@@ -2245,7 +2245,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             typeMod = MkqlBuildExpr(*node.Child(2), ctx);
         }
 
-        return ctx.ProgramBuilder.PgConst(type, node.Head().Content(), typeMod);
+        auto typeMod1 = typeMod;
+        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval") {
+            typeMod1 = TRuntimeNode();
+        }
+
+        auto ret = ctx.ProgramBuilder.PgConst(type, node.Head().Content(), typeMod1);
+        if (node.ChildrenSize() >= 3) {
+            return ctx.ProgramBuilder.PgCast(ret, type, typeMod);
+        } else {
+            return ret;
+        }
     });
 
     AddCallable("PgInternal0", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2288,7 +2298,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             typeMod = MkqlBuildExpr(*node.Child(2), ctx);
         }
 
-        return ctx.ProgramBuilder.PgCast(input, returnType, typeMod);
+        auto typeMod1 = typeMod;
+        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval") {
+            typeMod1 = TRuntimeNode();
+        }
+
+        auto cast = ctx.ProgramBuilder.PgCast(input, returnType, typeMod1);
+        if (node.ChildrenSize() >= 3) {
+            return ctx.ProgramBuilder.PgCast(cast, returnType, typeMod);
+        } else {
+            return cast;
+        }
     });
 
     AddCallable("FromPg", [](const TExprNode& node, TMkqlBuildContext& ctx) {

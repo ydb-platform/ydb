@@ -3305,11 +3305,12 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 return new TYqlData(pos, type, args);
             }
 
-            if (type.StartsWith("pg")) {
+            if (type.StartsWith("pg") || type.StartsWith("_pg")) {
                 TVector<TNodePtr> pgConstArgs;
                 if (!args.empty()) {
                     pgConstArgs.push_back(args.front());
-                    pgConstArgs.push_back(new TCallNodeImpl(pos, "PgType", { BuildQuotedAtom(pos, type.substr(2), TNodeFlags::Default) }));
+                    pgConstArgs.push_back(new TCallNodeImpl(pos, "PgType", { BuildQuotedAtom(pos,
+                        TString(type.StartsWith("pg") ? "" : "_") + type.substr(type.StartsWith("pg") ? 2 : 3), TNodeFlags::Default) }));
                     pgConstArgs.insert(pgConstArgs.end(), args.begin() + 1, args.end());
                 }
                 return new TYqlPgConst(pos, pgConstArgs);

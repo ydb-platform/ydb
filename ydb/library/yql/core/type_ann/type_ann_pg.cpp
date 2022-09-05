@@ -4078,7 +4078,12 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
 
     auto pgType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TPgExprType>();
     const auto& typeDesc = NPg::LookupType(pgType->GetId());
-    if (!typeDesc.TypeModInFuncId) {
+    auto funcId = typeDesc.TypeModInFuncId;
+    if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        funcId = NPg::LookupType(typeDesc.ElementTypeId).TypeModInFuncId;
+    }
+
+    if (!funcId) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "No modifiers for type: " << pgType->GetName()));
         return IGraphTransformer::TStatus::Error;
@@ -4093,7 +4098,7 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
         mods.push_back(TString(input->Child(i)->Content()));
     }
 
-    if (pgType->GetName() == "interval") {
+    if (pgType->GetName() == "interval" || pgType->GetName() == "_interval") {
         if (mods.size() != 1) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Exactly one modidifer is expected for pginterval"));
             return IGraphTransformer::TStatus::Error;
@@ -4124,7 +4129,7 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
     auto arr = ctx.Expr.NewCallable(input->Pos(), "PgArray", std::move(args));
     output = ctx.Expr.Builder(input->Pos())
         .Callable("PgCall")
-            .Atom(0, NPg::LookupProc(typeDesc.TypeModInFuncId, { 0 }).Name)
+            .Atom(0, NPg::LookupProc(funcId, { 0 }).Name)
             .List(1)
             .Seal()
             .Add(2, arr)

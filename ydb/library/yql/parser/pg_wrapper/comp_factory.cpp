@@ -738,28 +738,38 @@ public:
 
         Zero(FInfo1);
         Zero(FInfo2);
+        if (TypeMod && SourceId == TargetId && NPg::HasCast(TargetElemDesc.TypeId, TargetElemDesc.TypeId)) {
+            const auto& cast = NPg::LookupCast(TargetElemDesc.TypeId, TargetElemDesc.TypeId);
+
+            Y_ENSURE(cast.FunctionId);
+            fmgr_info(cast.FunctionId, &FInfo1);
+            Y_ENSURE(!FInfo1.fn_retset);
+            Y_ENSURE(FInfo1.fn_addr);
+            Y_ENSURE(FInfo1.fn_nargs >= 2 && FInfo1.fn_nargs <= 3);
+            ConvertLength = true;
+            ArrayCast = IsSourceArray;
+            return;
+        }
+
         if (SourceId == 0 || SourceId == TargetId) {
             return;
         }
 
         ui32 funcId;
         ui32 funcId2 = 0;
-        if (!NPg::HasCast(SourceElemDesc.TypeId, TargetElemDesc.TypeId)) {
-            if (SourceElemDesc.Category == 'S') {
-                ArrayCast = IsSourceArray;
-                if (!IsTargetArray || IsSourceArray) {
-                    funcId = TargetElemDesc.InFuncId;
-                } else {
-                    funcId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
-                }
+        if (!NPg::HasCast(SourceElemDesc.TypeId, TargetElemDesc.TypeId) || (IsSourceArray != IsTargetArray)) {
+            ArrayCast = IsSourceArray && IsTargetArray;
+            if (IsSourceArray && !IsTargetArray) {
+                Y_ENSURE(TargetTypeDesc.Category == 'S');
+                funcId = NPg::LookupProc("array_out", { 0 }).ProcId;
+            } else if (IsTargetArray && !IsSourceArray) {
+                Y_ENSURE(SourceElemDesc.Category == 'S');
+                funcId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
+            } else if (SourceElemDesc.Category == 'S') {
+                funcId = TargetElemDesc.InFuncId;
             } else {
                 Y_ENSURE(TargetTypeDesc.Category == 'S');
-                ArrayCast = IsTargetArray;
-                if (!IsSourceArray || IsTargetArray) {
-                    funcId = SourceElemDesc.OutFuncId;
-                } else {
-                    funcId = NPg::LookupProc("array_out", { 0 }).ProcId;
-                }
+                funcId = SourceElemDesc.OutFuncId;
             }
         } else {
             Y_ENSURE(IsSourceArray == IsTargetArray);
@@ -922,16 +932,26 @@ private:
         auto& callInfo1 = state.CallInfo1.Ref();
         callInfo1.isnull = false;
         NullableDatum argDatum = { datum, false };
+        void* freeCString = nullptr;
+        Y_DEFER {
+            if (freeCString) {
+                pfree(freeCString);
+            }
+        };
+
         if (ConvertArgToCString) {
             argDatum.value = (Datum)MakeCString(GetVarBuf((const text*)argDatum.value));
-            Y_DEFER {
-                pfree((void*)argDatum.value);
-            };
+            freeCString = (void*)argDatum.value;
         }
 
         callInfo1.args[0] = argDatum;
-        callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
-        callInfo1.args[2] = { Int32GetDatum(typeMod), false };
+        if (ConvertLength) {
+            callInfo1.args[1] = { Int32GetDatum(typeMod), false };
+            callInfo1.args[2] = { BoolGetDatum(true), false };
+        } else {
+            callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
+            callInfo1.args[2] = { Int32GetDatum(typeMod), false };
+        }
 
         void* freeMem = nullptr;
         void* freeMem2 = nullptr;
@@ -1005,6 +1025,7 @@ private:
     bool ConvertResFromCString2 = false;
     ui32 TypeIOParam = 0;
     bool ArrayCast = false;
+    bool ConvertLength = false;
 };
 
 

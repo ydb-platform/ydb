@@ -1842,12 +1842,20 @@ public:
                 return L(A("PgCast"), input, L(A("PgType"), QAX(finalType)));
             } else {
                 const auto& typeDesc = NPg::LookupType(finalType);
-                if (!typeDesc.TypeModInFuncId) {
+                ui32 typeModInFuncId;
+                if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
+                    const auto& typeDescElem = NPg::LookupType(typeDesc.ElementTypeId);
+                    typeModInFuncId = typeDescElem.TypeModInFuncId;
+                } else {
+                    typeModInFuncId = typeDesc.TypeModInFuncId;
+                }
+
+                if (!typeModInFuncId) {
                     AddError(TStringBuilder() << "Type " << finalType << " doesn't support modifiers");
                     return nullptr;
                 }
 
-                const auto& procDesc = NPg::LookupProc(typeDesc.TypeModInFuncId);
+                const auto& procDesc = NPg::LookupProc(typeModInFuncId);
 
                 TAstNode* typeMod;
                 if (typeName->typemod != -1) {

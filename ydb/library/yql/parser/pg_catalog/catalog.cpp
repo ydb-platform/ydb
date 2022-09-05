@@ -446,14 +446,16 @@ public:
             LastCast.TargetId = *typePtr;
         } else if (key == "castfunc") {
             if (value != "0") {
-                if (value.Contains(',')) {
-                    // e.g. castfunc => 'bit(int8,int4)'
-                    IsSupported = false;
-                } else if (value.Contains('(')) {
+                if (value.Contains('(')) {
                     auto pos1 = value.find('(');
                     auto pos2 = value.find(')');
+                    auto pos3 = value.find(',');
                     Y_ENSURE(pos1 != TString::npos);
                     Y_ENSURE(pos2 != TString::npos);
+                    if (pos3 != TString::npos) {
+                        pos2 = pos3;
+                    }
+
                     auto funcName = value.substr(0, pos1);
                     auto inputType = value.substr(pos1 + 1, pos2 - pos1 - 1);
                     auto inputTypeIdPtr = TypeByName.FindPtr(inputType);
@@ -464,7 +466,7 @@ public:
                     for (const auto& procId : *procIdPtr) {
                         auto procPtr = Procs.FindPtr(procId);
                         Y_ENSURE(procPtr);
-                        if (procPtr->ArgTypes.size() != 1) {
+                        if (procPtr->ArgTypes.size() < 1) {
                             continue;
                         }
 

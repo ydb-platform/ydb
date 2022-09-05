@@ -62,12 +62,12 @@ static void RegisterYdbCast(cp::FunctionRegistry* registry) {
 static void RegisterHouseAggregates(cp::FunctionRegistry* registry) {
 #ifndef WIN32
     try {
-        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedAny>(GetHouseFunctionName(EAggregate::Any))).ok());
+        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedAny>(GetHouseFunctionName(EAggregate::Some))).ok());
         Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedCount>(GetHouseFunctionName(EAggregate::Count))).ok());
         Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedMin>(GetHouseFunctionName(EAggregate::Min))).ok());
         Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedMax>(GetHouseFunctionName(EAggregate::Max))).ok());
         Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedSum>(GetHouseFunctionName(EAggregate::Sum))).ok());
-        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedAvg>(GetHouseFunctionName(EAggregate::Avg))).ok());
+        //Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedAvg>(GetHouseFunctionName(EAggregate::Avg))).ok());
     } catch (const std::exception& /*ex*/) {
         Y_VERIFY(false);
     }

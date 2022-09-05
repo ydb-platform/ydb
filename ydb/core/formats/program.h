@@ -88,12 +88,12 @@ enum class EOperation {
 
 enum class EAggregate {
     Unspecified = 0,
-    Any = 1,
+    Some = 1,
     Count = 2,
     Min = 3,
     Max = 4,
     Sum = 5,
-    Avg = 6,
+    //Avg = 6,
 };
 
 const char * GetFunctionName(EOperation op);

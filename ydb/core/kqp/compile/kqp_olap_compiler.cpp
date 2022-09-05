@@ -94,7 +94,7 @@ private:
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
     { "count", TProgram::TAggregateAssignment::AGG_COUNT },
-    { "some", TProgram::TAggregateAssignment::AGG_ANY },
+    { "some", TProgram::TAggregateAssignment::AGG_SOME },
 };
 
 TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);
@@ -170,7 +170,7 @@ ui32 ConvertParameterToColumn(const TCoParameter& parameter, TKqpOlapCompileCont
 ui32 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ctx)
 {
     auto columnId = GetOrCreateColumnId(cast.Value(), ctx);
-    
+
     TProgram::TAssignment* ssaValue = ctx.CreateAssignCmd();
 
     auto newCast = ssaValue->MutableFunction();
@@ -379,7 +379,7 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
         auto aggKeyColId = GetOrCreateColumnId(keyCol, ctx);
         aggKeyCol->SetId(aggKeyColId);
         aggKeyCol->SetName(keyColName);
-        
+
         auto* projCol = projection->AddColumns();
         projCol->SetId(aggKeyColId);
         projCol->SetName(keyColName);
@@ -397,10 +397,10 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
         auto* projCol = projection->AddColumns();
         projCol->SetId(aggColId);
         projCol->SetName(aggColName.c_str());
-        
+
         auto* aggFunc = agg->MutableFunction();
         aggFunc->SetId(ctx.GetAggFuncType(aggKqp.Type().StringValue().c_str()));
-        
+
         if (aggKqp.Column() != "*") {
             aggFunc->AddArguments()->SetId(GetOrCreateColumnId(aggKqp.Column(), ctx));
         }

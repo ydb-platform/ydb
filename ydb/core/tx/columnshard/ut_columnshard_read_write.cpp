@@ -84,7 +84,7 @@ bool DataHasOnly(const TVector<TString>& blobs, const TString& srtSchema, std::p
 }
 
 template <typename TArrowType>
-bool CheckTypedIntValues(const std::shared_ptr<arrow::Array>& array, const TVector<int64_t>& expected) {
+bool CheckTypedIntValues(const std::shared_ptr<arrow::Array>& array, const std::vector<int64_t>& expected) {
     UNIT_ASSERT(array);
     UNIT_ASSERT_VALUES_EQUAL(array->length(), (int)expected.size());
 
@@ -97,7 +97,21 @@ bool CheckTypedIntValues(const std::shared_ptr<arrow::Array>& array, const TVect
     return true;
 }
 
-bool CheckIntValues(const std::shared_ptr<arrow::Array>& array, const TVector<int64_t>& expected) {
+template <typename TArrowArrayType>
+bool CheckTypedStrValues(const std::shared_ptr<arrow::Array>& array, const std::vector<std::string>& expected) {
+    UNIT_ASSERT(array);
+    UNIT_ASSERT_VALUES_EQUAL(array->length(), (int)expected.size());
+
+    auto& column = dynamic_cast<const TArrowArrayType&>(*array);
+
+    for (int i = 0; i < column.length(); ++i) {
+        auto value = column.GetString(i);
+        UNIT_ASSERT_VALUES_EQUAL(value, expected[i]);
+    }
+    return true;
+}
+
+bool CheckIntValues(const std::shared_ptr<arrow::Array>& array, const std::vector<int64_t>& expected) {
     UNIT_ASSERT(array);
 
     switch (array->type()->id()) {
@@ -125,7 +139,25 @@ bool CheckIntValues(const std::shared_ptr<arrow::Array>& array, const TVector<in
 
         default:
             UNIT_ASSERT(false);
-            //return false;
+            break;
+    }
+    return true;
+}
+
+bool CheckStringValues(const std::shared_ptr<arrow::Array>& array, const std::vector<std::string>& expected) {
+    UNIT_ASSERT(array);
+
+    switch (array->type()->id()) {
+        case arrow::Type::STRING:
+            return CheckTypedStrValues<arrow::StringArray>(array, expected);
+        case arrow::Type::BINARY:
+            return CheckTypedStrValues<arrow::BinaryArray>(array, expected);
+        case arrow::Type::FIXED_SIZE_BINARY:
+            return CheckTypedStrValues<arrow::FixedSizeBinaryArray>(array, expected);
+
+        default:
+            UNIT_ASSERT(false);
+            break;
     }
     return true;
 }
@@ -153,14 +185,11 @@ bool CheckOrdered(const TString& blob, const TString& srtSchema) {
     return true;
 }
 
-bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& meta, const TVector<TString>& colNames,
-                  size_t rowsCount = 100) {
-    auto schema = NArrow::DeserializeSchema(meta.GetSchema());
-    auto batch = NArrow::DeserializeBatch(blob, schema);
+bool CheckColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TVector<TString>& colNames, size_t rowsCount) {
     UNIT_ASSERT(batch);
-
     for (auto& col : colNames) {
         if (!batch->GetColumnByName(col)) {
+            Cerr << "schema: " << batch->schema()->ToString() << "\n";
             return false;
         }
     }
@@ -169,6 +198,14 @@ bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& me
     UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_rows(), rowsCount);
     UNIT_ASSERT(batch->ValidateFull().ok());
     return true;
+}
+
+bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& meta, const TVector<TString>& colNames,
+                  size_t rowsCount = 100) {
+    auto schema = NArrow::DeserializeSchema(meta.GetSchema());
+    auto batch = NArrow::DeserializeBatch(blob, schema);
+
+    return CheckColumns(batch, colNames, rowsCount);
 }
 
 void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
@@ -929,13 +966,17 @@ static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssig
     return ssa;
 }
 
-// SELECT min(x), max(x), some(x), count(x) FROM t
-NKikimrSSA::TProgram MakeSelectAggregates(ui32 columnId)
+// SELECT min(x), max(x), some(x), count(x) FROM t [GROUP BY key[0], key[1], ...]
+NKikimrSSA::TProgram MakeSelectAggregates(ui32 columnId, const std::vector<ui32>& keys = {},
+                                          bool addProjection = true)
 {
     NKikimrSSA::TProgram ssa;
 
     auto* line1 = ssa.AddCommand();
     auto* groupBy = line1->MutableGroupBy();
+    for (ui32 key : keys) {
+        groupBy->AddKeyColumns()->SetId(key);
+    }
     //
     auto* l1_agg1 = groupBy->AddAggregates();
     l1_agg1->MutableColumn()->SetId(100);
@@ -952,7 +993,7 @@ NKikimrSSA::TProgram MakeSelectAggregates(ui32 columnId)
     auto* l1_agg3 = groupBy->AddAggregates();
     l1_agg3->MutableColumn()->SetId(102);
     auto* l1_agg3_f = l1_agg3->MutableFunction();
-    l1_agg3_f->SetId(TAggAssignment::AGG_ANY);
+    l1_agg3_f->SetId(TAggAssignment::AGG_SOME);
     l1_agg3_f->AddArguments()->SetId(columnId);
     //
     auto* l1_agg4 = groupBy->AddAggregates();
@@ -961,17 +1002,22 @@ NKikimrSSA::TProgram MakeSelectAggregates(ui32 columnId)
     l1_agg4_f->SetId(TAggAssignment::AGG_COUNT);
     l1_agg4_f->AddArguments()->SetId(columnId);
 
-    auto* line2 = ssa.AddCommand();
-    auto* proj = line2->MutableProjection();
-    proj->AddColumns()->SetId(100);
-    proj->AddColumns()->SetId(101);
-    proj->AddColumns()->SetId(102);
-    proj->AddColumns()->SetId(103);
+    // Projection by ids
+    if (addProjection) {
+        auto* line2 = ssa.AddCommand();
+        auto* proj = line2->MutableProjection();
+        proj->AddColumns()->SetId(100);
+        proj->AddColumns()->SetId(101);
+        proj->AddColumns()->SetId(102);
+        proj->AddColumns()->SetId(103);
+    }
     return ssa;
 }
 
-// SELECT min(x), max(x), some(x), count(x) FROM t WHERE y = 1
-NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(ui32 columnId, ui32 filterColumnId)
+// SELECT min(x), max(x), some(x), count(x) FROM t WHERE y = 1 [GROUP BY key[0], key[1], ...]
+NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(ui32 columnId, ui32 filterColumnId,
+                                                    const std::vector<ui32>& keys = {},
+                                                    bool addProjection = true)
 {
     NKikimrSSA::TProgram ssa;
 
@@ -993,37 +1039,47 @@ NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(ui32 columnId, ui32 filterCo
 
     auto* line4 = ssa.AddCommand();
     auto* groupBy = line4->MutableGroupBy();
+    for (ui32 key : keys) {
+        groupBy->AddKeyColumns()->SetId(key);
+    }
     //
     auto* l4_agg1 = groupBy->AddAggregates();
-    l4_agg1->MutableColumn()->SetId(100);
+    //l4_agg1->MutableColumn()->SetId(100);
+    l4_agg1->MutableColumn()->SetName("res_min");
     auto* l4_agg1_f = l4_agg1->MutableFunction();
     l4_agg1_f->SetId(TAggAssignment::AGG_MIN);
     l4_agg1_f->AddArguments()->SetId(columnId);
     //
     auto* l4_agg2 = groupBy->AddAggregates();
-    l4_agg2->MutableColumn()->SetId(101);
+    //l4_agg2->MutableColumn()->SetId(101);
+    l4_agg2->MutableColumn()->SetName("res_max");
     auto* l4_agg2_f = l4_agg2->MutableFunction();
     l4_agg2_f->SetId(TAggAssignment::AGG_MAX);
     l4_agg2_f->AddArguments()->SetId(columnId);
     //
     auto* l4_agg3 = groupBy->AddAggregates();
-    l4_agg3->MutableColumn()->SetId(102);
+    //l4_agg3->MutableColumn()->SetId(102);
+    l4_agg3->MutableColumn()->SetName("res_some");
     auto* l4_agg3_f = l4_agg3->MutableFunction();
-    l4_agg3_f->SetId(TAggAssignment::AGG_ANY);
+    l4_agg3_f->SetId(TAggAssignment::AGG_SOME);
     l4_agg3_f->AddArguments()->SetId(columnId);
     //
     auto* l4_agg4 = groupBy->AddAggregates();
-    l4_agg4->MutableColumn()->SetId(103);
+    //l4_agg4->MutableColumn()->SetId(103);
+    l4_agg4->MutableColumn()->SetName("res_count");
     auto* l4_agg4_f = l4_agg4->MutableFunction();
     l4_agg4_f->SetId(TAggAssignment::AGG_COUNT);
     l4_agg4_f->AddArguments()->SetId(columnId);
 
-    auto* line5 = ssa.AddCommand();
-    auto* proj = line5->MutableProjection();
-    proj->AddColumns()->SetId(100);
-    proj->AddColumns()->SetId(101);
-    proj->AddColumns()->SetId(102);
-    proj->AddColumns()->SetId(103);
+    // Projection by names
+    if (addProjection) {
+        auto* line5 = ssa.AddCommand();
+        auto* proj = line5->MutableProjection();
+        proj->AddColumns()->SetName("res_min");
+        proj->AddColumns()->SetName("res_max");
+        proj->AddColumns()->SetName("res_some");
+        proj->AddColumns()->SetName("res_count");
+    }
     return ssa;
 }
 
@@ -1154,7 +1210,7 @@ void TestReadWithProgram(const TVector<std::pair<TString, TTypeId>>& ydbSchema =
     }
 }
 
-void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = TTestSchema::YdbAllTypesSchema()) {
+void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema, const std::vector<ui32>& aggKeys = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -1185,11 +1241,16 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
 
     std::vector<TString> programs;
     THashSet<ui32> intResult;
+    THashSet<ui32> strResult;
     THashSet<ui32> isFiltered;
     THashSet<NScheme::TTypeId> intTypes = {
         NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64,
         NTypeIds::Uint8, NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64,
         NTypeIds::Timestamp
+    };
+    THashSet<NScheme::TTypeId> strTypes = {
+        NTypeIds::Utf8, NTypeIds::String, NTypeIds::Bytes
+        //NTypeIds::Yson, NTypeIds::Json, NTypeIds::JsonDocument
     };
 
     ui32 prog = 0;
@@ -1197,8 +1258,11 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
         if (intTypes.count(ydbSchema[i].second)) {
             intResult.insert(prog);
         }
+        if (strTypes.count(ydbSchema[i].second)) {
+            strResult.insert(prog);
+        }
 
-        NKikimrSSA::TProgram ssa = MakeSelectAggregates(i + 1);
+        NKikimrSSA::TProgram ssa = MakeSelectAggregates(i + 1, aggKeys, i % 2);
         TString serialized;
         UNIT_ASSERT(ssa.SerializeToString(&serialized));
         NKikimrSSA::TOlapProgram program;
@@ -1213,8 +1277,11 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
         if (intTypes.count(ydbSchema[i].second)) {
             intResult.insert(prog);
         }
+        if (strTypes.count(ydbSchema[i].second)) {
+            strResult.insert(prog);
+        }
 
-        NKikimrSSA::TProgram ssa = MakeSelectAggregatesWithFilter(i + 1, 4);
+        NKikimrSSA::TProgram ssa = MakeSelectAggregatesWithFilter(i + 1, 4, aggKeys, i % 2);
         TString serialized;
         UNIT_ASSERT(ssa.SerializeToString(&serialized));
         NKikimrSSA::TOlapProgram program;
@@ -1242,6 +1309,7 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
         UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
 
+        std::shared_ptr<arrow::RecordBatch> batch;
         {
             UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
             UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
@@ -1250,30 +1318,45 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
 
             auto& meta = resRead.GetMeta();
             auto& schema = meta.GetSchema();
+            auto& data = resRead.GetData();
 
-            TVector<TString> readData;
-            readData.push_back(resRead.GetData());
-            auto& data = readData[0];
-
-            auto batch = NArrow::DeserializeBatch(data, NArrow::DeserializeSchema(schema));
+            batch = NArrow::DeserializeBatch(data, NArrow::DeserializeSchema(schema));
             UNIT_ASSERT(batch);
+            UNIT_ASSERT(batch->ValidateFull().ok());
+        }
 
-            UNIT_ASSERT(CheckColumns(data, meta, {"100", "101", "102", "103"}, 1));
-
-            // min, max, any, count
+        if (aggKeys.empty()) {
             if (intResult.count(prog)) {
                 if (isFiltered.count(prog)) {
-                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("100"), {1}));
-                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("101"), {1}));
-                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("102"), {1}));
-                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("103"), {1}));
+                    UNIT_ASSERT(CheckColumns(batch, {"res_min", "res_max", "res_some", "res_count"}, 1));
+                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_min"), {1}));
+                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_max"), {1}));
+                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_some"), {1}));
+                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_count"), {1}));
                 } else {
+                    UNIT_ASSERT(CheckColumns(batch, {"100", "101", "102", "103"}, 1));
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("100"), {0}));
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("101"), {99}));
-                    //UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("102"), {0}));
+                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("102"), {0}));
+                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("103"), {100}));
+                }
+            } else if (strResult.count(prog)) {
+                if (isFiltered.count(prog)) {
+                    UNIT_ASSERT(CheckColumns(batch, {"res_min", "res_max", "res_some", "res_count"}, 1));
+                    UNIT_ASSERT(CheckStringValues(batch->GetColumnByName("res_min"), {"1"}));
+                    UNIT_ASSERT(CheckStringValues(batch->GetColumnByName("res_max"), {"1"}));
+                    UNIT_ASSERT(CheckStringValues(batch->GetColumnByName("res_some"), {"1"}));
+                    UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_count"), {1}));
+                } else {
+                    UNIT_ASSERT(CheckColumns(batch, {"100", "101", "102", "103"}, 1));
+                    UNIT_ASSERT(CheckStringValues(batch->GetColumnByName("100"), {"0"}));
+                    UNIT_ASSERT(CheckStringValues(batch->GetColumnByName("101"), {"99"}));
+                    UNIT_ASSERT(CheckStringValues(batch->GetColumnByName("102"), {"0"}));
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("103"), {100}));
                 }
             }
+        } else {
+            // TODO
         }
 
         ++prog;
@@ -1328,8 +1411,25 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(ReadAggregate) {
-        TestReadAggregate();
+        TestReadAggregate(TTestSchema::YdbAllTypesSchema());
     }
+
+#if 0
+    Y_UNIT_TEST(ReadGroupBy) {
+        auto schema = TTestSchema::YdbAllTypesSchema();
+        for (ui32 keyPos = 0; keyPos < schema.size(); ++keyPos) {
+            TestReadAggregate(schema, {keyPos});
+        }
+
+        for (ui32 keyPos = 0; keyPos < schema.size() - 1; ++keyPos) {
+            TestReadAggregate(schema, {keyPos, keyPos + 1});
+        }
+
+        for (ui32 keyPos = 0; keyPos < schema.size() - 2; ++keyPos) {
+            TestReadAggregate(schema, {keyPos, keyPos + 1, keyPos + 2});
+        }
+    }
+#endif
 
     Y_UNIT_TEST(CompactionSplitGranule) {
         TTestBasicRuntime runtime;

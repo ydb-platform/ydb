@@ -238,8 +238,6 @@ EOperation ValidateOperation(EOperation op, ui32 argsSize) {
 
 const char * GetFunctionName(EAggregate op) {
     switch (op) {
-        case EAggregate::Any:
-            return "any";
         case EAggregate::Count:
             return "count";
         case EAggregate::Min:
@@ -248,9 +246,10 @@ const char * GetFunctionName(EAggregate op) {
             return "min_max";
         case EAggregate::Sum:
             return "sum";
+#if 0 // TODO
         case EAggregate::Avg:
             return "mean";
-
+#endif
         default:
             break;
     }
@@ -259,7 +258,7 @@ const char * GetFunctionName(EAggregate op) {
 
 const char * GetHouseFunctionName(EAggregate op) {
     switch (op) {
-        case EAggregate::Any:
+        case EAggregate::Some:
             return "ch.any";
         case EAggregate::Count:
             return "ch.count";
@@ -269,9 +268,10 @@ const char * GetHouseFunctionName(EAggregate op) {
             return "ch.max";
         case EAggregate::Sum:
             return "ch.sum";
+#if 0 // TODO
         case EAggregate::Avg:
             return "ch.avg";
-
+#endif
         default:
             break;
     }

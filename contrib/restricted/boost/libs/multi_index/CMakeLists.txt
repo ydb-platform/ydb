@@ -7,14 +7,9 @@
 
 
 
-add_library(boost-libs-graph INTERFACE)
-target_link_libraries(boost-libs-graph INTERFACE
+add_library(boost-libs-multi_index INTERFACE)
+target_link_libraries(boost-libs-multi_index INTERFACE
   contrib-libs-cxxsupp
   contrib-restricted-boost
-  restricted-boost-atomic
-  restricted-boost-exception
-  restricted-boost-filesystem
   restricted-boost-serialization
-  restricted-boost-spirit
-  restricted-boost-thread
 )

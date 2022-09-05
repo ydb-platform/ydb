@@ -1,10 +1,6 @@
 #ifndef BOOST_ARCHIVE_DETAIL_INTERFACE_IARCHIVE_HPP
 #define BOOST_ARCHIVE_DETAIL_INTERFACE_IARCHIVE_HPP
 
-#if defined(__GNUC__)
-    #pragma GCC system_header
-#endif
-
 // MS compatible compilers support #pragma once
 #if defined(_MSC_VER)
 # pragma once

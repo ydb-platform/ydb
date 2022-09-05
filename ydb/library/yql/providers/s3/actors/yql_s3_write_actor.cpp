@@ -356,7 +356,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3WriteActor", "BootStrapped");
+        LOG_D("TS3WriteActor", "Bootstrapped");
         Become(&TS3WriteActor::StateFunc);
     }
 
@@ -409,14 +409,24 @@ private:
             ins.first->second.back()->SendData(TString((Keys.empty() ? v : *v.GetElements()).AsStringRef()));
         }
 
-        if (finished)
+        if (finished) {
             std::for_each(FileWriteActors.cbegin(), FileWriteActors.cend(), [](const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item){ item.second.back()->Finish(); });
+            Finished = true;
+            FinishIfNeeded();
+        }
         data.clear();
     }
 
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
         LOG_W("TS3WriteActor", "TEvUploadError " << result->Get()->Error.ToOneLineString());
         Callbacks->OnAsyncOutputError(OutputIndex, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+    }
+
+    void FinishIfNeeded() {
+        if (FileWriteActors.empty() && Finished) {
+            LOG_D("TS3WriteActor", "Finished, notify owner");
+            Callbacks->OnAsyncOutputFinished(OutputIndex);
+        }
     }
 
     void Handle(TEvPrivate::TEvUploadFinished::TPtr& result) {
@@ -428,9 +438,7 @@ private:
                     FileWriteActors.erase(it);
             }
         }
-
-        if (FileWriteActors.empty())
-            Callbacks->OnAsyncOutputFinished(OutputIndex);
+        FinishIfNeeded();
     }
 
     // IActor & IDqComputeActorAsyncOutput
@@ -469,6 +477,7 @@ private:
     const size_t MemoryLimit;
     const size_t MaxFileSize;
     const TString Compression;
+    bool Finished = false;
 
     std::unordered_map<TString, std::vector<TS3FileWriteActor*>> FileWriteActors;
 };

@@ -4,14 +4,26 @@
 
 * [{{ ydb-name }} Whitepaper](https://storage.yandexcloud.net/ydb-public-talks/yandex-database-a4.pdf).
 
-## 2022: Вебинар YDB 2022-08-15 {#webinar20220815}
+### 2022: Вебинар YDB 2022-09-11 {#webinar20220911}
+
+* Тема: Управляемый сервис YDB: настройка, применение, мониторинг.
+
+  * [Запись трансляции](https://www.youtube.com/watch?v=d5NEDzsyp7Q).
+  * Описание: Применение {{ ydb-name }} как управляемого сервиса позволяет разработчикам и архитекторам сосредоточиться на бизнес-задачах, а команда Yandex Cloud возьмёт на себя заботы о надёжности, производительности и ресурсной эффективности баз данных. На вебинаре показали, как:
+    * начать работу с сервисом;
+    * подключить приложения и настроить аутентификацию;
+    * контролировать потребление ресурсов;
+    * работать с доступными инструментами мониторинга;
+    * масштабировать базы данных, когда нагрузка растёт.
+
+### 2022: Вебинар YDB 2022-08-15 {#webinar20220815}
 
 * Тема: Scalability and Fault Tolerance in YDB — материал доступен только на английском языке.
 
   * [Запись трансляции](https://www.youtube.com/watch?v=eYpyKXihGaY).
   * Описание: In this talk we will cover two layers of YDB: Tablet and BlobStorage layers that together provide fault tolerance, scalability, and user isolation.
   
-## 2022: Hydra {#hydra-2022}
+### 2022: Hydra {#hydra-2022}
 
 * Тема: Parallel Asynchronous Replication between YDB Database Instances — материал доступен только на английском языке.
 
@@ -46,7 +58,7 @@
   * [О мероприятии](https://cloud.yandex.ru/events/408#about).
   * [Презентация](https://storage.yandexcloud.net/ydb-public-talks/pg2ydb.pdf).
   * [Запись трансляции](https://www.youtube.com/watch?v=8bgtMxkduV8&t=3946s).
-  * Описание: в исследовании, которое провела команда Yandex {{ ydb-name }}, рассмотрены аспекты миграции Е-commerce приложения, изначально разработанного для PostgreSQL, на Yandex {{ ydb-name }}. Основная тема исследования — сравнение производительности и стоимости решений на PostgreSQL и YDB.
+  * Описание: В исследовании, которое провела команда Yandex {{ ydb-name }}, рассмотрены аспекты миграции Е-commerce приложения, изначально разработанного для PostgreSQL, на Yandex {{ ydb-name }}. Основная тема исследования — сравнение производительности и стоимости решений на PostgreSQL и YDB.
 
 ### 2021: Я.Субботник по разработке инфраструктуры {#inframeetup20210621}
 

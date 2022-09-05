@@ -18,6 +18,7 @@ target_link_libraries(libs-rate_limiter-control_plane_service PUBLIC
   ydb-core-protos
   libs-config-protos
   yq-libs-events
+  libs-quota_manager-events
   libs-rate_limiter-events
   libs-rate_limiter-utils
   yq-libs-shared_resources
@@ -26,4 +27,5 @@ target_link_libraries(libs-rate_limiter-control_plane_service PUBLIC
 )
 target_sources(libs-rate_limiter-control_plane_service PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/rate_limiter/control_plane_service/rate_limiter_control_plane_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/rate_limiter/control_plane_service/update_limit_actor.cpp
 )

@@ -264,6 +264,15 @@ struct TEvents {
         NYdb::TStatus Result;
     };
 
+    struct TEvSchemaUpdated : public NActors::TEventLocal<TEvSchemaUpdated, TEventIds::EvSchemaUpdated> {
+        explicit TEvSchemaUpdated(NYdb::TStatus result)
+            : Result(std::move(result))
+        {
+        }
+
+        NYdb::TStatus Result;
+    };
+
     struct TEvCallback : public NActors::TEventLocal<TEvCallback, TEventIds::EvCallback> {
         explicit TEvCallback(std::function<void()> callback)
             : Callback(callback)

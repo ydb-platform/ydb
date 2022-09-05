@@ -46,19 +46,6 @@ struct TEvPrivate {
     };
 };
 
-bool ParentPathDoesNotExist(const NYdb::TStatus& status) {
-    if (status.GetStatus() == NYdb::EStatus::NOT_FOUND) {
-        return true;
-    }
-    if (status.GetStatus() == NYdb::EStatus::BAD_REQUEST) {
-        const TString issuesText = status.GetIssues().ToString();
-        if (issuesText.Contains("doesn't exist") || issuesText.Contains("does not exist")) {
-            return true;
-        }
-    }
-    return false;
-}
-
 template <class TResponseEvent>
 class TSchemaActorBase : public NActors::TActorBootstrapped<TSchemaActorBase<TResponseEvent>> {
 public:
@@ -202,6 +189,30 @@ protected:
     }
 };
 
+class TUpdateActorBase : public TSchemaActorBase<TEvents::TEvSchemaUpdated> {
+public:
+    using TSchemaActorBase::TSchemaActorBase;
+
+protected:
+    void Handle(TEvents::TEvSchemaUpdated::TPtr& ev) override {
+        if (ev->Get()->Result.IsSuccess()) {
+            SCHEMA_LOG_DEBUG("Successfully updated " << GetEntityName());
+            ReplyAndDie(ev);
+            return;
+        }
+
+        SCHEMA_LOG_ERROR("Update " << GetEntityName() << " error: " << ev->Get()->Result.GetStatus() << " " << ev->Get()->Result.GetIssues().ToOneLineString());
+
+        if (!ScheduleNextAttempt(ev)) {
+            ReplyAndDie(ev);
+        }
+    }
+
+    TStringBuf GetActionName() const override {
+        return "update";
+    }
+};
+
 template <class TRequestDesc, class TBase = TCreateActorBase>
 class TRecursiveCreateActorBase : public TBase {
 public:
@@ -228,7 +239,7 @@ protected:
             this->CallAndSubscribe();
             return;
         }
-        if (CurrentRequest > 0 && ParentPathDoesNotExist(ev->Get()->Result)) {
+        if (CurrentRequest > 0 && IsPathDoesNotExistError(ev->Get()->Result)) {
             if (!TriedPaths[CurrentRequest - 1]) { // Defence from cycles.
                 --CurrentRequest;
                 TriedPaths[CurrentRequest] = true;
@@ -474,7 +485,53 @@ private:
     const TString ResourcePath;
 };
 
+class TUpdateRateLimiterResourceActor : public TUpdateActorBase {
+public:
+    TUpdateRateLimiterResourceActor(
+        NActors::TActorId parent,
+        ui64 logComponent,
+        TYdbConnectionPtr connection,
+        const TString& coordinationNodePath,
+        const TString& resourcePath,
+        TMaybe<ui64> limit,
+        TYdbSdkRetryPolicy::TPtr retryPolicy,
+        ui64 cookie)
+        : TUpdateActorBase(parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
+        , CoordinationNodePath(coordinationNodePath)
+        , ResourcePath(resourcePath)
+        , Limit(limit)
+    {
+    }
+
+private:
+    TString GetEntityName() const override {
+        return TStringBuilder() << "rate limiter resource \"" << ResourcePath << "\"";
+    }
+
+    NYdb::TAsyncStatus CallYdbSdk() override {
+        return Connection->RateLimiterClient.AlterResource(CoordinationNodePath, ResourcePath, NYdb::NRateLimiter::TAlterResourceSettings().MaxUnitsPerSecond(Limit));
+    }
+
+private:
+    const TString CoordinationNodePath;
+    const TString ResourcePath;
+    const TMaybe<ui64> Limit;
+};
+
 } // namespace
+
+bool IsPathDoesNotExistError(const NYdb::TStatus& status) {
+    if (status.GetStatus() == NYdb::EStatus::NOT_FOUND) {
+        return true;
+    }
+    if (status.GetStatus() == NYdb::EStatus::BAD_REQUEST) {
+        const TString issuesText = status.GetIssues().ToString();
+        if (issuesText.Contains("doesn't exist") || issuesText.Contains("does not exist")) {
+            return true;
+        }
+    }
+    return false;
+}
 
 NActors::IActor* MakeCreateTableActor(
     NActors::TActorId parent,
@@ -569,6 +626,28 @@ NActors::IActor* MakeDeleteRateLimiterResourceActor(
         std::move(connection),
         coordinationNodePath,
         resourcePath,
+        std::move(retryPolicy),
+        cookie
+    );
+}
+
+NActors::IActor* MakeUpdateRateLimiterResourceActor(
+    NActors::TActorId parent,
+    ui64 logComponent,
+    TYdbConnectionPtr connection,
+    const TString& coordinationNodePath,
+    const TString& resourcePath,
+    TMaybe<double> limit,
+    TYdbSdkRetryPolicy::TPtr retryPolicy,
+    ui64 cookie)
+{
+    return new TUpdateRateLimiterResourceActor(
+        parent,
+        logComponent,
+        std::move(connection),
+        coordinationNodePath,
+        resourcePath,
+        limit,
         std::move(retryPolicy),
         cookie
     );

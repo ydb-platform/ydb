@@ -1,7 +1,9 @@
 #include "rate_limiter_control_plane_service.h"
+#include "update_limit_actor.h"
 
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/quota_manager/events/events.h>
 #include <ydb/core/yq/libs/rate_limiter/events/control_plane_events.h>
 #include <ydb/core/yq/libs/rate_limiter/utils/path.h>
 #include <ydb/core/yq/libs/ydb/schema.h>
@@ -50,7 +52,7 @@ ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
     return ERetryErrorClass::NoRetry;
 }
 
-TYdbSdkRetryPolicy::TPtr MakeCreateSchemaRetryPolicy() {
+TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
     static auto policy = TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
     return policy;
 }
@@ -71,6 +73,11 @@ struct TRateLimiterRequestsQueue {
     }
 
     TRateLimiterRequestsQueue& AddRequest(TEvRateLimiter::TEvDeleteResource::TPtr& ev) {
+        Queue.emplace_back(std::move(ev));
+        return *this;
+    }
+
+    TRateLimiterRequestsQueue& AddRequest(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
         Queue.emplace_back(std::move(ev));
         return *this;
     }
@@ -102,7 +109,12 @@ private:
         {
         }
 
-        using TOriginalRequestType = std::variant<TEvRateLimiter::TEvCreateResource::TPtr, TEvRateLimiter::TEvDeleteResource::TPtr>;
+        explicit TRequest(TEvQuotaService::TQuotaLimitChangeRequest::TPtr&& ev)
+            : OriginalRequest(std::move(ev))
+        {
+        }
+
+        using TOriginalRequestType = std::variant<TEvRateLimiter::TEvCreateResource::TPtr, TEvRateLimiter::TEvDeleteResource::TPtr, TEvQuotaService::TQuotaLimitChangeRequest::TPtr>;
         TOriginalRequestType OriginalRequest;
     };
 
@@ -121,7 +133,7 @@ private:
                 RateLimiterPath,
                 GetRateLimiterResourcePath(ev->Get()->CloudId, ev->Get()->Scope, ev->Get()->QueryId),
                 {ev->Get()->CloudLimit, Nothing(), ev->Get()->QueryLimit},
-                MakeCreateSchemaRetryPolicy(),
+                MakeSchemaRetryPolicy(),
                 cookie
             )
         );
@@ -136,7 +148,22 @@ private:
                 Connection,
                 RateLimiterPath,
                 GetRateLimiterResourcePath(ev->Get()->CloudId, ev->Get()->Scope, ev->Get()->QueryId),
-                MakeCreateSchemaRetryPolicy(),
+                MakeSchemaRetryPolicy(),
+                cookie
+            )
+        );
+    }
+
+    void ProcessRequest(ui64 cookie, TRequest& req, TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
+        Y_UNUSED(req);
+        NActors::TActivationContext::AsActorContext().Register(
+            MakeUpdateCloudRateLimitActor(
+                NActors::TActivationContext::AsActorContext().SelfID,
+                Connection,
+                RateLimiterPath,
+                ev->Get()->SubjectId,
+                ev->Get()->LimitRequested,
+                MakeSchemaRetryPolicy(),
                 cookie
             )
         );
@@ -173,6 +200,23 @@ private:
             new TEvRateLimiter::TEvDeleteResourceResponse(
                 ev->Get()->Result.IsSuccess(),
                 ev->Get()->Result.GetIssues()
+            ),
+            0, // flags
+            originalRequest->Cookie
+        );
+    }
+
+    void ProcessResponse(TRequest& req, TEvents::TEvSchemaUpdated::TPtr& ev) {
+        TEvQuotaService::TQuotaLimitChangeRequest::TPtr& originalRequest = std::get<TEvQuotaService::TQuotaLimitChangeRequest::TPtr>(req.OriginalRequest);
+        auto& record = *originalRequest->Get();
+        NActors::TActivationContext::AsActorContext().Send(
+            originalRequest->Sender,
+            new TEvQuotaService::TQuotaLimitChangeResponse(
+                record.SubjectType,
+                record.SubjectId,
+                record.MetricName,
+                ev->Get()->Result.IsSuccess() ? record.LimitRequested : record.Limit,
+                record.LimitRequested
             ),
             0, // flags
             originalRequest->Cookie
@@ -217,7 +261,7 @@ public:
     }
 
     void RunCreateCoordinationNodeActor(const TString& path) {
-        Register(MakeCreateCoordinationNodeActor(SelfId(), NKikimrServices::YQ_RATE_LIMITER, YdbConnection, path, MakeCreateSchemaRetryPolicy()));
+        Register(MakeCreateCoordinationNodeActor(SelfId(), NKikimrServices::YQ_RATE_LIMITER, YdbConnection, path, MakeSchemaRetryPolicy()));
         ++CreatingCoordinationNodes;
     }
 
@@ -266,6 +310,10 @@ public:
         GetRateLimiter(ev->Get()->CloudId).AddRequest(ev);
     }
 
+    void HandleInit(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
+        GetRateLimiter(ev->Get()->SubjectId).AddRequest(ev);
+    }
+
     void HandleWorking(TEvRateLimiter::TEvCreateResource::TPtr& ev) {
         GetRateLimiter(ev->Get()->CloudId).AddRequest(ev).ProcessRequests();
     }
@@ -274,11 +322,19 @@ public:
         GetRateLimiter(ev->Get()->CloudId).AddRequest(ev).ProcessRequests();
     }
 
+    void HandleWorking(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
+        GetRateLimiter(ev->Get()->SubjectId).AddRequest(ev).ProcessRequests();
+    }
+
     void HandleWorking(TEvents::TEvSchemaCreated::TPtr& ev) {
         GetRateLimiterByCookie(ev->Cookie).OnResponse(ev);
     }
 
     void HandleWorking(TEvents::TEvSchemaDeleted::TPtr& ev) {
+        GetRateLimiterByCookie(ev->Cookie).OnResponse(ev);
+    }
+
+    void HandleWorking(TEvents::TEvSchemaUpdated::TPtr& ev) {
         GetRateLimiterByCookie(ev->Cookie).OnResponse(ev);
     }
 
@@ -290,12 +346,25 @@ public:
         Send(ev->Sender, new TEvRateLimiter::TEvDeleteResourceResponse(true));
     }
 
+    void HandleOff(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
+        auto& record = *ev->Get();
+
+        Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(record.SubjectType, record.SubjectId, record.MetricName,
+            record.LimitRequested, record.LimitRequested));
+    }
+
+    void HandleQuotaUsage(TEvQuotaService::TQuotaUsageRequest::TPtr& ev) {
+        Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(ev->Get()->SubjectType, ev->Get()->SubjectId, ev->Get()->MetricName, 0));
+    }
+
     // State func that does nothing. Rate limiting is turned off.
     // Answers "OK" responses and does nothing.
     STRICT_STFUNC(
         RateLimiterOffStateFunc,
         hFunc(TEvRateLimiter::TEvCreateResource, HandleOff);
         hFunc(TEvRateLimiter::TEvDeleteResource, HandleOff);
+        hFunc(TEvQuotaService::TQuotaLimitChangeRequest, HandleOff);
+        hFunc(TEvQuotaService::TQuotaUsageRequest, HandleQuotaUsage);
     )
 
     // State func that inits limiters.
@@ -305,6 +374,8 @@ public:
         hFunc(TEvents::TEvSchemaCreated, HandleInit);
         hFunc(TEvRateLimiter::TEvCreateResource, HandleInit);
         hFunc(TEvRateLimiter::TEvDeleteResource, HandleInit);
+        hFunc(TEvQuotaService::TQuotaLimitChangeRequest, HandleInit);
+        hFunc(TEvQuotaService::TQuotaUsageRequest, HandleQuotaUsage);
     )
 
     // Working
@@ -314,6 +385,9 @@ public:
         hFunc(TEvRateLimiter::TEvDeleteResource, HandleWorking);
         hFunc(TEvents::TEvSchemaCreated, HandleWorking);
         hFunc(TEvents::TEvSchemaDeleted, HandleWorking);
+        hFunc(TEvents::TEvSchemaUpdated, HandleWorking);
+        hFunc(TEvQuotaService::TQuotaLimitChangeRequest, HandleWorking);
+        hFunc(TEvQuotaService::TQuotaUsageRequest, HandleQuotaUsage);
     )
 
     TRateLimiterRequestsQueue& GetRateLimiter(const TString& cloudId) {

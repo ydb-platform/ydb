@@ -294,6 +294,13 @@ private:
                 auto itI = infoMap.find(metricName);
                 if (itI != infoMap.end()) {
                     auto& info = itI->second;
+                    if (cached.Usage.Limit.Value == 0 || limit == 0 || limit > cached.Usage.Limit.Value) {
+                        // check hard limit only if quota is increased
+                        if (info.HardLimit != 0 && (limit == 0 || limit > info.HardLimit)) {
+                            limit = info.HardLimit;
+                        }
+                    }
+
                     if (info.QuotaController != NActors::TActorId{}) {
                         pended = true;
                         cache.PendingLimitRequest = ev->Sender;
@@ -301,13 +308,6 @@ private:
                         cache.PendingLimit.insert(metricName);
                         Send(info.QuotaController, new TEvQuotaService::TQuotaLimitChangeRequest(subjectType, subjectId, metricName, cached.Usage.Limit.Value, limit));
                         continue;
-                    } else {
-                        if (cached.Usage.Limit.Value == 0 || limit == 0 || limit > cached.Usage.Limit.Value) {
-                            // check hard limit only if quota is increased
-                            if (info.HardLimit != 0 && (limit == 0 || limit > info.HardLimit)) {
-                                limit = info.HardLimit;
-                            }
-                        }
                     }
                 }
 

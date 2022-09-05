@@ -52,6 +52,7 @@ struct TEventIds {
         EvDeleteRateLimiterResourceResponse,
 
         EvSchemaDeleted,
+        EvSchemaUpdated,
 
         // Special events
         EvEnd

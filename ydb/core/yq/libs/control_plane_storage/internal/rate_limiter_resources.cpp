@@ -188,7 +188,7 @@ public:
     void Handle(TEvQuotaService::TQuotaGetResponse::TPtr& ev) {
         CPS_LOG_D("Got response from quota service");
         if (auto quotaIt = ev->Get()->Quotas.find(QUOTA_CPU_PERCENT_LIMIT); quotaIt != ev->Get()->Quotas.end()) {
-            CloudLimit = static_cast<double>(quotaIt->second.Limit.Value * 100 * 1000);
+            CloudLimit = static_cast<double>(quotaIt->second.Limit.Value * 10); // percent -> milliseconds
             Send(RateLimiterControlPlaneServiceId(), new TEvRateLimiter::TEvCreateResource(CloudId, FolderId, QueryId, CloudLimit, QueryLimit));
         } else {
             ReplyWithError("CPU quota for cloud was not found");

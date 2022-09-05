@@ -63,4 +63,18 @@ NActors::IActor* MakeDeleteRateLimiterResourceActor(
     TYdbSdkRetryPolicy::TPtr retryPolicy,
     ui64 cookie = 0);
 
+// Actor that updates rate limiter resource.
+// Sends TEvSchemaUpdated to parent (if any).
+NActors::IActor* MakeUpdateRateLimiterResourceActor(
+    NActors::TActorId parent,
+    ui64 logComponent,
+    TYdbConnectionPtr connection,
+    const TString& coordinationNodePath,
+    const TString& resourcePath,
+    TMaybe<double> limit,
+    TYdbSdkRetryPolicy::TPtr retryPolicy,
+    ui64 cookie = 0);
+
+bool IsPathDoesNotExistError(const NYdb::TStatus& status);
+
 } // namespace NYq

@@ -16,6 +16,7 @@ target_link_libraries(providers-common-http_gateway PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-curl
+  cpp-actors-prof
   cpp-monlib-dynamic_counters
   library-cpp-retry
   providers-common-proto

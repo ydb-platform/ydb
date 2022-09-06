@@ -11,6 +11,10 @@
 #include <stack>
 #include <queue>
 
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+#include <library/cpp/actors/prof/tag.h>
+#endif
+
 namespace {
 int curlTrace(CURL *handle, curl_infotype type,
     char *data, size_t size,
@@ -497,6 +501,10 @@ private:
     }
 
     void Perform() {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        NProfiling::SetThreadAllocTag(NProfiling::MakeTag("HTTP_PERFORM"));
+#endif
+
         OutputSize.store(0ULL);
 
         for (size_t handlers = 0U; !IsStopped;) {

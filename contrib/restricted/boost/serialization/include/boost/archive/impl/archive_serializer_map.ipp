@@ -47,10 +47,10 @@ archive_serializer_map<Archive>::insert(const basic_serializer * bs){
 template<class Archive>
 BOOST_ARCHIVE_OR_WARCHIVE_DECL void
 archive_serializer_map<Archive>::erase(const basic_serializer * bs){
-    BOOST_ASSERT(! boost::serialization::singleton<
-            extra_detail::map<Archive>
-        >::is_destroyed()
-    );
+    // note: previously this conditional was a runtime assertion with
+    // BOOST_ASSERT.  We've changed it because we've discovered that at
+    // least one platform is not guaranteed to destroy singletons in
+    // reverse order of distruction.
     if(boost::serialization::singleton<
         extra_detail::map<Archive>
     >::is_destroyed())

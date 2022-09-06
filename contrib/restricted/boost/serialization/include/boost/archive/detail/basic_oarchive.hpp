@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // basic_oarchive.hpp:
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -69,19 +69,19 @@ public:
         const basic_oserializer & bos
     );
     BOOST_ARCHIVE_DECL void save_object(
-        const void *x, 
+        const void *x,
         const basic_oserializer & bos
     );
     BOOST_ARCHIVE_DECL void save_pointer(
-        const void * t, 
+        const void * t,
         const basic_pointer_oserializer * bpos_ptr
     );
     void save_null_pointer(){
-        vsave(NULL_POINTER_TAG);
+        vsave(BOOST_SERIALIZATION_NULL_POINTER_TAG);
     }
     // real public interface starts here
     BOOST_ARCHIVE_DECL void end_preamble(); // default implementation does nothing
-    BOOST_ARCHIVE_DECL library_version_type get_library_version() const;
+    BOOST_ARCHIVE_DECL boost::serialization::library_version_type get_library_version() const;
     BOOST_ARCHIVE_DECL unsigned int get_flags() const;
 };
 

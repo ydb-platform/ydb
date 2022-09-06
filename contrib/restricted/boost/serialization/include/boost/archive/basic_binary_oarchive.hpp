@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // basic_binary_oarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -58,7 +58,7 @@ namespace detail {
 // does have the virtue of buiding the smalles archive in the minimum amount
 // of time.  So under some circumstances it may be he right choice.
 template<class Archive>
-class BOOST_SYMBOL_VISIBLE basic_binary_oarchive : 
+class BOOST_SYMBOL_VISIBLE basic_binary_oarchive :
     public detail::common_oarchive<Archive>
 {
 #ifdef BOOST_NO_MEMBER_TEMPLATE_FRIENDS
@@ -90,18 +90,18 @@ protected:
     BOOST_STATIC_ASSERT(sizeof(object_id_type) == sizeof(uint_least32_t));
     BOOST_STATIC_ASSERT(sizeof(object_reference_type) == sizeof(uint_least32_t));
 
-    // binary files don't include the optional information 
+    // binary files don't include the optional information
     void save_override(const class_id_optional_type & /* t */){}
 
     // enable this if we decide to support generation of previous versions
     #if 0
     void save_override(const boost::archive::version_type & t){
         library_version_type lvt = this->get_library_version();
-        if(boost::archive::library_version_type(7) < lvt){
+        if(boost::serialization::library_version_type(7) < lvt){
             this->detail_common_oarchive::save_override(t);
         }
         else
-        if(boost::archive::library_version_type(6) < lvt){
+        if(boost::serialization::library_version_type(6) < lvt){
             const boost::uint_least16_t x = t;
             * this->This() << x;
         }
@@ -112,11 +112,11 @@ protected:
     }
     void save_override(const boost::serialization::item_version_type & t){
         library_version_type lvt = this->get_library_version();
-        if(boost::archive::library_version_type(7) < lvt){
+        if(boost::serialization::library_version_type(7) < lvt){
             this->detail_common_oarchive::save_override(t);
         }
         else
-        if(boost::archive::library_version_type(6) < lvt){
+        if(boost::serialization::library_version_type(6) < lvt){
             const boost::uint_least16_t x = t;
             * this->This() << x;
         }
@@ -128,11 +128,11 @@ protected:
 
     void save_override(class_id_type & t){
         library_version_type lvt = this->get_library_version();
-        if(boost::archive::library_version_type(7) < lvt){
+        if(boost::serialization::library_version_type(7) < lvt){
             this->detail_common_oarchive::save_override(t);
         }
         else
-        if(boost::archive::library_version_type(6) < lvt){
+        if(boost::serialization::library_version_type(6) < lvt){
             const boost::int_least16_t x = t;
             * this->This() << x;
         }
@@ -155,11 +155,11 @@ protected:
 
     #if 0
     void save_override(const serialization::collection_size_type & t){
-        if (get_library_version() < boost::archive::library_version_type(6)){
+        if (get_library_version() < boost::serialization::library_version_type(6)){
             unsigned int x=0;
             * this->This() >> x;
             t = serialization::collection_size_type(x);
-        } 
+        }
         else{
             * this->This() >> t;
         }

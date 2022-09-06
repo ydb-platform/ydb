@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // xml_woarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -22,20 +22,18 @@
 #else
 #include <cstddef> // size_t
 #if defined(BOOST_NO_STDC_NAMESPACE)
-namespace std{ 
-    using ::size_t; 
+namespace std{
+    using ::size_t;
 } // namespace std
 #endif
 
 #include <ostream>
 
-//#include <boost/smart_ptr/scoped_ptr.hpp>
 #include <boost/archive/detail/auto_link_warchive.hpp>
 #include <boost/archive/basic_text_oprimitive.hpp>
 #include <boost/archive/basic_xml_oarchive.hpp>
 #include <boost/archive/detail/register_archive.hpp>
 #include <boost/serialization/item_version_type.hpp>
-//#include <boost/archive/detail/utf8_codecvt_facet.hpp>
 
 #include <boost/archive/detail/abi_prefix.hpp> // must be the last header
 
@@ -74,28 +72,28 @@ protected:
     }
     void
     save(const version_type & t){
-        save(static_cast<const unsigned int>(t));
+        save(static_cast<unsigned int>(t));
     }
-    void 
+    void
     save(const boost::serialization::item_version_type & t){
-        save(static_cast<const unsigned int>(t));
+        save(static_cast<unsigned int>(t));
     }
     BOOST_WARCHIVE_DECL void
     save(const char * t);
     #ifndef BOOST_NO_INTRINSIC_WCHAR_T
-    BOOST_WARCHIVE_DECL void 
+    BOOST_WARCHIVE_DECL void
     save(const wchar_t * t);
     #endif
-    BOOST_WARCHIVE_DECL void 
+    BOOST_WARCHIVE_DECL void
     save(const std::string &s);
     #ifndef BOOST_NO_STD_WSTRING
     BOOST_WARCHIVE_DECL void
     save(const std::wstring &ws);
     #endif
-    BOOST_WARCHIVE_DECL 
+    BOOST_WARCHIVE_DECL
     xml_woarchive_impl(std::wostream & os, unsigned int flags);
     BOOST_WARCHIVE_DECL
-    ~xml_woarchive_impl();
+    ~xml_woarchive_impl() BOOST_OVERRIDE;
 public:
     BOOST_WARCHIVE_DECL void
     save_binary(const void *address, std::size_t count);
@@ -106,7 +104,7 @@ public:
 // typedef xml_woarchive_impl<xml_woarchive_impl<...> > xml_woarchive;
 
 // do not derive from this class.  If you want to extend this functionality
-// via inhertance, derived from xml_woarchive_impl instead.  This will
+// via inheritance, derived from xml_woarchive_impl instead.  This will
 // preserve correct static polymorphism.
 class BOOST_SYMBOL_VISIBLE xml_woarchive :
     public xml_woarchive_impl<xml_woarchive>
@@ -114,8 +112,11 @@ class BOOST_SYMBOL_VISIBLE xml_woarchive :
 public:
     xml_woarchive(std::wostream & os, unsigned int flags = 0) :
         xml_woarchive_impl<xml_woarchive>(os, flags)
-    {}
-    ~xml_woarchive(){}
+    {
+    if(0 == (flags & no_header))
+        init();
+    }
+    ~xml_woarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

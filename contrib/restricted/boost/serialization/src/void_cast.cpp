@@ -43,7 +43,7 @@ namespace void_cast_detail {
 // member extended type info records - NOT their
 // addresses.  This is necessary in order for the
 // void cast operations to work across dll and exe
-// module boundries.
+// module boundaries.
 bool void_caster::operator<(const void_caster & rhs) const {
     // include short cut to save time and eliminate
     // problems when when base class aren't virtual
@@ -87,14 +87,14 @@ class void_caster_shortcut : public void_caster
     vbc_downcast(
         void const * const t
     ) const;
-    virtual void const *
-    upcast(void const * const t) const{
+    void const *
+    upcast(void const * const t) const BOOST_OVERRIDE {
         if(m_includes_virtual_base)
             return vbc_upcast(t);
         return static_cast<const char *> ( t ) - m_difference;
     }
-    virtual void const *
-    downcast(void const * const t) const{
+    void const *
+    downcast(void const * const t) const BOOST_OVERRIDE {
         if(m_includes_virtual_base)
             return vbc_downcast(t);
         return static_cast<const char *> ( t ) + m_difference;
@@ -102,7 +102,7 @@ class void_caster_shortcut : public void_caster
     virtual bool is_shortcut() const {
         return true;
     }
-    virtual bool has_virtual_base() const {
+    bool has_virtual_base() const BOOST_OVERRIDE {
         return m_includes_virtual_base;
     }
 public:
@@ -118,7 +118,7 @@ public:
     {
         recursive_register(includes_virtual_base);
     }
-    virtual ~void_caster_shortcut(){
+    ~void_caster_shortcut() BOOST_OVERRIDE {
         recursive_unregister();
     }
 };
@@ -187,17 +187,17 @@ void_caster_shortcut::vbc_upcast(
 // just used as a search key
 class void_caster_argument : public void_caster
 {
-    virtual void const *
-    upcast(void const * const /*t*/) const {
+    void const *
+    upcast(void const * const /*t*/) const BOOST_OVERRIDE {
         BOOST_ASSERT(false);
         return NULL;
     }
-    virtual void const *
-    downcast( void const * const /*t*/) const {
+    void const *
+    downcast( void const * const /*t*/) const BOOST_OVERRIDE {
         BOOST_ASSERT(false);
         return NULL;
     }
-    virtual bool has_virtual_base() const {
+    bool has_virtual_base() const BOOST_OVERRIDE {
         BOOST_ASSERT(false);
         return false;
     }
@@ -208,7 +208,7 @@ public:
     ) :
         void_caster(derived, base)
     {}
-    virtual ~void_caster_argument(){};
+    ~void_caster_argument() BOOST_OVERRIDE {}
 };
 
 #ifdef BOOST_MSVC
@@ -276,7 +276,10 @@ void_caster::recursive_register(bool includes_virtual_base) const {
 
 BOOST_SERIALIZATION_DECL void
 void_caster::recursive_unregister() const {
-    BOOST_ASSERT(! void_caster_registry::is_destroyed());
+    // note: it's been discovered that at least one platform is not guaranteed
+    // to destroy singletons reverse order of construction.  So we can't
+    // use a runtime assert here.  Leave this in a reminder not to do this!
+    // BOOST_ASSERT(! void_caster_registry::is_destroyed());
     if(void_caster_registry::is_destroyed())
         return;
 

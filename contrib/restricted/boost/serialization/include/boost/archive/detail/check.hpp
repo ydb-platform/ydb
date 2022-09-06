@@ -4,18 +4,20 @@
 // MS compatible compilers support #pragma once
 #if defined(_MSC_VER)
 # pragma once
-#pragma inline_depth(511)
+#if !defined(__clang__)
+#pragma inline_depth(255)
 #pragma inline_recursion(on)
+#endif
 #endif
 
 #if defined(__MWERKS__)
-#pragma inline_depth(511)
+#pragma inline_depth(255)
 #endif
 
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // check.hpp: interface for serialization system.
 
-// (C) Copyright 2009 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2009 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -49,7 +51,7 @@ namespace detail {
 
 template<class T>
 inline void check_object_level(){
-    typedef 
+    typedef
         typename mpl::greater_equal<
             serialization::implementation_level< T >,
             mpl::int_<serialization::primitive_type>
@@ -62,7 +64,7 @@ inline void check_object_level(){
 
 template<class T>
 inline void check_object_versioning(){
-    typedef 
+    typedef
         typename mpl::or_<
             typename mpl::greater<
                 serialization::implementation_level< T >,
@@ -90,8 +92,8 @@ inline void check_object_tracking(){
     // saving an non-const object of a type not marked "track_never)
 
     // may be an indicator of an error usage of the
-    // serialization library and should be double checked.  
-    // See documentation on object tracking.  Also, see the 
+    // serialization library and should be double checked.
+    // See documentation on object tracking.  Also, see the
     // "rationale" section of the documenation
     // for motivation for this checking.
 
@@ -104,7 +106,7 @@ template<class T>
 inline void check_pointer_level(){
     // we should only invoke this once we KNOW that T
     // has been used as a pointer!!
-    typedef 
+    typedef
         typename mpl::or_<
             typename mpl::greater<
                 serialization::implementation_level< T >,
@@ -126,12 +128,12 @@ inline void check_pointer_level(){
 
     // in this case, indication that an object is tracked is
     // not stored in the archive itself - see level == object_serializable
-    // but rather the existence of the operation ar >> T * is used to 
+    // but rather the existence of the operation ar >> T * is used to
     // infer that an object of this type should be tracked.  So, if
     // you save via a pointer but don't load via a pointer the operation
     // will fail on load without given any valid reason for the failure.
 
-    // So if your program traps here, consider changing the 
+    // So if your program traps here, consider changing the
     // tracking or implementation level traits - or not
     // serializing via a pointer.
     BOOST_STATIC_WARNING(typex::value);

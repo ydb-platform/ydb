@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // basic_text_oarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -44,9 +44,9 @@ namespace detail {
 } // namespace detail
 
 /////////////////////////////////////////////////////////////////////////
-// class basic_text_oarchive 
+// class basic_text_oarchive
 template<class Archive>
-class BOOST_SYMBOL_VISIBLE basic_text_oarchive : 
+class BOOST_SYMBOL_VISIBLE basic_text_oarchive :
     public detail::common_oarchive<Archive>
 {
 #ifdef BOOST_NO_MEMBER_TEMPLATE_FRIENDS
@@ -89,7 +89,7 @@ protected:
         this->detail_common_oarchive::save_override(t);
     }
 
-    // text file don't include the optional information 
+    // text file don't include the optional information
     void save_override(const class_id_optional_type & /* t */){}
 
     void save_override(const class_name_type & t){
@@ -104,7 +104,7 @@ protected:
         detail::common_oarchive<Archive>(flags),
         delimiter(none)
     {}
-    ~basic_text_oarchive(){}
+    ~basic_text_oarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

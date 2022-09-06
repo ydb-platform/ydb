@@ -11,7 +11,7 @@
 // on runtime typing (rtti - typeid) but uses a user specified string
 // as the portable class identifier.
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -52,7 +52,7 @@ namespace typeid_system {
 class BOOST_SYMBOL_VISIBLE extended_type_info_typeid_0 :
     public extended_type_info
 {
-    virtual const char * get_debug_info() const {
+    const char * get_debug_info() const BOOST_OVERRIDE {
         if(static_cast<const std::type_info *>(0) == m_ti)
             return static_cast<const char *>(0);
         return m_ti->name();
@@ -60,16 +60,16 @@ class BOOST_SYMBOL_VISIBLE extended_type_info_typeid_0 :
 protected:
     const std::type_info * m_ti;
     BOOST_SERIALIZATION_DECL extended_type_info_typeid_0(const char * key);
-    BOOST_SERIALIZATION_DECL ~extended_type_info_typeid_0();
+    BOOST_SERIALIZATION_DECL ~extended_type_info_typeid_0() BOOST_OVERRIDE;
     BOOST_SERIALIZATION_DECL void type_register(const std::type_info & ti);
     BOOST_SERIALIZATION_DECL void type_unregister();
     BOOST_SERIALIZATION_DECL const extended_type_info *
     get_extended_type_info(const std::type_info & ti) const;
 public:
-    virtual BOOST_SERIALIZATION_DECL bool
-    is_less_than(const extended_type_info &rhs) const;
-    virtual BOOST_SERIALIZATION_DECL bool
-    is_equal(const extended_type_info &rhs) const;
+    BOOST_SERIALIZATION_DECL bool
+    is_less_than(const extended_type_info &rhs) const BOOST_OVERRIDE;
+    BOOST_SERIALIZATION_DECL bool
+    is_equal(const extended_type_info &rhs) const BOOST_OVERRIDE;
     const std::type_info & get_typeid() const {
         return *m_ti;
     }
@@ -78,7 +78,7 @@ public:
 } // typeid_system
 
 template<class T>
-class extended_type_info_typeid : 
+class extended_type_info_typeid :
     public typeid_system::extended_type_info_typeid_0,
     public singleton<extended_type_info_typeid< T > >
 {
@@ -91,7 +91,7 @@ public:
         type_register(typeid(T));
         key_register();
     }
-    ~extended_type_info_typeid(){
+    ~extended_type_info_typeid() BOOST_OVERRIDE {
         key_unregister();
         type_unregister();
     }
@@ -102,7 +102,7 @@ public:
         // note: this implementation - based on usage of typeid (rtti)
         // only does something if the class has at least one virtual function.
         BOOST_STATIC_WARNING(boost::is_polymorphic< T >::value);
-        return 
+        return
             typeid_system::extended_type_info_typeid_0::get_extended_type_info(
                 typeid(t)
             );
@@ -110,7 +110,7 @@ public:
     const char * get_key() const {
         return boost::serialization::guid< T >();
     }
-    virtual void * construct(unsigned int count, ...) const{
+    void * construct(unsigned int count, ...) const BOOST_OVERRIDE {
         // count up the arguments
         std::va_list ap;
         va_start(ap, count);
@@ -131,7 +131,7 @@ public:
             return NULL;
         }
     }
-    virtual void destroy(void const * const p) const {
+    void destroy(void const * const p) const BOOST_OVERRIDE {
         boost::serialization::access::destroy(
             static_cast<T const *>(p)
         );
@@ -143,7 +143,7 @@ public:
 } // namespace boost
 
 ///////////////////////////////////////////////////////////////////////////////
-// If no other implementation has been designated as default, 
+// If no other implementation has been designated as default,
 // use this one.  To use this implementation as the default, specify it
 // before any of the other headers.
 #ifndef BOOST_SERIALIZATION_DEFAULT_TYPE_INFO
@@ -152,7 +152,7 @@ public:
     namespace serialization {
     template<class T>
     struct extended_type_info_impl {
-        typedef typename 
+        typedef typename
             boost::serialization::extended_type_info_typeid< T > type;
     };
     } // namespace serialization

@@ -10,7 +10,7 @@
 
 //  See library home page at http://www.boost.org/libs/serialization
 
-//----------------------------------------------------------------------------// 
+//----------------------------------------------------------------------------//
 
 // This header implements separate compilation features as described in
 // http://www.boost.org/more/separate_compilation.html
@@ -18,7 +18,7 @@
 #include <boost/config.hpp>
 #include <boost/detail/workaround.hpp>
 
-// note: this version incorporates the related code into the the 
+// note: this version incorporates the related code into the the
 // the same library as BOOST_ARCHIVE.  This could change some day in the
 // future
 
@@ -48,7 +48,7 @@
     #define BOOST_SERIALIZATION_DECL
 #endif
 
-//  enable automatic library variant selection  ------------------------------// 
+//  enable automatic library variant selection  ------------------------------//
 
 #if !defined(BOOST_ALL_NO_LIB) && !defined(BOOST_SERIALIZATION_NO_LIB) \
 &&  !defined(BOOST_ARCHIVE_SOURCE) && !defined(BOOST_WARCHIVE_SOURCE)  \
@@ -69,6 +69,6 @@
     //
     #include <boost/config/auto_link.hpp>
 
-#endif  
+#endif
 
 #endif // BOOST_SERIALIZATION_CONFIG_HPP

@@ -79,10 +79,15 @@ BOOST_ARCHIVE_SIGNATURE(){
 // 15- corrections to optional and collection loading
 // 16- eliminated dependency on <codecvt> which is buggy in some libraries
 //     and now officially deprecated in the standard
+// 17- Boost 1.68 August 2018
+// 18- addressed undefined behavior in archive constuctors.
+//     init() called from base wrote archive header before archive
+//     was fully constructed.
+//     Boost 1.76 
 
-BOOST_SYMBOL_VISIBLE library_version_type
+BOOST_SYMBOL_VISIBLE boost::serialization::library_version_type
 BOOST_ARCHIVE_VERSION(){
-    return library_version_type(16);
+    return boost::serialization::library_version_type(19);
 }
 
 } // namespace archive

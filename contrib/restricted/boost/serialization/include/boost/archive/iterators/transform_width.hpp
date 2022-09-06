@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // transform_width.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -29,7 +29,7 @@
 
 #include <algorithm> // std::min
 
-namespace boost { 
+namespace boost {
 namespace archive {
 namespace iterators {
 
@@ -37,12 +37,12 @@ namespace iterators {
 // class used by text archives to translate char strings to wchar_t
 // strings of the currently selected locale
 template<
-    class Base, 
-    int BitsOut, 
-    int BitsIn, 
+    class Base,
+    int BitsOut,
+    int BitsIn,
     class CharType = typename boost::iterator_value<Base>::type // output character
 >
-class transform_width : 
+class transform_width :
     public boost::iterator_adaptor<
         transform_width<Base, BitsOut, BitsIn, CharType>,
         Base,
@@ -108,19 +108,19 @@ class transform_width :
 public:
     // make composible buy using templated constructor
     template<class T>
-    transform_width(T start) : 
+    transform_width(T start) :
         super_t(Base(static_cast< T >(start))),
         m_buffer_out_full(false),
         m_buffer_out(0),
-        // To disable GCC warning, but not truly necessary 
-	    //(m_buffer_in will be initialized later before being 
+        // To disable GCC warning, but not truly necessary
+	    //(m_buffer_in will be initialized later before being
 	    //used because m_remaining_bits == 0)
-        m_buffer_in(0), 
+        m_buffer_in(0),
         m_remaining_bits(0),
         m_end_of_sequence(false)
     {}
     // intel 7.1 doesn't like default copy constructor
-    transform_width(const transform_width & rhs) : 
+    transform_width(const transform_width & rhs) :
         super_t(rhs.base_reference()),
         m_buffer_out_full(rhs.m_buffer_out_full),
         m_buffer_out(rhs.m_buffer_out),
@@ -131,9 +131,9 @@ public:
 };
 
 template<
-    class Base, 
-    int BitsOut, 
-    int BitsIn, 
+    class Base,
+    int BitsOut,
+    int BitsIn,
     class CharType
 >
 void transform_width<Base, BitsOut, BitsIn, CharType>::fill() {

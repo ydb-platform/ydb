@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // xml_oarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -21,8 +21,8 @@
 #include <cstddef> // size_t
 #include <boost/config.hpp>
 #if defined(BOOST_NO_STDC_NAMESPACE)
-namespace std{ 
-    using ::size_t; 
+namespace std{
+    using ::size_t;
 } // namespace std
 #endif
 
@@ -47,7 +47,7 @@ namespace detail {
 } // namespace detail
 
 template<class Archive>
-class BOOST_SYMBOL_VISIBLE xml_oarchive_impl : 
+class BOOST_SYMBOL_VISIBLE xml_oarchive_impl :
     public basic_text_oprimitive<std::ostream>,
     public basic_xml_oarchive<Archive>
 {
@@ -63,15 +63,15 @@ protected:
     void save(const T & t){
         basic_text_oprimitive<std::ostream>::save(t);
     }
-    void 
+    void
     save(const version_type & t){
-        save(static_cast<const unsigned int>(t));
+        save(static_cast<unsigned int>(t));
     }
-    void 
+    void
     save(const boost::serialization::item_version_type & t){
-        save(static_cast<const unsigned int>(t));
+        save(static_cast<unsigned int>(t));
     }
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     save(const char * t);
     #ifndef BOOST_NO_INTRINSIC_WCHAR_T
     BOOST_ARCHIVE_DECL void
@@ -83,10 +83,10 @@ protected:
     BOOST_ARCHIVE_DECL void
     save(const std::wstring &ws);
     #endif
-    BOOST_ARCHIVE_DECL 
+    BOOST_ARCHIVE_DECL
     xml_oarchive_impl(std::ostream & os, unsigned int flags);
-    BOOST_ARCHIVE_DECL 
-    ~xml_oarchive_impl();
+    BOOST_ARCHIVE_DECL
+    ~xml_oarchive_impl() BOOST_OVERRIDE;
 public:
     BOOST_ARCHIVE_DECL
     void save_binary(const void *address, std::size_t count);
@@ -105,23 +105,26 @@ public:
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 // we use the following because we can't use
 // typedef xml_oarchive_impl<xml_oarchive_impl<...> > xml_oarchive;
 
 // do not derive from this class.  If you want to extend this functionality
-// via inhertance, derived from xml_oarchive_impl instead.  This will
+// via inheritance, derived from xml_oarchive_impl instead.  This will
 // preserve correct static polymorphism.
-class BOOST_SYMBOL_VISIBLE xml_oarchive : 
+class BOOST_SYMBOL_VISIBLE xml_oarchive :
     public xml_oarchive_impl<xml_oarchive>
 {
 public:
     xml_oarchive(std::ostream & os, unsigned int flags = 0) :
         xml_oarchive_impl<xml_oarchive>(os, flags)
-    {}
-    ~xml_oarchive(){}
+    {
+        if(0 == (flags & no_header))
+            init();
+    }
+    ~xml_oarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

@@ -11,7 +11,6 @@
 #include <boost/config.hpp>
 #include <cstring> // memcpy
 #include <cstddef> // NULL
-#include <exception>
 
 #if defined(BOOST_NO_STDC_NAMESPACE)
 namespace std{ 
@@ -34,6 +33,7 @@ namespace std{
 #include <boost/archive/dinkumware.hpp>
 #endif
 
+#include <boost/core/uncaught_exceptions.hpp>
 #include <boost/core/no_exceptions_support.hpp>
 
 #include <boost/archive/xml_archive_exception.hpp>
@@ -165,7 +165,7 @@ BOOST_ARCHIVE_DECL void
 xml_iarchive_impl<Archive>::init(){
     gimpl->init(is);
     this->set_library_version(
-        library_version_type(gimpl->rv.version)
+        boost::serialization::library_version_type(gimpl->rv.version)
     );
 }
 
@@ -181,15 +181,12 @@ xml_iarchive_impl<Archive>::xml_iarchive_impl(
     ),
     basic_xml_iarchive<Archive>(flags),
     gimpl(new xml_grammar())
-{
-    if(0 == (flags & no_header))
-        init();
-}
+{}
 
 template<class Archive>
 BOOST_ARCHIVE_DECL
 xml_iarchive_impl<Archive>::~xml_iarchive_impl(){
-    if(std::uncaught_exception())
+    if(boost::core::uncaught_exceptions() > 0)
         return;
     if(0 == (this->get_flags() & no_header)){
         gimpl->windup(is);

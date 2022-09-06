@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // extended_type_info.hpp: interface for portable version of type_info
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -34,7 +34,7 @@
 
 #define BOOST_SERIALIZATION_MAX_KEY_SIZE 128
 
-namespace boost { 
+namespace boost {
 namespace serialization {
 
 namespace void_cast_detail{
@@ -58,7 +58,7 @@ private:
 protected:
     BOOST_SERIALIZATION_DECL void key_unregister() const;
     BOOST_SERIALIZATION_DECL void key_register() const;
-    // this class can't be used as is. It's just the 
+    // this class can't be used as is. It's just the
     // common functionality for all type_info replacement
     // systems.  Hence, make these protected
     BOOST_SERIALIZATION_DECL extended_type_info(
@@ -104,7 +104,7 @@ inline const char * guid(){
     return ext::guid_impl<T>::call();
 }
 
-} // namespace serialization 
+} // namespace serialization
 } // namespace boost
 
 #ifdef BOOST_MSVC

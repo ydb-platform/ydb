@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // text_wiarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -36,7 +36,7 @@
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 namespace detail {
@@ -92,9 +92,9 @@ protected:
     void load_override(T & t){
         basic_text_iarchive<Archive>::load_override(t);
     }
-    BOOST_WARCHIVE_DECL 
+    BOOST_WARCHIVE_DECL
     text_wiarchive_impl(std::wistream & is, unsigned int flags);
-    ~text_wiarchive_impl(){};
+    ~text_wiarchive_impl() BOOST_OVERRIDE {}
 };
 
 } // namespace archive
@@ -111,16 +111,19 @@ protected:
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
-class BOOST_SYMBOL_VISIBLE text_wiarchive : 
+class BOOST_SYMBOL_VISIBLE text_wiarchive :
     public text_wiarchive_impl<text_wiarchive>{
 public:
     text_wiarchive(std::wistream & is, unsigned int flags = 0) :
         text_wiarchive_impl<text_wiarchive>(is, flags)
-    {}
-    ~text_wiarchive(){}
+    {
+        if(0 == (flags & no_header))
+            init();
+    }
+    ~text_wiarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

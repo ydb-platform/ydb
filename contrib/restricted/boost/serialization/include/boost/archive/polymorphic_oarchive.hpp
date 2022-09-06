@@ -17,7 +17,7 @@
 //  See http://www.boost.org for updates, documentation, and revision history.
 
 #include <cstddef> // size_t
-#include <climits> // ULONG_MAX 
+#include <climits> // ULONG_MAX
 #include <string>
 
 #include <boost/config.hpp>
@@ -118,11 +118,11 @@ public:
         save_end(t.name());
     }
 protected:
-    virtual ~polymorphic_oarchive_impl(){};
+    virtual ~polymorphic_oarchive_impl() {}
 public:
     // utility functions implemented by all legal archives
     virtual unsigned int get_flags() const = 0;
-    virtual library_version_type get_library_version() const = 0;
+    virtual boost::serialization::library_version_type get_library_version() const = 0;
     virtual void save_binary(const void * t, std::size_t size) = 0;
 
     virtual void save_object(
@@ -136,11 +136,11 @@ public:
 };
 
 // note: preserve naming symmetry
-class BOOST_SYMBOL_VISIBLE polymorphic_oarchive : 
+class BOOST_SYMBOL_VISIBLE polymorphic_oarchive :
     public polymorphic_oarchive_impl
 {
 public:
-    virtual ~polymorphic_oarchive(){};
+    ~polymorphic_oarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // text_oarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -21,8 +21,8 @@
 
 #include <boost/config.hpp>
 #if defined(BOOST_NO_STDC_NAMESPACE)
-namespace std{ 
-    using ::size_t; 
+namespace std{
+    using ::size_t;
 } // namespace std
 #endif
 
@@ -39,7 +39,7 @@ namespace std{
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 namespace detail {
@@ -65,45 +65,48 @@ protected:
         basic_text_oprimitive<std::ostream>::save(t);
     }
     void save(const version_type & t){
-        save(static_cast<const unsigned int>(t));
+        save(static_cast<unsigned int>(t));
     }
     void save(const boost::serialization::item_version_type & t){
-        save(static_cast<const unsigned int>(t));
+        save(static_cast<unsigned int>(t));
     }
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     save(const char * t);
     #ifndef BOOST_NO_INTRINSIC_WCHAR_T
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     save(const wchar_t * t);
     #endif
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     save(const std::string &s);
     #ifndef BOOST_NO_STD_WSTRING
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     save(const std::wstring &ws);
     #endif
-    BOOST_ARCHIVE_DECL 
+    BOOST_ARCHIVE_DECL
     text_oarchive_impl(std::ostream & os, unsigned int flags);
     // don't import inline definitions! leave this as a reminder.
-    //BOOST_ARCHIVE_DECL 
-    ~text_oarchive_impl(){};
+    //BOOST_ARCHIVE_DECL
+    ~text_oarchive_impl() BOOST_OVERRIDE {}
 public:
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     save_binary(const void *address, std::size_t count);
 };
 
 // do not derive from this class.  If you want to extend this functionality
-// via inhertance, derived from text_oarchive_impl instead.  This will
+// via inheritance, derived from text_oarchive_impl instead.  This will
 // preserve correct static polymorphism.
-class BOOST_SYMBOL_VISIBLE text_oarchive : 
+class BOOST_SYMBOL_VISIBLE text_oarchive :
     public text_oarchive_impl<text_oarchive>
 {
 public:
     text_oarchive(std::ostream & os_, unsigned int flags = 0) :
         // note: added _ to suppress useless gcc warning
         text_oarchive_impl<text_oarchive>(os_, flags)
-    {}
-    ~text_oarchive(){}
+    {
+        if(0 == (flags & no_header))
+            init();
+    }
+    ~text_oarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // text_woarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -26,8 +26,8 @@
 #include <cstddef> // size_t
 
 #if defined(BOOST_NO_STDC_NAMESPACE)
-namespace std{ 
-    using ::size_t; 
+namespace std{
+    using ::size_t;
 } // namespace std
 #endif
 
@@ -44,7 +44,7 @@ namespace std{
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 namespace detail {
@@ -78,10 +78,10 @@ protected:
         basic_text_oprimitive<std::wostream>::save(t);
     }
     void save(const version_type & t){
-        save(static_cast<const unsigned int>(t));
+        save(static_cast<unsigned int>(t));
     }
     void save(const boost::serialization::item_version_type & t){
-        save(static_cast<const unsigned int>(t));
+        save(static_cast<unsigned int>(t));
     }
     BOOST_WARCHIVE_DECL void
     save(const char * t);
@@ -97,14 +97,11 @@ protected:
     #endif
     text_woarchive_impl(std::wostream & os, unsigned int flags) :
         basic_text_oprimitive<std::wostream>(
-            os, 
+            os,
             0 != (flags & no_codecvt)
         ),
         basic_text_oarchive<Archive>(flags)
-    {
-        if(0 == (flags & no_header))
-            basic_text_oarchive<Archive>::init();
-    }
+    {}
 public:
     void save_binary(const void *address, std::size_t count){
         put(static_cast<wchar_t>('\n'));
@@ -114,7 +111,7 @@ public:
         #else
         this->basic_text_oprimitive::save_binary(
         #endif
-            address, 
+            address,
             count
         );
         put(static_cast<wchar_t>('\n'));
@@ -127,16 +124,19 @@ public:
 // typedef text_oarchive_impl<text_oarchive_impl<...> > text_oarchive;
 
 // do not derive from this class.  If you want to extend this functionality
-// via inhertance, derived from text_oarchive_impl instead.  This will
+// via inheritance, derived from text_oarchive_impl instead.  This will
 // preserve correct static polymorphism.
-class BOOST_SYMBOL_VISIBLE text_woarchive : 
+class BOOST_SYMBOL_VISIBLE text_woarchive :
     public text_woarchive_impl<text_woarchive>
 {
 public:
     text_woarchive(std::wostream & os, unsigned int flags = 0) :
         text_woarchive_impl<text_woarchive>(os, flags)
-    {}
-    ~text_woarchive(){}
+    {
+        if(0 == (flags & no_header))
+            init();
+    }
+    ~text_woarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

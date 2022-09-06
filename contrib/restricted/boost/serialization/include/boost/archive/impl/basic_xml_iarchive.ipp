@@ -37,7 +37,6 @@ basic_xml_iarchive<Archive>::load_start(const char *name){
     }
     // don't check start tag at highest level
     ++depth;
-    return;
 }
 
 template<class Archive>

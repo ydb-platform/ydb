@@ -20,7 +20,7 @@
 // IN GENERAL, ARCHIVES CREATED WITH THIS CLASS WILL NOT BE READABLE
 // ON PLATFORM APART FROM THE ONE THEY ARE CREATED ON
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -37,8 +37,8 @@
 
 #include <boost/config.hpp>
 #if defined(BOOST_NO_STDC_NAMESPACE)
-namespace std{ 
-    using ::memcpy; 
+namespace std{
+    using ::memcpy;
     using ::size_t;
 } // namespace std
 #endif
@@ -48,7 +48,6 @@ namespace std{
 #include <boost/integer.hpp>
 #include <boost/integer_traits.hpp>
 
-//#include <boost/mpl/placeholders.hpp>
 #include <boost/serialization/is_bitwise_serializable.hpp>
 #include <boost/serialization/array_wrapper.hpp>
 
@@ -58,7 +57,7 @@ namespace std{
 #include <boost/archive/detail/auto_link_archive.hpp>
 #include <boost/archive/detail/abi_prefix.hpp> // must be the last header
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 /////////////////////////////////////////////////////////////////////////////
@@ -98,8 +97,8 @@ public:
 
     /////////////////////////////////////////////////////////
     // fundamental types that need special treatment
-    
-    // trap usage of invalid uninitialized boolean 
+
+    // trap usage of invalid uninitialized boolean
     void load(bool & t){
         load_binary(& t, sizeof(t));
         int i = t;
@@ -119,29 +118,29 @@ public:
 
     BOOST_ARCHIVE_OR_WARCHIVE_DECL void
     init();
-    BOOST_ARCHIVE_OR_WARCHIVE_DECL 
+    BOOST_ARCHIVE_OR_WARCHIVE_DECL
     basic_binary_iprimitive(
-        std::basic_streambuf<Elem, Tr> & sb, 
+        std::basic_streambuf<Elem, Tr> & sb,
         bool no_codecvt
     );
-    BOOST_ARCHIVE_OR_WARCHIVE_DECL 
+    BOOST_ARCHIVE_OR_WARCHIVE_DECL
     ~basic_binary_iprimitive();
 public:
     // we provide an optimized load for all fundamental types
-    // typedef serialization::is_bitwise_serializable<mpl::_1> 
+    // typedef serialization::is_bitwise_serializable<mpl::_1>
     // use_array_optimization;
-    struct use_array_optimization {  
-        template <class T>  
-        #if defined(BOOST_NO_DEPENDENT_NESTED_DERIVATIONS)  
-            struct apply {  
-                typedef typename boost::serialization::is_bitwise_serializable< T >::type type;  
+    struct use_array_optimization {
+        template <class T>
+        #if defined(BOOST_NO_DEPENDENT_NESTED_DERIVATIONS)
+            struct apply {
+                typedef typename boost::serialization::is_bitwise_serializable< T >::type type;
             };
         #else
-            struct apply : public boost::serialization::is_bitwise_serializable< T > {};  
+            struct apply : public boost::serialization::is_bitwise_serializable< T > {};
         #endif
     };
 
-    // the optimized load_array dispatches to load_binary 
+    // the optimized load_array dispatches to load_binary
     template <class ValueType>
     void load_array(serialization::array_wrapper<ValueType>& a, unsigned int)
     {
@@ -155,17 +154,17 @@ public:
 template<class Archive, class Elem, class Tr>
 inline void
 basic_binary_iprimitive<Archive, Elem, Tr>::load_binary(
-    void *address, 
+    void *address,
     std::size_t count
 ){
     // note: an optimizer should eliminate the following for char files
     BOOST_ASSERT(
-        static_cast<std::streamsize>(count / sizeof(Elem)) 
+        static_cast<std::streamsize>(count / sizeof(Elem))
         <= boost::integer_traits<std::streamsize>::const_max
     );
     std::streamsize s = static_cast<std::streamsize>(count / sizeof(Elem));
     std::streamsize scount = m_sb.sgetn(
-        static_cast<Elem *>(address), 
+        static_cast<Elem *>(address),
         s
     );
     if(scount != s)

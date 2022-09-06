@@ -108,8 +108,6 @@ text_wiarchive_impl<Archive>::text_wiarchive_impl(
     ),
     basic_text_iarchive<Archive>(flags)
 {
-    if(0 == (flags & no_header))
-        basic_text_iarchive<Archive>::init();
 }
 
 } // archive

@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // binary_oarchive_impl.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -26,7 +26,7 @@
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 namespace detail {
@@ -34,7 +34,7 @@ namespace detail {
 } // namespace detail
 
 template<class Archive, class Elem, class Tr>
-class BOOST_SYMBOL_VISIBLE binary_oarchive_impl : 
+class BOOST_SYMBOL_VISIBLE binary_oarchive_impl :
     public basic_binary_oprimitive<Archive, Elem, Tr>,
     public basic_binary_oarchive<Archive>
 {
@@ -71,29 +71,25 @@ protected:
         #endif
     }
     binary_oarchive_impl(
-        std::basic_streambuf<Elem, Tr> & bsb, 
+        std::basic_streambuf<Elem, Tr> & bsb,
         unsigned int flags
     ) :
         basic_binary_oprimitive<Archive, Elem, Tr>(
-            bsb, 
+            bsb,
             0 != (flags & no_codecvt)
         ),
         basic_binary_oarchive<Archive>(flags)
-    {
-        init(flags);
-    }
+    {}
     binary_oarchive_impl(
-        std::basic_ostream<Elem, Tr> & os, 
+        std::basic_ostream<Elem, Tr> & os,
         unsigned int flags
     ) :
         basic_binary_oprimitive<Archive, Elem, Tr>(
-            * os.rdbuf(), 
+            * os.rdbuf(),
             0 != (flags & no_codecvt)
         ),
         basic_binary_oarchive<Archive>(flags)
-    {
-        init(flags);
-    }
+    {}
 };
 
 } // namespace archive

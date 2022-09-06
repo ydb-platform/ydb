@@ -11,7 +11,7 @@
 // on runtime typing (rtti - typeid) but uses a user specified string
 // as the portable class identifier.
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -50,25 +50,25 @@ namespace serialization {
 
 namespace no_rtti_system {
 
-// common base class to share type_info_key.  This is used to 
+// common base class to share type_info_key.  This is used to
 // identify the method used to keep track of the extended type
 class BOOST_SYMBOL_VISIBLE extended_type_info_no_rtti_0 :
     public extended_type_info
 {
 protected:
     BOOST_SERIALIZATION_DECL extended_type_info_no_rtti_0(const char * key);
-    BOOST_SERIALIZATION_DECL ~extended_type_info_no_rtti_0();
+    BOOST_SERIALIZATION_DECL ~extended_type_info_no_rtti_0() BOOST_OVERRIDE;
 public:
-    virtual BOOST_SERIALIZATION_DECL bool
-    is_less_than(const boost::serialization::extended_type_info &rhs) const ;
-    virtual BOOST_SERIALIZATION_DECL bool
-    is_equal(const boost::serialization::extended_type_info &rhs) const ;
+    BOOST_SERIALIZATION_DECL bool
+    is_less_than(const boost::serialization::extended_type_info &rhs) const BOOST_OVERRIDE;
+    BOOST_SERIALIZATION_DECL bool
+    is_equal(const boost::serialization::extended_type_info &rhs) const BOOST_OVERRIDE;
 };
 
 } // no_rtti_system
 
 template<class T>
-class extended_type_info_no_rtti : 
+class extended_type_info_no_rtti :
     public no_rtti_system::extended_type_info_no_rtti_0,
     public singleton<extended_type_info_no_rtti< T > >
 {
@@ -80,7 +80,7 @@ class extended_type_info_no_rtti :
             }
         };
         struct undefined {
-            // if your program traps here - you failed to 
+            // if your program traps here - you failed to
             // export a guid for this type.  the no_rtti
             // system requires export for types serialized
             // as pointers.
@@ -88,7 +88,7 @@ class extended_type_info_no_rtti :
             static const char * invoke();
         };
         static const char * invoke(){
-            typedef 
+            typedef
                 typename boost::mpl::if_c<
                     tf,
                     defined,
@@ -103,7 +103,7 @@ public:
     {
         key_register();
     }
-    ~extended_type_info_no_rtti(){
+    ~extended_type_info_no_rtti() BOOST_OVERRIDE {
         key_unregister();
     }
     const extended_type_info *
@@ -112,7 +112,7 @@ public:
         // this implementation doesn't depend on typeid() but assumes
         // that the specified type has a function of the following signature.
         // A common implemention of such a function is to define as a virtual
-        // function. So if the is not a polymporphic type it's likely an error
+        // function. So if the is not a polymorphic type it's likely an error
         BOOST_STATIC_WARNING(boost::is_polymorphic< T >::value);
         const char * derived_key = t.get_key();
         BOOST_ASSERT(NULL != derived_key);
@@ -121,10 +121,10 @@ public:
     const char * get_key() const{
         return action<guid_defined< T >::value >::invoke();
     }
-    virtual const char * get_debug_info() const{
+    const char * get_debug_info() const BOOST_OVERRIDE {
         return action<guid_defined< T >::value >::invoke();
     }
-    virtual void * construct(unsigned int count, ...) const{
+    void * construct(unsigned int count, ...) const BOOST_OVERRIDE {
         // count up the arguments
         std::va_list ap;
         va_start(ap, count);
@@ -145,7 +145,7 @@ public:
             return NULL;
         }
     }
-    virtual void destroy(void const * const p) const{
+    void destroy(void const * const p) const BOOST_OVERRIDE {
         boost::serialization::access::destroy(
             static_cast<T const *>(p)
         );
@@ -157,7 +157,7 @@ public:
 } // namespace boost
 
 ///////////////////////////////////////////////////////////////////////////////
-// If no other implementation has been designated as default, 
+// If no other implementation has been designated as default,
 // use this one.  To use this implementation as the default, specify it
 // before any of the other headers.
 
@@ -167,7 +167,7 @@ public:
     namespace serialization {
     template<class T>
     struct extended_type_info_impl {
-        typedef typename 
+        typedef typename
             boost::serialization::extended_type_info_no_rtti< T > type;
     };
     } // namespace serialization

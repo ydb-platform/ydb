@@ -18,7 +18,7 @@
 namespace boost {
 namespace archive {
 
-std::codecvt_base::result
+BOOST_SYMBOL_EXPORT std::codecvt_base::result
 codecvt_null<wchar_t>::do_out(
     std::mbstate_t & /*state*/,
     const wchar_t * first1, 
@@ -46,7 +46,7 @@ codecvt_null<wchar_t>::do_out(
     return std::codecvt_base::ok;
 }
 
-std::codecvt_base::result
+BOOST_SYMBOL_EXPORT std::codecvt_base::result
 codecvt_null<wchar_t>::do_in(
     std::mbstate_t & /*state*/,
     const char * first1, 
@@ -79,6 +79,13 @@ codecvt_null<wchar_t>::do_in(
     next2 = first2;
     return std::codecvt_base::ok;
 }
+
+BOOST_SYMBOL_EXPORT codecvt_null<wchar_t>::codecvt_null(std::size_t no_locale_manage) :
+    std::codecvt<wchar_t, char, std::mbstate_t>(no_locale_manage)
+{}
+
+BOOST_SYMBOL_EXPORT codecvt_null<wchar_t>::~codecvt_null()
+{}
 
 } // namespace archive
 } // namespace boost

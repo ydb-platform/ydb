@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // text_iarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -32,7 +32,7 @@
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 namespace detail {
@@ -65,16 +65,16 @@ protected:
         load(v);
         t = boost::serialization::item_version_type(v);
     }
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     load(char * t);
     #ifndef BOOST_NO_INTRINSIC_WCHAR_T
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     load(wchar_t * t);
     #endif
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     load(std::string &s);
     #ifndef BOOST_NO_STD_WSTRING
-    BOOST_ARCHIVE_DECL void 
+    BOOST_ARCHIVE_DECL void
     load(std::wstring &ws);
     #endif
     template<class T>
@@ -85,11 +85,11 @@ protected:
     load_override(class_name_type & t);
     BOOST_ARCHIVE_DECL void
     init();
-    BOOST_ARCHIVE_DECL 
+    BOOST_ARCHIVE_DECL
     text_iarchive_impl(std::istream & is, unsigned int flags);
     // don't import inline definitions! leave this as a reminder.
-    //BOOST_ARCHIVE_DECL 
-    ~text_iarchive_impl(){};
+    //BOOST_ARCHIVE_DECL
+    ~text_iarchive_impl() BOOST_OVERRIDE {}
 };
 
 } // namespace archive
@@ -106,17 +106,20 @@ protected:
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
-class BOOST_SYMBOL_VISIBLE text_iarchive : 
+class BOOST_SYMBOL_VISIBLE text_iarchive :
     public text_iarchive_impl<text_iarchive>{
 public:
     text_iarchive(std::istream & is_, unsigned int flags = 0) :
         // note: added _ to suppress useless gcc warning
         text_iarchive_impl<text_iarchive>(is_, flags)
-    {}
-    ~text_iarchive(){}
+    {
+        if(0 == (flags & no_header))
+             init();
+    }
+    ~text_iarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

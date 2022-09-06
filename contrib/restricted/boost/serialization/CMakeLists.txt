@@ -61,8 +61,18 @@ target_sources(restricted-boost-serialization PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/extended_type_info.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/extended_type_info_no_rtti.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/extended_type_info_typeid.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_binary_iarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_binary_oarchive.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_iarchive.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_oarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_text_iarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_text_oarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_text_wiarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_text_woarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_xml_iarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_xml_oarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_xml_wiarchive.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_xml_woarchive.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/stl_port.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/text_iarchive.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/serialization/src/text_oarchive.cpp

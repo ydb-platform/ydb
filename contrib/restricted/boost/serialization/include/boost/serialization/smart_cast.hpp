@@ -9,18 +9,18 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // smart_cast.hpp:
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 
 //  See http://www.boost.org/libs/serialization for updates, documentation, and revision history.
 
-// casting of pointers and references.  
+// casting of pointers and references.
 
 // In casting between different C++ classes, there are a number of
 // rules that have to be kept in mind in deciding whether to use
-// static_cast or dynamic_cast.  
+// static_cast or dynamic_cast.
 
 // a) dynamic casting can only be applied when one of the types is polymorphic
 // Otherwise static_cast must be used.
@@ -136,7 +136,7 @@ namespace smart_cast_impl {
     struct pointer {
 
         struct polymorphic {
-            // unfortunately, this below fails to work for virtual base 
+            // unfortunately, this below fails to work for virtual base
             // classes.  need has_virtual_base to do this.
             // Subject for further study
             #if 0
@@ -220,7 +220,7 @@ namespace smart_cast_impl {
     template<class T>
     struct error {
         // if we get here, its because we are using one argument in the
-        // cast on a system which doesn't support partial template 
+        // cast on a system which doesn't support partial template
         // specialization
         template<class U>
         static T cast(U){

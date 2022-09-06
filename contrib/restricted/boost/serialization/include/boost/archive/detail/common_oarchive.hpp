@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // common_oarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -40,28 +40,28 @@ class BOOST_SYMBOL_VISIBLE common_oarchive :
     friend class interface_oarchive<Archive>;
     friend class basic_oarchive;
 private:
-    virtual void vsave(const version_type t){
+    void vsave(const version_type t) BOOST_OVERRIDE {
         * this->This() << t;
     }
-    virtual void vsave(const object_id_type t){
+    void vsave(const object_id_type t) BOOST_OVERRIDE {
         * this->This() << t;
     }
-    virtual void vsave(const object_reference_type t){
+    void vsave(const object_reference_type t) BOOST_OVERRIDE {
         * this->This() << t;
     }
-    virtual void vsave(const class_id_type t){
+    void vsave(const class_id_type t) BOOST_OVERRIDE {
         * this->This() << t;
     }
-    virtual void vsave(const class_id_reference_type t){
+    void vsave(const class_id_reference_type t) BOOST_OVERRIDE {
         * this->This() << t;
     }
-    virtual void vsave(const class_id_optional_type t){
+    void vsave(const class_id_optional_type t) BOOST_OVERRIDE {
         * this->This() << t;
     }
-    virtual void vsave(const class_name_type & t){
+    void vsave(const class_name_type & t) BOOST_OVERRIDE {
         * this->This() << t;
     }
-    virtual void vsave(const tracking_type t){
+    void vsave(const tracking_type t) BOOST_OVERRIDE {
         * this->This() << t;
     }
 protected:
@@ -72,7 +72,7 @@ protected:
     }
     void save_start(const char * /*name*/){}
     void save_end(const char * /*name*/){}
-    common_oarchive(unsigned int flags = 0) : 
+    common_oarchive(unsigned int flags = 0) :
         basic_oarchive(flags),
         interface_oarchive<Archive>()
     {}

@@ -17,7 +17,7 @@
 //  See http://www.boost.org for updates, documentation, and revision history.
 
 #include <cstddef> // std::size_t
-#include <climits> // ULONG_MAX 
+#include <climits> // ULONG_MAX
 #include <string>
 
 #include <boost/config.hpp>
@@ -31,6 +31,7 @@ namespace std{
 
 #include <boost/archive/detail/iserializer.hpp>
 #include <boost/archive/detail/interface_iarchive.hpp>
+#include <boost/serialization/library_version_type.hpp>
 #include <boost/serialization/nvp.hpp>
 #include <boost/archive/detail/register_archive.hpp>
 
@@ -116,11 +117,13 @@ public:
         load_end(t.name());
     }
 protected:
-    virtual ~polymorphic_iarchive_impl(){};
+    virtual ~polymorphic_iarchive_impl() {}
 public:
     // utility function implemented by all legal archives
-    virtual void set_library_version(library_version_type archive_library_version) = 0;
-    virtual library_version_type get_library_version() const = 0;
+    virtual void set_library_version(
+        boost::serialization::library_version_type archive_library_version
+    ) = 0;
+    virtual boost::serialization::library_version_type get_library_version() const = 0;
     virtual unsigned int get_flags() const = 0;
     virtual void delete_created_pointers() = 0;
     virtual void reset_object_address(
@@ -156,7 +159,7 @@ class BOOST_SYMBOL_VISIBLE polymorphic_iarchive :
     public polymorphic_iarchive_impl
 {
 public:
-    virtual ~polymorphic_iarchive(){};
+    ~polymorphic_iarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

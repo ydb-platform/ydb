@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // basic_xml_archive.hpp:
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -21,40 +21,40 @@
 #include <boost/archive/detail/auto_link_archive.hpp>
 #include <boost/archive/detail/abi_prefix.hpp> // must be the last header
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 // constant strings used in xml i/o
 
-extern 
+extern
 BOOST_ARCHIVE_DECL const char *
 BOOST_ARCHIVE_XML_OBJECT_ID();
 
-extern 
+extern
 BOOST_ARCHIVE_DECL const char *
 BOOST_ARCHIVE_XML_OBJECT_REFERENCE();
 
-extern 
+extern
 BOOST_ARCHIVE_DECL const char *
 BOOST_ARCHIVE_XML_CLASS_ID();
 
-extern 
+extern
 BOOST_ARCHIVE_DECL const char *
 BOOST_ARCHIVE_XML_CLASS_ID_REFERENCE();
 
-extern 
+extern
 BOOST_ARCHIVE_DECL const char *
 BOOST_ARCHIVE_XML_CLASS_NAME();
 
-extern 
+extern
 BOOST_ARCHIVE_DECL const char *
 BOOST_ARCHIVE_XML_TRACKING();
 
-extern 
+extern
 BOOST_ARCHIVE_DECL const char *
 BOOST_ARCHIVE_XML_VERSION();
 
-extern 
+extern
 BOOST_ARCHIVE_DECL const char *
 BOOST_ARCHIVE_XML_SIGNATURE();
 

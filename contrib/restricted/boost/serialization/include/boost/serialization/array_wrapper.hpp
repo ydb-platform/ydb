@@ -6,13 +6,11 @@
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 
-//#include <iostream>
-
 #include <boost/config.hpp> // msvc 6.0 needs this for warning suppression
 
 #if defined(BOOST_NO_STDC_NAMESPACE)
-namespace std{ 
-    using ::size_t; 
+namespace std{
+    using ::size_t;
 } // namespace std
 #endif
 
@@ -81,18 +79,18 @@ public:
     {
       ar.load_array(*this,version);
     }
-    
+
     // default implementation
     template<class Archive>
     void serialize(Archive &ar, const unsigned int version)
     {
-      typedef typename 
+      typedef typename
           boost::serialization::use_array_optimization<Archive>::template apply<
-                    typename remove_const< T >::type 
+                    typename remove_const< T >::type
                 >::type use_optimized;
       serialize_optimized(ar,version,use_optimized());
     }
-    
+
     T * address() const
     {
       return m_t;

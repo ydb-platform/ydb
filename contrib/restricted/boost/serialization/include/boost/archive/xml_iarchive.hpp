@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // xml_iarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -32,7 +32,7 @@
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
 namespace detail {
@@ -44,7 +44,7 @@ class basic_xml_grammar;
 typedef basic_xml_grammar<char> xml_grammar;
 
 template<class Archive>
-class BOOST_SYMBOL_VISIBLE xml_iarchive_impl : 
+class BOOST_SYMBOL_VISIBLE xml_iarchive_impl :
     public basic_text_iprimitive<std::istream>,
     public basic_xml_iarchive<Archive>
 {
@@ -66,13 +66,13 @@ protected:
     void load(T & t){
         basic_text_iprimitive<std::istream>::load(t);
     }
-    void 
+    void
     load(version_type & t){
         unsigned int v;
         load(v);
         t = version_type(v);
     }
-    void 
+    void
     load(boost::serialization::item_version_type & t){
         unsigned int v;
         load(v);
@@ -98,10 +98,10 @@ protected:
     load_override(class_name_type & t);
     BOOST_ARCHIVE_DECL void
     init();
-    BOOST_ARCHIVE_DECL 
+    BOOST_ARCHIVE_DECL
     xml_iarchive_impl(std::istream & is, unsigned int flags);
     BOOST_ARCHIVE_DECL
-    ~xml_iarchive_impl();
+    ~xml_iarchive_impl() BOOST_OVERRIDE;
 };
 
 } // namespace archive
@@ -117,16 +117,19 @@ protected:
 #  pragma warning(disable : 4511 4512)
 #endif
 
-namespace boost { 
+namespace boost {
 namespace archive {
 
-class BOOST_SYMBOL_VISIBLE xml_iarchive : 
+class BOOST_SYMBOL_VISIBLE xml_iarchive :
     public xml_iarchive_impl<xml_iarchive>{
 public:
     xml_iarchive(std::istream & is, unsigned int flags = 0) :
         xml_iarchive_impl<xml_iarchive>(is, flags)
-    {}
-    ~xml_iarchive(){};
+    {
+        if(0 == (flags & no_header))
+            init();
+    }
+    ~xml_iarchive() BOOST_OVERRIDE {}
 };
 
 } // namespace archive

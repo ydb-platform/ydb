@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // istream_iterator.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -25,13 +25,13 @@
 #include <istream>
 #include <boost/iterator/iterator_facade.hpp>
 
-namespace boost { 
+namespace boost {
 namespace archive {
 namespace iterators {
 
 // given a type, make an input iterator based on a pointer to that type
 template<class Elem = char>
-class istream_iterator :  
+class istream_iterator :
     public boost::iterator_facade<
         istream_iterator<Elem>,
         Elem,
@@ -48,13 +48,13 @@ class istream_iterator :
         Elem
     > super_t;
     typedef typename std::basic_istream<Elem> istream_type;
- 
+
     bool equal(const this_t & rhs) const {
         // note: only  works for comparison against end of stream
         return m_istream == rhs.m_istream;
     }
 
-    //Access the value referred to 
+    //Access the value referred to
     Elem dereference() const {
         return static_cast<Elem>(m_istream->peek());
     }

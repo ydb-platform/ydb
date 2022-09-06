@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // base64_from_binary.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -20,15 +20,15 @@
 
 #include <cstddef> // size_t
 #if defined(BOOST_NO_STDC_NAMESPACE)
-namespace std{ 
-    using ::size_t; 
+namespace std{
+    using ::size_t;
 } // namespace std
 #endif
 
 #include <boost/iterator/transform_iterator.hpp>
 #include <boost/archive/iterators/dataflow_exception.hpp>
 
-namespace boost { 
+namespace boost {
 namespace archive {
 namespace iterators {
 
@@ -68,10 +68,10 @@ struct from_6_bit {
 
 //template<class Base, class CharType = typename Base::value_type>
 template<
-    class Base, 
+    class Base,
     class CharType = typename boost::iterator_value<Base>::type
 >
-class base64_from_binary : 
+class base64_from_binary :
     public transform_iterator<
         detail::from_6_bit<CharType>,
         Base
@@ -93,7 +93,7 @@ public:
         )
     {}
     // intel 7.1 doesn't like default copy constructor
-    base64_from_binary(const base64_from_binary & rhs) : 
+    base64_from_binary(const base64_from_binary & rhs) :
         super_t(
             Base(rhs.base_reference()),
             detail::from_6_bit<CharType>()

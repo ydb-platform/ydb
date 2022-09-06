@@ -9,7 +9,7 @@
 
 // factory.hpp: create an instance from an extended_type_info instance.
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -19,7 +19,7 @@
 #include <cstdarg> // valist
 #include <cstddef> // NULL
 
-#include <boost/preprocessor/control/if.hpp> 
+#include <boost/preprocessor/control/if.hpp>
 #include <boost/preprocessor/comparison/greater.hpp>
 #include <boost/assert.hpp>
 

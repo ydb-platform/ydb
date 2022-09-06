@@ -9,7 +9,7 @@
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
 // binary_iarchive.hpp
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -33,8 +33,8 @@ namespace archive {
 // preserve correct static polymorphism.
 class BOOST_SYMBOL_VISIBLE binary_iarchive :
     public binary_iarchive_impl<
-        boost::archive::binary_iarchive, 
-        std::istream::char_type, 
+        boost::archive::binary_iarchive,
+        std::istream::char_type,
         std::istream::traits_type
     >{
 public:
@@ -42,12 +42,16 @@ public:
         binary_iarchive_impl<
             binary_iarchive, std::istream::char_type, std::istream::traits_type
         >(is, flags)
-    {}
+    {
+        init(flags);
+    }
     binary_iarchive(std::streambuf & bsb, unsigned int flags = 0) :
         binary_iarchive_impl<
             binary_iarchive, std::istream::char_type, std::istream::traits_type
         >(bsb, flags)
-    {}
+    {
+        init(flags);
+    }
 };
 
 } // namespace archive

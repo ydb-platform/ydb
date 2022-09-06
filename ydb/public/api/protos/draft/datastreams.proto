@@ -222,6 +222,7 @@ message StreamDescriptionSummary {
     int32 open_shard_count = 5;
     // Retention period in hours
     int32 retention_period_hours = 6;
+    // Stream ARN
     string stream_arn = 7;
     // Timestamp that the stream was created
     int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];

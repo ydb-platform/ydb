@@ -4,6 +4,7 @@
 #include "ydb_service_export.h"
 #include "ydb_service_import.h"
 #include "ydb_service_operation.h"
+#include "ydb_service_monitoring.h"
 #include "ydb_service_scheme.h"
 #include "ydb_service_scripting.h"
 #include "ydb_service_table.h"
@@ -33,6 +34,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TClientSettings& settin
     AddCommand(std::make_unique<TCommandTools>());
     AddCommand(std::make_unique<TCommandExport>(Settings.UseExportToYt.GetRef()));
     AddCommand(std::make_unique<TCommandImport>());
+    AddCommand(std::make_unique<TCommandMonitoring>());
     AddCommand(std::make_unique<TCommandOperation>());
     AddCommand(std::make_unique<TCommandConfig>());
     AddCommand(std::make_unique<TCommandInit>());

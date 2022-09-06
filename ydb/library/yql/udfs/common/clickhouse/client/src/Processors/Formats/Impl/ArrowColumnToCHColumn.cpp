@@ -29,7 +29,6 @@
 #include <algorithm>
 #include <arrow/builder.h>
 #include <arrow/array.h>
-#include <fmt/ranges.h>
 
 /// UINT16 and UINT32 are processed separately, see comments in readColumnFromArrowColumn.
 #define FOR_ARROW_NUMERIC_TYPES(M) \
@@ -561,7 +560,7 @@ void ArrowColumnToCHColumn::arrowTableToCHChunk(Chunk & res, std::shared_ptr<arr
 
             // TODO: What if some columns were not presented? Insert NULLs? What if a column is not nullable?
             if (!read_from_nested)
-                throw Exception{ErrorCodes::THERE_IS_NO_COLUMN, "Column \"{}\" is not presented in input data. Available columns: {}", header_column.name, table->ColumnNames()};
+                throw Exception{ErrorCodes::THERE_IS_NO_COLUMN, "Column \"{}\" is not presented in input data.", header_column.name};
         }
 
         std::shared_ptr<arrow::ChunkedArray> arrow_column = name_to_column_ptr[header_column.name];

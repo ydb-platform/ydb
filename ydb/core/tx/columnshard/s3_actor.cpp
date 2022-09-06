@@ -27,7 +27,7 @@ struct TS3Export {
         : Event(ev.Release())
     {}
 
-    THashMap<TUnifiedBlobId, TString>& Blobs() {
+    TEvPrivate::TEvExport::TBlobDataMap& Blobs() {
         return Event->Blobs;
     }
 
@@ -123,7 +123,7 @@ public:
 
             ex.KeysToWrite.emplace(key);
             ExportingKeys[key] = exportNo;
-            SendPutObject(key, std::move(blob));
+            SendPutObject(key, std::move(blob.Data));
         }
     }
 
@@ -204,7 +204,7 @@ public:
 
         if (!errStr.empty()) {
             ex.Event->Status = NKikimrProto::ERROR;
-            ex.Event->ErrorStr = errStr;
+            ex.Event->ErrorStrings.emplace(key, errStr);
             Send(ShardActor, ex.Event.release());
             Exports.erase(exportNo);
         } else if (ex.KeysToWrite.empty()) {

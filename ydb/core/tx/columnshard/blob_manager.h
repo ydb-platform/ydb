@@ -226,6 +226,7 @@ public:
         CountersUpdate = TBlobManagerCounters();
         return res;
     }
+    bool IsEvicting(const TUnifiedBlobId& id);
 
     // Implementation of IBlobManager interface
     TBlobBatch StartBlobBatch(ui32 channel = BLOB_CHANNEL) override;
@@ -255,28 +256,7 @@ private:
     // Delete small blobs that were previously in use and could not be deleted
     void PerformDelayedDeletes(IBlobManagerDb& db);
 
-    bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false) {
-        if (fromDropped) {
-            if (DroppedEvictedBlobs.count(evict)) {
-                auto node = DroppedEvictedBlobs.extract(evict);
-                if (!node.empty()) {
-                    evict = node.key();
-                    meta = node.mapped();
-                    return true;
-                }
-            }
-        } else {
-            if (EvictedBlobs.count(evict)) {
-                auto node = EvictedBlobs.extract(evict);
-                if (!node.empty()) {
-                    evict = node.key();
-                    meta = node.mapped();
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
+    bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false);
 };
 
 }

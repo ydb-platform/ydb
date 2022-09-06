@@ -22,8 +22,7 @@ public:
     }
 
     void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev, const TActorContext& ctx) {
-        LOG_S_DEBUG("TEvReadBlobRangeResult (waiting " << BlobsToRead.size()
-            << ") at tablet " << TabletId << " (export)");
+        LOG_S_DEBUG("TEvReadBlobRangeResult (waiting " << BlobsToRead.size() << ") at tablet " << TabletId << " (export)");
 
         auto& event = *ev->Get();
         const TUnifiedBlobId& blobId = event.BlobRange.BlobId;
@@ -49,7 +48,7 @@ public:
         BlobsToRead.erase(blobId);
 
         Y_VERIFY(Event);
-        Event->Blobs[blobId] = blobData;
+        Event->Blobs[blobId].Data = blobData;
 
         if (BlobsToRead.empty()) {
             SendResultAndDie(ctx);
@@ -99,7 +98,7 @@ private:
     }
 };
 
-IActor* CreateExportActor(ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev) {
+IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev) {
     return new TExportActor(tabletId, dstActor, ev);
 }
 

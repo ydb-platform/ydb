@@ -1,16 +1,17 @@
 #include "columnshard_impl.h"
 #include "blob_manager_db.h"
+#include "columnshard_schema.h"
 
 namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-class TTxExport : public TTransactionBase<TColumnShard> {
+class TTxExportFinish: public TTransactionBase<TColumnShard> {
 public:
-    TTxExport(TColumnShard* self, TEvPrivate::TEvExport::TPtr& ev)
+    TTxExportFinish(TColumnShard* self, TEvPrivate::TEvExport::TPtr& ev)
         : TBase(self)
-        , Ev(ev)
-    {}
+        , Ev(ev) {
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
@@ -22,9 +23,9 @@ private:
 };
 
 
-bool TTxExport::Execute(TTransactionContext& txc, const TActorContext&) {
+bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxExport.Execute at tablet " << Self->TabletID());
+    LOG_S_DEBUG("TTxExportFinish.Execute at tablet " << Self->TabletID());
 
     txc.DB.NoMoreReadsForTx();
     //NIceDb::TNiceDb db(txc.DB);
@@ -92,13 +93,13 @@ bool TTxExport::Execute(TTransactionContext& txc, const TActorContext&) {
     return true;
 }
 
-void TTxExport::Complete(const TActorContext& ctx) {
+void TTxExportFinish::Complete(const TActorContext& ctx) {
     Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxExport.Complete at tablet " << Self->TabletID());
+    LOG_S_DEBUG("TTxExportFinish.Complete at tablet " << Self->TabletID());
 
     auto& msg = *Ev->Get();
     Y_VERIFY(!msg.TierName.empty());
-
+    Self->ActiveEviction = false;
     if (!BlobsToForget.empty()) {
         Self->ForgetBlobs(ctx, msg.TierName, std::move(BlobsToForget));
     }
@@ -107,26 +108,28 @@ void TTxExport::Complete(const TActorContext& ctx) {
 
 void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& ctx) {
     auto status = ev->Get()->Status;
+
+    Y_VERIFY(!ActiveTtl, "TTL already in progress at tablet %lu", TabletID());
+    Y_VERIFY(!ActiveEviction || status != NKikimrProto::UNKNOWN, "Eviction in progress at tablet %lu", TabletID());
     ui64 exportNo = ev->Get()->ExportNo;
     auto& tierName = ev->Get()->TierName;
-    bool error = status == NKikimrProto::ERROR;
 
-    if (error) {
+    if (status == NKikimrProto::ERROR) {
         LOG_S_WARN("Export (fail): " << exportNo << " tier '" << tierName << "' error: "
-            << ev->Get()->ErrorStr << "' at tablet " << TabletID());
+            << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
+        ActiveEviction = false;
     } else if (status == NKikimrProto::UNKNOWN) {
         LOG_S_DEBUG("Export (write): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
-
         auto& tierBlobs = ev->Get()->Blobs;
         Y_VERIFY(tierBlobs.size());
         ExportBlobs(ctx, exportNo, tierName, std::move(tierBlobs));
     } else if (status == NKikimrProto::OK) {
         LOG_S_DEBUG("Export (apply): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
-
-        Execute(new TTxExport(this, ev), ctx);
+        Execute(new TTxExportFinish(this, ev), ctx);
     } else {
         Y_VERIFY(false);
     }
+    ActiveEviction = true;
 }
 
 }

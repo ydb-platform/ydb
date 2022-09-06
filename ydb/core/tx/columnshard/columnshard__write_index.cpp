@@ -25,7 +25,7 @@ public:
 private:
     TEvPrivate::TEvWriteIndex::TPtr Ev;
     THashMap<TUnifiedBlobId, TString> BlobsToExport;
-    THashMap<TString, THashMap<TUnifiedBlobId, TString>> ExportTierBlobs;
+    THashMap<TString, THashSet<TUnifiedBlobId>> ExportTierBlobs;
     THashMap<TString, std::vector<NOlap::TEvictedBlob>> TierBlobsToForget;
     ui64 ExportNo = 0;
 };
@@ -217,7 +217,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     if (BlobsToExport.size()) {
         size_t numBlobs = BlobsToExport.size();
         for (auto& [blobId, tierName] : BlobsToExport) {
-            ExportTierBlobs[tierName].emplace(blobId, TString{});
+            ExportTierBlobs[tierName].emplace(blobId);
         }
         BlobsToExport.clear();
 
@@ -280,7 +280,15 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
 
     for (auto& [tierName, blobIds] : ExportTierBlobs) {
         Y_VERIFY(ExportNo);
-        ctx.Send(Self->SelfId(), new TEvPrivate::TEvExport(ExportNo, tierName, std::move(blobIds)));
+
+        TEvPrivate::TEvExport::TBlobDataMap blobsData;
+        for (auto&& i : blobIds) {
+            TEvPrivate::TEvExport::TExportBlobInfo info;
+            info.Evicting = Self->BlobManager->IsEvicting(i);
+            blobsData.emplace(i, std::move(info));
+        }
+
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvExport(ExportNo, tierName, std::move(blobsData)));
         ++ExportNo;
     }
 

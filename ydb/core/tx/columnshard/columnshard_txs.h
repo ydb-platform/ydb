@@ -125,15 +125,19 @@ struct TEvPrivate {
     };
 
     struct TEvExport : public TEventLocal<TEvExport, EvExport> {
-        using TBlobDataMap = THashMap<TUnifiedBlobId, TString>;
+        struct TExportBlobInfo {
+            TString Data;
+            bool Evicting = false;
+        };
+        using TBlobDataMap = THashMap<TUnifiedBlobId, TExportBlobInfo>;
 
         NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
-        ui64 ExportNo{};
+        ui64 ExportNo = 0;
         TString TierName;
         TActorId DstActor;
         TBlobDataMap Blobs;
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
-        TString ErrorStr;
+        TMap<TString, TString> ErrorStrings;
 
         explicit TEvExport(ui64 exportNo, const TString& tierName, TBlobDataMap&& tierBlobs)
             : ExportNo(exportNo)
@@ -156,9 +160,17 @@ struct TEvPrivate {
             Y_VERIFY(DstActor);
             Y_VERIFY(!Blobs.empty());
         }
+
+        TString SerializeErrorsToString() const {
+            TStringBuilder sb;
+            for (auto&& i : ErrorStrings) {
+                sb << i.first << "=" << i.second << ";";
+            }
+            return sb;
+        }
     };
 
-    struct TEvForget : public TEventLocal<TEvForget, EvForget> {
+    struct TEvForget: public TEventLocal<TEvForget, EvForget> {
         NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
         std::vector<NOlap::TEvictedBlob> Evicted;
         TString ErrorStr;

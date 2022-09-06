@@ -34,7 +34,7 @@ IActor* CreateReadActor(ui64 tabletId,
                         const TActorId& columnShardActorId,
                         ui64 requestCookie);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
-IActor* CreateExportActor(ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
+IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
 #ifndef KIKIMR_DISABLE_S3_OPS
 IActor* CreateS3Actor(ui64 tabletId, const TActorId& parent, const TString& tierName);
 #endif
@@ -85,7 +85,7 @@ class TColumnShard
     friend class TTxRead;
     friend class TTxScan;
     friend class TTxWriteIndex;
-    friend class TTxExport;
+    friend class TTxExportFinish;
     friend class TTxForget;
     friend class TTxRunGC;
     friend class TTxProcessGCResult;
@@ -382,6 +382,7 @@ private:
     bool ActiveIndexingOrCompaction = false;
     bool ActiveCleanup = false;
     bool ActiveTtl = false;
+    bool ActiveEviction = false;
     std::unique_ptr<TBlobManager> BlobManager;
     TInFlightReadsTracker InFlightReadsTracker;
     TSettings Settings;
@@ -442,10 +443,10 @@ private:
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
-    TActorId GetS3ActorForTier(const TString& tierName, const TString& phase);
+    TActorId GetS3ActorForTier(const TString& tierName, const TString& phase) const;
     void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
-                     THashMap<TUnifiedBlobId, TString>&& blobsIds);
-    void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs);
+        TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const;
+    void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const;
     bool GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
                          NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges);
     ui32 InitS3Actors(const TActorContext& ctx, bool init);

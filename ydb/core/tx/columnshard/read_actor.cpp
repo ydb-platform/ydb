@@ -35,7 +35,7 @@ public:
 
         auto& event = *ev->Get();
         const TUnifiedBlobId& blobId = event.BlobRange.BlobId;
-        Y_VERIFY(event.Data.size() == event.BlobRange.Size);
+        Y_VERIFY(event.Data.size() == event.BlobRange.Size, "%zu, %d", event.Data.size(), event.BlobRange.Size);
 
         if (IndexedBlobs.count(event.BlobRange)) {
             if (!WaitIndexed.count(event.BlobRange)) {

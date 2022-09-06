@@ -693,4 +693,32 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
     NBlobCache::ForgetBlob(blobId);
 }
 
+bool TBlobManager::IsEvicting(const TUnifiedBlobId& id) {
+    TEvictMetadata meta;
+    return GetEvicted(id, meta).State == EEvictState::EVICTING;
+}
+
+bool TBlobManager::ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped /*= false*/) {
+    if (fromDropped) {
+        if (DroppedEvictedBlobs.count(evict)) {
+            auto node = DroppedEvictedBlobs.extract(evict);
+            if (!node.empty()) {
+                evict = node.key();
+                meta = node.mapped();
+                return true;
+            }
+        }
+    } else {
+        if (EvictedBlobs.count(evict)) {
+            auto node = EvictedBlobs.extract(evict);
+            if (!node.empty()) {
+                evict = node.key();
+                meta = node.mapped();
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 }

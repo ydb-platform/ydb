@@ -2366,5 +2366,30 @@ Y_UNIT_TEST(TestObtainLockNewApi) {
    });
 }
 
+
+Y_UNIT_TEST(TestLargeWriteAndDelete) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        ExecuteObtainLock(tc, 1);
+        ui32 iteration = 0;
+        // for (ui32 iteration = 0; iteration < 10; ++iteration) {
+            TDeque<TKeyValuePair> keys;
+            for (ui32 idx = 0; idx < 15'000; ++idx) {
+                TString key = TStringBuilder() << iteration << ':' << idx;
+                keys.push_back({key, "value"});
+            }
+            ExecuteWrite(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+
+            TString fromKey = TStringBuilder()  << iteration << ':' << 1'000;
+            ExecuteDeleteRange(tc, fromKey, EBorderKind::Include, "", EBorderKind::Without, 1);
+        // }
+        ExecuteDeleteRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, 1);
+   });
+}
+
 } // TKeyValueTest
 } // NKikimr

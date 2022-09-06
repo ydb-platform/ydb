@@ -1472,7 +1472,7 @@ public:
             return L(A("PgConst"), QAX(ToString(StrVal(val))), L(A("PgType"), QA("text")));
         }
         case T_Null: {
-            return L(A("Null"));
+            return L(A("PgCast"), L(A("Null")), L(A("PgType"), QA("text")));
         }
         default:
             ValueNotImplemented(value, val);

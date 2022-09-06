@@ -1,8 +1,10 @@
-# Cluster extension {#expand_cluster}
+# Cluster extension
 
-1) Add information about new nodes to NameserviceConfig in the names.txt file
+You can expand the {{ ydb-short-name }} cluster by adding new nodes to the cluster configuration.
 
-    ```
+1. Specify the parameters of additional nodes in the file `names.txt ` NameserviceConfig configuration:
+
+    ```protobuf
     Node {
         NodeId: 1
         Port: <ic-port>
@@ -31,13 +33,11 @@
     AcceptUUID: "<cluster-UUID>"
     ```
 
-2) Update the NameserviceConfig via CMS
+1. [Update the NameserviceConfig](./cms.md) via CMS.
 
-3) Add new nodes to DefineBox
+1. Add new nodes to DefineBox
 
-    Sample protobuf for DefineBox
-
-    ```
+    ```protobuf
     Command {
         DefineHostConfig {
             HostConfigId: 1
@@ -71,9 +71,8 @@
     }
     ```
 
-    Using the command
+1. Run the command:
 
-    ```
+    ```protobuf
     kikimr -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
     ```
-

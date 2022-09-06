@@ -1,8 +1,10 @@
-# Расширение кластера {#expand_cluster}
+# Расширение кластера
 
-1) Добавить в конфиг NameserviceConfig в файл names.txt информацию о новых узлах
+Вы можете расширить кластер {{ ydb-short-name }}, добавив новые узлы в конфигурацию кластера.
 
-    ```
+1. Укажите параметры дополнительных узлов в файле `names.txt` конфигурации NameserviceConfig:
+
+    ```protobuf
     Node {
         NodeId: 1
         Port: <ic-port>
@@ -31,13 +33,11 @@
     AcceptUUID: "<UUID-кластера>"
     ```
 
-2) Обновить конфиг NameserviceConfig через CMS
+1. [Обновите конфигурацию](./cms.md) NameserviceConfig с помощью CMS.
 
-3) Добавить новые узлы в DefineBox
+1. Добавьте новые узлы в DefineBox:
 
-    Пример protobuf для DefineBox
-
-    ```
+    ```protobuf
     Command {
         DefineHostConfig {
             HostConfigId: 1
@@ -71,8 +71,8 @@
     }
     ```
 
-    Применение команды
+1. Выполните команду:
 
-    ```
+    ```protobuf
     kikimr -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
     ```

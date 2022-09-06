@@ -1000,6 +1000,13 @@ message TTableProfilesConfig {
 }
 
 message TTableServiceConfig {
+
+    message TShardsScanningPolicy {
+        optional uint32 AggregationGroupByLimit = 1 [default = 256];
+        optional uint32 AggregationNoGroupLimit = 2 [default = 1024];
+        optional uint32 ScanLimit = 3 [default = 16];
+    }
+
     message TResourceManager {
         optional uint32 ComputeActorsCount = 1 [default = 1000];
         optional uint64 ChannelBufferSize = 2 [default = 4194304];              //  4 MB
@@ -1017,7 +1024,7 @@ message TTableServiceConfig {
 
         optional uint64 MaxTotalScanBuffersSize = 13 [default = 4294967296];    // 4 GB
         optional uint64 MinScanBufferSize = 14 [default = 2097152];             // 2 MB
-        optional uint32 SimultaneouslyShardsScanningCount = 15 [default = 16];
+        optional TShardsScanningPolicy ShardsScanningPolicy = 16;
     }
 
     message TSpillingServiceConfig {

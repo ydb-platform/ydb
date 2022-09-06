@@ -361,6 +361,8 @@ namespace NUri {
             // http://wiki.yandex-team.ru/robot/newDesign/dups/normolization
             FeaturesRecommended = 0 | FeatureSchemeKnown | FeatureRemoteOnly | FeatureToLower | FeatureCheckHost | FeatureConvertHostIDN | FeatureHashBangToEscapedFragment | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodeExtendedASCII | FeatureUpperEncoded | FeatureDecodeUnreserved | FeaturePathOperation | FeaturePathStripRootParent,
 
+            NewFeaturesRecommended = 0 | FeatureSchemeKnown | FeatureRemoteOnly | FeatureToLower | FeatureCheckHost | FeatureConvertHostIDN | FeatureFragmentToHashBang | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodeExtendedASCII | FeatureUpperEncoded | FeatureDecodeUnreserved | FeaturePathOperation | FeaturePathStripRootParent,
+
             FeaturesRobot = FeaturesRecommended
         };
     };

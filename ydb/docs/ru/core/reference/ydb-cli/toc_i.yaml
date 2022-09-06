@@ -1,7 +1,7 @@
 items:
   - name: Установка
     href: install.md
-  - name: Структура команд YDB CLI
+  - name: Все команды по алфавиту
     href: commands.md
   - name: Сервисные команды
     href: commands/service.md
@@ -34,7 +34,7 @@ items:
   - name: Загрузка и выгрузка данных
     include: { mode: link, path: export_import/toc_p.yaml }
   - name: Работа с топиками
-    href: topic.md
+    include: { mode: link, path: topic/toc_i.yaml }
 #  - name: Утилиты
 #    items:
     # - name: Копирование таблиц

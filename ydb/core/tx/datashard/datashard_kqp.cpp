@@ -695,39 +695,6 @@ void KqpCommitLockChanges(ui64 origin, TActiveTransaction* tx, TDataShard& dataS
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLockChanges: committing txId# " << txId << " in localTid# " << localTid);
             txc.DB.CommitTx(localTid, txId);
         }
-    } else {
-        KqpRollbackLockChanges(origin, tx, dataShard, txc);
-    }
-}
-
-void KqpRollbackLockChanges(ui64 origin, TActiveTransaction* tx, TDataShard& dataShard, TTransactionContext& txc) {
-    auto& kqpTx = tx->GetDataTx()->GetKqpTransaction();
-
-    if (!kqpTx.HasLocks()) {
-        return;
-    }
-
-    if (NeedEraseLocks(kqpTx.GetLocks().GetOp())) {
-        for (auto& lockProto : kqpTx.GetLocks().GetLocks()) {
-            if (lockProto.GetDataShard() != origin) {
-                continue;
-            }
-
-            TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
-            auto localTid = dataShard.GetLocalTableId(tableId);
-            if (!localTid) {
-                // It may have been dropped already
-                continue;
-            }
-
-            auto txId = lockProto.GetLockId();
-            if (!txc.DB.HasOpenTx(localTid, txId)) {
-                continue;
-            }
-
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpRollbackLockChanges: removing txId# " << txId << " from localTid# " << localTid);
-            txc.DB.RemoveTx(localTid, txId);
-        }
     }
 }
 

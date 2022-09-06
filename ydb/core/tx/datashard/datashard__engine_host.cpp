@@ -408,8 +408,11 @@ public:
             return;
         }
 
-        // TODO: handle presistent tx locks
-        if (!LockTxId) {
+        CheckWriteConflicts(tableId, row);
+
+        if (LockTxId) {
+            Self->SysLocksTable().SetWriteLock(tableId, row, LockTxId, LockNodeId);
+        } else {
             Self->SysLocksTable().BreakLock(tableId, row);
         }
         Self->SetTableUpdateTime(tableId, Now);
@@ -463,8 +466,11 @@ public:
             return;
         }
 
-        // TODO: handle persistent tx locks
-        if (!LockTxId) {
+        CheckWriteConflicts(tableId, row);
+
+        if (LockTxId) {
+            Self->SysLocksTable().SetWriteLock(tableId, row, LockTxId, LockNodeId);
+        } else {
             Self->SysLocksTable().BreakLock(tableId, row);
         }
 
@@ -524,23 +530,166 @@ public:
         if (TSysTables::IsSystemTable(tableId) || !LockTxId)
             return nullptr;
 
-        // Don't use tx map when we know there's no open tx with the given txId
-        if (!DB.HasOpenTx(LocalTableId(tableId), LockTxId)) {
+        // Don't use tx map when we know there's no write lock for a table
+        // Note: currently write lock implies uncommitted changes
+        if (!Self->SysLocksTable().HasWriteLock(LockTxId, tableId)) {
             return nullptr;
         }
 
-        // Uncommitted changes are visible in all possible snapshots
-        // TODO: we need to guarantee no other changes committed between snapshot read and our local changes
-        return new NTable::TSingleTransactionMap(LockTxId, TRowVersion::Min());
+        auto& ptr = TxMaps[tableId];
+        if (!ptr) {
+            // Uncommitted changes are visible in all possible snapshots
+            ptr = new NTable::TSingleTransactionMap(LockTxId, TRowVersion::Min());
+        }
+
+        return ptr;
     }
 
     NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId) const override {
-        if (TSysTables::IsSystemTable(tableId))
+        if (TSysTables::IsSystemTable(tableId) || !LockTxId)
             return nullptr;
 
-        // TODO: use observer to detect conflicts with other uncommitted transactions
+        if (!Self->SysLocksTable().HasWriteLocks(tableId)) {
+            // We don't have any active write locks, so there's nothing we
+            // could possibly conflict with.
+            return nullptr;
+        }
 
-        return nullptr;
+        auto& ptr = TxObservers[tableId];
+        if (!ptr) {
+            // This observer is supposed to find conflicts
+            ptr = new TReadTxObserver(this, tableId);
+        }
+
+        return ptr;
+    }
+
+    class TReadTxObserver : public NTable::ITransactionObserver {
+    public:
+        TReadTxObserver(const TDataShardEngineHost* host, const TTableId& tableId)
+            : Host(host)
+            , TableId(tableId)
+        {
+            Y_UNUSED(Host);
+            Y_UNUSED(TableId);
+        }
+
+        void OnSkipUncommitted(ui64 txId) override {
+            Host->AddReadConflict(TableId, txId);
+        }
+
+        void OnSkipCommitted(const TRowVersion&) override {
+            // We already use InvisibleRowSkips for these
+        }
+
+        void OnSkipCommitted(const TRowVersion&, ui64) override {
+            // We already use InvisibleRowSkips for these
+        }
+
+        void OnApplyCommitted(const TRowVersion& rowVersion) override {
+            Host->CheckReadConflict(TableId, rowVersion);
+        }
+
+        void OnApplyCommitted(const TRowVersion& rowVersion, ui64) override {
+            Host->CheckReadConflict(TableId, rowVersion);
+        }
+
+    private:
+        const TDataShardEngineHost* const Host;
+        const TTableId TableId;
+    };
+
+    void AddReadConflict(const TTableId& tableId, ui64 txId) const {
+        Y_UNUSED(tableId);
+        if (LockTxId) {
+            // We have detected uncommitted changes in txId that could affect
+            // our read result. We arrange a conflict that breaks our lock
+            // when txId commits.
+            Self->SysLocksTable().AddReadConflict(txId, LockTxId, LockNodeId);
+        }
+    }
+
+    void CheckReadConflict(const TTableId& tableId, const TRowVersion& rowVersion) const {
+        Y_UNUSED(tableId);
+        if (rowVersion > ReadVersion) {
+            // We are reading from snapshot at ReadVersion and should not normally
+            // observe changes with a version above that. However, if we have an
+            // uncommitted change, that we fake as committed for our own changes
+            // visibility, we might shadow some change that happened after a
+            // snapshot. This is a clear indication of a conflict between read
+            // and that future conflict, hence we must break locks and abort.
+            // TODO: add an actual abort
+            Self->SysLocksTable().BreakSetLocks(LockTxId, LockNodeId);
+        }
+    }
+
+    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> row) {
+        if (!Self->SysLocksTable().HasWriteLocks(tableId)) {
+            // We don't have any active write locks, so there's nothing we
+            // could possibly conflict with.
+            return;
+        }
+
+        const auto localTid = LocalTableId(tableId);
+        Y_VERIFY(localTid);
+        const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
+        TSmallVec<TRawTypeValue> key;
+        ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
+
+        // We are not actually interested in the row version, we only need to
+        // detect uncommitted transaction skips on the path to that version.
+        auto res = Db.SelectRowVersion(
+            localTid, key, /* readFlags */ 0,
+            GetReadTxMap(tableId),
+            new TWriteTxObserver(this, tableId));
+
+        if (res.Ready == NTable::EReady::Page) {
+            throw TNotReadyTabletException();
+        }
+    }
+
+    class TWriteTxObserver : public NTable::ITransactionObserver {
+    public:
+        TWriteTxObserver(const TDataShardEngineHost* host, const TTableId& tableId)
+            : Host(host)
+            , TableId(tableId)
+        {
+            Y_UNUSED(Host);
+            Y_UNUSED(TableId);
+        }
+
+        void OnSkipUncommitted(ui64 txId) override {
+            Host->AddWriteConflict(TableId, txId);
+        }
+
+        void OnSkipCommitted(const TRowVersion&) override {
+            // nothing
+        }
+
+        void OnSkipCommitted(const TRowVersion&, ui64) override {
+            // nothing
+        }
+
+        void OnApplyCommitted(const TRowVersion&) override {
+            // nothing
+        }
+
+        void OnApplyCommitted(const TRowVersion&, ui64) override {
+            // nothing
+        }
+
+    private:
+        const TDataShardEngineHost* const Host;
+        const TTableId TableId;
+    };
+
+    void AddWriteConflict(const TTableId& tableId, ui64 txId) const {
+        Y_UNUSED(tableId);
+        if (LockTxId) {
+            Self->SysLocksTable().AddWriteConflict(txId, LockTxId, LockNodeId);
+        } else {
+            Self->SysLocksTable().BreakLock(txId);
+        }
     }
 
 private:
@@ -558,6 +707,8 @@ private:
     TRowVersion WriteVersion = TRowVersion::Max();
     TRowVersion ReadVersion = TRowVersion::Min();
     mutable THashMap<TTableId, THolder<IChangeCollector>> ChangeCollectors;
+    mutable THashMap<TTableId, NTable::ITransactionMapPtr> TxMaps;
+    mutable THashMap<TTableId, NTable::ITransactionObserverPtr> TxObservers;
 };
 
 //

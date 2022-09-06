@@ -148,6 +148,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_sending.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_counters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_loans.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_locks_db.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_locks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_split_dst.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_split_src.cpp

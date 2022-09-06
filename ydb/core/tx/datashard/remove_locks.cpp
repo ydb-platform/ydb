@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 
 namespace NKikimr::NDataShard {
 
@@ -16,20 +17,11 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_LOCK; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        // Remove any uncommitted changes with this lock id
-        // FIXME: if a distributed tx has already validated (and persisted)
-        // its locks, we must preserve uncommitted changes even when lock is
-        // removed on the originating node, since the final outcome may
-        // actually decide to commit.
-        for (const auto& pr : Self->GetUserTables()) {
-            auto localTid = pr.second->LocalTid;
-            if (txc.DB.HasOpenTx(localTid, LockId)) {
-                txc.DB.RemoveTx(localTid, LockId);
-            }
-        }
-
         // Remove the lock from memory, it's no longer needed
-        Self->SysLocks.RemoveSubscribedLock(LockId);
+        // Note: locksDb will also remove uncommitted changes
+        //       when removing a persistent lock.
+        TDataShardLocksDb locksDb(*Self, txc);
+        Self->SysLocks.RemoveSubscribedLock(LockId, &locksDb);
 
         return true;
     }
@@ -57,6 +49,10 @@ void TDataShard::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorC
 }
 
 void TDataShard::SubscribeNewLocks(const TActorContext&) {
+    SubscribeNewLocks();
+}
+
+void TDataShard::SubscribeNewLocks() {
     while (auto pendingSubscribeLock = SysLocks.NextPendingSubscribeLock()) {
         Send(MakeLongTxServiceID(SelfId().NodeId()),
             new TEvLongTxService::TEvSubscribeLock(

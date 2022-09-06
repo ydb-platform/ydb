@@ -267,6 +267,7 @@ class TDataShard
     friend class TS3DownloadsManager;
     friend class TS3Downloader;
     friend struct TSetupSysLocks;
+    friend class TDataShardLocksDb;
 
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
@@ -776,12 +777,44 @@ class TDataShard
             using TColumns = TableColumns<PathOwnerId, LocalPathId, SchemaVersion, Step, TxId, Schema>;
         };
 
+        struct Locks : Table<29> {
+            struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct LockNodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+            struct Generation : Column<3, NScheme::NTypeIds::Uint32> {};
+            struct Counter : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
+            struct Flags : Column<6, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<LockId>;
+            using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags>;
+        };
+
+        struct LockRanges : Table<30> {
+            struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct RangeId : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct PathOwnerId : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct LocalPathId : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct Flags : Column<5, NScheme::NTypeIds::Uint64> {};
+            struct Data : Column<6, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<LockId, RangeId>;
+            using TColumns = TableColumns<LockId, RangeId, PathOwnerId, LocalPathId, Flags, Data>;
+        };
+
+        struct LockConflicts : Table<31> {
+            struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct ConflictId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<LockId, ConflictId>;
+            using TColumns = TableColumns<LockId, ConflictId>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
             SrcChangeSenderActivations, DstChangeSenderActivations,
             ReplicationSourceOffsets, ReplicationSources, DstReplicationSourceOffsetsReceived,
-            UserTablesStats, SchemaSnapshots>;
+            UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1558,6 +1591,7 @@ public:
     void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);
 
     void SubscribeNewLocks(const TActorContext &ctx);
+    void SubscribeNewLocks();
 
 private:
     ///

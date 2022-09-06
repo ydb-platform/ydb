@@ -1,5 +1,7 @@
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
+#include "setup_sys_locks.h"
+#include "datashard_locks_db.h"
 
 #include <ydb/core/formats/arrow_batch_builder.h>
 
@@ -789,16 +791,20 @@ public:
             }
         }
 
+        bool hadWrites = false;
+
         if (Request->Record.HasLockTxId()) {
             // note that we set locks only when first read finish transaction,
             // i.e. we have read something without page faults
-            AcquireLock(ctx, state);
+            hadWrites |= AcquireLock(txc, ctx, state);
         }
 
-        if (!Self->IsFollower())
-            Self->PromoteImmediatePostExecuteEdges(state.ReadVersion, readType, txc);
+        if (!Self->IsFollower()) {
+            auto res = Self->PromoteImmediatePostExecuteEdges(state.ReadVersion, readType, txc);
+            hadWrites |= res.HadWrites;
+        }
 
-        return EExecutionStatus::DelayComplete;
+        return hadWrites ? EExecutionStatus::DelayCompleteNoMoreRestarts : EExecutionStatus::DelayComplete;
     }
 
     void CheckRequestAndInit(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -1268,16 +1274,17 @@ private:
         ValidationInfo.Loaded = true;
     }
 
-    void AcquireLock(const TActorContext& ctx, TReadIteratorState& state) {
+    bool AcquireLock(TTransactionContext& txc, const TActorContext& ctx, TReadIteratorState& state) {
         auto& sysLocks = Self->SysLocksTable();
-        auto& locker = sysLocks.GetLocker();
 
         const auto lockTxId = state.Request->Record.GetLockTxId();
         const auto lockNodeId = state.Request->Record.GetLockNodeId();
         TTableId tableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion);
-        TLockInfo::TPtr lock;
 
         state.LockTxId = lockTxId;
+
+        TDataShardLocksDb locksDb(*Self, txc);
+        TSetupSysLocks guard(lockTxId, lockNodeId, state.ReadVersion, *Self, &locksDb);
 
         if (!state.Request->Keys.empty()) {
             for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
@@ -1289,62 +1296,47 @@ private:
                         true,
                         key.GetCells(),
                         true);
-                    TRangeKey rangeKey = locker.MakeRange(tableId, lockRange);
-                    lock = locker.AddRangeLock(lockTxId, lockNodeId, rangeKey, state.ReadVersion);
+                    sysLocks.SetLock(tableId, lockRange, lockTxId, lockNodeId);
                 } else {
-                    TPointKey pointKey = locker.MakePoint(tableId, key.GetCells());
-                    lock = locker.AddPointLock(lockTxId, lockNodeId, pointKey, state.ReadVersion);
+                    sysLocks.SetLock(tableId, key.GetCells(), lockTxId, lockNodeId);
                 }
             }
         } else {
-            // since no keys, then we must have ranges (has been checked initially)
+            // no keys, so we must have ranges (has been checked initially)
             for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
                 auto range = state.Request->Ranges[i].ToTableRange();
-                TRangeKey rangeKey = locker.MakeRange(tableId, range);
-                lock = locker.AddRangeLock(lockTxId, lockNodeId, rangeKey, state.ReadVersion);
+                sysLocks.SetLock(tableId, range, lockTxId, lockNodeId);
             }
         }
 
-        ui64 counter;
-        ui64 lockId;
-        bool isBroken;
-        if (lock) {
-            counter = lock->GetCounter(state.ReadVersion);
-            lockId = lock->GetLockId();
-            isBroken = lock->IsBroken(state.ReadVersion);
-        } else {
-            counter = TSysTables::TLocksTable::TLock::ErrorNotSet;
-            lockId = lockTxId;
-            isBroken = true;
+        if (Reader->HasInvisibleRowSkips()) {
+            sysLocks.BreakSetLocks(lockTxId, lockNodeId);
         }
 
-        if (!isBroken && Reader->HasInvisibleRowSkips()) {
-            locker.BreakLock(lockTxId, TRowVersion::Min());
-            isBroken = true;
-            counter = TSysTables::TLocksTable::TLock::ErrorAlreadyBroken;
+        auto locks = sysLocks.ApplyLocks();
+
+        for (auto& lock : locks) {
+            NKikimrTxDataShard::TLock* addLock;
+            if (lock.IsError()) {
+                addLock = Result->Record.AddBrokenTxLocks();
+            } else {
+                addLock = Result->Record.AddTxLocks();
+            }
+
+            addLock->SetLockId(lock.LockId);
+            addLock->SetDataShard(lock.DataShard);
+            addLock->SetGeneration(lock.Generation);
+            addLock->SetCounter(lock.Counter);
+            addLock->SetSchemeShard(lock.SchemeShard);
+            addLock->SetPathId(lock.PathId);
+
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
+                << " Acquired lock# " << lock.LockId << ", counter# " << lock.Counter
+                << " for " << state.PathId);
         }
 
-        sysLocks.UpdateCounters(counter);
-
-        NKikimrTxDataShard::TLock *addLock;
-        if (!isBroken) {
-            addLock = Result->Record.AddTxLocks();
-        } else {
-            addLock = Result->Record.AddBrokenTxLocks();
-        }
-
-        addLock->SetLockId(lockId);
-        addLock->SetDataShard(Self->TabletID());
-        addLock->SetGeneration(Self->Generation());
-        addLock->SetCounter(counter);
-        addLock->SetSchemeShard(state.PathId.OwnerId);
-        addLock->SetPathId(state.PathId.LocalPathId);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
-            << " Acquired lock# " << lockId << ", counter# " << counter
-            << " for " << state.PathId);
-
-        state.Lock = lock; // note that might be nullptr
+        state.Lock = guard.Lock; // will be nullptr if broken
+        return locksDb.HasChanges();
     }
 };
 
@@ -1527,7 +1519,7 @@ public:
                     Result->Record,
                     Ydb::StatusIds::NOT_FOUND,
                     TStringBuilder() << "Unknown table id: " << state.PathId.LocalPathId);
-                SendResult(ctx);
+                SendResult(txc, ctx);
                 return true;
             }
             auto userTableInfo = it->second;
@@ -1539,7 +1531,7 @@ public:
                     Ydb::StatusIds::SCHEME_ERROR,
                     TStringBuilder() << "Schema changed, current " << currentSchemaVersion
                         << ", requested table schemaversion " << state.SchemaVersion);
-                SendResult(ctx);
+                SendResult(txc, ctx);
                 return true;
             }
 
@@ -1552,7 +1544,7 @@ public:
                     Ydb::StatusIds::NOT_FOUND,
                     TStringBuilder() << "Failed to get scheme for table local id: "
                         << state.PathId.LocalPathId);
-                SendResult(ctx);
+                SendResult(txc, ctx);
                 return true;
             }
             TableInfo = TShortTableInfo(state.PathId.LocalPathId, *schema);
@@ -1575,7 +1567,7 @@ public:
                      << state.ReadVersion << " shard " << Self->TabletID()
                      << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
                      << (Self->IsFollower() ? " RO replica" : ""));
-            SendResult(ctx);
+            SendResult(txc, ctx);
             return true;
         }
 
@@ -1586,7 +1578,7 @@ public:
                     Result->Record,
                     Ydb::StatusIds::BAD_REQUEST,
                     p.second);
-                SendResult(ctx);
+                SendResult(txc, ctx);
                 return true;
             }
             std::swap(BlockBuilder, p.first);
@@ -1600,7 +1592,7 @@ public:
 
         Reader.reset(new TReader(state, *BlockBuilder, TableInfo));
         if (Reader->Read(txc, ctx)) {
-            SendResult(ctx);
+            SendResult(txc, ctx);
             return true;
         }
         return false;
@@ -1610,7 +1602,7 @@ public:
         // nothing to do
     }
 
-    void SendResult(const TActorContext& ctx) {
+    void SendResult(TTransactionContext& txc, const TActorContext& ctx) {
         const auto* request = Ev->Get();
         TReadIteratorId readId(request->Reader, request->ReadId);
         auto it = Self->ReadIterators.find(readId);
@@ -1642,38 +1634,31 @@ public:
             return;
         }
 
-        if (state.Lock && !state.ReportedLockBroken) {
-            bool isBroken = false;
-            ui64 counter;
-            ui64 lockId;
-            if (state.Lock->IsBroken(state.ReadVersion)) {
-                isBroken = true;
-                counter = state.Lock->GetCounter(state.ReadVersion);
-                lockId = state.Lock->GetLockId();
-
-            } else if (Reader->HasInvisibleRowSkips()) {
-                isBroken = true;
-                counter = TSysTables::TLocksTable::TLock::ErrorBroken;
-                lockId = state.LockTxId;
-
+        if (state.Lock) {
+            bool isBroken = state.Lock->IsBroken(state.ReadVersion);
+            if (!isBroken && Reader->HasInvisibleRowSkips()) {
                 auto& sysLocks = Self->SysLocksTable();
-                auto& locker = sysLocks.GetLocker();
-                locker.BreakLock(state.LockTxId, TRowVersion::Min());
-                sysLocks.UpdateCounters(counter);
+                TDataShardLocksDb locksDb(*Self, txc);
+                TSetupSysLocks guard(*Self, &locksDb);
+                sysLocks.BreakLock(state.Lock->GetLockId());
+                sysLocks.ApplyLocks();
+                Y_VERIFY(state.Lock->IsBroken());
+                isBroken = true;
             }
 
             if (isBroken) {
-                state.ReportedLockBroken = true;
                 NKikimrTxDataShard::TLock *addLock = record.AddBrokenTxLocks();
-                addLock->SetLockId(lockId);
+                addLock->SetLockId(state.Lock->GetLockId());
                 addLock->SetDataShard(Self->TabletID());
-                addLock->SetGeneration(Self->Generation());
-                addLock->SetCounter(counter);
+                addLock->SetGeneration(state.Lock->GetGeneration());
+                addLock->SetCounter(state.Lock->GetCounter(state.ReadVersion));
                 addLock->SetSchemeShard(state.PathId.OwnerId);
                 addLock->SetPathId(state.PathId.LocalPathId);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
-                    << " TTxReadContinue::Execute() found broken lock# " << lockId);
+                    << " TTxReadContinue::Execute() found broken lock# " << state.Lock->GetLockId());
+
+                state.Lock = nullptr;
             }
         }
 

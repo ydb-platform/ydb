@@ -159,7 +159,6 @@ public:
     bool IsHeadRead = false;
     ui64 LockTxId = 0;
     TLockInfo::TPtr Lock;
-    bool ReportedLockBroken = false;
 
     // note that will be always overwritten by values from request
     NKikimrTxDataShard::EScanDataFormat Format = NKikimrTxDataShard::EScanDataFormat::CELLVEC;

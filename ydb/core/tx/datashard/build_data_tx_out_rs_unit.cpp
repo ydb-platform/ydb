@@ -2,6 +2,7 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
+#include "datashard_locks_db.h"
 
 namespace NKikimr {
 namespace NDataShard {
@@ -43,7 +44,8 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
                                                 TTransactionContext &txc,
                                                 const TActorContext &ctx)
 {
-    TSetupSysLocks guardLocks(op, DataShard);
+    TDataShardLocksDb locksDb(DataShard, txc);
+    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 

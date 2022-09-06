@@ -275,9 +275,9 @@ namespace NTest {
 
     static void RemoveLock(TLockTester& tester, ui64 lockTxId) {
         TLocksUpdate txLocks;
-        tester.StartTx(lockTxId, txLocks);
+        tester.StartTx(txLocks);
 
-        txLocks.EraseLock(lockTxId);
+        tester.EraseLock(lockTxId);
 
         tester.ApplyTxLocks();
     }
@@ -362,19 +362,9 @@ Y_UNIT_TEST(MvccTestOutdatedLocksRemove) {
     tester.PromoteCompleteVersion(TRowVersion(1, 10));
 
     {
-        // lock is ready to be deleted but still in place
-        TLocksUpdate update;
-        update.CheckVersion = TRowVersion(1, 5);
-        tester.StartTx(update);
-        UNIT_ASSERT(tester.CheckLock(10));
-        tester.ApplyTxLocks();
-    }
-
-    {
-        // erase triggers outdated locks cleanup
+        // next lock operation causes cleanup
         TLocksUpdate update;
         tester.StartTx(update);
-        tester.EraseLock(12);
         tester.ApplyTxLocks();
     }
 

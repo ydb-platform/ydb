@@ -444,8 +444,7 @@ struct TOutputOpData {
     TDelayedAcks DelayedAcks;
     TOutReadSets OutReadSets;
     TVector<THolder<TEvTxProcessing::TEvReadSet>> PreparedOutReadSets;
-    // Updates and checked locks.
-    TLocksUpdate LocksUpdate;
+    // Access log of checked locks
     TLocksCache LocksAccessLog;
     // Collected change records
     TVector<TChangeRecord> ChangeRecords;
@@ -604,7 +603,6 @@ public:
         return OutputDataRef().PreparedOutReadSets;
     }
 
-    TLocksUpdate &LocksUpdate() { return OutputDataRef().LocksUpdate; }
     TLocksCache &LocksAccessLog() { return OutputDataRef().LocksAccessLog; }
 
     TVector<TOutputOpData::TChangeRecord> &ChangeRecords() { return OutputDataRef().ChangeRecords; }

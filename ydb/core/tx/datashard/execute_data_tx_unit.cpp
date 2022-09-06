@@ -1,6 +1,7 @@
 #include "datashard_kqp.h"
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
+#include "datashard_locks_db.h"
 
 
 namespace NKikimr {
@@ -65,7 +66,8 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         op->MvccReadWriteVersion.reset();
     }
 
-    TSetupSysLocks guardLocks(op, DataShard);
+    TDataShardLocksDb locksDb(DataShard, txc);
+    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -161,8 +163,13 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     DataShard.IncCounter(COUNTER_WAIT_TOTAL_LATENCY_MS, waitTotalLatency.MilliSeconds());
     op->ResetCurrentTimer();
 
-    if (op->IsReadOnly())
+    if (op->IsReadOnly() && !locksDb.HasChanges())
         return EExecutionStatus::Executed;
+
+    if (locksDb.HasChanges()) {
+        // We made some changes to locks db, make sure we wait for commit
+        op->SetWaitCompletionFlag(true);
+    }
 
     return EExecutionStatus::ExecutedNoMoreRestarts;
 }

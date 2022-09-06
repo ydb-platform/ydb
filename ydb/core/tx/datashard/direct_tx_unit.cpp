@@ -2,6 +2,7 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
+#include "datashard_locks_db.h"
 
 namespace NKikimr {
 namespace NDataShard {
@@ -29,7 +30,8 @@ public:
             op->MvccReadWriteVersion.reset();
         }
 
-        TSetupSysLocks guardLocks(op, DataShard);
+        TDataShardLocksDb locksDb(DataShard, txc);
+        TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
         TDirectTransaction* tx = dynamic_cast<TDirectTransaction*>(op.Get());
         Y_VERIFY(tx != nullptr);

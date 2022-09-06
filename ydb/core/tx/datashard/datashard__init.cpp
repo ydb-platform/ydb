@@ -1,4 +1,5 @@
 #include "datashard_txs.h"
+#include "datashard_locks_db.h"
 
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -164,6 +165,9 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::DstReplicationSourceOffsetsReceived);
         PRECHARGE_SYS_TABLE(Schema::UserTablesStats);
         PRECHARGE_SYS_TABLE(Schema::SchemaSnapshots);
+        PRECHARGE_SYS_TABLE(Schema::Locks);
+        PRECHARGE_SYS_TABLE(Schema::LockRanges);
+        PRECHARGE_SYS_TABLE(Schema::LockConflicts);
 
         if (!ready)
             return false;
@@ -478,6 +482,15 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             return false;
         }
     }
+
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Locks::TableId)) {
+        TDataShardLocksDb locksDb(*Self, txc);
+        if (!Self->SysLocks.Load(locksDb)) {
+            return false;
+        }
+    }
+
+    Self->SubscribeNewLocks();
 
     return true;
 }

@@ -16,6 +16,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
             TActorTestContext testCtx(false, usePDiskMock);
+            const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
                 auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, PrepareData(1),
@@ -39,13 +40,13 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             }
             mock.CommitReservedChunks();
             TVector<TChunkIdx> chunkIds(mock.Chunks[EChunkState::COMMITTED].begin(), mock.Chunks[EChunkState::COMMITTED].end());
-            
+
             while (mock.Chunks[EChunkState::COMMITTED].size() > 0) {
                 auto it = mock.Chunks[EChunkState::COMMITTED].begin();
                 for (ui32 i = 0; i < inflight; ++i) {
-                    TString data = "HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE YOU SINCE I BEGAN TO LIVE...";
+                    TString dataCopy = data;
                     testCtx.Send(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), nullptr, false, 0));
+                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0));
                 }
                 NPDisk::TCommitRecord rec;
                 rec.DeleteChunks.push_back(*it);
@@ -56,7 +57,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             testCtx.Send(new NPDisk::TEvHarakiri(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound));
 
-            for (ui32 c = 0; ; c = (c + 1) % mocks.size()) {
+            for (ui32 c = 0, i = 0; i < 300; c = (c + 1) % mocks.size(), ++i) {
                 testCtx.Send(new NPDisk::TEvChunkReserve(mocks[c].PDiskParams->Owner, mocks[c].PDiskParams->OwnerRound, 1));
                 THolder<NPDisk::TEvChunkReserveResult> evRes = testCtx.Recv<NPDisk::TEvChunkReserveResult>();
                 if (!evRes || evRes->Status != NKikimrProto::OK) {
@@ -70,7 +71,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                 rec.CommitChunks.push_back(*reservedChunks.begin());
                 logNoTest(mocks[c], rec);
                 reservedChunks.clear();
-            } 
+            }
             testCtx.Recv<NPDisk::TEvHarakiriResult>();
         }
     }
@@ -91,7 +92,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
             TActorTestContext testCtx(false, usePDiskMock);
-            ui32 dataSize = 1024;
+            const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
                 auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, PrepareData(1),
@@ -104,15 +105,15 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             auto sendManyReads = [&](TVDiskMock& mock, TChunkIdx chunk, ui32 number, ui64& cookie) {
                 for (ui32 i = 0; i < number; ++i) {
                     testCtx.Send(new NPDisk::TEvChunkRead(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        chunk, 0, dataSize, 0, (void*)(cookie++)));
+                        chunk, 0, data.size(), 0, (void*)(cookie++)));
                 }
             };
             
             auto sendManyWrites = [&](TVDiskMock& mock, TChunkIdx chunk, ui32 number, ui64& cookie) {
                 for (ui32 i = 0; i < number; ++i) {
-                    TString data = PrepareData(dataSize);
+                    TString dataCopy = data;
                     testCtx.Send(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), (void*)(cookie++), false, 0));
+                        chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), (void*)(cookie++), false, 0));
                 }
             };
 
@@ -126,9 +127,9 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             {
                 auto& chunkIds = mock.Chunks[EChunkState::COMMITTED];
                 for (auto it = chunkIds.begin(); it != chunkIds.end(); ++it) {
-                    TString data = PrepareData(dataSize);
+                    TString dataCopy = data;
                     testCtx.TestResponce<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), (void*)10, false, 0),
+                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), (void*)10, false, 0),
                         NKikimrProto::OK);
                 }
             }
@@ -154,6 +155,9 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                 {
                     auto res = testCtx.Recv<NPDisk::TEvChunkReadResult>();
                     UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+                    if (res->Data.IsReadable()) {
+                        UNIT_ASSERT_VALUES_EQUAL(res->Data.ToString(), data);
+                    }
                 }
                 {
                     auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
@@ -183,6 +187,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
             TActorTestContext testCtx(false, usePDiskMock);
+            const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
                 auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, PrepareData(1),
@@ -210,9 +215,9 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             while (mock.Chunks[EChunkState::COMMITTED].size() > 0) {
                 auto it = mock.Chunks[EChunkState::COMMITTED].begin();
                 for (ui32 i = 0; i < inflight; ++i) {
-                    TString data = "HATE. LET ME TELL YOU HOW MUCH I'VE COME TO HATE YOU SINCE I BEGAN TO LIVE...";
+                    TString dataCopy = data;
                     testCtx.Send(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), nullptr, false, 0));
+                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0));
                 }
                 NPDisk::TCommitRecord rec;
                 rec.DeleteChunks.push_back(*it);
@@ -224,7 +229,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             testCtx.Send(new NPDisk::TEvHarakiri(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound));
 
-            for (ui32 c = 0; ; c = (c + 1) % mocks.size()) {
+            for (ui32 c = 0, i = 0; i < 300; c = (c + 1) % mocks.size(), ++i) {
                 testCtx.Send(new NPDisk::TEvChunkReserve(mocks[c].PDiskParams->Owner, mocks[c].PDiskParams->OwnerRound, 1));
                 THolder<NPDisk::TEvChunkReserveResult> evRes = testCtx.Recv<NPDisk::TEvChunkReserveResult>();
                 if (!evRes || evRes->Status != NKikimrProto::OK) {

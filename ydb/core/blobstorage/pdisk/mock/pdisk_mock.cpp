@@ -114,13 +114,22 @@ struct TPDiskMockState::TImpl {
     }
 
     std::tuple<ui8, TOwner*> FindOrCreateOwner(const TVDiskID& vdiskId, ui32 slotId, bool *created) {
+        bool slotIsValid = (slotId != Max<ui32>());
         for (auto& [ownerId, owner] : Owners) {
-            if (slotId == owner.SlotId) {
-                Y_VERIFY(owner.VDiskId.SameExceptGeneration(vdiskId));
-                *created = false;
-                return std::make_tuple(ownerId, &owner);
+            if (slotIsValid) {
+                if (slotId == owner.SlotId) {
+                    Y_VERIFY(owner.VDiskId.SameExceptGeneration(vdiskId));
+                    *created = false;
+                    return std::make_tuple(ownerId, &owner);
+                }
+            } else {
+                if (owner.VDiskId.SameExceptGeneration(vdiskId)) {
+                    *created = false;
+                    return std::make_tuple(ownerId, &owner);
+                }
             }
         }
+
         ui8 ownerId = 1;
         std::map<ui8, TOwner>::iterator it;
         for (it = Owners.begin(); it != Owners.end() && it->first == ownerId; ++it, ++ownerId)
@@ -707,8 +716,41 @@ public:
         Send(ev->Sender, res.release());
     }
 
-    void Handle(NPDisk::TEvHarakiri::TPtr /*ev*/) {
-        Y_FAIL();
+    void Handle(NPDisk::TEvHarakiri::TPtr ev) {
+        auto *msg = ev->Get();
+        PDISK_MOCK_LOG(INFO, PDM18, "received TEvHarakiri", (Msg, msg->ToString()));
+
+        TString errorReason = "";
+        auto res = std::make_unique<NPDisk::TEvHarakiriResult>(NKikimrProto::OK, GetStatusFlags(), errorReason);
+        auto it = Impl.Owners.find(msg->Owner);
+
+        if (it == Impl.Owners.end()) {
+            res->Status = NKikimrProto::ALREADY;
+            res->ErrorReason = "not found";
+        }
+
+        auto owner = it->second;
+
+        if (owner.Slain) {
+            res->Status = NKikimrProto::ALREADY; // already slain or not found
+            res->ErrorReason = "already slain or not found";
+        } else if (msg->OwnerRound <= owner.OwnerRound) {
+            res->Status = NKikimrProto::RACE;
+            res->ErrorReason = TStringBuilder() << "Message OwnerRound# " << msg->OwnerRound << " actual OwnerRound# "
+                << owner.OwnerRound << " race detected";
+        } else {
+            owner.Slain = true;
+            Impl.FreeChunks.merge(owner.ReservedChunks);
+            Impl.FreeChunks.merge(owner.CommittedChunks);
+            Impl.AdjustFreeChunks();
+            owner.ChunkData.clear();
+            owner.Log.clear();
+            owner.LogDataSize = 0;
+            owner.LastLsn = 0;
+            owner.StartingPoints.clear();
+        }
+
+        Send(ev->Sender, res.release());
     }
 
     void Handle(NPDisk::TEvCheckSpace::TPtr ev) {

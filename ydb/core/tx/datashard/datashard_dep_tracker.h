@@ -135,20 +135,20 @@ private:
     // Maps table id to current ranges that have been read/written by all transactions
     NFH::TFlatHashMap<ui64, TTableState> Tables;
     // All operations that are reading or writing something
-    TIntrusiveList<TOperationAllListItem> AllPlannedReaders;
-    TIntrusiveList<TOperationAllListItem> AllPlannedWriters;
-    TIntrusiveList<TOperationAllListItem> AllImmediateReaders;
-    TIntrusiveList<TOperationAllListItem> AllImmediateWriters;
+    TIntrusiveList<TOperation, TOperationAllListTag> AllPlannedReaders;
+    TIntrusiveList<TOperation, TOperationAllListTag> AllPlannedWriters;
+    TIntrusiveList<TOperation, TOperationAllListTag> AllImmediateReaders;
+    TIntrusiveList<TOperation, TOperationAllListTag> AllImmediateWriters;
     // A set of operations that read/write table globally
-    TIntrusiveList<TOperationGlobalListItem> GlobalPlannedReaders;
-    TIntrusiveList<TOperationGlobalListItem> GlobalPlannedWriters;
-    TIntrusiveList<TOperationGlobalListItem> GlobalImmediateReaders;
-    TIntrusiveList<TOperationGlobalListItem> GlobalImmediateWriters;
+    TIntrusiveList<TOperation, TOperationGlobalListTag> GlobalPlannedReaders;
+    TIntrusiveList<TOperation, TOperationGlobalListTag> GlobalPlannedWriters;
+    TIntrusiveList<TOperation, TOperationGlobalListTag> GlobalImmediateReaders;
+    TIntrusiveList<TOperation, TOperationGlobalListTag> GlobalImmediateWriters;
     // Immediate operations that have delayed adding their keys to ranges
-    TIntrusiveList<TOperationDelayedReadListItem> DelayedPlannedReads;
-    TIntrusiveList<TOperationDelayedReadListItem> DelayedImmediateReads;
-    TIntrusiveList<TOperationDelayedWriteListItem> DelayedPlannedWrites;
-    TIntrusiveList<TOperationDelayedWriteListItem> DelayedImmediateWrites;
+    TIntrusiveList<TOperation, TOperationDelayedReadListTag> DelayedPlannedReads;
+    TIntrusiveList<TOperation, TOperationDelayedReadListTag> DelayedImmediateReads;
+    TIntrusiveList<TOperation, TOperationDelayedWriteListTag> DelayedPlannedWrites;
+    TIntrusiveList<TOperation, TOperationDelayedWriteListTag> DelayedImmediateWrites;
 
     const TDefaultDependencyTrackingLogic DefaultLogic;
     const TMvccDependencyTrackingLogic MvccLogic;

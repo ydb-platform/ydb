@@ -107,7 +107,7 @@ void TDependencyTracker::AddImmediateWrites(const TOperation::TPtr& op, const TK
 
 void TDependencyTracker::FlushPlannedReads() noexcept {
     while (!DelayedPlannedReads.Empty()) {
-        TOperation::TPtr op = TOperation::From(DelayedPlannedReads.PopFront());
+        TOperation::TPtr op = DelayedPlannedReads.PopFront();
         auto reads = op->RemoveDelayedKnownReads();
         AddPlannedReads(op, reads);
     }
@@ -115,7 +115,7 @@ void TDependencyTracker::FlushPlannedReads() noexcept {
 
 void TDependencyTracker::FlushPlannedWrites() noexcept {
     while (!DelayedPlannedWrites.Empty()) {
-        TOperation::TPtr op = TOperation::From(DelayedPlannedWrites.PopFront());
+        TOperation::TPtr op = DelayedPlannedWrites.PopFront();
         auto writes = op->RemoveDelayedKnownWrites();
         AddPlannedWrites(op, writes);
     }
@@ -123,7 +123,7 @@ void TDependencyTracker::FlushPlannedWrites() noexcept {
 
 void TDependencyTracker::FlushImmediateReads() noexcept {
     while (!DelayedImmediateReads.Empty()) {
-        TOperation::TPtr op = TOperation::From(DelayedImmediateReads.PopFront());
+        TOperation::TPtr op = DelayedImmediateReads.PopFront();
         auto reads = op->RemoveDelayedKnownReads();
         AddImmediateReads(op, reads);
     }
@@ -131,7 +131,7 @@ void TDependencyTracker::FlushImmediateReads() noexcept {
 
 void TDependencyTracker::FlushImmediateWrites() noexcept {
     while (!DelayedImmediateWrites.Empty()) {
-        TOperation::TPtr op = TOperation::From(DelayedImmediateWrites.PopFront());
+        TOperation::TPtr op = DelayedImmediateWrites.PopFront();
         auto writes = op->RemoveDelayedKnownWrites();
         AddImmediateWrites(op, writes);
     }
@@ -289,23 +289,23 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
         // We are potentially writing to all keys in all tables, thus we conflict with everything
         if (op->IsImmediate()) {
             for (auto& item : Parent.AllPlannedReaders) {
-                TOperation::From(item)->AddImmediateConflict(op);
+                item.AddImmediateConflict(op);
             }
             for (auto& item : Parent.AllPlannedWriters) {
-                TOperation::From(item)->AddImmediateConflict(op);
+                item.AddImmediateConflict(op);
             }
         } else {
             for (auto& item : Parent.AllPlannedReaders) {
-                op->AddDependency(TOperation::From(item));
+                op->AddDependency(&item);
             }
             for (auto& item : Parent.AllPlannedWriters) {
-                op->AddDependency(TOperation::From(item));
+                op->AddDependency(&item);
             }
             for (auto& item : Parent.AllImmediateReaders) {
-                op->AddImmediateConflict(TOperation::From(item));
+                op->AddImmediateConflict(&item);
             }
             for (auto& item : Parent.AllImmediateWriters) {
-                op->AddImmediateConflict(TOperation::From(item));
+                op->AddImmediateConflict(&item);
             }
         }
     } else {
@@ -335,23 +335,23 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
             // If we have any reads we conflict with global reads or writes
             if (op->IsImmediate()) {
                 for (auto& item : Parent.GlobalPlannedReaders) {
-                    TOperation::From(item)->AddImmediateConflict(op);
+                    item.AddImmediateConflict(op);
                 }
                 for (auto& item : Parent.GlobalPlannedWriters) {
-                    TOperation::From(item)->AddImmediateConflict(op);
+                    item.AddImmediateConflict(op);
                 }
             } else {
                 for (auto& item : Parent.GlobalPlannedReaders) {
-                    op->AddDependency(TOperation::From(item));
+                    op->AddDependency(&item);
                 }
                 for (auto& item : Parent.GlobalPlannedWriters) {
-                    op->AddDependency(TOperation::From(item));
+                    op->AddDependency(&item);
                 }
                 for (auto& item : Parent.GlobalImmediateReaders) {
-                    op->AddImmediateConflict(TOperation::From(item));
+                    op->AddImmediateConflict(&item);
                 }
                 for (auto& item : Parent.GlobalImmediateWriters) {
-                    op->AddImmediateConflict(TOperation::From(item));
+                    op->AddImmediateConflict(&item);
                 }
             }
         }
@@ -360,14 +360,14 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
             // We are potentially reading all keys in all tables, thus we conflict with all writes
             if (op->IsImmediate()) {
                 for (auto& item : Parent.AllPlannedWriters) {
-                    TOperation::From(item)->AddImmediateConflict(op);
+                    item.AddImmediateConflict(op);
                 }
             } else {
                 for (auto& item : Parent.AllPlannedWriters) {
-                    op->AddDependency(TOperation::From(item));
+                    op->AddDependency(&item);
                 }
                 for (auto& item : Parent.AllImmediateWriters) {
-                    op->AddImmediateConflict(TOperation::From(item));
+                    op->AddImmediateConflict(&item);
                 }
             }
         } else if (haveReads) {
@@ -393,14 +393,14 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
             if (!haveWrites) {
                 if (op->IsImmediate()) {
                     for (auto& item : Parent.GlobalPlannedWriters) {
-                        TOperation::From(item)->AddImmediateConflict(op);
+                        item.AddImmediateConflict(op);
                     }
                 } else {
                     for (auto& item : Parent.GlobalPlannedWriters) {
-                        op->AddDependency(TOperation::From(item));
+                        op->AddDependency(&item);
                     }
                     for (auto& item : Parent.GlobalImmediateWriters) {
-                        op->AddImmediateConflict(TOperation::From(item));
+                        op->AddImmediateConflict(&item);
                     }
                 }
             }
@@ -544,16 +544,11 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::RemoveOperation(const 
         }
     }
 
-    TOperationAllListItem* allListItem = op.Get();
-    TOperationGlobalListItem* globalListItem = op.Get();
-    TOperationDelayedReadListItem* delayedReadListItem = op.Get();
-    TOperationDelayedWriteListItem* delayedWriteListItem = op.Get();
+    op->UnlinkFromList<TOperationAllListTag>();
+    op->UnlinkFromList<TOperationGlobalListTag>();
 
-    allListItem->Unlink();
-    globalListItem->Unlink();
-
-    if (!delayedReadListItem->Empty()) {
-        delayedReadListItem->Unlink();
+    if (op->IsInList<TOperationDelayedReadListTag>()) {
+        op->UnlinkFromList<TOperationDelayedReadListTag>();
         op->RemoveDelayedKnownReads();
     } else {
         for (auto& kv : Parent.Tables) {
@@ -565,8 +560,8 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::RemoveOperation(const 
         }
     }
 
-    if (!delayedWriteListItem->Empty()) {
-        delayedWriteListItem->Unlink();
+    if (op->IsInList<TOperationDelayedWriteListTag>()) {
+        op->UnlinkFromList<TOperationDelayedWriteListTag>();
         op->RemoveDelayedKnownWrites();
     } else {
         for (auto& kv : Parent.Tables) {
@@ -757,14 +752,14 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
         // We are potentially writing to all keys in all tables, thus we conflict with everything
         if (op->IsImmediate()) {
             for (auto& item : Parent.AllPlannedWriters) {
-                TOperation::From(item)->AddImmediateConflict(op);
+                item.AddImmediateConflict(op);
             }
         } else {
             for (auto& item : Parent.AllPlannedWriters) {
-                op->AddDependency(TOperation::From(item));
+                op->AddDependency(&item);
             }
             for (auto& item : Parent.AllImmediateWriters) {
-                op->AddImmediateConflict(TOperation::From(item));
+                op->AddImmediateConflict(&item);
             }
             // In mvcc case we skip immediate readers because they read at a fixed time point,
             // so that they already calculated all their dependencies and cannot have new ones,
@@ -798,18 +793,18 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
             // If we have any reads or writes we conflict with global writes
             if (op->IsImmediate()) {
                 for (auto& item : Parent.GlobalPlannedWriters) {
-                    TOperation::From(item)->AddImmediateConflict(op);
+                    item.AddImmediateConflict(op);
                 }
             } else {
                 for (auto& item : Parent.GlobalPlannedWriters) {
-                    op->AddDependency(TOperation::From(item));
+                    op->AddDependency(&item);
                 }
                 // Here we have immediate writers who are global readers as well
                 for (auto& item : Parent.GlobalImmediateReaders) {
-                    op->AddImmediateConflict(TOperation::From(item));
+                    op->AddImmediateConflict(&item);
                 }
                 for (auto& item : Parent.GlobalImmediateWriters) {
-                    op->AddImmediateConflict(TOperation::From(item));
+                    op->AddImmediateConflict(&item);
                 }
             }
         }
@@ -818,11 +813,11 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
             // We are potentially reading all keys in all tables, thus we conflict with all writes
             if (op->IsImmediate()) {
                 for (auto& item : Parent.AllPlannedWriters) {
-                    onImmediateConflict(*TOperation::From(item));
+                    onImmediateConflict(item);
                 }
             } else {
                 for (auto& item : Parent.AllPlannedWriters) {
-                    op->AddDependency(TOperation::From(item));
+                    op->AddDependency(&item);
                 }
                 // Since each happened read moves incomplete edge, neither immediate write cannot affect
                 // such read, that's why a planned reader cannot be a dependency for any immediate write
@@ -846,11 +841,11 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
             if (!haveWrites) {
                 if (op->IsImmediate()) {
                     for (auto& item : Parent.GlobalPlannedWriters) {
-                        onImmediateConflict(*TOperation::From(item));
+                        onImmediateConflict(item);
                     }
                 } else {
                     for (auto& item : Parent.GlobalPlannedWriters) {
-                        op->AddDependency(TOperation::From(item));
+                        op->AddDependency(&item);
                     }
                     // Since each happened read moves incomplete edge, neither immediate write cannot affect
                     // such read, that's why a planned reader cannot be a dependency for any immediate write
@@ -983,16 +978,11 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOp
         }
     }
 
-    TOperationAllListItem* allListItem = op.Get();
-    TOperationGlobalListItem* globalListItem = op.Get();
-    TOperationDelayedReadListItem* delayedReadListItem = op.Get();
-    TOperationDelayedWriteListItem* delayedWriteListItem = op.Get();
+    op->UnlinkFromList<TOperationAllListTag>();
+    op->UnlinkFromList<TOperationGlobalListTag>();
 
-    allListItem->Unlink();
-    globalListItem->Unlink();
-
-    if (!delayedReadListItem->Empty()) {
-        delayedReadListItem->Unlink();
+    if (op->IsInList<TOperationDelayedReadListTag>()) {
+        op->UnlinkFromList<TOperationDelayedReadListTag>();
         op->RemoveDelayedKnownReads();
     } else {
         for (auto& kv : Parent.Tables) {
@@ -1004,8 +994,8 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOp
         }
     }
 
-    if (!delayedWriteListItem->Empty()) {
-        delayedWriteListItem->Unlink();
+    if (op->IsInList<TOperationDelayedWriteListTag>()) {
+        op->UnlinkFromList<TOperationDelayedWriteListTag>();
         op->RemoveDelayedKnownWrites();
     } else {
         for (auto& kv : Parent.Tables) {

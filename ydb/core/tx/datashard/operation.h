@@ -468,18 +468,18 @@ struct TExecutionProfile {
     THashMap<EExecutionUnitKind, TUnitProfile> UnitProfiles;
 };
 
-class TOperationAllListItem : public TIntrusiveListItem<TOperationAllListItem> {};
-class TOperationGlobalListItem : public TIntrusiveListItem<TOperationGlobalListItem> {};
-class TOperationDelayedReadListItem : public TIntrusiveListItem<TOperationDelayedReadListItem> {};
-class TOperationDelayedWriteListItem : public TIntrusiveListItem<TOperationDelayedWriteListItem> {};
+struct TOperationAllListTag {};
+struct TOperationGlobalListTag {};
+struct TOperationDelayedReadListTag {};
+struct TOperationDelayedWriteListTag {};
 
 class TOperation
     : public TBasicOpInfo
-    , public TThrRefBase
-    , public TOperationAllListItem
-    , public TOperationGlobalListItem
-    , public TOperationDelayedReadListItem
-    , public TOperationDelayedWriteListItem
+    , public TSimpleRefCount<TOperation>
+    , public TIntrusiveListItem<TOperation, TOperationAllListTag>
+    , public TIntrusiveListItem<TOperation, TOperationGlobalListTag>
+    , public TIntrusiveListItem<TOperation, TOperationDelayedReadListTag>
+    , public TIntrusiveListItem<TOperation, TOperationDelayedWriteListTag>
 {
 public:
     enum EDepFlag {
@@ -505,9 +505,7 @@ public:
     using TPtr = TIntrusivePtr<TOperation>;
     using EResultStatus = NKikimrTxDataShard::TEvProposeTransactionResult::EStatus;
 
-    ~TOperation()
-    {
-    }
+    virtual ~TOperation() = default;
 
     TActorId GetTarget() const { return Target; }
     void SetTarget(TActorId target) { Target = target; }
@@ -516,15 +514,17 @@ public:
     void SetCookie(ui64 cookie) { Cookie = cookie; }
 
 public:
-    static TOperation* From(TOperationAllListItem* item) { return static_cast<TOperation*>(item); }
-    static TOperation* From(TOperationGlobalListItem* item) { return static_cast<TOperation*>(item); }
-    static TOperation* From(TOperationDelayedReadListItem* item) { return static_cast<TOperation*>(item); }
-    static TOperation* From(TOperationDelayedWriteListItem* item) { return static_cast<TOperation*>(item); }
+    template<class TTag>
+    bool IsInList() const {
+        using TItem = TIntrusiveListItem<TOperation, TTag>;
+        return !static_cast<const TItem*>(this)->Empty();
+    }
 
-    static TOperation* From(TOperationAllListItem& item) { return static_cast<TOperation*>(&item); }
-    static TOperation* From(TOperationGlobalListItem& item) { return static_cast<TOperation*>(&item); }
-    static TOperation* From(TOperationDelayedReadListItem& item) { return static_cast<TOperation*>(&item); }
-    static TOperation* From(TOperationDelayedWriteListItem& item) { return static_cast<TOperation*>(&item); }
+    template<class TTag>
+    void UnlinkFromList() {
+        using TItem = TIntrusiveListItem<TOperation, TTag>;
+        static_cast<TItem*>(this)->Unlink();
+    }
 
 public:
     TDuration GetTotalElapsed() const {

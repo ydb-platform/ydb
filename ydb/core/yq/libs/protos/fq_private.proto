@@ -89,6 +89,7 @@ message GetTaskResult {
         google.protobuf.Duration execution_limit = 29;
         google.protobuf.Timestamp request_started_at = 30;
         repeated CompressedData dq_graph_compressed = 31;
+        uint32 restart_count = 32;
     }
     repeated Task tasks = 1;
 }

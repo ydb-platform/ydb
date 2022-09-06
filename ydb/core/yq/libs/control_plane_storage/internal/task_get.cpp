@@ -277,6 +277,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                     << " LastSeenAt: " << lastSeenAt);
                 taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, Config.TaskLeaseRetryPolicy, now);
             }
+            task.RetryCount = taskInternal.RetryLimiter.RetryCount;
 
             *rootCounters->GetSubgroup("scope", task.Scope)->GetSubgroup("query_id", task.QueryId)->GetCounter("RetryCount") = taskInternal.RetryLimiter.RetryCount;
 
@@ -369,8 +370,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                     << " unsupported";
             }
 
-
-
             auto* newTask = result.add_tasks();
             newTask->set_query_type(queryType);
             newTask->set_execute_mode(task.Query.meta().execute_mode());
@@ -395,6 +394,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             newTask->set_result_limit(task.Internal.result_limit());
             *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
             *newTask->mutable_request_started_at() = task.Query.meta().started_at();
+
+            newTask->set_restart_count(task.RetryCount);
+            auto* jobId = newTask->mutable_job_id();
+            jobId->set_value(task.Query.meta().last_job_id());
 
             for (const auto& connection: task.Internal.connection()) {
                 const auto serviceAccountId = ExtractServiceAccountId(connection);

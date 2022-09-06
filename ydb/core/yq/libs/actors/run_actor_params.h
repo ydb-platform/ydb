@@ -66,7 +66,9 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& tenantName,
         uint64_t resultBytesLimit,
         TDuration executionTtl,
-        TInstant requestStartedAt
+        TInstant requestStartedAt,
+        ui32 restartCount,
+        const TString& jobId
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -122,6 +124,8 @@ struct TRunActorParams { // TODO2 : Change name
     uint64_t ResultBytesLimit;
     TDuration ExecutionTtl;
     TInstant RequestStartedAt;
+    ui32 RestartCount;
+    const TString JobId;
 };
 
 } /* NYq */

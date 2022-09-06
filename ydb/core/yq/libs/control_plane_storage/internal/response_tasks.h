@@ -8,6 +8,7 @@ namespace NYq {
 struct TTask {
     TString Scope;
     TString QueryId;
+    ui32 RetryCount;
     YandexQuery::Query Query;
     YandexQuery::Internal::QueryInternal Internal;
     ui64 Generation = 0;

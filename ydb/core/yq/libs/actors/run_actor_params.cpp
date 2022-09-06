@@ -51,7 +51,9 @@ TRunActorParams::TRunActorParams(
     const TString& tenantName,
     uint64_t resultBytesLimit,
     TDuration executionTtl,
-    TInstant requestStartedAt
+    TInstant requestStartedAt,
+    ui32 restartCount,
+    const TString& jobId
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -100,6 +102,8 @@ TRunActorParams::TRunActorParams(
     , ResultBytesLimit(resultBytesLimit)
     , ExecutionTtl(executionTtl)
     , RequestStartedAt(requestStartedAt)
+    , RestartCount(restartCount)
+    , JobId(jobId)
     {
     }
 

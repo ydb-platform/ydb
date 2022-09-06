@@ -133,7 +133,32 @@ const Node* ListNodeNth(const List* list, int index) {
     return static_cast<const Node*>(list_nth(list, index));
 }
 
+#define AT_LOCATION(node) \
+    TLocationGuard guard(this, node->location);
+
+#define AT_LOCATION_EX(node, field) \
+    TLocationGuard guard(this, node->field);
+
 class TConverter : public IPGParseEvents {
+    friend class TLocationGuard;
+
+private:
+    class TLocationGuard {
+    private:
+        TConverter* Owner;
+
+    public:
+        TLocationGuard(TConverter* owner, int location)
+            : Owner(owner)
+        {
+            Owner->PushPosition(location);
+        }
+
+        ~TLocationGuard() {
+            Owner->PopPosition();
+        }
+    };
+
 public:
     struct TFromDesc {
         TAstNode* Source = nullptr;
@@ -165,11 +190,14 @@ public:
 
     using TViews = THashMap<TString, TView>;
 
-    TConverter(TAstParseResult& astParseResult, const NSQLTranslation::TTranslationSettings& settings)
+    TConverter(TAstParseResult& astParseResult, const NSQLTranslation::TTranslationSettings& settings, const TString& query)
         : AstParseResult(astParseResult)
         , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
     {
+        Positions.push_back({});
+        ScanRows(query);
+
         for (auto& flag : Settings.Flags) {
             if (flag == "DqEngineEnable") {
                 DqEngineEnabled = true;
@@ -223,6 +251,7 @@ public:
 
     [[nodiscard]]
     bool ParseRawStmt(const RawStmt* value) {
+        AT_LOCATION_EX(value, stmt_location);
         auto node = value->stmt;
         switch (NodeTag(node)) {
         case T_SelectStmt:
@@ -776,6 +805,7 @@ public:
 
     [[nodiscard]]
     bool ParseWithClause(const WithClause* value) {
+        AT_LOCATION(value);
         if (value->recursive) {
             AddError("WithClause: recursion is not supported");
             return false;
@@ -798,6 +828,7 @@ public:
 
     [[nodiscard]]
     bool ParseCTE(const CommonTableExpr* value) {
+        AT_LOCATION(value);
         TView view;
         view.Name = value->ctename;
 
@@ -1108,6 +1139,7 @@ public:
     }
 
     TInsertDesc ParseWriteRangeVar(const RangeVar* value) {
+        AT_LOCATION(value);
         if (StrLength(value->catalogname) > 0) {
             AddError("catalogname is not supported");
             return {};
@@ -1140,6 +1172,7 @@ public:
     }
 
     TFromDesc ParseRangeVar(const RangeVar* value) {
+        AT_LOCATION(value);
         if (StrLength(value->catalogname) > 0) {
             AddError("catalogname is not supported");
             return {};
@@ -1290,6 +1323,7 @@ public:
     }
 
     TAstNode* ParseNullTestExpr(const NullTest* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         if (value->argisrow) {
             AddError("NullTest: unsupported argisrow");
             return nullptr;
@@ -1336,6 +1370,7 @@ public:
     }
 
     TAstNode* ParseCaseExpr(const CaseExpr* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         TAstNode* testExpr = nullptr;
         if (value->arg) {
             testExpr = ParseExpr(Expr2Node(value->arg), settings);
@@ -1391,12 +1426,7 @@ public:
             return ParseCaseExpr(CAST_NODE(CaseExpr, node), settings);
         }
         case T_ColumnRef: {
-            if (!settings.AllowColumns) {
-                AddError(TStringBuilder() << "Columns are not allowed in: " << settings.Scope);
-                return nullptr;
-            }
-
-            return ParseColumnRef(CAST_NODE(ColumnRef, node));
+            return ParseColumnRef(CAST_NODE(ColumnRef, node), settings);
         }
         case T_TypeCast: {
             return ParseTypeCast(CAST_NODE(TypeCast, node), settings);
@@ -1429,6 +1459,7 @@ public:
     }
 
     TAstNode* ParseAConst(const A_Const* value) {
+        AT_LOCATION(value);
         const auto& val = value->val;
         switch (NodeTag(val)) {
         case T_Integer: {
@@ -1450,6 +1481,7 @@ public:
     }
 
     TAstNode* ParseAArrayExpr(const A_ArrayExpr* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         TVector<TAstNode*> args;
         args.push_back(A("PgArray"));
         for (int i = 0; i < ListLength(value->elements); ++i) {
@@ -1465,6 +1497,7 @@ public:
     }
 
     TAstNode* ParseCoalesceExpr(const CoalesceExpr* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         TVector<TAstNode*> args;
         args.push_back(A("Coalesce"));
         for (int i = 0; i < ListLength(value->args); ++i) {
@@ -1480,6 +1513,7 @@ public:
     }
 
     TAstNode* ParseGroupingFunc(const GroupingFunc* value) {
+        AT_LOCATION(value);
         TVector<TAstNode*> args;
         args.push_back(A("PgGrouping"));
         TExprSettings settings;
@@ -1498,6 +1532,7 @@ public:
     }
 
     TAstNode* ParseGroupingSet(const GroupingSet* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         TString mode;
         switch (value->kind) {
         case GROUPING_SET_ROLLUP:
@@ -1578,6 +1613,7 @@ public:
     
 
     TAstNode* ParseSubLinkExpr(const SubLink* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         if (!settings.AllowSubLinks) {
             AddError(TStringBuilder() << "SubLinks are not allowed in: " << settings.Scope);
             return nullptr;
@@ -1641,6 +1677,7 @@ public:
     }
 
     TAstNode* ParseFuncCall(const FuncCall* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         if (ListLength(value->agg_order) > 0) {
             AddError("FuncCall: unsupported agg_order");
             return nullptr;
@@ -1787,6 +1824,7 @@ public:
     }
 
     TAstNode* ParseTypeCast(const TypeCast* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         if (!value->arg) {
             AddError("Expected arg");
             return nullptr;
@@ -1822,6 +1860,7 @@ public:
         }
 
         if (supportedTypeName) {
+            AT_LOCATION(typeName);
             TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
             auto input = ParseExpr(arg, settings);
             if (!input) {
@@ -1915,6 +1954,7 @@ public:
     }
 
     TAstNode* ParseBoolExpr(const BoolExpr* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         switch (value->boolop) {
         case AND_EXPR: {
             return ParseAndOrExpr(value, settings, "PgAnd");
@@ -1942,6 +1982,7 @@ public:
     }
 
     TAstNode* ParseWindowDef(const WindowDef* value) {
+        AT_LOCATION(value);
         auto name = QAX(value->name);
         auto refName = QAX(value->refname);
         TVector<TAstNode*> sortItems;
@@ -2190,6 +2231,7 @@ public:
     }
 
     TAstNode* ParseSortBy(const PG_SortBy* value, bool allowAggregates) {
+        AT_LOCATION(value);
         bool asc = true;
         switch (value->sortby_dir) {
         case SORTBY_DEFAULT:
@@ -2228,7 +2270,13 @@ public:
         return L(A("PgSort"), L(A("Void")), lambda, QA(asc ? "asc" : "desc"));
     }
 
-    TAstNode* ParseColumnRef(const ColumnRef* value) {
+    TAstNode* ParseColumnRef(const ColumnRef* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
+        if (!settings.AllowColumns) {
+            AddError(TStringBuilder() << "Columns are not allowed in: " << settings.Scope);
+            return nullptr;
+        }
+
         if (ListLength(value->fields) == 0) {
             AddError("No fields");
             return nullptr;
@@ -2272,6 +2320,7 @@ public:
     }
 
     TAstNode* ParseAExprOp(const A_Expr* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         if (ListLength(value->name) != 1) {
             AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
             return nullptr;
@@ -2460,6 +2509,7 @@ public:
     }
 
     TAstNode* ParseAExpr(const A_Expr* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
         switch (value->kind) {
         case AEXPR_OP:
             return ParseAExprOp(value, settings);
@@ -2515,7 +2565,7 @@ public:
     }
 
     TAstNode* VL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
-        return TAstNode::NewList(pos, nodes, size, *AstParseResult.Pool);
+        return TAstNode::NewList(pos.Row ? pos : Positions.back(), nodes, size, *AstParseResult.Pool);
     }
 
     TAstNode* QVL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
@@ -2523,11 +2573,11 @@ public:
     }
 
     TAstNode* A(const TString& str, TPosition pos = {}, ui32 flags = 0) {
-        return TAstNode::NewAtom(pos, str, *AstParseResult.Pool, flags);
+        return TAstNode::NewAtom(pos.Row ? pos : Positions.back(), str, *AstParseResult.Pool, flags);
     }
 
     TAstNode* AX(const TString& str, TPosition pos = {}) {
-        return A(str, pos, TNodeFlags::ArbitraryContent);
+        return A(str, pos.Row ? pos : Positions.back(), TNodeFlags::ArbitraryContent);
     }
 
     TAstNode* Q(TAstNode* node, TPosition pos = {}) {
@@ -2546,7 +2596,7 @@ public:
     TAstNode* L(TNodes... nodes) {
         TLState state;
         LImpl(state, nodes...);
-        return TAstNode::NewList(state.Position, state.Nodes.data(), state.Nodes.size(), *AstParseResult.Pool);
+        return TAstNode::NewList(state.Position.Row ? state.Position : Positions.back(), state.Nodes.data(), state.Nodes.size(), *AstParseResult.Pool);
     }
 
     template <typename... TNodes>
@@ -2556,7 +2606,7 @@ public:
 
 private:
     void AddError(const TString& value) {
-        AstParseResult.Issues.AddIssue(TIssue(value));
+        AstParseResult.Issues.AddIssue(TIssue(Positions.back(), value));
     }
 
     struct TLState {
@@ -2585,6 +2635,56 @@ private:
         LImpl(state, nodes...);
     }
 
+    void PushPosition(int location) {
+        if (location == -1) {
+            Positions.push_back(Positions.back());
+            return;
+        }
+
+        Positions.push_back(Location2Position(location));
+    };
+
+    void PopPosition() {
+        Positions.pop_back();
+    }
+
+    NYql::TPosition Location2Position(int location) const {
+        if (location < 0) {
+            return NYql::TPosition(0, 0);
+        }
+
+        auto it = LowerBound(RowStarts.begin(), RowStarts.end(), Min((ui32)location, QuerySize));
+        Y_ENSURE(it != RowStarts.end());
+
+        if (*it == location) {
+            auto row = 1 + it - RowStarts.begin();
+            auto column = 1;
+            return NYql::TPosition(column, row);
+        } else {
+            Y_ENSURE(it != RowStarts.begin());
+            auto row = it - RowStarts.begin();
+            auto column = 1 + location - *(it - 1);
+            return NYql::TPosition(column, row);
+        }
+    }
+
+    void ScanRows(const TString& query) {
+        QuerySize = query.Size();
+        RowStarts.push_back(0);
+        TPosition position(1, 1);
+        TTextWalker walker(position);
+        auto prevRow = position.Row;
+        for (ui32 i = 0; i < query.Size(); ++i) {
+            walker.Advance(query[i]);
+            if (position.Row != prevRow) {
+                RowStarts.push_back(i);
+                prevRow = position.Row;
+            }
+        }
+
+        RowStarts.push_back(QuerySize);
+    }
+
 private:
     TAstParseResult& AstParseResult;
     NSQLTranslation::TTranslationSettings Settings;
@@ -2596,11 +2696,14 @@ private:
     TViews Views;
     TVector<TViews> CTE;
     TString TablePathPrefix;
+    TVector<NYql::TPosition> Positions;
+    TVector<ui32> RowStarts;
+    ui32 QuerySize;
 };
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     NYql::TAstParseResult result;
-    TConverter converter(result, settings);
+    TConverter converter(result, settings, query);
     NYql::PGParse(query, converter);
     return result;
 }

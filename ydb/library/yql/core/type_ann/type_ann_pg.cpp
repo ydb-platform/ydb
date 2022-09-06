@@ -140,12 +140,17 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         input->SetTypeAnn(result);
         return IGraphTransformer::TStatus::Ok;
     } else {
-        const auto& proc = NPg::LookupProc(TString(name), argTypes);
-        auto children = input->ChildrenList();
-        auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
-        children.insert(children.begin() + 1, idNode);
-        output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
-        return IGraphTransformer::TStatus::Repeat;
+        try {
+            const auto& proc = NPg::LookupProc(TString(name), argTypes);
+            auto children = input->ChildrenList();
+            auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
+            children.insert(children.begin() + 1, idNode);
+            output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
+        } catch (const yexception& e) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 }
 
@@ -254,9 +259,14 @@ IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType(pgType).TypeId);
-    input->SetTypeAnn(result);
-    return IGraphTransformer::TStatus::Ok;
+    try {
+        auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType(pgType).TypeId);
+        input->SetTypeAnn(result);
+        return IGraphTransformer::TStatus::Ok;
+    } catch (const yexception& e) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
+        return IGraphTransformer::TStatus::Error;
+    }
 }
 
 IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
@@ -315,12 +325,17 @@ IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::
         input->SetTypeAnn(result);
         return IGraphTransformer::TStatus::Ok;
     } else {
-        const auto& oper = NPg::LookupOper(TString(name), argTypes);
-        auto children = input->ChildrenList();
-        auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(oper.OperId));
-        children.insert(children.begin() + 1, idNode);
-        output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedOp", std::move(children));
-        return IGraphTransformer::TStatus::Repeat;
+        try {
+            const auto& oper = NPg::LookupOper(TString(name), argTypes);
+            auto children = input->ChildrenList();
+            auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(oper.OperId));
+            children.insert(children.begin() + 1, idNode);
+            output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedOp", std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
+        } catch (const yexception& e) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 }
 
@@ -458,23 +473,28 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    const auto& aggDesc = NPg::LookupAggregation(name, argTypes);
-    if (aggDesc.Kind != NPg::EAggKind::Normal) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-            "Only normal aggregation supported"));
+    try {
+        const auto& aggDesc = NPg::LookupAggregation(name, argTypes);
+        if (aggDesc.Kind != NPg::EAggKind::Normal) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                "Only normal aggregation supported"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ui32 resultType;
+        if (!aggDesc.FinalFuncId) {
+            resultType = aggDesc.TransTypeId;
+        } else {
+            resultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
+        }
+
+        auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
+        input->SetTypeAnn(result);
+        return IGraphTransformer::TStatus::Ok;
+    } catch (const yexception& e) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
         return IGraphTransformer::TStatus::Error;
     }
-
-    ui32 resultType;
-    if (!aggDesc.FinalFuncId) {
-        resultType = aggDesc.TransTypeId;
-    } else {
-        resultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
-    }
-
-    auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
-    input->SetTypeAnn(result);
-    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PgQualifiedStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

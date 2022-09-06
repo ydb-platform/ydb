@@ -920,6 +920,36 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             CompareYson(R"([[["rValue"];#];[["rValue1"];["lValue1"]];[["rValue3"];#]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST_NEW_ENGINE(Describe) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+            CREATE TABLE `/Root/DescribeTest` (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            );
+        )")).ExtractValueSync();
+        UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+
+        auto describeTableResult = session.DescribeTable("/Root/DescribeTest").GetValueSync();
+        UNIT_ASSERT_C(describeTableResult.IsSuccess(), describeTableResult.GetIssues().ToString());
+
+        const THashMap<std::string_view, std::string_view> columnTypes = {
+            {"Key1", "Uint64"},
+            {"Key2", "Uint64?"},
+            {"Value", "String?"}
+        };
+
+        const auto& columns = describeTableResult.GetTableDescription().GetTableColumns();
+        for (const auto& column : columns) {
+            UNIT_ASSERT_VALUES_EQUAL(column.Type.ToString(), columnTypes.at(column.Name));
+        }
+    }
 }
 
 } // namespace NKqp

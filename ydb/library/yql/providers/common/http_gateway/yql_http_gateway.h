@@ -75,7 +75,7 @@ public:
     virtual void Download(
         TString url,
         THeaders headers,
-        std::size_t expectedSize,
+        std::size_t sizeLimit,
         TOnResult callback,
         TString data = {},
         IRetryPolicy</*http response code*/long>::TPtr RetryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()
@@ -103,6 +103,7 @@ public:
         TString url,
         THeaders headers,
         std::size_t offset,
+        std::size_t sizeLimit,
         TOnDownloadStart onStart,
         TOnNewDataPart onNewData,
         TOnDownloadFinish onFinish) = 0;

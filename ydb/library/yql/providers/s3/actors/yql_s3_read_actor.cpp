@@ -130,7 +130,7 @@ public:
         bool addPathIndex,
         ui64 startPathIndex,
         const NActors::TActorId& computeActorId,
-        ui64 expectedSize
+        ui64 sizeLimit
     )   : Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
         , InputIndex(inputIndex)
@@ -141,7 +141,7 @@ public:
         , Paths(std::move(paths))
         , AddPathIndex(addPathIndex)
         , StartPathIndex(startPathIndex)
-        , ExpectedSize(expectedSize)
+        , SizeLimit(sizeLimit)
     {}
 
     void Bootstrap() {
@@ -149,7 +149,7 @@ public:
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
             const TPath& path = Paths[pathInd];
             Gateway->Download(Url + std::get<TString>(path),
-                Headers, std::min(std::get<size_t>(path), ExpectedSize),
+                Headers, std::min(std::get<size_t>(path), SizeLimit),
                 std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd + StartPathIndex), {}, GetS3RetryPolicy());
         };
     }
@@ -250,7 +250,7 @@ private:
     const TPathList Paths;
     const bool AddPathIndex;
     const ui64 StartPathIndex;
-    const ui64 ExpectedSize;
+    const ui64 SizeLimit;
 
     std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
 };
@@ -261,7 +261,7 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName Columns;
     NDB::FormatSettings Settings;
     TString Format, Compression;
-    ui64 ExpectedSize = 0;
+    ui64 SizeLimit = 0;
 };
 
 struct TRetryStuff {
@@ -271,14 +271,14 @@ struct TRetryStuff {
         IHTTPGateway::TPtr gateway,
         TString url,
         const IHTTPGateway::THeaders& headers,
-        std::size_t expectedSize
-    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), ExpectedSize(expectedSize), Offset(0U), RetryState(GetS3RetryPolicy()->CreateRetryState())
+        std::size_t sizeLimit
+    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), SizeLimit(sizeLimit), Offset(0U), RetryState(GetS3RetryPolicy()->CreateRetryState())
     {}
 
     const IHTTPGateway::TPtr Gateway;
     const TString Url;
     const IHTTPGateway::THeaders Headers;
-    const std::size_t ExpectedSize;
+    const std::size_t SizeLimit;
 
     std::size_t Offset = 0U;
     const IRetryPolicy<long>::IRetryState::TPtr RetryState;
@@ -485,18 +485,19 @@ private:
             }
         }
 
-        if (retryStuff->NextRetryDelay)
+        if (retryStuff->NextRetryDelay && retryStuff->Offset < retryStuff->SizeLimit)
             actorSystem->Schedule(*retryStuff->NextRetryDelay, new IEventHandle(parent, self, new TEvPrivate::TEvRetryEventFunc(std::bind(&TS3ReadCoroActor::DownloadStart, retryStuff, self, parent))));
         else
             actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadFinished));
     }
 
     static void DownloadStart(const TRetryStuff::TPtr& retryStuff, const TActorId& self, const TActorId& parent) {
+        auto* as = TActivationContext::ActorSystem();
         retryStuff->CancelHook = retryStuff->Gateway->Download(retryStuff->Url,
-            retryStuff->Headers, retryStuff->Offset,
-            std::bind(&TS3ReadCoroActor::OnDownloadStart, TActivationContext::ActorSystem(), self, parent, std::placeholders::_1),
-            std::bind(&TS3ReadCoroActor::OnNewData, TActivationContext::ActorSystem(), self, parent, std::placeholders::_1),
-            std::bind(&TS3ReadCoroActor::OnDownloadFinished, TActivationContext::ActorSystem(), self, parent, retryStuff, std::placeholders::_1));
+            retryStuff->Headers, retryStuff->Offset, retryStuff->SizeLimit,
+            std::bind(&TS3ReadCoroActor::OnDownloadStart, as, self, parent, std::placeholders::_1),
+            std::bind(&TS3ReadCoroActor::OnNewData, as, self, parent, std::placeholders::_1),
+            std::bind(&TS3ReadCoroActor::OnDownloadFinished, as, self, parent, retryStuff, std::placeholders::_1));
     }
 
     void Registered(TActorSystem* sys, const TActorId& parent) override {
@@ -834,12 +835,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId);
         return {actor, actor};
     } else {
-        ui64 expectedSize = std::numeric_limits<ui64>::max();
-        if (const auto it = settings.find("expectedSize"); settings.cend() != it)
-            expectedSize = FromString<ui64>(it->second);
+        ui64 sizeLimit = std::numeric_limits<ui64>::max();
+        if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
+            sizeLimit = FromString<ui64>(it->second);
 
         const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), holderFactory, params.GetUrl(), authToken,
-                                            std::move(paths), addPathIndex, startPathIndex, computeActorId, expectedSize);
+                                            std::move(paths), addPathIndex, startPathIndex, computeActorId, sizeLimit);
         return {actor, actor};
     }
 }

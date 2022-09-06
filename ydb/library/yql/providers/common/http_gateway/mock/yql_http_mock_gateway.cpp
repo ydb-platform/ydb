@@ -48,13 +48,13 @@ public:
     void Download(
             TString url,
             THeaders headers,
-            std::size_t expectedSize,
+            std::size_t sizeLimit,
             TOnResult callback,
             TString data,
             IRetryPolicy<long>::TPtr retryPolicy)
     {
 
-        Y_UNUSED(expectedSize);
+        Y_UNUSED(sizeLimit);
         Y_UNUSED(retryPolicy);
 
         auto key = TKeyType(url, headers, data);
@@ -72,6 +72,7 @@ public:
      TCancelHook Download(
             TString ,
             THeaders ,
+            std::size_t ,
             std::size_t ,
             TOnDownloadStart ,
             TOnNewDataPart ,

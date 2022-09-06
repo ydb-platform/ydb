@@ -190,22 +190,22 @@ public:
                 }
                 auto readSettings = s3ReadObject.Object().Settings().Cast().Ptr();
 
-                int expectedSizeIndex = -1;
+                int sizeLimitIndex = -1;
                 for (size_t childInd = 0; childInd < readSettings->ChildrenSize(); ++childInd) {
                     if (readSettings->Child(childInd)->Head().Content() == "readmaxbytes") {
-                        expectedSizeIndex = childInd;
+                        sizeLimitIndex = childInd;
                         break;
                     }
                 }
 
-                if (expectedSizeIndex != -1) {
+                if (sizeLimitIndex != -1) {
                     return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3SourceSettings>()
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                             .Build()
-                        .ExpectedSize(readSettings->Child(expectedSizeIndex)->TailPtr())
+                        .SizeLimit(readSettings->Child(sizeLimitIndex)->TailPtr())
                         .Build()
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
@@ -265,9 +265,9 @@ public:
                 }
             } else if (const auto maySourceSettings = source.Settings().Maybe<TS3SourceSettings>()){
                 const auto sourceSettings = maySourceSettings.Cast();
-                auto expectedSize = sourceSettings.ExpectedSize();
-                if (expectedSize.IsValid()) {
-                    srcDesc.MutableSettings()->insert({"expectedSize", expectedSize.Cast().StringValue()});
+                auto sizeLimit = sourceSettings.SizeLimit();
+                if (sizeLimit.IsValid()) {
+                    srcDesc.MutableSettings()->insert({"sizeLimit", sizeLimit.Cast().StringValue()});
                 }
             }
 

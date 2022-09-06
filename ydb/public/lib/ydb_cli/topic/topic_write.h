@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ydb/public/lib/ydb_cli/commands/ydb_command.h"
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 
@@ -48,7 +48,7 @@ namespace NYdb::NConsoleClient {
         TTopicWriter();
         TTopicWriter(const TTopicWriter&) = default;
         TTopicWriter(TTopicWriter&&) = default;
-        TTopicWriter(std::shared_ptr<NPersQueue::IWriteSession>, TTopicWriterParams);
+        TTopicWriter(std::shared_ptr<NTopic::IWriteSession>, TTopicWriterParams);
 
         bool Close(TDuration closeTimeout = TDuration::Max());
         int Init();
@@ -61,16 +61,16 @@ namespace NYdb::NConsoleClient {
             bool ContinueSending = false;
         };
 
-        int HandleEvent(NPersQueue::TWriteSessionEvent::TEvent&);
-        int HandleAcksEvent(const NPersQueue::TWriteSessionEvent::TAcksEvent&);
-        int HandleReadyToAcceptEvent(NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent&);
-        int HandleSessionClosedEvent(const NPersQueue::TSessionClosedEvent&);
+        int HandleEvent(NTopic::TWriteSessionEvent::TEvent&);
+        int HandleAcksEvent(const NTopic::TWriteSessionEvent::TAcksEvent&);
+        int HandleReadyToAcceptEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent&);
+        int HandleSessionClosedEvent(const NTopic::TSessionClosedEvent&);
         TTopicWriter::TSendMessageData EnterMessage(IInputStream&); // TODO(shmel1k@): make static or like a helper function
 
-        std::shared_ptr<NPersQueue::IWriteSession> WriteSession_;
+        std::shared_ptr<NTopic::IWriteSession> WriteSession_;
         const TTopicWriterParams WriterParams_;
 
-        TMaybe<NPersQueue::TContinuationToken> ContinuationToken_ = Nothing();
+        TMaybe<NTopic::TContinuationToken> ContinuationToken_ = Nothing();
 
         ui64 CurrentSeqNo_ = 0;
 

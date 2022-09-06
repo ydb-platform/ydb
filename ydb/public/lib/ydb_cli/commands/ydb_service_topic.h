@@ -154,71 +154,11 @@ namespace NYdb::NConsoleClient {
         NTopic::TReadSessionSettings PrepareReadSessionSettings();
     };
 
-    namespace {
-        const THashMap<NYdb::NPersQueue::ECodec, TString> CodecsDescriptionsMigration = {
-            {NYdb::NPersQueue::ECodec::RAW, "Raw codec. No data compression(default)"},
-            {NYdb::NPersQueue::ECodec::GZIP, "GZIP codec. Data is compressed with GZIP compression algorithm"},
-            {NYdb::NPersQueue::ECodec::LZOP, "LZOP codec. Data is compressed with LZOP compression algorithm"},
-            {NYdb::NPersQueue::ECodec::ZSTD, "ZSTD codec. Data is compressed with ZSTD compression algorithm"},
-        };
-    }
-
-    const TVector<NYdb::NPersQueue::ECodec> AllowedCodecsMigration = {
-        NPersQueue::ECodec::RAW,
-        NPersQueue::ECodec::GZIP,
-        NPersQueue::ECodec::ZSTD,
-    };
-
-    class TCommandWithCodecMigration {
-        // TODO(shmel1k@): remove after TopicService C++ SDK supports IWriteSession
-    protected:
-        void AddAllowedCodecs(TClientCommand::TConfig& config) {
-            TStringStream description;
-            description << "Codec used for writing. Available codecs: ";
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-            for (const auto& codec : AllowedCodecsMigration) {
-                auto findResult = CodecsDescriptionsMigration.find(codec);
-                Y_VERIFY(findResult != CodecsDescriptionsMigration.end(),
-                         "Couldn't find description for %s codec", (TStringBuilder() << codec).c_str());
-                description << "\n  " << colors.BoldColor() << codec << colors.OldColor()
-                            << "\n    " << findResult->second;
-            }
-            config.Opts->AddLongOption("codec", description.Str())
-                .RequiredArgument("STRING")
-                .StoreResult(&CodecStr_);
-        }
-
-        void ParseCodec() {
-            TString codec = to_lower(CodecStr_);
-            if (codec == "raw") {
-                Codec_ = NPersQueue::ECodec::RAW;
-            }
-            if (codec == "gzip") {
-                Codec_ = NPersQueue::ECodec::GZIP;
-            }
-            if (codec = "zstd") {
-                Codec_ = NPersQueue::ECodec::ZSTD;
-            }
-        }
-
-        NPersQueue::ECodec GetCodec() const {
-            if (CodecStr_ == "") {
-                return DefaultCodec_;
-            }
-            return Codec_;
-        }
-
-    private:
-        NPersQueue::ECodec DefaultCodec_ = NPersQueue::ECodec::RAW;
-        TString CodecStr_;
-        NPersQueue::ECodec Codec_;
-    };
-
     class TCommandTopicWrite: public TYdbCommand,
                               public TCommandWithFormat,
                               public TInterruptibleCommand,
                               public TCommandWithTopicName,
-                              public TCommandWithCodecMigration {
+                              public TCommandWithSupportedCodecs {
     public:
         TCommandTopicWrite();
         void Config(TConfig& config) override;
@@ -238,9 +178,9 @@ namespace NYdb::NConsoleClient {
 
         ui64 MessageSizeLimit_ = 0;
         void ParseMessageSizeLimit();
-        void CheckOptions(NPersQueue::TPersQueueClient& persQueueClient);
+        void CheckOptions(NTopic::TTopicClient& persQueueClient);
 
     private:
-        NPersQueue::TWriteSessionSettings PrepareWriteSessionSettings();
+        NTopic::TWriteSessionSettings PrepareWriteSessionSettings();
     };
 } // namespace NYdb::NConsoleClient

@@ -56,7 +56,7 @@ namespace NYdb::NConsoleClient {
     TTopicWriter::TTopicWriter() {
     }
 
-    TTopicWriter::TTopicWriter(std::shared_ptr<NYdb::NPersQueue::IWriteSession> writeSession,
+    TTopicWriter::TTopicWriter(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession,
                                TTopicWriterParams params)
         : WriteSession_(writeSession)
         , WriterParams_(params) {
@@ -78,6 +78,9 @@ namespace NYdb::NConsoleClient {
 
         if (!initSeqNo.HasValue()) {
             // TODO(shmel1k@): logging
+            if (initSeqNo.HasException()) {
+                initSeqNo.TryRethrow();
+            }
             return EXIT_FAILURE;
         }
 
@@ -85,30 +88,30 @@ namespace NYdb::NConsoleClient {
         return EXIT_SUCCESS;
     }
 
-    int TTopicWriter::HandleAcksEvent(const NPersQueue::TWriteSessionEvent::TAcksEvent& event) {
+    int TTopicWriter::HandleAcksEvent(const NTopic::TWriteSessionEvent::TAcksEvent& event) {
         Y_UNUSED(event);
         return EXIT_SUCCESS;
     }
 
-    int TTopicWriter::HandleReadyToAcceptEvent(NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent& event) {
+    int TTopicWriter::HandleReadyToAcceptEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event) {
         ContinuationToken_ = std::move(event.ContinuationToken);
         return EXIT_SUCCESS;
     }
 
-    int TTopicWriter::HandleSessionClosedEvent(const NPersQueue::TSessionClosedEvent& event) {
+    int TTopicWriter::HandleSessionClosedEvent(const NTopic::TSessionClosedEvent& event) {
         ThrowOnError(event);
         return EXIT_FAILURE;
     }
 
-    int TTopicWriter::HandleEvent(NPersQueue::TWriteSessionEvent::TEvent& event) {
+    int TTopicWriter::HandleEvent(NTopic::TWriteSessionEvent::TEvent& event) {
         return std::visit(TOverloaded{
-                              [&](const NPersQueue::TWriteSessionEvent::TAcksEvent& event) {
+                              [&](const NTopic::TWriteSessionEvent::TAcksEvent& event) {
                                   return HandleAcksEvent(event);
                               },
-                              [&](NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent& event) {
+                              [&](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event) {
                                   return HandleReadyToAcceptEvent(event);
                               },
-                              [&](const NPersQueue::TSessionClosedEvent& event) {
+                              [&](const NTopic::TSessionClosedEvent& event) {
                                   return HandleSessionClosedEvent(event);
                               },
                           },
@@ -150,7 +153,7 @@ namespace NYdb::NConsoleClient {
         bool continueSending = true;
         while (continueSending) {
             while (!ContinuationToken_.Defined()) {
-                TMaybe<NPersQueue::TWriteSessionEvent::TEvent> event = WriteSession_->GetEvent(true);
+                TMaybe<NTopic::TWriteSessionEvent::TEvent> event = WriteSession_->GetEvent(true);
                 if (event.Empty()) {
                     continue;
                 }
@@ -176,25 +179,24 @@ namespace NYdb::NConsoleClient {
         if (WriteSession_->Close(TDuration::Hours(12))) {
             return true;
         }
-        TVector<NPersQueue::TWriteSessionEvent::TEvent> events = WriteSession_->GetEvents(true);
+        TVector<NTopic::TWriteSessionEvent::TEvent> events = WriteSession_->GetEvents(true);
         if (events.empty()) {
             return false;
         }
         for (auto& evt : events) {
             bool hasFailure = false;
             std::visit(TOverloaded{
-                           [&](const NPersQueue::TWriteSessionEvent::TAcksEvent& event) {
+                           [&](const NTopic::TWriteSessionEvent::TAcksEvent& event) {
                                Y_UNUSED(event);
                            },
-                           [&](NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent& event) {
+                           [&](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event) {
                                Y_UNUSED(event);
                            },
-                           [&](const NPersQueue::TSessionClosedEvent& event) {
+                           [&](const NTopic::TSessionClosedEvent& event) {
                                int result = HandleSessionClosedEvent(event);
                                if (result == EXIT_FAILURE) {
                                    hasFailure = true;
                                }
-                               Y_UNUSED(result);
                            },
                        },
                        evt);

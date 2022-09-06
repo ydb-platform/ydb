@@ -164,6 +164,7 @@ namespace NYdb::NConsoleClient {
         AddCommand(std::make_unique<TCommandTopicDrop>());
         AddCommand(std::make_unique<TCommandTopicConsumer>());
         AddCommand(std::make_unique<TCommandTopicRead>());
+        AddCommand(std::make_unique<TCommandTopicWrite>());
     }
 
     TCommandTopicCreate::TCommandTopicCreate()
@@ -402,11 +403,6 @@ namespace NYdb::NConsoleClient {
         TStatus status = topicClient.AlterTopic(TopicName, removeReadRuleSettings).GetValueSync();
         ThrowOnError(status);
         return EXIT_SUCCESS;
-    }
-
-    TCommandTopicInternal::TCommandTopicInternal()
-        : TClientCommandTree("topic", {}, "Experimental topic operations") {
-        AddCommand(std::make_unique<TCommandTopicWrite>());
     }
 
     TCommandTopicRead::TCommandTopicRead()
@@ -648,7 +644,7 @@ namespace NYdb::NConsoleClient {
                                     //      EOutputFormat::JsonRawStreamConcat,
                                     //      EOutputFormat::JsonRawArray,
                                 });
-        AddAllowedCodecs(config);
+        AddAllowedCodecs(config, {NTopic::ECodec::RAW});
 
         // TODO(shmel1k@): improve help.
         config.Opts->AddLongOption('d', "delimiter", "Delimiter to split messages")
@@ -678,7 +674,7 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Parse(config);
         ParseTopicName(config, 0);
         ParseMessagingFormats();
-        ParseCodec();
+        ParseCodecs();
 
         if (Delimiter_.Defined() && MessagingFormat != EMessagingFormat::SingleMessage) {
             throw TMisuseException() << "Both mutually exclusive options \"delimiter\"(\"--delimiter\", \"-d\" "
@@ -686,13 +682,13 @@ namespace NYdb::NConsoleClient {
         }
     }
 
-    NPersQueue::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings() {
-        NPersQueue::TWriteSessionSettings settings;
-        settings.Codec(GetCodec()); // TODO(shmel1k@): codecs?
+    NTopic::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings() {
+        NTopic::TWriteSessionSettings settings;
+//        settings.Codec(GetCodecs()[0]);
+        settings.Codec(NTopic::ECodec::GZIP);
         settings.Path(TopicName);
         //settings.BatchFlushInterval(BatchDuration_);
         //settings.BatchFlushSizeBytes(BatchSize_);
-        settings.ClusterDiscoveryMode(NPersQueue::EClusterDiscoveryMode::Auto);
 
         if (!MessageGroupId_.Defined()) {
             const TString rnd = ToString(TInstant::Now().NanoSeconds());
@@ -708,49 +704,21 @@ namespace NYdb::NConsoleClient {
         }
 
         settings.MessageGroupId(*MessageGroupId_);
+        settings.ProducerId(*MessageGroupId_);
 
         return settings;
-    }
-
-    void TCommandTopicWrite::CheckOptions(NPersQueue::TPersQueueClient& persQueueClient) {
-        NPersQueue::TAsyncDescribeTopicResult descriptionFuture = persQueueClient.DescribeTopic(TopicName);
-        descriptionFuture.Wait(TDuration::Seconds(1));
-        NPersQueue::TDescribeTopicResult description = descriptionFuture.GetValueSync();
-        ThrowOnError(description);
-
-        NPersQueue::ECodec codec = GetCodec();
-        bool exists = false;
-        for (const auto c : description.TopicSettings().SupportedCodecs()) {
-            if (c == codec) {
-                exists = true;
-                break;
-            }
-        }
-        if (exists) {
-            return;
-        }
-        TStringStream errorMessage;
-        errorMessage << "Codec \"" << (TStringBuilder() << codec) << "\" is not available for topic. Available codecs:\n";
-        for (const auto c : description.TopicSettings().SupportedCodecs()) {
-            errorMessage << "    " << (TStringBuilder() << c) << "\n";
-        }
-        throw TMisuseException() << errorMessage.Str();
     }
 
     int TCommandTopicWrite::Run(TConfig& config) {
         SetInterruptHandlers();
 
         auto driver = std::make_unique<TDriver>(CreateDriver(config));
-        NPersQueue::TPersQueueClient persQueueClient(*driver);
-
-        CheckOptions(persQueueClient);
-
-        // TODO(shmel1k@): return back after IWriteSession in TopicService SDK
-        //        TTopicInitializationChecker checker = TTopicInitializationChecker(persQueueClient);
-        //        checker.CheckTopicExistence(TopicName);
+        NTopic::TTopicClient persQueueClient(*driver);
+        TTopicInitializationChecker checker = TTopicInitializationChecker(persQueueClient);
+        checker.CheckTopicExistence(TopicName);
 
         {
-            auto writeSession = NPersQueue::TPersQueueClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
+            auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
             auto writer = TTopicWriter(writeSession, std::move(TTopicWriterParams(
                                                          MessagingFormat,
                                                          Delimiter_,

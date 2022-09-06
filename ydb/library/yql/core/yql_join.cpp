@@ -895,6 +895,46 @@ TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& setting
     return res;
 }
 
+TCoLambda BuildJoinRenameLambda(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
+    const TStructExprType& joinResultType, TExprContext& ctx)
+{
+    THashMap<TStringBuf, TStringBuf> reverseRenameMap;
+    for (const auto& [oldName , targets] : renameMap) {
+        for (TStringBuf newName : targets) {
+            reverseRenameMap[newName] = oldName;
+        }
+    }
+
+    TCoArgument rowArg = Build<TCoArgument>(ctx, pos)
+        .Name("row")
+        .Done();
+
+    TVector<TExprBase> renameTuples;
+    for (auto& item : joinResultType.GetItems()) {
+        TStringBuf newName = item->GetName();
+        auto renamedFrom = reverseRenameMap.FindPtr(newName);
+        TStringBuf oldName = renamedFrom ? *renamedFrom : newName;
+
+        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(newName)
+            .Value<TCoMember>()
+                .Struct(rowArg)
+                .Name().Build(oldName)
+            .Build()
+            .Done();
+
+        renameTuples.push_back(tuple);
+    }
+
+    return Build<TCoLambda>(ctx, pos)
+        .Args({rowArg})
+        .Body<TCoAsStruct>()
+            .Add(renameTuples)
+        .Build()
+        .Done();
+}
+
+
 TSet<TVector<TStringBuf>> LoadJoinSortSets(const TExprNode& settings) {
     TSet<TVector<TStringBuf>> res;
     for (const auto& child : settings.Children()) {

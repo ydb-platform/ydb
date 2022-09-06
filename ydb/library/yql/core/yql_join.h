@@ -84,6 +84,8 @@ TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::T
     const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx);
 
 TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings);
+NNodes::TCoLambda BuildJoinRenameLambda(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
+    const TStructExprType& joinResultType, TExprContext& ctx);
 TSet<TVector<TStringBuf>> LoadJoinSortSets(const TExprNode& settings);
 
 THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins,

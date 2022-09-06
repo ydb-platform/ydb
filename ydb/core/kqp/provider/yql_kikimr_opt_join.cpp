@@ -924,43 +924,11 @@ TExprNode::TPtr KiRewriteEquiJoin(TExprBase node, const TKikimrTablesData& table
     TExprBase joinExpr = rewrittenJoin.Cast();
     auto resultType = node.Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto renameMap = LoadJoinRenameMap(*joinOptions.Ptr());
-
-    THashMap<TStringBuf, TStringBuf> reverseRenameMap;
-    for (auto& pair : renameMap) {
-        for (TStringBuf newName : pair.second) {
-            reverseRenameMap[newName] = pair.first;
-        }
-    }
-
-    TCoArgument rowArg = Build<TCoArgument>(ctx, joinExpr.Pos())
-        .Name("row")
-        .Done();
-
-    TVector<TExprBase> renameTuples;
-    for (auto& item : resultType->GetItems()) {
-        TStringBuf newName = item->GetName();
-        auto renamedFrom = reverseRenameMap.FindPtr(newName);
-        TStringBuf oldName = renamedFrom ? *renamedFrom : newName;
-
-        auto tuple = Build<TCoNameValueTuple>(ctx, joinExpr.Pos())
-            .Name().Build(newName)
-            .Value<TCoMember>()
-                .Struct(rowArg)
-                .Name().Build(oldName)
-                .Build()
-            .Done();
-
-        renameTuples.push_back(tuple);
-    }
+    TCoLambda renamingLambda = BuildJoinRenameLambda(joinExpr.Pos(), renameMap, *resultType, ctx);
 
     return Build<TCoMap>(ctx, joinExpr.Pos())
         .Input(joinExpr)
-        .Lambda()
-            .Args({rowArg})
-            .Body<TCoAsStruct>()
-                .Add(renameTuples)
-                .Build()
-            .Build()
+        .Lambda(renamingLambda)
         .Done()
         .Ptr();
 }

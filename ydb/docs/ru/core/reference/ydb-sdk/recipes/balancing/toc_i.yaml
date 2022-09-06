@@ -1,9 +1,0 @@
-items:
-- name: Обзор
-  href: index.md
-- name: Равномерный случайный выбор
-  href: random_choice.md
-- name: Предпочитать ближайший дата-центр
-  href: prefer_local.md
-- name: Предпочитать зону доступности
-  href: prefer_location.md

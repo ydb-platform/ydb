@@ -24,8 +24,9 @@ git clone https://github.com/ydb-platform/ydb-go-examples/
 
 ```go
 import (
-  // общие импорты
+  // общие импорты из стандартной библиотеки
   "context"
+  "log"
   "path"
 
   // импорты пакетов ydb-go-sdk
@@ -34,6 +35,7 @@ import (
   "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // для работы с table-сервисом
   "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // для работы с table-сервисом
   "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // для работы с table-сервисом
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/types" // для работы с типами YDB и значениями
   "github.com/ydb-platform/ydb-go-sdk-auth-environ" // для аутентификации с использованием перменных окружения
   "github.com/ydb-platform/ydb-go-yc" // для работы с YDB в Яндекс Облаке
 )
@@ -48,8 +50,7 @@ dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8s
 // IAM-токен
 token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
 // создаем объект подключения db, является входной точкой для сервисов YDB
-db, err := ydb.Open(ctx,
-  dsn,
+db, err := ydb.Open(ctx, dsn,
 //  yc.WithInternalCA(), // используем сертификаты Яндекс Облака
   ydb.WithAccessTokenCredentials(token), // аутентификация с помощью токена
 //  ydb.WithAnonimousCredentials(), // анонимная аутентификация (например, в docker ydb)
@@ -61,9 +62,7 @@ if err != nil {
   // обработка ошибки подключения
 }
 // закрытие драйвера по окончании работы программы обязательно
-defer func() {
-  _ = db.Close(ctx)
-}
+defer db.Close(ctx)
 ```
 
 Объект `db` является входной точкой для работы с сервисами `YDB`.
@@ -77,8 +76,7 @@ defer func() {
 Для создания таблиц используется метод `table.Session.CreateTable()`:
 
 ```go
-err = db.Table().Do(
-  ctx,
+err = db.Table().Do(ctx,
   func(ctx context.Context, s table.Session) (err error) {
     return s.CreateTable(ctx, path.Join(db.Name(), "series"),
       options.WithColumn("series_id", types.TypeUint64),  // not null column
@@ -98,8 +96,7 @@ if err != nil {
 С помощью метода `table.Session.DescribeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
 
 ```go
-err = db.Table().Do(
-  ctx,
+err = db.Table().Do(ctx,
   func(ctx context.Context, s table.Session) (err error) {
     desc, err := s.DescribeTable(ctx, path.Join(db.Name(), "series"))
     if err != nil {
@@ -110,7 +107,7 @@ err = db.Table().Do(
       log.Printf("  > column, name: %s, %s\n", c.Type, c.Name)
     }
     return
-  }
+  },
 )
 if err != nil {
   // обработка ситуации, когда не удалось выполнить запрос
@@ -131,8 +128,7 @@ var (
     table.CommitTx(),
   )
 )
-err := db.Table().Do(
-  ctx,
+err := db.Table().Do(ctx,
   func(ctx context.Context, s table.Session) (err error) {
     var (
       res   result.Result
@@ -161,9 +157,7 @@ err := db.Table().Do(
     if err != nil {
       return err
     }
-    defer func() {
-      _ = res.Close() // закрытие result'а обязательно
-    }()
+    defer res.Close() // закрытие result'а обязательно
     log.Printf("> select_simple_transaction:\n")
     for res.NextResultSet(ctx) {
       for res.NextRow() {
@@ -205,8 +199,7 @@ var (
   `
   res result.StreamResult
 )
-err = c.Do(
-  ctx,
+err = c.Do(ctx,
   func(ctx context.Context, s table.Session) (err error) {
     res, err = s.StreamExecuteScanQuery(ctx, query,
       table.NewQueryParameters(
@@ -221,9 +214,7 @@ err = c.Do(
     if err != nil {
       return err
     }
-    defer func() {
-      _ = res.Close() // закрытие result'а обязательно
-    }()
+    defer res.Close() // закрытие result'а обязательно
     var (
       seriesID uint64
       seasonID uint64

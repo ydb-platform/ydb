@@ -1,9 +1,0 @@
-items:
-- name: Обзор
-  href: index.md
-- name: Включить логирование
-  href: logs.md
-- name: Подключить метрики в Prometheus
-  href: prometheus.md
-- name: Подключить трассировку в Jaeger
-  href: jaeger.md

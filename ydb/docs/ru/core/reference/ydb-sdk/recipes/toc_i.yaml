@@ -1,17 +1,49 @@
 items:
 - name: Обзор
   href: index.md
+- name: Инициализация драйвера
+  href: init.md
 - name: Аутентификация
-  include: { mode: link, path: auth/toc_p.yaml }
+  items:
+  - name: Обзор
+    href: auth.md
+  - name: С помощью токена
+    href: auth-access-token.md
+  - name: Анонимная
+    href: auth-anonymous.md
+  - name: Файл сервисного аккаунта
+    href: auth-service-account.md
+  - name: Сервис метаданных
+    href: auth-metadata.md
+  - name: С помощью переменных окружения
+    href: auth-env.md
+  - name: С помощью логина и пароля
+    href: auth-static.md
 - name: Балансировка
-  include: { mode: link, path: balancing/toc_p.yaml }
+  items:
+  - name: Обзор
+    href: balancing.md
+  - name: Равномерный случайный выбор
+    href: balancing-random-choice.md
+  - name: Предпочитать ближайший дата-центр
+    href: balancing-prefer-local.md
+  - name: Предпочитать конкретную зону доступности
+    href: balancing-prefer-location.md
 - name: Выполнение повторных запросов
-  href: retry/index.md
-- name: Диагностика проблем
-  include: { mode: link, path: debug/toc_p.yaml }
+  href: retry.md
 - name: Установить размер пула сессий
-  href: session_pool_limit/index.md
+  href: session-pool-limit.md
 - name: Вставка данных
-  href: upsert/index.md
+  href: upsert.md
 - name: Пакетная вставка данных
-  href: bulk_upsert/index.md
+  href: bulk-upsert.md
+- name: Диагностика проблем
+  items:
+  - name: Обзор
+    href: debug.md
+  - name: Включить логирование
+    href: debug-logs.md
+  - name: Подключить метрики в Prometheus
+    href: debug-prometheus.md
+  - name: Подключить трассировку в Jaeger
+    href: debug-jaeger.md

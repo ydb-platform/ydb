@@ -83,6 +83,7 @@ message ExecuteGraphRequest {
     map<string, string> GraphParams = 13;
     string RateLimiter = 14;
     string RateLimiterResource = 15;
+    map<string, bytes> CommonTaskParams = 16; // to be merged into each task TTaskMeta.TaskParams
 }
 
 message ExecuteGraphResponse {

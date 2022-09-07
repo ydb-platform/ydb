@@ -1459,6 +1459,7 @@ protected:
                             .TransformOutput = transform.OutputBuffer,
                             .Callback = static_cast<TOutputTransformCallbacks*>(this),
                             .SecureParams = secureParams,
+                            .TaskParams = taskParams,
                             .TypeEnv = typeEnv,
                             .HolderFactory = holderFactory,
                             .ProgramBuilder = *transform.ProgramBuilder
@@ -1483,6 +1484,7 @@ protected:
                         .TxId = TxId,
                         .Callback = static_cast<TSinkCallbacks*>(this),
                         .SecureParams = secureParams,
+                        .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .RandomProvider = TaskRunner ? TaskRunner->GetRandomProvider() : nullptr

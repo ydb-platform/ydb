@@ -300,6 +300,7 @@ private:
                                 .TxId = TraceId,
                                 .Callback = this,
                                 .SecureParams = secureParams,
+                                .TaskParams = taskParams,
                                 .TypeEnv = typeEnv,
                                 .HolderFactory = holderFactory
                             });

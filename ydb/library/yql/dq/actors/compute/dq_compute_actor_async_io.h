@@ -163,6 +163,7 @@ public:
         TTxId TxId;
         IDqComputeActorAsyncOutput::ICallbacks* Callback;
         const THashMap<TString, TString>& SecureParams;
+        const THashMap<TString, TString>& TaskParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         IRandomProvider *const RandomProvider;
@@ -188,6 +189,7 @@ public:
         const IDqOutputConsumer::TPtr TransformOutput;
         IDqComputeActorAsyncOutput::ICallbacks* Callback;
         const THashMap<TString, TString>& SecureParams;
+        const THashMap<TString, TString>& TaskParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;

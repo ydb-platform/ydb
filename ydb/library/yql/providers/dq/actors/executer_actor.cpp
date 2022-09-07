@@ -163,6 +163,10 @@ private:
                 *taskMeta.MutableSecureParams() = ev->Get()->Record.GetRequest().GetSecureParams();
             }
 
+            if (ev->Get()->Record.GetRequest().GetCommonTaskParams().size() > 0) {
+                taskMeta.MutableTaskParams()->insert(ev->Get()->Record.GetRequest().GetCommonTaskParams().begin(), ev->Get()->Record.GetRequest().GetCommonTaskParams().end());
+            }
+
             Settings->Save(taskMeta);
 
             task.MutableMeta()->PackFrom(taskMeta);

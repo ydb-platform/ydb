@@ -327,6 +327,7 @@ class TS3WriteActor : public TActorBootstrapped<TS3WriteActor>, public IDqComput
 public:
     TS3WriteActor(ui64 outputIndex,
         const TTxId& txId,
+        const TString& prefix,
         IHTTPGateway::TPtr gateway,
         NYdb::TCredentialsProviderPtr credProvider,
         IRandomProvider* randomProvider,
@@ -342,6 +343,7 @@ public:
         , RandomProvider(randomProvider)
         , OutputIndex(outputIndex)
         , TxId(txId)
+        , Prefix(prefix)
         , Callbacks(callbacks)
         , Url(url)
         , Path(path)
@@ -373,7 +375,7 @@ private:
             });
     }
 
-    TString MakeKey(const NUdf::TUnboxedValuePod v) const {
+    TString MakePartitionKey(const NUdf::TUnboxedValuePod v) const {
         if (Keys.empty())
             return {};
 
@@ -387,9 +389,9 @@ private:
         return UrlEscapeRet(key);
     }
 
-    TString MakeSuffix() const {
+    TString MakeOutputName() const {
         const auto rand = std::make_tuple(RandomProvider->GenUuid4(), RandomProvider->GenRand());
-        return Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
+        return Prefix + Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -399,10 +401,10 @@ private:
 
     void SendData(TUnboxedValueVector&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
         for (const auto& v : data) {
-            const auto& key = MakeKey(v);
+            const auto& key = MakePartitionKey(v);
             const auto ins = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
             if (ins.second || ins.first->second.empty() || ins.first->second.back()->IsFinishing()) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeSuffix(), MaxFileSize, Compression);
+                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeOutputName(), MaxFileSize, Compression);
                 ins.first->second.emplace_back(fileWrite.get());
                 RegisterWithSameMailbox(fileWrite.release());
             }
@@ -469,6 +471,7 @@ private:
 
     const ui64 OutputIndex;
     const TTxId TxId;
+    const TString Prefix;
     IDqComputeActorAsyncOutput::ICallbacks *const Callbacks;
 
     const TString Url;
@@ -493,6 +496,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     NS3::TSink&& params,
     ui64 outputIndex,
     const TTxId& txId,
+    const TString& prefix,
     const THashMap<TString, TString>& secureParams,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
@@ -502,6 +506,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const auto actor = new TS3WriteActor(
         outputIndex,
         txId,
+        prefix,
         std::move(gateway),
         credentialsProviderFactory->CreateProvider(),
         randomProvider, params.GetUrl(),

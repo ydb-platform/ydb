@@ -4,6 +4,7 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/CreateMultipartUploadRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/CompleteMultipartUploadRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/GetObjectRequest.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/ListObjectsRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/HeadObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/PutObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectRequest.h>
@@ -18,6 +19,10 @@ namespace NWrappers {
 void Out(IOutputStream& out, const Aws::S3::Model::GetObjectRequest& request);
 void Out(IOutputStream& out, const Aws::S3::Model::GetObjectResult& result);
 void Out(IOutputStream& out, const Aws::S3::Model::GetObjectOutcome& outcome);
+
+void Out(IOutputStream& out, const Aws::S3::Model::ListObjectsRequest& request);
+void Out(IOutputStream& out, const Aws::S3::Model::ListObjectsResult& result);
+void Out(IOutputStream& out, const Aws::S3::Model::ListObjectsOutcome& outcome);
 
 void Out(IOutputStream& out, const Aws::S3::Model::HeadObjectRequest& request);
 void Out(IOutputStream& out, const Aws::S3::Model::HeadObjectResult& result);
@@ -65,6 +70,18 @@ Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::GetObjectResult, out, value) {
 }
 
 Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::GetObjectOutcome, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::ListObjectsRequest, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::ListObjectsResult, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::ListObjectsOutcome, out, value) {
     NKikimr::NWrappers::Out(out, value);
 }
 

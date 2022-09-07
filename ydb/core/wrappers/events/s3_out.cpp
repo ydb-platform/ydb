@@ -74,6 +74,19 @@ void Out(IOutputStream& out, const GetObjectOutcome& outcome) {
     OutOutcome(out, outcome);
 }
 
+void Out(IOutputStream& out, const ListObjectsRequest& request) {
+    using T = ListObjectsRequest;
+    OutRequest(out, request, {&Bucket<T>});
+}
+
+void Out(IOutputStream& out, const ListObjectsResult& result) {
+    OutResult(out, result, "ListObjectsResult", {});
+}
+
+void Out(IOutputStream& out, const ListObjectsOutcome& outcome) {
+    OutOutcome(out, outcome);
+}
+
 void Out(IOutputStream& out, const HeadObjectRequest& request) {
     using T = HeadObjectRequest;
     OutRequest(out, request, {&Bucket<T>, &Key<T>});

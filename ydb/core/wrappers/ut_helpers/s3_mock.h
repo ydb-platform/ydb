@@ -46,7 +46,7 @@ private:
         bool HttpNotFound(const TReplyParams& params);
         bool HttpNotImplemented(const TReplyParams& params);
         void MaybeContinue(const TReplyParams& params);
-        bool HttpServeRead(const TReplyParams& params, EMethod method, TStringBuf content);
+        bool HttpServeRead(const TReplyParams& params, EMethod method, const TStringBuf path);
         bool HttpServeWrite(const TReplyParams& params, TStringBuf path, const TCgiParameters& queryParams);
         bool HttpServeAction(const TReplyParams& params, EMethod method, TStringBuf path, const TCgiParameters& queryParams);
 

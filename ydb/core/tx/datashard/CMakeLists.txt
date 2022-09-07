@@ -238,6 +238,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_raw.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_zstd.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_uploader.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/extstorage_usage_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/import_s3.cpp
 )
 generate_enum_serilization(core-tx-datashard

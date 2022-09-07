@@ -1,9 +1,12 @@
 #include "columnshard_ut_common.h"
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
+#include <util/system/hostname.h>
 
 namespace NKikimr {
 
 using namespace NTxUT;
+using namespace NColumnShard;
 using NWrappers::NTestHelpers::TS3Mock;
 
 namespace {
@@ -263,6 +266,112 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 }
 
+class TCountersContainer {
+private:
+    ui32 RestartTabletOnPutData = 0;
+    ui32 SuccessCounterStart = 0;
+public:
+    ui32 UnknownsCounter = 0;
+    ui32 SuccessCounter = 0;
+    ui32 ErrorsCounter = 0;
+    ui32 ResponsesCounter = 0;
+
+    TCountersContainer& SetRestartTabletOnPutData(const ui32 value) {
+        RestartTabletOnPutData = value;
+        return *this;
+    }
+
+    bool PopRestartTabletOnPutData() {
+        if (!RestartTabletOnPutData) {
+            return false;
+        }
+        --RestartTabletOnPutData;
+        return true;
+    }
+    TString SerializeToString() const {
+        TStringBuilder sb;
+        sb << "EXPORTS INFO: " << SuccessCounter << "/" << ErrorsCounter << "/" << UnknownsCounter << "/" << ResponsesCounter;
+        return sb;
+    }
+
+    void WaitEvents(TTestBasicRuntime& runtime, const TActorId sender, const ui32 attemption, const ui32 expectedDeltaSuccess, const TDuration timeout) {
+        const TInstant startInstant = Now();
+        const TInstant deadline = startInstant + timeout;
+        Cerr << "START_WAITING(" << attemption << "): " << SerializeToString() << Endl;
+        while (Now() < deadline) {
+            if (PopRestartTabletOnPutData()) {
+                RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            }
+            Cerr << "IN_WAITING(" << attemption << "):" << SerializeToString() << Endl;
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(5));
+            UNIT_ASSERT(ErrorsCounter == 0);
+            if (expectedDeltaSuccess) {
+                if (SuccessCounter >= SuccessCounterStart + expectedDeltaSuccess) {
+                    break;
+                }
+            } else {
+                if (SuccessCounter > SuccessCounterStart) {
+                    break;
+                }
+            }
+        }
+        if (expectedDeltaSuccess) {
+            UNIT_ASSERT(SuccessCounter >= SuccessCounterStart + expectedDeltaSuccess);
+        } else {
+            UNIT_ASSERT(SuccessCounter == SuccessCounterStart);
+        }
+        Cerr << "FINISH_WAITING(" << attemption << "): " << SerializeToString() << Endl;
+        SuccessCounterStart = SuccessCounter;
+    }
+};
+
+class TEventsCounter {
+private:
+    TCountersContainer* Counters = nullptr;
+    TTestBasicRuntime& Runtime;
+    const TActorId Sender;
+private:
+    template <class TPrivateEvent>
+    static TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
+            return nullptr;
+        }
+        return dynamic_cast<TPrivateEvent*>(ev->GetBase());
+    }
+public:
+
+    TEventsCounter(TCountersContainer& counters, TTestBasicRuntime& runtime, const TActorId sender)
+        : Counters(&counters)
+        , Runtime(runtime)
+        , Sender(sender)
+    {
+        Y_UNUSED(Runtime);
+        Y_UNUSED(Sender);
+    }
+    bool operator()(TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        TStringBuilder ss;
+        if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvExport>(ev)) {
+            ss << "EXPORT";
+            if (msg->Status == NKikimrProto::OK) {
+                ss << "(" << ++Counters->SuccessCounter << "): SUCCESS";
+            }
+            if (msg->Status == NKikimrProto::ERROR) {
+                ss << "(" << ++Counters->ErrorsCounter << "): ERROR";
+            }
+            if (msg->Status == NKikimrProto::UNKNOWN) {
+                ss << "(" << ++Counters->UnknownsCounter << "): UNKNOWN";
+            }
+        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
+            ss << "S3_RESPONSE(" << ++Counters->ResponsesCounter << "):";
+        } else {
+            return false;
+        }
+        ss << " " << ev->Sender << "->" << ev->Recipient;
+        Cerr << ss << Endl;
+        return false;
+    };
+};
+
 std::vector<std::pair<std::shared_ptr<arrow::TimestampArray>, ui64>>
 TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTestSchema::TTableSpecials>& specs) {
     TTestBasicRuntime runtime;
@@ -309,6 +418,8 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
     std::vector<std::pair<std::shared_ptr<arrow::TimestampArray>, ui64>> resColumns;
     resColumns.reserve(specs.size());
 
+    TCountersContainer counter;
+    runtime.SetEventFilter(TEventsCounter(counter, runtime, sender));
     for (ui32 i = 0; i < specs.size(); ++i) {
         if (i) {
             ui32 version = i + 1;
@@ -318,17 +429,28 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
             UNIT_ASSERT(ok);
             PlanSchemaTx(runtime, sender, {planStep, txId});
 
-            if (reboots) {
-                RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+        bool hasEvictionSettings = false;
+        for (auto&& i : specs[i].Tiers) {
+            if (!!i.S3) {
+                hasEvictionSettings = true;
+                break;
             }
         }
 
+        counter.SetRestartTabletOnPutData(reboots ? 1 : 0);
+
         TriggerTTL(runtime, sender, {++planStep, ++txId}, {});
-#if 0
-        if (i) {
-            sleep(10); // TODO: wait export
+        if (hasEvictionSettings) {
+            if (i == 1 || i == 2) {
+                counter.WaitEvents(runtime, sender, i, 1, TDuration::Seconds(40));
+            } else {
+                counter.WaitEvents(runtime, sender, i, 0, TDuration::Seconds(20));
+            }
+        } else {
+            counter.WaitEvents(runtime, sender, i, 0, TDuration::Seconds(5));
         }
-#endif
+
         // Read
 
         --planStep;
@@ -428,43 +550,44 @@ void TestTwoHotTiers(bool reboot) {
     TestTwoTiers(spec, true, reboot);
 }
 
-#if 0
 void TestHotAndColdTiers(bool reboot) {
-#if 1
     TString bucket = "ydb";
     TPortManager portManager;
-    ui16 port = portManager.GetPort();
-    TString connString = Sprintf("localhost:%hu", port);
+    const ui16 port = portManager.GetPort();
+    const TString connString = "fake";
     Cerr << "S3 at " << connString << "\n";
 
     TS3Mock s3Mock({}, TS3Mock::TSettings(port));
     UNIT_ASSERT(s3Mock.Start());
-#endif
 
     TTestSchema::TTableSpecials spec;
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1"));
     spec.Tiers.back().S3 = NKikimrSchemeOp::TS3Settings();
-    auto& s3 = *spec.Tiers.back().S3;
+    auto& s3Config = *spec.Tiers.back().S3;
+    {
 
-    s3.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-    s3.SetVerifySSL(false);
+        s3Config.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        s3Config.SetVerifySSL(false);
 #if 0
-    s3.SetEndpoint("storage.cloud-preprod.yandex.net");
-    s3.SetBucket("ch-s3");
-    s3.SetAccessKey(); <--
-    s3.SetSecretKey(); <--
-    s3.SetProxyHost("localhost");
-    s3.SetProxyPort(8080);
-    s3.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        s3Config.SetEndpoint("storage.cloud-preprod.yandex.net");
+        s3Config.SetBucket("ch-s3");
+        s3Config.SetAccessKey(); < --
+        s3Config.SetSecretKey(); < --
+        s3Config.SetProxyHost("localhost");
+        s3Config.SetProxyPort(8080);
+        s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
 #else
-    s3.SetEndpoint(connString);
-    s3.SetBucket(bucket);
+        s3Config.SetEndpoint(connString);
+        s3Config.SetBucket(bucket);
 #endif
+        s3Config.SetRequestTimeoutMs(10000);
+        s3Config.SetHttpRequestTimeoutMs(10000);
+        s3Config.SetConnectionTimeoutMs(10000);
+    }
 
     TestTwoTiers(spec, false, reboot);
 }
-#endif
 
 void TestDrop(bool reboots) {
     TTestBasicRuntime runtime;
@@ -608,7 +731,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
 
     Y_UNIT_TEST(ColdTiers) {
         // Disabled KIKIMR-14942
-        //TestHotAndColdTiers(false);
+        TestHotAndColdTiers(false);
     }
 
     Y_UNIT_TEST(RebootColdTiers) {

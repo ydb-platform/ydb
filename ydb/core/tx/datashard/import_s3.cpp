@@ -1,15 +1,17 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
+#include "backup_restore_traits.h"
 #include "datashard_impl.h"
+#include "extstorage_usage_config.h"
 #include "import_common.h"
 #include "import_s3.h"
-#include "s3_common.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/s3_storage.h>
 #include <ydb/core/io_formats/csv.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -48,7 +50,7 @@ using namespace NWrappers;
 using namespace Aws::S3;
 using namespace Aws;
 
-class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
+class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
     class IReadController {
     public:
         enum EFeed {
@@ -317,7 +319,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             Send(client, new TEvents::TEvPoisonPill());
         }
 
-        Client = RegisterWithSameMailbox(CreateS3Wrapper(Settings.GetCredentials(), Settings.GetConfig()));
+
+        Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         Become(&TThis::StateWork);
@@ -331,7 +334,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             .WithBucket(Settings.GetBucket())
             .WithKey(key);
 
-        Send(Client, new TEvS3Wrapper::TEvHeadObjectRequest(request));
+        Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
     }
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
@@ -344,10 +347,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
-        Send(Client, new TEvS3Wrapper::TEvGetObjectRequest(request));
+        Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
 
-    void Handle(TEvS3Wrapper::TEvHeadObjectResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& result = ev->Get()->Result;
@@ -423,7 +426,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             Reader->NextRange(ContentLength, ProcessedBytes));
     }
 
-    void Handle(TEvS3Wrapper::TEvGetObjectResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         auto& msg = *ev->Get();
@@ -686,7 +689,8 @@ public:
     }
 
     explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
-        : DataShard(dataShard)
+        : ExternalStorageConfig(new NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
+        , DataShard(dataShard)
         , TxId(txId)
         , Settings(TS3Settings::FromRestoreTask(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
@@ -720,8 +724,8 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvS3Wrapper::TEvHeadObjectResponse, Handle);
-            hFunc(TEvS3Wrapper::TEvGetObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
 
             hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
             hFunc(TEvDataShard::TEvUnsafeUploadRowsResponse, Handle);
@@ -732,9 +736,10 @@ public:
     }
 
 private:
+    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId DataShard;
     const ui64 TxId;
-    const TS3Settings Settings;
+    const NDataShard::TS3Settings Settings;
     const NBackupRestoreTraits::EDataFormat DataFormat;
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
     const TTableInfo TableInfo;

@@ -260,8 +260,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
 
         TString scheme;
         runtime.SetObserverFunc([&scheme](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (!scheme && ev->GetTypeRewrite() == NWrappers::TEvS3Wrapper::EvPutObjectRequest) {
-                const auto* msg = ev->Get<NWrappers::TEvS3Wrapper::TEvPutObjectRequest>();
+            if (!scheme && ev->GetTypeRewrite() == NWrappers::NExternalStorage::EvPutObjectRequest) {
+                const auto* msg = ev->Get<NWrappers::NExternalStorage::TEvPutObjectRequest>();
                 scheme = msg->Body;
             }
 
@@ -736,8 +736,8 @@ partitioning_settings {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
 
-                case NWrappers::TEvS3Wrapper::EvCompleteMultipartUploadRequest:
-                case NWrappers::TEvS3Wrapper::EvAbortMultipartUploadRequest:
+                case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest:
+                case NWrappers::NExternalStorage::EvAbortMultipartUploadRequest:
                     delayed = true;
                     return TTestActorRuntime::EEventAction::DROP;
 

@@ -4,12 +4,14 @@
 #include "datashard.h"
 #include "export_common.h"
 #include "export_s3.h"
-#include "s3_common.h"
+#include "extstorage_usage_config.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/services.pb.h>
+#include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/events/common.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -23,9 +25,6 @@
 namespace NKikimr {
 namespace NDataShard {
 
-using namespace Aws::S3;
-using namespace Aws;
-
 class IProxyOps {
 public:
     virtual ~IProxyOps() = default;
@@ -36,10 +35,9 @@ public:
 
 template <typename TDerived>
 class TS3UploaderBase: public TActorBootstrapped<TDerived>
-                     , private NWrappers::TS3User
                      , public IProxyOps
 {
-    using TEvS3Wrapper = NWrappers::TEvS3Wrapper;
+    using TEvExternalStorage = NWrappers::TEvExternalStorage;
     using TEvBuffer = TEvExportScan::TEvBuffer<TBuffer>;
 
 protected:
@@ -54,7 +52,7 @@ protected:
             this->Send(std::exchange(Client, TActorId()), new TEvents::TEvPoisonPill());
         }
 
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(Settings.GetCredentials(), Settings.GetConfig()));
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         if (!SchemeUploaded) {
             this->Become(&TDerived::StateUploadScheme);
@@ -80,17 +78,17 @@ protected:
 
         google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
 
-        auto request = Model::PutObjectRequest()
+        auto request = Aws::S3::Model::PutObjectRequest()
             .WithBucket(Settings.GetBucket())
             .WithKey(Settings.GetSchemeKey())
             .WithStorageClass(Settings.GetStorageClass());
-        this->Send(Client, new TEvS3Wrapper::TEvPutObjectRequest(request, std::move(Buffer)));
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
     }
 
-    void HandleScheme(TEvS3Wrapper::TEvPutObjectResponse::TPtr& ev) {
+    void HandleScheme(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleScheme TEvS3Wrapper::TEvPutObjectResponse"
+        EXPORT_LOG_D("HandleScheme TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -146,30 +144,30 @@ protected:
 
     void UploadData() {
         if (!MultiPart) {
-            auto request = Model::PutObjectRequest()
+            auto request = Aws::S3::Model::PutObjectRequest()
                 .WithBucket(Settings.GetBucket())
                 .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                 .WithStorageClass(Settings.GetStorageClass());
-            this->Send(Client, new TEvS3Wrapper::TEvPutObjectRequest(request, std::move(Buffer)));
+            this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
         } else {
             if (!UploadId) {
                 this->Send(DataShard, new TEvDataShard::TEvGetS3Upload(this->SelfId(), TxId));
                 return;
             }
 
-            auto request = Model::UploadPartRequest()
+            auto request = Aws::S3::Model::UploadPartRequest()
                 .WithBucket(Settings.GetBucket())
                 .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                 .WithUploadId(*UploadId)
                 .WithPartNumber(Parts.size() + 1);
-            this->Send(Client, new TEvS3Wrapper::TEvUploadPartRequest(request, std::move(Buffer)));
+            this->Send(Client, new TEvExternalStorage::TEvUploadPartRequest(request, std::move(Buffer)));
         }
     }
 
-    void HandleData(TEvS3Wrapper::TEvPutObjectResponse::TPtr& ev) {
+    void HandleData(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleData TEvS3Wrapper::TEvPutObjectResponse"
+        EXPORT_LOG_D("HandleData TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -188,11 +186,11 @@ protected:
             << ", upload# " << upload);
 
         if (!upload) {
-            auto request = Model::CreateMultipartUploadRequest()
+            auto request = Aws::S3::Model::CreateMultipartUploadRequest()
                 .WithBucket(Settings.GetBucket())
                 .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                 .WithStorageClass(Settings.GetStorageClass());
-            this->Send(Client, new TEvS3Wrapper::TEvCreateMultipartUploadRequest(request));
+            this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
         } else {
             UploadId = upload->Id;
 
@@ -203,19 +201,19 @@ protected:
                 case TS3Upload::EStatus::Complete: {
                     Parts = std::move(upload->Parts);
 
-                    TVector<Model::CompletedPart> parts(Reserve(Parts.size()));
+                    TVector<Aws::S3::Model::CompletedPart> parts(Reserve(Parts.size()));
                     for (ui32 partIndex = 0; partIndex < Parts.size(); ++partIndex) {
-                        parts.emplace_back(Model::CompletedPart()
+                        parts.emplace_back(Aws::S3::Model::CompletedPart()
                             .WithPartNumber(partIndex + 1)
                             .WithETag(Parts.at(partIndex)));
                     }
 
-                    auto request = Model::CompleteMultipartUploadRequest()
+                    auto request = Aws::S3::Model::CompleteMultipartUploadRequest()
                         .WithBucket(Settings.GetBucket())
                         .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                         .WithUploadId(*UploadId)
-                        .WithMultipartUpload(Model::CompletedMultipartUpload().WithParts(std::move(parts)));
-                    this->Send(Client, new TEvS3Wrapper::TEvCompleteMultipartUploadRequest(request));
+                        .WithMultipartUpload(Aws::S3::Model::CompletedMultipartUpload().WithParts(std::move(parts)));
+                    this->Send(Client, new TEvExternalStorage::TEvCompleteMultipartUploadRequest(request));
                     break;
                 }
 
@@ -225,21 +223,21 @@ protected:
                         Error = "<empty>";
                     }
 
-                    auto request = Model::AbortMultipartUploadRequest()
+                    auto request = Aws::S3::Model::AbortMultipartUploadRequest()
                         .WithBucket(Settings.GetBucket())
                         .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                         .WithUploadId(*UploadId);
-                    this->Send(Client, new TEvS3Wrapper::TEvAbortMultipartUploadRequest(request));
+                    this->Send(Client, new TEvExternalStorage::TEvAbortMultipartUploadRequest(request));
                     break;
                 }
             }
         }
     }
 
-    void Handle(TEvS3Wrapper::TEvCreateMultipartUploadResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvCreateMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvS3Wrapper::TEvCreateMultipartUploadResponse"
+        EXPORT_LOG_D("Handle TEvExternalStorage::TEvCreateMultipartUploadResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -250,10 +248,10 @@ protected:
         this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, result.GetResult().GetUploadId().c_str()));
     }
 
-    void Handle(TEvS3Wrapper::TEvUploadPartResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvS3Wrapper::TEvUploadPartResponse"
+        EXPORT_LOG_D("Handle TEvExternalStorage::TEvUploadPartResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -270,16 +268,16 @@ protected:
         this->Send(Scanner, new TEvExportScan::TEvFeed());
     }
 
-    void Handle(TEvS3Wrapper::TEvCompleteMultipartUploadResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvCompleteMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvS3Wrapper::TEvCompleteMultipartUploadResponse"
+        EXPORT_LOG_D("Handle TEvExternalStorage::TEvCompleteMultipartUploadResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
         if (!result.IsSuccess()) {
             const auto& error = result.GetError();
-            if (error.GetErrorType() != S3Errors::NO_SUCH_UPLOAD) {
+            if (error.GetErrorType() != Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
                 Error = error.GetMessage().c_str();
             }
         }
@@ -287,10 +285,10 @@ protected:
         PassAway();
     }
 
-    void Handle(TEvS3Wrapper::TEvAbortMultipartUploadResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvAbortMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvS3Wrapper::TEvAbortMultipartUploadResponse"
+        EXPORT_LOG_D("Handle TEvExternalStorage::TEvAbortMultipartUploadResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -317,7 +315,7 @@ protected:
         return false;
     }
 
-    void RetryOrFinish(const S3Error& error) {
+    void RetryOrFinish(const Aws::S3::S3Error& error) {
         if (Attempt++ < Retries && error.ShouldRetry()) {
             Delay = Min(Delay * Attempt, TDuration::Minutes(10));
             const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
@@ -380,7 +378,8 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme)
-        : Settings(TS3Settings::FromBackupTask(task))
+        : ExternalStorageConfig(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
+        , Settings(TS3Settings::FromBackupTask(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
         , CompressionCodec(NBackupRestoreTraits::CodecFromTask(task))
         , DataShard(dataShard)
@@ -417,7 +416,7 @@ public:
 
     STATEFN(StateUploadScheme) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvS3Wrapper::TEvPutObjectResponse, HandleScheme);
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());
         }
@@ -428,17 +427,18 @@ public:
             hFunc(TEvBuffer, Handle);
             hFunc(TEvDataShard::TEvS3Upload, Handle);
 
-            hFunc(TEvS3Wrapper::TEvPutObjectResponse, HandleData);
-            hFunc(TEvS3Wrapper::TEvCreateMultipartUploadResponse, Handle);
-            hFunc(TEvS3Wrapper::TEvUploadPartResponse, Handle);
-            hFunc(TEvS3Wrapper::TEvCompleteMultipartUploadResponse, Handle);
-            hFunc(TEvS3Wrapper::TEvAbortMultipartUploadResponse, Handle);
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleData);
+            hFunc(TEvExternalStorage::TEvCreateMultipartUploadResponse, Handle);
+            hFunc(TEvExternalStorage::TEvUploadPartResponse, Handle);
+            hFunc(TEvExternalStorage::TEvCompleteMultipartUploadResponse, Handle);
+            hFunc(TEvExternalStorage::TEvAbortMultipartUploadResponse, Handle);
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());
         }
     }
 
 protected:
+    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TS3Settings Settings;
     const NBackupRestoreTraits::EDataFormat DataFormat;
     const NBackupRestoreTraits::ECompressionCodec CompressionCodec;

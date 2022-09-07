@@ -1,3 +1,5 @@
+#include "s3_storage_config.h"
+
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -12,9 +14,10 @@
 
 using namespace NActors;
 using namespace NKikimr;
+using namespace NKikimr::NWrappers;
 using namespace Aws::S3::Model;
 
-class TS3MockTest: public NUnitTest::TTestBase, private NWrappers::TS3User {
+class TS3MockTest: public NUnitTest::TTestBase, private NExternalStorage::TS3User {
     using TS3Mock = NWrappers::NTestHelpers::TS3Mock;
 
     static auto MakeClientConfig(ui16 port) {
@@ -40,7 +43,8 @@ public:
         Runtime = MakeHolder<TTestBasicRuntime>();
         Runtime->Initialize(TAppPrepare().Unwrap());
         Runtime->SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
-        Wrapper = Runtime->Register(NWrappers::CreateS3Wrapper(Aws::Auth::AWSCredentials(), MakeClientConfig(*Port)));
+        NWrappers::IExternalStorageConfig::TPtr config = std::make_shared<NExternalStorage::TS3ExternalStorageConfig>(Aws::Auth::AWSCredentials(), MakeClientConfig(*Port));
+        Wrapper = Runtime->Register(NWrappers::CreateS3Wrapper(config->ConstructStorageOperator()));
     }
 
     void TearDown() override {
@@ -74,12 +78,10 @@ private:
 }; // TS3MockTest
 
 class TS3WrapperTests: public TS3MockTest {
-    using TEvS3Wrapper = NWrappers::TEvS3Wrapper;
-
     auto PutObject(const TString& key, TString&& body) {
         auto request = PutObjectRequest().WithBucket("").WithKey(key);
-        auto response = Send<TEvS3Wrapper::TEvPutObjectResponse>(
-            new TEvS3Wrapper::TEvPutObjectRequest(request, std::move(body)));
+        auto response = Send<NExternalStorage::TEvPutObjectResponse>(
+            new NExternalStorage::TEvPutObjectRequest(request, std::move(body)));
 
         UNIT_ASSERT(response->Get());
         return response->Get()->Result;
@@ -87,8 +89,8 @@ class TS3WrapperTests: public TS3MockTest {
 
     auto HeadObject(const TString& key) {
         auto request = HeadObjectRequest().WithBucket("").WithKey(key);
-        auto response = Send<TEvS3Wrapper::TEvHeadObjectResponse>(
-            new TEvS3Wrapper::TEvHeadObjectRequest(request));
+        auto response = Send<NExternalStorage::TEvHeadObjectResponse>(
+            new NExternalStorage::TEvHeadObjectRequest(request));
 
         UNIT_ASSERT(response->Get());
         return response->Get()->Result;
@@ -99,8 +101,8 @@ class TS3WrapperTests: public TS3MockTest {
             .WithBucket("")
             .WithKey(key)
             .WithRange(Sprintf("bytes=0-%" PRIu64, bodySize - 1));
-        auto response = Send<TEvS3Wrapper::TEvGetObjectResponse>(
-            new TEvS3Wrapper::TEvGetObjectRequest(request));
+        auto response = Send<NExternalStorage::TEvGetObjectResponse>(
+            new NExternalStorage::TEvGetObjectRequest(request));
 
         UNIT_ASSERT(response->Get());
         return std::make_pair(response->Get()->Result, response->Get()->Body);
@@ -108,8 +110,8 @@ class TS3WrapperTests: public TS3MockTest {
 
     auto CreateMultipartUpload(const TString& key) {
         auto request = CreateMultipartUploadRequest().WithBucket("").WithKey(key);
-        auto response = Send<TEvS3Wrapper::TEvCreateMultipartUploadResponse>(
-            new TEvS3Wrapper::TEvCreateMultipartUploadRequest(request));
+        auto response = Send<NExternalStorage::TEvCreateMultipartUploadResponse>(
+            new NExternalStorage::TEvCreateMultipartUploadRequest(request));
 
         UNIT_ASSERT(response->Get());
         return response->Get()->Result;
@@ -121,8 +123,8 @@ class TS3WrapperTests: public TS3MockTest {
             .WithKey(key)
             .WithUploadId(uploadId)
             .WithMultipartUpload(CompletedMultipartUpload().WithParts(parts));
-        auto response = Send<TEvS3Wrapper::TEvCompleteMultipartUploadResponse>(
-            new TEvS3Wrapper::TEvCompleteMultipartUploadRequest(request));
+        auto response = Send<NExternalStorage::TEvCompleteMultipartUploadResponse>(
+            new NExternalStorage::TEvCompleteMultipartUploadRequest(request));
 
         UNIT_ASSERT(response->Get());
         return response->Get()->Result;
@@ -133,8 +135,8 @@ class TS3WrapperTests: public TS3MockTest {
             .WithBucket("")
             .WithKey(key)
             .WithUploadId(uploadId);
-        auto response = Send<TEvS3Wrapper::TEvAbortMultipartUploadResponse>(
-            new TEvS3Wrapper::TEvAbortMultipartUploadRequest(request));
+        auto response = Send<NExternalStorage::TEvAbortMultipartUploadResponse>(
+            new NExternalStorage::TEvAbortMultipartUploadRequest(request));
 
         UNIT_ASSERT(response->Get());
         return response->Get()->Result;
@@ -146,8 +148,8 @@ class TS3WrapperTests: public TS3MockTest {
             .WithKey(key)
             .WithUploadId(uploadId)
             .WithPartNumber(partNumber);
-        auto response = Send<TEvS3Wrapper::TEvUploadPartResponse>(
-            new TEvS3Wrapper::TEvUploadPartRequest(request, std::move(body)));
+        auto response = Send<NExternalStorage::TEvUploadPartResponse>(
+            new NExternalStorage::TEvUploadPartRequest(request, std::move(body)));
 
         UNIT_ASSERT(response->Get());
         return response->Get()->Result;

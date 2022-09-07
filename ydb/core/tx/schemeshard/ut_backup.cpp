@@ -39,8 +39,8 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         ui32 partsUploaded = 0;
         ui32 objectsPut = 0;
         runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            partsUploaded += ui32(ev->GetTypeRewrite() == NWrappers::TEvS3Wrapper::EvUploadPartResponse);
-            objectsPut += ui32(ev->GetTypeRewrite() == NWrappers::TEvS3Wrapper::EvPutObjectResponse);
+            partsUploaded += ui32(ev->GetTypeRewrite() == NWrappers::NExternalStorage::EvUploadPartResponse);
+            objectsPut += ui32(ev->GetTypeRewrite() == NWrappers::NExternalStorage::EvPutObjectResponse);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 

@@ -4,12 +4,11 @@
 #include "columnshard_impl.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/datashard/s3_common.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
 namespace NKikimr::NColumnShard {
 
-using NWrappers::TEvS3Wrapper;
+using TEvExternalStorage = NWrappers::TEvExternalStorage;
 
 namespace {
 
@@ -18,14 +17,14 @@ TString ExtractBlobPart(const NOlap::TBlobRange& blobRange, const TString& data)
 }
 
 struct TS3Export {
+public:
     std::unique_ptr<TEvPrivate::TEvExport> Event;
-    THashSet<TString> KeysToWrite;
 
     TS3Export() = default;
 
     explicit TS3Export(TAutoPtr<TEvPrivate::TEvExport> ev)
-        : Event(ev.Release())
-    {}
+        : Event(ev.Release()) {
+    }
 
     TEvPrivate::TEvExport::TBlobDataMap& Blobs() {
         return Event->Blobs;
@@ -35,6 +34,22 @@ struct TS3Export {
         Event->SrcToDstBlobs[srcBlob] = TUnifiedBlobId(srcBlob, TUnifiedBlobId::S3_BLOB, bucket);
         return Event->SrcToDstBlobs[srcBlob];
     }
+
+    bool ExtractionFinished() const {
+        return KeysToWrite.empty();
+    }
+
+    TS3Export& RegisterKey(const TString& key) {
+        KeysToWrite.emplace(key);
+        return *this;
+    }
+
+    TS3Export& FinishKey(const TString& key) {
+        KeysToWrite.erase(key);
+        return *this;
+    }
+private:
+    TSet<TString> KeysToWrite;
 };
 
 struct TS3Forget {
@@ -44,23 +59,7 @@ struct TS3Forget {
     TS3Forget() = default;
 
     explicit TS3Forget(TAutoPtr<TEvPrivate::TEvForget> ev)
-        : Event(ev.Release())
-    {}
-};
-
-// S3 objects need InitAPI() called frist. TS3User calls it in ctor.
-struct TAwsContext : private NWrappers::TS3User {
-    Aws::Client::ClientConfiguration Config;
-    Aws::Auth::AWSCredentials Credentials;
-    TActorId Client; // S3Wrapper should be created after API owner too
-
-    void SetConfig(const NKikimrSchemeOp::TS3Settings& settings) {
-        Config = NDataShard::ConfigFromSettings(settings);
-        Credentials = NDataShard::CredentialsFromSettings(settings);
-    }
-
-    IActor* CreateS3Wrapper() const {
-        return NWrappers::CreateS3Wrapper(Credentials, Config);
+        : Event(ev.Release()) {
     }
 };
 
@@ -101,12 +100,12 @@ public:
             return;
         }
 
-        S3Ctx.SetConfig(msg.Settings);
-        if (S3Ctx.Client) {
-            Send(S3Ctx.Client, new TEvents::TEvPoisonPill);
-            S3Ctx.Client = {};
+        ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(msg.Settings);
+        if (ExternalStorageActorId) {
+            Send(ExternalStorageActorId, new TEvents::TEvPoisonPill);
+            ExternalStorageActorId = {};
         }
-        S3Ctx.Client = this->RegisterWithSameMailbox(S3Ctx.CreateS3Wrapper());
+        ExternalStorageActorId = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
     }
 
     void Handle(TEvPrivate::TEvExport::TPtr& ev) {
@@ -121,9 +120,14 @@ public:
             TString key = ex.AddExported(Bucket, blobId).GetS3Key();
             Y_VERIFY(!ExportingKeys.count(key)); // TODO
 
-            ex.KeysToWrite.emplace(key);
+            ex.RegisterKey(key);
             ExportingKeys[key] = exportNo;
-            SendPutObject(key, std::move(blob.Data));
+            
+            if (blob.Evicting) {
+                SendPutObjectIfNotExists(key, std::move(blob.Data));
+            } else {
+                SendPutObject(key, std::move(blob.Data));
+            }
         }
     }
 
@@ -139,7 +143,7 @@ public:
                 continue;
             }
 
-            TString key = evict.ExternBlob.GetS3Key();
+            const TString& key = evict.ExternBlob.GetS3Key();
             Y_VERIFY(!ForgettingKeys.count(key)); // TODO
 
             forget.KeysToDelete.emplace(key);
@@ -161,60 +165,68 @@ public:
         ReadingKeys[key].emplace_back(ev->Release().Release());
 
         if (!reading) {
-            ui64 blobSize = evict.ExternBlob.BlobSize();
-            SendGetObject(key, {0, blobSize});
+            const ui64 blobSize = evict.ExternBlob.BlobSize();
+            SendGetObject(key, 0, blobSize);
         } else {
             LOG_S_DEBUG("[S3] Outstanding get key '" << key << "' at tablet " << TabletId);
         }
     }
 
     // TODO: clean written blobs in failed export
-    void Handle(TEvS3Wrapper::TEvPutObjectResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         Y_VERIFY(Initialized());
 
         auto& msg = *ev->Get();
         const auto& resultOutcome = msg.Result;
 
+        const bool hasError = !resultOutcome.IsSuccess();
         TString errStr;
-        if (!resultOutcome.IsSuccess()) {
+        if (hasError) {
             errStr = LogError("PutObjectResponse", resultOutcome.GetError(), !!msg.Key);
         }
 
         Y_VERIFY(msg.Key); // FIXME
-        TString key = *msg.Key;
+        const TString key = *msg.Key;
 
         LOG_S_DEBUG("[S3] PutObjectResponse '" << key << "' at tablet " << TabletId);
+        KeyFinished(key, hasError, errStr);
+    }
 
-        if (!ExportingKeys.count(key)) {
-            LOG_S_DEBUG("[S3] PutObjectResponse for unknown key '" << key << "' at tablet " << TabletId);
+    class TEvCheckObjectExistsRequestContext: public NWrappers::NExternalStorage::IRequestContext {
+    private:
+        using TBase = NWrappers::NExternalStorage::IRequestContext;
+        const TString Key;
+        TString Data;
+    public:
+        TEvCheckObjectExistsRequestContext(const TString& key, TString&& data)
+            : Key(key)
+            , Data(std::move(data)) {
+
+        }
+        TString DetachData() {
+            return std::move(Data);
+        }
+        const TString& GetKey() const {
+            return Key;
+        }
+    };
+
+    void Handle(TEvExternalStorage::TEvCheckObjectExistsResponse::TPtr& ev) {
+        Y_VERIFY(Initialized());
+
+        auto& msg = *ev->Get();
+        auto context = msg.GetRequestContextAs<TEvCheckObjectExistsRequestContext>();
+        if (!context) {
             return;
         }
-
-        ui64 exportNo = ExportingKeys[key];
-        ExportingKeys.erase(key);
-
-        if (!Exports.count(exportNo)) {
-            LOG_S_DEBUG("[S3] PutObjectResponse for unknown export with key '" << key << "' at tablet " << TabletId);
-            return;
-        }
-
-        auto& ex = Exports[exportNo];
-        ex.KeysToWrite.erase(key);
-        Y_VERIFY(ex.Event->DstActor == ShardActor);
-
-        if (!errStr.empty()) {
-            ex.Event->Status = NKikimrProto::ERROR;
-            ex.Event->ErrorStrings.emplace(key, errStr);
-            Send(ShardActor, ex.Event.release());
-            Exports.erase(exportNo);
-        } else if (ex.KeysToWrite.empty()) {
-            ex.Event->Status = NKikimrProto::OK;
-            Send(ShardActor, ex.Event.release());
-            Exports.erase(exportNo);
+        if (!msg.IsExists()) {
+            SendPutObject(context->GetKey(), std::move(context->DetachData()));
+        } else {
+            KeyFinished(context->GetKey(), false, "");
         }
     }
 
-    void Handle(TEvS3Wrapper::TEvDeleteObjectResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvDeleteObjectResponse::TPtr& ev) {
         Y_VERIFY(Initialized());
 
         auto& msg = *ev->Get();
@@ -258,7 +270,7 @@ public:
         }
     }
 
-    void Handle(TEvS3Wrapper::TEvGetObjectResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
         Y_VERIFY(Initialized());
 
         auto& msg = *ev->Get();
@@ -315,10 +327,46 @@ public:
         ReadingKeys.erase(*key);
     }
 
+    void KeyFinished(const TString& key, const bool hasError, const TString& errStr) {
+        ui64 exportNo = 0;
+        {
+            auto itExportKey = ExportingKeys.find(key);
+            if (itExportKey == ExportingKeys.end()) {
+                LOG_S_DEBUG("[S3] KeyFinished for unknown key '" << key << "' at tablet " << TabletId);
+                return;
+            }
+            exportNo = itExportKey->second;
+            ExportingKeys.erase(itExportKey);
+        }
+        auto it = Exports.find(exportNo);
+        if (it == Exports.end()) {
+            LOG_S_DEBUG("[S3] KeyFinished for unknown export with key '" << key << "' at tablet " << TabletId);
+            return;
+        }
+
+        auto& ex = it->second;
+        ex.FinishKey(key);
+        Y_VERIFY(ex.Event->DstActor == ShardActor);
+
+        if (hasError) {
+            ex.Event->Status = NKikimrProto::ERROR;
+            Y_VERIFY(ex.Event->ErrorStrings.emplace(key, errStr).second, "%s", key.data());
+            if (ex.ExtractionFinished()) {
+                Send(ShardActor, ex.Event.release());
+                Exports.erase(exportNo);
+            }
+        } else if (ex.ExtractionFinished()) {
+            ex.Event->Status = NKikimrProto::OK;
+            Send(ShardActor, ex.Event.release());
+            Exports.erase(exportNo);
+        }
+    }
+
 private:
+    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
+    NActors::TActorId ExternalStorageActorId;
     ui64 TabletId;
     TActorId ShardActor;
-    TAwsContext S3Ctx;
     TString TierName;
     TString Bucket;
     ui64 ForgetNo{};
@@ -335,11 +383,13 @@ private:
             hFunc(TEvPrivate::TEvForget, Handle);
             hFunc(TEvPrivate::TEvGetExported, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-            hFunc(TEvS3Wrapper::TEvPutObjectResponse, Handle);
-            hFunc(TEvS3Wrapper::TEvDeleteObjectResponse, Handle);
-            hFunc(TEvS3Wrapper::TEvGetObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvDeleteObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvCheckObjectExistsResponse, Handle);
+            
 #if 0
-            hFunc(TEvS3Wrapper::TEvHeadObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
 #endif
             default:
                 break;
@@ -347,13 +397,13 @@ private:
     }
 
     bool Initialized() const {
-        return (bool)S3Ctx.Client;
+        return (bool)ExternalStorageActorId;
     }
 
     void PassAway() override {
-        if (S3Ctx.Client) {
-            Send(S3Ctx.Client, new TEvents::TEvPoisonPill());
-            S3Ctx.Client = {};
+        if (ExternalStorageActorId) {
+            Send(ExternalStorageActorId, new TEvents::TEvPoisonPill());
+            ExternalStorageActorId = {};
         }
         TActor::PassAway();
     }
@@ -369,7 +419,17 @@ private:
         request.SetMetadata(std::move(metadata));
 #endif
         LOG_S_DEBUG("[S3] PutObjectRequest key '" << key << "' at tablet " << TabletId);
-        Send(S3Ctx.Client, new TEvS3Wrapper::TEvPutObjectRequest(request, std::move(data)));
+        Send(ExternalStorageActorId, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(data)));
+    }
+
+    void SendPutObjectIfNotExists(const TString& key, TString&& data) {
+        auto request = Aws::S3::Model::HeadObjectRequest()
+            .WithBucket(Bucket)
+            .WithKey(key);
+
+        LOG_S_DEBUG("[S3] HeadObjectRequest key '" << key << "' at tablet " << TabletId);
+        std::shared_ptr<TEvCheckObjectExistsRequestContext> context = std::make_shared<TEvCheckObjectExistsRequestContext>(key, std::move(data));
+        Send(ExternalStorageActorId, new TEvExternalStorage::TEvCheckObjectExistsRequest(request, context));
     }
 
     void SendHeadObject(const TString& key) const {
@@ -378,17 +438,18 @@ private:
             .WithKey(key);
 
         LOG_S_DEBUG("[S3] HeadObjectRequest key '" << key << "' at tablet " << TabletId);
-        Send(S3Ctx.Client, new TEvS3Wrapper::TEvHeadObjectRequest(request));
+        Send(ExternalStorageActorId, new TEvExternalStorage::TEvHeadObjectRequest(request));
     }
 
-    void SendGetObject(const TString& key, const std::pair<ui64, ui64>& range) {
+    void SendGetObject(const TString& key, const ui32 startPos, const ui32 size) {
+        Y_VERIFY(size);
         auto request = Aws::S3::Model::GetObjectRequest()
             .WithBucket(Bucket)
             .WithKey(key)
-            .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
+            .WithRange(TStringBuilder() << "bytes=" << startPos << "-" << startPos + size - 1);
 
         LOG_S_DEBUG("[S3] GetObjectRequest key '" << key << "' at tablet " << TabletId);
-        Send(S3Ctx.Client, new TEvS3Wrapper::TEvGetObjectRequest(request));
+        Send(ExternalStorageActorId, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
 
     void SendDeleteObject(const TString& key) const {
@@ -396,7 +457,7 @@ private:
             .WithBucket(Bucket)
             .WithKey(key);
 
-        Send(S3Ctx.Client, new TEvS3Wrapper::TEvDeleteObjectRequest(request));
+        Send(ExternalStorageActorId, new TEvExternalStorage::TEvDeleteObjectRequest(request));
     }
 
     TString LogError(const TString& responseType, const Aws::S3::S3Error& error, bool hasKey) const {

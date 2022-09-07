@@ -6,12 +6,9 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(events)
-add_subdirectory(ut)
-add_subdirectory(ut_helpers)
 
-add_library(ydb-core-wrappers)
-target_link_libraries(ydb-core-wrappers PUBLIC
+add_library(core-wrappers-events)
+target_link_libraries(core-wrappers-events PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-aws-sdk-cpp-aws-cpp-sdk-s3
@@ -20,13 +17,11 @@ target_link_libraries(ydb-core-wrappers PUBLIC
   ydb-core-base
   ydb-core-protos
   core-wrappers-ut_helpers
-  core-wrappers-events
 )
-target_sources(ydb-core-wrappers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_storage_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/fake_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/fake_storage_config.cpp
+target_sources(core-wrappers-events PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/list_objects.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/object_exists.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/s3_out.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/abstract.cpp
 )

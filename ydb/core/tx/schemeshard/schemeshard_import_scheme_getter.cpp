@@ -2,6 +2,7 @@
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
 
+#include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
@@ -20,33 +21,7 @@ using namespace Aws::Client;
 using namespace Aws::S3;
 using namespace Aws;
 
-class TSchemeGetter: public TActorBootstrapped<TSchemeGetter>, private TS3User {
-    static ClientConfiguration ConfigFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
-        ClientConfiguration config;
-
-        config.endpointOverride = settings.endpoint();
-        config.verifySSL = false;
-        config.connectTimeoutMs = 10000;
-        config.maxConnections = 5;
-
-        switch (settings.scheme()) {
-        case Ydb::Import::ImportFromS3Settings::HTTP:
-            config.scheme = Http::Scheme::HTTP;
-            break;
-        case Ydb::Import::ImportFromS3Settings::HTTPS:
-            config.scheme = Http::Scheme::HTTPS;
-            break;
-        default:
-            Y_FAIL("Unknown scheme");
-        }
-
-        return config;
-    }
-
-    static AWSCredentials CredentialsFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
-        return AWSCredentials(settings.access_key(), settings.secret_key());
-    }
-
+class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     static TString SchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
         Y_VERIFY(itemIdx < (ui32)settings.items_size());
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/scheme.pb";
@@ -57,13 +32,13 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter>, private TS3User {
             .WithBucket(ImportInfo->Settings.bucket())
             .WithKey(key);
 
-        Send(Client, new TEvS3Wrapper::TEvHeadObjectRequest(request));
+        Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
     }
 
-    void Handle(TEvS3Wrapper::TEvHeadObjectResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("Handle TEvS3Wrapper::TEvHeadObjectResponse"
+        LOG_D("Handle TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -81,14 +56,14 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter>, private TS3User {
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
-        Send(Client, new TEvS3Wrapper::TEvGetObjectRequest(request));
+        Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
 
-    void Handle(TEvS3Wrapper::TEvGetObjectResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("Handle TEvS3Wrapper::TEvGetObjectResponse"
+        LOG_D("Handle TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -149,11 +124,10 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter>, private TS3User {
 
 public:
     explicit TSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
-        : ReplyTo(replyTo)
+        : ExternalStorageConfig(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->Settings))
+        , ReplyTo(replyTo)
         , ImportInfo(importInfo)
         , ItemIdx(itemIdx)
-        , Config(ConfigFromSettings(importInfo->Settings))
-        , Credentials(CredentialsFromSettings(importInfo->Settings))
         , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx))
         , Retries(importInfo->Settings.number_of_retries())
     {
@@ -164,7 +138,7 @@ public:
             Send(Client, new TEvents::TEvPoisonPill());
         }
 
-        Client = RegisterWithSameMailbox(CreateS3Wrapper(Credentials, Config));
+        Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         HeadObject(SchemeKey);
         Become(&TThis::StateWork);
@@ -172,8 +146,8 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvS3Wrapper::TEvHeadObjectResponse, Handle);
-            hFunc(TEvS3Wrapper::TEvGetObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
 
             cFunc(TEvents::TEvWakeup::EventType, Bootstrap);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
@@ -181,12 +155,11 @@ public:
     }
 
 private:
+    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId ReplyTo;
     TImportInfo::TPtr ImportInfo;
     const ui32 ItemIdx;
 
-    const ClientConfiguration Config;
-    const AWSCredentials Credentials;
     const TString SchemeKey;
 
     const ui32 Retries;

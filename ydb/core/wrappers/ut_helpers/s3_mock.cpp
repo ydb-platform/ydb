@@ -105,12 +105,21 @@ void TS3Mock::TRequest::MaybeContinue(const TReplyParams& params) {
     }
 }
 
-bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method, TStringBuf content) {
-    std::pair<ui32, ui32> range(0, content.size() - 1);
-    if (const auto* rangeHeader = params.Input.Headers().FindHeader("Range")) {
+bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method, const TStringBuf path) {
+    const TStringBuf content = Parent->Data.at(path);
+    Cerr << "S3_MOCK::HttpServeRead: " << path << " / " << content.size() << Endl;
+    std::pair<ui32, ui32> range(0, content.size() ? content.size() - 1 : 0);
+    const auto* rangeHeader = params.Input.Headers().FindHeader("Range");
+    if (rangeHeader) {
         if (!TryParseRange(rangeHeader->Value(), range)) {
             return HttpBadRequest(params, "Invalid range");
         }
+        if (range.first > range.second) {
+            return HttpBadRequest(params, "Invalid range borders (from > to)");
+        }
+    }
+    if (range.second >= content.size() && content.size()) {
+        return HttpBadRequest(params, "Invalid range right border");
     }
 
     TString etag = MD5::Data(content);
@@ -120,14 +129,24 @@ bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method
 
     params.Output << "HTTP/1.1 200 Ok\r\n";
     THttpHeaders headers;
-    headers.AddHeader("Content-Length", range.second - range.first + 1);
     headers.AddHeader("ETag", etag);
-    headers.OutTo(&params.Output);
-    params.Output << "\r\n";
 
     if (method == EMethod::Get) {
+        headers.AddHeader("Content-Length", range.second - range.first + 1);
+        headers.AddHeader("Content-Type", "application/octet-stream");
+        headers.OutTo(&params.Output);
+        if (rangeHeader) {
+            headers.AddHeader("Accept-Ranges", "bytes");
+            headers.AddHeader("Content-Range", "bytes " + ::ToString(range.first) + "-" + ToString(range.second) + "/" + ::ToString(content.size()));
+        }
+        params.Output << "\r\n";
         params.Output << content.SubStr(range.first, range.second - range.first + 1);
+    } else {
+        headers.AddHeader("Content-Length", content.size());
+        headers.OutTo(&params.Output);
+        params.Output << "\r\n";
     }
+    params.Output.Flush();
 
     return true;
 }
@@ -142,6 +161,7 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
     } else {
         content = params.Input.ReadAll();
     }
+    Cerr << "S3_MOCK::HttpServeWrite: " << path << " / " << queryParams.Print() << " / " << length << Endl;
 
     const TString etag = MD5::Data(content);
 
@@ -176,14 +196,18 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
 
     params.Output << "HTTP/1.1 200 Ok\r\n";
     THttpHeaders headers;
+    headers.AddHeader("x-amz-id-2", "LriYPLdmOdAiIfgSm/F1YsViT1LW94/xUQxMsF7xiEb1a0wiIOIxl+zbwZ163pt7");
+    headers.AddHeader("x-amz-request-id", "0A49CE4060975EAC");
     headers.AddHeader("ETag", etag);
     headers.OutTo(&params.Output);
     params.Output << "\r\n";
+    params.Output.Flush();
 
     return true;
 }
 
 bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod method, TStringBuf path, const TCgiParameters& queryParams) {
+    Cerr << "S3_MOCK::HttpServeAction: " << (ui32)method << " / " << path << " / " << queryParams.Print() << Endl;
     if (queryParams.Has("uploads")) {
         const int uploadId = Parent->NextUploadId++;
         Parent->MultipartUploads[std::make_pair(path, ToString(uploadId))] = {};
@@ -256,6 +280,9 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
         } else {
             return HttpBadRequest(params);
         }
+    } else if (method == EMethod::Delete && Parent->Data.contains(path)) {
+        Parent->Data.erase(path);
+        params.Output << "HTTP/1.1 204 Ok\r\n\r\n";
     } else {
         return HttpBadRequest(params);
     }
@@ -272,6 +299,12 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     TStringBuf requestString(RequestString);
     TStringBuf methodStr = requestString.NextTok(' ');
     TStringBuf uriStr = requestString.NextTok(' ');
+
+    Cerr << "REQUEST: " << params.Input.FirstLine() << Endl;
+    Cerr << "HEADERS: " << Endl;
+    for (auto&& i : params.Input.Headers()) {
+        Cerr << i.Name() << ": " << i.Value() << Endl;
+    }
 
     if (!methodStr.IsInited() || !uriStr.IsInited()) {
         return HttpBadRequest(params);
@@ -290,7 +323,7 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     case EMethod::Head:
     case EMethod::Get:
         if (Parent->Data.contains(pathStr)) {
-            return HttpServeRead(params, method, Parent->Data.at(pathStr));
+            return HttpServeRead(params, method, pathStr);
         } else {
             return HttpNotFound(params);
         }

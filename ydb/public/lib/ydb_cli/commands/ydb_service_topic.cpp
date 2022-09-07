@@ -281,7 +281,7 @@ namespace NYdb::NConsoleClient {
 
     int TCommandTopicAlter::Run(TConfig& config) {
         if (!PartitionsCount_.Defined() && GetCodecs().empty() && !RetentionPeriodHours_.Defined() && !PartitionWriteSpeedKbps_.Defined() &&
-            GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
+            GetMeteringMode() == NTopic::EMeteringMode::Unspecified) {
             return EXIT_SUCCESS;
         }
 

@@ -98,7 +98,7 @@ TPgConvertInfo GetPgConvertInfo(IFunctionTypeInfoBuilder& typeInfoBuilder, const
     Y_ENSURE(pgDescription);
     info.TypeLen = pgDescription->Typelen;
     info.TypeName = pgDescription->Name;
-    
+
     std::tie(info.SourceLogicalSlot, info.SourceDataType) = InferSlotFromPgType(typeInfoBuilder, pgDescription->Name);
     if (info.SourceDataType) {
         info.SourceDataType = typeInfoBuilder.Optional()->Item(info.SourceDataType).Build();
@@ -156,7 +156,7 @@ NDB::DataTypePtr PgMetaToClickHouse(const TPgConvertInfo& info) {
     if (info.TypeName == TStringRef("int4")) {
         return std::make_shared<NDB::DataTypeInt32>();
     }
-    
+
     if (info.TypeName == TStringRef("int8")) {
         return std::make_shared<NDB::DataTypeInt64>();
     }
@@ -1005,9 +1005,9 @@ class TSerializeFormat : public TBoxedValue {
                 it->second.second->writePrefix();
             }
             it->second.second->write(it->second.first);
-            if (IsFinished)
-                it->second.second->writeSuffix();
+            it->second.second->writeSuffix();
             it->second.second->flush();
+            it->second.second.reset();
             it->second.first = HeaderBlock.cloneEmpty();
 
             if (KeysIndexes.empty())

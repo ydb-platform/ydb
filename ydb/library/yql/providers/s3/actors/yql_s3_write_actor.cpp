@@ -131,7 +131,8 @@ public:
     void SendData(TString&& data) {
         Parts->Push(std::move(data));
 
-        if (10000U == Tags.size() + Parts->Size() || SizeLimit <= SentSize + Parts->Volume())
+        Y_UNUSED(SizeLimit);
+//TODO: if (10000U == Tags.size() + Parts->Size() || SizeLimit <= SentSize + Parts->Volume())
             Parts->Seal();
 
         if (!UploadId.empty())

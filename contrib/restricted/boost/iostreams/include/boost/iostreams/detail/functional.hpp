@@ -36,6 +36,7 @@ public:
     device_close_operation(T& t, BOOST_IOS::openmode which) 
         : t_(t), which_(which) 
         { }
+    device_close_operation(const device_close_operation&) = default;
     void operator()() const { boost::iostreams::close(t_, which_); }
 private:
     BOOST_DELETED_FUNCTION(device_close_operation& operator=(const device_close_operation&));
@@ -50,6 +51,7 @@ public:
     filter_close_operation(T& t, Sink& snk, BOOST_IOS::openmode which)
         : t_(t), snk_(snk), which_(which)
         { }
+    filter_close_operation(const filter_close_operation&) = default;
     void operator()() const { boost::iostreams::close(t_, snk_, which_); }
 private:
     BOOST_DELETED_FUNCTION(filter_close_operation& operator=(const filter_close_operation&));

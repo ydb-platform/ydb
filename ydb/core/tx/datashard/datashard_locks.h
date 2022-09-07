@@ -235,6 +235,7 @@ struct TLockInfoReadConflictListTag {};
 struct TLockInfoWriteConflictListTag {};
 struct TLockInfoBrokenListTag {};
 struct TLockInfoBrokenPersistentListTag {};
+struct TLockInfoExpireListTag {};
 
 /// Aggregates shard, point and range locks
 class TLockInfo
@@ -245,6 +246,7 @@ class TLockInfo
     , public TIntrusiveListItem<TLockInfo, TLockInfoWriteConflictListTag>
     , public TIntrusiveListItem<TLockInfo, TLockInfoBrokenListTag>
     , public TIntrusiveListItem<TLockInfo, TLockInfoBrokenPersistentListTag>
+    , public TIntrusiveListItem<TLockInfo, TLockInfoExpireListTag>
 {
     friend class TTableLocks;
     friend class TLockLocker;
@@ -256,6 +258,18 @@ public:
     TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId);
     TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs);
     ~TLockInfo();
+
+    template<class TTag>
+    bool IsInList() const {
+        using TItem = TIntrusiveListItem<TLockInfo, TTag>;
+        return !static_cast<const TItem*>(this)->Empty();
+    }
+
+    template<class TTag>
+    void UnlinkFromList() {
+        using TItem = TIntrusiveListItem<TLockInfo, TTag>;
+        static_cast<TItem*>(this)->Unlink();
+    }
 
     ui32 GetGeneration() const { return Generation; }
     ui64 GetCounter(const TRowVersion& at = TRowVersion::Max()) const { return !BreakVersion || at < *BreakVersion ? Counter : Max<ui64>(); }
@@ -416,45 +430,22 @@ class TLockLocker {
 
 public:
     /// Prevent unlimited lock's count growth
-    class TLockLimiter {
-    public:
-        static constexpr ui32 TimeLimitMSec() { return 5 * 60 * 1000; }
-        static constexpr ui64 LockLimit() {
-            // Valgrind and sanitizers are too slow
-            // Some tests cannot exhaust default limit in under 5 minutes
-            return NValgrind::PlainOrUnderValgrind(
-                NSan::PlainOrUnderSanitizer(
-                    16 * 1024,
-                    1024),
-                1024);
-        }
+    static constexpr ui64 LockLimit() {
+        // Valgrind and sanitizers are too slow
+        // Some tests cannot exhaust default limit in under 5 minutes
+        return NValgrind::PlainOrUnderValgrind(
+            NSan::PlainOrUnderSanitizer(
+                16 * 1024,
+                1024),
+            1024);
+    }
 
-        TLockLimiter(TLockLocker * parent)
-            : Parent(parent)
-            , LocksQueue(2 * LockLimit()) // it should be greater than LockLimit
-        {}
-
-        ui64 LocksCount() const { return Parent->LocksCount(); }
-
-        TLockInfo::TPtr TryAddLock(ui64 lockId, ui32 lockNodeId);
-        void RemoveLock(ui64 lockId);
-        void TouchLock(ui64 lockId);
-
-        TLockInfo::TPtr AddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs);
-        void Clear();
-
-        // TODO: AddPoint, AddRange
-
-    private:
-        TLockLocker * Parent;
-        TLRUCache<ui64, TInstant> LocksQueue;
-    };
+    /// We don't expire locks until this time limit after they are created
+    static constexpr TDuration LockTimeLimit() { return TDuration::Minutes(5); }
 
     template <typename T>
     TLockLocker(const T * self)
         : Self(new TLocksDataShardAdapter<T>(self))
-        , Limiter(this)
-        , Counter(0)
     {}
 
     ~TLockLocker() {
@@ -544,10 +535,6 @@ public:
     ui32 Generation() const { return Self->Generation(); }
     ui64 IncCounter() { return Counter++; };
 
-    TVector<TLockInfo::TPtr>& GetRemovedPersistentLocks() {
-        return RemovedPersistentLocks;
-    }
-
     void Clear() {
         for (auto& pr : Tables) {
             pr.second->Clear();
@@ -558,15 +545,15 @@ public:
         CleanupPending.clear();
         CleanupCandidates.clear();
         PendingSubscribeLocks.clear();
-        RemovedPersistentLocks.clear();
-        Limiter.Clear();
     }
 
 private:
-    THolder<TLocksDataShard> Self;
+    const THolder<TLocksDataShard> Self;
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
     THashSet<ui64> ShardLocks;
+    // A list of locks that may be removed when enough time passes
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> ExpireQueue;
     // A list of broken, but not yet removed locks
     TIntrusiveList<TLockInfo, TLockInfoBrokenPersistentListTag> BrokenPersistentLocks;
     TIntrusiveList<TLockInfo, TLockInfoBrokenListTag> BrokenLocks;
@@ -575,9 +562,7 @@ private:
     TVector<ui64> CleanupPending;
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
     TList<TPendingSubscribeLock> PendingSubscribeLocks;
-    TVector<TLockInfo::TPtr> RemovedPersistentLocks;
-    TLockLimiter Limiter;
-    ui64 Counter;
+    ui64 Counter = 0;
 
     TTableLocks::TPtr GetTableLocks(const TTableId& table) const {
         auto it = Tables.find(table.PathId);
@@ -590,7 +575,6 @@ private:
     TLockInfo::TPtr GetOrAddLock(ui64 lockId, ui32 lockNodeId);
     TLockInfo::TPtr AddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs);
     void RemoveOneLock(ui64 lockId, ILocksDb* db = nullptr);
-    void RemoveBrokenLocks();
 
     void SaveBrokenPersistentLocks(ILocksDb* db);
 };

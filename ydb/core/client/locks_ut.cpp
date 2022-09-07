@@ -1810,7 +1810,7 @@ static void LocksLimit() {
 
     using TLock = TSysTables::TLocksTable::TLock;
 
-    ui32 limit = NDataShard::TLockLocker::TLockLimiter::LockLimit();
+    ui32 limit = NDataShard::TLockLocker::LockLimit();
     const ui32 factor = 100;
 
     const char * query = R"((
@@ -1917,7 +1917,7 @@ static void ShardLocks() {
     TClient::TFlatQueryOptions opts;
 
 
-    ui32 limit = NDataShard::TLockLocker::TLockLimiter::LockLimit();
+    ui32 limit = NDataShard::TLockLocker::LockLimit();
     //const ui32 factor = 100;
 
     const char * setLock = R"___((

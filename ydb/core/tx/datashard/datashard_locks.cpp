@@ -488,29 +488,50 @@ void TLockLocker::RemoveBrokenRanges() {
 TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
     auto it = Locks.find(lockId);
     if (it != Locks.end()) {
-        Limiter.TouchLock(lockId);
+        if (it->second->IsInList<TLockInfoExpireListTag>()) {
+            ExpireQueue.PushBack(it->second.Get());
+        }
         if (lockNodeId && !it->second->LockNodeId) {
-            // This shouldn't ever happen, but better safe than sorry
+            // This should never happen, but better safe than sorry
             it->second->LockNodeId = lockNodeId;
             PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
         }
         return it->second;
     }
 
-    TLockInfo::TPtr lock = Limiter.TryAddLock(lockId, lockNodeId);
-    if (lock) {
-        Locks[lockId] = lock;
-        if (lockNodeId) {
-            PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
+    while (Locks.size() >= LockLimit()) {
+        if (!BrokenLocks.Empty()) {
+            // We remove broken locks first
+            TLockInfo* lock = BrokenLocks.Front();
+            RemoveOneLock(lock->GetLockId());
+            continue;
         }
+        if (!ExpireQueue.Empty()) {
+            TLockInfo* lock = ExpireQueue.Front();
+            if (TAppData::TimeProvider->Now() - lock->GetCreationTime() >= LockTimeLimit()) {
+                RemoveOneLock(lock->GetLockId());
+                continue;
+            }
+        }
+        // We cannot add any more locks
+        return nullptr;
     }
+
+    TLockInfo::TPtr lock(new TLockInfo(this, lockId, lockNodeId));
+    Y_VERIFY(!lock->IsPersistent());
+    Locks[lockId] = lock;
+    if (lockNodeId) {
+        PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
+    }
+    ExpireQueue.PushBack(lock.Get());
     return lock;
 }
 
 TLockInfo::TPtr TLockLocker::AddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs) {
     Y_VERIFY(Locks.find(lockId) == Locks.end());
 
-    TLockInfo::TPtr lock = Limiter.AddLock(lockId, lockNodeId, generation, counter, createTs);
+    TLockInfo::TPtr lock(new TLockInfo(this, lockId, lockNodeId, generation, counter, createTs));
+    Y_VERIFY(lock->IsPersistent());
     Locks[lockId] = lock;
     if (lockNodeId) {
         PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
@@ -529,6 +550,7 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
             Self->IncCounter(COUNTER_LOCKS_REMOVED);
         }
 
+        ExpireQueue.Remove(txLock.Get());
         if (txLock->InBrokenLocks) {
             BrokenLocks.Remove(txLock.Get());
             --BrokenLocksCount_;
@@ -541,24 +563,12 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
             Tables.at(tableId)->RemoveWriteLock(txLock.Get());
         }
         txLock->CleanupConflicts();
-        Limiter.RemoveLock(lockTxId);
         Locks.erase(it);
-        if (txLock->IsPersistent()) {
-            if (db) {
-                txLock->PersistRemoveLock(db);
-            } else {
-                Y_VERIFY(txLock->IsBroken(), "Scheduling persistent lock removal that is not broken");
-                RemovedPersistentLocks.push_back(txLock);
-            }
-        }
-    }
-}
 
-void TLockLocker::RemoveBrokenLocks() {
-    RemoveBrokenRanges();
-    while (BrokenLocks) {
-        auto* lock = BrokenLocks.PopFront();
-        RemoveOneLock(lock->GetLockId());
+        if (txLock->IsPersistent()) {
+            Y_VERIFY(db, "Cannot remove persistent locks without a database");
+            txLock->PersistRemoveLock(db);
+        }
     }
 }
 
@@ -589,14 +599,12 @@ void TLockLocker::RemoveSchema(const TPathId& tableId) {
     CleanupPending.clear();
     CleanupCandidates.clear();
     PendingSubscribeLocks.clear();
-    RemovedPersistentLocks.clear();
-    Limiter.Clear();
 }
 
 bool TLockLocker::ForceShardLock(const TPathId& tableId) const {
     auto it = Tables.find(tableId);
     if (it != Tables.end()) {
-        if (it->second->RangeCount() > TLockLimiter::LockLimit()) {
+        if (it->second->RangeCount() > LockLimit()) {
             return true;
         }
     }
@@ -605,7 +613,7 @@ bool TLockLocker::ForceShardLock(const TPathId& tableId) const {
 
 bool TLockLocker::ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const {
     for (auto& table : readTables) {
-        if (table.RangeCount() > TLockLimiter::LockLimit())
+        if (table.RangeCount() > LockLimit())
             return true;
     }
     return false;
@@ -645,50 +653,6 @@ void TLockLocker::SaveBrokenPersistentLocks(ILocksDb* db) {
         TLockInfo* lock = BrokenPersistentLocks.PopFront();
         lock->PersistBrokenLock(db);
     }
-}
-
-// TLockLocker.TLockLimiter
-
-TLockInfo::TPtr TLockLocker::TLockLimiter::TryAddLock(ui64 lockId, ui32 lockNodeId) {
-#if 1
-    if (LocksQueue.Size() >= LockLimit()) {
-        Parent->RemoveBrokenLocks();
-    }
-#endif
-    if (LocksQueue.Size() >= LockLimit()) {
-        TInstant forgetTime = TAppData::TimeProvider->Now() - TDuration::MilliSeconds(TimeLimitMSec());
-        auto oldest = LocksQueue.FindOldest();
-        if (oldest.Value() >= forgetTime)
-            return nullptr;
-
-        if (Parent->Self->TabletCounters) {
-            Parent->Self->IncCounter(COUNTER_LOCKS_EVICTED);
-        }
-
-        Parent->RemoveOneLock(oldest.Key()); // erase LocksQueue inside
-    }
-
-    LocksQueue.Insert(lockId, TAppData::TimeProvider->Now());
-    return TLockInfo::TPtr(new TLockInfo(Parent, lockId, lockNodeId));
-}
-
-void TLockLocker::TLockLimiter::RemoveLock(ui64 lockId) {
-    auto it = LocksQueue.FindWithoutPromote(lockId);
-    if (it != LocksQueue.End())
-        LocksQueue.Erase(it);
-}
-
-void TLockLocker::TLockLimiter::TouchLock(ui64 lockId) {
-    LocksQueue.Find(lockId);
-}
-
-TLockInfo::TPtr TLockLocker::TLockLimiter::AddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs) {
-    LocksQueue.Insert(lockId, createTs);
-    return TLockInfo::TPtr(new TLockInfo(Parent, lockId, lockNodeId, generation, counter, createTs));
-}
-
-void TLockLocker::TLockLimiter::Clear() {
-    LocksQueue.Clear();
 }
 
 // TSysLocks
@@ -797,6 +761,8 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
             if (lock->GetWriteTables() && !lock->IsPersistent()) {
                 // We need to persist a new lock
                 lock->PersistLock(Db);
+                // Persistent locks cannot expire
+                Locker.ExpireQueue.Remove(lock.Get());
             }
         }
     }

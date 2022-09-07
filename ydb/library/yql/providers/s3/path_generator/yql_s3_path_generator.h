@@ -69,6 +69,6 @@ struct IPathGenerator {
 
 using TPathGeneratorPtr = std::shared_ptr<const IPathGenerator>;
 
-TPathGeneratorPtr CreatePathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, size_t pathsLimit = 1000);
+TPathGeneratorPtr CreatePathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, size_t pathsLimit = 2000);
 
 }

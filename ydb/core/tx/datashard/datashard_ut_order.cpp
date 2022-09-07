@@ -5427,13 +5427,13 @@ Y_UNIT_TEST_TWIN(UncommittedReads, UseNewEngine) {
     TServerSettings::TControls controls;
     controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
     controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
-    controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
         .SetEnableMvccSnapshotReads(true)
         .SetEnableKqpSessionActor(UseNewEngine)
+        .SetControls(controls)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);

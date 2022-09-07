@@ -36,7 +36,8 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(TEvStreamPQReadReques
                                                            TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                                                            const TMaybe<TString> clientDC,
                                                            const NPersQueue::TTopicsListController& topicsHandler)
-    : Request(request)
+    : TRlHelpers(request, READ_BLOCK_SIZE, TDuration::Minutes(1))
+    , Request(request)
     , ClientDC(clientDC ? *clientDC : "other")
     , StartTimestamp(TInstant::Now())
     , SchemeCache(schemeCache)
@@ -46,7 +47,6 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(TEvStreamPQReadReques
     , ClientPath()
     , Session()
     , CommitsDisabled(false)
-    , BalancersInitStarted(false)
     , InitDone(false)
     , MaxReadMessagesCount(0)
     , MaxReadSize(0)
@@ -899,26 +899,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
             SLIBigLatency.Inc();
         }
 
-        TServerMessage result;
-        result.set_status(Ydb::StatusIds::SUCCESS);
-
-        result.mutable_init_response()->set_session_id(Session);
-        if (!WriteResponse(std::move(result))) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc write failed");
-            Die(ctx);
-            return;
-        }
-
-        if (!Request->GetStreamCtx()->Read()) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
-            Die(ctx);
-            return;
-        }
-
-
-        Y_VERIFY(!BalancersInitStarted);
-        BalancersInitStarted = true;
-
         for (auto& [name, t] : ev->Get()->TopicAndTablets) { // ToDo - return something from Init and Auth Actor (Full Path - ?)
             auto internalName = t.TopicNameConverter->GetInternalName();
             auto topicGrIter = TopicGroups.find(name);
@@ -945,42 +925,79 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
             topicHolder.CloudId = t.CloudId;
             topicHolder.DbId = t.DbId;
             topicHolder.FolderId = t.FolderId;
+            topicHolder.MeteringMode = t.MeteringMode;
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
             FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
-        }
 
-        for (auto& t : Topics) {
-            NTabletPipe::TClientConfig clientConfig;
-
-            clientConfig.CheckAliveness = false;
-
-            clientConfig.RetryPolicy = RetryPolicyForPipes;
-            t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig));
-
-            Y_VERIFY(t.second.FullConverter);
-            auto it = TopicGroups.find(t.second.FullConverter->GetInternalName());
-            if (it != TopicGroups.end()) {
-                t.second.Groups = it->second;
+            if (!GetMeteringMode()) {
+                SetMeteringMode(t.MeteringMode);
+            } else if (*GetMeteringMode() != t.MeteringMode) {
+                return CloseSession("Cannot read from topics with different metering modes",
+                    PersQueue::ErrorCode::BAD_REQUEST, ctx);
             }
         }
 
-        RegisterSessions(ctx);
-
-        ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup());
+        if (IsQuotaRequired()) {
+            Y_VERIFY(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
+        } else {
+            InitSession(ctx);
+        }
     } else {
         for (auto& [name, t] : ev->Get()->TopicAndTablets) {
-            if (Topics.find(t.TopicNameConverter->GetInternalName()) == Topics.end()) {
-                CloseSession(
+            auto it = Topics.find(t.TopicNameConverter->GetInternalName());
+            if (it == Topics.end()) {
+                return CloseSession(
                         TStringBuilder() << "list of topics changed - new topic '"
                                          << t.TopicNameConverter->GetPrintableString() << "' found",
                         PersQueue::ErrorCode::BAD_REQUEST, ctx
                 );
-                return;
+            } else if (it->second.MeteringMode != *GetMeteringMode()) {
+                return CloseSession(
+                        TStringBuilder() << "Metering mode of topic: " << name << " has been changed",
+                        PersQueue::ErrorCode::OVERLOAD, ctx
+                );
             }
         }
     }
 }
 
+template<bool UseMigrationProtocol>
+void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& ctx) {
+    TServerMessage result;
+    result.set_status(Ydb::StatusIds::SUCCESS);
+
+    result.mutable_init_response()->set_session_id(Session);
+    if (!WriteResponse(std::move(result))) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc write failed");
+        Die(ctx);
+        return;
+    }
+
+    if (!Request->GetStreamCtx()->Read()) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
+        Die(ctx);
+        return;
+    }
+
+    for (auto& t : Topics) {
+        NTabletPipe::TClientConfig clientConfig;
+
+        clientConfig.CheckAliveness = false;
+
+        clientConfig.RetryPolicy = RetryPolicyForPipes;
+        t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig));
+
+        Y_VERIFY(t.second.FullConverter);
+        auto it = TopicGroups.find(t.second.FullConverter->GetInternalName());
+        if (it != TopicGroups.end()) {
+            t.second.Groups = it->second;
+        }
+    }
+
+    RegisterSessions(ctx);
+
+    ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
+}
 
 template<bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
@@ -1390,10 +1407,19 @@ void TReadSessionActor<UseMigrationProtocol>::ReleasePartition(const typename TH
     DropPartition(it, ctx); //partition will be dropped
 
     if (formedResponseToAnswer) {
-        ProcessAnswer(ctx, formedResponseToAnswer); // returns false if actor died
+        if (const auto ru = CalcRuConsumption(PrepareResponse(formedResponseToAnswer))) {
+            formedResponseToAnswer->RequiredQuota = ru;
+            if (MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx)) {
+                Y_VERIFY(!PendingQuota);
+                PendingQuota = formedResponseToAnswer;
+            } else {
+                WaitingQuota.push_back(formedResponseToAnswer);
+            }
+        } else {
+            ProcessAnswer(ctx, formedResponseToAnswer); // returns false if actor died
+        }
     }
 }
-
 
 template<bool UseMigrationProtocol>
 bool TReadSessionActor<UseMigrationProtocol>::ProcessBalancerDead(const ui64 tablet, const TActorContext& ctx) {
@@ -1572,7 +1598,17 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::T
     }
 
     if (formedResponse->RequestsInfly == 0) {
-        ProcessAnswer(ctx, formedResponse);
+        if (const auto ru = CalcRuConsumption(PrepareResponse(formedResponse))) {
+            formedResponse->RequiredQuota = ru;
+            if (MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx)) {
+                Y_VERIFY(!PendingQuota);
+                PendingQuota = formedResponse;
+            } else {
+                WaitingQuota.push_back(formedResponse);
+            }
+        } else {
+            ProcessAnswer(ctx, formedResponse);
+        }
     }
 }
 
@@ -1589,6 +1625,19 @@ bool TReadSessionActor<UseMigrationProtocol>::WriteResponse(TServerMessage&& res
 }
 
 template<bool UseMigrationProtocol>
+ui64 TReadSessionActor<UseMigrationProtocol>::PrepareResponse(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse) {
+    formedResponse->ByteSizeBeforeFiltering = formedResponse->Response.ByteSize();
+
+    if constexpr(UseMigrationProtocol) {
+        formedResponse->HasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_data_batch());
+    } else {
+        formedResponse->HasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_read_response());
+    }
+
+    return formedResponse->HasMessages ? formedResponse->Response.ByteSize() : 0;
+}
+
+template<bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(const TActorContext& ctx, typename TFormedReadResponse<TServerMessage>::TPtr formedResponse) {
     ui32 readDurationMs = (ctx.Now() - formedResponse->Start - formedResponse->WaitQuotaTime).MilliSeconds();
     if (formedResponse->FromDisk) {
@@ -1601,19 +1650,13 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(const TActorContext&
     }
 
     Y_VERIFY(formedResponse->RequestsInfly == 0);
-    const ui64 diff = formedResponse->Response.ByteSize();
-    bool hasMessages;
-    if constexpr(UseMigrationProtocol) {
-        hasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_data_batch());
-    } else {
-        hasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_read_response());
-    }
-    ui64 sizeEstimation = hasMessages ? formedResponse->Response.ByteSize() : 0;
+    const ui64 diff = formedResponse->ByteSizeBeforeFiltering;
+    ui64 sizeEstimation = formedResponse->HasMessages ? formedResponse->Response.ByteSize() : 0;
     if constexpr (!UseMigrationProtocol) {
         formedResponse->Response.mutable_read_response()->set_bytes_size(sizeEstimation);
     }
 
-    if (hasMessages) {
+    if (formedResponse->HasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " response to read " << formedResponse->Guid);
 
         if (!WriteResponse(std::move(formedResponse->Response))) {
@@ -1661,7 +1704,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(const TActorContext&
     AvailablePartitions.insert(formedResponse->PartitionsBecameAvailable.begin(), formedResponse->PartitionsBecameAvailable.end());
 
     if constexpr (UseMigrationProtocol) {
-        if (!hasMessages) {
+        if (!formedResponse->HasMessages) {
             // process new read
             // Start new reading request with the same guid
             Reads.emplace_back(new TEvPQProxy::TEvRead(formedResponse->Guid));
@@ -1836,8 +1879,43 @@ void TReadSessionActor<UseMigrationProtocol>::HandlePoison(TEvPQProxy::TEvDieCom
 
 
 template<bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::HandleWakeup(const TActorContext& ctx) {
-    ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup());
+void TReadSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+    const auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
+    OnWakeup(tag);
+
+    switch (tag) {
+        case EWakeupTag::RlInit:
+            return InitSession(ctx);
+
+        case EWakeupTag::RecheckAcl:
+            return RecheckACL(ctx);
+
+        case EWakeupTag::RlAllowed:
+            ProcessAnswer(ctx, PendingQuota);
+            if (!WaitingQuota.empty()) {
+                PendingQuota = WaitingQuota.front();
+                WaitingQuota.pop_front();
+            } else {
+                PendingQuota = nullptr;
+            }
+            if (PendingQuota) {
+                Y_VERIFY(MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+            }
+            break;
+
+        case EWakeupTag::RlNoResource:
+            if (PendingQuota) {
+                Y_VERIFY(MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+            } else {
+                return CloseSession("Throughput limit exceeded", PersQueue::ErrorCode::OVERLOAD, ctx);
+            }
+            break;
+    }
+}
+
+template<bool UseMigrationProtocol>
+void TReadSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& ctx) {
+    ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
     if (Token && !AuthInitActor && (ForceACLCheck || (ctx.Now() - LastACLCheckTimestamp > TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()) && RequestNotChecked))) {
         ForceACLCheck = false;
         RequestNotChecked = false;

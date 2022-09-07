@@ -2757,6 +2757,10 @@ void TPartition::OnReadRequestFinished(TReadInfo&& info, ui64 answerSize) {
     auto userInfo = UsersInfoStorage.GetIfExists(info.User);
     Y_VERIFY(userInfo);
 
+    if (Config.GetMeteringMode() == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
+        return;
+    }
+
     if (userInfo->ReadSpeedLimiter) {
         Send(
             userInfo->ReadSpeedLimiter->Actor,
@@ -4831,6 +4835,9 @@ void TPartition::Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& c
 }
 
 size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
+    if (Config.GetMeteringMode() == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
+        return 0;
+    }
     if (AppData()->PQConfig.GetQuotingConfig().GetTopicWriteQuotaEntityToLimit() ==
         NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
         return WriteNewSize;

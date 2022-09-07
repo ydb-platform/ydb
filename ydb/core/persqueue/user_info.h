@@ -93,8 +93,7 @@ public:
         return QuotedTime;
     }
 
-    void UpdateConfig(const ui64 maxBurst, const ui64 speedPerSecond)
-    {
+    void UpdateConfig(const ui64 maxBurst, const ui64 speedPerSecond) {
         SpeedPerSecond = speedPerSecond;
         MaxBurst = maxBurst;
         AvailableSize = maxBurst;
@@ -103,19 +102,24 @@ public:
     void Update(const TInstant& timestamp);
 
     bool CanExaust() const {
-        return AvailableSize > 0;
+        if (SpeedPerSecond) {
+            return AvailableSize > 0;
+        } else {
+            return true;
+        }
     }
 
     void Exaust(const ui64 size, const TInstant& timestamp) {
         Update(timestamp);
-        AvailableSize -= (i64)size;
+        if (SpeedPerSecond) {
+            AvailableSize -= (i64)size;
+        }
         Update(timestamp);
     }
 
     ui64 GetAvailableAvgSec(const TInstant& timestamp) {
         Update(timestamp);
         return AvgSec.GetAvg();
-
     }
 
     ui64 GetAvailableAvgMin(const TInstant& timestamp) {

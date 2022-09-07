@@ -9,12 +9,11 @@
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/kqp/kqp.h>
-
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
-
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/services/lib/actors/pq_rl_helpers.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -24,7 +23,10 @@ inline TActorId GetPQWriteServiceActorID() {
 }
 
 template<bool UseMigrationProtocol>
-class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor<UseMigrationProtocol>> {
+class TWriteSessionActor
+    : public NActors::TActorBootstrapped<TWriteSessionActor<UseMigrationProtocol>>
+    , private TRlHelpers
+{
     using TSelf = TWriteSessionActor<UseMigrationProtocol>;
     using TClientMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage,
                                               Topic::StreamWriteMessage::FromClient>;
@@ -49,6 +51,33 @@ class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor
     using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
     using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
+    struct TWriteRequestInfo: public TSimpleRefCount<TWriteRequestInfo> {
+        using TPtr = TIntrusivePtr<TWriteRequestInfo>;
+
+        explicit TWriteRequestInfo(ui64 cookie)
+            : PartitionWriteRequest(new NPQ::TEvPartitionWriter::TEvWriteRequest(cookie))
+            , Cookie(cookie)
+            , ByteSize(0)
+            , RequiredQuota(0)
+        {
+        }
+
+        // Source requests from user (grpc session object)
+        std::deque<THolder<TEvWrite>> UserWriteRequests;
+
+        // Partition write request
+        THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> PartitionWriteRequest;
+
+        // Formed write request's cookie
+        ui64 Cookie;
+
+        // Formed write request's size
+        ui64 ByteSize;
+
+        // Quota in term of RUs
+        ui64 RequiredQuota;
+    };
+
 // Codec ID size in bytes
 static constexpr ui32 CODEC_ID_SIZE = 1;
 
@@ -67,7 +96,7 @@ public:
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(NActors::TEvents::TSystem::Wakeup, HandleWakeup);
+            HFunc(TEvents::TEvWakeup, Handle);
 
             HFunc(IContext::TEvReadFinished, Handle);
             HFunc(IContext::TEvWriteFinished, Handle);
@@ -113,6 +142,7 @@ private:
     void TryCloseSession(const TActorContext& ctx);
 
     void CheckACL(const TActorContext& ctx);
+    void RecheckACL(const TActorContext& ctx);
     // Requests fresh ACL from 'SchemeCache'
     void InitCheckSchema(const TActorContext& ctx, bool needWaitSchema = false);
     void Handle(typename TEvWriteInit::TPtr& ev,  const NActors::TActorContext& ctx);
@@ -144,13 +174,14 @@ private:
     void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
-    void HandleWakeup(const NActors::TActorContext& ctx);
+    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
     void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
 
     void CheckFinish(const NActors::TActorContext& ctx);
 
-    void GenerateNextWriteRequest(const NActors::TActorContext& ctx);
+    void PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx);
+    void SendRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
 
     void SetupCounters();
     void SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId);
@@ -190,31 +221,18 @@ private:
     TString OwnerCookie;
     TString UserAgent;
 
-    ui32 NumReserveBytesRequests;
-
     THolder<TAclWrapper> ACL;
 
-    struct TWriteRequestBatchInfo: public TSimpleRefCount<TWriteRequestBatchInfo> {
-        using TPtr = TIntrusivePtr<TWriteRequestBatchInfo>;
-
-        // Source requests from user (grpc session object)
-        std::deque<THolder<TEvWrite>> UserWriteRequests;
-
-        // Formed write request's size
-        ui64 ByteSize = 0;
-
-        // Formed write request's cookie
-        ui64 Cookie = 0;
-    };
-
-    // Nonprocessed source client requests
-    std::deque<THolder<TEvWrite>> Writes;
-
-    // Formed, but not sent, batch requests to partition actor
-    std::deque<typename TWriteRequestBatchInfo::TPtr> FormedWrites;
-
-    // Requests that is already sent to partition actor
-    std::deque<typename TWriteRequestBatchInfo::TPtr> SentMessages;
+    // Future batch request to partition actor
+    typename TWriteRequestInfo::TPtr PendingRequest;
+    // Request that is waiting for quota
+    typename TWriteRequestInfo::TPtr PendingQuotaRequest;
+    // Quoted, but not sent requests
+    std::deque<typename TWriteRequestInfo::TPtr> QuotedRequests;
+    // Requests that is sent to partition actor, but not accepted
+    std::deque<typename TWriteRequestInfo::TPtr> SentRequests;
+    // Accepted requests
+    std::deque<typename TWriteRequestInfo::TPtr> AcceptedRequests;
 
 
     bool WritesDone;
@@ -230,13 +248,14 @@ private:
     ui64 BytesInflightTotal_;
 
     bool NextRequestInited;
+    ui64 NextRequestCookie;
+
+    ui64 PayloadBytes;
 
     NKikimr::NPQ::TMultiCounter SessionsCreated;
     NKikimr::NPQ::TMultiCounter SessionsActive;
 
     NKikimr::NPQ::TMultiCounter Errors;
-
-    ui64 NextRequestCookie;
 
     TIntrusivePtr<NACLib::TUserToken> Token;
     TString Auth;

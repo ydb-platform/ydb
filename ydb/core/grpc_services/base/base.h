@@ -313,6 +313,7 @@ enum class TRateLimiterMode : ui8 {
     Rps = 1,
     Ru = 2,
     RuOnProgress = 3,
+    RuManual = 4,
 };
 
 #define RLSWITCH(mode) \

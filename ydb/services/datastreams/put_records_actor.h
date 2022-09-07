@@ -8,6 +8,7 @@
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
+#include <ydb/services/lib/actors/pq_rl_helpers.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -212,7 +213,10 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     template<class TDerived, class TProto>
-    class TPutRecordsActorBase : public NGRpcProxy::V1::TPQGrpcSchemaBase<TPutRecordsActorBase<TDerived, TProto>, TProto> {
+    class TPutRecordsActorBase
+        : public NGRpcProxy::V1::TPQGrpcSchemaBase<TPutRecordsActorBase<TDerived, TProto>, TProto>
+        , private NGRpcProxy::V1::TRlHelpers
+    {
         using TBase = NGRpcProxy::V1::TPQGrpcSchemaBase<TPutRecordsActorBase<TDerived, TProto>, TProto>;
 
     public:
@@ -224,7 +228,9 @@ namespace NKikimr::NDataStreams::V1 {
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
     protected:
+        void Write(const TActorContext& ctx);
         void AddRecord(THashMap<ui32, TVector<TPutRecordsItem>>& items, ui32 totalShardsCount, int index);
+        ui64 GetPayloadSize() const;
 
     private:
         struct TPartitionTask {
@@ -232,6 +238,7 @@ namespace NKikimr::NDataStreams::V1 {
             std::vector<ui32> RecordIndexes;
         };
 
+        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
         THashMap<ui32, TPartitionTask> PartitionToActor;
         Ydb::DataStreams::V1::PutRecordsResult PutRecordsResult;
 
@@ -247,6 +254,7 @@ namespace NKikimr::NDataStreams::V1 {
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult, Handle);
+                HFunc(TEvents::TEvWakeup, Handle);
                 default: TBase::StateWork(ev, ctx);
             };
         }
@@ -255,6 +263,7 @@ namespace NKikimr::NDataStreams::V1 {
     template<class TDerived, class TProto>
     TPutRecordsActorBase<TDerived, TProto>::TPutRecordsActorBase(NGRpcService::IRequestOpCtx* request)
             : TBase(request, dynamic_cast<const typename TProto::TRequest*>(request->GetRequest())->stream_name())
+            , TRlHelpers(request, 4_KB, TDuration::Seconds(1))
             , Ip(request->GetPeerName())
     {
         Y_ENSURE(request);
@@ -321,8 +330,21 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
+        PQGroupInfo = topicInfo->PQGroupInfo;
+        SetMeteringMode(PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode());
+
+        if (IsQuotaRequired()) {
+            const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
+            Y_VERIFY(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+        } else {
+            Write(ctx);
+        }
+    }
+
+    template<class TDerived, class TProto>
+    void TPutRecordsActorBase<TDerived, TProto>::Write(const TActorContext& ctx) {
         THashMap<ui32, TVector<TPutRecordsItem>> items;
-        const auto& pqDescription = topicInfo->PQGroupInfo->Description;
+        const auto& pqDescription = PQGroupInfo->Description;
         ui32 totalShardsCount = pqDescription.GetPartitions().size();
         for (int i = 0; i < static_cast<TDerived*>(this)->GetPutRecordsRequest().records_size(); ++i) {
             PutRecordsResult.add_records();
@@ -380,6 +402,22 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     template<class TDerived, class TProto>
+    void TPutRecordsActorBase<TDerived, TProto>::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
+            case EWakeupTag::RlAllowed:
+                return Write(ctx);
+            case EWakeupTag::RlNoResource:
+                PutRecordsResult.set_failed_record_count(static_cast<TDerived*>(this)->GetPutRecordsRequest().records_size());
+                for (int i = 0; i < PutRecordsResult.failed_record_count(); ++i) {
+                    PutRecordsResult.add_records()->set_error_code("ThrottlingException");
+                }
+                this->CheckFinish(ctx);
+            default:
+                return this->HandleWakeup(ev, ctx);
+        }
+    }
+
+    template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::AddRecord(THashMap<ui32, TVector<TPutRecordsItem>>& items, ui32 totalShardsCount, int index) {
         const auto& record = static_cast<TDerived*>(this)->GetPutRecordsRequest().records(index);
         ui32 shard = 0;
@@ -392,6 +430,19 @@ namespace NKikimr::NDataStreams::V1 {
         }
         items[shard].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip});
         PartitionToActor[shard].RecordIndexes.push_back(index);
+    }
+
+    template<class TDerived, class TProto>
+    ui64 TPutRecordsActorBase<TDerived, TProto>::GetPayloadSize() const {
+        ui64 result = 0;
+
+        for (const auto& record : static_cast<const TDerived*>(this)->GetPutRecordsRequest().records()) {
+            result += record.data().size()
+                + record.explicit_hash_key().size()
+                + record.partition_key().size();
+        }
+
+        return result;
     }
 
     class TPutRecordsActor : public TPutRecordsActorBase<TPutRecordsActor, NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest> {
@@ -451,7 +502,9 @@ namespace NKikimr::NDataStreams::V1 {
             result.set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);
             return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
         } else {
-            if (putRecordsResult.records(0).error_code() == "ProvisionedThroughputExceededException") {
+            if (putRecordsResult.records(0).error_code() == "ProvisionedThroughputExceededException"
+                || putRecordsResult.records(0).error_code() == "ThrottlingException")
+            {
                 return ReplyWithResult(Ydb::StatusIds::OVERLOADED, ctx);
             }
             //TODO: other codes - access denied and so on

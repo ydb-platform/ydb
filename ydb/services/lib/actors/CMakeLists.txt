@@ -14,7 +14,9 @@ target_link_libraries(services-lib-actors PUBLIC
   cpp-grpc-server
   cpp-digest-md5
   ydb-core-grpc_services
+  core-grpc_services-base
   ydb-core-mind
+  ydb-core-protos
   library-persqueue-obfuscate
   library-persqueue-topic_parser
   api-grpc
@@ -24,4 +26,5 @@ target_link_libraries(services-lib-actors PUBLIC
 )
 target_sources(services-lib-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/lib/actors/pq_schema_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/lib/actors/pq_rl_helpers.cpp
 )

@@ -11,6 +11,7 @@
 #include <ydb/core/persqueue/write_meta.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/services/lib/actors/pq_rl_helpers.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -1275,10 +1276,12 @@ namespace NKikimr::NDataStreams::V1 {
     //-----------------------------------------------------------------------------------
 
     class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>
+                           , private TRlHelpers
                            , public TCdcStreamCompatible
     {
         using TBase = TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
+        using EWakeupTag = TRlHelpers::EWakeupTag;
 
         static constexpr ui32 READ_TIMEOUT_MS = 150;
         static constexpr i32 MAX_LIMIT = 10000;
@@ -1293,25 +1296,28 @@ namespace NKikimr::NDataStreams::V1 {
         void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
         void Die(const TActorContext& ctx) override;
 
     private:
         void SendReadRequest(const TActorContext& ctx);
-        void SendResponse(const TActorContext& ctx,
-                          const std::vector<Ydb::DataStreams::V1::Record>& records,
-                          ui64 millisBehindLatestMs);
+        void PrepareResponse(const std::vector<Ydb::DataStreams::V1::Record>& records, ui64 millisBehindLatestMs);
+        void SendResponse(const TActorContext& ctx);
+        ui64 GetPayloadSize() const;
 
         TShardIterator ShardIterator;
         TString StreamName;
         ui64 TabletId;
         i32 Limit;
         TActorId PipeClient;
+        Ydb::DataStreams::V1::GetRecordsResult Result;
     };
 
     TGetRecordsActor::TGetRecordsActor(NKikimr::NGRpcService::IRequestOpCtx* request)
         : TBase(request, TShardIterator(GetRequest<TProtoRequest>(request)->shard_iterator()).IsValid()
                 ? TShardIterator(GetRequest<TProtoRequest>(request)->shard_iterator()).GetStreamName()
                 : "undefined")
+        , TRlHelpers(request, 8_KB, TDuration::Seconds(1))
         , ShardIterator{GetRequest<TProtoRequest>(request)->shard_iterator()}
         , StreamName{ShardIterator.IsValid() ? ShardIterator.GetStreamName() : "undefined"}
         , TabletId{0}
@@ -1373,6 +1379,7 @@ namespace NKikimr::NDataStreams::V1 {
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvents::TEvWakeup, Handle);
         default: TBase::StateWork(ev, ctx);
         }
     }
@@ -1397,6 +1404,8 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         if (response.Self->Info.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+            SetMeteringMode(response.PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode());
+
             const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
             for (auto& partition : partitions) {
                 auto partitionId = partition.GetPartitionId();
@@ -1418,7 +1427,13 @@ namespace NKikimr::NDataStreams::V1 {
                 switch (record.GetErrorCode()) {
                     case NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
                     case NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
-                        return SendResponse(ctx, {}, 0);
+                        PrepareResponse({}, 0);
+                        if (IsQuotaRequired()) {
+                            Y_VERIFY(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
+                        } else {
+                            SendResponse(ctx);
+                        }
+                        return;
                     default:
                         return ReplyWithError(ConvertPersQueueInternalCodeToStatus(record.GetErrorCode()),
                                               Ydb::PersQueue::ErrorCode::ERROR,
@@ -1449,7 +1464,13 @@ namespace NKikimr::NDataStreams::V1 {
                 : 0;
         }
 
-        SendResponse(ctx, records, millisBehindLatestMs);
+        PrepareResponse(records, millisBehindLatestMs);
+        if (IsQuotaRequired()) {
+            const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
+            Y_VERIFY(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+        } else {
+            SendResponse(ctx);
+        }
     }
 
     void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
@@ -1464,12 +1485,20 @@ namespace NKikimr::NDataStreams::V1 {
                        TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
     }
 
-    void TGetRecordsActor::SendResponse(const TActorContext& ctx,
-                                        const std::vector<Ydb::DataStreams::V1::Record>& records,
-                                        ui64 millisBehindLatestMs) {
-        Ydb::DataStreams::V1::GetRecordsResult result;
+    void TGetRecordsActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
+            case EWakeupTag::RlAllowed:
+                return SendResponse(ctx);
+            case EWakeupTag::RlNoResource:
+                return ReplyWithResult(Ydb::StatusIds::OVERLOADED, ctx);
+            default:
+                return HandleWakeup(ev, ctx);
+        }
+    }
+
+    void TGetRecordsActor::PrepareResponse(const std::vector<Ydb::DataStreams::V1::Record>& records, ui64 millisBehindLatestMs) {
         for (auto& r : records) {
-            auto record = result.add_records();
+            auto record = Result.add_records();
             *record = r;
         }
 
@@ -1481,11 +1510,24 @@ namespace NKikimr::NDataStreams::V1 {
                                      ShardIterator.GetStreamArn(),
                                      ShardIterator.GetShardId(),
                                      timestamp, seqNo, ShardIterator.GetKind());
-        result.set_next_shard_iterator(shardIterator.Serialize());
-        result.set_millis_behind_latest(millisBehindLatestMs);
+        Result.set_next_shard_iterator(shardIterator.Serialize());
+        Result.set_millis_behind_latest(millisBehindLatestMs);
+    }
 
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
+    void TGetRecordsActor::SendResponse(const TActorContext& ctx) {
+        Request_->SendResult(Result, Ydb::StatusIds::SUCCESS);
         Die(ctx);
+    }
+
+    ui64 TGetRecordsActor::GetPayloadSize() const {
+        ui64 result = 0;
+
+        for (const auto& record : Result.records()) {
+            result += record.data().size()
+                + record.partition_key().size();
+        }
+
+        return result;
     }
 
     void TGetRecordsActor::Die(const TActorContext& ctx) {

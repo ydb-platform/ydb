@@ -1,9 +1,8 @@
 #pragma once
 
 #include "events.h"
-#include "persqueue_utils.h"
-
 #include "partition_actor.h"
+#include "persqueue_utils.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
@@ -11,6 +10,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/services/lib/actors/pq_rl_helpers.h>
 
 #include <util/generic/guid.h>
 #include <util/system/compiler.h>
@@ -90,6 +90,10 @@ struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse<TServerMe
     i64 ByteSize = 0;
     ui64 RequestedBytes = 0;
 
+    bool HasMessages = false;
+    i64 ByteSizeBeforeFiltering = 0;
+    ui64 RequiredQuota = 0;
+
     //returns byteSize diff
     i64 ApplyResponse(TServerMessage&& resp);
 
@@ -108,7 +112,10 @@ struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse<TServerMe
 
 
 template<bool UseMigrationProtocol>
-class TReadSessionActor : public TActorBootstrapped<TReadSessionActor<UseMigrationProtocol>> {
+class TReadSessionActor
+    : public TActorBootstrapped<TReadSessionActor<UseMigrationProtocol>>
+    , private TRlHelpers
+{
     using TClientMessage = typename std::conditional_t<UseMigrationProtocol, PersQueue::V1::MigrationStreamingReadClientMessage, Topic::StreamReadMessage::FromClient>;
     using TServerMessage = typename std::conditional_t<UseMigrationProtocol, PersQueue::V1::MigrationStreamingReadServerMessage, Topic::StreamReadMessage::FromServer>;
 
@@ -132,6 +139,7 @@ private:
     static constexpr ui32 MAX_INFLY_READS = 10;
 
     static constexpr ui64 MAX_READ_SIZE = 100 << 20; //100mb;
+    static constexpr ui64 READ_BLOCK_SIZE = 8_KB; // metering
 
     static constexpr double LAG_GROW_MULTIPLIER = 1.2; //assume that 20% more data arrived to partitions
 
@@ -152,7 +160,7 @@ public:
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(NActors::TEvents::TSystem::Wakeup, HandleWakeup)
+            HFunc(TEvents::TEvWakeup, Handle);
 
             HFunc(IContext::TEvReadFinished, Handle);
             HFunc(IContext::TEvWriteFinished, Handle);
@@ -194,6 +202,7 @@ private:
         };
     }
 
+    ui64 PrepareResponse(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse); // returns estimated response's size
     bool WriteResponse(TServerMessage&& response, bool finish = false);
 
     void Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);
@@ -231,9 +240,11 @@ private:
     [[nodiscard]] bool ProcessBalancerDead(const ui64 tabletId, const NActors::TActorContext& ctx); // returns false if actor died
 
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
-    void HandleWakeup(const NActors::TActorContext& ctx);
+    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const NActors::TActorContext& ctx);
+    void RecheckACL(const TActorContext& ctx);
 
+    void InitSession(const TActorContext& ctx);
     void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode,
                       const NActors::TActorContext& ctx);
 
@@ -280,7 +291,6 @@ private:
     TString PeerName;
 
     bool CommitsDisabled;
-    bool BalancersInitStarted;
 
     bool InitDone;
     bool RangesMode = false;
@@ -316,6 +326,8 @@ private:
 
     THashMap<TActorId, typename TFormedReadResponse<TServerMessage>::TPtr> PartitionToReadResponse; // Partition actor -> TFormedReadResponse answer that has this partition.
                                                                            // PartitionsTookPartInRead in formed read response contain this actor id.
+    typename TFormedReadResponse<TServerMessage>::TPtr PendingQuota; // response that currenly pending quota
+    std::deque<typename TFormedReadResponse<TServerMessage>::TPtr> WaitingQuota; // responses that will be quoted next
 
     struct TControlMessages {
         TVector<TServerMessage> ControlMessages;

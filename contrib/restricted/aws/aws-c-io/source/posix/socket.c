@@ -17,6 +17,7 @@
 #include <aws/io/io.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/types.h>

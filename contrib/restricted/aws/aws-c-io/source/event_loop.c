@@ -63,16 +63,14 @@ static void s_aws_event_loop_group_shutdown_async(struct aws_event_loop_group *e
     struct aws_thread cleanup_thread;
     AWS_ZERO_STRUCT(cleanup_thread);
 
-    AWS_FATAL_ASSERT(aws_thread_init(&cleanup_thread, el_group->allocator) == AWS_OP_SUCCESS);
+    aws_thread_init(&cleanup_thread, el_group->allocator);
 
     struct aws_thread_options thread_options;
     AWS_ZERO_STRUCT(thread_options);
     thread_options.cpu_id = -1;
     thread_options.join_strategy = AWS_TJS_MANAGED;
 
-    AWS_FATAL_ASSERT(
-        aws_thread_launch(&cleanup_thread, s_event_loop_destroy_async_thread_fn, el_group, &thread_options) ==
-        AWS_OP_SUCCESS);
+    aws_thread_launch(&cleanup_thread, s_event_loop_destroy_async_thread_fn, el_group, &thread_options);
 }
 
 static struct aws_event_loop_group *s_event_loop_group_new(

@@ -33,6 +33,7 @@ add_subdirectory(ut_replication)
 add_subdirectory(ut_rs)
 add_subdirectory(ut_snapshot)
 add_subdirectory(ut_stats)
+add_subdirectory(ut_testload)
 add_subdirectory(ut_upload_rows)
 
 add_library(core-tx-datashard)

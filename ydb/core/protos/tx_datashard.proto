@@ -1809,7 +1809,7 @@ message TEvTestLoadRequest {
     oneof Command {
         TLoadStop LoadStop = 2;
         TUpdateStart BulkUpsertStart = 3;
-        TUpdateStart UpsertStart = 4;
+        TUpdateStart UpsertMkqlStart = 4;
     }
 }
 

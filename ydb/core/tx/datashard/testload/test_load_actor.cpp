@@ -112,8 +112,8 @@ public:
                 break;
             }
 
-            case NKikimrTxDataShard::TEvTestLoadRequest::CommandCase::kUpsertStart: {
-                const auto& cmd = record.GetUpsertStart();
+            case NKikimrTxDataShard::TEvTestLoadRequest::CommandCase::kUpsertMkqlStart: {
+                const auto& cmd = record.GetUpsertMkqlStart();
                 const ui64 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);

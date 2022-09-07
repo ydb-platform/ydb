@@ -189,6 +189,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"$x=1","$x = 1;\n"},
             {"$x,$y=(2,3)","$x, $y = (2, 3);\n"},
+            {"$a = select 1 union all select 2","$a =\n\tSELECT\n\t\t1\n\tUNION ALL\n\tSELECT\n\t\t2;\n"},
         };
 
         TSetup setup;

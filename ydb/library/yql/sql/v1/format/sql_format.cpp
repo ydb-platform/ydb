@@ -378,42 +378,59 @@ private:
         }
     }
 
+    void PosFromPartial(const TRule_select_kind_partial& partial) {
+        const auto& kind = partial.GetRule_select_kind1();
+        if (kind.HasBlock1()) { // DISCARD
+            PosFromToken(kind.GetBlock1().GetToken1());
+        } else {
+            switch (kind.GetBlock2().Alt_case()) {
+            case TRule_select_kind_TBlock2::kAlt1:
+                PosFromToken(kind.GetBlock2().GetAlt1().GetRule_process_core1().GetToken1());
+                break;
+            case TRule_select_kind_TBlock2::kAlt2:
+                PosFromToken(kind.GetBlock2().GetAlt2().GetRule_reduce_core1().GetToken1());
+                break;
+            case TRule_select_kind_TBlock2::kAlt3: {
+                const auto& selCore = kind.GetBlock2().GetAlt3().GetRule_select_core1();
+                if (selCore.HasBlock1()) {
+                    PosFromToken(selCore.GetBlock1().GetToken1());
+                } else {
+                    PosFromToken(selCore.GetToken2());
+                }
+
+                break;
+            }
+
+            default:
+                ythrow yexception() << "Alt is not supported";
+            }
+        }
+    }
+
     void VisitSelect(const TRule_select_stmt& msg) {
         const auto& paren = msg.GetRule_select_kind_parenthesis1();
         if (paren.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis1) {
             const auto& partial = paren.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1();
-            const auto& kind = partial.GetRule_select_kind1();
-            if (kind.HasBlock1()) { // DISCARD
-                PosFromToken(kind.GetBlock1().GetToken1());
-            } else {
-                switch (kind.GetBlock2().Alt_case()) {
-                case TRule_select_kind_TBlock2::kAlt1:
-                    PosFromToken(kind.GetBlock2().GetAlt1().GetRule_process_core1().GetToken1());
-                    break;
-                case TRule_select_kind_TBlock2::kAlt2:
-                    PosFromToken(kind.GetBlock2().GetAlt2().GetRule_reduce_core1().GetToken1());
-                    break;
-                case TRule_select_kind_TBlock2::kAlt3: {
-                    const auto& selCore = kind.GetBlock2().GetAlt3().GetRule_select_core1();
-                    if (selCore.HasBlock1()) {
-                        PosFromToken(selCore.GetBlock1().GetToken1());
-                    } else {
-                        PosFromToken(selCore.GetToken2());
-                    }
-
-                    break;
-                }
-
-                default:
-                    ythrow yexception() << "Alt is not supported";
-                }
-            }
+            PosFromPartial(partial);
         } else {
             PosFromToken(paren.GetAlt_select_kind_parenthesis2().GetToken1());
         }
 
         NewLine();
         Visit(msg.GetRule_select_kind_parenthesis1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_select_op1());
+            NewLine();
+            Visit(block.GetRule_select_kind_parenthesis2());
+        }
+    }
+
+    void VisitSelectUnparenthesized(const TRule_select_unparenthesized_stmt& msg) {
+        const auto& partial = msg.GetRule_select_kind_partial1();
+        PosFromPartial(partial);
+        NewLine();
+        Visit(msg.GetRule_select_kind_partial1());
         for (const auto& block : msg.GetBlock2()) {
             NewLine();
             Visit(block.GetRule_select_op1());
@@ -1693,6 +1710,7 @@ TStaticData::TStaticData()
 
         {TRule_pragma_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitPragma)},
         {TRule_select_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelect)},
+        {TRule_select_unparenthesized_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelectUnparenthesized)},
         {TRule_named_nodes_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitNamedNodes)},
         {TRule_create_table_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateTable)},
         {TRule_drop_table_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropTable)},

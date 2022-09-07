@@ -2693,9 +2693,9 @@ private:
         auto prevRow = position.Row;
         for (ui32 i = 0; i < query.Size(); ++i) {
             walker.Advance(query[i]);
-            if (position.Row != prevRow) {
+            while (position.Row != prevRow) {
                 RowStarts.push_back(i);
-                prevRow = position.Row;
+                ++prevRow;
             }
         }
 

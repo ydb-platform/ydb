@@ -26,6 +26,27 @@ Y_UNIT_TEST_SUITE(TParseTests) {
         UNIT_ASSERT_VALUES_EQUAL(rule.Values.back(), "SPB");
     }
 
+    Y_UNIT_TEST(SuccessParseEnumWithStrip) {
+        auto generator = CreatePathGenerator(R"(
+            {
+                "projection.enabled" : true,
+                "projection.city.type" : "enum",
+                "projection.city.values" : " MSK ,  SPB   ",
+                "storage.location.template" : "/${city}/"
+            }
+        )", {"city"});
+        const auto& result = generator->GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
+        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "/${city}/");
+        UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
+        const auto& rule = result.Rules.front();
+        UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::ENUM);
+        UNIT_ASSERT_VALUES_EQUAL(rule.Name, "city");
+        UNIT_ASSERT_VALUES_EQUAL(rule.Values.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rule.Values.front(), "MSK");
+        UNIT_ASSERT_VALUES_EQUAL(rule.Values.back(), "SPB");
+    }
+
     Y_UNIT_TEST(ParseTwoEnabled) {
         UNIT_ASSERT_NO_EXCEPTION(CreatePathGenerator(R"(
             {

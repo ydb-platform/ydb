@@ -66,13 +66,13 @@ tools copy | Копирование таблиц
 [tools dump](../export_import/tools_dump.md) | Выгрузка директории или таблицы в файловую систему
 [tools rename](../commands/tools/rename.md) | Переименование таблиц
 [tools restore](../export_import/tools_restore.md) | Восстановление из файловой системы
-[topic alter](../topic/scheme.md#alter) | Модификация параметров топика и перечня читателей
-[topic consumer add](../topic/scheme.md#consumer-add) | Добавление читателя в топик
-[topic consumer drop](../topic/scheme.md#consumer-drop) | Удаление читателя из топика
-[topic create](../topic/scheme.md#create) | Создание топика
-[topic drop](../topic/scheme.md#drop) | Удаление топика
-[topic read](../topic/read.md) | Чтение сообщений из топика
-[topic write](../topic/write.md) | Запись сообщений в топик
+[topic create](../topic-create.md) | Создание топика
+[topic alter](../topic-alter.md) | Модификация параметров топика и перечня читателей
+[topic drop](../topic-drop.md) | Удаление топика
+[topic consumer add](../topic-consumer-add.md) | Добавление читателя в топик
+[topic consumer drop](../topic-consumer-drop.md) | Удаление читателя из топика
+[topic read](../topic-read.md) | Чтение сообщений из топика
+[topic write](../topic-write.md) | Запись сообщений в топик
 {% if ydb-cli == "ydb" %}
 [update](../commands/service.md) | Обновление {{ ydb-short-name }} CLI
 [version](../commands/service.md) | Вывод информации о версии {{ ydb-short-name }} CLI

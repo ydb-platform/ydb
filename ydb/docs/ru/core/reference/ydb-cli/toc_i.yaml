@@ -34,7 +34,25 @@ items:
   - name: Загрузка и выгрузка данных
     include: { mode: link, path: export_import/toc_p.yaml }
   - name: Работа с топиками
-    include: { mode: link, path: topic/toc_i.yaml }
+    items:
+    - name: Команды для работы с топиком
+      href: topic-overview.md
+    - name: Создание топика
+      href: topic-create.md
+    - name: Изменение топика
+      href: topic-alter.md
+    - name: Удаление топика
+      href: topic-drop.md
+    - name: Добавление читателя топика
+      href: topic-consumer-add.md
+    - name: Удаление читателя топика
+      href: topic-consumer-drop.md    
+    - name: Чтение из топика
+      href: topic-read.md    
+    - name: Запись в топик
+      href: topic-write.md    
+    - name: Конвейерная обработка сообщений
+      href: topic-pipeline.md    
 #  - name: Утилиты
 #    items:
     # - name: Копирование таблиц

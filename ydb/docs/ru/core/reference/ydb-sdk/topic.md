@@ -2,7 +2,7 @@
 
 В этой статье приведены примеры использования {{ ydb-short-name }} SDK для работы с [топиками](../../concepts/topic.md).
 
-Перед выполнением примеров [создайте топик](../ydb-cli/topic/scheme.md#create) и [добавьте читателя](../ydb-cli/topic/scheme.md#consumer-add).
+Перед выполнением примеров [создайте топик](../ydb-cli/topic-create.md) и [добавьте читателя](../ydb-cli/topic-consumer-add.md).
 
 ## Подключение к топику {#start-reader}
 

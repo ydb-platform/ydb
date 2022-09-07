@@ -344,7 +344,7 @@ public:
                     return nullptr;
                 }
 
-                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), setItems.size() == 1);
+                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), setItems.size() == 1, true);
                 if (!sort) {
                     return nullptr;
                 }
@@ -365,13 +365,20 @@ public:
                 } else {
                     for (int i = 0; i < ListLength(x->distinctClause); ++i) {
                         auto node = ListNodeNth(x->distinctClause, i);
-                        TExprSettings settings;
-                        settings.AllowColumns = true;
-                        settings.Scope = "DISTINCT ON";
-                        auto expr = ParseExpr(node, settings);
+                        TAstNode* expr;
+                        if (NodeTag(node) == T_A_Const && (NodeTag(CAST_NODE(A_Const, node)->val) == T_Integer)) {
+                            expr = MakeProjectionRef("DISTINCT ON", CAST_NODE(A_Const, node));
+                        } else {
+                            TExprSettings settings;
+                            settings.AllowColumns = true;
+                            settings.Scope = "DISTINCT ON";
+                            expr = ParseExpr(node, settings);
+                        }
+
                         if (!expr) {
                             return nullptr;
                         }
+
 
                         auto lambda = L(A("lambda"), QL(), expr);
                         distinctOnItems.push_back(L(A("PgGroup"), L(A("Void")), lambda));
@@ -500,14 +507,18 @@ public:
                 TVector<TAstNode*> groupByItems;
                 for (int i = 0; i < ListLength(x->groupClause); ++i) {
                     auto node = ListNodeNth(x->groupClause, i);
-                    TExprSettings settings;
-                    settings.AllowColumns = true;
-                    settings.Scope = "GROUP BY";
                     TAstNode* expr;
-                    if (NodeTag(node) == T_GroupingSet) {
-                        expr = ParseGroupingSet(CAST_NODE(GroupingSet, node), settings);
+                    if (NodeTag(node) == T_A_Const && (NodeTag(CAST_NODE(A_Const, node)->val) == T_Integer)) {
+                        expr = MakeProjectionRef("GROUP BY", CAST_NODE(A_Const, node));
                     } else {
-                        expr = ParseExpr(node, settings);
+                        TExprSettings settings;
+                        settings.AllowColumns = true;
+                        settings.Scope = "GROUP BY";
+                        if (NodeTag(node) == T_GroupingSet) {
+                            expr = ParseGroupingSet(CAST_NODE(GroupingSet, node), settings);
+                        } else {
+                            expr = ParseExpr(node, settings);
+                        }
                     }
 
                     if (!expr) {
@@ -1993,7 +2004,7 @@ public:
                 return nullptr;
             }
 
-            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), true);
+            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), true, false);
             if (!sort) {
                 return nullptr;
             }
@@ -2230,7 +2241,7 @@ public:
         }
     }
 
-    TAstNode* ParseSortBy(const PG_SortBy* value, bool allowAggregates) {
+    TAstNode* ParseSortBy(const PG_SortBy* value, bool allowAggregates, bool useProjectionRefs) {
         AT_LOCATION(value);
         bool asc = true;
         switch (value->sortby_dir) {
@@ -2256,12 +2267,18 @@ public:
             return nullptr;
         }
 
-        TExprSettings settings;
-        settings.AllowColumns = true;
-        settings.AllowSubLinks = true;
-        settings.Scope = "ORDER BY";
-        settings.AllowAggregates = allowAggregates;
-        auto expr = ParseExpr(value->node, settings);
+        TAstNode* expr;
+        if (useProjectionRefs && NodeTag(value->node) == T_A_Const && (NodeTag(CAST_NODE(A_Const, value->node)->val) == T_Integer)) {
+            expr = MakeProjectionRef("ORDER BY", CAST_NODE(A_Const, value->node));
+        } else {
+            TExprSettings settings;
+            settings.AllowColumns = true;
+            settings.AllowSubLinks = true;
+            settings.Scope = "ORDER BY";
+            settings.AllowAggregates = allowAggregates;
+            expr = ParseExpr(value->node, settings);
+        }
+
         if (!expr) {
             return nullptr;
         }
@@ -2683,6 +2700,17 @@ private:
         }
 
         RowStarts.push_back(QuerySize);
+    }
+
+    TAstNode* MakeProjectionRef(const TStringBuf& scope, const A_Const* aConst) {
+        AT_LOCATION(aConst);
+        auto num = IntVal(aConst->val);
+        if (num <= 0) {
+            AddError(TStringBuilder() << scope << ": position " << num << " is not in select list");
+            return nullptr;
+        }
+
+        return L(A("PgProjectionRef"), QA(ToString(num - 1)));
     }
 
 private:

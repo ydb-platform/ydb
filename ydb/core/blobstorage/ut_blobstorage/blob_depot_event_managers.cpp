@@ -16,7 +16,7 @@ bool IsCollected(const TLogoBlobID& id, ui32 collectGen, ui32 collectStep) {
 }
 
 bool IsCollected(const TBlobInfo& blob, ui32 softCollectGen, ui32 softCollectStep, ui32 hardCollectGen, ui32 hardCollectStep) {
-    return IsCollected(blob.Id, hardCollectGen, hardCollectStep) || (blob.KeepFlag && IsCollected(blob.Id, softCollectGen, softCollectStep));
+    return IsCollected(blob.Id, hardCollectGen, hardCollectStep) || (!blob.KeepFlag && IsCollected(blob.Id, softCollectGen, softCollectStep));
 }
 
 

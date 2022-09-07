@@ -22,7 +22,7 @@ namespace {
 
 enum class ERequestType {
     BulkUpsert,
-    UpsertMkql,
+    UpsertLocalMkql,
 };
 
 TString GetKey(size_t n) {
@@ -109,7 +109,7 @@ TRequestsVector GenerateRequests(ui64 tableId, ui64 n, ERequestType requestType)
         case ERequestType::BulkUpsert:
             requests.emplace_back(GenerateBulkRowRequest(tableId, keyNum));
             break;
-        case ERequestType::UpsertMkql:
+        case ERequestType::UpsertLocalMkql:
             requests.emplace_back(GenerateMkqlRowRequest(tableId, keyNum));
             break;
         }
@@ -307,7 +307,7 @@ NActors::IActor *CreateBulkUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequ
 NActors::IActor *CreateUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
-    return new TUpsertActor(cmd, parent, std::move(counters), tag, ERequestType::UpsertMkql);
+    return new TUpsertActor(cmd, parent, std::move(counters), tag, ERequestType::UpsertLocalMkql);
 }
 
 } // NKikimr::NDataShard

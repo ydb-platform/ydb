@@ -222,14 +222,14 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         helper.TestLoad(std::move(request), expectedRowCount);
     }
 
-    Y_UNIT_TEST(ShouldWriteDataBulkUpsertMkql) {
+    Y_UNIT_TEST(ShouldWriteDataBulkUpsertLocalMkql) {
         TTestHelper helper;
 
         const ui64 expectedRowCount = 10;
 
         std::unique_ptr<TEvDataShard::TEvTestLoadRequest> request(new TEvDataShard::TEvTestLoadRequest());
         auto& record = request->Record;
-        auto& command = *record.MutableUpsertMkqlStart();
+        auto& command = *record.MutableUpsertLocalMkqlStart();
 
         command.SetTag(1);
         command.SetRowCount(expectedRowCount);

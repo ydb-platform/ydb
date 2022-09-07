@@ -195,7 +195,7 @@ private:
     static void OnPartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, size_t size, size_t index, IHTTPGateway::TResult&& response) {
         switch (response.index()) {
         case 0U: {
-            const auto str = std::get<IHTTPGateway::TContent>(std::move(response)).Extract();
+            const auto& str = std::get<IHTTPGateway::TContent>(std::move(response)).Headers;
 
             if (const auto p = str.find("etag: \""); p != TString::npos) {
                 if (const auto p1 = p + 7, p2 = str.find("\"", p1); p2 != TString::npos) {

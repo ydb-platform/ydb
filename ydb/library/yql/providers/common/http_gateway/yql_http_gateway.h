@@ -49,14 +49,15 @@ public:
     class TContent : public TContentBase {
     friend class TEasyCurl;
     public:
-        TContent(TString&& data, long httpResponseCode = 0LL);
-        TContent(const TString& data, long httpResponseCode = 0LL);
+        TContent(TString&& data, long httpResponseCode = 0LL, TString&& headers = {});
+        TContent(const TString& data, long httpResponseCode = 0LL, const TString& headers = {});
 
         TContent(TContent&& src) = default;
         TContent& operator=(TContent&& src) = default;
 
         using TContentBase::Extract;
     public:
+        TString Headers;
         long HttpResponseCode;
     };
 

@@ -27,6 +27,7 @@ target_link_libraries(ydb-library-arrow_clickhouse PUBLIC
   library-arrow_clickhouse-DataStreams
 )
 target_sources(ydb-library-arrow_clickhouse PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/AggregateFunctions/IAggregateFunction.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Aggregator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/common/mremap.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/common/getPageSize.cpp

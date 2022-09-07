@@ -68,6 +68,8 @@ static void RegisterHouseAggregates(cp::FunctionRegistry* registry) {
         Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedMax>(GetHouseFunctionName(EAggregate::Max))).ok());
         Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedSum>(GetHouseFunctionName(EAggregate::Sum))).ok());
         //Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedAvg>(GetHouseFunctionName(EAggregate::Avg))).ok());
+
+        Y_VERIFY(registry->AddFunction(std::make_shared<CH::ArrowGroupBy>(GetHouseGroupByName())).ok());
     } catch (const std::exception& /*ex*/) {
         Y_VERIFY(false);
     }

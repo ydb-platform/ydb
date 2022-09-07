@@ -1398,13 +1398,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     level, COUNT(level)
                 FROM `/Root/olapStore/olapTable`
                 GROUP BY level
+                ORDER BY level
             )";
             auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson(result, R"([[23000u;]])");
+            CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
 
             // Check plan
             CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" });

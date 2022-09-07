@@ -99,6 +99,7 @@ enum class EAggregate {
 const char * GetFunctionName(EOperation op);
 const char * GetFunctionName(EAggregate op);
 const char * GetHouseFunctionName(EAggregate op);
+inline const char * GetHouseGroupByName() { return "ch.group_by"; }
 EOperation ValidateOperation(EOperation op, ui32 argsSize);
 
 class TAssign {
@@ -235,10 +236,11 @@ struct TProgramStep {
     std::vector<TAssign> Assignes;
     std::vector<std::string> Filters; // List of filter columns. Implicit "Filter by (f1 AND f2 AND .. AND fn)"
     std::vector<TAggregateAssign> GroupBy;
+    std::vector<std::string> GroupByKeys; // TODO: it's possible to use them without GROUP BY for DISTINCT
     std::vector<std::string> Projection; // Step's result columns (remove others)
 
     struct TDatumBatch {
-        std::shared_ptr<arrow::Schema> fields;
+        std::shared_ptr<arrow::Schema> schema;
         int64_t rows;
         std::vector<arrow::Datum> datums;
     };

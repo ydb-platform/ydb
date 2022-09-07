@@ -6,6 +6,32 @@
 
 #include "program.h"
 #include "arrow_helpers.h"
+
+#ifndef WIN32
+#include <AggregateFunctions/IAggregateFunction.h>
+#else
+namespace CH {
+enum class AggFunctionId {
+    AGG_UNSPECIFIED = 0,
+    AGG_ANY = 1,
+    AGG_COUNT = 2,
+    AGG_MIN = 3,
+    AGG_MAX = 4,
+    AGG_SUM = 5,
+};
+struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
+    struct Assign {
+        AggFunctionId function = AggFunctionId::AGG_UNSPECIFIED;
+        std::string result_column;
+        std::vector<std::string> arguments;
+    };
+
+    std::shared_ptr<arrow::Schema> schema;
+    std::vector<Assign> assigns;
+};
+}
+#endif
+
 #include <util/system/yassert.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
@@ -280,12 +306,34 @@ const char * GetHouseFunctionName(EAggregate op) {
 
 namespace {
 
+CH::AggFunctionId GetHouseFunction(EAggregate op) {
+    switch (op) {
+        case EAggregate::Some:
+            return CH::AggFunctionId::AGG_ANY;
+        case EAggregate::Count:
+            return CH::AggFunctionId::AGG_COUNT;
+        case EAggregate::Min:
+            return CH::AggFunctionId::AGG_MIN;
+        case EAggregate::Max:
+            return CH::AggFunctionId::AGG_MAX;
+        case EAggregate::Sum:
+            return CH::AggFunctionId::AGG_SUM;
+#if 0 // TODO
+        case EAggregate::Avg:
+            return CH::AggFunctionId::AGG_AVG;
+#endif
+        default:
+            break;
+    }
+    return CH::AggFunctionId::AGG_UNSPECIFIED;
+}
+
 arrow::Status AddColumn(
     TProgramStep::TDatumBatch& batch,
     const std::string& name,
     arrow::Datum&& column)
 {
-    if (batch.fields->GetFieldIndex(name) != -1) {
+    if (batch.schema->GetFieldIndex(name) != -1) {
         return arrow::Status::Invalid("Trying to add duplicate column '" + name + "'");
     }
 
@@ -297,13 +345,13 @@ arrow::Status AddColumn(
         return arrow::Status::Invalid("Wrong column length.");
     }
 
-    batch.fields = *batch.fields->AddField(batch.fields->num_fields(), field);
+    batch.schema = *batch.schema->AddField(batch.schema->num_fields(), field);
     batch.datums.emplace_back(column);
     return arrow::Status::OK();
 }
 
 arrow::Result<arrow::Datum> GetColumnByName(const TProgramStep::TDatumBatch& batch, const std::string& name) {
-    int i = batch.fields->GetFieldIndex(name);
+    int i = batch.schema->GetFieldIndex(name);
     if (i == -1) {
         return arrow::Status::Invalid("Not found column '" + name + "' or duplicate");
     } else {
@@ -334,7 +382,7 @@ std::shared_ptr<arrow::RecordBatch> ToRecordBatch(TProgramStep::TDatumBatch& bat
             columns.push_back(col.make_array());
         }
     }
-    return arrow::RecordBatch::Make(batch.fields, batch.rows, columns);
+    return arrow::RecordBatch::Make(batch.schema, batch.rows, columns);
 }
 
 template <bool houseFunction, typename TOpId, typename TOptions>
@@ -398,6 +446,18 @@ arrow::Result<arrow::Datum> CallHouseFunctionByAssign(
     }
 }
 
+CH::GroupByOptions::Assign GetGroupByAssign(const TAggregateAssign& assign) {
+    CH::GroupByOptions::Assign descr;
+    descr.function = GetHouseFunction(assign.GetOperation());
+    descr.result_column = assign.GetName();
+    descr.arguments.reserve(assign.GetArguments().size());
+
+    for (auto& colName : assign.GetArguments()) {
+        descr.arguments.push_back(colName);
+    }
+    return descr;
+}
+
 }
 
 
@@ -441,50 +501,85 @@ arrow::Status TProgramStep::ApplyAggregates(
         return arrow::Status::OK();
     }
 
+    ui32 numResultColumns = GroupBy.size() + GroupByKeys.size();
     TDatumBatch res;
-    res.rows = 1; // TODO
-    res.datums.reserve(GroupBy.size());
+    res.datums.reserve(numResultColumns);
 
     arrow::FieldVector fields;
-    fields.reserve(GroupBy.size());
+    fields.reserve(numResultColumns);
 
-    for (auto& assign : GroupBy) {
-        auto funcResult = CallFunctionByAssign(assign, batch, ctx);
-        if (!funcResult.ok()) {
-            auto houseResult = CallHouseFunctionByAssign(assign, batch, ctx);
-            if (!houseResult.ok()) {
-                return funcResult.status();
+    if (GroupByKeys.empty()) {
+        for (auto& assign : GroupBy) {
+            auto funcResult = CallFunctionByAssign(assign, batch, ctx);
+            if (!funcResult.ok()) {
+                auto houseResult = CallHouseFunctionByAssign(assign, batch, ctx);
+                if (!houseResult.ok()) {
+                    return funcResult.status();
+                }
+                funcResult = houseResult;
             }
-            funcResult = houseResult;
-        }
 
-        res.datums.push_back(*funcResult);
-        auto& column = res.datums.back();
-        if (!column.is_scalar()) {
-            return arrow::Status::Invalid("Aggregate result is not a scalar.");
-        }
-
-        if (column.scalar()->type->id() == arrow::Type::STRUCT) {
-            auto op = assign.GetOperation();
-            if (op == EAggregate::Min) {
-                const auto& minMax = column.scalar_as<arrow::StructScalar>();
-                column = minMax.value[0];
-            } else if (op == EAggregate::Max) {
-                const auto& minMax = column.scalar_as<arrow::StructScalar>();
-                column = minMax.value[1];
-            } else {
-                return arrow::Status::Invalid("Unexpected struct result for aggregate function");
+            res.datums.push_back(*funcResult);
+            auto& column = res.datums.back();
+            if (!column.is_scalar()) {
+                return arrow::Status::Invalid("Aggregate result is not a scalar.");
             }
+
+            if (column.scalar()->type->id() == arrow::Type::STRUCT) {
+                auto op = assign.GetOperation();
+                if (op == EAggregate::Min) {
+                    const auto& minMax = column.scalar_as<arrow::StructScalar>();
+                    column = minMax.value[0];
+                } else if (op == EAggregate::Max) {
+                    const auto& minMax = column.scalar_as<arrow::StructScalar>();
+                    column = minMax.value[1];
+                } else {
+                    return arrow::Status::Invalid("Unexpected struct result for aggregate function.");
+                }
+            }
+
+            if (!column.type()) {
+                return arrow::Status::Invalid("Aggregate result has no type.");
+            }
+            fields.emplace_back(std::make_shared<arrow::Field>(assign.GetName(), column.type()));
         }
 
-        if (!column.type()) {
-            return arrow::Status::Invalid("Aggregate result has no type.");
+        res.rows = 1;
+    } else {
+        CH::GroupByOptions funcOpts;
+        funcOpts.schema = batch.schema;
+        funcOpts.assigns.reserve(numResultColumns);
+
+        for (auto& assign : GroupBy) {
+            funcOpts.assigns.emplace_back(GetGroupByAssign(assign));
         }
-        fields.emplace_back(std::make_shared<arrow::Field>(assign.GetName(), column.type()));
+
+        for (auto& key : GroupByKeys) {
+            funcOpts.assigns.emplace_back(CH::GroupByOptions::Assign{
+                .result_column = key
+            });
+        }
+
+        auto gbRes = arrow::compute::CallFunction(GetHouseGroupByName(), batch.datums, &funcOpts, ctx);
+        if (!gbRes.ok()) {
+            return gbRes.status();
+        }
+        auto gbBatch = (*gbRes).record_batch();
+
+        for (auto& assign : funcOpts.assigns) {
+            auto column = gbBatch->GetColumnByName(assign.result_column);
+            if (!column) {
+                return arrow::Status::Invalid("No expected column in GROUP BY result.");
+            }
+            fields.emplace_back(std::make_shared<arrow::Field>(assign.result_column, column->type()));
+            res.datums.push_back(column);
+        }
+
+        res.rows = gbBatch->num_rows();
     }
 
-    res.fields = std::make_shared<arrow::Schema>(fields);
-    batch = res;
+    res.schema = std::make_shared<arrow::Schema>(fields);
+    batch = std::move(res);
     return arrow::Status::OK();
 }
 
@@ -521,20 +616,22 @@ arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
 
         std::unordered_set<std::string_view> neededColumns;
         bool allColumns = Projection.empty() && GroupBy.empty();
-        if (!GroupBy.empty()) {
+        if (!allColumns) {
             for (auto& aggregate : GroupBy) {
                 for (auto& arg : aggregate.GetArguments()) {
                     neededColumns.insert(arg);
                 }
             }
-        } else if (!Projection.empty()) {
+            for (auto& key : GroupByKeys) {
+                neededColumns.insert(key);
+            }
             for (auto& str : Projection) {
                 neededColumns.insert(str);
             }
         }
 
-        for (int64_t i = 0; i < batch.fields->num_fields(); ++i) {
-            bool needed = (allColumns || neededColumns.contains(batch.fields->field(i)->name()));
+        for (int64_t i = 0; i < batch.schema->num_fields(); ++i) {
+            bool needed = (allColumns || neededColumns.contains(batch.schema->field(i)->name()));
             if (batch.datums[i].is_array() && needed) {
                 auto res = arrow::compute::Filter(batch.datums[i].make_array(), filter);
                 if (!res.ok()) {
@@ -567,17 +664,17 @@ arrow::Status TProgramStep::ApplyProjection(TDatumBatch& batch) const {
     }
     std::vector<std::shared_ptr<arrow::Field>> newFields;
     std::vector<arrow::Datum> newDatums;
-    for (int64_t i = 0; i < batch.fields->num_fields(); ++i) {
-        auto& cur_field_name = batch.fields->field(i)->name();
+    for (int64_t i = 0; i < batch.schema->num_fields(); ++i) {
+        auto& cur_field_name = batch.schema->field(i)->name();
         if (projSet.contains(cur_field_name)) {
-            newFields.push_back(batch.fields->field(i));
+            newFields.push_back(batch.schema->field(i));
             if (!newFields.back()) {
                 return arrow::Status::Invalid("Wrong projection.");
             }
             newDatums.push_back(batch.datums[i]);
         }
     }
-    batch.fields = std::make_shared<arrow::Schema>(newFields);
+    batch.schema = std::make_shared<arrow::Schema>(newFields);
     batch.datums = std::move(newDatums);
     return arrow::Status::OK();
 }

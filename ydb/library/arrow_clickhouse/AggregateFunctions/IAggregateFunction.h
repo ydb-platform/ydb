@@ -481,4 +481,40 @@ struct AggregateFunctionProperties
     bool is_order_dependent = false;
 };
 
+enum class AggFunctionId {
+    AGG_UNSPECIFIED = 0,
+    AGG_ANY = 1,
+    AGG_COUNT = 2,
+    AGG_MIN = 3,
+    AGG_MAX = 4,
+    AGG_SUM = 5,
+    AGG_AVG = 6,
+    //AGG_VAR = 7,
+    //AGG_COVAR = 8,
+    //AGG_STDDEV = 9,
+    //AGG_CORR = 10,
+    //AGG_ARG_MIN = 11,
+    //AGG_ARG_MAX = 12,
+    //AGG_COUNT_DISTINCT = 13,
+    //AGG_QUANTILES = 14,
+    //AGG_TOP_COUNT = 15,
+    //AGG_TOP_SUM = 16,
+};
+
+struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
+    // We have to return aggregates + aggregate keys in result.
+    // We use pair {AGG_UNSPECIFIED, result_column} to specify a key.
+    // Then we could place aggregates and keys in one vector to set their order in result.
+    struct Assign {
+        AggFunctionId function = AggFunctionId::AGG_UNSPECIFIED;
+        std::string result_column;
+        std::vector<std::string> arguments;
+    };
+
+    std::shared_ptr<arrow::Schema> schema; // types and names of input arguments
+    std::vector<Assign> assigns; // aggregates and keys in needed result order
+};
+
+AggregateFunctionPtr GetAggregateFunction(AggFunctionId, const DataTypes & argument_types);
+
 }

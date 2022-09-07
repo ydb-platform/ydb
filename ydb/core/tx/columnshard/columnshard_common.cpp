@@ -305,11 +305,6 @@ bool ExtractGroupBy(const TContext& info, NArrow::TProgramStep& step, const NKik
     if (!groupBy.AggregatesSize()) {
         return false;
     }
-#if 1 // TODO
-    if (groupBy.KeyColumnsSize()) {
-        return false;
-    }
-#endif
 
     // It adds implicit projection with aggregates and keys. Remove non aggregated columns.
     step.Projection.reserve(groupBy.KeyColumnsSize() + groupBy.AggregatesSize());
@@ -318,6 +313,7 @@ bool ExtractGroupBy(const TContext& info, NArrow::TProgramStep& step, const NKik
     }
 
     step.GroupBy.reserve(groupBy.AggregatesSize());
+    step.GroupByKeys.reserve(groupBy.KeyColumnsSize());
     for (auto& agg : groupBy.GetAggregates()) {
         auto& resColumn = agg.GetColumn();
         TString columnName = info.GenerateName(resColumn);
@@ -328,6 +324,9 @@ bool ExtractGroupBy(const TContext& info, NArrow::TProgramStep& step, const NKik
         }
         step.GroupBy.push_back(std::move(func));
         step.Projection.push_back(columnName);
+    }
+    for (auto& key : groupBy.GetKeyColumns()) {
+        step.GroupByKeys.push_back(info.GetName(key));
     }
 
     return true;

@@ -21,3 +21,5 @@ items:
   href: cms.md
 - name: Изменение конфигурации акторсистемы
   href: change_actorsystem_configs.md
+- name: Декомиссия части кластера
+  href: ../../administration/decommissioning.md

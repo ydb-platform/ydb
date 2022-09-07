@@ -555,10 +555,12 @@ inline EReady TTableItBase<TIteratorOps>::Start() noexcept
 
     if (!Iterators ||
         Iterators.front().IteratorId.Type == EType::Stop ||
-        !(Limit && Limit--))
+        Limit == 0)
     {
         return EReady::Gone;
     }
+
+    --Limit;
 
     auto key = Iterators.front().Key;
     PopHeap(Iterators.begin(), Active--, Comparator);

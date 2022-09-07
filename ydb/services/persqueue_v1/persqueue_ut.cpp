@@ -856,7 +856,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             req.mutable_init_request()->set_path("acc/topic3");
 
             req.mutable_init_request()->set_producer_id("A");
-            req.mutable_init_request()->set_message_group_id("A");
+            req.mutable_init_request()->set_partition_id(0);
 
             if (!writeStream1->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -864,6 +864,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(writeStream1->Read(&resp));
             Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+            UNIT_ASSERT_C(resp.init_response().partition_id() == 0, "unexpected partition_id");
             //send some reads
             req.Clear();
 
@@ -893,7 +894,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             req.mutable_init_request()->set_path("acc/topic3");
 
             req.mutable_init_request()->set_producer_id("B");
-            req.mutable_init_request()->set_message_group_id("B");
+            req.mutable_init_request()->set_partition_id(1);
 
             if (!writeStream2->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -901,6 +902,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(writeStream2->Read(&resp));
             Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+            UNIT_ASSERT_C(resp.init_response().partition_id() == 1, "unexpected partition_id");
             //send some reads
             req.Clear();
 
@@ -957,6 +959,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             TVector<i64> partition_ids;
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect 1st start part, Got response: " << resp.ShortDebugString() << Endl;
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == "acc/topic3");
             partition_ids.push_back(resp.start_partition_session_request().partition_session().partition_id());
@@ -970,6 +973,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             resp.Clear();
             UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect 2nd start part, Got response: " << resp.ShortDebugString() << Endl;
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == "acc/topic3");
             partition_ids.push_back(resp.start_partition_session_request().partition_session().partition_id());

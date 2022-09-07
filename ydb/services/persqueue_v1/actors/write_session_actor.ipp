@@ -393,8 +393,16 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         }
     } else {
         // TODO (ildar-khisam@): support other cases of producer_id / message_group_id / partition_id settings
-        if (InitRequest.message_group_id() != InitRequest.producer_id() || InitRequest.producer_id().empty()) {
-            CloseSession("only (producer_id == message_group_id) case is supported for now",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
+        // For now exactly two scenarios supported:
+        //    1. Non-empty producer_id == message_group_id
+        //    2. Non-empty producer_id && non-empty valid partition_id (explicit partitioning)
+        bool isScenarioSupported = (!InitRequest.producer_id().empty() && InitRequest.has_message_group_id() &&
+                                        InitRequest.message_group_id() == InitRequest.producer_id())
+                                || (!InitRequest.producer_id().empty() && InitRequest.has_partition_id());
+
+        if (!isScenarioSupported) {
+            CloseSession("unsupported producer_id / message_group_id / partition_id settings in init request",
+                         PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return;
         }
     }
@@ -410,14 +418,13 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
 
     PeerName = event->PeerName;
 
-    SourceId = InitRequest.message_group_id();
-    // SourceId = [this]() {
-    //     if constexpr (UseMigrationProtocol) {
-    //         return InitRequest.message_group_id();
-    //     } else {
-    //         return InitRequest.message_group_id().empty() ? InitRequest.producer_id() : InitRequest.message_group_id();
-    //     }
-    // }();
+    SourceId = [this]() {
+        if constexpr (UseMigrationProtocol) {
+            return InitRequest.message_group_id();
+        } else {
+            return InitRequest.has_message_group_id() ? InitRequest.message_group_id() : InitRequest.producer_id();
+        }
+    }();
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << InitRequest << " from " << PeerName);
     //TODO: get user agent from headers

@@ -11,6 +11,12 @@
 #include <random>
 #include <sstream>
 
+template <>
+void Out<NYdbWorkload::KvWorkloadConstants>(IOutputStream& out, NYdbWorkload::KvWorkloadConstants constant)
+{
+    out << static_cast<ui64>(constant);
+}
+
 namespace NYdbWorkload {
 
 TKvWorkloadGenerator::TKvWorkloadGenerator(const TKvWorkloadParams* params)
@@ -56,6 +62,8 @@ TQueryInfoList TKvWorkloadGenerator::GetWorkload(int type) {
     switch (static_cast<EType>(type)) {
         case EType::UpsertRandom:
             return UpsertRandom();
+        case EType::InsertRandom:
+            return InsertRandom();
         case EType::SelectRandom:
             return SelectRandom();
         default:
@@ -63,21 +71,27 @@ TQueryInfoList TKvWorkloadGenerator::GetWorkload(int type) {
     }
 }
 
-TQueryInfoList TKvWorkloadGenerator::UpsertRandom() {
+
+TQueryInfoList TKvWorkloadGenerator::AddOperation(TString operation) {
     std::stringstream ss;
 
     NYdb::TParamsBuilder paramsBuilder;
 
     ss << "--!syntax_v1\n";
-    ss << "DECLARE $c0 AS Uint64;\n";
-    paramsBuilder.AddParam("$c0").Uint64(KeyUniformDistGen(Gen)).Build();
 
-    for (size_t col = 1; col < Params.ColumnsCnt; ++col) {
-        ss << "DECLARE $c" << col << " AS String;\n";
-        paramsBuilder.AddParam("$c" + std::to_string(col)).String(BigString).Build();
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        TString pkname = "$r" + std::to_string(row);
+        ss << "DECLARE " << pkname << " AS Uint64;\n";
+        paramsBuilder.AddParam(pkname).Uint64(KeyUniformDistGen(Gen)).Build();
+
+        for (size_t col = 1; col < Params.ColumnsCnt; ++col) {
+            TString cname = "$c" + std::to_string(row) + std::to_string(col);
+            ss << "DECLARE " << cname << " AS String;\n";
+            paramsBuilder.AddParam(cname).String(BigString).Build();
+        }
     }
 
-    ss << "UPSERT INTO `kv_test`(";
+    ss << operation << " INTO `kv_test`(";
 
     for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
         ss << "c" << col;
@@ -86,27 +100,50 @@ TQueryInfoList TKvWorkloadGenerator::UpsertRandom() {
         }
     }
 
-    ss << ") VALUES (";
+    ss << ") VALUES ";
 
-    for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
-        ss << "$c" << col;
-        if (col + 1 < Params.ColumnsCnt) {
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+
+        ss << "(";
+        ss << "$r" << row;
+
+        for (size_t col = 1; col < Params.ColumnsCnt; ++col) {
+            ss << ", $c" << row << col;
+        }
+
+        ss << ")";
+
+        if (row + 1 < Params.RowsCnt) {
             ss << ", ";
         }
-    }
 
-    ss << ")";
+    }
 
     auto params = paramsBuilder.Build();
 
     return TQueryInfoList(1, TQueryInfo(ss.str(), std::move(params)));
 }
 
+TQueryInfoList TKvWorkloadGenerator::UpsertRandom() {
+    return AddOperation("UPSERT");
+}
+
+TQueryInfoList TKvWorkloadGenerator::InsertRandom() {
+    return AddOperation("INSERT");
+}
+
 TQueryInfoList TKvWorkloadGenerator::SelectRandom() {
     std::stringstream ss;
 
+    NYdb::TParamsBuilder paramsBuilder;
+
     ss << "--!syntax_v1\n";
-    ss << "DECLARE $c0 AS Uint64;\n";
+
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        ss << "DECLARE $r" << row << " AS Uint64;\n";
+        paramsBuilder.AddParam("$r" + std::to_string(row)).Uint64(KeyUniformDistGen(Gen)).Build();
+    }
+
     ss << "SELECT ";
     for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
         ss << "c" << col;
@@ -116,16 +153,15 @@ TQueryInfoList TKvWorkloadGenerator::SelectRandom() {
         ss << " ";
     }
 
-    ss << "FROM `kv_test` WHERE c0 = $c0";
+    ss << "FROM `kv_test` WHERE ";
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        ss << "c0 = $r" << row;
+        if (row + 1 < Params.RowsCnt) {
+            ss << " OR ";
+        }
+    }
 
-    ui64 x = KeyUniformDistGen(Gen);
-
-    NYdb::TParamsBuilder paramsBuilder;
-    auto params = paramsBuilder
-        .AddParam("$c0")
-            .Uint64(x)
-            .Build()
-        .Build();
+    auto params = paramsBuilder.Build();
 
     return TQueryInfoList(1, TQueryInfo(ss.str(), std::move(params)));
 }

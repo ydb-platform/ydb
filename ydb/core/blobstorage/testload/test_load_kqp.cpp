@@ -367,6 +367,7 @@ public:
             params.MaxFirstKey = cmd.GetKv().GetMaxFirstKey();
             params.StringLen = cmd.GetKv().GetStringLen();
             params.ColumnsCnt = cmd.GetKv().GetColumnsCnt();
+            params.RowsCnt = cmd.GetKv().GetRowsCnt();
             params.MinPartitions = UniformPartitionsCount;
             params.DbPath = WorkingDir;
             WorkloadQueryGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);
@@ -411,6 +412,7 @@ public:
                 << "MinPartitions: " << params->MinPartitions << " "
                 << "StringLen: " << params->StringLen << " "
                 << "ColumnsCnt: " << params->ColumnsCnt << " "
+                << "RowsCnt: " << params->RowsCnt << " "
                 << "DbPath: " << params->DbPath);
         }
 

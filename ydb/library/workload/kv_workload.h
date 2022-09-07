@@ -7,13 +7,24 @@
 
 namespace NYdbWorkload {
 
+enum KvWorkloadConstants : ui64 {
+    MIN_PARTITIONS = 40,
+    INIT_ROW_COUNT = 1000,
+    MAX_FIRST_KEY = Max<ui64>(),
+    STRING_LEN = 8,
+    COLUMNS_CNT = 2,
+    ROWS_CNT = 1,
+    PARTITIONS_BY_LOAD = true
+};
+
 struct TKvWorkloadParams : public TWorkloadParams {
-    ui64 MinPartitions = 1;
-    ui64 InitRowCount = 1000;
-    ui64 MaxFirstKey = 5000;
-    ui64 StringLen = 8;
-    ui64 ColumnsCnt = 2;
-    bool PartitionsByLoad = true;
+    ui64 MinPartitions = KvWorkloadConstants::MIN_PARTITIONS;
+    ui64 InitRowCount = KvWorkloadConstants::INIT_ROW_COUNT;
+    ui64 MaxFirstKey = KvWorkloadConstants::MAX_FIRST_KEY;
+    ui64 StringLen = KvWorkloadConstants::STRING_LEN;
+    ui64 ColumnsCnt = KvWorkloadConstants::COLUMNS_CNT;
+    ui64 RowsCnt = KvWorkloadConstants::ROWS_CNT;
+    bool PartitionsByLoad = KvWorkloadConstants::PARTITIONS_BY_LOAD;
 };
 
 class TKvWorkloadGenerator : public IWorkloadQueryGenerator {
@@ -40,16 +51,19 @@ public:
 
     enum class EType {
         UpsertRandom,
+        InsertRandom,
         SelectRandom
     };
 
 private:
     TQueryInfoList UpsertRandom();
+    TQueryInfoList InsertRandom();
     TQueryInfoList SelectRandom();
 
     TKvWorkloadGenerator(const TKvWorkloadParams* params);
 
     TQueryInfo FillKvData() const;
+    TQueryInfoList AddOperation(TString operation);
 
     std::string DbPath;
     TKvWorkloadParams Params;

@@ -1578,9 +1578,10 @@ message TEvTestLoadRequest {
         message TKvWorkload {
             optional uint64 InitRowCount = 1 [default = 1000];
             optional bool PartitionsByLoad = 2 [default = true];
-            optional uint64 MaxFirstKey = 3 [default = 5000];
+            optional uint64 MaxFirstKey = 3 [default = 18446744073709551615];
             optional uint64 StringLen = 4 [default = 8];
             optional uint64 ColumnsCnt = 5 [default = 2];
+            optional uint64 RowsCnt = 6 [default = 1];
         }
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;

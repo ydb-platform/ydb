@@ -23,6 +23,7 @@ private:
     ui64 MaxFirstKey;
     ui64 StringLen;
     ui64 ColumnsCnt;
+    ui64 RowsCnt;
     bool PartitionsByLoad;
 };
 
@@ -50,6 +51,22 @@ private:
     ui64 MaxFirstKey;
     ui64 StringLen;
     ui64 ColumnsCnt;
+    ui64 RowsCnt;
+
+};
+
+class TCommandKvRunInsertRandom : public TWorkloadCommand {
+public:
+    TCommandKvRunInsertRandom();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    ui64 MaxFirstKey;
+    ui64 StringLen;
+    ui64 ColumnsCnt;
+    ui64 RowsCnt;
 
 };
 
@@ -63,6 +80,7 @@ public:
 private:
     ui64 MaxFirstKey;
     ui64 ColumnsCnt;
+    ui64 RowsCnt;
 
 };
 

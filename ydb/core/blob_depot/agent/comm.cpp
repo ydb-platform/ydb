@@ -17,6 +17,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::ConnectToBlobDepot() {
+        Y_VERIFY(!PipeId);
         PipeId = Register(NTabletPipe::CreateClient(SelfId(), TabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
         const ui64 id = NextRequestId++;
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA05, "ConnectToBlobDepot", (VirtualGroupId, VirtualGroupId),

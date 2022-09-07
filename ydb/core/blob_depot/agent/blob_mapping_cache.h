@@ -33,9 +33,9 @@ namespace NKikimr::NBlobDepot {
             : TRequestSender(agent)
         {}
 
-        void HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg);
+        void HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg, TRequestContext::TPtr context);
         const TResolvedValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context);
-        void ProcessResponse(ui64 /*tag*/, TRequestContext::TPtr /*context*/, TResponse response);
+        void ProcessResponse(ui64 /*tag*/, TRequestContext::TPtr /*context*/, TResponse response) override;
     };
 
 } // NKikimr::NBlobDepot

@@ -96,7 +96,7 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, QueryId), (Msg, msg.Record));
 
-                Agent.BlobMappingCache.HandleResolveResult(msg.Record);
+                Agent.BlobMappingCache.HandleResolveResult(msg.Record, nullptr);
 
                 const NKikimrProto::EReplyStatus status = msg.Record.GetStatus();
                 if (status != NKikimrProto::OK && status != NKikimrProto::OVERRUN) {

@@ -2,22 +2,46 @@
 
 namespace NKikimr::NBlobDepot {
 
-    void TBlobDepotAgent::TBlobMappingCache::HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg) {
-        for (const auto& item : msg.GetResolvedKeys()) {
-            TString key = item.GetKey();
+    struct TResolveContext : TRequestContext {
+        TString Key;
+
+        TResolveContext(TString key)
+            : Key(std::move(key))
+        {}
+    };
+
+    void TBlobDepotAgent::TBlobMappingCache::HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg,
+            TRequestContext::TPtr context) {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDA28, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId), (Msg, msg));
+
+        auto process = [&](TString key, const NKikimrBlobDepot::TEvResolveResult::TResolvedKey *item) {
             const auto [it, inserted] = Cache.try_emplace(std::move(key));
             auto& entry = it->second;
             if (inserted) {
                 entry.Key = it->first;
             }
-            entry.Values = item.GetValueChain();
-            Queue.PushBack(&entry);
-
-            entry.ResolveInFlight = false;
-
-            for (TQueryWaitingForKey& item : std::exchange(entry.QueriesWaitingForKey, {})) {
-                Agent.OnRequestComplete(item.Id, TKeyResolved{&entry.Values}, Agent.OtherRequestInFlight);
+            if (item) {
+                Y_VERIFY(it->first == item->GetKey());
+                entry.Values = item->GetValueChain();
+            } else {
+                entry.Values.Clear();
             }
+            Queue.PushBack(&entry);
+            entry.ResolveInFlight = false;
+            for (TQueryWaitingForKey& item : std::exchange(entry.QueriesWaitingForKey, {})) {
+                Agent.OnRequestComplete(item.Id, TKeyResolved{entry.Values.empty() ? nullptr : &entry.Values},
+                    Agent.OtherRequestInFlight);
+            }
+        };
+
+        for (const auto& item : msg.GetResolvedKeys()) {
+            process(item.GetKey(), &item);
+            if (context && context->Obtain<TResolveContext>().Key == item.GetKey()) {
+                context.reset();
+            }
+        }
+        if (context) {
+            process(context->Obtain<TResolveContext>().Key, nullptr);
         }
     }
 
@@ -45,7 +69,7 @@ namespace NKikimr::NBlobDepot {
                 item->SetTabletId(id.TabletID());
             }
 
-            Agent.Issue(std::move(msg), this, nullptr);
+            Agent.Issue(std::move(msg), this, std::make_unique<TResolveContext>(it->first));
         }
 
         const ui64 id = Agent.NextRequestId++;
@@ -58,9 +82,9 @@ namespace NKikimr::NBlobDepot {
         return nullptr;
     }
 
-    void TBlobDepotAgent::TBlobMappingCache::ProcessResponse(ui64 /*tag*/, TRequestContext::TPtr /*context*/, TResponse response) {
+    void TBlobDepotAgent::TBlobMappingCache::ProcessResponse(ui64 /*tag*/, TRequestContext::TPtr context, TResponse response) {
         if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
-            HandleResolveResult((*p)->Record);
+            HandleResolveResult((*p)->Record, std::move(context));
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
             for (auto& [key, entry] : Cache) {
                 if (entry.ResolveInFlight) {

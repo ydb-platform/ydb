@@ -56,6 +56,8 @@ namespace NKikimr::NBlobDepot {
 
             bool ProcessSingleResult(ui32 queryIdx, const TResolvedValueChain *value) {
                 auto& msg = GetQuery();
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA27, "ProcessSingleResult", (VirtualGroupId, Agent.VirtualGroupId),
+                    (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Value, value));
 
                 if (!value) {
                     Response->Responses[queryIdx].Status = NKikimrProto::NODATA;

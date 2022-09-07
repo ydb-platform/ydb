@@ -133,7 +133,7 @@ namespace NKikimr::NBlobDepot {
                 Y_VERIFY(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
                     TabletId = *info->BlobDepotId;
-                    if (TabletId) {
+                    if (TabletId && TabletId != Max<ui64>()) {
                         ConnectToBlobDepot();
                     }
                 

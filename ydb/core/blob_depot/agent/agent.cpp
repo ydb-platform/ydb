@@ -27,7 +27,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::Bootstrap() {
         Become(&TThis::StateFunc);
 
-        if (TabletId) {
+        if (TabletId && TabletId != Max<ui64>()) {
             ConnectToBlobDepot();
         }
     }

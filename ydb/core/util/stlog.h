@@ -98,6 +98,13 @@ namespace NKikimr::NStLog {
         static constexpr bool value = decltype(check<T>(0))::value;
     };
 
+    template<typename T> struct TIsIterable { static constexpr bool value = false; };
+    template<typename T, typename Y> struct TIsIterable<std::deque<T, Y>> { static constexpr bool value = true; };
+    template<typename T, typename Y> struct TIsIterable<std::list<T, Y>> { static constexpr bool value = true; };
+    template<typename T, typename Y> struct TIsIterable<std::vector<T, Y>> { static constexpr bool value = true; };
+    template<typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
+    template<typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
+
     template<typename Base, typename T>
     class TBoundParam : public Base {
         T Value;
@@ -147,6 +154,26 @@ namespace NKikimr::NStLog {
                 }
             } else if constexpr (THasToStringMethod<TValue>::value) {
                 s << value.ToString();
+            } else if constexpr (std::is_pointer_v<TValue> && !std::is_same_v<std::remove_cv_t<std::remove_pointer_t<TValue>>, char>) {
+                if (value) {
+                    OutputParam(s, *value);
+                } else {
+                    s << "<null>";
+                }
+            } else if constexpr (TIsIterable<TValue>::value) {
+                auto begin = std::begin(value);
+                auto end = std::end(value);
+                bool first = true;
+                s << "[";
+                for (; begin != end; ++begin) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        s << " ";
+                    }
+                    OutputParam(s, *begin);
+                }
+                s << "]";
             } else {
                 s << value;
             }

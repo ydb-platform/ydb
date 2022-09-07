@@ -13,10 +13,19 @@ namespace NActors {
     class TExecutorThread;
     class IActor;
     class ISchedulerCookie;
+    class IExecutorPool;
 
     namespace NLog {
         struct TSettings;
     }
+
+    struct TThreadContext {
+        IExecutorPool *Pool = nullptr;
+        ui32 WaitedActivation = 0;
+        bool IsSendingWithContinuousExecution = false; // set the value to true to work in any sendings
+    };
+
+    extern Y_POD_THREAD(TThreadContext*) TlsThreadContext;
 
     struct TActorContext;
 
@@ -36,6 +45,7 @@ namespace NActors {
 
     public:
         static bool Send(TAutoPtr<IEventHandle> ev);
+        static bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev);
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -103,6 +113,7 @@ namespace NActors {
             return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
         }
         bool Send(TAutoPtr<IEventHandle> ev) const;
+        bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const;
 
         TInstant Now() const;
         TMonotonic Monotonic() const;

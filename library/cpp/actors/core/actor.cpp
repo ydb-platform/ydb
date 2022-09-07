@@ -3,8 +3,8 @@
 #include <library/cpp/actors/util/datetime.h>
 
 namespace NActors {
-    Y_POD_THREAD(TActivationContext*)
-    TlsActivationContext((TActivationContext*)nullptr);
+    Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
+    Y_POD_THREAD(TActivationContext*) TlsActivationContext(nullptr);
 
     bool TActorContext::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
         return Send(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId)));
@@ -12,6 +12,14 @@ namespace NActors {
 
     bool TActorContext::Send(TAutoPtr<IEventHandle> ev) const {
         return ExecutorThread.Send(ev);
+    }
+
+    bool TActorContext::SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const {
+        if (TlsThreadContext) {
+            return ExecutorThread.SendWithContinuousExecution(ev);
+        } else {
+            return Send(ev);
+        }
     }
 
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
@@ -30,6 +38,10 @@ namespace NActors {
 
     bool TActivationContext::Send(TAutoPtr<IEventHandle> ev) {
         return TlsActivationContext->ExecutorThread.Send(ev);
+    }
+
+    bool TActivationContext::SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) {
+        return TlsActivationContext->ExecutorThread.SendWithContinuousExecution(ev);
     }
 
     void TActivationContext::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {

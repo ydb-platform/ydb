@@ -60,7 +60,8 @@ namespace NActors {
         Cleanup();
     }
 
-    bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
+    template <TActorSystem::TEPSendFunction EPSpecificSend>
+    bool TActorSystem::GenericSend(TAutoPtr<IEventHandle> ev) const {
         if (Y_UNLIKELY(!ev))
             return false;
 
@@ -105,13 +106,21 @@ namespace NActors {
         Y_VERIFY_DEBUG(recipient == ev->GetRecipientRewrite());
         const ui32 recpPool = recipient.PoolID();
         if (recipient && recpPool < ExecutorPoolCount) {
-            if (CpuManager->GetExecutorPool(recpPool)->Send(ev)) {
+            if ((CpuManager->GetExecutorPool(recpPool)->*EPSpecificSend)(ev)) {
                 return true;
             }
         }
 
         Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));
         return false;
+    }
+
+    bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
+        return this->GenericSend< &IExecutorPool::Send>(ev);
+    }
+
+    bool TActorSystem::SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const {
+        return this->GenericSend<&IExecutorPool::SendWithContinuousExecution>(ev);
     }
 
     bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags) const {

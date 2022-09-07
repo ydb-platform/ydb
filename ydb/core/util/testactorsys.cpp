@@ -51,6 +51,10 @@ public:
         return Context->Send(ev, NodeId);
     }
 
+    bool SendWithContinuousExecution(TAutoPtr<IEventHandle>& ev) override {
+        return Send(ev);
+    }
+
     void ScheduleActivation(ui32 /*activation*/) override {
         Y_FAIL();
     }

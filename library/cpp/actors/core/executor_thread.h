@@ -50,14 +50,30 @@ namespace NActors {
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
 
-        bool Send(TAutoPtr<IEventHandle> ev) {
 #ifdef USE_ACTOR_CALLSTACK
-            ev->Callstack = TCallstack::GetTlsCallstack();
-            ev->Callstack.Trace();
+#define TRY_TRACE_CALLSTACK(ev) \
+    do { \
+        (ev)->Callstack = TCallstack::GetTlsCallstack(); \
+        (ev)->Callstack.Trace(); \
+    } while (false) \
+// TRY_TRACE_CALLSTACK
+#else
+#define TRY_TRACE_CALLSTACK(...)
 #endif
+
+        bool Send(TAutoPtr<IEventHandle> ev) {
+            TRY_TRACE_CALLSTACK(ev);
             Ctx.IncrementSentEvents();
             return ActorSystem->Send(ev);
         }
+
+        bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) {
+            TRY_TRACE_CALLSTACK(ev);
+            Ctx.IncrementSentEvents();
+            return ActorSystem->SendWithContinuousExecution(ev);
+        }
+
+#undef TRY_TRACE_CALLSTACK
 
         void GetCurrentStats(TExecutorThreadStats& statsCopy) const {
             Ctx.GetCurrentStats(statsCopy);

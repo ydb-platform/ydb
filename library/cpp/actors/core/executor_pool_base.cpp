@@ -53,8 +53,29 @@ namespace NActors {
         return MailboxTable->SendTo(ev, this);
     }
 
+    bool TExecutorPoolBaseMailboxed::SendWithContinuousExecution(TAutoPtr<IEventHandle>& ev) {
+        Y_VERIFY_DEBUG(ev->GetRecipientRewrite().PoolID() == PoolId);
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
+        RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
+#endif
+        if (TlsThreadContext) {
+            bool prevValue = std::exchange(TlsThreadContext->IsSendingWithContinuousExecution, true);
+            bool res = MailboxTable->SendTo(ev, this);
+            TlsThreadContext->IsSendingWithContinuousExecution = prevValue;
+            return res;
+        } else {
+            return MailboxTable->SendTo(ev, this);;
+        }
+    }
+
     void TExecutorPoolBase::ScheduleActivation(ui32 activation) {
-        ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
+        if (TlsThreadContext && TlsThreadContext->Pool == static_cast<IExecutorPool*>(this) && TlsThreadContext->IsSendingWithContinuousExecution
+                && !TlsThreadContext->WaitedActivation)
+        {
+            TlsThreadContext->WaitedActivation = activation;
+        } else {
+            ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
+        }
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) {

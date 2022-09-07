@@ -357,6 +357,10 @@ namespace NActors {
         }
 
         // for actorsystem
+        bool SendWithContinuousExecution(TAutoPtr<IEventHandle>& ev) override {
+            return Send(ev);
+        }
+
         bool Send(TAutoPtr<IEventHandle>& ev) override {
             TGuard<TMutex> guard(Runtime->Mutex);
             bool verbose = (Runtime->CurrentDispatchContext ? !Runtime->CurrentDispatchContext->Options->Quiet : true) && VERBOSE;

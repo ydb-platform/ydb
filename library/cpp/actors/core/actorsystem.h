@@ -98,6 +98,7 @@ namespace NActors {
 
         // for actorsystem
         virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0;
+        virtual bool SendWithContinuousExecution(TAutoPtr<IEventHandle>& ev) = 0;
         virtual void ScheduleActivation(ui32 activation) = 0;
         virtual void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) = 0;
         virtual TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingCounter, const TActorId& parentId) = 0;
@@ -258,7 +259,15 @@ namespace NActors {
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0,
                           ui64 revolvingCounter = 0, const TActorId& parentId = TActorId());
 
+    private:
+        typedef bool (IExecutorPool::*TEPSendFunction)(TAutoPtr<IEventHandle>& ev);
+
+        template <TEPSendFunction EPSpecificSend>
+        bool GenericSend(TAutoPtr<IEventHandle> ev) const;
+
+    public:
         bool Send(TAutoPtr<IEventHandle> ev) const;
+        bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0) const;
 
         /**

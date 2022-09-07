@@ -867,6 +867,7 @@ namespace NActors {
         void Schedule(TMonotonic, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
         void Schedule(TDuration, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
         bool Send(TAutoPtr<IEventHandle>&) override { Y_FAIL(); }
+        bool SendWithContinuousExecution(TAutoPtr<IEventHandle>&) override { Y_FAIL(); }
         void ScheduleActivation(ui32) override { Y_FAIL(); }
         void ScheduleActivationEx(ui32, ui64) override { Y_FAIL(); }
         TActorId Register(IActor*, TMailboxType::EType, ui64, const TActorId&) override { Y_FAIL(); }

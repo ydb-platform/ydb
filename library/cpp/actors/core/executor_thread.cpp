@@ -300,6 +300,9 @@ namespace NActors {
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
         }
+        TThreadContext threadCtx;
+        TlsThreadContext = &threadCtx;
+        TlsThreadContext->Pool = static_cast<IExecutorPool*>(ExecutorPool);
 
         ExecutorPool->SetRealTimeMode();
         TAffinityGuard affinity(ExecutorPool->Affinity());
@@ -311,50 +314,56 @@ namespace NActors {
         i64 execCycles = 0;
         i64 nonExecCycles = 0;
 
-        for (;;) {
-            if (ui32 activation = ExecutorPool->GetReadyActivation(Ctx, ++RevolvingReadCounter)) {
-                LWTRACK(ActivationBegin, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId, NHPTimer::GetSeconds(Ctx.Lease.GetPreciseExpireTs()) * 1e3);
-                readyActivationCount++;
-                if (TMailboxHeader* header = Ctx.MailboxTable->Get(activation)) {
-                    if (header->LockForExecution()) {
-                        hpnow = GetCycleCountFast();
-                        nonExecCycles += hpnow - hpprev;
-                        hpprev = hpnow;
-                        switch (header->Type) {
-                            case TMailboxType::Simple:
-                                Execute(static_cast<TMailboxTable::TSimpleMailbox*>(header), activation);
-                                break;
-                            case TMailboxType::Revolving:
-                                Execute(static_cast<TMailboxTable::TRevolvingMailbox*>(header), activation);
-                                break;
-                            case TMailboxType::HTSwap:
-                                Execute(static_cast<TMailboxTable::THTSwapMailbox*>(header), activation);
-                                break;
-                            case TMailboxType::ReadAsFilled:
-                                Execute(static_cast<TMailboxTable::TReadAsFilledMailbox*>(header), activation);
-                                break;
-                            case TMailboxType::TinyReadAsFilled:
-                                Execute(static_cast<TMailboxTable::TTinyReadAsFilledMailbox*>(header), activation);
-                                break;
-                        }
-                        hpnow = GetCycleCountFast();
-                        execCycles += hpnow - hpprev;
-                        hpprev = hpnow;
-                        execCount++;
-                        if (execCycles + nonExecCycles > 39000000) { // every 15 ms at 2.6GHz, so 1000 items is 15 sec (solomon interval)
-                            LWPROBE(ExecutorThreadStats, ExecutorPool->PoolId, ExecutorPool->GetName(), Ctx.WorkerId,
-                                    execCount, readyActivationCount,
-                                    NHPTimer::GetSeconds(execCycles) * 1000.0, NHPTimer::GetSeconds(nonExecCycles) * 1000.0);
-                            execCount = 0;
-                            readyActivationCount = 0;
-                            execCycles = 0;
-                            nonExecCycles = 0;
-                            Ctx.UpdateThreadTime();
-                        }
+        auto executeActivation = [&](ui32 activation) {
+            LWTRACK(ActivationBegin, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId, NHPTimer::GetSeconds(Ctx.Lease.GetPreciseExpireTs()) * 1e3);
+            readyActivationCount++;
+            if (TMailboxHeader* header = Ctx.MailboxTable->Get(activation)) {
+                if (header->LockForExecution()) {
+                    hpnow = GetCycleCountFast();
+                    nonExecCycles += hpnow - hpprev;
+                    hpprev = hpnow;
+                    switch (header->Type) {
+                        case TMailboxType::Simple:
+                            Execute(static_cast<TMailboxTable::TSimpleMailbox*>(header), activation);
+                            break;
+                        case TMailboxType::Revolving:
+                            Execute(static_cast<TMailboxTable::TRevolvingMailbox*>(header), activation);
+                            break;
+                        case TMailboxType::HTSwap:
+                            Execute(static_cast<TMailboxTable::THTSwapMailbox*>(header), activation);
+                            break;
+                        case TMailboxType::ReadAsFilled:
+                            Execute(static_cast<TMailboxTable::TReadAsFilledMailbox*>(header), activation);
+                            break;
+                        case TMailboxType::TinyReadAsFilled:
+                            Execute(static_cast<TMailboxTable::TTinyReadAsFilledMailbox*>(header), activation);
+                            break;
+                    }
+                    hpnow = GetCycleCountFast();
+                    execCycles += hpnow - hpprev;
+                    hpprev = hpnow;
+                    execCount++;
+                    if (execCycles + nonExecCycles > 39000000) { // every 15 ms at 2.6GHz, so 1000 items is 15 sec (solomon interval)
+                        LWPROBE(ExecutorThreadStats, ExecutorPool->PoolId, ExecutorPool->GetName(), Ctx.WorkerId,
+                                execCount, readyActivationCount,
+                                NHPTimer::GetSeconds(execCycles) * 1000.0, NHPTimer::GetSeconds(nonExecCycles) * 1000.0);
+                        execCount = 0;
+                        readyActivationCount = 0;
+                        execCycles = 0;
+                        nonExecCycles = 0;
+                        Ctx.UpdateThreadTime();
                     }
                 }
-                LWTRACK(ActivationEnd, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId);
-                Ctx.Orbit.Reset();
+            }
+            LWTRACK(ActivationEnd, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId);
+            Ctx.Orbit.Reset();
+        };
+
+        for (;;) {
+            if (ui32 waitedActivation = std::exchange(TlsThreadContext->WaitedActivation, 0)) {
+                executeActivation(waitedActivation);
+            } else if (ui32 activation = ExecutorPool->GetReadyActivation(Ctx, ++RevolvingReadCounter)) {
+                executeActivation(activation);
             } else { // no activation means PrepareStop was called so thread must terminate
                 break;
             }

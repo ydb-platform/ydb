@@ -62,6 +62,9 @@ namespace NYql {
 namespace {
 
 struct TCurlInitConfig {
+    ui64 RequestTimeout = 0;
+    ui64 LowSpeedTime = 0;
+    ui64 LowSpeedLimit = 0;
     ui64 ConnectionTimeout = 0;
     ui64 BytesPerSecondLimit = 0;
     ui64 BufferSize = CURL_MAX_WRITE_SIZE;
@@ -120,8 +123,9 @@ public:
         curl_easy_setopt(Handle, CURLOPT_CONNECTTIMEOUT, Config.ConnectionTimeout);
         curl_easy_setopt(Handle, CURLOPT_MAX_RECV_SPEED_LARGE, Config.BytesPerSecondLimit);
         curl_easy_setopt(Handle, CURLOPT_BUFFERSIZE, Config.BufferSize);
-        curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_TIME, 20L);
-        curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+        curl_easy_setopt(Handle, CURLOPT_TIMEOUT, Config.RequestTimeout);
+        curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_TIME, Config.LowSpeedTime);
+        curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, Config.LowSpeedLimit);
 
         if (!Headers.empty()) {
             CurlHeaders = std::accumulate(Headers.cbegin(), Headers.cend(), CurlHeaders,
@@ -478,6 +482,18 @@ public:
 
             if (httpGatewaysCfg->HasBuffersSizePerStream()) {
                 BuffersSizePerStream = httpGatewaysCfg->GetBuffersSizePerStream();
+            }
+
+            if (httpGatewaysCfg->HasRequestTimeoutSeconds()) {
+                InitConfig.RequestTimeout = httpGatewaysCfg->GetRequestTimeoutSeconds();
+            }
+
+            if (httpGatewaysCfg->HasLowSpeedTimeSeconds()) {
+                InitConfig.LowSpeedTime = httpGatewaysCfg->GetLowSpeedTimeSeconds();
+            }
+
+            if (httpGatewaysCfg->HasLowSpeedBytesLimit()) {
+                InitConfig.LowSpeedLimit = httpGatewaysCfg->GetLowSpeedBytesLimit();
             }
 
             if (httpGatewaysCfg->HasConnectionTimeoutSeconds()) {

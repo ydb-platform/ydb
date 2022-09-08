@@ -951,7 +951,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         // await both CreatePartitionStreamRequest from Server
         // confirm both
-        ui64 assignId = 0;
         {
             Ydb::Topic::StreamReadMessage::FromClient req;
             Ydb::Topic::StreamReadMessage::FromServer resp;
@@ -964,12 +963,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == "acc/topic3");
             partition_ids.push_back(resp.start_partition_session_request().partition_session().partition_id());
 
-            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
-            req.Clear();
-            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
-            if (!readStream->Write(req)) {
-                ythrow yexception() << "write fail";
-            }
+            ui64 assignIdFirst = resp.start_partition_session_request().partition_session().partition_session_id();
 
             resp.Clear();
             UNIT_ASSERT(readStream->Read(&resp));
@@ -981,7 +975,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             std::sort(partition_ids.begin(), partition_ids.end());
             UNIT_ASSERT((partition_ids == TVector<i64>{0, 1}));
 
-            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            ui64 assignIdSecond = resp.start_partition_session_request().partition_session().partition_session_id();
+
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignIdFirst);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
 
             req.Clear();
 
@@ -993,7 +993,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Sleep(TDuration::MilliSeconds(100));
 
             req.Clear();
-            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignIdSecond);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";

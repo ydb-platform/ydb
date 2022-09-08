@@ -58,6 +58,7 @@ namespace NUri {
             FIELD_FLAG(Path),
             FIELD_FLAG(Query),
             FIELD_FLAG(Frag),
+            FIELD_FLAG(HashBang),
             FIELD_FLAG(UrlMAX),
             FIELD_FLAG(HostAscii),
             FIELD_FLAG(AllMAX),
@@ -67,6 +68,7 @@ namespace NUri {
             FlagFragment = FlagFrag,
             FlagAction = FlagScheme | FlagHostPort | FlagPath,
             FlagNoFrag = FlagAction | FlagQuery,
+            FlagFragmentLess = FlagAction | FlagQuery | FlagHashBang,
             FlagUrlFields = FlagUrlMAX - 1,
             FlagAll = FlagUrlFields, // obsolete, for backwards compatibility
             FlagAllFields = FlagAllMAX - 1

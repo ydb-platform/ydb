@@ -55,7 +55,7 @@ namespace NUri {
     }
 
     /********************************************************/
-    TUri::TUri(const TStringBuf& host, ui16 port, const TStringBuf& path, const TStringBuf& query, const TStringBuf& scheme, unsigned defaultPort)
+    TUri::TUri(const TStringBuf& host, ui16 port, const TStringBuf& path, const TStringBuf& query, const TStringBuf& scheme, unsigned defaultPort, const TStringBuf& hashbang)
         : FieldsSet(0)
         , Port(port)
         , DefaultPort(0)
@@ -79,6 +79,7 @@ namespace NUri {
         FldTrySet(FieldHost, host);
         FldTrySet(FieldPath, path);
         FldTrySet(FieldQuery, query);
+        FldTrySet(FieldHashBang, hashbang);
 
         Rewrite();
     }
@@ -233,6 +234,9 @@ namespace NUri {
             if (noscheme && IsNull(FlagQuery) && IsNull(FlagPath))
                 FldTrySet(FieldQuery, base);
 
+           if (noscheme && IsNull(FlagHashBang) && IsNull(FlagPath))
+                FldTrySet(FieldHashBang, base);
+
             if (IsNull(FlagAuth) && !base.IsNull(FlagAuth)) {
                 FldChkSet(FieldUser, base);
                 FldChkSet(FieldPass, base);
@@ -320,7 +324,7 @@ namespace NUri {
         }
 
         // find out if it is link to itself then ignore it
-        if (!Compare(base, FlagPath | FlagQuery))
+        if (!Compare(base, FlagPath | FlagQuery | FlagHashBang))
             return LinkIsFragment;
 
         return LinkIsLocal;
@@ -422,6 +426,12 @@ namespace NUri {
             v = Fields[FieldFrag];
             if (v.IsInited())
                 out << '#' << v;
+        }
+
+        if (flags & FlagHashBang) {
+            v = Fields[FieldHashBang];
+            if (v.IsInited())
+                out << '#' << '!' << v;
         }
 
         return out;

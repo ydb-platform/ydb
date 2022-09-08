@@ -42,6 +42,11 @@ namespace NUri {
                 ,
             TParseFlags(0 // FieldFragment
                             | TFeature::FeaturesEncodePChar,
+                        0 | TFeature::FeatureToLower | TFeature::FeatureEncodeSpaceAsPlus)
+
+                ,
+            TParseFlags(0 // FieldHashBang
+                            | TFeature::FeaturesEncodePChar,
                         0 | TFeature::FeatureToLower | TFeature::FeatureEncodeSpaceAsPlus)};
 
     namespace NParse {

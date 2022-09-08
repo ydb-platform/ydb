@@ -27,8 +27,8 @@ public:
     {
     }
 
-    THttpURL(const TStringBuf& host, ui16 port, const TStringBuf& path, const TStringBuf& query = TStringBuf(), const TStringBuf& scheme = "http", unsigned defaultPort = 0)
-        : TUri(host, port, path, query, scheme, defaultPort)
+    THttpURL(const TStringBuf& host, ui16 port, const TStringBuf& path, const TStringBuf& query = TStringBuf(), const TStringBuf& scheme = "http", unsigned defaultPort = 0, const TStringBuf& hashbang = TStringBuf())
+        : TUri(host, port, path, query, scheme, defaultPort, hashbang)
     {
     }
 

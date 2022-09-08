@@ -14,14 +14,14 @@ namespace NUri {
 
 // remove '#' which can't ever be decoded
 // don't mark anything allowed for pass (pass is completely encoded)
-// safe in path, qry, frag
+// safe in path, qry, frag, hashbang
 #define GENDELIMS1 ":@"
-// allowed in qry, frag
+// allowed in qry, frag, hashbang
 #define GENDELIMS2 "/?"
 
 // qry-unsafe chars
 #define SUBDELIMS1 "&+=;"
-// rest allowed in qry, frag
+// rest allowed in qry, frag, hashbang
 #define SUBDELIMS2 "!$'()*,"
 
         const TEncoder::TGrammar& TEncoder::Grammar() {
@@ -44,11 +44,11 @@ namespace NUri {
             // now field-specific subsets of reserved characters (gen-delims + sub-delims)
             const ui64 featSafe = TFeature::FeatureDecodeFieldAllowed;
 
-            Add(GENDELIMS1, 0, featSafe, TField::FlagPath | TField::FlagQuery | TField::FlagFrag);
-            Add(GENDELIMS2, 0, featSafe, TField::FlagQuery | TField::FlagFrag);
+            Add(GENDELIMS1, 0, featSafe, TField::FlagPath | TField::FlagQuery | TField::FlagFrag | TField::FlagHashBang);
+            Add(GENDELIMS2, 0, featSafe, TField::FlagQuery | TField::FlagFrag | TField::FlagHashBang);
 
             Add(SUBDELIMS1, 0, featSafe, TField::FlagUser);
-            Add(SUBDELIMS2, 0, featSafe, TField::FlagUser | TField::FlagQuery | TField::FlagFrag);
+            Add(SUBDELIMS2, 0, featSafe, TField::FlagUser | TField::FlagQuery | TField::FlagFrag | TField::FlagHashBang);
 
             // control chars
             AddRng(0x00, 0x20, TFeature::FeatureEncodeCntrl);
@@ -67,11 +67,11 @@ namespace NUri {
             Add(' ', TFeature::FeatureEncodeSpace | TFeature::FeatureEncodeSpaceAsPlus);
             Add("'\"\\", TFeature::FeatureEncodeForSQL);
 
-            GetMutable(':').EncodeFld |= TField::FlagUser;
-            GetMutable('?').EncodeFld |= TField::FlagPath;
-            GetMutable('#').EncodeFld |= TField::FlagPath | TField::FlagQuery;
-            GetMutable('&').EncodeFld |= TField::FlagQuery;
-            GetMutable('+').EncodeFld |= TField::FlagQuery;
+            GetMutable(':').EncodeFld |= TField::FlagUser | TField::FlagHashBang;
+            GetMutable('?').EncodeFld |= TField::FlagPath | TField::FlagHashBang;
+            GetMutable('#').EncodeFld |= TField::FlagPath | TField::FlagQuery | TField::FlagHashBang;
+            GetMutable('&').EncodeFld |= TField::FlagQuery | TField::FlagHashBang;
+            GetMutable('+').EncodeFld |= TField::FlagQuery | TField::FlagHashBang;
         }
 
         // should we decode an encoded character

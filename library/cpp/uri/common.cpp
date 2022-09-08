@@ -100,6 +100,8 @@ namespace NUri {
                 return "query";
             case TField::FieldFrag:
                 return "fragment";
+            case TField::FieldHashBang:
+                return "hashbang";
             default:
                 return "Field[Unknown]";
         }

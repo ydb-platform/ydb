@@ -257,7 +257,7 @@ namespace NUri {
         {
         }
 
-        TUri(const TStringBuf& host, ui16 port, const TStringBuf& path, const TStringBuf& query = TStringBuf(), const TStringBuf& scheme = "http", unsigned defaultPort = 0);
+        TUri(const TStringBuf& host, ui16 port, const TStringBuf& path, const TStringBuf& query = TStringBuf(), const TStringBuf& scheme = "http", unsigned defaultPort = 0, const TStringBuf& hashbang = TStringBuf());
 
         TUri(const TUri& url)
             : FieldsSet(url.FieldsSet)

@@ -155,6 +155,7 @@ namespace NUri {
             if (fragment.IsSet()) {
                 HashBang = fragment.Get();
                 if (!HashBang.empty() && '!' == HashBang[0]) {
+                    HashBang.Skip(1); // remove !
                     return true;
                 }
             }
@@ -182,7 +183,6 @@ namespace NUri {
                 }
             } else if (0 != (parser.Flags & TFeature::FeatureHashBangToEscapedFragment)) {
                 if (ParseHashBangFromFragment(parser)) {
-                    HashBang.Skip(1); // remove !
                     FromFragmentToQuery = true;
                     buflen += ESCAPED_FRAGMENT.length();
                     buflen += 2 * HashBang.length(); // encode

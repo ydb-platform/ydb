@@ -1,6 +1,7 @@
 #include "yql_s3_list.h"
 #include "yql_s3_path.h"
 
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -11,18 +12,11 @@
 #undef THROW
 #endif
 #include <library/cpp/xml/document/xml-document.h>
-#include <library/cpp/retry/retry_policy.h>
-
 #include <util/string/builder.h>
-
 
 namespace NYql {
 
 namespace {
-
-ERetryErrorClass RetryS3SlowDown(long httpResponseCode) {
-    return httpResponseCode == 503 ? ERetryErrorClass::LongRetry : ERetryErrorClass::NoRetry; // S3 Slow Down == 503
-}
 
 TString RegexFromWildcards(const std::string_view& pattern) {
     const auto& escaped = NS3::EscapeRegex(ToString(pattern));
@@ -235,7 +229,7 @@ private:
         TString prefix;
         TResultFilter filter = MakeFilter(pattern, pathPrefix, prefix);
 
-        const auto retryPolicy = IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown);
+        const auto retryPolicy = GetHTTPDefaultRetryPolicy();
         TUrlBuilder urlBuilder(urlStr);
         const auto url = urlBuilder
             .AddUrlParam("list-type", "2")

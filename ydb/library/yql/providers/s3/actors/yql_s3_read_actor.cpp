@@ -21,7 +21,6 @@
 #endif
 
 #include "yql_s3_read_actor.h"
-#include "yql_s3_retry_policy.h"
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
@@ -31,6 +30,7 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -150,7 +150,7 @@ public:
             const TPath& path = Paths[pathInd];
             Gateway->Download(Url + std::get<TString>(path),
                 Headers, std::min(std::get<size_t>(path), SizeLimit),
-                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd + StartPathIndex), {}, GetS3RetryPolicy());
+                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd + StartPathIndex), {}, GetHTTPDefaultRetryPolicy());
         };
     }
 
@@ -272,7 +272,7 @@ struct TRetryStuff {
         TString url,
         const IHTTPGateway::THeaders& headers,
         std::size_t sizeLimit
-    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), SizeLimit(sizeLimit), Offset(0U), RetryState(GetS3RetryPolicy()->CreateRetryState())
+    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), SizeLimit(sizeLimit), Offset(0U), RetryState(GetHTTPDefaultRetryPolicy()->CreateRetryState())
     {}
 
     const IHTTPGateway::TPtr Gateway;

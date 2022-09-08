@@ -1,12 +1,12 @@
-#include "yql_s3_retry_policy.h"
+#include "yql_http_default_retry_policy.h"
 
 namespace NYql {
 
-IRetryPolicy<long>::TPtr GetS3RetryPolicy() {
+IRetryPolicy<long>::TPtr GetHTTPDefaultRetryPolicy() {
     return IRetryPolicy<long>::GetExponentialBackoffPolicy([](long httpCode) {
         switch (httpCode) {
             case 0: return ERetryErrorClass::ShortRetry;
-            case 503: return ERetryErrorClass::LongRetry;
+            case 503:return ERetryErrorClass::LongRetry;
             default: return ERetryErrorClass::NoRetry;
         }
     });

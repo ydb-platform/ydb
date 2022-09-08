@@ -24,4 +24,5 @@ target_link_libraries(providers-common-http_gateway PUBLIC
 )
 target_sources(providers-common-http_gateway PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/yql_http_gateway.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.cpp
 )

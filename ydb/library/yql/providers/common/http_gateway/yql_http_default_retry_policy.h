@@ -4,6 +4,6 @@
 
 namespace NYql {
 
-IRetryPolicy<long>::TPtr GetS3RetryPolicy();
+IRetryPolicy<long>::TPtr GetHTTPDefaultRetryPolicy();
 
 }

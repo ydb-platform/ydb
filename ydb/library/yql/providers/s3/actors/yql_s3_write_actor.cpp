@@ -1,8 +1,8 @@
 #include "yql_s3_write_actor.h"
-#include "yql_s3_retry_policy.h"
 
 #include <ydb/core/protos/services.pb.h>
 
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -110,10 +110,10 @@ public:
             const auto size = Parts->Volume();
             InFlight += size;
             SentSize += size;
-            Gateway->Upload(Url, MakeHeader(), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), true, GetS3RetryPolicy());
+            Gateway->Upload(Url, MakeHeader(), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), true, GetHTTPDefaultRetryPolicy());
         } else {
             Become(&TS3FileWriteActor::InitialStateFunc);
-            Gateway->Upload(Url + "?uploads", MakeHeader(), 0, std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetS3RetryPolicy());
+            Gateway->Upload(Url + "?uploads", MakeHeader(), 0, std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetHTTPDefaultRetryPolicy());
         }
     }
 
@@ -195,7 +195,7 @@ private:
     static void OnPartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, size_t size, size_t index, IHTTPGateway::TResult&& response) {
         switch (response.index()) {
         case 0U: {
-            const auto& str = std::get<IHTTPGateway::TContent>(std::move(response)).Headers;
+            const auto& str = std::get<IHTTPGateway::TContent>(response).Headers;
 
             if (const auto p = str.find("etag: \""); p != TString::npos) {
                 if (const auto p1 = p + 7, p2 = str.find("\"", p1); p2 != TString::npos) {
@@ -280,7 +280,7 @@ private:
             Tags.emplace_back();
             InFlight += size;
             SentSize += size;
-            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(part), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, GetS3RetryPolicy());
+            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(part), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, GetHTTPDefaultRetryPolicy());
         }
     }
 
@@ -293,7 +293,7 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), false, GetS3RetryPolicy());
+        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), false, GetHTTPDefaultRetryPolicy());
     }
 
     IHTTPGateway::THeaders MakeHeader() const {

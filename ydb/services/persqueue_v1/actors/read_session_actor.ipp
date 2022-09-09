@@ -951,7 +951,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
                                          << t.TopicNameConverter->GetPrintableString() << "' found",
                         PersQueue::ErrorCode::BAD_REQUEST, ctx
                 );
-            } else if (it->second.MeteringMode != *GetMeteringMode()) {
+            }
+            if (t.MeteringMode != *GetMeteringMode()) {
                 return CloseSession(
                         TStringBuilder() << "Metering mode of topic: " << name << " has been changed",
                         PersQueue::ErrorCode::OVERLOAD, ctx

@@ -7,7 +7,7 @@
 #include "flat_row_nulls.h"
 #include "flat_part_pinout.h"
 
-#include <ydb/core/base/shared_data.h>
+#include <library/cpp/actors/util/shared_data.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>

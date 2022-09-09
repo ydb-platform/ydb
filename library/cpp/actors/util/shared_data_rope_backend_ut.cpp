@@ -4,7 +4,7 @@
 
 #include "shared_data_rope_backend.h"
 
-namespace NKikimr {
+namespace NActors {
 
     namespace {
 
@@ -228,4 +228,4 @@ namespace NKikimr {
         }
     }
 
-} // namespace NKikimr
+} // namespace NActors

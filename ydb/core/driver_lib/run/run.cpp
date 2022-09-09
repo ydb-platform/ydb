@@ -119,7 +119,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
 
-#include <library/cpp/actors/core/memory_track.h>
+#include <library/cpp/actors/util/memory_track.h>
 #include <library/cpp/actors/prof/tag.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 

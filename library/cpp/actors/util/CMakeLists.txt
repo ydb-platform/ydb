@@ -16,6 +16,9 @@ target_link_libraries(cpp-actors-util PUBLIC
 )
 target_sources(cpp-actors-util PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/affinity.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/memory_track.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/memory_tracker.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/shared_data.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/should_continue.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/threadparkpad.cpp
 )

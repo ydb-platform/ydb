@@ -4,7 +4,7 @@
 #include "flat_sausage_layout.h"
 #include "flat_sausage_solid.h"
 
-#include <ydb/core/base/shared_data.h>
+#include <library/cpp/actors/util/shared_data.h>
 
 namespace NKikimr {
 namespace NPageCollection {

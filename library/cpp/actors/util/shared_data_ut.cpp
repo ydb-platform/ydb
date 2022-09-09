@@ -6,7 +6,7 @@
 #include <util/generic/deque.h>
 #include <util/system/sys_alloc.h>
 
-namespace NKikimr {
+namespace NActors {
 
     Y_UNIT_TEST_SUITE(TSharedDataTest) {
 

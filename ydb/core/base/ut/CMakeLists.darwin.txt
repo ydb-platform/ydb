@@ -32,8 +32,6 @@ target_sources(ydb-core-base-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/shared_data_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/shared_data_rope_backend_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
 )

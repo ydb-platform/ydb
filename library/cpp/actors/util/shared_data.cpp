@@ -1,11 +1,11 @@
 #include "shared_data.h"
 
-#include <library/cpp/actors/core/memory_tracker.h>
+#include "memory_tracker.h"
 
 #include <util/system/sys_alloc.h>
 #include <util/system/sanitizers.h>
 
-namespace NKikimr {
+namespace NActors {
 
     static constexpr char MemoryLabelSharedData[] = "Tablet/TSharedData/Buffers";
 

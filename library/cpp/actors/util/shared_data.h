@@ -6,7 +6,7 @@
 #include <util/system/compiler.h>
 #include <util/generic/array_ref.h>
 
-namespace NKikimr {
+namespace NActors {
 
     class TSharedData {
     public:

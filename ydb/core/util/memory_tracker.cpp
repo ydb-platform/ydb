@@ -5,7 +5,7 @@
 #include <ydb/core/mon/mon.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/memory_tracker.h>
+#include <library/cpp/actors/util/memory_tracker.h>
 #include <library/cpp/html/escape/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 

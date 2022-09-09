@@ -36,6 +36,7 @@ struct TNameLabeled
     char payload[32];
 };
 
+#ifndef _win_
 Y_UNIT_TEST(Gathering)
 {
     TMemoryTracker::Instance()->Initialize();
@@ -75,7 +76,7 @@ Y_UNIT_TEST(Gathering)
     UNIT_ASSERT(metrics[nameIndex].GetMemory() == 0);
     UNIT_ASSERT(metrics[nameIndex].GetCount() == 0);
 }
-
+#endif
 
 static constexpr char InContainerLabel[] = "InContainerLabel";
 

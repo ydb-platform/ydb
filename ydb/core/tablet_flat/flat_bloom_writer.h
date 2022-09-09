@@ -5,7 +5,7 @@
 #include "flat_util_binary.h"
 #include "util_deref.h"
 
-#include <ydb/core/base/shared_data.h>
+#include <library/cpp/actors/util/shared_data.h>
 
 #include <util/generic/ymath.h>
 #include <util/system/sanitizers.h>

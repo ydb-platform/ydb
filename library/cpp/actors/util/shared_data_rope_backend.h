@@ -4,7 +4,7 @@
 
 #include "shared_data.h"
 
-namespace NKikimr {
+namespace NActors {
 
 class TRopeSharedDataBackend : public IRopeChunkBackend {
     TSharedData Buffer;
@@ -34,4 +34,4 @@ public:
     }
 };
 
-} // namespace NKikimr
+} // namespace NActors

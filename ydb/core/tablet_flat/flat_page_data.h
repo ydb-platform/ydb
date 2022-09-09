@@ -6,7 +6,7 @@
 #include "util_basics.h"
 #include "util_deref.h"
 
-#include <ydb/core/base/shared_data.h>
+#include <library/cpp/actors/util/shared_data.h>
 
 #include <library/cpp/blockcodecs/codecs.h>
 #include <util/generic/buffer.h>

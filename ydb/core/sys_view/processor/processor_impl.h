@@ -15,7 +15,7 @@
 #include <ydb/core/tx/tx.h>
 
 #include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/memory_track.h>
+#include <library/cpp/actors/util/memory_track.h>
 
 namespace NKikimr {
 namespace NSysView {

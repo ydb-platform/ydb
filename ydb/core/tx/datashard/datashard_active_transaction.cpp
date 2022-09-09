@@ -7,7 +7,7 @@
 #include "datashard_failpoints.h"
 #include "key_conflicts.h"
 
-#include <library/cpp/actors/core/memory_track.h>
+#include <library/cpp/actors/util/memory_track.h>
 
 namespace NKikimr {
 namespace NDataShard {

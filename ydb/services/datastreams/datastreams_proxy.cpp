@@ -149,11 +149,6 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
-        if (workingDir != proposal.Record.GetDatabaseName() && !proposal.Record.GetDatabaseName().empty()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                  "streams can be created only at database root", ctx);
-        }
-
         auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
         if (GetProtoRequest()->retention_case() ==
             Ydb::DataStreams::V1::CreateStreamRequest::RetentionCase::kRetentionStorageMegabytes) {
@@ -851,7 +846,14 @@ namespace NKikimr::NDataStreams::V1 {
     void TListStreamsActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         for (const auto& entry : navigate->ResultSet) {
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath
+
+
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindTable) {
+                for (const auto& stream : entry.CdcStreams) {
+                    TString childFullPath = JoinPath({JoinPath(entry.Path), stream.GetName()});
+                    Topics.push_back(childFullPath);
+                }
+            } else if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath
                 || entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain)
             {
                 Y_ENSURE(entry.ListNodeEntry, "ListNodeEntry is zero");
@@ -859,6 +861,7 @@ namespace NKikimr::NDataStreams::V1 {
                     TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name});
                     switch (child.Kind) {
                         case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath:
+                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindTable:
                             if (GetProtoRequest()->recurse()) {
                                 SendNavigateRequest(ctx, childFullPath);
                             }
@@ -866,6 +869,7 @@ namespace NKikimr::NDataStreams::V1 {
                         case NSchemeCache::TSchemeCacheNavigate::EKind::KindTopic:
                             Topics.push_back(childFullPath);
                             break;
+
                         default:
                             break;
                             // ignore all other types

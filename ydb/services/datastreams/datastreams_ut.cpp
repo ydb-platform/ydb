@@ -189,7 +189,45 @@ Y_UNIT_TEST_SUITE(DataStreams) {
     Y_UNIT_TEST(TestControlPlaneAndMeteringData) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        const TString streamName2 = TStringBuilder() << "tdir/stream_" << Y_UNIT_TEST_NAME;
+        const TString streamName3 = TStringBuilder() << "tdir/table/feed_" << Y_UNIT_TEST_NAME;
+        const TString tableName = "tdir/table";
+        const TString feedName = TStringBuilder() << "feed_" << Y_UNIT_TEST_NAME;
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto result = pqClient.CreateTopic(streamName2).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            NYdb::NTable::TTableClient tableClient(*testServer.Driver);
+            tableClient.RetryOperationSync([&](TSession session)
+                {
+                    NYdb::NTable::TTableBuilder builder;
+                    builder.AddNonNullableColumn("key", NYdb::EPrimitiveType::String).SetPrimaryKeyColumn("key");
+
+                    auto result = session.CreateTable("/Root/" + tableName, builder.Build()).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                    Cerr << result.GetIssues().ToString() << "\n";
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+                    auto result2 = session.AlterTable("/Root/" + tableName, NYdb::NTable::TAlterTableSettings()
+                                    .AppendAddChangefeeds(NYdb::NTable::TChangefeedDescription(feedName,
+                                                                                           NYdb::NTable::EChangefeedMode::Updates,
+                                                                                           NYdb::NTable::EChangefeedFormat::Json))
+                                                     ).ExtractValueSync();
+                    Cerr << result2.GetIssues().ToString() << "\n";
+                    UNIT_ASSERT_VALUES_EQUAL(result2.IsTransportError(), false);
+                    UNIT_ASSERT_VALUES_EQUAL(result2.GetStatus(), EStatus::SUCCESS);
+                    return result2;
+                }
+            );
+        }
+
         // Trying to delete stream that doesn't exist yet
+
         {
             auto result = testServer.DataStreamsClient->DeleteStream("testfolder/" + streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -242,11 +280,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description_summary().open_shard_count(), 3);
         }
 
-        {
-            auto result = testServer.DataStreamsClient->CreateStream("testfolder/" + streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        }
 
         {
             auto result = testServer.DataStreamsClient->ListStreams().ExtractValueSync();
@@ -271,6 +304,18 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+        // list all streams, include cdc and recursive
+        {
+            auto result = testServer.DataStreamsClient->ListStreams(NYdb::NDataStreams::V1::TListStreamsSettings().Recurse(true)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            Cerr << result.GetResult() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names(0), streamName);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names(1), streamName2);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names(2), streamName3);
+        }
+
         // now when stream is created delete should work fine
         {
             auto result = testServer.DataStreamsClient->DeleteStream(streamName).ExtractValueSync();
@@ -284,6 +329,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream("testfolder/" + streamName).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+
     }
 
     Y_UNIT_TEST(TestReservedResourcesMetering) {

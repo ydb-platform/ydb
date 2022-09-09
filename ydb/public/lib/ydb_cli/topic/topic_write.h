@@ -81,5 +81,9 @@ namespace NYdb::NConsoleClient {
         ui64 CurrentSeqNo_ = 0;
 
         friend class TTopicWriterTests;
+
+    private:
+        static void OnTerminate(int);
+        static void SetInterruptHandlers();
     };
 } // namespace NYdb::NConsoleClient

@@ -6,6 +6,8 @@
 #include <util/string/hex.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <signal.h>
+
 namespace NYdb::NConsoleClient {
     namespace {
         constexpr TDuration DefaultMessagesWaitTimeout = TDuration::Seconds(1);
@@ -159,6 +161,7 @@ namespace NYdb::NConsoleClient {
 
     int TTopicWriter::Run(IInputStream& input) {
         // TODO(shmel1k@): add notificator about failures.
+        SetInterruptHandlers();
         bool continueSending = true;
         while (continueSending) {
             while (!ContinuationToken_.Defined()) {
@@ -197,5 +200,14 @@ namespace NYdb::NConsoleClient {
             }
         }
         return true;
+    }
+
+    void TTopicWriter::OnTerminate(int) {
+        exit(EXIT_FAILURE);
+    }
+
+    void TTopicWriter::SetInterruptHandlers() {
+        signal(SIGINT, &TTopicWriter::OnTerminate);
+        signal(SIGTERM, &TTopicWriter::OnTerminate);
     }
 } // namespace NYdb::NConsoleClient

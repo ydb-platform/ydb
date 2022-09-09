@@ -57,7 +57,6 @@ add_subdirectory(numeric_conversion)
 add_subdirectory(optional)
 add_subdirectory(parameter)
 add_subdirectory(phoenix)
-add_subdirectory(polygon)
 add_subdirectory(pool)
 add_subdirectory(predef)
 add_subdirectory(preprocessor)
@@ -134,7 +133,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-optional
   restricted-boost-parameter
   restricted-boost-phoenix
-  restricted-boost-polygon
   restricted-boost-pool
   restricted-boost-predef
   restricted-boost-preprocessor

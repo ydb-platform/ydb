@@ -201,6 +201,7 @@ namespace Tests {
         }
 
         TServerSettings(const TServerSettings& settings) = default;
+        TServerSettings& operator=(const TServerSettings& settings) = default;
     };
 
     class TServer : public TThrRefBase, TMoveOnly {

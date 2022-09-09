@@ -123,6 +123,7 @@ struct TUsageScope {
 
     TUsageScope();
     TUsageScope(const TUsageScope &other) = default;
+    TUsageScope& operator=(const TUsageScope &other) = default;
     TUsageScope(const NKikimrConsole::TUsageScope &scope, ui32 order = 0);
 
     bool operator==(const TUsageScope &rhs) const {

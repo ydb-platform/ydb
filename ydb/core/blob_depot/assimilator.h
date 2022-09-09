@@ -30,6 +30,10 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeId;
 
     public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BLOB_DEPOT_ASSIMILATOR_ACTOR;
+        }
+
         TGroupAssimilator(TBlobDepot *self)
             : Token(self->Token)
             , Self(self)

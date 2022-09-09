@@ -90,6 +90,10 @@ namespace NKikimr::NBlobDepot {
         };
 
     public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BLOB_DEPOT_AGENT_ACTOR;
+        }
+
         TBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId);
         ~TBlobDepotAgent();
 

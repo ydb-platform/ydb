@@ -901,7 +901,7 @@ message TActivity {
         TX_COLUMNSHARD_EXPORT_ACTOR = 568;
         YQ_HEALTH_ACTOR = 569;
         BLOB_DEPOT_ACTOR = 570;
-        BLOB_DEPOT_AGENT = 571;
+        BLOB_DEPOT_AGENT_ACTOR = 571;
         KQP_STREAM_LOOKUP_ACTOR = 572;
         BS_STORAGE_STATS_ACTOR = 573;
         DS_LOAD_ACTOR = 574;
@@ -910,5 +910,7 @@ message TActivity {
         ACTOR_COROUTINE = 577;
         LB_CM_ABC_ACTOR = 578;
         LB_CM_FOLDER_ACTOR = 579;
+        BLOB_DEPOT_ASSIMILATOR_ACTOR = 580;
+        BLOB_DEPOT_BLOCKS_PROCESSOR_ACTOR = 581;
     };
 };

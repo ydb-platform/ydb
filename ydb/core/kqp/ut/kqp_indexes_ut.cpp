@@ -102,15 +102,15 @@ void CreateTableWithIndexWithState(
 
 
 Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
-    Y_UNIT_TEST_QUAD(HandleNotReadyIndex, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(HandleNotReadyIndex, UseNewEngine) {
         using namespace NYql;
         using namespace NYql::NNodes;
 
         auto setting = NKikimrKqp::TKqpSetting();
 
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
 
@@ -170,14 +170,14 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(HandleWriteOnlyIndex, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(HandleWriteOnlyIndex, UseNewEngine) {
         using namespace NYql;
         using namespace NYql::NNodes;
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
 
@@ -392,11 +392,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SelectConcurentTX, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SelectConcurentTX, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -470,14 +470,14 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                  TTxControl::Tx(result1.GetTransaction().GetRef()).CommitTx())
                           .ExtractValueSync();
         // read only tx should succeed in MVCC case
-        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), WithMvcc ? NYdb::EStatus::SUCCESS : NYdb::EStatus::ABORTED, result2.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::SUCCESS, result2.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_QUAD(SelectConcurentTX2, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SelectConcurentTX2, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -554,11 +554,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::ABORTED, result2.GetIssues().ToString().c_str());
     }
 
-    Y_UNIT_TEST_QUAD(UpsertWithoutExtraNullDelete, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -785,11 +785,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     }
 
-    Y_UNIT_TEST_QUAD(UpsertWithNullKeysSimple, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(UpsertWithNullKeysSimple, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({ setting });
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -881,11 +881,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     }
 
-    Y_UNIT_TEST_QUAD(UpsertWithNullKeysComplex, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(UpsertWithNullKeysComplex, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1019,11 +1019,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     }
 
-    Y_UNIT_TEST_TWIN(KeyIndex, WithMvcc) {
+    Y_UNIT_TEST(KeyIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1202,11 +1202,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(KeyIndex2, WithMvcc) {
+    Y_UNIT_TEST(KeyIndex2) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1339,11 +1339,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ReplaceWithoutExtraNullDelete, WithMvcc) {
+    Y_UNIT_TEST(ReplaceWithoutExtraNullDelete) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1429,12 +1429,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-
-    Y_UNIT_TEST_QUAD(SecondaryIndexUpsert1DeleteUpdate, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexUpsert1DeleteUpdate, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1618,11 +1617,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexUpsert2Update, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexUpsert2Update, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1709,11 +1708,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexUpdateOnUsingIndex, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexUpdateOnUsingIndex, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1776,11 +1775,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexSelectUsingScripting, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexSelectUsingScripting, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1817,11 +1816,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexOrderBy, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexOrderBy, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2187,11 +2186,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexOrderBy2, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexOrderBy2, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2367,11 +2366,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexReplace, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexReplace, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2446,11 +2445,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexInsert1, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexInsert1, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2492,11 +2491,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(MultipleSecondaryIndex, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(MultipleSecondaryIndex, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2557,11 +2556,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(MultipleSecondaryIndexWithSameComulns, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameComulns, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2895,11 +2894,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexWithPrimaryKeySameComulns, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameComulns, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3169,11 +3168,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(DeleteOnWithSubquery, WithMvcc) {
+    Y_UNIT_TEST(DeleteOnWithSubquery) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3225,11 +3224,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).deletes().rows(), 1);
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexUsingInJoin, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexUsingInJoin, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3415,11 +3414,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(SecondaryIndexUsingInJoin2, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexUsingInJoin2, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3552,11 +3551,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(ForbidViewModification, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(ForbidViewModification, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3640,11 +3639,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     }
 
-    Y_UNIT_TEST_TWIN(ForbidDirectIndexTableCreation, WithMvcc) {
+    Y_UNIT_TEST(ForbidDirectIndexTableCreation) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3691,11 +3690,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(DuplicateUpsertInterleave, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(DuplicateUpsertInterleave, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3729,11 +3728,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(DuplicateUpsertInterleaveParams, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(DuplicateUpsertInterleaveParams, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3817,11 +3816,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(MultipleModifications, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(MultipleModifications, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -3865,15 +3864,15 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    template <bool WithMvcc, bool UseNewEngine>
+    template <bool UseNewEngine>
     void CreateTableWithIndexSQL(EIndexTypeSql type, bool enableAsyncIndexes = false) {
         auto kqpSetting = NKikimrKqp::TKqpSetting();
         kqpSetting.SetName("_KqpYqlSyntaxVersion");
         kqpSetting.SetValue("1");
 
         auto settings = TKikimrSettings()
-                .SetEnableMvcc(WithMvcc)
-                .SetEnableMvccSnapshotReads(WithMvcc)
+                .SetEnableMvcc(true)
+                .SetEnableMvccSnapshotReads(true)
                 .SetEnableAsyncIndexes(enableAsyncIndexes)
                 .SetKqpSettings({kqpSetting});
         TKikimrRunner kikimr(settings);
@@ -3955,31 +3954,31 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(CreateTableWithImplicitSyncIndexSQL, WithMvcc, UseNewEngine) {
-        CreateTableWithIndexSQL<WithMvcc, UseNewEngine>(EIndexTypeSql::Global);
+    Y_UNIT_TEST_TWIN(CreateTableWithImplicitSyncIndexSQL, UseNewEngine) {
+        CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::Global);
     }
 
-    Y_UNIT_TEST_QUAD(CreateTableWithExplicitSyncIndexSQL, WithMvcc, UseNewEngine) {
-        CreateTableWithIndexSQL<WithMvcc, UseNewEngine>(EIndexTypeSql::GlobalSync);
+    Y_UNIT_TEST_TWIN(CreateTableWithExplicitSyncIndexSQL, UseNewEngine) {
+        CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::GlobalSync);
     }
 
-    Y_UNIT_TEST_QUAD(CreateTableWithAsyncIndexSQLShouldFail, WithMvcc, UseNewEngine) {
-        CreateTableWithIndexSQL<WithMvcc, UseNewEngine>(EIndexTypeSql::GlobalAsync);
+    Y_UNIT_TEST_TWIN(CreateTableWithAsyncIndexSQLShouldFail, UseNewEngine) {
+        CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::GlobalAsync);
     }
 
-    Y_UNIT_TEST_QUAD(CreateTableWithAsyncIndexSQLShouldSucceed, WithMvcc, UseNewEngine) {
-        CreateTableWithIndexSQL<WithMvcc, UseNewEngine>(EIndexTypeSql::GlobalAsync, true);
+    Y_UNIT_TEST_TWIN(CreateTableWithAsyncIndexSQLShouldSucceed, UseNewEngine) {
+        CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::GlobalAsync, true);
     }
 
-    template <bool WithMvcc, bool UseNewEngine>
+    template <bool UseNewEngine>
     void SelectFromAsyncIndexedTable() {
         auto kqpSetting = NKikimrKqp::TKqpSetting();
         kqpSetting.SetName("_KqpYqlSyntaxVersion");
         kqpSetting.SetValue("1");
 
         auto settings = TKikimrSettings()
-                .SetEnableMvcc(WithMvcc)
-                .SetEnableMvccSnapshotReads(WithMvcc)
+                .SetEnableMvcc(true)
+                .SetEnableMvccSnapshotReads(true)
                 .SetEnableAsyncIndexes(true)
                 .SetKqpSettings({kqpSetting});
         TKikimrRunner kikimr(settings);
@@ -4028,17 +4027,17 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(SelectFromAsyncIndexedTable, WithMvcc, UseNewEngine) {
-        SelectFromAsyncIndexedTable<WithMvcc, UseNewEngine>();
+    Y_UNIT_TEST_TWIN(SelectFromAsyncIndexedTable, UseNewEngine) {
+        SelectFromAsyncIndexedTable<UseNewEngine>();
     }
 
-    Y_UNIT_TEST_QUAD(InnerJoinWithNonIndexWherePredicate, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(InnerJoinWithNonIndexWherePredicate, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -4118,13 +4117,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     //KIKIMR-8144
-    Y_UNIT_TEST_QUAD(InnerJoinSecondaryIndexLookupAndRightTablePredicateNonIndexColumn, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(InnerJoinSecondaryIndexLookupAndRightTablePredicateNonIndexColumn, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -4296,11 +4295,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_QUAD(DeleteByIndex, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(DeleteByIndex, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
 
@@ -4387,11 +4386,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_QUAD(UpdateDeletePlan, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
 
@@ -4445,11 +4444,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         checkPlan(result.GetPlan(), 1, 1, 1);
     }
 
-    Y_UNIT_TEST_QUAD(UpsertNoIndexColumns, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(UpsertNoIndexColumns, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
 
@@ -4497,11 +4496,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         CompareYson(R"([[[2]]])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST_QUAD(UpdateIndexSubsetPk, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(UpdateIndexSubsetPk, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
 

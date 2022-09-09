@@ -50,6 +50,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         ui64 RetentionPeriodHours_;
+        ui64 RetentionStorageMb_;
         ui32 PartitionsCount_;
         ui32 PartitionWriteSpeedKbps_;
     };
@@ -63,6 +64,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TMaybe<ui64> RetentionPeriodHours_;
+        TMaybe<ui64> RetentionStorageMb_;
         TMaybe<ui32> PartitionsCount_;
         TMaybe<ui32> PartitionWriteSpeedKbps_;
 

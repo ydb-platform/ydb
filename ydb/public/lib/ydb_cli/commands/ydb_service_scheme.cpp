@@ -206,7 +206,7 @@ namespace {
 int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& description) {
     Cout << Endl << "RetentionPeriod: " << description.GetRetentionPeriod().Hours() << " hours";
     if (description.GetRetentionStorageMb().Defined()) {
-        Cout << Endl << "StorageRetention: " << *description.GetRetentionStorageMb() / 1_MB << " MB";
+        Cout << Endl << "StorageRetention: " << *description.GetRetentionStorageMb() << " MB";
     }
     Cout << Endl << "PartitionsCount: " << description.GetTotalPartitionsCount();
     Cout << Endl << "PartitionWriteSpeed: " << description.GetPartitionWriteSpeedBytesPerSecond() / 1_KB << " KB";

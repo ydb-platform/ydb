@@ -184,6 +184,10 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(1024)
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
+        config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
+            .DefaultValue(0)
+            .Optional()
+            .StoreResult(&RetentionStorageMb_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "New topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -217,6 +221,7 @@ namespace NYdb::NConsoleClient {
         }
 
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
+        settings.RetentionStorageMb(RetentionStorageMb_ / 1_MB);
 
         auto status = persQueueClient.CreateTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);
@@ -237,6 +242,10 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
+        config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
+            .DefaultValue(1024)
+            .Optional()
+            .StoreResult(&RetentionStorageMb_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic to alter");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -276,15 +285,14 @@ namespace NYdb::NConsoleClient {
             settings.SetMeteringMode(GetMeteringMode());
         }
 
+        if (RetentionStorageMb_.Defined() && describeResult.GetTopicDescription().GetRetentionStorageMb() != *RetentionStorageMb_) {
+            settings.SetRetentionStorageMb(*RetentionStorageMb_);
+        }
+
         return settings;
     }
 
     int TCommandTopicAlter::Run(TConfig& config) {
-        if (!PartitionsCount_.Defined() && GetCodecs().empty() && !RetentionPeriodHours_.Defined() && !PartitionWriteSpeedKbps_.Defined() &&
-            GetMeteringMode() == NTopic::EMeteringMode::Unspecified) {
-            return EXIT_SUCCESS;
-        }
-
         TDriver driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 

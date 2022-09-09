@@ -113,7 +113,7 @@ public:
         , TransactionsBytesWritten(transactionsBytesWritten) {}
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " TKqpLoadWorker Bootstrap called");
+        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " TKqpLoadWorker Bootstrap called");
 
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::Seconds(WindowDuration), new TEvUpdateMonitoring);
@@ -145,14 +145,12 @@ private:
     }
 
     void CloseSession(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " creating event for session close");
+        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " creating event for session close");
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(WorkerSession);
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
-            << " sending session close query to proxy: " + kqp_proxy.ToString());
 
         ctx.Send(kqp_proxy, ev.Release());
     }
@@ -162,14 +160,12 @@ private:
     // working
 
     void CreateWorkingSession(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " creating event for session creation");
+        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " creating event for session creation");
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
-            << " sending event for session creation to proxy: " << kqp_proxy.ToString());
 
         Send(kqp_proxy, ev.Release());
     }
@@ -179,10 +175,10 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             WorkerSession = response.GetResponse().GetSessionId();
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " Session is created: " + WorkerSession);
+            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " Session is created: " + WorkerSession);
             CreateDataQuery(ctx);
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
                 << " Session creation failed: " + ev->Get()->ToString());
         }
     }
@@ -226,8 +222,6 @@ private:
         request->Record.MutableRequest()->MutableParameters()->Swap(&params);
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
-            << " sending data query to proxy: " + kqp_proxy.ToString());
 
         ctx.Send(kqp_proxy, request.Release());
 
@@ -243,7 +237,7 @@ private:
             TransactionsBytesWritten->Add(response.GetResponse().GetQueryStats().ByteSize());
             WindowHist.RecordValue(response.GetResponse().GetQueryStats().GetDurationUs());
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
+            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
                 << " data request status: Fail, Issue: " + ev->Get()->ToString());
             ++WindowErrors;
         }
@@ -395,7 +389,7 @@ public:
 
         if (WorkloadClass == NYdbWorkload::EWorkload::STOCK) {
             NYdbWorkload::TStockWorkloadParams* params = static_cast<NYdbWorkload::TStockWorkloadParams*>(WorkloadQueryGen->GetParams());
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload STOCK, Params: {"
+            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload STOCK, Params: {"
                 << "PartitionsByLoad: " << params->PartitionsByLoad << " "
                 << "OrderCount: " << params->OrderCount << " "
                 << "ProductCount: " << params->ProductCount << " "
@@ -405,7 +399,7 @@ public:
                 << "MinPartitions: " << params->MinPartitions);
         } else if (WorkloadClass == NYdbWorkload::EWorkload::KV) {
             NYdbWorkload::TKvWorkloadParams* params = static_cast<NYdbWorkload::TKvWorkloadParams*>(WorkloadQueryGen->GetParams());
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload KV, Params: {"
+            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload KV, Params: {"
                 << "InitRowCount: " << params->InitRowCount << " "
                 << "PartitionsByLoad: " << params->PartitionsByLoad << " "
                 << "MaxFirstKey: " << params->MaxFirstKey << " "
@@ -462,7 +456,7 @@ private:
     }
 
     void DropTables(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for tables drop");
+        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for tables drop");
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
@@ -472,7 +466,6 @@ private:
         ev->Record.MutableRequest()->SetQuery(WorkloadQueryGen->GetCleanDDLQueries());
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " sending drop tables query to proxy: " + kqp_proxy.ToString());
 
         ctx.Send(kqp_proxy, ev.Release());
     }
@@ -481,9 +474,9 @@ private:
         auto& response = ev->Get()->Record.GetRef();
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: SUCCESS");
+            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: SUCCESS");
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: FAIL, reason: " + ev->Get()->ToString());
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: FAIL, reason: " + ev->Get()->ToString());
         }
 
         DeathReport(ctx);
@@ -546,13 +539,12 @@ private:
     // creating tables
 
     void CreateSessionForTablesDDL(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for session creation");
+        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for session creation");
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " sending event for session creation to proxy: " << kqp_proxy.ToString());
 
         Send(kqp_proxy, ev.Release());
     }
@@ -562,15 +554,15 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             TableSession = response.GetResponse().GetSessionId();
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Session is created: " + TableSession);
+            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Session is created: " + TableSession);
             CreateTables(ctx);
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Session creation failed: " + ev->Get()->ToString());
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Session creation failed: " + ev->Get()->ToString());
         }
     }
 
     void CreateTables(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for tables creation");
+        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for tables creation");
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
@@ -580,7 +572,6 @@ private:
         ev->Record.MutableRequest()->SetQuery(WorkloadQueryGen->GetDDLQueries());
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " sending ddl query to proxy: " + kqp_proxy.ToString());
 
         ctx.Send(kqp_proxy, ev.Release());
     }
@@ -594,7 +585,7 @@ private:
             InitData = WorkloadQueryGen->GetInitialData();
             InsertInitData(ctx);
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " tables creation failed: " + ev->Get()->ToString());
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " tables creation failed: " + ev->Get()->ToString());
             CreateTables(ctx);
         }
     }
@@ -641,8 +632,6 @@ private:
         request->Record.MutableRequest()->MutableParameters()->Swap(&params);
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag
-            << " sending init query to proxy: " + kqp_proxy.ToString());
 
         ctx.Send(kqp_proxy, request.Release());
     }
@@ -759,7 +748,6 @@ private:
         ev->Record.MutableRequest()->SetSessionId(TableSession);
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " sending session close query to proxy: " + kqp_proxy.ToString());
 
         ctx.Send(kqp_proxy, ev.Release());
     }

@@ -6,6 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
 
+#include <util/string/join.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -169,32 +170,20 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
 
 namespace {
     TString FormatCodecs(const TVector<NYdb::NTopic::ECodec>& codecs) {
-        if (codecs.empty()) {
-            return "";
-        }
-
-        TStringBuilder builder = TStringBuilder();
-        for (unsigned int i = 0; i < codecs.size() - 1; ++i) {
-            builder << codecs[i] << ", ";
-        }
-        builder << codecs[codecs.size() - 1];
-        return ToString(builder);
+        return JoinSeq(", ", codecs);
     }
 
-    void PrintTopicConsumers(
-            const TVector<NYdb::NTopic::TConsumer>& consumers) {
+    void PrintTopicConsumers(const TVector<NYdb::NTopic::TConsumer>& consumers) {
         if (consumers.empty()) {
             return;
         }
-        TPrettyTable table(
-                {"ConsumerName", "SupportedCodecs",
-                 "ReadFrom", "Important"});
+        TPrettyTable table({ "ConsumerName", "SupportedCodecs", "ReadFrom", "Important" });
         for (const auto& c: consumers) {
             table.AddRow()
                 .Column(0, c.GetConsumerName())
                 .Column(1, FormatCodecs(c.GetSupportedCodecs()))
                 .Column(2, c.GetReadFrom().ToRfc822StringLocal())
-                .Column(3, c.GetImportant());
+                .Column(3, c.GetImportant() ? "Yes" : "No");
 //                .Column(4, rule.ServiceType())
 //                .Column(5, rule.Version());
         }

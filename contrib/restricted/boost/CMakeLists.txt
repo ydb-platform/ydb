@@ -24,6 +24,7 @@ add_subdirectory(core)
 add_subdirectory(crc)
 add_subdirectory(date_time)
 add_subdirectory(detail)
+add_subdirectory(dynamic_bitset)
 add_subdirectory(endian)
 add_subdirectory(exception)
 add_subdirectory(filesystem)
@@ -109,6 +110,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-conversion
   restricted-boost-core
   restricted-boost-detail
+  restricted-boost-dynamic_bitset
   restricted-boost-endian
   restricted-boost-exception
   restricted-boost-foreach

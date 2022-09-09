@@ -34,7 +34,7 @@ namespace boost { namespace detail {
 #endif
 
 //
-#if (defined __BORLANDC__ && BOOST_WORKAROUND(__BORLANDC__, BOOST_TESTED_AT(0x564)))  \
+#if (defined BOOST_BORLANDC && BOOST_WORKAROUND(BOOST_BORLANDC, BOOST_TESTED_AT(0x564)))  \
                              || (defined BOOST_NO_MEMBER_TEMPLATE_FRIENDS)
 #define BOOST_DYNAMIC_BITSET_DONT_USE_FRIENDS
 #endif

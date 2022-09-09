@@ -288,8 +288,9 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res) {
 
         case TType::EKind::Struct: {
             auto structType = static_cast<TStructType*>(type);
+            auto resStruct = res.mutable_struct_type();
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
-                auto newMember = res.mutable_struct_type()->add_members();
+                auto newMember = resStruct->add_members();
                 newMember->set_name(TString(structType->GetMemberName(index)));
                 ExportTypeToProtoImpl(structType->GetMemberType(index), *newMember->mutable_type());
             }

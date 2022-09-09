@@ -72,7 +72,13 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
         return {};
     }
 
-    if (!out.BlobSchema || !out.ResultSchema) {
+    if (!out.BlobSchema) {
+        error = "Could not get BlobSchema.";
+        return {};
+    }
+
+    if (!out.ResultSchema) {
+        error = "Could not get ResultSchema.";
         return {};
     }
 

@@ -214,6 +214,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         "}\n");
     }
 
+    Y_UNIT_TEST(TestExportEmptyStructType) {
+        TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
+            auto pgmReturn = pgmBuilder.NewStruct(items);
+            return pgmReturn;
+        },
+        "Kind: Struct\n");
+    }
+
     Y_UNIT_TEST(TestExportDictType) {
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
             auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<i32>::Id),

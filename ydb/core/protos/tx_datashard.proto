@@ -221,6 +221,7 @@ message TKqpTransaction {
          optional EScanDataFormat DataFormat = 9;
          optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables
          optional bool Sorted = 11;
+         repeated TColumnMeta ResultColumns = 12;
     }
 
     optional EKqpTransactionType Type = 1;

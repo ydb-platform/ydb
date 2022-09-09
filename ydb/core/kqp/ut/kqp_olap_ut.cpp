@@ -1328,6 +1328,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(AggregationSumPushdown) {
+        // Delete return once SUM pushdown will be implemented
+        return;
+
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
@@ -1532,9 +1535,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(AggregationAndFilterPushdownOnDiffCols) {
-        // _LIBCPP_ASSERT '__n < size()' failed https://paste.yandex-team.ru/11497970
-        return;
-
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);

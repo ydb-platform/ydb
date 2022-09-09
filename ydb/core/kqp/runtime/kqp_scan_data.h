@@ -38,7 +38,8 @@ public:
     public:
         TScanData(TScanData&&) = default; // needed to create TMap<ui32, TScanData> Scans
         TScanData(const TTableId& tableId, const TTableRange& range, const TSmallVec<TColumn>& columns,
-            const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys);
+            const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys,
+            const TSmallVec<TColumn>& resultColumns);
 
         TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode);
 
@@ -54,6 +55,10 @@ public:
 
         const TSmallVec<TColumn>& GetSystemColumns() const {
             return SystemColumns;
+        }
+
+        const TSmallVec<TColumn>& GetResultColumns() const {
+            return ResultColumns;
         }
 
         ui64 AddRows(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
@@ -120,6 +125,7 @@ public:
 
         TSmallVec<TColumn> Columns;
         TSmallVec<TColumn> SystemColumns;
+        TSmallVec<TColumn> ResultColumns;
         TQueue<RowBatch> RowBatches;
         ui64 StoredBytes = 0;
         bool Finished = false;

@@ -130,6 +130,7 @@ struct TTaskMeta {
         bool Reverse = false;
         bool Sorted = false;
         TKqpOlapProgram OlapProgram;
+        TVector<NUdf::TDataTypeId> ResultColumnsTypes;
     };
 
     struct TWriteInfo {

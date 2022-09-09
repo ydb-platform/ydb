@@ -16,9 +16,11 @@
 #include <ydb/core/kqp/node/kqp_node.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -378,7 +380,7 @@ private:
 
 private:
     void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse, bool sorted,
-        const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange)
+        NKikimr::NMiniKQL::TType* resultType, const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange)
     {
         if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
             // Validate parameters
@@ -397,6 +399,26 @@ private:
         taskMeta.ReadInfo.ItemsLimit = itemsLimit;
         taskMeta.ReadInfo.Reverse = reverse;
         taskMeta.ReadInfo.Sorted = sorted;
+
+        if (resultType) {
+            YQL_ENSURE(resultType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct
+                || resultType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple);
+
+            auto* resultStructType = static_cast<NKikimr::NMiniKQL::TStructType*>(resultType);
+            ui32 resultColsCount = resultStructType->GetMembersCount();
+            
+            taskMeta.ReadInfo.ResultColumnsTypes.reserve(resultColsCount);
+            for (ui32 i = 0; i < resultColsCount; ++i) {
+                auto memberType = resultStructType->GetMemberType(i);
+                if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
+                    memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
+                }
+                YQL_ENSURE(memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
+                    "Expected simple data types to be read from column shard");
+                auto memberDataType = static_cast<NKikimr::NMiniKQL::TDataType*>(memberType);
+                taskMeta.ReadInfo.ResultColumnsTypes.push_back(memberDataType->GetSchemeType());
+            }
+        }
 
         if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
             return;
@@ -476,6 +498,7 @@ private:
             TString itemsLimitParamName;
             NDqProto::TData itemsLimitBytes;
             NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
+            NKikimr::NMiniKQL::TType* resultType = nullptr;
 
             // TODO: Support reverse, skipnull and limit for kReadRanges
             if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
@@ -492,6 +515,9 @@ private:
                 reverse = op.GetReadOlapRange().GetReverse();
                 ExtractItemsLimit(stageInfo, op.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv,
                     itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
+                NKikimrMiniKQL::TType minikqlProtoResultType;
+                ConvertYdbTypeToMiniKQLType(op.GetReadOlapRange().GetResultType(), minikqlProtoResultType);
+                resultType = ImportTypeFromProto(minikqlProtoResultType, typeEnv);
             }
 
             for (auto& [shardId, shardInfo] : partitions) {
@@ -521,9 +547,9 @@ private:
 
                 if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
                     const auto& readRange = op.GetReadOlapRange();
-                    FillReadInfo(task.Meta, itemsLimit, reverse, sorted, readRange);
+                    FillReadInfo(task.Meta, itemsLimit, reverse, sorted, resultType, readRange);
                 } else {
-                    FillReadInfo(task.Meta, itemsLimit, reverse, sorted, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
+                    FillReadInfo(task.Meta, itemsLimit, reverse, sorted, nullptr, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
                 }
 
                 if (!task.Meta.Reads) {
@@ -738,17 +764,16 @@ private:
                 YQL_ENSURE(task.Meta.Reads);
                 YQL_ENSURE(!task.Meta.Writes);
 
-                for (auto& column : task.Meta.Reads->front().Columns) {
-                    auto* protoColumn = protoTaskMeta.AddColumns();
-                    protoColumn->SetId(column.Id);
-                    protoColumn->SetType(column.Type);
-                    protoColumn->SetName(column.Name);
-                }
-
                 if (!task.Meta.Reads->empty()) {
                     protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse);
                     protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
                     protoTaskMeta.SetSorted(task.Meta.ReadInfo.Sorted);
+
+                    for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
+                        auto* protoResultColumn = protoTaskMeta.AddResultColumns();
+                        protoResultColumn->SetId(0);
+                        protoResultColumn->SetType(columnType);
+                    }
 
                     if (tableInfo.TableKind == ETableKind::Olap) {
                         auto* olapProgram = protoTaskMeta.MutableOlapProgram();
@@ -761,6 +786,13 @@ private:
                         olapProgram->SetParameters(parameters);
                     } else {
                         YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
+                    }
+
+                    for (auto& column : task.Meta.Reads->front().Columns) {
+                        auto* protoColumn = protoTaskMeta.AddColumns();
+                        protoColumn->SetId(column.Id);
+                        protoColumn->SetType(column.Type);
+                        protoColumn->SetName(column.Name);
                     }
                 }
 

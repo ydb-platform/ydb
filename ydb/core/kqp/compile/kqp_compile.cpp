@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/compile/kqp_olap_compiler.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
@@ -480,6 +481,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 FillOlapProgram(readTableRanges.Process(), *tableMeta, *tableOp.MutableReadOlapRange());
+                FillResultType(readTableRanges.Process().Ref().GetTypeAnn(), *tableOp.MutableReadOlapRange());
             } else if (node.Maybe<TCoSort>()) {
                 hasSort = true;
             } else if (node.Maybe<TCoMapJoinCore>()) {
@@ -727,6 +729,14 @@ private:
         }
 
         YQL_ENSURE(false, "Unexpected connection type: " << connection.CallableName());
+    }
+
+    void FillResultType(const TTypeAnnotationNode* resultType, NKqpProto::TKqpPhyOpReadOlapRanges& opProto)
+    {
+        YQL_ENSURE(resultType->GetKind() == NYql::ETypeAnnotationKind::Flow, "Unexpected type: " << NYql::FormatType(resultType));
+        TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
+        const auto resultItemType = resultType->Cast<TFlowExprType>()->GetItemType();
+        ExportTypeToProto(CompileType(pgmBuilder, *resultItemType), *opProto.MutableResultType());
     }
 
 private:

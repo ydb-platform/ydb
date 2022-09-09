@@ -2,6 +2,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <util/generic/hash.h>
+#include <util/generic/hash_multi_map.h>
 #include <util/generic/hash_set.h>
 
 namespace NYql {

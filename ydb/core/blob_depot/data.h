@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "blob_depot_tablet.h"
 
+#include <util/generic/hash_multi_map.h>
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TData {

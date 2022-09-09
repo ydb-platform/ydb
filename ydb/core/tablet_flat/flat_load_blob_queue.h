@@ -4,7 +4,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <util/generic/deque.h>
-#include <util/generic/hash.h>
+#include <util/generic/hash_multi_map.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

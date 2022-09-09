@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/quoter.h>
 
-#include <util/generic/hash.h>
+#include <util/generic/hash_multi_map.h>
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 

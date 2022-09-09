@@ -14,6 +14,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <util/generic/hash_multi_map.h>
 #include <util/generic/guid.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>

@@ -13,6 +13,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_multi_map.h>
 #include <util/generic/ptr.h>
 #include <library/cpp/logger/log.h>
 

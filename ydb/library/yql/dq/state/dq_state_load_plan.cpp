@@ -5,6 +5,8 @@
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
 
 #include <util/digest/multi.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_multi_map.h>
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 

@@ -13,6 +13,7 @@
 
 #include <util/digest/numeric.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_multi_map.h>
 #include <util/system/condvar.h>
 
 #include <atomic>

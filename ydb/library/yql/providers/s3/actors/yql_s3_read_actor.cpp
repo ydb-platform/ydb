@@ -272,15 +272,13 @@ struct TRetryStuff {
         TString url,
         const IHTTPGateway::THeaders& headers,
         std::size_t sizeLimit
-    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), SizeLimit(sizeLimit), Offset(0U), RetryState(GetHTTPDefaultRetryPolicy()->CreateRetryState())
+    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), Offset(0U), SizeLimit(sizeLimit), RetryState(GetHTTPDefaultRetryPolicy()->CreateRetryState())
     {}
 
     const IHTTPGateway::TPtr Gateway;
     const TString Url;
     const IHTTPGateway::THeaders Headers;
-    const std::size_t SizeLimit;
-
-    std::size_t Offset = 0U;
+    std::size_t Offset, SizeLimit;
     const IRetryPolicy<long>::IRetryState::TPtr RetryState;
     IHTTPGateway::TCancelHook CancelHook;
     TMaybe<TDuration> NextRetryDelay;
@@ -344,6 +342,7 @@ public:
                 if (200L == HttpResponseCode || 206L == HttpResponseCode) {
                     value = ev->Get<TEvPrivate::TEvDataPart>()->Result.Extract();
                     RetryStuff->Offset += value.size();
+                    RetryStuff->SizeLimit -= value.size();
                     Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
                 } else if (HttpResponseCode && !RetryStuff->NextRetryDelay) {
                     if (ErrorText.size() < 256_KB)
@@ -485,7 +484,7 @@ private:
             }
         }
 
-        if (retryStuff->NextRetryDelay && retryStuff->Offset < retryStuff->SizeLimit)
+        if (retryStuff->NextRetryDelay && retryStuff->SizeLimit > 0ULL)
             actorSystem->Schedule(*retryStuff->NextRetryDelay, new IEventHandle(parent, self, new TEvPrivate::TEvRetryEventFunc(std::bind(&TS3ReadCoroActor::DownloadStart, retryStuff, self, parent))));
         else
             actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadFinished));

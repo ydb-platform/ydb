@@ -441,7 +441,8 @@ public:
                     }
 
                     newPaths = ctx.ChangeChildren(maybeS3SourceSettings.Cast().Paths().Ref(), std::move(newPathItems));
-                    TExprNode::TPtr newExtra = ctx.ChangeChildren(*originalExtra, std::move(newExtraColumnsExtents));
+
+                    TExprNode::TPtr newExtra = ctx.NewCallable(extraColumnsSetting->Pos(), "OrderedExtend", std::move(newExtraColumnsExtents));
                     newSettings = TExprBase(extraTypeItems.empty() ? RemoveSetting(settings.Cast().Ref(), "extraColumns", ctx) :
                         ReplaceSetting(settings.Cast().Ref(), extraColumnsSetting->Pos(), "extraColumns", newExtra, ctx));
                 }

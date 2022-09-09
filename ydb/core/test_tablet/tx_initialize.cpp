@@ -22,12 +22,9 @@ namespace NKikimr::NTestShard {
             const bool success = Cmd.SerializeToString(&settings);
             Y_VERIFY(success);
 
-            const TString digest = MD5::CalcRaw(settings);
-
             NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::State>().Key(Schema::State::Key::Default).Update(
-                NIceDb::TUpdate<Schema::State::Settings>(settings),
-                NIceDb::TUpdate<Schema::State::Digest>(digest));
+                NIceDb::TUpdate<Schema::State::Settings>(settings));
 
             return true;
         }

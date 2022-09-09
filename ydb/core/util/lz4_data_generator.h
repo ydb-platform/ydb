@@ -16,21 +16,27 @@ inline TString GenDataForLZ4(const ui64 size, const ui64 seed = 0) {
     return data;
 }
 
-inline TString FastGenDataForLZ4(i64 size, ui64 seed) {
+inline TString FastGenDataForLZ4(size_t size, ui64 seed) {
     TString data = TString::Uninitialized(size);
 
     TReallyFastRng32 rng(seed);
 
     constexpr size_t minRunLen = 32;
     constexpr size_t maxRunLen = 64;
-    const size_t runLen = minRunLen + rng() % (maxRunLen - minRunLen + 1);
+    const size_t runLen = minRunLen + sizeof(ui32) * rng() % ((maxRunLen - minRunLen) / sizeof(ui32) + 1);
 
     char run[maxRunLen];
-    std::generate(run, run + runLen, rng);
-
-    for (char *ptr = data.Detach(); size > 0; ptr += runLen, size -= runLen) {
-        memcpy(ptr, run, Min<size_t>(size, runLen));
+    ui32 i;
+    for (i = 0; i < runLen; i += sizeof(ui32)) {
+        reinterpret_cast<ui32&>(i[run]) = rng();
     }
+    Y_VERIFY_DEBUG(i == runLen);
+
+    char *ptr = data.Detach();
+    for (; size >= runLen; size -= runLen, ptr += runLen) {
+        memcpy(ptr, run, runLen);
+    }
+    memcpy(ptr, run, size);
 
     return data;
 }

@@ -18,8 +18,6 @@ namespace NKikimr::NTestShard {
                     return false;
                 } else if (table.IsValid()) {
                     const TString settings = table.GetValue<T::Settings>();
-                    const TString digest = table.GetValue<T::Digest>();
-                    Y_VERIFY(digest == MD5::CalcRaw(settings));
                     Self->Settings.emplace();
                     const bool success = Self->Settings->ParseFromString(settings);
                     Y_VERIFY(success);

@@ -1,4 +1,5 @@
 #include "load_actor_impl.h"
+#include "scheme.h"
 
 namespace NKikimr::NTestShard {
 
@@ -37,6 +38,10 @@ namespace NKikimr::NTestShard {
         };
 
     public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::TEST_SHARD_VALIDATION_ACTOR;
+        }
+
         TValidationActor(TLoadActor& self, bool initialCheck)
             : Settings(self.Settings)
             , TabletId(self.TabletId)
@@ -150,8 +155,8 @@ namespace NKikimr::NTestShard {
                 const TString& value = res.GetValue();
                 const bool inserted = Keys.try_emplace(key, value.size()).second;
                 Y_VERIFY(inserted);
-                Y_VERIFY_S(MD5::Calc(value) == key, "TabletId# " << TabletId << " Key# " << key << " digest mismatch"
-                    " actual# " << MD5::Calc(value) << " len# " << value.size());
+                Y_VERIFY_S(HashForValue(value) == key, "TabletId# " << TabletId << " Key# " << key << " digest mismatch"
+                    " actual# " << HashForValue(value) << " len# " << value.size());
                 STLOG(PRI_DEBUG, TEST_SHARD, TS16, "read key", (TabletId, TabletId), (Key, key));
             } else {
                 WaitedReadRangesViaEvResponse--;
@@ -210,8 +215,8 @@ namespace NKikimr::NTestShard {
             const TString& value = record.value();
             const bool inserted = Keys.try_emplace(key, value.size()).second;
             Y_VERIFY(inserted);
-            Y_VERIFY_S(MD5::Calc(value) == key, "TabletId# " << TabletId << " Key# " << key << " digest mismatch"
-                " actual# " << MD5::Calc(value) << " len# " << value.size());
+            Y_VERIFY_S(HashForValue(value) == key, "TabletId# " << TabletId << " Key# " << key << " digest mismatch"
+                " actual# " << HashForValue(value) << " len# " << value.size());
             STLOG(PRI_DEBUG, TEST_SHARD, TS25, "read key", (TabletId, TabletId), (Key, key));
             FinishIfPossible();
         }

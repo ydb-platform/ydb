@@ -53,8 +53,11 @@ namespace NKikimr::NTestShard {
                 RunValidation(false);
             }
         } else { // resume load
-            while (WritesInFlight.size() < Settings.GetMaxInFlight()) { // write until there is space in inflight
+            if (WritesInFlight.size() < Settings.GetMaxInFlight()) { // write until there is space in inflight
                 IssueWrite();
+                if (WritesInFlight.size() < Settings.GetMaxInFlight()) {
+                    TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+                }
             }
             if (BytesOfData > Settings.GetMaxDataBytes()) { // delete some data if needed
                 IssueDelete();

@@ -1,6 +1,5 @@
 #include "load_actor_impl.h"
-
-#include <ydb/core/util/lz4_data_generator.h>
+#include "scheme.h"
 
 namespace NKikimr::NTestShard {
 
@@ -8,11 +7,8 @@ namespace NKikimr::NTestShard {
         const size_t len = GenerateRandomSize(Settings.GetSizes(), isInline) + sizeof(ui64);
         ui64 seed = TAppData::RandomProvider->GenRand64();
         TString data = FastGenDataForLZ4(len, seed);
-        char *charData = data.Detach();
-        for (size_t i = 0; i < Min<size_t>(sizeof(seed), data.size()); ++i) {
-            charData[i] = *(reinterpret_cast<char*>(&seed) + i);
-        }
-        *key = MD5::Calc(data);
+        memcpy(data.Detach(), &seed, Min(data.size(), sizeof(seed)));
+        *key = HashForValue(data);
         *value = std::move(data);
     }
 

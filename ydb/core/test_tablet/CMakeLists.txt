@@ -11,6 +11,7 @@ add_library(ydb-core-test_tablet)
 target_link_libraries(ydb-core-test_tablet PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-t1ha
   cpp-digest-md5
   ydb-core-keyvalue
   ydb-core-protos

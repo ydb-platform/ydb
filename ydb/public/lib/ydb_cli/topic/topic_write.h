@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h>
 
 namespace NYdb::NConsoleClient {
 #define GETTER(TYPE, NAME) \
@@ -16,7 +17,8 @@ namespace NYdb::NConsoleClient {
         TTopicWriterParams();
         TTopicWriterParams(EMessagingFormat inputFormat, TMaybe<TString> delimiter,
                            ui64 messageSizeLimit, TMaybe<TDuration> batchDuration,
-                           TMaybe<ui64> batchSize, TMaybe<ui64> batchMessagesCount);
+                           TMaybe<ui64> batchSize, TMaybe<ui64> batchMessagesCount,
+                           ETransformBody transform);
         TTopicWriterParams(const TTopicWriterParams&) = default;
         TTopicWriterParams(TTopicWriterParams&&) = default;
 
@@ -26,6 +28,8 @@ namespace NYdb::NConsoleClient {
         GETTER(TMaybe<ui64>, BatchMessagesCount);
         GETTER(ui64, MessageSizeLimit);
         GETTER(EMessagingFormat, MessagingFormat);
+        GETTER(NTopic::ECodec, Codec);
+        GETTER(ETransformBody, Transform);
 
     private:
         TMaybe<TString> File_;
@@ -36,6 +40,8 @@ namespace NYdb::NConsoleClient {
         TMaybe<TDuration> BatchDuration_;
         TMaybe<ui64> BatchSize_;
         TMaybe<ui64> BatchMessagesCount_;
+        NTopic::ECodec Codec_ = NTopic::ECodec::RAW;
+        ETransformBody Transform_ = ETransformBody::None;
 
         ui64 MessageSizeLimit_ = 0;
     };
@@ -62,9 +68,9 @@ namespace NYdb::NConsoleClient {
         };
 
         int HandleEvent(NTopic::TWriteSessionEvent::TEvent&);
-        int HandleAcksEvent(const NTopic::TWriteSessionEvent::TAcksEvent&);
-        int HandleReadyToAcceptEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent&);
-        int HandleSessionClosedEvent(const NTopic::TSessionClosedEvent&);
+        int HandleAcksEvent(const NTopic::TWriteSessionEvent::TAcksEvent*);
+        int HandleReadyToAcceptEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent*);
+        int HandleSessionClosedEvent(const NTopic::TSessionClosedEvent*);
         TTopicWriter::TSendMessageData EnterMessage(IInputStream&); // TODO(shmel1k@): make static or like a helper function
 
         std::shared_ptr<NTopic::IWriteSession> WriteSession_;

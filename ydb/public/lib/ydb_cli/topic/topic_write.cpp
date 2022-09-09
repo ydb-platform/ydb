@@ -4,6 +4,7 @@
 #include <util/generic/overloaded.h>
 #include <util/stream/tokenizer.h>
 #include <util/string/hex.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NYdb::NConsoleClient {
     namespace {
@@ -13,13 +14,14 @@ namespace NYdb::NConsoleClient {
     TTopicWriterParams::TTopicWriterParams() {
     }
 
-    TTopicWriterParams::TTopicWriterParams(EMessagingFormat inputFormat, TMaybe<TString> delimiter,
-                                           ui64 messageSizeLimit, TMaybe<TDuration> batchDuration,
-                                           TMaybe<ui64> batchSize, TMaybe<ui64> batchMessagesCount)
+    TTopicWriterParams::TTopicWriterParams(EMessagingFormat inputFormat, TMaybe<TString> delimiter, ui64 messageSizeLimit,
+                                           TMaybe<TDuration> batchDuration, TMaybe<ui64> batchSize, TMaybe<ui64> batchMessagesCount,
+                                           ETransformBody transform)
         : MessagingFormat_(inputFormat)
         , BatchDuration_(batchDuration)
         , BatchSize_(batchSize)
         , BatchMessagesCount_(batchMessagesCount)
+        , Transform_(transform)
         , MessageSizeLimit_(messageSizeLimit) {
         if (inputFormat == EMessagingFormat::NewlineDelimited || inputFormat == EMessagingFormat::Concatenated) {
             Delimiter_ = TMaybe<char>('\n');
@@ -88,34 +90,41 @@ namespace NYdb::NConsoleClient {
         return EXIT_SUCCESS;
     }
 
-    int TTopicWriter::HandleAcksEvent(const NTopic::TWriteSessionEvent::TAcksEvent& event) {
+    int TTopicWriter::HandleAcksEvent(const NTopic::TWriteSessionEvent::TAcksEvent* event) {
         Y_UNUSED(event);
         return EXIT_SUCCESS;
     }
 
-    int TTopicWriter::HandleReadyToAcceptEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event) {
-        ContinuationToken_ = std::move(event.ContinuationToken);
+    int TTopicWriter::HandleReadyToAcceptEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent* event) {
+        ContinuationToken_ = std::move(event->ContinuationToken);
         return EXIT_SUCCESS;
     }
 
-    int TTopicWriter::HandleSessionClosedEvent(const NTopic::TSessionClosedEvent& event) {
-        ThrowOnError(event);
+    int TTopicWriter::HandleSessionClosedEvent(const NTopic::TSessionClosedEvent* event) {
+        ThrowOnError(*event);
         return EXIT_FAILURE;
     }
 
     int TTopicWriter::HandleEvent(NTopic::TWriteSessionEvent::TEvent& event) {
-        return std::visit(TOverloaded{
-                              [&](const NTopic::TWriteSessionEvent::TAcksEvent& event) {
-                                  return HandleAcksEvent(event);
-                              },
-                              [&](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event) {
-                                  return HandleReadyToAcceptEvent(event);
-                              },
-                              [&](const NTopic::TSessionClosedEvent& event) {
-                                  return HandleSessionClosedEvent(event);
-                              },
-                          },
-                          event);
+        if (auto* acksEvent = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+            return HandleAcksEvent(acksEvent);
+        } else if (auto* readyToAcceptEvent = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+            return HandleReadyToAcceptEvent(readyToAcceptEvent);
+        } else if (auto* sessionClosedEvent = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+            return HandleSessionClosedEvent(sessionClosedEvent);
+        }
+
+        return EXIT_SUCCESS;
+    }
+
+    namespace {
+        TString TransformBody(const TString& body, ETransformBody transform) {
+            if (transform == ETransformBody::None) {
+                return body;
+            }
+
+            return Base64Decode(body);
+        }
     }
 
     TTopicWriter::TSendMessageData TTopicWriter::EnterMessage(IInputStream& input) {
@@ -123,9 +132,9 @@ namespace NYdb::NConsoleClient {
         // TODO(shmel1k@): add JSONStreamReader & etc interfaces.
         // TODO(shmel1k@): add stream parsing here & improve performance.
         if (!WriterParams_.Delimiter().Defined()) {
-            // TODO(shmel1k@): interruption?
+            TString body = input.ReadAll();
             return TSendMessageData{
-                .Data = input.ReadAll(),
+                .Data = TransformBody(body, WriterParams_.Transform()),
                 .NeedSend = true,
                 .ContinueSending = false,
             };
@@ -142,7 +151,7 @@ namespace NYdb::NConsoleClient {
             };
         }
         return TSendMessageData{
-            .Data = buffer,
+            .Data = TransformBody(buffer, WriterParams_.Transform()),
             .NeedSend = true,
             .ContinueSending = true,
         };
@@ -175,8 +184,7 @@ namespace NYdb::NConsoleClient {
     }
 
     bool TTopicWriter::Close(TDuration closeTimeout) {
-        Y_UNUSED(closeTimeout);
-        if (WriteSession_->Close(TDuration::Hours(12))) {
+        if (WriteSession_->Close(closeTimeout)) {
             return true;
         }
         TVector<NTopic::TWriteSessionEvent::TEvent> events = WriteSession_->GetEvents(true);
@@ -184,23 +192,7 @@ namespace NYdb::NConsoleClient {
             return false;
         }
         for (auto& evt : events) {
-            bool hasFailure = false;
-            std::visit(TOverloaded{
-                           [&](const NTopic::TWriteSessionEvent::TAcksEvent& event) {
-                               Y_UNUSED(event);
-                           },
-                           [&](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event) {
-                               Y_UNUSED(event);
-                           },
-                           [&](const NTopic::TSessionClosedEvent& event) {
-                               int result = HandleSessionClosedEvent(event);
-                               if (result == EXIT_FAILURE) {
-                                   hasFailure = true;
-                               }
-                           },
-                       },
-                       evt);
-            if (hasFailure) {
+            if (HandleEvent(evt)) {
                 return false;
             }
         }

@@ -108,15 +108,22 @@ namespace NYdb::NConsoleClient {
         TString ConsumerName_;
     };
 
-    class TCommandTopicInternal: public TClientCommandTree {
-    public:
-        TCommandTopicInternal();
+    class TCommandWithTransformBody {
+    protected:
+        void AddTransform(TClientCommand::TConfig& config);
+        void ParseTransform();
+        ETransformBody GetTransform() const;
+
+    private:
+        TString TransformStr_;
+        ETransformBody Transform_ = ETransformBody::None;
     };
 
     class TCommandTopicRead: public TYdbCommand,
                              public TCommandWithFormat,
                              public TInterruptibleCommand,
-                             public TCommandWithTopicName {
+                             public TCommandWithTopicName,
+                             public TCommandWithTransformBody {
     public:
         TCommandTopicRead();
         void Config(TConfig& config) override;
@@ -156,11 +163,24 @@ namespace NYdb::NConsoleClient {
         NTopic::TReadSessionSettings PrepareReadSessionSettings();
     };
 
+    class TCommandWithCodec {
+    protected:
+        void AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NTopic::ECodec>& allowedCodecs);
+        void ParseCodec();
+        NTopic::ECodec GetCodec() const;
+
+    private:
+        TVector<NTopic::ECodec> AllowedCodecs_;
+        TString CodecStr_;
+        NTopic::ECodec Codec_ = NTopic::ECodec::RAW;
+    };
+
     class TCommandTopicWrite: public TYdbCommand,
                               public TCommandWithFormat,
                               public TInterruptibleCommand,
                               public TCommandWithTopicName,
-                              public TCommandWithSupportedCodecs {
+                              public TCommandWithCodec,
+                              public TCommandWithTransformBody {
     public:
         TCommandTopicWrite();
         void Config(TConfig& config) override;
@@ -180,7 +200,7 @@ namespace NYdb::NConsoleClient {
 
         ui64 MessageSizeLimit_ = 0;
         void ParseMessageSizeLimit();
-        void CheckOptions(NTopic::TTopicClient& persQueueClient);
+        void CheckOptions(NTopic::TTopicClient& topicClient);
 
     private:
         NTopic::TWriteSessionSettings PrepareWriteSessionSettings();

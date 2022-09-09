@@ -1,4 +1,5 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 namespace NYdb::NConsoleClient {

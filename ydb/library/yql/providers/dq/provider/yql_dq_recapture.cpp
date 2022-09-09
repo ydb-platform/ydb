@@ -50,7 +50,7 @@ public:
             FlushStatistics();
         };
 
-        if (State_->ExternalUser) {
+        if (State_->ExternalUser && !State_->Settings->_EnablePorto.Get().GetOrElse(TDqSettings::TDefault::EnablePorto)) {
             Statistics_["DqExternalUser"]++;
             return TStatus::Ok;
         }

@@ -657,7 +657,7 @@ private:
     TStatusCallbackPair HandleResult(const TExprNode::TPtr& input, TExprContext& ctx) {
         YQL_CLOG(DEBUG, ProviderDq) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
 
-        if (State->ExternalUser) {
+        if (State->ExternalUser && !State->Settings->_EnablePorto.Get().GetOrElse(TDqSettings::TDefault::EnablePorto)) {
             return Fallback();
         }
 

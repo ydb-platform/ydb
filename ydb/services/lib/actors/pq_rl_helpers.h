@@ -1,13 +1,14 @@
 #pragma once
 
 #include <ydb/core/grpc_services/local_rate_limiter.h>
+#include <ydb/core/metering/stream_ru_calculator.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <util/datetime/base.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-class TRlHelpers {
+class TRlHelpers: public NMetering::TStreamRequestUnitsCalculator {
 public:
     explicit TRlHelpers(NGRpcService::IRequestCtxBase* reqCtx, ui64 blockSize, const TDuration& waitDuration);
 
@@ -30,10 +31,8 @@ protected:
 
 private:
     NGRpcService::IRequestCtxBase* const Request;
-    const ui64 BlockSize;
     const TDuration WaitDuration;
 
-    ui64 PayloadBytes;
     TActorId RlActor;
     TMaybe<NKikimrPQ::TPQTabletConfig::EMeteringMode> MeteringMode;
 };

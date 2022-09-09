@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-metering PUBLIC
 target_sources(ydb-core-metering PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/metering/bill_record.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/metering/metering.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/metering/stream_ru_calculator.cpp
 )
 generate_enum_serilization(ydb-core-metering
   ${CMAKE_SOURCE_DIR}/ydb/core/metering/bill_record.h

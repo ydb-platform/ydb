@@ -5,10 +5,9 @@
 namespace NKikimr::NGRpcProxy::V1 {
 
 TRlHelpers::TRlHelpers(NGRpcService::IRequestCtxBase* reqCtx, ui64 blockSize, const TDuration& waitDuration)
-    : Request(reqCtx)
-    , BlockSize(blockSize)
+    : TStreamRequestUnitsCalculator(blockSize)
+    , Request(reqCtx)
     , WaitDuration(waitDuration)
-    , PayloadBytes(0)
 {
     Y_VERIFY(Request);
 }
@@ -65,14 +64,7 @@ ui64 TRlHelpers::CalcRuConsumption(ui64 payloadSize) {
         return 0;
     }
 
-    const ui64 remainder = BlockSize - (PayloadBytes % BlockSize);
-    PayloadBytes += payloadSize;
-
-    if (payloadSize > remainder) {
-        return Max<ui64>(1, (payloadSize - remainder) / BlockSize);
-    }
-
-    return 0;
+    return CalcConsumption(payloadSize);
 }
 
 }

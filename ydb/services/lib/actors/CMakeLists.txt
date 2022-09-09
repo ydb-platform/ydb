@@ -15,6 +15,7 @@ target_link_libraries(services-lib-actors PUBLIC
   cpp-digest-md5
   ydb-core-grpc_services
   core-grpc_services-base
+  ydb-core-metering
   ydb-core-mind
   ydb-core-protos
   library-persqueue-obfuscate

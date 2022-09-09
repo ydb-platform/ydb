@@ -495,7 +495,9 @@ private:
         TIntrusivePtr<TLoadReport> Report(new TLoadReport());
         Report->Duration = TDuration::Seconds(DurationSeconds);
 
-        ctx.Send(Parent, new TEvTestLoadFinished(Tag, Report, "OK called StartDeathProcess"));
+        auto* finishEv = new TEvTestLoadFinished(Tag, Report, "OK called StartDeathProcess");
+        finishEv->LastHtmlPage = RenderHTML();
+        ctx.Send(Parent, finishEv);
         Die(ctx);
     }
 
@@ -659,9 +661,7 @@ private:
 
 private:
 
-    // html render
-
-    void HandleHTML(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+    TString RenderHTML() {
         TStringStream str;
         HTML(str) {
             TABLE_CLASS("table table-condensed") {
@@ -722,7 +722,11 @@ private:
                 str << "<pre>" << ConfingString << "</pre>";
             }
         }
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
+        return str.Str();
+    }
+
+    void HandleHTML(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderHTML(), ev->Get()->SubRequestId));
     }
 
 

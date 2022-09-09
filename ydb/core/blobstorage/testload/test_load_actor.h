@@ -116,6 +116,7 @@ namespace NKikimr {
         ui64 Tag;
         TIntrusivePtr<TLoadReport> Report; // nullptr indicates error
         TString ErrorReason;
+        TString LastHtmlPage;
 
         TEvTestLoadFinished(ui64 tag, TIntrusivePtr<TLoadReport> report, TString errorReason)
             : Tag(tag)

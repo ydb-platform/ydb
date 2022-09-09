@@ -32,6 +32,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         ui64 Tag;
         TString ErrorReason;
         TInstant FinishTime;
+        TString LastHtmlPage;
     };
 
     // info about finished actors
@@ -45,6 +46,9 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
 
     // HTTP info requests being currently executed
     THashMap<ui32, THttpInfoRequest> InfoRequests;
+
+    // issure tags in ascending order
+    ui64 NextTag = 1;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
@@ -90,11 +94,7 @@ public:
         if (cmd.HasTag()) {
             return cmd.GetTag();
         } else {
-            if (LoadActors.empty()) {
-                return 1;
-            } else {
-                return LoadActors.rbegin()->first + 1;
-            }
+            return NextTag++;
         }
     }
 
@@ -238,7 +238,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor with tag# " << msg->Tag << " finished");
         LoadActors.erase(iter);
 
-        FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now()});
+        FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->LastHtmlPage});
 
         auto it = InfoRequests.begin();
         while (it != InfoRequests.end()) {
@@ -358,16 +358,15 @@ public:
                 }
 
                 COLLAPSED_BUTTON_CONTENT("finished_tests_info", "Finished tests") {
-                    for (const auto& req : FinishedTests) {
+                    for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
                         DIV_CLASS("panel panel-info") {
                             DIV_CLASS("panel-heading") {
-                                str << "Tag# " << req.Tag;
+                                str << "Tag# " << it->Tag;
                             }
                             DIV_CLASS("panel-body") {
-                                str << "<p>";
-                                str << "Finish reason# " << req.ErrorReason << "<br/>";
-                                str << "Finish time# " << req.FinishTime << "<br/>";
-                                str << "</p>";
+                                str << "Finish reason# " << it->ErrorReason << "<br/>";
+                                str << "Finish time# " << it->FinishTime << "<br/>";
+                                str << it->LastHtmlPage;
                             }
                         }
                     }

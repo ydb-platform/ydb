@@ -39,8 +39,8 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 
-    for (const auto& [mutableIdx, fieldIdx, count] : mutables.WideFieldInitialize) {
-        for (ui32 i = 0; i < count; ++i) {
+    for (const auto& [mutableIdx, fieldIdx, used] : mutables.WideFieldInitialize) {
+        for (ui32 i: used) {
             WideFields[fieldIdx + i] = &MutableValues[mutableIdx + i];
         }
     }

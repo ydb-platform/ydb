@@ -33,7 +33,7 @@ protected:
         , InputsIndex(mutables.CurValueIndex)
         , WideFieldsIndex(mutables.CurWideFieldsIndex)
     {
-        mutables.DeferWideFieldsInit(UsedInputs.size());
+        mutables.DeferWideFieldsInit(inputWidth, UsedInputs);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

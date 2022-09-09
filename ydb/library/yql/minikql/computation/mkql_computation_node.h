@@ -64,7 +64,7 @@ struct TComputationOptsFull: public TComputationOpts {
 struct TWideFieldsInitInfo {
     ui32 MutablesIndex = 0;
     ui32 WideFieldsIndex = 0;
-    ui32 Count = 0;
+    std::set<ui32> Used;
 };
 
 struct TComputationMutables {
@@ -73,8 +73,9 @@ struct TComputationMutables {
     ui32 CurWideFieldsIndex = 0U;
     std::vector<TWideFieldsInitInfo> WideFieldInitialize;
 
-    void DeferWideFieldsInit(ui32 count) {
-        WideFieldInitialize.push_back({CurValueIndex, CurWideFieldsIndex, count});
+    void DeferWideFieldsInit(ui32 count, std::set<ui32> used) {
+        Y_VERIFY_DEBUG(AllOf(used, [count](ui32 i) { return i < count; }));
+        WideFieldInitialize.push_back({CurValueIndex, CurWideFieldsIndex, std::move(used)});
         CurValueIndex += count;
         CurWideFieldsIndex += count;
     }

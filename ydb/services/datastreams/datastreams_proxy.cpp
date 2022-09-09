@@ -153,7 +153,7 @@ namespace NKikimr::NDataStreams::V1 {
         if (GetProtoRequest()->retention_case() ==
             Ydb::DataStreams::V1::CreateStreamRequest::RetentionCase::kRetentionStorageMegabytes) {
             modifyScheme.MutableCreatePersQueueGroup()->MutablePQTabletConfig()->
-                MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Days(7).Seconds());
+                MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(DEFAULT_STREAM_WEEK_RETENTION).Seconds());
         }
 
         modifyScheme.SetWorkingDir(workingDir);
@@ -387,8 +387,12 @@ namespace NKikimr::NDataStreams::V1 {
             case Ydb::DataStreams::V1::UpdateStreamRequest::RetentionCase::kRetentionPeriodHours:
                 groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(
                     TDuration::Hours(GetProtoRequest()->retention_period_hours()).Seconds());
+                groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->ClearStorageLimitBytes();
+
                 break;
             case Ydb::DataStreams::V1::UpdateStreamRequest::RetentionCase::kRetentionStorageMegabytes:
+                groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(
+                    TDuration::Hours(DEFAULT_STREAM_WEEK_RETENTION).Seconds());
                 groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetStorageLimitBytes(
                     GetProtoRequest()->retention_storage_megabytes() * 1_MB);
                 break;

@@ -62,7 +62,7 @@ void TTabletListRenderer::RenderHeader(TStringStream& str,
 {
     Y_UNUSED(tabletsToRender);
     IOutputStream &__stream(str);
-    H3() {
+    TAG(TH3) {
         str << listName;
         if (filterInfo.FilterNodeId != 0) {
             str << " of Node " << filterInfo.FilterNodeId;

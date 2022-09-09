@@ -708,11 +708,11 @@ public:
         auto stats = tcmalloc::MallocExtension::GetStats();
 
         HTML(out) {
-            H3() {
+            TAG(TH3) {
                 out << "TCMalloc" << Endl;
             }
             out << "<hr>" << Endl;
-            H4() {
+            TAG(TH4) {
                 out << "Allocator properties" << Endl;
             }
             TABLE_CLASS("table") {
@@ -734,7 +734,7 @@ public:
                 }
             }
             out << "<hr>" << Endl;
-            H4() {
+            TAG(TH4) {
                 out << "<a href=\"https://github.com/google/tcmalloc/blob/master/docs/stats.md\">Internal stats</a>" << Endl;
             }
             PRE() {

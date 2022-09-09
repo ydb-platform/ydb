@@ -154,7 +154,7 @@ namespace NKikimr {
                 auto info = NAllocDbg::GetPerTagAllocInfo(true, maxTag, numSizes);
 
                 HTML(out) {
-                    H3() {
+                    TAG(TH3) {
                         out << "LFAlloc" << Endl;
                     }
                     out << "<hr>" << Endl;
@@ -247,7 +247,7 @@ namespace NKikimr {
                 }
 #else
                 HTML(out) {
-                    H3() {
+                    TAG(TH3) {
                         out << "LFAlloc" << Endl;
                     }
                     out << "<hr>" << Endl;
@@ -314,7 +314,7 @@ namespace NKikimr {
                 GetMemoryUsageForTags(tags.data(), tags.size(), usages.data());
 
                 HTML(out) {
-                    H3() {
+                    TAG(TH3) {
                         out << "YTAlloc" << Endl;
                     }
                     out << "<hr>" << Endl;
@@ -358,7 +358,7 @@ namespace NKikimr {
                 }
 #else
                 HTML(out) {
-                    H3() {
+                    TAG(TH3) {
                         out << "YTAlloc" << Endl;
                     }
                     out << "<hr>" << Endl;

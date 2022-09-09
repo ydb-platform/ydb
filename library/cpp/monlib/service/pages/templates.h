@@ -55,17 +55,11 @@
 #define PARA() TAG(TPara)
 #define PARA_CLASS(cls) TAG_CLASS(TPara, cls)
 
-#define H1() TAG(TH1)
 #define H1_CLASS(cls) TAG_CLASS(TH1, cls)
-#define H2() TAG(TH2)
 #define H2_CLASS(cls) TAG_CLASS(TH2, cls)
-#define H3() TAG(TH3)
 #define H3_CLASS(cls) TAG_CLASS(TH3, cls)
-#define H4() TAG(TH4)
 #define H4_CLASS(cls) TAG_CLASS(TH4, cls)
-#define H5() TAG(TH5)
 #define H5_CLASS(cls) TAG_CLASS(TH5, cls)
-#define H6() TAG(TH6)
 #define H6_CLASS(cls) TAG_CLASS(TH6, cls)
 
 #define SMALL() TAG(TSMALL)

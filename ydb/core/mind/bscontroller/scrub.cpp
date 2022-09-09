@@ -370,7 +370,7 @@ public:
 
     void Render(IOutputStream& str) {
         HTML(str) {
-            H3() {
+            TAG(TH3) {
                 str << "Scrub state"
                     << "<br/>"
                     << (Self->ScrubPeriodicity != TDuration::Zero() ? TString(TStringBuilder() << "every " <<

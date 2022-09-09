@@ -183,17 +183,17 @@ bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
 TString TPersQueueReadBalancer::GenerateStat() {
     TStringStream str;
     HTML(str) {
-        H2() {str << "PersQueueReadBalancer Tablet";}
-        H3() {str << "Topic: " << Topic;}
-        H3() {str << "Generation: " << Generation;}
-        H3() {str << "Inited: " << Inited;}
-        H3() {str << "ActivePipes: " << PipesInfo.size();}
+        TAG(TH2) {str << "PersQueueReadBalancer Tablet";}
+        TAG(TH3) {str << "Topic: " << Topic;}
+        TAG(TH3) {str << "Generation: " << Generation;}
+        TAG(TH3) {str << "Inited: " << Inited;}
+        TAG(TH3) {str << "ActivePipes: " << PipesInfo.size();}
         if (Inited) {
-            H3() {str << "Active partitions: " << NumActiveParts;}
-            H3() {str << "[Total/Max/Avg]WriteSpeedSec: " << TotalAvgSpeedSec << "/" << MaxAvgSpeedSec << "/" << TotalAvgSpeedSec / NumActiveParts;}
-            H3() {str << "[Total/Max/Avg]WriteSpeedMin: " << TotalAvgSpeedMin << "/" << MaxAvgSpeedMin << "/" << TotalAvgSpeedMin / NumActiveParts;}
-            H3() {str << "[Total/Max/Avg]WriteSpeedHour: " << TotalAvgSpeedHour << "/" << MaxAvgSpeedHour << "/" << TotalAvgSpeedHour / NumActiveParts;}
-            H3() {str << "[Total/Max/Avg]WriteSpeedDay: " << TotalAvgSpeedDay << "/" << MaxAvgSpeedDay << "/" << TotalAvgSpeedDay / NumActiveParts;}
+            TAG(TH3) {str << "Active partitions: " << NumActiveParts;}
+            TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedSec: " << TotalAvgSpeedSec << "/" << MaxAvgSpeedSec << "/" << TotalAvgSpeedSec / NumActiveParts;}
+            TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedMin: " << TotalAvgSpeedMin << "/" << MaxAvgSpeedMin << "/" << TotalAvgSpeedMin / NumActiveParts;}
+            TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedHour: " << TotalAvgSpeedHour << "/" << MaxAvgSpeedHour << "/" << TotalAvgSpeedHour / NumActiveParts;}
+            TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedDay: " << TotalAvgSpeedDay << "/" << MaxAvgSpeedDay << "/" << TotalAvgSpeedDay / NumActiveParts;}
         }
 
         UL_CLASS("nav nav-tabs") {

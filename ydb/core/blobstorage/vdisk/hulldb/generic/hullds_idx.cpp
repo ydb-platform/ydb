@@ -198,7 +198,7 @@ namespace NKikimr {
                 DIV_CLASS("panel-body") {
                     DIV_CLASS("row") {
                         DIV_CLASS("col-md-1") {
-                            H5() { str << "Fresh"; }
+                            TAG(TH5) { str << "Fresh"; }
                             const char *comp = Fresh.CompactionInProgress() ? "Compaction In Progress" : "No Compaction";
                             H6_CLASS ("text-info") {str << comp << " W:" << FreshCompWritesInFlight;}
                         }
@@ -206,7 +206,7 @@ namespace NKikimr {
                     }
                     DIV_CLASS("row") {
                         DIV_CLASS("col-md-1") {
-                            H5() { str << "Levels"; }
+                            TAG(TH5) { str << "Levels"; }
                             H6_CLASS ("text-info") {str << GetCompStateStr(HullCompReadsInFlight, HullCompWritesInFlight);}
                         }
                         DIV_CLASS("col-md-11") {CurSlice->OutputHtml(str);}

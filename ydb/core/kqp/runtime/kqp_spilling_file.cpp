@@ -643,7 +643,7 @@ private:
         }
 
         HTML(s) {
-            H2() { s << "Configuration"; }
+            TAG(TH2) { s << "Configuration"; }
             PRE() {
                 s << "  - Root: " << Config.GetRoot() << Endl;
                 s << "  - MaxTotalSize: " << Config.GetMaxTotalSize() << Endl;
@@ -653,11 +653,11 @@ private:
                     << ", queue: " << Config.GetIoThreadPool().GetQueueSize() << Endl;
             }
 
-            H2() { s << "Active files"; }
+            TAG(TH2) { s << "Active files"; }
             PRE() { s << "Used space: " << TotalSize << Endl; }
 
             for (const auto& tx : byTx) {
-                H4() { s << "Transaction " << tx.first; }
+                TAG(TH2) { s << "Transaction " << tx.first; }
                 s << "Open files:" << Endl;
                 UL() {
                     for (const auto* fd : tx.second) {
@@ -690,7 +690,7 @@ private:
                 }
             }
 
-            H2() { s << "Last closed files"; }
+            TAG(TH2) { s << "Last closed files"; }
             UL() {
                 for (auto it = ClosedFiles.rbegin(); it != ClosedFiles.rend(); ++it) {
                     auto& fd = *it;

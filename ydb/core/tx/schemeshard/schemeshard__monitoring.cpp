@@ -556,7 +556,7 @@ private:
 
     void OutputMainPage(TStringStream& str) const {
         HTML(str) {
-            H3() {str << "SchemeShard main page:";}
+            TAG(TH3) {str << "SchemeShard main page:";}
 
             {
                 str << "<legend>";
@@ -634,21 +634,21 @@ private:
 
             {
                 str << "<legend>";
-                H3() {str << "Transactions in flight:"; }
+                TAG(TH3) {str << "Transactions in flight:"; }
                 str << "</legend>";
                 TableTxInfly(str);
             }
 
             {
                 str << "<legend>";
-                H3() {str << "Active Build Indexes in flight:"; }
+                TAG(TH3) {str << "Active Build Indexes in flight:"; }
                 str << "</legend>";
                 BuildIndexesInfly(str, /*forActive=*/ true);
             }
 
             {
                 str << "<legend>";
-                H3() {str << "Finished Build Indexes:"; }
+                TAG(TH3) {str << "Finished Build Indexes:"; }
                 str << "</legend>";
                 BuildIndexesInfly(str, /*forActive=*/ false);
             }
@@ -695,7 +695,7 @@ private:
 
     void BuildIndexInfoPage(TIndexBuildId buildIndexId, TStringStream& str) const {
         HTML(str) {
-            H3() {str << "Build index id " << buildIndexId;}
+            TAG(TH3) {str << "Build index id " << buildIndexId;}
 
             if (!Self->IndexBuilds.contains(buildIndexId)) {
                 PRE() {
@@ -705,7 +705,7 @@ private:
             }
 
             const TIndexBuildInfo::TPtr& info = Self->IndexBuilds.at(buildIndexId);
-            H4() {str << "Fields";}
+            TAG(TH4) {str << "Fields";}
             PRE () {
                 str << "BuildInfoId:                   " << info->Id << Endl
                     << "Uid:                           " << info->Uid << Endl
@@ -769,7 +769,7 @@ private:
             }
 
             {
-                H3() {str << "Shards : " << info->Shards.size() << "\n";}
+                TAG(TH3) {str << "Shards : " << info->Shards.size() << "\n";}
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
@@ -875,7 +875,7 @@ private:
 
     void OutputTxListPage(TStringStream& str) const {
         HTML(str) {
-            H3() {str << "Transactions in flight:";}
+            TAG(TH3) {str << "Transactions in flight:";}
 
             TableTxInfly(str);
         }
@@ -883,7 +883,7 @@ private:
 
     void OutputTxInfoPage(TOperationId operationId, TStringStream& str) const {
         HTML(str) {
-            H3() {str << "Transaction " << operationId;}
+            TAG(TH3) {str << "Transaction " << operationId;}
 
             auto txInfo = Self->FindTx(operationId);
             if (!txInfo) {
@@ -892,7 +892,7 @@ private:
                 }
             } else {
                 const TTxState txState = *txInfo;
-                H3() {str << "Shards in progress : " << txState.ShardsInProgress.size() << "\n";}
+                TAG(TH3) {str << "Shards in progress : " << txState.ShardsInProgress.size() << "\n";}
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
@@ -931,7 +931,7 @@ private:
     void OutputShardInfo(TShardIdx shardIdx, TStringStream& str) const {
         HTML(str) {
             if (!Self->ShardInfos.contains(shardIdx)) {
-                H4() {
+                TAG(TH4) {
                     str << "No shard item for shard " << shardIdx << "</a>";
                 }
                 return;
@@ -939,7 +939,7 @@ private:
 
             const TShardInfo& shard = Self->ShardInfos.at(shardIdx);
 
-            H4() {str << "Shard idx " << shardIdx << "</a>";}
+            TAG(TH4) {str << "Shard idx " << shardIdx << "</a>";}
             PRE () {
                 str << "TabletID:                     " << shard.TabletID<< Endl
                     << "CurrentTxId:                  " << shard.CurrentTxId << Endl
@@ -947,7 +947,7 @@ private:
                     << "TabletType:                   " << TTabletTypes::TypeToStr(shard.TabletType) << Endl;
             }
 
-            H4() {str << "BindedChannels for shard idx " << shardIdx << "</a>";}
+            TAG(TH4) {str << "BindedChannels for shard idx " << shardIdx << "</a>";}
             TABLE_SORTABLE_CLASS("BindedChannels") {
                 TABLEHEAD() {
                     TABLER() {
@@ -1001,7 +1001,7 @@ private:
     void OutputPathInfo(TPathId pathId, TStringStream& str) const {
         HTML(str) {
             if (!Self->PathsById.contains(pathId)) {
-                H4() {
+                TAG(TH4) {
                     str << "No path item for shard " << pathId << "</a>";
                 }
                 return;
@@ -1012,7 +1012,7 @@ private:
             auto localACL = TSecurityObject(path->Owner, path->ACL, path->IsContainer());
             auto effectiveACL = TSecurityObject(path->Owner, path->CachedEffectiveACL.GetForSelf(), path->IsContainer());
 
-            H4() {str << "Path info " << pathId << "</a>";}
+            TAG(TH4) {str << "Path info " << pathId << "</a>";}
             PRE () {
                 str << "Path:                     " << Self->PathToString(path) << Endl
                     << "PathId:                   " << pathId << Endl
@@ -1040,7 +1040,7 @@ private:
             }
 
             if (path->UserAttrs->Attrs) {
-                H4() {str << "UserAttrs for pathId " << pathId << "</a>";}
+                TAG(TH4) {str << "UserAttrs for pathId " << pathId << "</a>";}
                 TABLE_SORTABLE_CLASS("UserAttrs") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1058,7 +1058,7 @@ private:
             }
 
             if (path->GetChildren().size()) {
-                H4() {str << "Childrens for pathId " << pathId << "</a>";}
+                TAG(TH4) {str << "Childrens for pathId " << pathId << "</a>";}
                 TABLE_SORTABLE_CLASS("UserAttrs") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1085,7 +1085,7 @@ private:
 
             auto shards = Self->CollectAllShards({pathId});
 
-            H4() {str << "Shards for pathId " << pathId << "</a>";}
+            TAG(TH4) {str << "Shards for pathId " << pathId << "</a>";}
             TABLE_SORTABLE_CLASS("ShardForPath") {
                 TABLEHEAD() {
                     TABLER() {
@@ -1123,7 +1123,7 @@ private:
     void OutputOperationPartInfo(TOperationId opId, TStringStream& str) const {
         HTML(str) {
             if (!Self->Operations.contains(opId.GetTxId())) {
-                H4() {
+                TAG(TH4) {
                     str << "No operations for tx id " << opId << "</a>";
                 }
                 return;
@@ -1132,14 +1132,14 @@ private:
             TOperation::TPtr operation = Self->Operations.at(opId.GetTxId());
 
             if (ui64(opId.GetSubTxId()) >= operation->Parts.size()) {
-                H4() {
+                TAG(TH4) {
                     str << "No part operations for operation id " << opId << "</a>";
                 }
                 return;
             }
 
             if (!Self->TxInFlight.contains(opId)) {
-                H4() {
+                TAG(TH4) {
                     str << "No txInfly record for operation id " << opId << "</a>";
                 }
                 return;
@@ -1148,7 +1148,7 @@ private:
             const TTxState& txState = Self->TxInFlight.at(opId);
 
 
-            H4() {str << "TxState info " << opId << "</a>";}
+            TAG(TH4) {str << "TxState info " << opId << "</a>";}
             PRE () {
                 str << "TxType:                                  " << TTxState::TypeName(txState.TxType) << Endl
                     << "TargetPathId:                            " << LinkToPathInfo(txState.TargetPathId) << Endl
@@ -1168,7 +1168,7 @@ private:
                     << "Wait operations count:                   " << operation->WaitOperations.size() << Endl;
             }
 
-            H4() {str << "Dependent operations for txId " << opId.GetTxId() << "</a>";}
+            TAG(TH4) {str << "Dependent operations for txId " << opId.GetTxId() << "</a>";}
             TABLE_SORTABLE_CLASS("DependentTxId") {
                 TABLEHEAD() {
                     TABLER() {
@@ -1182,7 +1182,7 @@ private:
                 }
             }
 
-            H4() {str << "Wait operations for txId " << opId.GetTxId() << "</a>";}
+            TAG(TH4) {str << "Wait operations for txId " << opId.GetTxId() << "</a>";}
             TABLE_SORTABLE_CLASS("WaitTxId") {
                 TABLEHEAD() {
                     TABLER() {
@@ -1197,7 +1197,7 @@ private:
             }
 
 
-            H4() {str << "Shards for opId " << opId << "</a>";}
+            TAG(TH4) {str << "Shards for opId " << opId << "</a>";}
             TABLE_SORTABLE_CLASS("Shards") {
                 TABLEHEAD() {
                     TABLER() {
@@ -1220,7 +1220,7 @@ private:
                 }
             }
 
-            H4() {str << "Shards in progress for opId " << opId << "</a>";}
+            TAG(TH4) {str << "Shards in progress for opId " << opId << "</a>";}
             TABLE_SORTABLE_CLASS("Shards") {
                 TABLEHEAD() {
                     TABLER() {
@@ -1237,7 +1237,7 @@ private:
                 }
             }
 
-            H4() {str << "SchemeChangeNotificationReceived for opId " << opId << "</a>";}
+            TAG(TH4) {str << "SchemeChangeNotificationReceived for opId " << opId << "</a>";}
             TABLE_SORTABLE_CLASS("SchemeChangeNotificationReceived") {
                 TABLEHEAD() {
                     TABLER() {
@@ -1254,7 +1254,7 @@ private:
                 }
             }
 
-            H4() {str << "ShardStatuses for opId " << opId << "</a>";}
+            TAG(TH4) {str << "ShardStatuses for opId " << opId << "</a>";}
             TABLE_SORTABLE_CLASS("ShardStatuses") {
                 TABLEHEAD() {
                     TABLER() {
@@ -1284,7 +1284,7 @@ private:
     void OutputOperationInfo(TTxId txId, TStringStream& str) const {
         HTML(str) {
             if (!Self->Operations.contains(txId)) {
-                H4() {
+                TAG(TH4) {
                     str << "No operations for tx id " << txId << "</a>";
                 }
                 return;
@@ -1300,7 +1300,7 @@ private:
     void OutputPathInfoPage(TPathId pathId, TStringStream& str) {
         HTML(str) {
             if (!Self->PathsById.contains(pathId)) {
-                H4() {
+                TAG(TH4) {
                     str << "No path item for tablet " << pathId << "</a>";
                 }
                 return;
@@ -1320,7 +1320,7 @@ private:
     void OutputShardInfoPageByShardIdx(TShardIdx shardIdx, TStringStream& str) const {
         HTML(str) {
             if (!Self->ShardInfos.contains(shardIdx)) {
-                H4() {
+                TAG(TH4) {
                     str << "No shard info for shard idx " << shardIdx;
                 }
                 return;
@@ -1331,7 +1331,7 @@ private:
             const TShardInfo& shard = Self->ShardInfos[shardIdx];
 
             if (!Self->PathsById.contains(shard.PathId)) {
-                H4() {
+                TAG(TH4) {
                     str << "No path item path id " << shard.PathId;
                 }
                 return;
@@ -1348,7 +1348,7 @@ private:
     void OutputShardInfoPageByShardID(TTabletId tabletId, TStringStream& str) const {
         HTML(str) {
             if (!Self->TabletIdToShardIdx.contains(tabletId)) {
-                H4() {
+                TAG(TH4) {
                     str << "No shard info for shard ID "
                         << "<a href='../tablets?TabletID=" << tabletId << "'>" << tabletId << "</a>";
                 }

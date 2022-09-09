@@ -3262,7 +3262,7 @@ void TKeyValueState::VerifyEqualIndex(const TKeyValueState& state) const {
 
 void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
     HTML(out) {
-        H2() {out << "KeyValue Tablet";}
+        TAG(TH2) {out << "KeyValue Tablet";}
         UL_CLASS("nav nav-tabs") {
             LI_CLASS("active") {
                 out << "<a href=\"#database\" data-toggle=\"tab\">Database</a>";

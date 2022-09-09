@@ -55,7 +55,7 @@ public:
         Sort(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end());
         TStringStream str;
         HTML(str) {
-            H3() {
+            TAG(TH3) {
                 str << "Nodes";
             }
             TABLE_SORTABLE_CLASS("table") {
@@ -82,7 +82,7 @@ public:
                 }
             }
             HTML_TAG() {str << "<a href=\"nodetabmon?action=browse_tablets\">All tablets of the cluster</a>";}
-            H3() {
+            TAG(TH3) {
                 str << "State Storages";
             }
             TABLE_SORTABLE_CLASS("table") {
@@ -339,7 +339,7 @@ public:
         }
         TStringStream str;
         HTML(str) {
-            H3() {
+            TAG(TH3) {
                 str << "Tablets of StateStorage " << StateStorageId;
             }
             TABLE_CLASS("table table-bordered") {

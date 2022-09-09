@@ -89,10 +89,10 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             </style>
             )__";
 
-        H2() { out << "NodeWarden on node " << LocalNodeId; }
+        TAG(TH2) { out << "NodeWarden on node " << LocalNodeId; }
         RenderLocalDrives(out);
 
-        H3() { out << "PDisks"; }
+        TAG(TH3) { out << "PDisks"; }
         TABLE_CLASS("table oddgray") {
             TABLEHEAD() {
                 TABLER() {
@@ -114,7 +114,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             }
         }
 
-        H3() { out << "VDisks"; }
+        TAG(TH3) { out << "VDisks"; }
         TABLE_CLASS("table oddgray") {
             TABLEHEAD() {
                 TABLER() {
@@ -223,10 +223,10 @@ void TNodeWarden::RenderDSProxies(IOutputStream& out) {
             numStarted += bool(group.ProxyId);
         }
 
-        H3() { out << "Started DSProxies"; }
+        TAG(TH3) { out << "Started DSProxies"; }
         createTable(out, "started", numStarted);
 
-        H3() { out << "Ejected DSProxies"; }
+        TAG(TH3) { out << "Ejected DSProxies"; }
         createTable(out, "ejected", numEjected);
     }
 }
@@ -235,7 +235,7 @@ void TNodeWarden::RenderLocalDrives(IOutputStream& out) {
     TVector<NPDisk::TDriveData> onlineLocalDrives = ListLocalDrives();
 
     HTML(out) {
-        H3() { out << "LocalDrives"; }
+        TAG(TH3) { out << "LocalDrives"; }
         out << "\n";
         TABLE_CLASS("table oddgray") {
             TABLEHEAD() {

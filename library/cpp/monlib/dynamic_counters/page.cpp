@@ -123,7 +123,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
             out << " for Solomon";
         }
 
-        H5() {
+        TAG(TH5) {
             out << "Counters subgroups";
         }
         UL() {
@@ -136,7 +136,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
             });
         }
 
-        H4() {
+        TAG(TH4) {
             out << "Counters as text";
         }
     }

@@ -77,7 +77,7 @@ namespace NActors {
             HTML(str) {
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {
-                        H4() {
+                        TAG(TH4) {
                             str << "Counters" << Endl;
                         }
                         DynamicCounters->OutputHtml(str);
@@ -142,7 +142,7 @@ namespace NActors {
             HTML(str) {
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {
-                        H4() {
+                        TAG(TH4) {
                             str << "Metrics" << Endl;
                         }
                         // TODO: Now, TMetricRegistry does not have the GetOutputHtml function
@@ -312,7 +312,7 @@ namespace NActors {
     void TLoggerActor::RenderComponentPriorities(IOutputStream& str) {
         using namespace NLog;
         HTML(str) {
-            H4() {
+            TAG(TH4) {
                 str << "Priority Settings for the Components";
             }
             TABLE_SORTABLE_CLASS("table") {
@@ -415,7 +415,7 @@ namespace NActors {
             HTML(str) {
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {
-                        H4() {
+                        TAG(TH4) {
                             str << "Current log settings for " << Settings->ComponentName(component) << Endl;
                         }
                         UL() {
@@ -437,7 +437,7 @@ namespace NActors {
 
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {
-                        H4() {
+                        TAG(TH4) {
                             str << "Change priority" << Endl;
                         }
                         UL() {
@@ -448,7 +448,7 @@ namespace NActors {
                                 }
                             }
                         }
-                        H4() {
+                        TAG(TH4) {
                             str << "Change sampling priority" << Endl;
                         }
                         UL() {
@@ -459,7 +459,7 @@ namespace NActors {
                                 }
                             }
                         }
-                        H4() {
+                        TAG(TH4) {
                             str << "Change sampling rate" << Endl;
                         }
                         str << "<form method=\"GET\">" << Endl;
@@ -467,7 +467,7 @@ namespace NActors {
                         str << "<input type=\"hidden\" name=\"c\" value=\"" << component << "\">" << Endl;
                         str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Change\"/>" << Endl;
                         str << "</form>" << Endl;
-                        H4() {
+                        TAG(TH4) {
                             str << "<a href='logger'>Cancel</a>" << Endl;
                         }
                     }
@@ -503,7 +503,7 @@ namespace NActors {
                         RenderComponentPriorities(str);
                     }
                     DIV_CLASS("col-md-6") {
-                        H4() {
+                        TAG(TH4) {
                             str << "Change priority for all components";
                         }
                         TABLE_CLASS("table table-condensed") {
@@ -525,7 +525,7 @@ namespace NActors {
                                 }
                             }
                         }
-                        H4() {
+                        TAG(TH4) {
                             str << "Change sampling priority for all components";
                         }
                         TABLE_CLASS("table table-condensed") {
@@ -547,7 +547,7 @@ namespace NActors {
                                 }
                             }
                         }
-                        H4() {
+                        TAG(TH4) {
                             str << "Change sampling rate for all components";
                         }
                         str << "<form method=\"GET\">" << Endl;
@@ -555,7 +555,7 @@ namespace NActors {
                         str << "<input type=\"hidden\" name=\"c\" value=\"-1\">" << Endl;
                         str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Change\"/>" << Endl;
                         str << "</form>" << Endl;
-                        H4() {
+                        TAG(TH4) {
                             str << "Drop log entries in case of overflow: "
                                 << (Settings->AllowDrop ? "Enabled" : "Disabled");
                         }

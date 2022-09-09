@@ -497,9 +497,9 @@ private:
         for (auto& r: Results) mx = Max<ui32>(mx, r.second.size());
 
         HTML(str) {
-            H2() {str << "PersQueue Tablet";}
-            H3() {str << "Topic: " << TopicName;}
-            H4() {str << "inflight: " << Inflight;}
+            TAG(TH2) {str << "PersQueue Tablet";}
+            TAG(TH3) {str << "Topic: " << TopicName;}
+            TAG(TH4) {str << "inflight: " << Inflight;}
             UL_CLASS("nav nav-tabs") {
                 LI_CLASS("active") {
                     str << "<a href=\"#main\" data-toggle=\"tab\">main</a>";
@@ -532,7 +532,7 @@ private:
                     str << s;
                 }
             }
-            H3() {str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";}
+            TAG(TH3) {str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";}
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));

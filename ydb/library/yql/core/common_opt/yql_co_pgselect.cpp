@@ -1815,6 +1815,12 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
         for (ui32 i = 0; i < groupExprs->Tail().ChildrenSize(); ++i) {
             const auto& group = groupExprs->Tail().Child(i);
             const auto& lambda = group->Tail();
+            TStringBuf columnName;
+            if (NTypeAnnImpl::IsPlainMemberOverArg(lambda.Tail(), columnName)) {
+                groupKeysItems.push_back(ctx.NewAtom(pos, columnName));
+                continue;
+            }
+
             auto name = "_yql_agg_key_" + ToString(i);
             groupKeysItems.push_back(ctx.NewAtom(pos, name));
             newColumns.push_back(ctx.Builder(pos)
@@ -3355,7 +3361,7 @@ TExprNode::TPtr ExpandPgGroupRef(const TExprNode::TPtr& node, TExprContext& ctx,
     return ctx.Builder(node->Pos())
         .Callable("Member")
             .Add(0, node->HeadPtr())
-            .Atom(1, "_yql_agg_key_" + ToString(node->Tail().Content()))
+            .Atom(1, node->ChildrenSize() == 3 ? ("_yql_agg_key_" + ToString(node->Tail().Content())) : node->Tail().Content())
         .Seal()
         .Build();
 }

@@ -2164,13 +2164,25 @@ TMaybe<bool> ScanExprForMatchedGroup(const TExprNode::TPtr& row, const TExprNode
                 continue;
             }
 
-            replaces[&root] = ctx.Builder(root.Pos())
-                .Callable("PgGroupRef")
-                    .Add(0, row)
-                    .Add(1, exprs[i].TypeNode)
-                    .Atom(2, ToString(i))
-                .Seal()
-                .Build();
+            TStringBuf memberName;
+            if (IsPlainMemberOverArg(root, memberName)) {
+                replaces[&root] = ctx.Builder(root.Pos())
+                    .Callable("PgGroupRef")
+                        .Add(0, row)
+                        .Add(1, exprs[i].TypeNode)
+                        .Atom(2, ToString(i))
+                        .Atom(3, memberName)
+                    .Seal()
+                    .Build();
+            } else {
+                replaces[&root] = ctx.Builder(root.Pos())
+                    .Callable("PgGroupRef")
+                        .Add(0, row)
+                        .Add(1, exprs[i].TypeNode)
+                        .Atom(2, ToString(i))
+                    .Seal()
+                    .Build();
+            }
 
             nodeVisited[&root] = false;
             return false;
@@ -2531,6 +2543,15 @@ TMap<TString, ui32> ExtractExternalColumns(const TExprNode& select) {
     return res;
 }
 
+bool IsPlainMemberOverArg(const TExprNode& expr, TStringBuf& memberName) {
+    if (expr.IsCallable("Member") && expr.Head().IsArgument()) {
+        memberName = expr.Tail().Content();
+        return true;
+    }
+
+    return false;
+}
+
 bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TString>& possibleAliases,
     const TExprNode& data, TExtContext& ctx, bool& hasNewSort, TExprNode::TListType& newSorts, bool scanColumnsOnly,
     const TExprNode::TPtr& groupExprs, const TStringBuf& scope, const TProjectionOrders* projectionOrders) {
@@ -2659,7 +2680,11 @@ bool GatherExtraSortColumns(const TExprNode& data, const TInputs& inputs, TExprN
                 }
 
                 if (node->IsCallable("PgGroupRef")) {
-                    keys.insert("_yql_agg_key_" + ToString(node->Tail().Content()));
+                    if (node->ChildrenSize() == 3) {
+                        keys.insert("_yql_agg_key_" + ToString(node->Tail().Content()));
+                    } else {
+                        keys.insert(ToString(node->Tail().Content()));
+                    }
                 }
 
                 if (node->IsCallable("Member") && &node->Head() == arg) {
@@ -4743,7 +4768,11 @@ IGraphTransformer::TStatus PgSubLinkWrapper(const TExprNode::TPtr& input, TExprN
 
 IGraphTransformer::TStatus PgGroupRefWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+    if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureMaxArgsCount(*input, 4, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -4757,6 +4786,12 @@ IGraphTransformer::TStatus PgGroupRefWrapper(const TExprNode::TPtr& input, TExpr
 
     if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->ChildrenSize() >= 4) {
+        if (!EnsureAtom(*input->Child(3), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     input->SetTypeAnn(input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());

@@ -305,7 +305,7 @@ public:
             layout.ForEachPartOfDisk(type, [&](ui32 partIdx, ui32 idxInSubgroup) {
                 const TLogoBlobID partId(id, partIdx + 1);
                 const NKikimrProto::EReplyStatus res = PutToVDisk(orderNums[idxInSubgroup], partId,
-                    parts.Parts[partIdx].OwnedString);
+                    parts.Parts[partIdx].OwnedString.ConvertToString());
                 UNIT_ASSERT_VALUES_EQUAL(res, NKikimrProto::OK);
                 disksWrittenTo |= {topology, topology->GetVDiskId(idxInSubgroup)};
             });

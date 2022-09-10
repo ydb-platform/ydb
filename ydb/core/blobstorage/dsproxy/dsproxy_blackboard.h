@@ -51,7 +51,7 @@ struct TBlobState {
         TIntervalSet<i32> Here;    // Present in the Data buffer
 
         void AddResponseData(ui32 fullSize, ui32 shift, TString &data);
-        void AddPartToPut(TString &data);
+        void AddPartToPut(TRope &data);
         TString ToString() const;
     };
     struct TWholeState : TState {
@@ -88,7 +88,7 @@ struct TBlobState {
 
     void Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &Info);
     void AddNeeded(ui64 begin, ui64 size);
-    void AddPartToPut(ui32 partIdx, TString &partData);
+    void AddPartToPut(ui32 partIdx, TRope &partData);
     void MarkBlobReadyToPut(ui8 blobIdx = 0);
     bool Restore(const TBlobStorageGroupInfo &info);
     void AddResponseData(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring,
@@ -128,14 +128,14 @@ struct TDiskPutRequest {
         ReasonAccelerate
     };
     const TLogoBlobID Id;
-    TString Buffer;
+    TRope Buffer;
     EPutReason Reason;
     bool IsHandoff;
     ui8 BlobIdx;
     std::vector<std::pair<ui64, ui32>> *ExtraBlockChecks;
     NWilson::TSpan *Span;
 
-    TDiskPutRequest(const TLogoBlobID &id, TString buffer, EPutReason reason, bool isHandoff,
+    TDiskPutRequest(const TLogoBlobID &id, TRope buffer, EPutReason reason, bool isHandoff,
             std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TSpan *span, ui8 blobIdx)
         : Id(id)
         , Buffer(std::move(buffer))
@@ -160,7 +160,7 @@ struct TGroupDiskRequests {
     TGroupDiskRequests(ui32 disks);
     void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet);
     void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const ui32 shift, const ui32 size);
-    void AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TString buffer,
+    void AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TRope buffer,
         TDiskPutRequest::EPutReason putReason, bool isHandoff, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
         NWilson::TSpan *span, ui8 blobIdx);
 };
@@ -205,7 +205,7 @@ struct TBlackboard {
     {}
 
     void AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize);
-    void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData);
+    void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TRope &partData);
     void MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx = 0);
     void MoveBlobStateToDone(const TLogoBlobID &id);
     void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data, bool keep, bool doNotKeep);

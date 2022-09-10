@@ -44,7 +44,7 @@ static TString DebugFormatBits(ui64 value) {
 
 namespace NKikimr {
 
-static void Refurbish(TString &str, ui64 size) {
+static void Refurbish(TRope &str, ui64 size) {
     if (str.size() != size) {
         str = TString::Uninitialized(size);
     }
@@ -1378,12 +1378,12 @@ void PadAndCrcParts(TErasureType::ECrcMode crcMode, const TBlockParams &p, TData
 }
 
 template <bool isStripe>
-void StarBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString &buffer,
+void StarBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope &buffer,
         TDataPartSet &outPartSet) {
     TBlockParams p(crcMode, type, buffer.size());
 
     // Prepare input data pointers
-    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
+    p.PrepareInputDataPointers<isStripe>(buffer.UnsafeGetContiguousSpanMut().data());
 
     outPartSet.FullDataSize = buffer.size();
     outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts);
@@ -1399,12 +1399,12 @@ void StarBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, co
 }
 
 template <bool isStripe>
-void EoBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString &buffer,
+void EoBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope &buffer,
         TDataPartSet &outPartSet) {
     TBlockParams p(crcMode, type, buffer.size());
 
     // Prepare input data pointers
-    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
+    p.PrepareInputDataPointers<isStripe>(buffer.UnsafeGetContiguousSpanMut().data());
 
     // Prepare if not yet
     if (!outPartSet.IsSplitStarted()) {
@@ -1429,12 +1429,12 @@ void EoBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, cons
 }
 
 template <bool isStripe>
-void XorBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString& buffer,
+void XorBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope& buffer,
         TDataPartSet& outPartSet) {
     TBlockParams p(crcMode, type, buffer.size());
 
     // Prepare input data pointers
-    p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
+    p.PrepareInputDataPointers<isStripe>(buffer.UnsafeGetContiguousSpanMut().data());
 
     outPartSet.FullDataSize = buffer.size();
     outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts);
@@ -1451,7 +1451,7 @@ void XorBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, con
 
 template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
 void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDataPartSet& partSet) {
-    TString &outBuffer = partSet.FullDataFragment.OwnedString;
+    TRope &outBuffer = partSet.FullDataFragment.OwnedString;
     ui32 totalParts = type.TotalPartCount();
     Y_VERIFY(partSet.Parts.size() >= totalParts);
 
@@ -1515,17 +1515,17 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
                 (!restoreParts && missingDataPartIdxA >= p.TotalParts - 2)) {
         VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
         if (isStripe) {
-            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
+            p.PrepareInputDataPointers<isStripe>(outBuffer.GetContiguousSpanMut().data());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
         } else {
-            p.GlueBlockParts(outBuffer.Detach(), partSet);
+            p.GlueBlockParts(outBuffer.GetContiguousSpanMut().data(), partSet);
         }
         return;
     }
 
     // Prepare output data pointers
     if (restoreFullData) {
-        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
+        p.PrepareInputDataPointers<isStripe>(outBuffer.GetContiguousSpanMut().data());
     }
 
     // Consider failed disk cases
@@ -1541,15 +1541,15 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
     //    TODO: use 2-nd part of 'eo-split' to restore m+1 part
     //    TODO: 1-pass
     if (missingDataPartIdxA <= p.DataParts && missingDataPartIdxB >= p.TotalParts - 1) {
-        TString temp;
-        TString &buffer = restoreFullData ? outBuffer : temp;
+        TRope temp;
+        TRope &buffer = restoreFullData ? outBuffer : temp;
         if (!restoreFullData && restoreParts && missingDataPartIdxB == p.TotalParts - 1) {
             // The (f1) case, but no full data needed, only parts
             TRACE("case# f1" << Endl);
             VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
             if (isStripe) {
                 Refurbish(buffer, dataSize);
-                p.PrepareInputDataPointers<isStripe>(buffer.Detach());
+                p.PrepareInputDataPointers<isStripe>(buffer.GetContiguousSpanMut().data());
             }
             p.XorRestorePart<isStripe, true, false, false>(partSet, missingDataPartIdxA);
             TRACE("case# f1 split" << Endl);
@@ -1583,8 +1583,8 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
     if (missingDataPartIdxA == p.TotalParts - 1 && missingDataPartIdxB == p.TotalParts) {
         TRACE("case# c" << Endl);
         VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
-        TString temp;
-        TString &buffer = restoreFullData ? outBuffer : temp;
+        TRope temp;
+        TRope &buffer = restoreFullData ? outBuffer : temp;
         if (!restoreFullData) {
             TRACE(__LINE__ << Endl);
             if (!restoreParityParts) {
@@ -1598,12 +1598,12 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
         }
         if (isStripe) {
             TRACE(__LINE__ << Endl);
-            p.PrepareInputDataPointers<isStripe>(buffer.Detach());
+            p.PrepareInputDataPointers<isStripe>(buffer.GetContiguousSpanMut().data());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
         } else {
             TRACE(__LINE__ << Endl);
             if (restoreFullData) {
-                p.GlueBlockParts(buffer.Detach(), partSet);
+                p.GlueBlockParts(buffer.GetContiguousSpanMut().data(), partSet);
             }
         }
         if (restoreParts) {
@@ -1650,7 +1650,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
 // restorePartiyParts may be set only togehter with restore parts
 template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
 void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDataPartSet& partSet) {
-    TString &outBuffer = partSet.FullDataFragment.OwnedString;
+    TRope &outBuffer = partSet.FullDataFragment.OwnedString;
 
     ui32 totalParts = type.TotalPartCount();
     Y_VERIFY(partSet.Parts.size() == totalParts);
@@ -1728,7 +1728,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
     TBlockParams p(crcMode, type, dataSize);
     if (restoreFullData) {
         Refurbish(outBuffer, dataSize);
-        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
+        p.PrepareInputDataPointers<isStripe>(outBuffer.GetContiguousSpanMut().data());
     } else if (missingDataPartCount == 0) {
         return;
     }
@@ -1738,10 +1738,10 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             (!restoreParts && missingDataPartIdxA >= p.DataParts)) {
         VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
         if (isStripe) {
-            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
+            p.PrepareInputDataPointers<isStripe>(outBuffer.GetContiguousSpanMut().data());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
         } else {
-            p.GlueBlockParts(outBuffer.Detach(), partSet);
+            p.GlueBlockParts(outBuffer.GetContiguousSpanMut().data(), partSet);
         }
         return;
     }
@@ -1880,7 +1880,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
 
 template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
 void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDataPartSet &partSet) {
-    TString &outBuffer = partSet.FullDataFragment.OwnedString;
+    TRope &outBuffer = partSet.FullDataFragment.OwnedString;
     ui32 totalParts = type.TotalPartCount();
     Y_VERIFY(partSet.Parts.size() == totalParts,
         "partSet.Parts.size(): %" PRIu64 " totalParts: %" PRIu32 " erasure: %s",
@@ -1919,16 +1919,16 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
     if (missingDataPartCount == 0 ||
             (missingDataPartCount == 1 && !restoreParts && missingDataPartIdx == p.TotalParts - 1)) {
         if (isStripe) {
-            p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
+            p.PrepareInputDataPointers<isStripe>(outBuffer.GetContiguousSpanMut().data());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
         } else {
-            p.GlueBlockParts(outBuffer.Detach(), partSet);
+            p.GlueBlockParts(outBuffer.GetContiguousSpanMut().data(), partSet);
         }
         return;
     }
     // Prepare output data pointers
     if (restoreFullData) {
-        p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
+        p.PrepareInputDataPointers<isStripe>(outBuffer.GetContiguousSpanMut().data());
     }
 
     p.XorRestorePart<isStripe, restoreParts, restoreFullData, restoreParityParts>(partSet, missingDataPartIdx);
@@ -2502,7 +2502,7 @@ ui64 TErasureType::BlockSplitPartUsedSize(ui64 dataSize, ui32 partIdx) const {
     return lastPartSize;
 }
 
-void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString& buffer,
+void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope& buffer,
         TDataPartSet& outPartSet) {
     outPartSet.FullDataSize = buffer.size();
     outPartSet.Parts.resize(type.TotalPartCount());
@@ -2519,12 +2519,12 @@ void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const
     case TErasureType::CrcModeWholePart:
         {
             ui64 partSize = type.PartSize(crcMode, buffer.size());
-            TString part = TString::Uninitialized(partSize);
-            char *dst = part.Detach();
+            TRope part = TString::Uninitialized(partSize);
+            char *dst = part.GetContiguousSpanMut().data();
             if (buffer.size() || part.size()) {
                 Y_VERIFY(part.size() >= buffer.size() + sizeof(ui32), "Part size too small, buffer size# %" PRIu64
                         " partSize# %" PRIu64, (ui64)buffer.size(), (ui64)partSize);
-                memcpy(dst, buffer.data(), buffer.size());
+                memcpy(dst, buffer.GetContiguousSpan().data(), buffer.size());
                 PadAndCrcAtTheEnd(dst, buffer.size(), part.size());
             }
             for (ui32 partIdx = 0; partIdx <= parityParts; ++partIdx) {
@@ -2558,11 +2558,15 @@ void MirrorRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDa
                         partSet.FullDataFragment.ReferenceTo(partSet.Parts[partIdx].OwnedString);
                         return;
                     case TErasureType::CrcModeWholePart:
-                        TString outBuffer = partSet.Parts[partIdx].OwnedString;
-                        outBuffer.Detach();
-                        Y_VERIFY(outBuffer.size() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
-                                " fullDataSize# %" PRIu64, (ui64)outBuffer.size(), (ui64)partSet.FullDataSize);
-                        outBuffer.resize(partSet.FullDataSize); // To pad with zeroes!
+                        TRope outBuffer = partSet.Parts[partIdx].OwnedString;
+                        outBuffer.GetContiguousSpanMut(); // Detach
+                        if(outBuffer.size() != partSet.FullDataSize) {
+                            TString newOutBuffer(outBuffer.GetContiguousSpan().data(), outBuffer.size()); //FIXME(innokentii) potentially redundant allocation for resize
+                            Y_VERIFY(outBuffer.size() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
+                                    " fullDataSize# %" PRIu64, (ui64)outBuffer.size(), (ui64)partSet.FullDataSize);
+                            newOutBuffer.resize(partSet.FullDataSize); // To pad with zeroes!
+                            outBuffer = newOutBuffer;
+                        }
                         partSet.FullDataFragment.ReferenceTo(outBuffer);
                         return;
                 }
@@ -2586,14 +2590,14 @@ static void VerifyPartSizes(TDataPartSet& partSet, size_t definedPartEndIdx) {
     }
 }
 
-void TErasureType::SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
+void TErasureType::SplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const {
     outPartSet.ResetSplit();
     do {
         IncrementalSplitData(crcMode, buffer, outPartSet);
     } while (!outPartSet.IsSplitDone());
 }
 
-void TErasureType::IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
+void TErasureType::IncrementalSplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const {
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
@@ -2968,7 +2972,7 @@ void TErasureType::ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
     }
 }
 
-void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TString& outBuffer, bool restoreParts,
+void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TRope& outBuffer, bool restoreParts,
         bool restoreFullData, bool restoreParityParts) const {
     partSet.FullDataFragment.ReferenceTo(outBuffer);
     RestoreData(crcMode, partSet, restoreParts, restoreFullData, restoreParityParts);

@@ -223,7 +223,7 @@ public:
                 }
             }
             partSet.FullDataSize = state.Id.BlobSize();
-            TString whole;
+            TRope whole;
             info.Type.RestoreData((TErasureType::ECrcMode)state.Id.CrcMode(), partSet, whole, false, true, false);
 
             TIntervalSet<i32> missing(state.Whole.NotHere);
@@ -231,7 +231,7 @@ public:
                 auto [begin, end] = *it;
                 i32 offset = begin;
                 i32 size = end - begin;
-                const char *source = whole.data() + offset;
+                const char *source = whole.GetContiguousSpan().data() + offset;
                 // Cerr << "LINE " << __LINE__ << " copy whole [" << offset << ", " << (offset + size) << ")" << Endl;
                 state.Whole.Data.Write(offset, source, size);
                 state.Whole.Here.Add(offset, offset + size);

@@ -123,7 +123,7 @@ namespace NKikimr {
         }
         const ui32 numParts = PopCount(item.PartSet.PartsMask);
         if (numParts >= Info->Type.MinimalRestorablePartCount()) {
-            TString buffer;
+            TRope buffer;
             Info->Type.RestoreData((TErasureType::ECrcMode)item.BlobId.CrcMode(), item.PartSet, buffer, true,
                 false, true);
             item.PartSet.PartsMask = (1u << item.PartSet.Parts.size()) - 1;

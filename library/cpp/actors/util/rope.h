@@ -1060,7 +1060,7 @@ public:
         Erase(Begin(), End());
     }
 
-    bool IsContiguous() {
+    bool IsContiguous() const {
         if(Begin() == End() || (++Begin() == End())) {
             return true;
         }

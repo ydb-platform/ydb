@@ -17,3 +17,7 @@
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 #include <util/generic/ylimits.h>
+
+namespace NKikimr {
+using namespace NActors;
+} // namespace NKikimr

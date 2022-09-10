@@ -229,6 +229,12 @@ namespace NKikimr {
             {
             }
 
+            TBlob(const TLogoBlobID &blob, ui8 partId, const TRope &buffer)
+                : BlobId(blob, partId)
+                , Buffer(buffer.ConvertToString())
+            {
+            }
+
             TBlob(const TLogoBlobID &blob, ui8 partId, ui32 bufferSize)
                 : BlobId(blob, partId)
             {
@@ -759,7 +765,7 @@ namespace NKikimr {
                     ui32 patchedPartId = LogoBlobIDFromLogoBlobID(record.GetPatchedPartBlobId()).PartId();
 
                     TVector<TDiff> xorDiffs;
-                    const ui8 *buffer = reinterpret_cast<const ui8*>(partSet.Parts[fromPartId - 1].OwnedString.data());
+                    const ui8 *buffer = reinterpret_cast<const ui8*>(partSet.Parts[fromPartId - 1].OwnedString.GetContiguousSpan().data());
                     testData.GType.MakeXorDiff(TErasureType::CrcModeNone, data.size(), buffer, diffSet.PartDiffs[fromPartId - 1].Diffs, &xorDiffs);
 
                     UNIT_ASSERT_VALUES_EQUAL_C(xorDiffs.size(), record.DiffsSize(), "from# " << (ui32)fromPartId);

@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/actors/util/rope.h>
 
 namespace NKikimr {
 
@@ -184,7 +185,9 @@ namespace NKikimr {
             }
 
             void IssuePutRequest(const TLogoBlobID& logoBlobId, ui64 cookie, const TActorContext& ctx) {
-                TString whole(logoBlobId.BlobSize(), 'X');
+                TSharedData data = TSharedData::Uninitialized(logoBlobId.BlobSize());
+                std::fill_n(data.mutable_data(), logoBlobId.BlobSize(), 'X');
+                TRope whole(MakeIntrusive<TRopeSharedDataBackend>(data));
                 TDataPartSet parts;
                 GType.SplitData((TErasureType::ECrcMode)logoBlobId.CrcMode(), whole, parts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(logoBlobId,

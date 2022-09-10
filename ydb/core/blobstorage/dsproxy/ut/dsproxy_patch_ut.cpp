@@ -336,7 +336,7 @@ void ConductPut(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
     UNIT_ASSERT_VALUES_EQUAL(put->Id, args.PatchedId);
     UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, args.OriginalId.Hash());
     TString patchedBuffer = MakePatchedBuffer(args);
-    UNIT_ASSERT_VALUES_EQUAL(put->Buffer, patchedBuffer);
+    UNIT_ASSERT_VALUES_EQUAL(put->Buffer.ConvertToString(), patchedBuffer);
 
     std::unique_ptr<TEvBlobStorage::TEvPutResult> putResult = std::make_unique<TEvBlobStorage::TEvPutResult>(
             resultStatus, args.PatchedId, args.StatusFlags, args.CurrentGroupId, args.ApproximateFreeSpaceShare);

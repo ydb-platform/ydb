@@ -48,7 +48,7 @@ namespace NKikimr {
                 Y_VERIFY(id.PartId());
                 const ui32 partIdx = id.PartId() - 1;
                 Y_VERIFY(PartSet.PartsMask & (1 << partIdx));
-                return PartSet.Parts[partIdx].OwnedString;
+                return PartSet.Parts[partIdx].OwnedString.ConvertToString();
             }
 
             NMatrix::TVectorType GetAvailableParts() const {

@@ -48,7 +48,7 @@ void TestMissingPartWithRandomData(TErasureType &groupType, ui32 *missingPartIdx
         partSet.Parts[missingPartIdx[i]].clear();
     }
     // Restore the data
-    TString restoredString;
+    TRope restoredString;
     groupType.RestoreData(TErasureType::CrcModeNone, partSet, restoredString,
             isRestoreParts, isRestoreFullData, isRestoreParts);
 
@@ -191,7 +191,7 @@ void RunTestDiff(TErasureType &groupType, ui32 dataSize, const TString &testStri
     }
 
     for (ui32 partIdx = 0; partIdx < dataParts + parityParts; ++partIdx) {
-        UNIT_ASSERT_STRINGS_EQUAL(partSet.Parts[partIdx].OwnedString, resultPartSet.Parts[partIdx].OwnedString);
+        UNIT_ASSERT_STRINGS_EQUAL(partSet.Parts[partIdx].OwnedString.ConvertToString(), resultPartSet.Parts[partIdx].OwnedString.ConvertToString());
     }
 }
 
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                 UNIT_ASSERT_EQUAL_C(partSet.Parts[i].size(), expectedParts[i].size(), Sprintf("%lu == %lu",
                                                                 partSet.Parts[i].size(), expectedParts[i].size()));
                 for (ui32 j = 0; j < partSet.Parts[i].size(); ++j) {
-                    UNIT_ASSERT_EQUAL( (ui8)partSet.Parts[i].OwnedString[j], expectedParts[i][j]);
+                    UNIT_ASSERT_EQUAL( (ui8)partSet.Parts[i].OwnedString.GetContiguousSpan().data()[j], expectedParts[i][j]);
                 }
             }
         }
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                             (isRestoreParts ? "true" : "false"),
                             (isRestoreFullData ? "true" : "false"));
 
-                        TString restoredString;
+                        TRope restoredString;
                         try {
                             groupType.RestoreData(TErasureType::CrcModeNone, partSet, restoredString,
                                     isRestoreParts, isRestoreFullData, isRestoreParts);
@@ -404,9 +404,9 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                         if (isRestoreFullData) {
                             UNIT_ASSERT_EQUAL_C(testString.size(), restoredString.size(), errorInfo);
                             for (ui32 i = 0; i < testString.size(); ++i) {
-                                UNIT_ASSERT_EQUAL_C(((char*)testString.data())[i], ((char*)restoredString.data())[i],
+                                UNIT_ASSERT_EQUAL_C(((char*)testString.data())[i], (restoredString.UnsafeGetContiguousSpanMut().data())[i],
                                     (errorInfo + mode + " (full data)"));
-                                if (((char*)testString.data())[i] != ((char*)restoredString.data())[i]) {
+                                if (((char*)testString.data())[i] != (restoredString.UnsafeGetContiguousSpanMut().data())[i]) {
                                     VERBOSE_COUT("mismatch " << errorInfo << mode << " (full data)" << Endl);
                                     break;
                                 }
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                             partSet.Parts[missingPartIdx[idx]].clear();
                         }
                     }
-                    partSet.FullDataFragment.UninitializedOwnedWhole(dataSize);;
+                    partSet.FullDataFragment.UninitializedOwnedWhole(dataSize);
 
 
                     TString mode = Sprintf(" restoreParts=%s isRestoreParityParts=%s restoreFullData=%s ",
@@ -720,7 +720,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                         (isRestoreFullData ? "true" : "false"));
 
                     VERBOSE_COUT("RestoreData " << errorInfo << Endl);
-                    TString restoredString;
+                    TRope restoredString;
                     try {
                         groupType.RestoreData(crcMode, partSet, restoredString,
                                 isRestoreParts, isRestoreFullData, isRestoreParityParts);
@@ -733,7 +733,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                     if (isRestoreFullData) {
                         UNIT_ASSERT_EQUAL_C(testString.size(), restoredString.size(), errorInfo);
                         for (ui32 i = 0; i < testString.size(); ++i) {
-                            UNIT_ASSERT_EQUAL_C(((char*)testString.data())[i], ((char*)restoredString.data())[i],
+                            UNIT_ASSERT_EQUAL_C(((char*)testString.data())[i], (restoredString.UnsafeGetContiguousSpanMut().data())[i],
                                 (errorInfo + erasureName + mode + " (full data)"));
                         }
                     }
@@ -1036,7 +1036,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                     for (ui32 idx = 0; idx < partSet.Parts.size(); ++idx) {
                         ui32 cutBegin = Min(partSize, needBegin);
                         ui32 cutSize = Min(partSize, needEnd) - cutBegin;
-                        partSet.Parts[idx].ReferenceTo(partSet.Parts[idx].OwnedString.substr(cutBegin, cutSize),
+                        partSet.Parts[idx].ReferenceTo(partSet.Parts[idx].OwnedString.ConvertToString().substr(cutBegin, cutSize),
                                 cutBegin, cutSize, partSize);
                     }
 

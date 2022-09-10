@@ -39,7 +39,7 @@ public:
     }
 
 protected:
-    TString GetDataBuffer(TBlobState& state, const TBlobStorageGroupInfo& info) {
+    TRope GetDataBuffer(TBlobState& state, const TBlobStorageGroupInfo& info) {
         for (ui32 i = 0; i < info.Type.TotalPartCount(); ++i) {
             if (info.Type.PartSize(TLogoBlobID(state.Id, i + 1)) && state.Parts[i].Data.IsMonolith()) {
                 return state.Parts[i].Data.GetMonolith();
@@ -47,11 +47,11 @@ protected:
         }
         const TIntervalVec<i32> interval(0, state.Id.BlobSize());
         Y_VERIFY(interval.IsSubsetOf(state.Whole.Here), "missing blob data State# %s", state.ToString().data());
-        TString wholeBuffer = TString::Uninitialized(state.Id.BlobSize());
-        state.Whole.Data.Read(0, const_cast<char*>(wholeBuffer.data()), state.Id.BlobSize());
+        TRope wholeBuffer(MakeIntrusive<TRopeSharedDataBackend>(TSharedData::Uninitialized(state.Id.BlobSize())));
+        state.Whole.Data.Read(0, wholeBuffer.UnsafeGetContiguousSpanMut().data(), state.Id.BlobSize());
         TDataPartSet partSet;
         info.Type.SplitData((TErasureType::ECrcMode)state.Id.CrcMode(), wholeBuffer, partSet);
-        TString s = partSet.Parts[0].OwnedString;
+        TRope s = partSet.Parts[0].OwnedString;
         state.Parts[0].Data.SetMonolith(s);
         return s;
     }

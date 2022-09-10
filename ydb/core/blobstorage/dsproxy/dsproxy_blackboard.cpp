@@ -15,7 +15,7 @@ void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TString &dat
     Here.Add(shift, shift + data.size());
 }
 
-void TBlobState::TState::AddPartToPut(TString &data) {
+void TBlobState::TState::AddPartToPut(TRope &data) {
     Y_VERIFY(data.size());
     Data.SetMonolith(data);
     Here.Assign(0, data.size());
@@ -45,7 +45,7 @@ void TBlobState::AddNeeded(ui64 begin, ui64 size) {
     IsChanged = true;
 }
 
-void TBlobState::AddPartToPut(ui32 partIdx, TString &partData) {
+void TBlobState::AddPartToPut(ui32 partIdx, TRope &partData) {
     Y_VERIFY(bool(Id));
     Y_VERIFY(partIdx < Parts.size());
     Parts[partIdx].AddPartToPut(partData);
@@ -84,17 +84,17 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
         if (const ui32 partSize = info.Type.PartSize(TLogoBlobID(Id, i + 1))) {
             if (TIntervalVec<i32>(0, partSize).IsSubsetOf(Parts[i].Here)) {
                 partSet.PartsMask |= (1 << i);
-                TString tmp = TString::Uninitialized(partSize);
-                Parts[i].Data.Read(0, const_cast<char*>(tmp.data()), partSize);
-                partSet.Parts[i].ReferenceTo(tmp);
+                TRope data(MakeIntrusive<TRopeSharedDataBackend>(TSharedData::Uninitialized(partSize)));
+                Parts[i].Data.Read(0, data.UnsafeGetContiguousSpanMut().data(), partSize);
+                partSet.Parts[i].ReferenceTo(data);
             }
         }
     }
     partSet.FullDataSize = Id.BlobSize();
 
-    TString whole;
+    TRope whole;
     info.Type.RestoreData((TErasureType::ECrcMode)Id.CrcMode(), partSet, whole, false, true, false);
-    Whole.Data.Write(0, whole.data(), Id.BlobSize());
+    Whole.Data.Write(0, whole.GetContiguousSpan().data(), Id.BlobSize());
     Whole.Here.Add(fullBlobInterval);
     Whole.NotHere.Subtract(fullBlobInterval);
     return true;
@@ -350,7 +350,7 @@ void TGroupDiskRequests::AddGet(const ui32 diskOrderNumber, const TLogoBlobID &i
     DiskRequestsForOrderNumber[diskOrderNumber].GetsToSend.emplace_back(id, shift, size);
 }
 
-void TGroupDiskRequests::AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TString buffer,
+void TGroupDiskRequests::AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TRope buffer,
         TDiskPutRequest::EPutReason putReason, bool isHandoff, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
         NWilson::TSpan *span, ui8 blobIdx) {
     Y_VERIFY(diskOrderNumber < DiskRequestsForOrderNumber.size());
@@ -381,7 +381,7 @@ void TBlackboard::AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize) {
     }
 }
 
-void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData) {
+void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TRope &partData) {
     Y_VERIFY(bool(id));
     Y_VERIFY(id.PartId() == 0);
     Y_VERIFY(id.BlobSize() != 0);

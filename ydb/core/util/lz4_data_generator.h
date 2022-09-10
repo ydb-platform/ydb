@@ -5,13 +5,21 @@
 
 namespace NKikimr {
 
-inline TString GenDataForLZ4(const ui64 size, const ui64 seed = 0) {
-    TString data = TString::Uninitialized(size);
+template <class ResultContainer = TString>
+inline ResultContainer GenDataForLZ4(const ui64 size, const ui64 seed = 0) {
+    ResultContainer data = ResultContainer::Uninitialized(size);
     const ui32 long_step = Max<ui32>(2027, size / 20);
     const ui32 short_step = Min<ui32>(53, long_step / 400);
+    char *buffer = [&]() -> char * {
+        if constexpr(std::is_same<ResultContainer, TString>::value) {
+            return data.Detach();
+        } else {
+            return data.mutable_data();
+        }
+    }();
     for (ui32 i = 0; i < data.size(); ++i) {
         const ui32 j = i + seed;
-        data[i] = 0xff & (j % short_step + j / long_step);
+        buffer[i] = 0xff & (j % short_step + j / long_step);
     }
     return data;
 }

@@ -206,7 +206,7 @@ namespace NKikimr {
                         Y_VERIFY(partSet.PartSet.FullDataSize == id.BlobSize());
 
                         // PartSet contains some data, other data will be restored and written in the same PartSet
-                        TString recoveredData;
+                        TRope recoveredData;
                         const ui32 incomingMask = partSet.PartSet.PartsMask;
                         if (canRestore && needToRestore) {
                             groupType.RestoreData((TErasureType::ECrcMode)id.CrcMode(), partSet.PartSet, recoveredData,

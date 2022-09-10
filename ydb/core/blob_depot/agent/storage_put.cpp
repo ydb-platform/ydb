@@ -77,11 +77,11 @@ namespace NKikimr::NBlobDepot {
                 footer.StoredBlobId = msg.Id;
                 TStringBuf footerData(reinterpret_cast<const char*>(&footer), sizeof(footer));
 
-                auto put = [&](EBlobType type, const TString& buffer) {
+                auto put = [&](EBlobType type, TRope&& buffer) {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_VERIFY(!locator->HasGroupId() || locator->GetGroupId() == groupId);
                     locator->SetGroupId(groupId);
-                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, msg.Deadline, msg.HandleClass, msg.Tactic);
+                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), msg.Deadline, msg.HandleClass, msg.Tactic);
                     ev->ExtraBlockChecks = msg.ExtraBlockChecks;
                     if (!msg.Decommission) { // do not check original blob against blocks when writing decommission copy
                         ev->ExtraBlockChecks.emplace_back(msg.Id.TabletID(), msg.Id.Generation());
@@ -92,15 +92,18 @@ namespace NKikimr::NBlobDepot {
 
                 if (SuppressFooter) {
                     // write the blob as is, we don't need footer for this kind
-                    put(EBlobType::VG_DATA_BLOB, msg.Buffer);
+                    put(EBlobType::VG_DATA_BLOB, TRope(msg.Buffer));
                 } else if (msg.Buffer.size() + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize) {
                     // write single blob with footer
-                    put(EBlobType::VG_COMPOSITE_BLOB, msg.Buffer + footerData);
+                    TRope buffer = msg.Buffer;
+                    buffer.Insert(buffer.End(), TRope(TString(footerData))); //FIXME(innokentii)
+                    buffer.Compact();
+                    put(EBlobType::VG_COMPOSITE_BLOB, std::move(buffer));
                 } else {
                     // write data blob and blob with footer
-                    put(EBlobType::VG_DATA_BLOB, msg.Buffer);
-                    put(EBlobType::VG_FOOTER_BLOB, TString(footerData));
-                }
+                    put(EBlobType::VG_DATA_BLOB, TRope(msg.Buffer));
+                    put(EBlobType::VG_FOOTER_BLOB, TRope(TString(footerData)));
+               }
             }
 
             void OnUpdateBlock(bool success) override {

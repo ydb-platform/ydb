@@ -99,7 +99,10 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
             const ui32 partSize = type.PartSize(TErasureType::CrcModeNone, dataSize);
             partSet.Parts.resize(type.TotalPartCount());
             for (ui32 i = 0; i < type.TotalPartCount(); ++i) {
-                partSet.Parts[i].ReferenceTo(partSet.Parts[i].OwnedString.resize(partSize));
+                auto data = partSet.Parts[i].OwnedString.GetContiguousSpan();
+                TString newOwnedString(partSize, '\0');
+                memcpy(newOwnedString.Detach(), data.data(), data.size());
+                partSet.Parts[i].ReferenceTo(partSet.Parts[i].OwnedString);
             }
         }
         if (measureSplit) {
@@ -113,13 +116,10 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
             time += timer.PassedReset() / attempts;
         }
         if (isRestoreFullData) {
-            std::vector<TString> restoredData;
+            std::vector<TRope> restoredData;
             restoredData.resize(attempts);
             for (auto& restored : restoredData) {
-                restored.resize(dataSize);
-                for (ui64 i = 0; i < dataSize; ++i) {
-                    restored[i] = 0;
-                }
+                restored = TString(dataSize, '\0');
             }
             // Remove the 'missing' parts
             for (auto& partSet : partSets) {
@@ -136,7 +136,7 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
                 time += timer.PassedReset() / attempts;
             }
             for (size_t i = 0; i < attempts; ++i) {
-                UNIT_ASSERT_EQUAL(originalData[i], restoredData[i]);
+                UNIT_ASSERT_EQUAL(TRope(originalData[i]), restoredData[i]);
             }
         }
         times.push_back(time);
@@ -250,7 +250,7 @@ void RopeMeasureSplitTime(TErasureType &type, ui64 dataSize, const TString& buff
         type.SplitData(TErasureType::CrcModeNone, rope, partSet);
         if (convertToRope) {
             for (int i = 0; i < 6; ++i) {
-                ropes[i] = RopeFromStringReference(std::move(partSet.Parts[i].OwnedString));
+                ropes[i] = partSet.Parts[i].OwnedString;
             }
         }
 #ifdef LONG_TEST

@@ -1420,7 +1420,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
-                TEST_RESPONSE(MessageVGetResult, OK, 1, partSet.Parts[0].OwnedString);
+                TEST_RESPONSE(MessageVGetResult, OK, 1, partSet.Parts[0].OwnedString.ConvertToString());
 
                 VERBOSE_COUT("Done");
                 Env->DoneEvent.Signal();
@@ -1713,7 +1713,7 @@ class TTestBlobStorageProxyVGet : public TTestBlobStorageProxy {
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
-                TEST_RESPONSE(MessageVGetResult, OK, 1, partSet.Parts[0].OwnedString);
+                TEST_RESPONSE(MessageVGetResult, OK, 1, partSet.Parts[0].OwnedString.ConvertToString());
 
                 isNoData = false;
                 VERBOSE_COUT("Done");

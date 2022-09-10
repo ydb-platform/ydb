@@ -40,7 +40,7 @@ namespace NKikimr {
                 for (ui32 i = 0; i < info->Type.TotalPartCount(); ++i) {
                     for (ui32 k = 0; k < vdisks.size(); ++k) {
                         if (varray[i] == vdisks[k]) {
-                            diskvec[k] = parts.Parts[i].OwnedString;
+                            diskvec[k] = parts.Parts[i].OwnedString.ConvertToString();
                             break;
                         }
                     }

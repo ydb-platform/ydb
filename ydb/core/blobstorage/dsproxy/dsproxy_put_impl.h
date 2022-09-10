@@ -46,7 +46,7 @@ private:
 
     struct TBlobInfo {
         TLogoBlobID BlobId;
-        TString Buffer;
+        TRope Buffer;
         ui64 BufferSize;
         TActorId Recipient;
         ui64 Cookie;
@@ -55,7 +55,7 @@ private:
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
         NWilson::TSpan Span;
 
-        TBlobInfo(TLogoBlobID id, TString buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
+        TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
                 NLWTrace::TOrbit&& orbit, std::vector<std::pair<ui64, ui32>> extraBlockChecks, bool single)
             : BlobId(id)
             , Buffer(std::move(buffer))
@@ -115,7 +115,7 @@ public:
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(ev->Tactic)
     {
-        Blobs.emplace_back(ev->Id, std::move(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
+        Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
             std::move(ev->ExtraBlockChecks), true);
 
         auto& blob = Blobs.back();
@@ -143,7 +143,7 @@ public:
             auto& msg = *ev->Get();
             Y_VERIFY(msg.HandleClass == putHandleClass);
             Y_VERIFY(msg.Tactic == tactic);
-            Blobs.emplace_back(msg.Id, std::move(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
+            Blobs.emplace_back(msg.Id, TRope(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
                 std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), false);
             Deadline = Max(Deadline, msg.Deadline);
 
@@ -496,7 +496,7 @@ protected:
                 } else if constexpr (isVMultiPut) {
                     // this request MUST originate from the TEvPut, so the Span field must be filled in
                     Y_VERIFY(put.Span);
-                    outVPutEvents.back()->AddVPut(put.Id, put.Buffer, &cookie, put.ExtraBlockChecks, put.Span->GetTraceId());
+                    outVPutEvents.back()->AddVPut(put.Id, put.Buffer.ConvertToString(), &cookie, put.ExtraBlockChecks, put.Span->GetTraceId());
                 }
 
                 if (put.IsHandoff) {

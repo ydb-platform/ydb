@@ -65,7 +65,7 @@ namespace NKikimr {
                                     key.LogoBlobID());
                                 TRope holder;
                                 TRope part = blob.GetPart(i, &holder);
-                                PartSet.Parts[i].ReferenceTo(part.ConvertToString());
+                                PartSet.Parts[i].ReferenceTo(part);
                             } else {
                                 CorruptedParts.push_back(*part);
                             }

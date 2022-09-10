@@ -1,6 +1,7 @@
 #include "fragmented_buffer.h"
 
 #include <util/stream/str.h>
+#include <library/cpp/actors/util/shared_data_rope_backend.h>
 
 namespace NKikimr {
 
@@ -9,7 +10,8 @@ TFragmentedBuffer::TFragmentedBuffer() {
 
 void TFragmentedBuffer::Insert(i32 begin, const char* source, i32 bytesToCopy) {
     Y_VERIFY(bytesToCopy);
-    BufferForOffset[begin].AssignNoAlias(source, bytesToCopy);
+    //FIXME(innokentii): can save allocation
+    BufferForOffset[begin] = TRope(MakeIntrusive<TRopeSharedDataBackend>(TSharedData::Copy(source, bytesToCopy)));
 }
 
 
@@ -17,12 +19,12 @@ bool TFragmentedBuffer::IsMonolith() const {
     return (BufferForOffset.size() == 1 && BufferForOffset.begin()->first == 0);
 }
 
-TString TFragmentedBuffer::GetMonolith() {
+TRope TFragmentedBuffer::GetMonolith() {
     Y_VERIFY(IsMonolith());
     return BufferForOffset.begin()->second;
 }
 
-void TFragmentedBuffer::SetMonolith(TString &data) {
+void TFragmentedBuffer::SetMonolith(TRope &data) {
     Y_VERIFY(data);
     BufferForOffset.clear();
     BufferForOffset.emplace(0, data);
@@ -64,7 +66,7 @@ void TFragmentedBuffer::Write(i32 begin, const char* buffer, i32 size) {
             Y_VERIFY(it->first + i32(it->second.size()) > offset);
             i32 bytesToNext = it->first + it->second.size() - offset;
             i32 bytesToInsert = Min(bytesToCopy, bytesToNext);
-            char *destination = const_cast<char*>(it->second.data()) + offset - it->first;
+            char *destination = it->second.UnsafeGetContiguousSpanMut().data() + offset - it->first;
             memcpy(destination, source, bytesToInsert);
             source += bytesToInsert;
             offset += bytesToInsert;
@@ -97,7 +99,7 @@ void TFragmentedBuffer::Read(i32 begin, char* buffer, i32 size) const {
         Y_VERIFY(it->first + i32(it->second.size()) > offset);
         i32 bytesToNext = it->first + it->second.size() - offset;
         i32 bytesToInsert = Min(bytesToCopy, bytesToNext);
-        const char *source = it->second.data() + offset - it->first;
+        const char *source = const_cast<TRope&>(it->second).GetContiguousSpan().data() + offset - it->first;
         memcpy(destination, source, bytesToInsert);
         destination += bytesToInsert;
         offset += bytesToInsert;
@@ -125,7 +127,7 @@ std::pair<const char*, i32> TFragmentedBuffer::Get(i32 begin) const {
     --it;
     const i32 offset = begin - it->first;
     Y_VERIFY(offset >= 0 && (size_t)offset < it->second.size());
-    return std::make_pair(it->second.data() + offset, it->second.size() - offset);
+    return std::make_pair(const_cast<TRope&>(it->second).GetContiguousSpan().data() + offset, it->second.size() - offset);
 }
 
 void TFragmentedBuffer::CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range) {

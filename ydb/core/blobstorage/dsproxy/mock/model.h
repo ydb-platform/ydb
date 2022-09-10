@@ -13,11 +13,15 @@ namespace NFake {
         using TStep = ui32;
 
         struct TBlob {
+            TBlob(TRope buffer)
+                : Buffer(std::move(buffer))
+            {}
+
             TBlob(TString buffer)
                 : Buffer(std::move(buffer))
             {}
 
-            TString Buffer;
+            TRope Buffer;
             bool Keep = false;
             bool DoNotKeep = false;
         };
@@ -125,7 +129,7 @@ namespace NFake {
                     const ui32 size = Min<ui32>(maxSize, !query.Size ? Max<ui32>() : query.Size);
 
                     // calculate substring; use 0 instead of query.Shift because it may exceed the buffer
-                    response.Buffer = data.Buffer.substr(size ? query.Shift : 0, size);
+                    response.Buffer = data.Buffer.ConvertToString().substr(size ? query.Shift : 0, size);
                 } else {
                     // ensure this blob is not under GC
                     Y_VERIFY(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
@@ -173,7 +177,7 @@ namespace NFake {
                         lastBlobId.Generation() >= msg->MinGeneration) {
                     TString buffer;
                     if (msg->ReadBody) {
-                        buffer = it->second.Buffer;
+                        buffer = it->second.Buffer.ConvertToString();
                     }
 
                     result = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(lastBlobId, msg->MinGeneration, buffer,
@@ -206,7 +210,7 @@ namespace NFake {
             if (from <= to) {
                 // forward scan
                 for (auto it = Blobs.lower_bound(from); it != Blobs.end() && it->first <= to; ++it) {
-                    process(it->first, it->second.Buffer);
+                    process(it->first, it->second.Buffer.ConvertToString());
                 }
             } else {
                 // reverse scan
@@ -215,7 +219,7 @@ namespace NFake {
                     if (it->first < to) {
                         break;
                     } else {
-                        process(it->first, it->second.Buffer);
+                        process(it->first, it->second.Buffer.ConvertToString());
                     }
                 }
             }

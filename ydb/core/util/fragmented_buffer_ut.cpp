@@ -130,22 +130,22 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         fb.Read(0, buffer, 3);
         UNIT_ASSERT_VALUES_EQUAL(buffer, data2);
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), true);
-        TString res = fb.GetMonolith();
+        TRope res = fb.GetMonolith();
         UNIT_ASSERT_VALUES_EQUAL(res.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(memcmp(res.data(), data2, 3), 0);
+        UNIT_ASSERT_VALUES_EQUAL(memcmp(res.GetContiguousSpan().data(), data2, 3), 0);
     }
 
     Y_UNIT_TEST(TestSetMonolith) {
-        TString inData = "123";
+        TRope inData = TString("123");
         TFragmentedBuffer fb;
         fb.SetMonolith(inData);
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), true);
-        TString res = fb.GetMonolith();
-        UNIT_ASSERT_VALUES_EQUAL(inData, res);
+        TRope res = fb.GetMonolith();
+        UNIT_ASSERT_VALUES_EQUAL(inData.ConvertToString(), res.ConvertToString());
     }
 
     Y_UNIT_TEST(TestReplaceWithSetMonolith) {
-        TString inData = "123";
+        TRope inData = TString("123");
         const char *data3v2 = "5";
         const char *data4 = "678";
         TFragmentedBuffer fb;
@@ -156,8 +156,8 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), false);
         fb.SetMonolith(inData);
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), true);
-        TString res = fb.GetMonolith();
-        UNIT_ASSERT_VALUES_EQUAL(inData, res);
+        TRope res = fb.GetMonolith();
+        UNIT_ASSERT_VALUES_EQUAL(inData.ConvertToString(), res.ConvertToString());
     }
 
     Y_UNIT_TEST(CopyFrom) {

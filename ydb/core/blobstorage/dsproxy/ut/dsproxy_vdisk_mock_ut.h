@@ -486,12 +486,12 @@ public:
         Info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), encryptedData, partSet);
         for (ui32 i = 0; i < totalParts; ++i) {
             TLogoBlobID pId(id, i + 1);
-            TString pData = partSet.Parts[i].OwnedString;
+            TRope pData = partSet.Parts[i].OwnedString;
             if (i < handoffsToUse) {
                 Y_VERIFY(totalParts + i < totalvd);
-                GetVDisk(vDisksId[totalParts + i].FailDomain, vDisksId[totalParts + i].VDisk).Put(pId, pData);
+                GetVDisk(vDisksId[totalParts + i].FailDomain, vDisksId[totalParts + i].VDisk).Put(pId, pData.ConvertToString());
             } else {
-                GetVDisk(vDisksId[i].FailDomain, vDisksId[i].VDisk).Put(pId, pData);
+                GetVDisk(vDisksId[i].FailDomain, vDisksId[i].VDisk).Put(pId, pData.ConvertToString());
             }
         }
     }

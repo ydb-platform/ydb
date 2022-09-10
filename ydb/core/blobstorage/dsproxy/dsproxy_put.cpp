@@ -387,14 +387,14 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             }
             TEvBlobStorage::TEvPut *put;
 
-            TString buffer = item.Buffer;
-            char *data = buffer.Detach();
+            TRope buffer = item.Buffer;
+            char* data = buffer.GetContiguousSpanMut().data();
             Decrypt(data, data, 0, buffer.size(), item.BlobId, *Info);
 
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, buffer, Deadline, HandleClass, Tactic),
+                put = new TEvBlobStorage::TEvPut(item.BlobId, std::move(buffer), Deadline, HandleClass, Tactic),
                 0 /*flags*/,
                 item.Cookie,
                 nullptr /*forwardOnNondelivery*/,
@@ -545,7 +545,7 @@ public:
             const ui64 partSize = Info->Type.PartSize(blobId);
             ui64 bufferSize = PutImpl.Blobs[idx].BufferSize;
 
-            char *data = PutImpl.Blobs[idx].Buffer.Detach();
+            char *data = PutImpl.Blobs[idx].Buffer.GetContiguousSpanMut().data();
             Encrypt(data, data, 0, bufferSize, blobId, *Info);
             TDataPartSet &partSet = resume->PartSets[idx];
 
@@ -630,9 +630,8 @@ public:
         bool splitDone = true;
         for (ui64 idx = 0; idx < PutImpl.Blobs.size(); ++idx) {
             TDataPartSet &partSet = resume->PartSets[idx];
-            TString &buffer = PutImpl.Blobs[idx].Buffer;
             TLogoBlobID blobId = PutImpl.Blobs[idx].BlobId;
-            Info->Type.IncrementalSplitData((TErasureType::ECrcMode)blobId.CrcMode(), buffer, partSet);
+            Info->Type.IncrementalSplitData((TErasureType::ECrcMode)blobId.CrcMode(), PutImpl.Blobs[idx].Buffer, partSet);
             if (partSet.IsSplitDone()) {
                 ReportBytes(partSet.MemoryConsumed - PutImpl.Blobs[idx].BufferSize);
             } else {

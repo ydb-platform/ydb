@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(DonorMode) {
                     break;
                 }
             }
-            TString part = partSet.Parts[blobId.PartId() - 1].OwnedString;
+            TRope part = partSet.Parts[blobId.PartId() - 1].OwnedString;
 
             // scan through existing stored blobs and ensure they are intact
             for (const auto& [blobId, part] : stored) {
@@ -75,19 +75,19 @@ Y_UNIT_TEST_SUITE(DonorMode) {
             }
 
             // add it to stored set
-            stored.emplace(blobId, part);
+            stored.emplace(blobId, part.ConvertToString());
 
             // get the blob location for this group
             const auto& [vdiskActorId, vdiskId] = getBlobLocation(info, blobId);
 
             // first, check that there is no such blob in the disk
-            env.CheckBlob(vdiskActorId, vdiskId, blobId, part, NKikimrProto::NODATA);
+            env.CheckBlob(vdiskActorId, vdiskId, blobId, part.ConvertToString(), NKikimrProto::NODATA);
 
             // put the blob to the disk
-            env.PutBlob(vdiskId, blobId, part);
+            env.PutBlob(vdiskId, blobId, part.ConvertToString());
 
             // check it appeared
-            env.CheckBlob(vdiskActorId, vdiskId, blobId, part);
+            env.CheckBlob(vdiskActorId, vdiskId, blobId, part.ConvertToString());
 
             // wait for sync
             env.WaitForSync(info, blobId);

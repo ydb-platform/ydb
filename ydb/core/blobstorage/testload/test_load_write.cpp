@@ -291,7 +291,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             const ui32 size = 1;
             const ui32 lastStep = Max<ui32>();
             const TLogoBlobID id(TabletId, Generation, lastStep, Channel, size, 0);
-            const TString buffer = GenerateBuffer(id);
+            const TSharedData buffer = GenerateBuffer<TSharedData>(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
 
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
@@ -531,7 +531,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
                 putHandleClass = PutHandleClass;
             }
             const TLogoBlobID id(TabletId, Generation, WriteStep, Channel, size, Cookie);
-            const TString buffer = GenerateBuffer(id);
+            const TSharedData buffer = GenerateBuffer<TSharedData>(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), putHandleClass);
             const ui64 writeQueryId = ++WriteQueryId;
 
@@ -741,8 +741,9 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             NextReadInQueue = false;
         }
 
-        static TString GenerateBuffer(const TLogoBlobID& id) {
-            return GenDataForLZ4(id.BlobSize());
+        template <class ResultContainer = TString>
+        static ResultContainer GenerateBuffer(const TLogoBlobID& id) {
+            return GenDataForLZ4<ResultContainer>(id.BlobSize());
         }
     };
 

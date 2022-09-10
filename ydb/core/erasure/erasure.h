@@ -12,6 +12,7 @@
 
 #include <util/generic/list.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/actors/util/rope.h>
 
 namespace NKikimr {
 
@@ -57,7 +58,7 @@ struct TPartDiffSet {
 
 // Part fragment, contains only some data
 struct TPartFragment {
-    TString OwnedString; // Used for ownership only
+    TRope OwnedString; // Used for ownership only
     char *Bytes = nullptr;
     ui64 Offset = 0; // Relative to part beginning
     ui64 Size = 0;
@@ -76,38 +77,51 @@ struct TPartFragment {
     }
 
     void UninitializedOwnedWhole(ui64 size) {
-        OwnedString = TString::Uninitialized(size);
-        Bytes = OwnedString.Detach();
+        OwnedString = TString::Uninitialized(size); //FIXME(innokentii)
+        Bytes = OwnedString.GetContiguousSpanMut().data();
         Offset = 0;
         Size = size;
         PartSize = size;
     }
 
-    void ResetToWhole(const TString &whole) {
+    void ResetToWhole(const TRope &whole) {
         OwnedString = whole;
-        Bytes = OwnedString.Detach();
+        Bytes = OwnedString.GetContiguousSpanMut().data();
         Offset = 0;
-        Size = whole.size();
+        Size = OwnedString.size();
         PartSize = Size;
     }
 
-    void ReferenceTo(const TString &whole) {
+    void ReferenceTo(const TRope &whole) {
+        Y_VERIFY(whole.IsContiguous());
         OwnedString = whole;
-        Bytes = const_cast<char*>(whole.data());
+        Bytes = OwnedString.UnsafeGetContiguousSpanMut().data();
         Offset = 0;
-        Size = whole.size();
+        Size = OwnedString.size();
         PartSize = Size;
     }
 
-    void ReferenceTo(const TString &piece, ui64 offset, ui64 size, ui64 partSize) {
+    void ReferenceTo(const TRope &piece, ui64 offset, ui64 size, ui64 partSize) {
+        Y_VERIFY(piece.IsContiguous());
         OwnedString = piece;
-        Bytes = const_cast<char*>(piece.data());
+        Bytes = OwnedString.UnsafeGetContiguousSpanMut().data();
         Offset = offset;
         Y_VERIFY(size <= piece.size());
         Size = size;
         Y_VERIFY(offset + size <= partSize);
         PartSize = partSize;
     }
+
+    void ReferenceTo(const TString &whole) {
+        TRope rope(whole);
+        ReferenceTo(rope);
+    }
+
+    void ReferenceTo(const TString &piece, ui64 offset, ui64 size, ui64 partSize) {
+        TRope rope(piece);
+        ReferenceTo(rope, offset, size, partSize);
+    }
+
 
     char *GetDataAt(ui64 get_offset) const {
         Y_VERIFY_DEBUG(Size);
@@ -130,19 +144,12 @@ struct TPartFragment {
     }
 
     void Detach() {
-        char *newBytes = nullptr;
-        if (Bytes) {
+        if(Bytes) {
             char *oldBytes = Bytes;
-            char *oldData = const_cast<char*>(OwnedString.data());
+            char *oldData = OwnedString.UnsafeGetContiguousSpanMut().data();
             intptr_t bytesOffset = oldBytes - oldData;
-            OwnedString.Detach();
-            if (OwnedString.data() != oldData) {
-                newBytes = const_cast<char*>(OwnedString.data()) + bytesOffset;
-            } else {
-                newBytes = oldBytes;
-            }
+            Bytes = OwnedString.GetContiguousSpanMut().data() + bytesOffset;
         }
-        Bytes = newBytes;
     }
 };
 
@@ -317,8 +324,16 @@ struct TErasureType {
     ui64 SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDown) const;
     ui32 Prime() const;
 
-    void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
-    void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
+    void SplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const;
+    void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
+        TRope rope = buffer;
+        SplitData(crcMode, rope, outPartSet);
+    }
+    void IncrementalSplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const;
+    void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
+        TRope rope = buffer;
+        IncrementalSplitData(crcMode, rope, outPartSet);
+    }
 
     void SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const;
     void ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const;
@@ -327,7 +342,7 @@ struct TErasureType {
     void ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
             const TVector<TDiff> &diffs, ui8 fromPart, ui8 toPart) const;
 
-    void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TString& outBuffer, bool restoreParts,
+    void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TRope& outBuffer, bool restoreParts,
             bool restoreFullData, bool restoreParityParts) const;
     void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool restoreParts, bool restoreFullData,
             bool restoreParityParts) const;

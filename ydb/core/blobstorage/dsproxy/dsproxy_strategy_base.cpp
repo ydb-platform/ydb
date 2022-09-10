@@ -291,14 +291,15 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         Y_VERIFY(fullInterval.IsSubsetOf(state.Whole.Here),
                 "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
 
-        TString wholeBuffer = TString::Uninitialized(state.Id.BlobSize());
-        state.Whole.Data.Read(0, const_cast<char*>(wholeBuffer.data()), state.Id.BlobSize());
+        TRope wholeBuffer(MakeIntrusive<TRopeSharedDataBackend>(TSharedData::Uninitialized(state.Id.BlobSize())));
+        state.Whole.Data.Read(0, wholeBuffer.UnsafeGetContiguousSpanMut().data(), state.Id.BlobSize());
         TDataPartSet partSet;
         info.Type.SplitData((TErasureType::ECrcMode)state.Id.CrcMode(), wholeBuffer, partSet);
 
         Y_VERIFY(partSet.Parts.size() == state.Parts.size());
         for (ui32 partIdx = 0; partIdx < partSet.Parts.size(); ++partIdx) {
-            state.AddPartToPut(partIdx, partSet.Parts[partIdx].OwnedString);
+            TRope data = partSet.Parts[partIdx].OwnedString;
+            state.AddPartToPut(partIdx, data);
         }
     }
 

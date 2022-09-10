@@ -387,7 +387,7 @@ NJson::TJsonValue FormatColumnPrettyValue(
 
     using namespace NYql::NCommon::NJsonCodec;
 
-    static const TValueConvertPolicy convertPolicy{ NUMBER_AS_STRING };
+    static const TValueConvertPolicy convertPolicy{ UNSAFE_NUMBER_AS_STRING };
 
     return GenericFormatColumnValue(value, type, holderFactory, [type](auto unboxed) {
         NJson::TJsonValue v;

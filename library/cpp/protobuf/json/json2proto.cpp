@@ -3,6 +3,7 @@
 
 #include <library/cpp/json/json_value.h>
 
+#include <google/protobuf/util/time_util.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
 
@@ -77,6 +78,52 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
     return name;
 }
 
+
+static void JsonString2Duration(const NJson::TJsonValue& json,
+                 google::protobuf::Message& proto,
+                 const google::protobuf::FieldDescriptor& field,
+                 const NProtobufJson::TJson2ProtoConfig& config) {
+    using namespace google::protobuf;
+    if (!json.GetString() && !config.CastRobust) {
+        ythrow yexception() << "Invalid type of JSON field '" << field.name() << "': "
+                            << "IsString() failed while "
+                            << "CPPTYPE_STRING is expected.";
+    }
+    TString jsonString = json.GetStringRobust();
+
+    Duration durationFromString;
+
+    if (!util::TimeUtil::FromString(jsonString, &durationFromString)) {
+        ythrow yexception() << "error while parsing google.protobuf.Duration from string on field '" <<
+                                                                                    field.name() << "'";
+    }
+
+    proto.CopyFrom(durationFromString);
+
+}
+
+static void JsonString2Timestamp(const NJson::TJsonValue& json,
+                 google::protobuf::Message& proto,
+                 const google::protobuf::FieldDescriptor& field,
+                 const NProtobufJson::TJson2ProtoConfig& config) {
+    using namespace google::protobuf;
+    if (!json.GetString() && !config.CastRobust) {
+        ythrow yexception() << "Invalid type of JSON field '" << field.name() << "': "
+                            << "IsString() failed while "
+                            << "CPPTYPE_STRING is expected.";
+    }
+    TString jsonString = json.GetStringRobust();
+
+    Timestamp timestampFromString;
+
+    if (!util::TimeUtil::FromString(jsonString, &timestampFromString)) {
+        ythrow yexception() << "error while parsing google.protobuf.Timestamp from string on field '" <<
+                                                                                    field.name() << "'";
+    }
+
+    proto.CopyFrom(timestampFromString);
+}
+
 static void
 JsonString2Field(const NJson::TJsonValue& json,
                  google::protobuf::Message& proto,
@@ -108,6 +155,24 @@ JsonString2Field(const NJson::TJsonValue& json,
         reflection->AddString(&proto, &field, value);
     else
         reflection->SetString(&proto, &field, value);
+}
+
+static bool
+HandleString2TimeConversion(const NJson::TJsonValue& json,
+                 google::protobuf::Message& proto,
+                 const google::protobuf::FieldDescriptor& field,
+                 const NProtobufJson::TJson2ProtoConfig& config) {
+    using namespace google::protobuf;
+    auto type = proto.GetDescriptor()->well_known_type();
+
+    if (type == Descriptor::WellKnownType::WELLKNOWNTYPE_DURATION) {
+        JsonString2Duration(json, proto, field, config);
+        return true;
+    } else if (type == Descriptor::WellKnownType::WELLKNOWNTYPE_TIMESTAMP) {
+        JsonString2Timestamp(json, proto, field, config);
+        return true;
+    }
+    return false;
 }
 
 static const NProtoBuf::EnumValueDescriptor*
@@ -215,6 +280,12 @@ Json2SingleField(const NJson::TJsonValue& json,
         case FieldDescriptor::CPPTYPE_MESSAGE: {
             Message* innerProto = reflection->MutableMessage(&proto, &field);
             Y_ASSERT(!!innerProto);
+
+            if (config.AllowString2TimeConversion &&
+                                        HandleString2TimeConversion(fieldJson, *innerProto, field, config)) {
+                break;
+            }
+
             NProtobufJson::MergeJson2Proto(fieldJson, *innerProto, config);
 
             break;

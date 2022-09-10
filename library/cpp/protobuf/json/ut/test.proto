@@ -1,5 +1,8 @@
 package NProtobufJsonTest;
 
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
 enum EEnum {
     E_0 = 0;
     E_1 = 1;
@@ -192,6 +195,14 @@ message TSingleRepeatedString {
 
 message TSingleRepeatedInt {
     repeated int32 RepeatedInt = 1;
+}
+
+message TSingleDuration {
+    required google.protobuf.Duration Duration = 1;
+}
+
+message TSingleTimestamp {
+    required google.protobuf.Timestamp Timestamp = 1;
 }
 
 message TExtensionField {

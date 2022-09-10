@@ -8,6 +8,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -1143,5 +1144,30 @@ Y_UNIT_TEST(TestAllowComments) {
     UNIT_ASSERT_VALUES_EQUAL(proto.GetI32(), 4);
     UNIT_ASSERT_VALUES_EQUAL(proto.GetI64(), 3423);
 } // TestAllowComments
+
+Y_UNIT_TEST(TestSimplifiedDuration) {
+    NJson::TJsonValue json;
+    TSingleDuration simpleDuration;
+    json["Duration"] = "10.1s";
+    NProtobufJson::Json2Proto(json, simpleDuration, NProtobufJson::TJson2ProtoConfig().SetAllowString2TimeConversion(true));
+    UNIT_ASSERT_EQUAL(NProtoInterop::CastFromProto(simpleDuration.GetDuration()), TDuration::MilliSeconds(10100));
+} // TestSimplifiedDuration
+
+Y_UNIT_TEST(TestUnwrappedDuration) {
+    NJson::TJsonValue json;
+    TSingleDuration duration;
+    json["Duration"]["seconds"] = 2;
+    NProtobufJson::Json2Proto(json, duration, NProtobufJson::TJson2ProtoConfig());
+    UNIT_ASSERT_EQUAL(NProtoInterop::CastFromProto(duration.GetDuration()), TDuration::MilliSeconds(2000));
+} // TestUnwrappedDuration
+
+Y_UNIT_TEST(TestSimplifiedTimestamp) {
+    NJson::TJsonValue json;
+    TSingleTimestamp simpleTimestamp;
+    json["Timestamp"] = "2014-08-26T15:52:15Z";
+    NProtobufJson::Json2Proto(json, simpleTimestamp, NProtobufJson::TJson2ProtoConfig().SetAllowString2TimeConversion(true));
+    UNIT_ASSERT_EQUAL(NProtoInterop::CastFromProto(simpleTimestamp.GetTimestamp()), TInstant::ParseIso8601("2014-08-26T15:52:15Z"));
+
+} // TestSimplifiedTimestamp
 
 } // TJson2ProtoTest

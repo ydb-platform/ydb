@@ -65,6 +65,9 @@ namespace NProtobufJson {
         /// with FieldNameMode.
         bool UseJsonName = false;
 
+        // Allow nonstandard conversions, e.g. from google.protobuf.Duration to string
+        bool ConvertTimeAsString = false;
+
         /// Transforms will be applied only to string values (== protobuf fields of string / bytes type).
         /// yajl_encode_string will be used if no transforms are specified.
         TVector<TStringTransformPtr> StringTransforms;
@@ -122,6 +125,11 @@ namespace NProtobufJson {
         TSelf& SetUseJsonName(bool jsonName) {
             Y_ENSURE(!jsonName || FieldNameMode == FieldNameOriginalCase, "FieldNameMode and UseJsonName are mutually exclusive");
             UseJsonName = jsonName;
+            return *this;
+        }
+
+        TSelf& SetConvertTimeAsString(bool value) {
+            ConvertTimeAsString = value;
             return *this;
         }
 

@@ -2,9 +2,13 @@
 #include "config.h"
 #include "util.h"
 
+#include <google/protobuf/util/time_util.h>
+
 #include <util/generic/yexception.h>
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
+#include <util/system/win_undef.h>
+
 
 namespace NProtobufJson {
     using namespace NProtoBuf;
@@ -176,6 +180,22 @@ namespace NProtobufJson {
         }
     }
 
+    bool HandleTimeConversion(const Message& proto, IJsonOutput& json) {
+        using namespace google::protobuf;
+        auto type = proto.GetDescriptor()->well_known_type();
+
+        if (type == Descriptor::WellKnownType::WELLKNOWNTYPE_DURATION) {
+            const auto& duration = static_cast<const Duration&>(proto);
+            json.Write(util::TimeUtil::ToString(duration));
+            return true;
+        } else if (type == Descriptor::WellKnownType::WELLKNOWNTYPE_TIMESTAMP) {
+            const auto& timestamp = static_cast<const Timestamp&>(proto);
+            json.Write(util::TimeUtil::ToString(timestamp));
+            return true;
+        }
+        return false;
+    }
+
     void TProto2JsonPrinter::PrintSingleField(const Message& proto,
                                               const FieldDescriptor& field,
                                               IJsonOutput& json,
@@ -228,6 +248,9 @@ namespace NProtobufJson {
 
                 case FieldDescriptor::CPPTYPE_MESSAGE: {
                     json.WriteKey(key);
+                    if (Config.ConvertTimeAsString && HandleTimeConversion(reflection->GetMessage(proto, &field), json)) {
+                        break;
+                    }
                     Print(reflection->GetMessage(proto, &field), json);
                     break;
                 }

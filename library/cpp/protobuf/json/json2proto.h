@@ -103,6 +103,11 @@ namespace NProtobufJson {
             return *this;
         }
 
+        TSelf& SetAllowString2TimeConversion(bool value) {
+            AllowString2TimeConversion = value;
+            return *this;
+        }
+
         FldNameMode FieldNameMode = FieldNameOriginalCase;
         bool AllowUnknownFields = true;
 
@@ -144,6 +149,9 @@ namespace NProtobufJson {
 
         /// Allow js-style comments (both // and /**/)
         bool AllowComments = false;
+
+        /// Allow nonstandard conversions, e.g. google.protobuf.Duration from String
+        bool AllowString2TimeConversion = false;
     };
 
     /// @throw yexception

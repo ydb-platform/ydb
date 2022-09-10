@@ -1019,4 +1019,22 @@ Y_UNIT_TEST(TestExtension) {
     UNIT_ASSERT_EQUAL(Proto2Json(proto, cfg), "{\"bar\":1}");
 } // TestExtension
 
+Y_UNIT_TEST(TestSimplifiedDuration) {
+    TString json;
+    TSingleDuration simpleDuration;
+    simpleDuration.mutable_duration()->set_seconds(10);
+    simpleDuration.mutable_duration()->set_nanos(101);
+    Proto2Json(simpleDuration, json, TProto2JsonConfig().SetConvertTimeAsString(true));
+    UNIT_ASSERT_EQUAL_C(json, "{\"Duration\":\"10.000000101s\"}", "real value is " << json);
+} // TestSimplifiedDuration
+
+Y_UNIT_TEST(TestSimplifiedTimestamp) {
+    TString json;
+    TSingleTimestamp simpleTimestamp;
+    simpleTimestamp.mutable_timestamp()->set_seconds(10000000);
+    simpleTimestamp.mutable_timestamp()->set_nanos(504);
+    Proto2Json(simpleTimestamp, json, TProto2JsonConfig().SetConvertTimeAsString(true));
+    UNIT_ASSERT_EQUAL_C(json, "{\"Timestamp\":\"1970-04-26T17:46:40.000000504Z\"}", "real value is " << json);
+} // TestSimplifiedTimestamp
+
 } // TProto2JsonTest

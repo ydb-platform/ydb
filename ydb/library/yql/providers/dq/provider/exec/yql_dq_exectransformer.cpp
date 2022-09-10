@@ -789,7 +789,7 @@ private:
                         future = NThreading::MakeFuture<IDqGateway::TResult>(std::move(result));
                     }
                 } else {
-                    graphParams["Evaluation"] = ctx.Step.IsDone(TExprStep::ExprEval) ? "false" : "true";
+                    graphParams["Evaluation"] = ToString(!ctx.Step.IsDone(TExprStep::ExprEval));
                     future = State->DqGateway->ExecutePlan(
                         State->SessionId, executionPlanner->GetPlan(), columns, secureParams, graphParams,
                         settings, progressWriter, ModulesMapping, fillSettings.Discard);
@@ -1591,7 +1591,7 @@ private:
             }
 
             auto graphParams = GatherGraphParams(optimizedInput);
-
+            graphParams["Precompute"] = ToString(true);
             MarkProgressStarted(publicIds->AllPublicIds, State->ProgressWriter);
 
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);

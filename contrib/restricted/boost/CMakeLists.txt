@@ -63,7 +63,6 @@ add_subdirectory(preprocessor)
 add_subdirectory(program_options)
 add_subdirectory(proto)
 add_subdirectory(ptr_container)
-add_subdirectory(qvm)
 add_subdirectory(random)
 add_subdirectory(range)
 add_subdirectory(ratio)
@@ -137,7 +136,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-preprocessor
   restricted-boost-proto
   restricted-boost-ptr_container
-  restricted-boost-qvm
   restricted-boost-random
   restricted-boost-range
   restricted-boost-rational

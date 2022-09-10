@@ -21,7 +21,7 @@ namespace NKikimr::NBlobDepot {
 
     enum class EBlobType : ui32 {
         VG_COMPOSITE_BLOB = 0, // data + footer
-        VG_DATA_BLOB = 1, // just data, footer aside
+        VG_DATA_BLOB = 1, // just data, footer aside (optional)
         VG_FOOTER_BLOB = 2, // footer only
         VG_GC_BLOB = 3, // garbage collection command
     };
@@ -132,7 +132,9 @@ namespace NKikimr::NBlobDepot {
         for (const auto& item : valueChain) {
             const auto& locator = item.GetLocator();
             const auto& blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
-            if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
+            if (locator.GetFooterLen() == 0) {
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
+            } else if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
                 callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
                 callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()), 0, 0);
             } else {

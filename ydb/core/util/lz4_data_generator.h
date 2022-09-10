@@ -23,7 +23,7 @@ inline TString FastGenDataForLZ4(size_t size, ui64 seed) {
 
     constexpr size_t minRunLen = 32;
     constexpr size_t maxRunLen = 64;
-    const size_t runLen = minRunLen + sizeof(ui32) * rng() % ((maxRunLen - minRunLen) / sizeof(ui32) + 1);
+    const size_t runLen = minRunLen + sizeof(ui32) * (rng() % ((maxRunLen - minRunLen) / sizeof(ui32) + 1));
 
     char run[maxRunLen];
     ui32 i;

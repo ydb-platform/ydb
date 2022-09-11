@@ -4,45 +4,44 @@
 //  Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#ifndef BOOST_MP_RESTRICTED_CONVERSION_HPP
-#define BOOST_MP_RESTRICTED_CONVERSION_HPP
+#ifndef BOOST_MP_IS_RESTRICTED_CONVERSION_HPP
+#define BOOST_MP_IS_RESTRICTED_CONVERSION_HPP
 
 #include <boost/multiprecision/traits/explicit_conversion.hpp>
-#include <boost/mpl/if.hpp>
 #include <boost/multiprecision/detail/number_base.hpp>
 
-namespace boost{ namespace multiprecision{ namespace detail{
-
+namespace boost { namespace multiprecision { namespace detail {
 
 template <class From, class To>
 struct is_lossy_conversion
 {
-   typedef typename mpl::if_c<
-      ((number_category<From>::value == number_kind_floating_point) && (number_category<To>::value == number_kind_integer))
-      /* || ((number_category<From>::value == number_kind_floating_point) && (number_category<To>::value == number_kind_rational))*/
-      || ((number_category<From>::value == number_kind_rational) && (number_category<To>::value == number_kind_integer))
-      || ((number_category<From>::value == number_kind_fixed_point) && (number_category<To>::value == number_kind_integer))
-      || (number_category<From>::value == number_kind_unknown)
-      || (number_category<To>::value == number_kind_unknown),
-      mpl::true_,
-      mpl::false_
-   >::type type;
-   static const bool value = type::value;
+   static constexpr bool category_conditional_is_true =
+         (   (static_cast<boost::multiprecision::number_category_type>(number_category<From>::value) == number_kind_floating_point)
+          && (static_cast<boost::multiprecision::number_category_type>(number_category<To  >::value) == number_kind_integer))
+      || (   (static_cast<boost::multiprecision::number_category_type>(number_category<From>::value) == number_kind_rational)
+          && (static_cast<boost::multiprecision::number_category_type>(number_category<To  >::value) == number_kind_integer))
+      || (   (static_cast<boost::multiprecision::number_category_type>(number_category<From>::value) == number_kind_fixed_point)
+          && (static_cast<boost::multiprecision::number_category_type>(number_category<To  >::value) == number_kind_integer))
+      ||     (static_cast<boost::multiprecision::number_category_type>(number_category<From>::value) == number_kind_unknown)
+      ||     (static_cast<boost::multiprecision::number_category_type>(number_category<To  >::value) == number_kind_unknown);
+
+   using type = typename std::conditional<category_conditional_is_true,
+                                          std::integral_constant<bool, true>,
+                                          std::integral_constant<bool, false>>::type;
+
+   static constexpr bool value = type::value;
 };
 
-template<typename From, typename To>
+template <typename From, typename To>
 struct is_restricted_conversion
 {
-   typedef typename mpl::if_c<
-      ((is_explicitly_convertible<From, To>::value && !is_convertible<From, To>::value)
-      || is_lossy_conversion<From, To>::value),
-      mpl::true_,
-      mpl::false_
-   >::type type;
-   static const bool value = type::value;
+   using type = typename std::conditional<
+       ((is_explicitly_convertible<From, To>::value && !std::is_convertible<From, To>::value) || is_lossy_conversion<From, To>::value),
+       std::integral_constant<bool, true>,
+       std::integral_constant<bool, false>>::type;
+   static constexpr const bool                     value = type::value;
 };
 
-}}} // namespaces
+}}} // namespace boost::multiprecision::detail
 
-#endif // BOOST_MP_RESTRICTED_CONVERSION_HPP
-
+#endif // BOOST_MP_IS_RESTRICTED_CONVERSION_HPP

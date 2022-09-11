@@ -19,7 +19,7 @@ void RegisterS3ReadActorFactory(
     NDB::registerFormats();
     factory.RegisterSource<NS3::TSource>("S3Source",
         [credentialsFactory, gateway](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
-                return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, gateway, std::move(settings), args.InputIndex, args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory);
+                return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, gateway, std::move(settings), args.InputIndex, args.TxId, args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory);
         });
 #else
     Y_UNUSED(factory);

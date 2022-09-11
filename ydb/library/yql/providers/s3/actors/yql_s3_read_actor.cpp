@@ -22,6 +22,8 @@
 
 #include "yql_s3_read_actor.h"
 
+#include <ydb/core/protos/services.pb.h>
+
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -44,6 +46,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
 
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>
@@ -54,6 +57,29 @@
 #undef THROW
 #endif
 #include <library/cpp/xml/document/xml-document.h>
+
+
+#define LOG_E(name, stream) \
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
+#define LOG_W(name, stream) \
+    LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
+#define LOG_I(name, stream) \
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
+#define LOG_D(name, stream) \
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
+#define LOG_T(name, stream) \
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
+
+#define LOG_CORO_E(name, stream) \
+    LOG_ERROR_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, name << ": " << SelfActorId << ", TxId: " << TxId << ". " << stream)
+#define LOG_CORO_W(name, stream) \
+    LOG_WARN_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, name << ": " << SelfActorId << ", TxId: " << TxId << ". " << stream)
+#define LOG_CORO_I(name, stream) \
+    LOG_INFO_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, name << ": " << SelfActorId << ", TxId: " << TxId << ". " << stream)
+#define LOG_CORO_D(name, stream) \
+    LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, name << ": " << SelfActorId << ", TxId: " << TxId << ". " << stream)
+#define LOG_CORO_T(name, stream) \
+    LOG_TRACE_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, name << ": " << SelfActorId << ", TxId: " << TxId << ". " << stream)
 
 namespace NYql::NDq {
 
@@ -122,6 +148,7 @@ using namespace NKikimr::NMiniKQL;
 class TS3ReadActor : public TActorBootstrapped<TS3ReadActor>, public IDqComputeActorAsyncInput {
 public:
     TS3ReadActor(ui64 inputIndex,
+        const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
         const TString& url,
@@ -134,6 +161,7 @@ public:
     )   : Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
         , InputIndex(inputIndex)
+        , TxId(txId)
         , ComputeActorId(computeActorId)
         , ActorSystem(TActivationContext::ActorSystem())
         , Url(url)
@@ -145,12 +173,15 @@ public:
     {}
 
     void Bootstrap() {
+        LOG_D("TS3ReadActor", "Bootstrapped, InputIndex: " << InputIndex);
         Become(&TS3ReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
             const TPath& path = Paths[pathInd];
-            Gateway->Download(Url + std::get<TString>(path),
-                Headers, std::min(std::get<size_t>(path), SizeLimit),
-                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd + StartPathIndex), {}, GetHTTPDefaultRetryPolicy());
+            auto url = Url + std::get<TString>(path);
+            auto id = pathInd + StartPathIndex;
+            LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id);
+            Gateway->Download(url, Headers, std::min(std::get<size_t>(path), SizeLimit),
+                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, id), {}, GetHTTPDefaultRetryPolicy());
         };
     }
 
@@ -214,17 +245,22 @@ private:
 
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         ++IsDoneCounter;
-        Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), result->Get()->PathIndex));
+        auto id = result->Get()->PathIndex;
+        LOG_D("TS3ReadActor", "ID: " << id << ", TEvReadResult size: " << result->Get()->Result.size());
+        Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), id));
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
         ++IsDoneCounter;
+        auto id = result->Get()->PathIndex;
+        LOG_W("TS3ReadActor", "ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString());
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        LOG_D("TS3ReadActor", "PassAway");
         ContainerCache.Clear();
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
@@ -241,6 +277,7 @@ private:
     TPlainContainerCache ContainerCache;
 
     const ui64 InputIndex;
+    const TTxId TxId;
     const NActors::TActorId ComputeActorId;
 
     TActorSystem* const ActorSystem;
@@ -271,24 +308,31 @@ struct TRetryStuff {
         IHTTPGateway::TPtr gateway,
         TString url,
         const IHTTPGateway::THeaders& headers,
-        std::size_t sizeLimit
-    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), Offset(0U), SizeLimit(sizeLimit), RetryState(GetHTTPDefaultRetryPolicy()->CreateRetryState())
+        std::size_t sizeLimit,
+        const TTxId& txId
+    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), Offset(0U), SizeLimit(sizeLimit), TxId(txId), RetryState(GetHTTPDefaultRetryPolicy()->CreateRetryState()), Cancelled(false)
     {}
 
     const IHTTPGateway::TPtr Gateway;
     const TString Url;
     const IHTTPGateway::THeaders Headers;
     std::size_t Offset, SizeLimit;
+    const TTxId TxId;
     const IRetryPolicy<long>::IRetryState::TPtr RetryState;
     IHTTPGateway::TCancelHook CancelHook;
     TMaybe<TDuration> NextRetryDelay;
+    std::atomic_bool Cancelled;
 
     void Cancel() {
-        NextRetryDelay = {};
+        Cancelled.store(true);
         if (const auto cancelHook = std::move(CancelHook)) {
             CancelHook = {};
             cancelHook(TIssue("Request cancelled."));
         }
+    }
+
+    bool IsCancelled() {
+        return Cancelled.load();
     }
 };
 
@@ -315,8 +359,8 @@ private:
 
     static constexpr std::string_view TruncatedSuffix = "... [truncated]"sv;
 public:
-    TS3ReadCoroImpl(ui64 inputIndex, const NActors::TActorId& computeActorId, const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex, const TString& path)
-        : TActorCoroImpl(256_KB), InputIndex(inputIndex), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId), PathIndex(pathIndex), Path(path)
+    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId, const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex, const TString& path)
+        : TActorCoroImpl(256_KB), InputIndex(inputIndex), TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId), PathIndex(pathIndex), Path(path)
     {}
 
     bool Next(TString& value) {
@@ -326,6 +370,7 @@ public:
         const auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadStarted, TEvPrivate::TEvDataPart, TEvPrivate::TEvReadError, TEvPrivate::TEvReadFinished>();
         switch (const auto etype = ev->GetTypeRewrite()) {
             case TEvPrivate::TEvReadStarted::EventType:
+                LOG_CORO_D("TS3ReadCoroImpl", "TEvReadStarted, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
                 ErrorText.clear();
                 Issues.Clear();
                 value.clear();
@@ -333,23 +378,27 @@ public:
                 return true;
             case TEvPrivate::TEvReadFinished::EventType:
                 InputFinished = true;
+                LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
                 return false;
             case TEvPrivate::TEvReadError::EventType:
                 InputFinished = true;
                 Issues = std::move(ev->Get<TEvPrivate::TEvReadError>()->Error);
+                LOG_CORO_W("TS3ReadCoroImpl", "TEvReadError: " << Issues.ToOneLineString() << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
                 return false;
             case TEvPrivate::TEvDataPart::EventType:
                 if (200L == HttpResponseCode || 206L == HttpResponseCode) {
                     value = ev->Get<TEvPrivate::TEvDataPart>()->Result.Extract();
                     RetryStuff->Offset += value.size();
                     RetryStuff->SizeLimit -= value.size();
+                    LOG_CORO_T("TS3ReadCoroImpl", "TEvDataPart, size: " << value.size() << ", Url: " << RetryStuff->Url << ", Offset (updated): " << RetryStuff->Offset);
                     Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
-                } else if (HttpResponseCode && !RetryStuff->NextRetryDelay) {
+                } else if (HttpResponseCode && !RetryStuff->IsCancelled() && !RetryStuff->NextRetryDelay) {
                     if (ErrorText.size() < 256_KB)
                         ErrorText.append(ev->Get<TEvPrivate::TEvDataPart>()->Result.Extract());
                     else if (!ErrorText.EndsWith(TruncatedSuffix))
                         ErrorText.append(TruncatedSuffix);
                     value.clear();
+                    LOG_CORO_W("TS3ReadCoroImpl", "TEvDataPart, ERROR: " << ErrorText << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
                 }
                 return true;
             default:
@@ -358,6 +407,7 @@ public:
     }
 private:
     void WaitFinish() {
+        LOG_CORO_D("TS3ReadCoroImpl", "WaitFinish()");   
         if (InputFinished)
             return;
 
@@ -370,9 +420,11 @@ private:
             }
             switch (etype) {
                 case TEvPrivate::TEvReadFinished::EventType:
+                    LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished");
                     break;
                 case TEvPrivate::TEvReadError::EventType:
                     Issues = std::move(ev->Get<TEvPrivate::TEvReadError>()->Error);
+                    LOG_CORO_W("TS3ReadCoroImpl", "TEvReadError: " << Issues.ToOneLineString());
                     break;
                 default:
                     break;
@@ -383,6 +435,8 @@ private:
     }
 
     void Run() final try {
+
+        LOG_CORO_D("TS3ReadCoroImpl", "Run, Path: " << Path);   
 
         NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
 
@@ -448,6 +502,7 @@ private:
     }
 private:
     const ui64 InputIndex;
+    const TTxId& TxId;
     const TRetryStuff::TPtr RetryStuff;
     const TReadSpec::TPtr ReadSpec;
     const TString Format, RowType, Compression;
@@ -484,24 +539,26 @@ private:
             }
         }
 
-        if (retryStuff->NextRetryDelay && retryStuff->SizeLimit > 0ULL)
-            actorSystem->Schedule(*retryStuff->NextRetryDelay, new IEventHandle(parent, self, new TEvPrivate::TEvRetryEventFunc(std::bind(&TS3ReadCoroActor::DownloadStart, retryStuff, self, parent))));
-        else
+        if (!retryStuff->IsCancelled() && retryStuff->NextRetryDelay && retryStuff->SizeLimit > 0ULL) {
+            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3ReadCoroActor" << ": " << self << ", TxId: " << retryStuff->TxId << ". " << "Retry Download, Url: " << retryStuff->Url << ", Offset: " << retryStuff->Offset);
+            actorSystem->Schedule(*retryStuff->NextRetryDelay, new IEventHandle(parent, self, new TEvPrivate::TEvRetryEventFunc(std::bind(&TS3ReadCoroActor::DownloadStart, retryStuff, actorSystem, self, parent))));
+        } else {
             actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadFinished));
+        }
     }
 
-    static void DownloadStart(const TRetryStuff::TPtr& retryStuff, const TActorId& self, const TActorId& parent) {
-        auto* as = TActivationContext::ActorSystem();
+    static void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent) {
         retryStuff->CancelHook = retryStuff->Gateway->Download(retryStuff->Url,
             retryStuff->Headers, retryStuff->Offset, retryStuff->SizeLimit,
-            std::bind(&TS3ReadCoroActor::OnDownloadStart, as, self, parent, std::placeholders::_1),
-            std::bind(&TS3ReadCoroActor::OnNewData, as, self, parent, std::placeholders::_1),
-            std::bind(&TS3ReadCoroActor::OnDownloadFinished, as, self, parent, retryStuff, std::placeholders::_1));
+            std::bind(&TS3ReadCoroActor::OnDownloadStart, actorSystem, self, parent, std::placeholders::_1),
+            std::bind(&TS3ReadCoroActor::OnNewData, actorSystem, self, parent, std::placeholders::_1),
+            std::bind(&TS3ReadCoroActor::OnDownloadFinished, actorSystem, self, parent, retryStuff, std::placeholders::_1));
     }
 
-    void Registered(TActorSystem* sys, const TActorId& parent) override {
-        TActorCoro::Registered(sys, parent); // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
-        DownloadStart(RetryStuff, SelfId(), parent);
+    void Registered(TActorSystem* actorSystem, const TActorId& parent) override {
+        TActorCoro::Registered(actorSystem, parent); // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
+        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3ReadCoroActor" << ": " << SelfId() << ", TxId: " << RetryStuff->TxId << ". " << "Retry Download, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
+        DownloadStart(RetryStuff, actorSystem, SelfId(), parent);
     }
 
     static IHTTPGateway::THeaders MakeHeader(const TString& token) {
@@ -515,6 +572,7 @@ class TS3StreamReadActor : public TActorBootstrapped<TS3StreamReadActor>, public
 public:
     TS3StreamReadActor(
         ui64 inputIndex,
+        const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
         const TString& url,
@@ -527,6 +585,7 @@ public:
     )   : Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
         , InputIndex(inputIndex)
+        , TxId(txId)
         , ComputeActorId(computeActorId)
         , Url(url)
         , Headers(MakeHeader(token))
@@ -538,17 +597,18 @@ public:
     {}
 
     void Bootstrap() {
+        LOG_D("TS3StreamReadActor", "Bootstrapped");
         Become(&TS3StreamReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
             const TPath& path = Paths[pathInd];
-            auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + std::get<TString>(path), Headers, std::get<std::size_t>(path));
+            auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + std::get<TString>(path), Headers, std::get<std::size_t>(path), TxId);
             RetryStuffForFile.push_back(stuff);
-            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, ComputeActorId, stuff, ReadSpec, pathInd + StartPathIndex, std::get<TString>(path));
+            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, stuff, ReadSpec, pathInd + StartPathIndex, std::get<TString>(path));
             RegisterWithSameMailbox(std::make_unique<TS3ReadCoroActor>(std::move(impl), std::move(stuff)).release());
         }
     }
 
-    static constexpr char ActorName[] = "S3_READ_ACTOR";
+    static constexpr char ActorName[] = "S3_STREAM_READ_ACTOR";
 
 private:
     class TBoxedBlock : public TComputationValue<TBoxedBlock> {
@@ -605,6 +665,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        LOG_D("TS3StreamReadActor", "PassAway");
         for (auto stuff: RetryStuffForFile) {
             stuff->Cancel();
         }
@@ -646,6 +707,7 @@ private:
     TPlainContainerCache ContainerCache;
 
     const ui64 InputIndex;
+    const TTxId TxId;
     const NActors::TActorId ComputeActorId;
 
 
@@ -770,6 +832,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     IHTTPGateway::TPtr gateway,
     NS3::TSource&& params,
     ui64 inputIndex,
+    const TTxId& txId,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
@@ -830,7 +893,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
 
-        const auto actor = new TS3StreamReadActor(inputIndex, std::move(gateway), holderFactory, params.GetUrl(), authToken,
+        const auto actor = new TS3StreamReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken,
                                                   std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId);
         return {actor, actor};
     } else {
@@ -838,7 +901,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
             sizeLimit = FromString<ui64>(it->second);
 
-        const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), holderFactory, params.GetUrl(), authToken,
+        const auto actor = new TS3ReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken,
                                             std::move(paths), addPathIndex, startPathIndex, computeActorId, sizeLimit);
         return {actor, actor};
     }

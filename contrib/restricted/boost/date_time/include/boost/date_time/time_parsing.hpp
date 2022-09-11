@@ -309,7 +309,7 @@ namespace date_time {
     // then from_iso_string should be able to read a special value string
     // the special_values_parser is expensive to set up and not thread-safe
     // so it cannot be static, so we need to be careful about when we use it
-    if (svp_type::likely2(s)) {
+    if (svp_type::should_call_match(s)) {
         typedef typename svp_type::stringstream_type ss_type;
         typedef typename svp_type::stream_itr_type itr_type;
         typedef typename svp_type::match_results mr_type;

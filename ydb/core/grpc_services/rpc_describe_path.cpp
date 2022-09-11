@@ -5,12 +5,14 @@
 #include "rpc_common.h"
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
+using namespace NSchemeCache;
 using namespace Ydb;
 
 using TEvListDirectoryRequest = TGrpcRequestOperationCall<Ydb::Scheme::ListDirectoryRequest,
@@ -29,22 +31,70 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
-
-        SendProposeRequest(ctx);
-        this->Become(&TDerived::StateWork);
+        ResolvePath(ctx);
     }
 
 private:
-    void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = this->GetProtoRequest();
+    void ResolvePath(const TActorContext& ctx) {
+        auto request = MakeHolder<TSchemeCacheNavigate>();
+        request->DatabaseName = NKikimr::CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
 
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = TSchemeCacheNavigate::OpList; // we need ListNodeEntry
+        entry.Path = NKikimr::SplitPath(this->GetProtoRequest()->path());
+
+        ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        this->Become(&TDerived::StateResolvePath);
+    }
+
+    void StateResolvePath(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            default: TBase::StateWork(ev, ctx);
+        }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        const auto& request = ev->Get()->Request;
+        if (request->ResultSet.size() != 1) {
+            return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+        }
+
+        const auto& entry = request->ResultSet.front();
+        if (entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
+            return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+        }
+
+        if (entry.Kind != TSchemeCacheNavigate::EKind::KindCdcStream) {
+            return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+        }
+
+        if (!entry.Self || !entry.ListNodeEntry) {
+            return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+        }
+
+        if (entry.ListNodeEntry->Children.size() != 1) {
+            // not created yet
+            return this->Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+        }
+
+        OverrideName = entry.Self->Info.GetName();
+        const auto& topicName = entry.ListNodeEntry->Children.at(0).Name;
+
+        return SendProposeRequest(ctx,
+            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(this->GetProtoRequest()->path()), topicName)));
+    }
+
+    void SendProposeRequest(const TActorContext& ctx, const TString& path) {
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *this->Request_);
         SetDatabase(navigateRequest.get(), *this->Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(req->path());
+        record->SetPath(path);
+        record->MutableOptions()->SetShowPrivateTable(OverrideName.Defined());
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
+        this->Become(&TDerived::StateWork);
     }
 
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
@@ -68,6 +118,9 @@ private:
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
                 ConvertDirectoryEntry(pathDescription, result.mutable_self(), true);
+                if (OverrideName) {
+                    result.mutable_self()->set_name(*OverrideName);
+                }
                 if constexpr (ListChildren) {
                     for (const auto& child : pathDescription.GetChildren()) {
                         ConvertDirectoryEntry(child, result.add_children(), false);
@@ -90,6 +143,9 @@ private:
             }
         }
     }
+
+private:
+    TMaybe<TString> OverrideName;
 };
 
 class TListDirectoryRPC : public TBaseDescribe<TListDirectoryRPC, TEvListDirectoryRequest, Ydb::Scheme::ListDirectoryResult, true> {

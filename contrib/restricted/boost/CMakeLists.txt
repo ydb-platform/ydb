@@ -127,7 +127,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-mpl
   restricted-boost-multi_array
   restricted-boost-multi_index
-  restricted-boost-multiprecision
   restricted-boost-numeric_conversion
   restricted-boost-optional
   restricted-boost-parameter

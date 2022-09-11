@@ -42,7 +42,6 @@ target_include_directories(libs-apache-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/re2
   ${CMAKE_SOURCE_DIR}/contrib/libs/utf8proc
   ${CMAKE_SOURCE_DIR}/contrib/libs/zstd/include
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost
 )
 target_link_libraries(libs-apache-arrow PUBLIC
   contrib-libs-cxxsupp
@@ -59,6 +58,7 @@ target_link_libraries(libs-apache-arrow PUBLIC
   ZLIB::ZLIB
   contrib-libs-zstd
   contrib-restricted-boost
+  restricted-boost-multiprecision
   contrib-restricted-fast_float
   contrib-restricted-thrift
   contrib-restricted-uriparser

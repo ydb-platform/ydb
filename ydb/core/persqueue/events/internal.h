@@ -142,6 +142,7 @@ struct TEvPQ {
             TString PartitionKey;
             TString ExplicitHashKey;
             bool External;
+            bool IgnoreQuotaDeadline;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite)

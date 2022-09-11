@@ -4678,16 +4678,23 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
     if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now())
         return;
 
+    std::deque<TMessage> newRequests;
     for (auto& w : Requests) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
         if (w.IsWrite()) {
             const auto& msg = w.GetWrite().Msg;
+            if (msg.IgnoreQuotaDeadline) {
+                newRequests.emplace_back(std::move(w));
+                continue;
+            }
+
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
             WriteInflightSize -= msg.Data.size();
         }
+
+        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
     }
-    Requests.clear();
+    Requests = std::move(newRequests);
     QuotaDeadline = TInstant::Zero();
 
     UpdateWriteBufferIsFullState(ctx.Now());

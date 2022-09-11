@@ -1646,7 +1646,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
                     totalParts, totalSize, createTimestampMs, receiveTimestampMs,
                     disableDeduplication, writeTimestampMs, data, uncompressedSize,
-                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation()
+                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation(),
+                    cmd.GetIgnoreQuotaDeadline()
                 });
                 partNo++;
                 uncompressedSize = 0;
@@ -1665,7 +1666,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 static_cast<ui32>(cmd.HasTotalSize() ? cmd.GetTotalSize() : cmd.GetData().Size()),
                 createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, cmd.GetData(),
                 cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(),
-                cmd.GetExternalOperation()
+                cmd.GetExternalOperation(), cmd.GetIgnoreQuotaDeadline()
             });
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message topic: " << TopicConverter->GetClientsideName() <<

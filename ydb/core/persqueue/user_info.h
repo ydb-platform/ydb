@@ -102,18 +102,12 @@ public:
     void Update(const TInstant& timestamp);
 
     bool CanExaust() const {
-        if (SpeedPerSecond) {
-            return AvailableSize > 0;
-        } else {
-            return true;
-        }
+        return AvailableSize > 0;
     }
 
     void Exaust(const ui64 size, const TInstant& timestamp) {
         Update(timestamp);
-        if (SpeedPerSecond) {
-            AvailableSize -= (i64)size;
-        }
+        AvailableSize -= (i64)size;
         Update(timestamp);
     }
 

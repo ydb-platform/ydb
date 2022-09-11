@@ -1209,6 +1209,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetCreateTimeMS(writeRequest.created_at_ms(messageIndex));
         w->SetUncompressedSize(writeRequest.blocks_uncompressed_sizes(messageIndex));
         w->SetClientDC(ClientDC);
+        w->SetIgnoreQuotaDeadline(IsQuotaRequired());
         payloadSize += w->GetData().size() + w->GetSourceId().size();
     };
 
@@ -1220,6 +1221,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetCreateTimeMS(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(writeRequest.messages(messageIndex).created_at()));
         w->SetUncompressedSize(writeRequest.messages(messageIndex).uncompressed_size());
         w->SetClientDC(ClientDC);
+        w->SetIgnoreQuotaDeadline(IsQuotaRequired());
         payloadSize += w->GetData().size() + w->GetSourceId().size();
     };
 

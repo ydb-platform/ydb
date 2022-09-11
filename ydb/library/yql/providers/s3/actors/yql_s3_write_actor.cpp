@@ -105,7 +105,7 @@ public:
 
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
-        LOG_D("TS3FileWriteActor", "Bootstrapped by " << ParentId);
+        LOG_D("TS3FileWriteActor", "Bootstrapped by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "]");
         if (Parts->IsSealed() && 1U == Parts->Size()) {
             const auto size = Parts->Volume();
             InFlight += size;

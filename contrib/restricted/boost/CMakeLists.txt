@@ -134,7 +134,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-optional
   restricted-boost-parameter
   restricted-boost-phoenix
-  restricted-boost-pool
   restricted-boost-predef
   restricted-boost-preprocessor
   restricted-boost-proto

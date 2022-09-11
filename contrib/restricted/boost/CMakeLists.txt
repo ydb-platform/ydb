@@ -61,6 +61,7 @@ add_subdirectory(pool)
 add_subdirectory(predef)
 add_subdirectory(preprocessor)
 add_subdirectory(program_options)
+add_subdirectory(property_tree)
 add_subdirectory(proto)
 add_subdirectory(ptr_container)
 add_subdirectory(random)
@@ -133,6 +134,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-phoenix
   restricted-boost-predef
   restricted-boost-preprocessor
+  restricted-boost-property_tree
   restricted-boost-proto
   restricted-boost-ptr_container
   restricted-boost-random

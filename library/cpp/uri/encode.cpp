@@ -205,15 +205,16 @@ namespace NUri {
 
             bool escapepct = false;
             if (0 < res) // definitely encode
-                escapepct = FldDst.Enabled();
+                escapepct = FldDst.Enabled() && !FldDst.Is(TField::FieldHashBang);
             else if (0 != res || !FldDst.Enabled() || !FldDst.Encode(ch)) {
                 Out << ch;
                 return;
             }
 
             Out << '%';
-            if (escapepct)
+            if (escapepct) {
                 Out.Write("25", 2); // '%'
+            }
             Hex(Out, ch);
         }
     }

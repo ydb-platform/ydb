@@ -260,28 +260,28 @@ namespace NUri {
 
         Y_UNIT_TEST(test01) {
             TTest test = {
-                "user:pass@host:8080", TFeature::FeaturesAll, TState::ParsedRootless, "user", "", "", "", 0, "", "", ""};
+                "user:pass@host:8080", TFeature::FeaturesAll, TState::ParsedRootless, "user", "", "", "", 0, "", "", "", ""};
             TUri url;
             URL_TEST(url, test);
         }
 
         Y_UNIT_TEST(test02) {
             TTest test = {
-                "http://host", TFeature::FeaturesAll, TState::ParsedOK, "http", "", "", "host", 80, "/", "", ""};
+                "http://host", TFeature::FeaturesAll, TState::ParsedOK, "http", "", "", "host", 80, "/", "", "", ""};
             TUri url;
             URL_TEST(url, test);
         }
 
         Y_UNIT_TEST(test03) {
             TTest test = {
-                "https://host", TFeature::FeatureSchemeFlexible | TFeature::FeatureAllowHostIDN, TState::ParsedOK, "https", "", "", "host", 443, "/", "", ""};
+                "https://host", TFeature::FeatureSchemeFlexible | TFeature::FeatureAllowHostIDN, TState::ParsedOK, "https", "", "", "host", 443, "/", "", "", ""};
             TUri url;
             URL_TEST(url, test);
         }
 
         Y_UNIT_TEST(test04) {
             TTest test = {
-                "user:pass@host:8080", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "user", "", "", "", 0, "pass@host:8080", "", ""};
+                "user:pass@host:8080", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "user", "", "", "", 0, "pass@host:8080", "", "", ""};
             TUri url;
             URL_TEST(url, test);
             TUri url2(url);
@@ -291,7 +291,7 @@ namespace NUri {
 
         Y_UNIT_TEST(test05) {
             TTest test = {
-                "host:8080", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "host", "", "", "", 0, "8080", "", ""};
+                "host:8080", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "host", "", "", "", 0, "8080", "", "", ""};
             TUri url;
             URL_TEST(url, test);
             UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "host:8080");
@@ -299,7 +299,7 @@ namespace NUri {
 
         Y_UNIT_TEST(test06) {
             TTest test = {
-                "http://user:pass@host?q", TFeature::FeaturesAll, TState::ParsedOK, "http", "user", "pass", "host", 80, "/", "q", ""};
+                "http://user:pass@host?q", TFeature::FeaturesAll, TState::ParsedOK, "http", "user", "pass", "host", 80, "/", "q", "", ""};
             TUri url;
             URL_TEST(url, test);
             url.FldMemSet(TField::FieldScheme, "https");
@@ -362,7 +362,7 @@ namespace NUri {
         Y_UNIT_TEST(test07) {
             {
                 TTest test = {
-                    "http://host/path//", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "http", "", "", "host", 80, "/path/", "", ""};
+                    "http://host/path//", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "http", "", "", "host", 80, "/path/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 url.FldMemSet(TField::FieldScheme, "HTTPs");
@@ -378,7 +378,7 @@ namespace NUri {
                 const TString host = "host.com";
                 const TString urlstr = scheme + "://" + host;
                 TTest test = {
-                    urlstr, TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, scheme, "", "", host, 80, "/", "", ""};
+                    urlstr, TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, scheme, "", "", host, 80, "/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), urlstr + "/");
@@ -388,85 +388,85 @@ namespace NUri {
         Y_UNIT_TEST(test08) {
             {
                 TTest test = {
-                    "mailto://user@host.com", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "mailto", "user", "", "host.com", 0, "", "", ""};
+                    "mailto://user@host.com", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "mailto", "user", "", "host.com", 0, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "host:/path/.path/.", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "host", "", "", "", 0, "/path/.path/", "", ""};
+                    "host:/path/.path/.", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "host", "", "", "", 0, "/path/.path/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "host:1/path/.path/.", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "host", 1, "/path/.path/", "", ""};
+                    "host:1/path/.path/.", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "host", 1, "/path/.path/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "host:1/path/.path/.", TFeature::FeaturesAll | TFeature::FeatureAllowRootless, TState::ParsedOK, "host", "", "", "", 0, "1/path/.path/.", "", ""};
+                    "host:1/path/.path/.", TFeature::FeaturesAll | TFeature::FeatureAllowRootless, TState::ParsedOK, "host", "", "", "", 0, "1/path/.path/.", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "/[foo]:bar", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "/[foo]:bar", "", ""};
+                    "/[foo]:bar", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "/[foo]:bar", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    ".", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "", "", ""};
+                    ".", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    ".", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "", "", ""};
+                    ".", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "././.", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "", "", ""};
+                    "././.", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "././.", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "", "", ""};
+                    "././.", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "./path", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "path", "", ""};
+                    "./path", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "path", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "./path", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "path", "", ""};
+                    "./path", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "path", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "../path", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "../path", "", ""};
+                    "../path", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "../path", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "../path", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "../path", "", ""};
+                    "../path", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "", "", "", "", 0, "../path", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "/../path", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "/path", "", ""};
+                    "/../path", TFeature::FeaturesAll, TState::ParsedOK, "", "", "", "", 0, "/path", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -475,19 +475,19 @@ namespace NUri {
         Y_UNIT_TEST(test09) {
             {
                 TTest test = {
-                    "mailto:user@host.com", TFeature::FeaturesAll | TFeature::FeatureAllowRootless, TState::ParsedOK, "mailto", "", "", "", 0, "user@host.com", "", ""};
+                    "mailto:user@host.com", TFeature::FeaturesAll | TFeature::FeatureAllowRootless, TState::ParsedOK, "mailto", "", "", "", 0, "user@host.com", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "scheme:", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "scheme", "", "", "", 0, "", "", ""};
+                    "scheme:", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "scheme", "", "", "", 0, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "scheme:", TFeature::FeaturesAll | TFeature::FeatureAllowRootless, TState::ParsedOK, "scheme", "", "", "", 0, "", "", ""};
+                    "scheme:", TFeature::FeaturesAll | TFeature::FeatureAllowRootless, TState::ParsedOK, "scheme", "", "", "", 0, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -500,7 +500,7 @@ namespace NUri {
                 TString ehost = "%D0%BF%D1%80%D0%B5%D0%B7%D0%B8%D0%B4%D0%B5%D0%BD%D1%82.%D1%80%D1%84";
                 const TString urlstr = TString::Join("http://", host, "/");
                 TTest test = {
-                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeaturesDefault | TFeature::FeatureCheckHost, TState::ParsedBadHost, "http", "", "", ehost, 80, "/", "", ""};
+                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeaturesDefault | TFeature::FeatureCheckHost, TState::ParsedBadHost, "http", "", "", ehost, 80, "/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -509,7 +509,7 @@ namespace NUri {
                 TString host = "%D0%BF%D1%80%D0%B5%D0%B7%D0%B8%D0%B4%D0%B5%D0%BD%D1%82.%D1%80%D1%84";
                 const TString urlstr = TString::Join("http://", host, "/");
                 TTest test = {
-                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeaturesDefault | TFeature::FeatureCheckHost, TState::ParsedBadHost, "http", "", "", host, 80, "/", "", ""};
+                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeaturesDefault | TFeature::FeatureCheckHost, TState::ParsedBadHost, "http", "", "", host, 80, "/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -519,7 +519,7 @@ namespace NUri {
                 TString ehost = "%D0%A4ilip.ru";
                 const TString urlstr = TString::Join("http://", host);
                 TTest test = {
-                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeaturesDefault, TState::ParsedBadHost, "http", "", "", ehost, 80, "/", "", ""};
+                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeaturesDefault, TState::ParsedBadHost, "http", "", "", ehost, 80, "/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -528,7 +528,7 @@ namespace NUri {
                 TString host = "%D0%A4ilip.ru";
                 const TString urlstr = TString::Join("http://", host);
                 TTest test = {
-                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeaturesDefault, TState::ParsedBadHost, "http", "", "", host, 80, "/", "", ""};
+                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeaturesDefault, TState::ParsedBadHost, "http", "", "", host, 80, "/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -538,7 +538,7 @@ namespace NUri {
                 TString ehost = "Filip%90.r%D0%AF";
                 const TString urlstr = TString::Join(host, ":8080");
                 TTest test = {
-                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeatureDecodeAllowed | TFeature::FeaturesDefault | TFeature::FeatureNoRelPath, TState::ParsedBadHost, "", "", "", ehost, 8080, "", "", ""};
+                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeatureDecodeAllowed | TFeature::FeaturesDefault | TFeature::FeatureNoRelPath, TState::ParsedBadHost, "", "", "", ehost, 8080, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -547,7 +547,7 @@ namespace NUri {
                 TString host = "Filip%90.r%D0%AF";
                 const TString urlstr = TString::Join(host, ":8080");
                 TTest test = {
-                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeatureDecodeAllowed | TFeature::FeaturesDefault | TFeature::FeatureNoRelPath, TState::ParsedBadHost, "", "", "", host, 8080, "", "", ""};
+                    urlstr, TFeature::FeatureEncodeExtendedASCII | TFeature::FeatureDecodeAllowed | TFeature::FeaturesDefault | TFeature::FeatureNoRelPath, TState::ParsedBadHost, "", "", "", host, 8080, "", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -556,14 +556,14 @@ namespace NUri {
         Y_UNIT_TEST(test11) {
             {
                 TTest test = {
-                    "HtTp://HoSt/%50aTh/?Query#Frag", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "http", "", "", "host", 80, "/PaTh/", "Query", "Frag"};
+                    "HtTp://HoSt/%50aTh/?Query#Frag", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "http", "", "", "host", 80, "/PaTh/", "Query", "Frag", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
 
             {
                 TTest test = {
-                    "HtTp://HoSt/%50a%54h/?Query#Frag", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TFeature::FeatureToLower), TState::ParsedOK, "http", "", "", "host", 80, "/path/", "query", "frag"};
+                    "HtTp://HoSt/%50a%54h/?Query#Frag", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TFeature::FeatureToLower), TState::ParsedOK, "http", "", "", "host", 80, "/path/", "query", "frag", ""};
                 TUri url;
                 URL_TEST(url, test);
             }
@@ -576,7 +576,7 @@ namespace NUri {
 #define DEC "%2F:"
 #define ENC "%2F%3A"
                 TTest test = {
-                    "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" DEC, RAW, RAW};
+                    "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" DEC, RAW, RAW, ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" ENC ":" ENC "@host/" DEC "?" RAW "#" RAW);
@@ -589,7 +589,7 @@ namespace NUri {
 #define DEC "%3F@"
 #define ENC "%3F%40"
                 TTest test = {
-                    "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" DEC, RAW, RAW};
+                    "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" DEC, RAW, RAW, ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" ENC ":" ENC "@host/" DEC "?" RAW "#" RAW);
@@ -602,7 +602,7 @@ namespace NUri {
 #define DEC "%25&;="
 #define ENC "%25%26%3B%3D"
                 TTest test = {
-                    "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" ENC, ENC, ENC};
+                    "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" ENC, ENC, ENC, ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC);
@@ -615,7 +615,7 @@ namespace NUri {
 #define DEC "!$%27()*,"
 #define ENC "%21%24%27%28%29%2A%2C"
                 TTest test = {
-                    "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" ENC, DEC, DEC};
+                    "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" ENC, DEC, DEC, ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" ENC ":" ENC "@host/" ENC "?" DEC "#" DEC);
@@ -629,7 +629,7 @@ namespace NUri {
 // punycode corresponds to lowercase
 #define PNC "xn--b1afab7bff7cb.xn--p1ai"
                 TTest test = {
-                    "http://" ENC "/" ENC "?" ENC "#" ENC, TParseFlags(TFeature::FeaturesAll | TFeature::FeatureAllowHostIDN, TFeature::FeatureDecodeExtendedASCII), TState::ParsedOK, "http", "", "", DEC, 80, "/" ENC, ENC, ENC};
+                    "http://" ENC "/" ENC "?" ENC "#" ENC, TParseFlags(TFeature::FeaturesAll | TFeature::FeatureAllowHostIDN, TFeature::FeatureDecodeExtendedASCII), TState::ParsedOK, "http", "", "", DEC, 80, "/" ENC, ENC, ENC, ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldHostAscii), PNC);
@@ -645,7 +645,7 @@ namespace NUri {
 // punycode corresponds to lowercase
 #define PNC "xn--b1afab7bff7cb.xn--p1ai"
                 TTest test = {
-                    "http://" DEC "/" DEC "?" DEC "#" DEC, TParseFlags(TFeature::FeaturesRobot | TFeature::FeatureEncodeExtendedASCII), TState::ParsedOK, "http", "", "", PNC, 80, "/" ENC, ENC, ENC};
+                    "http://" DEC "/" DEC "?" DEC "#" DEC, TParseFlags(TFeature::FeaturesRobot | TFeature::FeatureEncodeExtendedASCII), TState::ParsedOK, "http", "", "", PNC, 80, "/" ENC, ENC, ENC, ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" PNC "/" ENC "?" ENC "#" ENC);
@@ -657,7 +657,7 @@ namespace NUri {
 #define DEC "независимая-экспертиза-оценка-ущерба-авто-дтп.рф"
 #define PNC "xn--------3veabbbbjgk5abecc3afsad2cg8bvq2alouolqf5brd3a4jzftgqd.xn--p1ai"
                 TTest test = {
-                    "http://" DEC "/", TParseFlags(TFeature::FeaturesRobot), TState::ParsedOK, "http", "", "", PNC, 80, "/", "", ""};
+                    "http://" DEC "/", TParseFlags(TFeature::FeaturesRobot), TState::ParsedOK, "http", "", "", PNC, 80, "/", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" PNC "/");
@@ -687,42 +687,42 @@ namespace NUri {
             // test characters which are not always allowed
             {
                 TTest test = {
-                    "http://host/pa th", TFeature::FeaturesAll | TFeature::FeatureEncodeSpace, TState::ParsedOK, "http", "", "", "host", 80, "/pa%20th", "", ""};
+                    "http://host/pa th", TFeature::FeaturesAll | TFeature::FeatureEncodeSpace, TState::ParsedOK, "http", "", "", "host", 80, "/pa%20th", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host/pa%20th");
             }
             {
                 TTest test = {
-                    "http://host/pa th", TFeature::FeaturesAll, TState::ParsedBadFormat, "http", "", "", "host", 80, "/pa th", "", ""};
+                    "http://host/pa th", TFeature::FeaturesAll, TState::ParsedBadFormat, "http", "", "", "host", 80, "/pa th", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host/pa th");
             }
             {
                 TTest test = {
-                    "http://host/pa%th%41", TFeature::FeaturesAll | TFeature::FeatureEncodePercent, TState::ParsedOK, "http", "", "", "host", 80, "/pa%25thA", "", ""};
+                    "http://host/pa%th%41", TFeature::FeaturesAll | TFeature::FeatureEncodePercent, TState::ParsedOK, "http", "", "", "host", 80, "/pa%25thA", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host/pa%25thA");
             }
             {
                 TTest test = {
-                    "http://host/invalid_second_char%az%1G", TFeature::FeaturesAll | TFeature::FeatureEncodePercent, TState::ParsedOK, "http", "", "", "host", 80, "/invalid_second_char%25az%251G", "", ""};
+                    "http://host/invalid_second_char%az%1G", TFeature::FeaturesAll | TFeature::FeatureEncodePercent, TState::ParsedOK, "http", "", "", "host", 80, "/invalid_second_char%25az%251G", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host/invalid_second_char%25az%251G");
             }
             {
                 TTest test = {
-                    "http://host/border%2", TFeature::FeaturesAll | TFeature::FeatureEncodePercent, TState::ParsedOK, "http", "", "", "host", 80, "/border%252", "", ""};
+                    "http://host/border%2", TFeature::FeaturesAll | TFeature::FeatureEncodePercent, TState::ParsedOK, "http", "", "", "host", 80, "/border%252", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host/border%252");
             }
             {
                 TTest test = {
-                    "http://host/pa%th%41", TFeature::FeaturesAll, TState::ParsedBadFormat, "http", "", "", "host", 80, "/pa%thA", "", ""};
+                    "http://host/pa%th%41", TFeature::FeaturesAll, TState::ParsedBadFormat, "http", "", "", "host", 80, "/pa%thA", "", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host/pa%thA");
@@ -734,7 +734,7 @@ namespace NUri {
 #define RAW "[1080:0:0:0:8:800:200C:417A]"
 #define DEC "[1080:0:0:0:8:800:200c:417a]"
                 TTest test = {
-                    "http://" RAW "/" RAW "?" RAW "#" RAW, TParseFlags(TFeature::FeaturesAll), TState::ParsedOK, "http", "", "", DEC, 80, "/" RAW, RAW, RAW};
+                    "http://" RAW "/" RAW "?" RAW "#" RAW, TParseFlags(TFeature::FeaturesAll), TState::ParsedOK, "http", "", "", DEC, 80, "/" RAW, RAW, RAW, ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" DEC "/" RAW "?" RAW "#" RAW);
@@ -746,17 +746,27 @@ namespace NUri {
         Y_UNIT_TEST(testEscapedFragment) {
             {
                 TTest test = {
-                    "http://host.com#!a=b&c=d#e+g%41%25", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureHashBangToEscapedFragment), TState::ParsedOK, "http", "", "", "host.com", 80, "/", "_escaped_fragment_=a=b%26c=d%23e%2BgA%2525", ""};
+                    "http://host.com#!a=b&c=d#e+g%41%25", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureHashBangToEscapedFragment), TState::ParsedOK, "http", "", "", "host.com", 80, "/", "_escaped_fragment_=a=b%26c=d%23e%2BgA%2525", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host.com/?_escaped_fragment_=a=b%26c=d%23e%2BgA%2525");
             }
             {
                 TTest test = {
-                    "http://host.com?_escaped_fragment_=a=b%26c=d%23e%2bg%2525", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureEscapedToHashBangFragment), TState::ParsedOK, "http", "", "", "host.com", 80, "/", "", "!a=b&c=d#e+g%25"};
+                    "http://host.com?_escaped_fragment_=a=b%26c=d%23e%2bg%2525", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureEscapedToHashBangFragment), TState::ParsedOK, "http", "", "", "host.com", 80, "/", "", "!a=b&c=d#e+g%25", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host.com/#!a=b&c=d#e+g%25");
+            }
+        }
+
+        Y_UNIT_TEST(testHashBang) {
+            {
+                TTest test = {
+                "http://host.com#!?a=b&c=d#e+g%41%25", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureFragmentToHashBang), TState::ParsedOK, "http", "", "", "host.com", 80, "/", "", "", "%3Fa=b%26c=d%23e%2BgA%25"};
+                TUri url;
+                URL_TEST(url, test);
+                UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host.com/#!%3Fa=b%26c=d%23e%2BgA%25");
             }
         }
 
@@ -837,49 +847,49 @@ namespace NUri {
         Y_UNIT_TEST(test_ParseFailures) {
             {
                 TTest test = {
-                    "http://host:port", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", ""};
+                    "http://host:port", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", "", ""};
                 TUri url(-1);
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "http://javascript:alert(hi)", TFeature::FeaturesRobot, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", ""};
+                    "http://javascript:alert(hi)", TFeature::FeaturesRobot, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", "", ""};
                 TUri url(-1);
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "http://host::0", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", ""};
+                    "http://host::0", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", "", ""};
                 TUri url(-1);
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "http://host ", TFeature::FeaturesAll, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", ""};
+                    "http://host ", TFeature::FeaturesAll, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", "", ""};
                 TUri url(-1);
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "http:00..03", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", ""};
+                    "http:00..03", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", "", ""};
                 TUri url(-1);
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "host:00..03", TFeature::FeaturesAll, TState::ParsedRootless, "host", "", "", "", 0, "", "", ""};
+                    "host:00..03", TFeature::FeaturesAll, TState::ParsedRootless, "host", "", "", "", 0, "", "", "", ""};
                 TUri url(-1);
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "http://roduct;isbn,0307371549;at,aid4c00179ab018www.mcnamarasband.wordpress.com/", TFeature::FeaturesAll, TState::ParsedBadHost, "http", "", "", "roduct;isbn,0307371549;at,aid4c00179ab018www.mcnamarasband.wordpress.com", 80, "/", "", ""};
+                    "http://roduct;isbn,0307371549;at,aid4c00179ab018www.mcnamarasband.wordpress.com/", TFeature::FeaturesAll, TState::ParsedBadHost, "http", "", "", "roduct;isbn,0307371549;at,aid4c00179ab018www.mcnamarasband.wordpress.com", 80, "/", "", "", ""};
                 TUri url(-1);
                 URL_TEST(url, test);
             }
             {
                 TTest test = {
-                    "invalid url", TFeature::FeaturesDefault, TState::ParsedBadFormat, "", "", "", "", 0, "invalid url", "", ""};
+                    "invalid url", TFeature::FeaturesDefault, TState::ParsedBadFormat, "", "", "", "", 0, "invalid url", "", "", ""};
                 TUri url(-1);
                 URL_TEST(url, test);
             }

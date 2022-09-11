@@ -81,6 +81,11 @@ namespace NUri {
             {
             }
 
+        public:
+            bool Is(TField::EField fld) const {
+                return FldMask & (1u << fld);
+            }
+
         protected:
             const ui64 Flags;
             const ui32 FldMask;

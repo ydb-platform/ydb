@@ -135,7 +135,7 @@ namespace NUri {
 // punycode corresponds to lowercase
 #define PNC "xn--b1afab7bff7cb.xn--p1ai"
                 TTest test = {
-                    "http://" ENC "/" ENC "?" ENC "#" ENC, TParseFlags(TFeature::FeaturesAll | TFeature::FeatureAllowHostIDN, TFeature::FeatureDecodeExtendedASCII), TState::ParsedOK, "http", "", "", DEC, 80, "/" ENC, ENC, ENC};
+                    "http://" ENC "/" ENC "?" ENC "#" ENC, TParseFlags(TFeature::FeaturesAll | TFeature::FeatureAllowHostIDN, TFeature::FeatureDecodeExtendedASCII), TState::ParsedOK, "http", "", "", DEC, 80, "/" ENC, ENC, ENC, ""};
                 TUri url;
                 URL_TEST_ENC(url, test, CODES_WIN);
                 UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldHostAscii), PNC);

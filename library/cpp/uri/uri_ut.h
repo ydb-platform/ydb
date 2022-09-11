@@ -17,6 +17,7 @@ namespace NUri {
         TStringBuf Path;
         TStringBuf Query;
         TStringBuf Frag;
+        TStringBuf HashBang;
     };
 
 }
@@ -41,6 +42,7 @@ namespace NUri {
         CMP_FLD(url, test, Path);                           \
         CMP_FLD(url, test, Query);                          \
         CMP_FLD(url, test, Frag);                           \
+        CMP_FLD(url, test, HashBang);                       \
     } while (false)
 
 #define URL_TEST_ENC(url, test, enc)                                                                                              \

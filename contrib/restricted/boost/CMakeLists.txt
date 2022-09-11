@@ -49,7 +49,6 @@ add_subdirectory(locale)
 add_subdirectory(logic)
 add_subdirectory(math)
 add_subdirectory(move)
-add_subdirectory(mp11)
 add_subdirectory(mpl)
 add_subdirectory(multi_array)
 add_subdirectory(multi_index)
@@ -125,7 +124,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-lexical_cast
   restricted-boost-math
   restricted-boost-move
-  restricted-boost-mp11
   restricted-boost-mpl
   restricted-boost-multi_array
   restricted-boost-multi_index

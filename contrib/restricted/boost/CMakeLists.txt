@@ -137,7 +137,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-ptr_container
   restricted-boost-random
   restricted-boost-range
-  restricted-boost-rational
   restricted-boost-smart_ptr
   restricted-boost-static_assert
   restricted-boost-throw_exception

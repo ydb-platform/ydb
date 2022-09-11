@@ -142,6 +142,7 @@ struct ordered_index_node_compressed_base
   struct color_ref
   {
     color_ref(uintptr_type* r_):r(r_){}
+
     color_ref(color_ref const& x):r(x.r){}
     
     operator ordered_index_color()const
@@ -168,7 +169,8 @@ struct ordered_index_node_compressed_base
   struct parent_ref
   {
     parent_ref(uintptr_type* r_):r(r_){}
-    parent_ref(const parent_ref& x):r(x.r){}
+
+    parent_ref(parent_ref const& x):r(x.r){}
     
     operator pointer()const
     {

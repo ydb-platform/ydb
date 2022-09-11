@@ -21,7 +21,7 @@ target_link_libraries(clickhouse_client_udf INTERFACE
   public-udf-support
   contrib-libs-cctz
   contrib-restricted-boost
-  boost-libs-multi_index
+  restricted-boost-multi_index
   restricted-boost-program_options
   contrib-restricted-cityhash-1.0.2
   contrib-restricted-fast_float
@@ -81,7 +81,7 @@ target_link_libraries(clickhouse_client_udf.global PUBLIC
   public-udf-support
   contrib-libs-cctz
   contrib-restricted-boost
-  boost-libs-multi_index
+  restricted-boost-multi_index
   restricted-boost-program_options
   contrib-restricted-cityhash-1.0.2
   contrib-restricted-fast_float

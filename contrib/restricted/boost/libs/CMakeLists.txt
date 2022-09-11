@@ -7,4 +7,3 @@
 
 
 add_subdirectory(graph)
-add_subdirectory(multi_index)

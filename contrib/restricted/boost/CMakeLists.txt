@@ -52,6 +52,7 @@ add_subdirectory(move)
 add_subdirectory(mp11)
 add_subdirectory(mpl)
 add_subdirectory(multi_array)
+add_subdirectory(multi_index)
 add_subdirectory(multiprecision)
 add_subdirectory(numeric_conversion)
 add_subdirectory(optional)
@@ -126,6 +127,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-mp11
   restricted-boost-mpl
   restricted-boost-multi_array
+  restricted-boost-multi_index
   restricted-boost-multiprecision
   restricted-boost-numeric_conversion
   restricted-boost-optional

@@ -83,6 +83,7 @@ add_subdirectory(type_index)
 add_subdirectory(type_traits)
 add_subdirectory(typeof)
 add_subdirectory(ublas)
+add_subdirectory(units)
 add_subdirectory(unordered)
 add_subdirectory(utility)
 add_subdirectory(variant)
@@ -151,6 +152,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-type_traits
   restricted-boost-typeof
   restricted-boost-ublas
+  restricted-boost-units
   restricted-boost-unordered
   restricted-boost-utility
   restricted-boost-variant

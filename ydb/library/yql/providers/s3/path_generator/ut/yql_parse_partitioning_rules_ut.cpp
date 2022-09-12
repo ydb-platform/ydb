@@ -165,6 +165,16 @@ Y_UNIT_TEST_SUITE(TParseTests) {
         UNIT_ASSERT_VALUES_EQUAL(rule.Max, 6);
     }
 
+    Y_UNIT_TEST(CheckErrorPrefix) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
+            {
+                "projection.enabled" : true,
+                "projection.city.type" : "enum",
+                "projection.city.values" : null,
+                "storage.location.template" : "/${city}/"
+            }
+        )", {"city"}), yexception, "projection error: ");
+    }
 }
 
 }

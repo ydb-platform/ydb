@@ -213,8 +213,14 @@ struct TPathGenerator: public IPathGenerator {
 public:
     TPathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, size_t pathsLimit)
     {
-        ParsePartitioningRules(projection, partitionedBy);
-        ExpandPartitioningRules(pathsLimit);
+        try {
+            ParsePartitioningRules(projection, partitionedBy);
+            ExpandPartitioningRules(pathsLimit);
+        } catch (const yexception& e) {
+            throw yexception() << "projection error: " << e.what();
+        } catch (...) {
+            throw yexception() << "projection error: " << CurrentExceptionMessage();
+        }
     }
 
     TString Format(const TStringBuf& columnName, const TStringBuf& dataValue) const override {

@@ -10,7 +10,7 @@
 
     CREATE TABLE table_name (
         column1 type1,
-{% if feature_not_null == true %}         column2 type2 NOT NULL,{% else %}         column2 type2,{% endif %}
+{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
         ...
         columnN typeN,
 {% if feature_secondary_index == true %}
@@ -18,8 +18,8 @@
         INDEX index2_name GLOBAL ON ( column1, column2, ... ),
 {% endif %}
 {% if feature_map_tables %}
-        PRIMARY KEY (column, ...),
-        FAMILY column_family ()
+        PRIMARY KEY ( column, ... ),
+        FAMILY column_family ( family_options, ... )
 {% else %}
         ...
 {% endif %}
@@ -71,16 +71,16 @@
 ```sql
 CREATE TABLE table_name ( 
     ...
-    INDEX <Index_name> GLOBAL [SYNC|ASYNC] ON ( <Index_columns> ) COVER ( <Cover_columns> ),
+    INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
     ...
 )
 ```
 
 где:
-* **Index_name** - уникальное имя индекса, по которому будет возможно обращение к данным
-* **SYNC/ASYNC** - синхронная или асинхронная запись в индекс, если не указано -- синхронная
-* **Index_columns** - имена колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе
-* **Cover_columns** - имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительное к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу 
+* **index_name** — уникальное имя индекса, по которому будет возможно обращение к данным.
+* **SYNC/ASYNC** — синхронная или асинхронная запись в индекс, если не указано — синхронная.
+* **index_columns** — имена колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе.
+* **cover_columns** — имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительно к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу.
 
 **Пример**
 
@@ -90,8 +90,8 @@ CREATE TABLE my_table (
     b Bool,
     c Uft8,
     d Date,
-    INDEX idx_a GLOBAL ON (d),
-    INDEX idx_ca GLOBAL ASYNC ON (b, a) COVER ( c ),
+    INDEX idx_d GLOBAL ON (d),
+    INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
     PRIMARY KEY (a)
 )
 ```

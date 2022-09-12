@@ -60,9 +60,7 @@ namespace NKikimr::NBlobDepot {
 
             NKikimrBlobDepot::TEvResolve msg;
             auto *item = msg.AddItems();
-            item->SetBeginningKey(it->first);
-            item->SetEndingKey(it->first);
-            item->SetIncludeEnding(true);
+            item->SetExactKey(it->first);
 
             if (Agent.VirtualGroupId) {
                 const auto& id = TLogoBlobID::FromBinary(it->first);

@@ -29,6 +29,43 @@ namespace NKikimr::NBlobDepot {
             , NumKeysRead(predecessor.NumKeysRead)
         {}
 
+        bool GetScanParams(const NKikimrBlobDepot::TEvResolve::TItem& item, std::optional<TKey> *begin,
+                std::optional<TKey> *end, TScanFlags *flags, ui64 *maxKeys) {
+            switch (item.GetKeyDesignatorCase()) {
+                case NKikimrBlobDepot::TEvResolve::TItem::kKeyRange: {
+                    const auto& range = item.GetKeyRange();
+                    *flags = TScanFlags()
+                        | (range.GetIncludeBeginning() ? EScanFlags::INCLUDE_BEGIN : TScanFlags())
+                        | (range.GetIncludeEnding() ? EScanFlags::INCLUDE_END : TScanFlags())
+                        | (range.GetReverse() ? EScanFlags::REVERSE : TScanFlags());
+                    if (range.HasBeginningKey()) {
+                        begin->emplace(TKey::FromBinaryKey(range.GetBeginningKey(), Self->Config));
+                    } else {
+                        begin->reset();
+                    }
+                    if (range.HasEndingKey()) {
+                        end->emplace(TKey::FromBinaryKey(range.GetEndingKey(), Self->Config));
+                    } else {
+                        end->reset();
+                    }
+                    *maxKeys = range.GetMaxKeys();
+                    return true;
+                }
+
+                case NKikimrBlobDepot::TEvResolve::TItem::kExactKey:
+                    begin->emplace(TKey::FromBinaryKey(item.GetExactKey(), Self->Config));
+                    end->emplace(begin->value());
+                    *flags = EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END;
+                    *maxKeys = 1;
+                    return true;
+
+                case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
+                    return false;
+            }
+
+            return false;
+        }
+
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             NIceDb::TNiceDb db(txc.DB);
 
@@ -47,24 +84,12 @@ namespace NKikimr::NBlobDepot {
             for (; ItemIndex < items.size(); ++ItemIndex, LastScannedKey.reset(), NumKeysRead = 0) {
                 const auto& item = items[ItemIndex];
 
-                std::optional<TKey> begin = item.HasBeginningKey()
-                    ? std::make_optional(TKey::FromBinaryKey(item.GetBeginningKey(), Self->Config))
-                    : std::nullopt;
-
-                std::optional<TKey> end = item.HasEndingKey()
-                    ? std::make_optional(TKey::FromBinaryKey(item.GetEndingKey(), Self->Config))
-                    : std::nullopt;
-
+                std::optional<TKey> begin;
+                std::optional<TKey> end;
                 TScanFlags flags;
-                if (item.GetIncludeBeginning()) {
-                    flags |= EScanFlags::INCLUDE_BEGIN;
-                }
-                if (item.GetIncludeEnding()) {
-                    flags |= EScanFlags::INCLUDE_END;
-                }
-                if (item.GetReverse()) {
-                    flags |= EScanFlags::REVERSE;
-                }
+                ui64 maxKeys;
+                const bool success = GetScanParams(item, &begin, &end, &flags, &maxKeys);
+                Y_VERIFY_DEBUG(success);
 
                 // adjust range according to actually generated data
                 if (LastScannedKey) {
@@ -84,7 +109,7 @@ namespace NKikimr::NBlobDepot {
                     // we can scan only some part from memory -- do it
                     auto callback = [&](const TKey& key, const TValue&) {
                         LastScannedKey = key;
-                        return ++NumKeysRead != item.GetMaxKeys();
+                        return ++NumKeysRead != maxKeys;
                     };
                     Self->Data->ScanRange(begin ? &begin.value() : nullptr, &Self->Data->LastLoadedKey.value(),
                         flags | EScanFlags::INCLUDE_END, callback);
@@ -94,7 +119,7 @@ namespace NKikimr::NBlobDepot {
                     flags &= ~EScanFlags::INCLUDE_BEGIN;
 
                     // check if we have read all the keys requested
-                    if (NumKeysRead == item.GetMaxKeys()) {
+                    if (NumKeysRead == maxKeys) {
                         continue;
                     }
                 }
@@ -115,7 +140,7 @@ namespace NKikimr::NBlobDepot {
 
                             const bool matchBegin = !begin || (flags & EScanFlags::INCLUDE_BEGIN ? *begin <= key : *begin < key);
                             const bool matchEnd = !end || (flags & EScanFlags::INCLUDE_END ? key <= *end : key < *end);
-                            if (matchBegin && matchEnd && ++NumKeysRead == item.GetMaxKeys()) {
+                            if (matchBegin && matchEnd && ++NumKeysRead == maxKeys) {
                                 // we have hit the MaxItems limit, exit
                                 return true;
                             } else if (flags & EScanFlags::REVERSE ? !matchBegin : !matchEnd) {
@@ -137,7 +162,7 @@ namespace NKikimr::NBlobDepot {
                         : applyEnd(std::forward<std::decay_t<decltype(x)>>(x));
                 };
                 auto applyReverse = [&](auto&& x) {
-                    return item.GetReverse()
+                    return flags & EScanFlags::REVERSE
                         ? applyBegin(x.Reverse())
                         : applyBegin(std::forward<std::decay_t<decltype(x)>>(x));
                 };
@@ -186,26 +211,12 @@ namespace NKikimr::NBlobDepot {
             for (const auto& item : Request->Get()->Record.GetItems()) {
                 std::optional<ui64> cookie = item.HasCookie() ? std::make_optional(item.GetCookie()) : std::nullopt;
 
-                std::optional<TKey> begin = item.HasBeginningKey()
-                    ? std::make_optional(TKey::FromBinaryKey(item.GetBeginningKey(), Self->Config))
-                    : std::nullopt;
-
-                std::optional<TKey> end = item.HasEndingKey()
-                    ? std::make_optional(TKey::FromBinaryKey(item.GetEndingKey(), Self->Config))
-                    : std::nullopt;
-
+                std::optional<TKey> begin;
+                std::optional<TKey> end;
                 TScanFlags flags;
-                if (item.GetIncludeBeginning()) {
-                    flags |= EScanFlags::INCLUDE_BEGIN;
-                }
-                if (item.GetIncludeEnding()) {
-                    flags |= EScanFlags::INCLUDE_END;
-                }
-                if (item.GetReverse()) {
-                    flags |= EScanFlags::REVERSE;
-                }
-
-                ui64 count = item.GetMaxKeys();
+                ui64 count;
+                const bool success = GetScanParams(item, &begin, &end, &flags, &count);
+                Y_VERIFY_DEBUG(success);
 
                 auto callback = [&](const TKey& key, const TValue& value) {
                     IssueResponseItem(cookie, key, value, lastResponseSize);
@@ -292,11 +303,25 @@ namespace NKikimr::NBlobDepot {
                 TLogoBlobID maxId(tabletId, Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel, TLogoBlobID::MaxBlobSize,
                     TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode);
 
-                if (item.HasBeginningKey()) {
-                    minId = TKey::FromBinaryKey(item.GetBeginningKey(), Self->Config).GetBlobId();
-                }
-                if (item.HasEndingKey()) {
-                    maxId = TKey::FromBinaryKey(item.GetEndingKey(), Self->Config).GetBlobId();
+                switch (item.GetKeyDesignatorCase()) {
+                    case NKikimrBlobDepot::TEvResolve::TItem::kKeyRange: {
+                        const auto& range = item.GetKeyRange();
+                        if (range.HasBeginningKey()) {
+                            minId = TKey::FromBinaryKey(range.GetBeginningKey(), Self->Config).GetBlobId();
+                        }
+                        if (range.HasEndingKey()) {
+                            maxId = TKey::FromBinaryKey(range.GetEndingKey(), Self->Config).GetBlobId();
+                        }
+                        break;
+                    }
+
+                    case NKikimrBlobDepot::TEvResolve::TItem::kExactKey:
+                        minId = maxId = TKey::FromBinaryKey(item.GetExactKey(), Self->Config).GetBlobId();
+                        break;
+
+                    case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
+                        Y_VERIFY_DEBUG(false);
+                        break;
                 }
 
                 Y_VERIFY_DEBUG(minId.TabletID() == tabletId);

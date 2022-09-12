@@ -178,18 +178,24 @@ message TEvCommitBlobSeqResult {
 // each of the found entries.
 
 message TEvResolve {
-    message TItem {
+    message TKeyRange {
         optional bytes BeginningKey = 1; // start from the very first key (if not set)
         optional bool IncludeBeginning = 2 [default = true];
         optional bytes EndingKey = 3; // end with the key beyond the last one (if not set)
         optional bool IncludeEnding = 4 [default = false];
         optional uint32 MaxKeys = 5 [default = 0]; // zero or unset value means infinite amount
-        optional bool ReturnMeta = 6 [default = false];
-        optional bool ReturnOwners = 7 [default = false];
-        optional bool Reverse = 8 [default = false]; // reverse output
-        optional uint64 Cookie = 9; // request cookie to match response item
-        optional fixed64 TabletId = 10; // used in virtual group mode to resolve keys of specific tablet
-        optional bool MustRestoreFirst = 11;
+        optional bool Reverse = 6 [default = false]; // reverse output
+    }
+    message TItem {
+        oneof KeyDesignator {
+            TKeyRange KeyRange = 1;
+            bytes ExactKey = 2;
+        }
+        optional bool ReturnMeta = 3 [default = false];
+        optional bool ReturnOwners = 4 [default = false];
+        optional uint64 Cookie = 5; // request cookie to match response item
+        optional fixed64 TabletId = 6; // used in virtual group mode to resolve keys of specific tablet
+        optional bool MustRestoreFirst = 7;
     }
 
     repeated TItem Items = 1;

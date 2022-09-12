@@ -49,12 +49,13 @@ namespace NKikimr::NBlobDepot {
 
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
-                item->SetBeginningKey(from.AsBinaryString());
-                item->SetIncludeBeginning(true);
-                item->SetEndingKey(to.AsBinaryString());
-                item->SetIncludeEnding(true);
-                item->SetMaxKeys(1);
-                item->SetReverse(true);
+                auto *range = item->MutableKeyRange();
+                range->SetBeginningKey(from.AsBinaryString());
+                range->SetIncludeBeginning(true);
+                range->SetEndingKey(to.AsBinaryString());
+                range->SetIncludeEnding(true);
+                range->SetMaxKeys(1);
+                range->SetReverse(true);
                 item->SetTabletId(TabletId);
                 item->SetMustRestoreFirst(true);
 

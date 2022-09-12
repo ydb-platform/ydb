@@ -190,10 +190,6 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     auto ranges = read.Ranges();
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
 
-    if (!IsDqPureExpr(ranges)) {
-        return read;
-    }
-
     bool fullScan = TCoVoid::Match(ranges.Raw());
 
     TVector<TExprBase> input;
@@ -201,27 +197,69 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     TVector<TCoArgument> programArgs;
 
     if (!fullScan) {
-        auto computeStage = Build<TDqStage>(ctx, read.Pos())
-            .Inputs()
-                .Build()
-            .Program()
-                .Args({})
-                .Body<TCoToStream>()
-                    .Input<TCoJust>()
-                        .Input<TExprList>()
-                            .Add(ranges)
+        TMaybe<TDqStage> rangesStage;
+        if (IsDqPureExpr(read.Ranges())) {
+            rangesStage = Build<TDqStage>(ctx, read.Pos())
+                .Inputs()
+                    .Build()
+                .Program()
+                    .Args({})
+                    .Body<TCoToStream>()
+                        .Input<TCoJust>()
+                            .Input<TExprList>()
+                                .Add(ranges)
+                                .Build()
                             .Build()
                         .Build()
                     .Build()
-                .Build()
-            .Settings()
-                .Build()
-            .Done();
+                .Settings()
+                    .Build()
+                .Done();
+        } else {
+            auto connections = FindDqConnections(node);
+            YQL_ENSURE(!connections.empty());
+            TVector<TDqConnection> inputs;
+            TVector<TExprBase> stageInputs;
+            TNodeOnNodeOwnedMap replaceMap;
 
+            inputs.reserve(connections.size());
+            for (auto& cn : connections) {
+                auto input = TDqConnection(cn);
+                if (!input.Maybe<TDqCnUnionAll>()) {
+                    return node;
+                }
+
+                inputs.push_back(input);
+                stageInputs.push_back(
+                    Build<TDqPhyPrecompute>(ctx, cn.Pos())
+                        .Connection(input)
+                        .Done());
+            }
+            auto args = PrepareArgumentsReplacement(read.Ranges(), inputs, ctx, replaceMap);
+            auto body = ctx.ReplaceNodes(read.Ranges().Ptr(), replaceMap);
+            rangesStage = Build<TDqStage>(ctx, read.Pos())
+                .Inputs()
+                    .Add(std::move(stageInputs))
+                    .Build()
+                .Program()
+                    .Args(args)
+                    .Body<TCoToStream>()
+                        .Input<TCoJust>()
+                            .Input<TExprList>()
+                                .Add(body)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Settings().Build()
+                .Done();
+        }
+
+        YQL_ENSURE(rangesStage);
         auto precompute = Build<TDqPhyPrecompute>(ctx, read.Pos())
             .Connection<TDqCnValue>()
                 .Output()
-                    .Stage(computeStage)
+                    .Stage(*rangesStage)
                     .Index().Build("0")
                     .Build()
                 .Build()

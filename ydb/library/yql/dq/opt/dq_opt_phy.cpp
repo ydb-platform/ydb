@@ -10,8 +10,6 @@ namespace NYql::NDq {
 
 using namespace NYql::NNodes;
 
-namespace {
-
 TVector<TCoArgument> PrepareArgumentsReplacement(const TExprBase& node, const TVector<TDqConnection>& newInputs,
     TExprContext& ctx, TNodeOnNodeOwnedMap& replaceMap)
 {
@@ -41,6 +39,8 @@ TVector<TCoArgument> PrepareArgumentsReplacement(const TExprBase& node, const TV
 
     return newArgs;
 }
+
+namespace {
 
 template <typename TPartition>
 TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap) {

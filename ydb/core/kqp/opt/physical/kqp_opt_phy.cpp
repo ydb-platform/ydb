@@ -38,6 +38,7 @@ public:
         AddHandler(0, &TDqPhyLength::Match, HNDL(PushOlapLength));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildPureFlatmapStage));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage));
@@ -163,6 +164,12 @@ protected:
     {
         TExprBase output = DqPushExtractMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("PushExtractMembersToStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqBuildPureFlatmapStage(node, ctx);
+        DumpAppliedRule("BuildPureFlatmapStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

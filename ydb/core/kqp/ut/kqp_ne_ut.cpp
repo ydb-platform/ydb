@@ -3347,6 +3347,43 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[[1];[101u];["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(PushPureFlatmapInnerConnectionsToStage) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$rows").BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Name").String("Name1")
+                        .AddMember("Value2").String("Value22")
+                        .AddMember("Data").String("Data1")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            DECLARE $rows AS List<Struct<
+                Name: String,
+                Value2: String,
+                Data: String>>;
+
+            $values =
+                SELECT (Name, Value2) FROM Join2
+                WHERE Key1 = 101;
+
+            SELECT * FROM AS_TABLE($rows)
+            WHERE (Name, Value2) IN COMPACT $values;
+        )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([["Data1";"Name1";"Value22"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKikimr::NKqp

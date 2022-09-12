@@ -297,6 +297,19 @@ TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& f
         .Done();
 }
 
+TExprNode::TListType FindLambdaConnections(const TCoLambda& lambda) {
+    auto filter = [](const TExprNode::TPtr& node) {
+        return !TMaybeNode<TDqPhyPrecompute>(node).IsValid();
+    };
+
+    auto predicate = [](const TExprNode::TPtr& node) {
+        return TMaybeNode<TDqSource>(node).IsValid() ||
+               TMaybeNode<TDqConnection>(node).IsValid();
+    };
+
+    return FindNodes(lambda.Body().Ptr(), filter, predicate);
+}
+
 } // namespace
 
 TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& outputIndex, TCoLambda& lambda,
@@ -438,6 +451,44 @@ TExprBase DqPushExtractMembersToStage(TExprBase node, TExprContext& ctx, IOptimi
     return DqPushMembersFilterToStage<TCoExtractMembers>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
 }
 
+TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
+    if (!node.Maybe<TCoFlatMapBase>()) {
+        return node;
+    }
+
+    auto flatmap = node.Cast<TCoFlatMapBase>();
+
+    if (!IsDqPureExpr(flatmap.Input())) {
+        return node;
+    }
+
+    auto innerConnections = FindLambdaConnections(flatmap.Lambda());
+    if (innerConnections.empty()) {
+        return node;
+    }
+
+    auto inputStage = Build<TDqStage>(ctx, flatmap.Input().Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body<TCoIterator>()
+                .List(flatmap.Input())
+                .Build()
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, flatmap.Input().Pos()))
+        .Done();
+
+    auto inputConnection = Build<TDqCnUnionAll>(ctx, flatmap.Pos())
+        .Output()
+            .Stage(inputStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+
+    return TExprBase(ctx.ChangeChild(flatmap.Ref(), TCoFlatMapBase::idx_Input, inputConnection.Ptr()));
+}
+
 TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -451,16 +502,7 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         return node;
     }
 
-    auto filter = [](const TExprNode::TPtr& node) {
-        return !TMaybeNode<TDqPhyPrecompute>(node).IsValid();
-    };
-
-    auto predicate = [](const TExprNode::TPtr& node) {
-        return TMaybeNode<TDqSource>(node).IsValid() ||
-               TMaybeNode<TDqConnection>(node).IsValid();
-    };
-
-    auto innerConnections = FindNodes(flatmap.Lambda().Body().Ptr(), filter, predicate);
+    auto innerConnections = FindLambdaConnections(flatmap.Lambda());
 
     TMaybeNode<TDqStage> flatmapStage;
     if (!innerConnections.empty()) {

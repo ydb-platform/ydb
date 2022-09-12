@@ -31,6 +31,8 @@ NNodes::TExprBase DqPushOrderedLMapToStage(NNodes::TExprBase node, TExprContext&
 NNodes::TExprBase DqPushLMapToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
+NNodes::TExprBase DqBuildPureFlatmapStage(NNodes::TExprBase node, TExprContext& ctx);
+
 NNodes::TExprBase DqBuildFlatmapStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 

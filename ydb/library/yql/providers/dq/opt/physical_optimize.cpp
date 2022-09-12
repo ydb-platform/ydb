@@ -28,6 +28,7 @@ public:
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildPureFlatmapStage));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage));
@@ -225,6 +226,10 @@ protected:
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushExtractMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqPushExtractMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    TMaybeNode<TExprBase> BuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
+        return DqBuildPureFlatmapStage(node, ctx);
     }
 
     template <bool IsGlobal>

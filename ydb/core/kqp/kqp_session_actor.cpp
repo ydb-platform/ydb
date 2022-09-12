@@ -92,6 +92,7 @@ struct TKqpQueryState {
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
+    ETableReadType MaxReadType = ETableReadType::Other;
 
     TULID TxId; // User tx
     TString TxId_Human = "";
@@ -496,6 +497,7 @@ public:
     void HandleCompile(TEvKqp::TEvCompileResponse::TPtr& ev) {
         auto compileResult = ev->Get()->CompileResult;
         QueryState->Orbit = std::move(ev->Get()->Orbit);
+        QueryState->MaxReadType = compileResult->MaxReadType;
 
         YQL_ENSURE(compileResult);
         YQL_ENSURE(QueryState);
@@ -1396,15 +1398,13 @@ public:
 
         Counters->ReportQueryLatency(Settings.DbCounters, QueryState->Request.GetAction(), queryDuration);
 
-        auto& stats = QueryState->Stats;
-        auto plan = SerializeAnalyzePlan(stats);
-
-        auto maxReadType = ExtractMostHeavyReadType(plan);
-        if (maxReadType == ETableReadType::FullScan) {
+        if (QueryState->MaxReadType == ETableReadType::FullScan) {
             Counters->ReportQueryWithFullScan(Settings.DbCounters);
-        } else if (maxReadType == ETableReadType::Scan) {
+        } else if (QueryState->MaxReadType == ETableReadType::Scan) {
             Counters->ReportQueryWithRangeScan(Settings.DbCounters);
         }
+
+        auto& stats = QueryState->Stats;
 
         ui32 affectedShardsCount = 0;
         ui64 readBytesCount = 0;

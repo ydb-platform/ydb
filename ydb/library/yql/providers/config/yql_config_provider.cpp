@@ -729,7 +729,7 @@ namespace {
                     return false;
                 }
 
-                Types.JsonQueryReturnsJsonDocument = (name == "DisableJsonQueryReturnsJsonDocument");
+                Types.JsonQueryReturnsJsonDocument = (name == "JsonQueryReturnsJsonDocument");
             }
             else if (name == "OrderedColumns" || name == "DisableOrderedColumns") {
                 if (args.size() != 0) {

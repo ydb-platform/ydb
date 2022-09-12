@@ -135,7 +135,7 @@ public:
 
     void ReplyError(const TString& message) {
         Counters->Error->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, message)}), Cookie);
+        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, "Monitoring: " + message)}), Cookie);
         DestroyActor(false /* success */);
     }
 

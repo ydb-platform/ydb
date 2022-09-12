@@ -239,7 +239,7 @@ private:
     }
 
     void ReplyError(const TString& message) {
-        ReplyError(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, message)});
+        ReplyError(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, "Data Streams: " + message)});
     }
 
     void ReplyOk() {

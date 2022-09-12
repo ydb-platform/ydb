@@ -194,7 +194,7 @@ private:
     void ReplyError(const TString& message) {
         TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Invalid access for object storage connection: " << message);
         Counters->Error->Inc();
-        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, message)}), 0, Cookie);
+        Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NYq::TIssuesIds::BAD_REQUEST, "Object Storage: " + message)}), 0, Cookie);
         DestroyActor(false /* success */);
     }
 

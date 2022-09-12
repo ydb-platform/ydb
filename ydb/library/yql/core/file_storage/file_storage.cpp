@@ -117,7 +117,7 @@ public:
             TShellCommand cmd("strip", {file, "-o", dstPath.GetPath()});
             cmd.Run().Wait();
             if (*cmd.GetExitCode() != 0) {
-                ythrow yexception() << cmd.GetError();
+                ythrow yexception() << "'strip' exited with " << *cmd.GetExitCode() << "code. Stedrr: " << cmd.GetError();
             }
             md5 = MD5::File(dstPath.GetPath());
             size = TFile(dstPath.GetPath(), OpenExisting | RdOnly).GetLength();

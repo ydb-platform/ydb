@@ -118,6 +118,7 @@ public:
         // curl_easy_setopt(Handle, CURLOPT_VERBOSE, 1L);
 
         curl_easy_setopt(Handle, CURLOPT_URL, Url.c_str());
+        curl_easy_setopt(Handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
         curl_easy_setopt(Handle, CURLOPT_USERAGENT, "YQ HTTP gateway");
         curl_easy_setopt(Handle, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(Handle, CURLOPT_CONNECTTIMEOUT, Config.ConnectionTimeout);

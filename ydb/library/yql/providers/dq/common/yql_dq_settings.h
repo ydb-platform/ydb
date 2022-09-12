@@ -71,6 +71,8 @@ struct TDqSettings {
     NCommon::TConfSetting<TString, false> _FallbackOnRuntimeErrors;
     NCommon::TConfSetting<bool, false> _EnablePrecompute;
     NCommon::TConfSetting<bool, false> EnableDqReplicate;
+    NCommon::TConfSetting<bool, false> _EnableGraceJoin;
+
 
     NCommon::TConfSetting<TString, false> WorkerFilter;
 

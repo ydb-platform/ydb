@@ -44,6 +44,7 @@
 #include "mkql_iterator.h"
 #include "mkql_join.h"
 #include "mkql_join_dict.h"
+#include "mkql_grace_join.h"
 #include "mkql_lazy_list.h"
 #include "mkql_length.h"
 #include "mkql_listfromrange.h"
@@ -218,6 +219,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Nth", &WrapNth},
         {"ToIndexDict", &WrapToIndexDict},
         {"JoinDict", &WrapJoinDict},
+        {"GraceJoin", &WrapGraceJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
         {"CombineCore", &WrapCombineCore},

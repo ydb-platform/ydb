@@ -13,6 +13,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
 
+#include <ydb/core/util/ulid.h>
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
@@ -91,7 +93,8 @@ struct TKqpQueryState {
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
 
-    TString TxId; // User tx
+    TULID TxId; // User tx
+    TString TxId_Human = "";
     bool Commit = false;
 
     NTopic::TOffsetsInfo Offsets;
@@ -206,7 +209,7 @@ public:
         Cleanup();
     }
 
-    TIntrusivePtr<TKqpTransactionContext> FindTransaction(const TString& id) {
+    TIntrusivePtr<TKqpTransactionContext> FindTransaction(const TULID& id) {
         auto it = ExplicitTransactions.Find(id);
         if (it != ExplicitTransactions.End()) {
             auto& value = it.Value();
@@ -217,7 +220,7 @@ public:
         return {};
     }
 
-    void RemoveTransaction(const TString& txId) {
+    void RemoveTransaction(const TULID& txId) {
         auto it = ExplicitTransactions.FindWithoutPromote(txId);
         if (it != ExplicitTransactions.End()) {
             ExplicitTransactions.Erase(it);
@@ -230,11 +233,12 @@ public:
                 "Can't perform ROLLBACK_TX: TxControl isn't set in TQueryRequest");
         const auto& txControl = queryRequest.GetTxControl();
         QueryState->Commit = txControl.commit_tx();
-        const auto& txId = txControl.tx_id();
+        TULID txId;
+        txId.ParseString(txControl.tx_id());
         auto txCtx = FindTransaction(txId);
         if (!txCtx) {
             std::vector<TIssue> issues{YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND,
-                TStringBuilder() << "Transaction not found: " << QueryState->TxId)};
+                TStringBuilder() << "Transaction not found: " << txControl.tx_id())};
             ReplyQueryError(requestInfo, Ydb::StatusIds::NOT_FOUND, "", MessageFromIssues(issues));
         } else {
             QueryState->TxCtx = txCtx;
@@ -257,18 +261,20 @@ public:
 
         QueryState->Commit = txControl.commit_tx();
 
-        const auto& txId = txControl.tx_id();
+        TULID txId;
+        txId.ParseString(txControl.tx_id());
         auto txCtx = FindTransaction(txId);
         LOG_D("queryRequest TxControl: " << txControl.DebugString() << " txCtx: " << (void*)txCtx.Get());
         if (!txCtx) {
             std::vector<TIssue> issues{YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND,
-                TStringBuilder() << "Transaction not found: " << QueryState->TxId)};
+                TStringBuilder() << "Transaction not found: " << txControl.tx_id())};
             auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
             ReplyQueryError(requestInfo, Ydb::StatusIds::NOT_FOUND, "", MessageFromIssues(issues));
             return;
         }
         QueryState->TxCtx = std::move(txCtx);
         QueryState->TxId = txId;
+        QueryState->TxId_Human = txControl.tx_id();
         bool replied = ExecutePhyTx(/*query*/ nullptr, /*tx*/ nullptr, /*commit*/ true);
 
         if (!replied) {
@@ -656,7 +662,8 @@ public:
     }
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
-        QueryState->TxId = CreateGuidAsString();
+        QueryState->TxId = UlidGen.Next();
+        QueryState->TxId_Human = QueryState->TxId.ToString();
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false);
         SetIsolationLevel(settings);
         CreateNewTx();
@@ -687,16 +694,18 @@ public:
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
                 case Ydb::Table::TransactionControl::kTxId: {
-                    TString txId = txControl.tx_id();
+                    TULID txId;
+                    txId.ParseString(txControl.tx_id());
                     auto it = ExplicitTransactions.Find(txId);
                     if (it == ExplicitTransactions.End()) {
                         std::vector<TIssue> issues{YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND,
-                            TStringBuilder() << "Transaction not found: " << QueryState->TxId)};
+                            TStringBuilder() << "Transaction not found: " << txControl.tx_id())};
                         ReplyQueryError(requestInfo, Ydb::StatusIds::NOT_FOUND, "", MessageFromIssues(issues));
                         return false;
                     }
                     QueryState->TxCtx = *it;
                     QueryState->TxId = txId;
+                    QueryState->TxId_Human = txControl.tx_id();
                     break;
                 }
                 case Ydb::Table::TransactionControl::kBeginTx: {
@@ -1364,9 +1373,10 @@ public:
         YQL_ENSURE(QueryState);
         if (QueryState->Commit) {
             RemoveTransaction(QueryState->TxId);
-            QueryState->TxId = "";
+            QueryState->TxId = CreateEmptyULID();
+            QueryState->TxId_Human = "";
         }
-        response->MutableTxMeta()->set_id(QueryState->TxId);
+        response->MutableTxMeta()->set_id(QueryState->TxId_Human);
 
         if (QueryState->TxCtx) {
             auto txInfo = QueryState->TxCtx->GetInfo();
@@ -1513,23 +1523,26 @@ public:
         FillCompileStatus(compileResult, QueryResponse->Record);
 
         auto& queryRequest = QueryState->Request;
-        TString txId = "";
+        TULID txId = CreateEmptyULID();
+        TString txId_Human = "";
         if (queryRequest.HasTxControl()) {
             auto& txControl = queryRequest.GetTxControl();
 
             if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
-                txId = txControl.tx_id();
+                txId.ParseString(txControl.tx_id());
+                txId_Human = txControl.tx_id();
             }
         }
 
-        LOG_W("ReplyQueryCompileError, status" << compileResult->Status << " remove tx with tx_id: " << txId);
+        LOG_W("ReplyQueryCompileError, status" << compileResult->Status << " remove tx with tx_id: " << txId_Human);
         auto txCtx = FindTransaction(txId);
         if (txCtx) {
             txCtx->Invalidate();
             TransactionsToBeAborted.emplace_back(txCtx);
             RemoveTransaction(txId);
         }
-        txId = "";
+        txId = CreateEmptyULID();
+        txId_Human = "";
 
         auto* record = &QueryResponse->Record.GetRef();
         FillTxInfo(record->MutableResponse());
@@ -2153,6 +2166,14 @@ private:
     }
 
 private:
+
+    TULID CreateEmptyULID() {
+        TULID next;
+        memset(next.Data, 0, sizeof(next.Data));
+        return next;
+    }
+
+private:
     TActorId Owner;
     TString SessionId;
 
@@ -2169,7 +2190,7 @@ private:
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
     TKikimrConfiguration::TPtr Config;
-    TLRUCache<TString, TIntrusivePtr<TKqpTransactionContext>> ExplicitTransactions;
+    TLRUCache<TULID, TIntrusivePtr<TKqpTransactionContext>> ExplicitTransactions;
     std::vector<TIntrusivePtr<TKqpTransactionContext>> TransactionsToBeAborted;
     ui64 EvictedTx = 0;
     std::unique_ptr<TEvKqp::TEvQueryResponse> QueryResponse;
@@ -2177,6 +2198,8 @@ private:
     TActorId IdleTimerActorId;
     ui32 IdleTimerId = 0;
     std::optional<TSessionShutdownState> ShutdownState;
+
+    TULIDGenerator UlidGen;
 };
 
 } // namespace

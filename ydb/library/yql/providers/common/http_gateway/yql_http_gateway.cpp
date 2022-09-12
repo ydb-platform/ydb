@@ -373,6 +373,8 @@ public:
             }
             if (Working = !Working)
                 SkipTo(Position);
+            else
+                LastHttpResponseCode = 0L;
             return Working ? EAction::Work : EAction::Stop;
         }
 
@@ -386,7 +388,8 @@ public:
 private:
     void Fail(const TIssue& error) final  {
         Working = false;
-        return OnFinish(TIssues{error});
+        if (!Cancelled)
+            OnFinish(TIssues{error});
     }
 
     void Done(CURLcode result, long) final {
@@ -394,20 +397,23 @@ private:
             return Fail(TIssue(curl_easy_strerror(result)));
 
         Working = false;
-        return OnFinish(TIssues());
+        if (!Cancelled)
+            OnFinish(TIssues());
     }
 
     size_t Write(void* contents, size_t size, size_t nmemb) final {
-        if (!StreamStarted) {
-            StreamStarted = true;
-            long httpResponseCode = 0L;
-            curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
-            OnStart(httpResponseCode);
+        if (!LastHttpResponseCode) {
+            curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &LastHttpResponseCode);
+            if (!FirstHttpResponseCode)
+                OnStart(FirstHttpResponseCode = LastHttpResponseCode);
+            else if (FirstHttpResponseCode != LastHttpResponseCode)
+                Cancel(TIssue(TStringBuilder() << "HTTP response has been changed from " << FirstHttpResponseCode << " to " << LastHttpResponseCode));
         }
 
         const auto realsize = size * nmemb;
         Position += realsize;
-        OnNewData(IHTTPGateway::TCountedContent(TString(static_cast<char*>(contents), realsize), Counter));
+        if (!Cancelled)
+            OnNewData(IHTTPGateway::TCountedContent(TString(static_cast<char*>(contents), realsize), Counter));
         return realsize;
     }
 
@@ -422,7 +428,8 @@ private:
     bool Working = false;
     size_t Position = 0ULL;
     bool Cancelled = false;
-    bool StreamStarted = false;
+    long FirstHttpResponseCode = 0L;
+    long LastHttpResponseCode = 0L;
 };
 
 using TKeyType = std::tuple<TString, size_t, IHTTPGateway::THeaders, TString, IRetryPolicy<long>::TPtr>;

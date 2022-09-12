@@ -537,7 +537,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
     {
         auto programText = R"___((
             (let r1 '('key1 (Uint32 '345) (Uint32 '347)))
-            (let r2 '('key2 (Void) (Void)))
+            (let r2 '('key2 (Nothing (OptionalType (DataType 'Utf8))) (Nothing (OptionalType (DataType 'Utf8)))))
             (let range '('IncFrom 'ExcTo r1 r2))
             (let select '('key1 'key2 'value))
             (let options '())
@@ -557,18 +557,18 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         UNIT_ASSERT_EQUAL(rsl.Size(), 2);
         TValue row1 = rsl[0];
         TValue row2 = rsl[1];
-        UNIT_ASSERT_EQUAL(ui32(row1["key1"]), 346);
-        UNIT_ASSERT_EQUAL(ui32(row2["key1"]), 347);
-        UNIT_ASSERT_EQUAL(TString(row1["key2"]), "id345");
-        UNIT_ASSERT_EQUAL(TString(row2["key2"]), "idXYZ");
-        UNIT_ASSERT_EQUAL(TString(row1["value"]), "Tables");
-        UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
+        UNIT_ASSERT_EQUAL(ui32(row1["key1"]), 345);
+        UNIT_ASSERT_EQUAL(ui32(row2["key1"]), 346);
+        UNIT_ASSERT_EQUAL(TString(row1["key2"]), "id123");
+        UNIT_ASSERT_EQUAL(TString(row2["key2"]), "id345");
+        UNIT_ASSERT_EQUAL(TString(row1["value"]), "Robert");
+        UNIT_ASSERT_EQUAL(TString(row2["value"]), "Tables");
     }
 
     {
         auto programText = R"___((
             (let r1 '('key1 (Uint32 '345) (Uint32 '347)))
-            (let r2 '('key2 (Void) (Void)))
+            (let r2 '('key2 (Void) (Nothing (OptionalType (DataType 'Utf8)))))
             (let range '('ExcFrom 'ExcTo r1 r2))
             (let select '('key1 'key2 'value))
             (let options '())
@@ -585,21 +585,17 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         TValue rs0 = value["myRes"];
         UNIT_ASSERT_EQUAL(bool(rs0["Truncated"]), false);
         TValue rsl = rs0["List"];
-        UNIT_ASSERT_EQUAL(rsl.Size(), 2);
+        UNIT_ASSERT_EQUAL(rsl.Size(), 1);
         TValue row1 = rsl[0];
-        TValue row2 = rsl[1];
         UNIT_ASSERT_EQUAL(ui32(row1["key1"]), 346);
-        UNIT_ASSERT_EQUAL(ui32(row2["key1"]), 347);
         UNIT_ASSERT_EQUAL(TString(row1["key2"]), "id345");
-        UNIT_ASSERT_EQUAL(TString(row2["key2"]), "idXYZ");
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Tables");
-        UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
 
     {
         auto programText = R"___((
             (let r1 '('key1 (Uint32 '345) (Uint32 '347)))
-            (let r2 '('key2 (Void) (Void)))
+            (let r2 '('key2 (Nothing (OptionalType (DataType 'Utf8))) (Void)))
             (let range '('IncFrom 'IncTo r1 r2))
             (let select '('key1 'key2 'value))
             (let options '())
@@ -616,22 +612,26 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         auto rs0 = value["myRes"];
         UNIT_ASSERT_EQUAL(bool(rs0["Truncated"]), false);
         auto rsl = rs0["List"];
-        UNIT_ASSERT_EQUAL(rsl.Size(), 2);
+        UNIT_ASSERT_EQUAL(rsl.Size(), 3);
         auto row1 = rsl[0];
         auto row2 = rsl[1];
-        UNIT_ASSERT_EQUAL(ui32(row1["key1"]), 346);
-        UNIT_ASSERT_EQUAL(ui32(row2["key1"]), 347);
-        UNIT_ASSERT_EQUAL(TString(row1["key2"]), "id345");
-        UNIT_ASSERT_EQUAL(TString(row2["key2"]), "idXYZ");
-        UNIT_ASSERT_EQUAL(TString(row1["value"]), "Tables");
-        UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
+        auto row3 = rsl[2];
+        UNIT_ASSERT_EQUAL(ui32(row1["key1"]), 345);
+        UNIT_ASSERT_EQUAL(ui32(row2["key1"]), 346);
+        UNIT_ASSERT_EQUAL(ui32(row3["key1"]), 347);
+        UNIT_ASSERT_EQUAL(TString(row1["key2"]), "id123");
+        UNIT_ASSERT_EQUAL(TString(row2["key2"]), "id345");
+        UNIT_ASSERT_EQUAL(TString(row3["key2"]), "idXYZ");
+        UNIT_ASSERT_EQUAL(TString(row1["value"]), "Robert");
+        UNIT_ASSERT_EQUAL(TString(row2["value"]), "Tables");
+        UNIT_ASSERT_EQUAL(TString(row3["value"]), "Paulson");
     }
 
     // (345,inf).. (347,inf)
     {
         auto programText = R"___((
             (let r1 '('key1 (Uint32 '345) (Uint32 '347)))
-            (let range '('IncFrom 'ExcTo r1))
+            (let range '('ExcFrom 'IncTo r1))
             (let select '('key1 'key2 'value))
             (let options '())
             (let pgmReturn (AsList

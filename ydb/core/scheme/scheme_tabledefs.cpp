@@ -32,6 +32,48 @@ bool TTableRange::IsFullRange(ui32 columnsCount) const {
     return true;
 }
 
+namespace {
+    // There are many places that use a non-inclusive -inf/+inf
+    // We special case empty keys anyway, so the requirement is temporarily relaxed
+    static constexpr bool RelaxEmptyKeys = true;
+}
+
+const char* TTableRange::IsAmbiguousReason(size_t keyColumnsCount) const noexcept {
+    if (Point) {
+        if (Y_UNLIKELY(From.size() != keyColumnsCount)) {
+            return "Ambiguous table point: does not match key columns count";
+        }
+
+        return nullptr;
+    }
+
+    if (!From) {
+        if (Y_UNLIKELY(!InclusiveFrom) && !RelaxEmptyKeys) {
+            return "Ambiguous table range: empty From must be inclusive";
+        }
+    } else if (From.size() < keyColumnsCount) {
+        if (Y_UNLIKELY(InclusiveFrom)) {
+            return "Ambiguous table range: incomplete From must be non-inclusive (any/+inf is ambiguous otherwise)";
+        }
+    } else if (Y_UNLIKELY(From.size() > keyColumnsCount)) {
+        return "Ambiguous table range: From is too large";
+    }
+
+    if (!To) {
+        if (Y_UNLIKELY(!InclusiveTo && !RelaxEmptyKeys)) {
+            return "Ambiguous table range: empty To must be inclusive";
+        }
+    } else if (To.size() < keyColumnsCount) {
+        if (Y_UNLIKELY(!InclusiveTo)) {
+            return "Ambiguous table range: incomplete To must be inclusive (any/+inf is ambiguous otherwise)";
+        }
+    } else if (Y_UNLIKELY(To.size() > keyColumnsCount)) {
+        return "Ambiguous table range: To is too large";
+    }
+
+    return nullptr;
+}
+
 bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const
 {
     auto cmp = CompareBorders<true, false>(To.GetCells(), From.GetCells(), ToInclusive, FromInclusive, type);

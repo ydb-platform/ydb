@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
     Y_UNIT_TEST(SelectRange) {
         auto programText = R"___(
 (
-(let range '('IncFrom 'ExcTo '('key (Uint32 '23) (Void))))
+(let range '('IncFrom 'IncTo '('key (Uint32 '23) (Void))))
 (let select '('value))
 (let options '('('ItemsLimit (Uint64 '2)) '('BytesLimit (Uint64 '1000))))
 (let pgmReturn (AsList
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
     Y_UNIT_TEST(Extract) {
         auto programText = R"___(
 (
-(let range '('IncFrom 'ExcTo '('key (Uint32 '23) (Void))))
+(let range '('IncFrom 'IncTo '('key (Uint32 '23) (Void))))
 (let select '('key 'value))
 (let options '('('ItemsLimit (Uint64 '2))))
 (let tupleList (AsList '((Uint32 '1) (Uint32 '2)) '((Uint32 '3) (Uint32 '4))))

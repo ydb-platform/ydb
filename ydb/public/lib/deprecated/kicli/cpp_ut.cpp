@@ -1472,9 +1472,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                               '('Rank rank)
                                               '('UrlHash urlHash)))
                                   (let column1 '('UrlHash))
-                                  (let range '('IncFrom '('ShardId shardId (Void))
-                                                        '('HostTitleHash hostTitleHash (Void))
-                                                        '('GroupSimHash groupSimHash (Void))
+                                  (let range '('ExcFrom 'IncTo '('ShardId shardId (Void))
+                                                               '('HostTitleHash hostTitleHash (Void))
+                                                               '('GroupSimHash groupSimHash (Void))
                                   ))
                                   (let column2 '('UrlHash))
                                   (let options '('('ItemsLimit (Uint64 '1))))
@@ -1510,6 +1510,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     {
         using namespace NClient;
 
+        Y_UNUSED(includeFrom);
+        Y_UNUSED(includeTo);
+
         auto rawq = kikimr.Query(
                     Sprintf(R"___(
                               (
@@ -1524,8 +1527,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                               (return pgmReturn)
                               )
                               )___",
-                              includeFrom ? "IncFrom" : "ExcFrom",
-                              includeTo ? "IncTo" : "ExcTo"
+                              "ExcFrom" /* incomplete From is always non-inclusive */,
+                              "IncTo" /* incomplete To is always inclusive */
                     ));
         auto q = rawq.SyncPrepare();
         UNIT_ASSERT_VALUES_EQUAL_C(q.GetStatus(), NMsgBusProxy::MSTATUS_OK,  q.GetError().GetMessage().c_str());

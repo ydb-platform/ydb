@@ -931,42 +931,6 @@ public:
                  }
             }
 
-            // TODO: remove later, when we sure that key prefix is properly
-            // interpreted same way everywhere: i.e. treated as 0 at the left and
-            // inf on the right.
-            // We really do weird transformations here, not sure if we can do better though
-            for (size_t i = 0; i < Request->Ranges.size(); ++i) {
-                auto& range = Request->Ranges[i];
-                auto& keyFrom = range.From;
-                auto& keyTo = Request->Ranges[i].To;
-
-                if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
-                    keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
-                }
-
-                if (!range.ToInclusive && keyTo.GetCells().size() != TableInfo.KeyColumnCount) {
-                    keyTo = ExtendWithNulls(keyTo, TableInfo.KeyColumnCount);
-                }
-            }
-
-            // TODO: remove later, when we sure that key prefix is properly
-            // interpreted same way everywhere: i.e. treated as 0 at the left and
-            // inf on the right.
-            // We really do weird transformations here, not sure if we can do better though
-            for (size_t i = 0; i < Request->Keys.size(); ++i) {
-                const auto& key = Request->Keys[i];
-                if (key.GetCells().size() == TableInfo.KeyColumnCount)
-                    continue;
-
-                if (state.Keys.size() != Request->Keys.size()) {
-                    state.Keys.resize(Request->Keys.size());
-                }
-
-                // we can safely use cells referencing original Request->Keys[x],
-                // because request will live until the end
-                state.Keys[i] = ExtendWithNulls(key, TableInfo.KeyColumnCount);
-            }
-
             userTableInfo->Stats.AccessTime = TAppData::TimeProvider->Now();
         } else {
             // DS is owner, read system table
@@ -982,6 +946,36 @@ public:
                 return;
             }
             TableInfo = TShortTableInfo(state.PathId.LocalPathId, *schema);
+        }
+
+        // Make ranges in the new 'any' form compatible with the old '+inf' form
+        for (size_t i = 0; i < Request->Ranges.size(); ++i) {
+            auto& range = Request->Ranges[i];
+            auto& keyFrom = range.From;
+            auto& keyTo = Request->Ranges[i].To;
+
+            if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
+                keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
+            }
+
+            if (!range.ToInclusive && keyTo.GetCells().size() != TableInfo.KeyColumnCount) {
+                keyTo = ExtendWithNulls(keyTo, TableInfo.KeyColumnCount);
+            }
+        }
+
+        // Make prefixes in the new 'any' form compatible with the old '+inf' form
+        for (size_t i = 0; i < Request->Keys.size(); ++i) {
+            const auto& key = Request->Keys[i];
+            if (key.GetCells().size() == TableInfo.KeyColumnCount)
+                continue;
+
+            if (state.Keys.size() != Request->Keys.size()) {
+                state.Keys.resize(Request->Keys.size());
+            }
+
+            // we can safely use cells referencing original Request->Keys[x],
+            // because request will live until the end
+            state.Keys[i] = ExtendWithNulls(key, TableInfo.KeyColumnCount);
         }
 
         state.Columns.reserve(record.ColumnsSize());
@@ -1004,7 +998,12 @@ public:
 
         Y_ASSERT(Result);
 
-        PrepareValidationInfo(ctx, state);
+        if (state.PathId.OwnerId != Self->TabletID()) {
+            PrepareValidationInfo(ctx, state);
+        } else {
+            // There should be no keys when reading sysm tables
+            ValidationInfo.Loaded = true;
+        }
     }
 
     void SendResult(const TActorContext& ctx) override {

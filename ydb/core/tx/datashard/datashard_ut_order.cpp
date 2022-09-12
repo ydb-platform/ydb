@@ -1193,6 +1193,9 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     auto &tx = *dataTransaction.MutableReadTableTransaction();
     tx.MutableTableId()->SetOwnerId(FAKE_SCHEMESHARD_TABLET_ID);
     tx.MutableTableId()->SetTableId(13);
+    auto &range = *tx.MutableRange();
+    range.SetFromInclusive(true);
+    range.SetToInclusive(true);
     auto &c = *tx.AddColumns();
     c.SetId(56);
     c.SetName("value");

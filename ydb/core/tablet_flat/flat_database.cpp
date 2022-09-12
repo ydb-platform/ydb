@@ -88,12 +88,53 @@ TAutoPtr<TTableIt> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef ta
     return iter;
 }
 
+namespace {
+    // There are many places that use a non-inclusive -inf/+inf
+    // We special case empty keys anyway, so the requirement is temporarily relaxed
+    static constexpr bool RelaxEmptyKeys = true;
+
+    const char* IsAmbiguousRangeReason(const TKeyRange& range, ui32 keyColumnsCount) {
+        if (!range.MinKey) {
+            if (Y_UNLIKELY(!range.MinInclusive) && !RelaxEmptyKeys) {
+                return "Ambiguous table range: empty MinKey must be inclusive";
+            }
+        } else if (range.MinKey.size() < keyColumnsCount) {
+            if (Y_UNLIKELY(range.MinInclusive)) {
+                return "Ambiguous table range: incomplete MinKey must be non-inclusive (any/+inf is ambiguous otherwise)";
+            }
+        } else if (Y_UNLIKELY(range.MinKey.size() > keyColumnsCount)) {
+            return "Ambiguous table range: MinKey is too large";
+        }
+
+        if (!range.MaxKey) {
+            if (Y_UNLIKELY(!range.MaxInclusive) && !RelaxEmptyKeys) {
+                return "Ambiguous table range: empty MaxKey must be inclusive";
+            }
+        } else if (range.MaxKey.size() < keyColumnsCount) {
+            if (Y_UNLIKELY(!range.MaxInclusive)) {
+                return "Ambiguous table range: incomplete MaxKey must be inclusive (any/+inf is ambiguous otherwise)";
+            }
+        } else if (Y_UNLIKELY(range.MaxKey.size() > keyColumnsCount)) {
+            return "Ambiguous table range: MaxKey is too large";
+        }
+
+        return nullptr;
+    }
+
+    bool IsAmbiguousRange(const TKeyRange& range, ui32 keyColumnsCount) {
+        return IsAmbiguousRangeReason(range, keyColumnsCount) != nullptr;
+    }
+}
+
 TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+
+    Y_VERIFY_DEBUG(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
+        "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
 
     IteratedTables.insert(table);
 
@@ -120,6 +161,9 @@ TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyR
         const ITransactionObserverPtr& observer) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+
+    Y_VERIFY_DEBUG(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
+        "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
 
     IteratedTables.insert(table);
 

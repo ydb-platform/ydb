@@ -17,7 +17,7 @@ ui64 GetRSCount(TTestActorRuntime &runtime, TActorId sender, ui64 shard)
 {
     auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
     TString miniKQL =   R"___((
-        (let range '('IncFrom '('TxId (Uint64 '0) (Void))))
+        (let range '('ExcFrom '('TxId (Uint64 '0) (Void))))
         (let select '('TxId))
         (let options '())
         (let pgmReturn (AsList
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         {
             auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
             TString miniKQL =   R"___((
-                (let range '('IncFrom '('TxId (Uint64 '0) (Void))))
+                (let range '('ExcFrom '('TxId (Uint64 '0) (Void))))
                 (let select '('TxId))
                 (let options '())
                 (let pgmReturn (AsList

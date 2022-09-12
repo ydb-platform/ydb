@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                         ((return (AsList
                             (SetResult 'x
                                 (SelectRange '"/dc-1/test/perf/FlatDaoPerfTestClient"
-                                    '('ExcFrom 'ExcTo '('ls (Utf8 '"") (Void)))
+                                    '('ExcFrom 'IncTo '('ls (Utf8 '"") (Void)))
                                     '('ls 'kg 'localId 'createdSeconds 'mode1)
                                     '('('BytesLimit (Uint64 '3000000)))
                                 )
@@ -1528,7 +1528,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         NKikimrClient::TResponse response;
         status = annoyingClient.FlatQueryRaw(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (Member (SelectRange '/dc-1/Dir/Table range '('Key 'Value) '()) 'List))
             (let result (Filter data (lambda '(row)
                 (Coalesce (NotEqual (Member row 'Key) (Uint32 '1)) (Bool 'false))
@@ -1843,6 +1843,33 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TFlatMsgBusClient::TFlatQueryOptions opts;
         NKikimrClient::TResponse response;
         annoyingClient.FlatQueryRaw(Sprintf(readQuery, fromKey, table.data(), follower ? TReadTarget::Follower().GetMode()
+            : TReadTarget::Head().GetMode()), opts, response);
+
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT(response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete));
+        NKikimrMiniKQL::TResult result;
+        result.Swap(response.MutableExecutionEngineEvaluatedResponse());
+
+        TString strResult;
+        ::google::protobuf::TextFormat::PrintToString(result.GetValue(), &strResult);
+        return strResult;
+    }
+
+    TString ReadFromTwoKeysTable(TFlatMsgBusClient& annoyingClient, TString table, ui32 fromKey = 0, ui32 fromKey2 = 0, bool follower = false) {
+        const char* readQuery =
+                "("
+                "(let range1 '('IncFrom '('Key (Uint32 '%d) (Void)) '('Key2 (Uint32 '%d) (Void)) ))"
+                "(let select '('Key 'Key2 'Value 'Large))"
+                "(let options '())"
+                "(let pgmReturn (AsList"
+                "    (SetResult 'range1 (SelectRange '%s range1 select options (Uint32 '%d)))"
+                "))"
+                "(return pgmReturn)"
+                ")";
+
+        TFlatMsgBusClient::TFlatQueryOptions opts;
+        NKikimrClient::TResponse response;
+        annoyingClient.FlatQueryRaw(Sprintf(readQuery, fromKey, fromKey2, table.data(), follower ? TReadTarget::Follower().GetMode()
             : TReadTarget::Head().GetMode()), opts, response);
 
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -2332,12 +2359,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), datashards);
     }
 
-    void DoSplitMergeTable(TFlatMsgBusClient& annoyingClient, TString table, const TVector<ui64>& srcPartitions, const TVector<ui32>& splitPoints) {
+    void DoSplitMergeTable(TFlatMsgBusClient& annoyingClient, TString table, const TVector<ui64>& srcPartitions, const TVector<ui32>& splitPoints, bool twoKeys = false) {
         TVector<ui64> partitionsBefore;
         partitionsBefore = annoyingClient.GetTablePartitions(table);
         UNIT_ASSERT(partitionsBefore.size() > 0);
 
-        TString strResultBefore = ReadFromTable(annoyingClient, table);
+        TString strResultBefore = twoKeys ? ReadFromTwoKeysTable(annoyingClient, table) : ReadFromTable(annoyingClient, table);
 
         TStringStream splitDescr;
         for (ui32 src : srcPartitions) {
@@ -2355,8 +2382,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         // TODO: check paritions that were not supposed to change
         //UNIT_ASSERT_VALUES_EQUAL(partitionsAfter.back(), partitionsBefore.back());
 
-        TString strResultAfter = ReadFromTable(annoyingClient, table);
+        TString strResultAfter = twoKeys ? ReadFromTwoKeysTable(annoyingClient, table) : ReadFromTable(annoyingClient, table);
         UNIT_ASSERT_NO_DIFF(strResultBefore, strResultAfter);
+    }
+
+    void SplitTwoKeysTable(TFlatMsgBusClient& annoyingClient, TString table, ui64 partitionIdx, const TVector<ui32>& splitPoints) {
+        DoSplitMergeTable(annoyingClient, table, {partitionIdx}, splitPoints, /* twoKeys */ true);
     }
 
     void SplitTable(TFlatMsgBusClient& annoyingClient, TString table, ui64 partitionIdx, const TVector<ui32>& splitPoints) {
@@ -2614,7 +2645,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
-        SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {splitKey});
+        SplitTwoKeysTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {splitKey});
     }
 
     Y_UNIT_TEST(SplitThenMerge) {
@@ -3267,7 +3298,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         client.FlatQuery(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List))
             (let result (Filter data (lambda '(row)
                 (Coalesce (NotEqual (Member row 'Key) (Uint64 '1)) (Bool 'false))
@@ -3361,7 +3392,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         annoyingClient.FlatQuery(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List))
             (let result (Take (Skip (Filter data (lambda '(row)
                 (Coalesce (NotEqual (Member row 'Key) (Uint64 '1)) (Bool 'false))
@@ -3408,7 +3439,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         annoyingClient.FlatQuery(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List))
             (let result (OrderedMap data (lambda '(row)
                 (AddMember row 'Value2 (Member row 'Value))
@@ -3463,7 +3494,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         annoyingClient.FlatQuery(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List))
             (let result (OrderedMap data (lambda '(row)
                 (AddMember row 'Value2 (Member row 'Value))
@@ -3616,7 +3647,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         auto res = annoyingClient.FlatQuery(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (SelectRange
                 '"/dc-1/test/TestTable"
                 range
@@ -3677,7 +3708,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         auto res = annoyingClient.FlatQuery(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (SelectRange
                 '"/dc-1/test/TestTable"
                 range
@@ -3738,7 +3769,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         auto res = annoyingClient.FlatQuery(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (SelectRange
                 '"/dc-1/test/TestTable"
                 range
@@ -3812,7 +3843,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(SelectRangeSkipNullKeys) {
         auto res = CreateTableAndExecuteMkql(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void))))
             (let data (SelectRange
                 '"/dc-1/test/TestTable"
                 range
@@ -4012,7 +4043,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         auto res = annoyingClient.FlatQuery(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (SelectRange
                 '"/dc-1/test/TestTable"
                 range
@@ -4080,7 +4111,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         auto res = annoyingClient.FlatQuery(Sprintf(R"(
             (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let range '('ExcFrom 'IncTo '('Key (Null) (Void))))
             (let data (SelectRange
                 '"/dc-1/test/TestTable"
                 range

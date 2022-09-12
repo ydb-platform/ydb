@@ -70,7 +70,6 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
         if (!hasImmediateData) {
             MKQL_ENSURE(!requireStaticKey, "Expected static key components");
             point = false;
-            inclusiveTo = false;
             continue;
         }
 

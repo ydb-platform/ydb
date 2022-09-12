@@ -181,6 +181,12 @@ public:
 
     bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const;
     bool IsFullRange(ui32 columnsCount) const;
+
+    bool IsAmbiguous(size_t keyColumnsCount) const noexcept {
+        return IsAmbiguousReason(keyColumnsCount) != nullptr;
+    }
+
+    const char* IsAmbiguousReason(size_t keyColumnsCount) const noexcept;
 };
 
 class TSerializedTableRange {

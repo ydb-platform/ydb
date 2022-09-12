@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
         UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 3);
         UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull());
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
         UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 2);
         UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull());
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
-        UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
+        UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
         UNIT_ASSERT(!tableKeys[0]->Range.Point);
         UNIT_ASSERT(tableKeys[0]->Range.From.size() == 3);
         UNIT_ASSERT(tableKeys[0]->Range.From[0].IsNull());

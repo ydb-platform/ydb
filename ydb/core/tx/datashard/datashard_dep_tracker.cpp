@@ -3,6 +3,8 @@
 
 #include "const.h"
 
+#include <util/string/escape.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -181,6 +183,14 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
             const auto& k = *vk.Key;
             if (Parent.Self->IsUserTable(k.TableId)) {
                 const ui64 tableId = k.TableId.PathId.LocalPathId;
+                Y_VERIFY_DEBUG_S(!k.Range.IsAmbiguous(Parent.Self->GetUserTables().at(tableId)->KeyColumnTypes.size()),
+                    (vk.IsWrite ? "Write" : "Read")
+                    << " From# \"" << EscapeC(TSerializedCellVec::Serialize(k.Range.From)) << "\""
+                    << " To# \"" << EscapeC(TSerializedCellVec::Serialize(k.Range.To)) << "\""
+                    << " InclusiveFrom# " << (k.Range.InclusiveFrom ? "true" : "false")
+                    << " InclusiveTo# " << (k.Range.InclusiveTo ? "true" : "false")
+                    << " Point# " << (k.Range.Point ? "true" : "false")
+                    << ": " << k.Range.IsAmbiguousReason(Parent.Self->GetUserTables().at(tableId)->KeyColumnTypes.size()));
                 if (!tooManyKeys && ++keysCount > MAX_REORDER_TX_KEYS) {
                     tooManyKeys = true;
                 }
@@ -617,6 +627,14 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
             const auto& k = *vk.Key;
             if (Parent.Self->IsUserTable(k.TableId)) {
                 const ui64 tableId = k.TableId.PathId.LocalPathId;
+                Y_VERIFY_DEBUG_S(!k.Range.IsAmbiguous(Parent.Self->GetUserTables().at(tableId)->KeyColumnTypes.size()),
+                    (vk.IsWrite ? "Write" : "Read")
+                    << " From# \"" << EscapeC(TSerializedCellVec::Serialize(k.Range.From)) << "\""
+                    << " To# \"" << EscapeC(TSerializedCellVec::Serialize(k.Range.To)) << "\""
+                    << " InclusiveFrom# " << (k.Range.InclusiveFrom ? "true" : "false")
+                    << " InclusiveTo# " << (k.Range.InclusiveTo ? "true" : "false")
+                    << " Point# " << (k.Range.Point ? "true" : "false")
+                    << ": " << k.Range.IsAmbiguousReason(Parent.Self->GetUserTables().at(tableId)->KeyColumnTypes.size()));
                 if (!tooManyKeys && ++keysCount > MAX_REORDER_TX_KEYS) {
                     tooManyKeys = true;
                 }

@@ -1,5 +1,9 @@
 #include "datashard_ut_common.h"
 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD), Q_
+
+#include <ydb/library/yql/minikql/mkql_node_printer.h>
+
 #include "testload/test_load_actor.h"
 
 namespace NKikimr {
@@ -87,7 +91,7 @@ struct TTestHelper {
         auto &runtime = *Server->GetRuntime();
         Sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::DS_LOAD_TEST, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::DS_LOAD_TEST, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
@@ -239,6 +243,26 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         helper.TestLoad(std::move(request), expectedRowCount);
     }
-}
+
+    Y_UNIT_TEST(ShouldWriteKqpUpsert) {
+        TTestHelper helper;
+
+        const ui64 expectedRowCount = 10;
+
+        std::unique_ptr<TEvDataShard::TEvTestLoadRequest> request(new TEvDataShard::TEvTestLoadRequest());
+        auto& record = request->Record;
+        auto& command = *record.MutableUpsertKqpStart();
+
+        command.SetTag(1);
+        command.SetRowCount(expectedRowCount);
+        command.SetTabletId(helper.Table.TabletId);
+        command.SetTableId(helper.Table.UserTable.GetPathId());
+        command.SetInflight(1);
+        command.SetPath("/Root");
+
+        helper.TestLoad(std::move(request), expectedRowCount);
+    }
+
+} // Y_UNIT_TEST_SUITE(UpsertLoad)
 
 } // namespace NKikimr

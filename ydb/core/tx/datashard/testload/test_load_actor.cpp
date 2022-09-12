@@ -118,6 +118,30 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
+                LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Create new local mkql upsert load actor with tag# " << tag);
+                LoadActors.emplace(tag, ctx.Register(CreateLocalMkqlUpsertActor(cmd, ctx.SelfID,
+                                GetServiceCounters(Counters, "load_actor"), tag)));
+                break;
+            }
+
+            case NKikimrTxDataShard::TEvTestLoadRequest::CommandCase::kUpsertKqpStart: {
+                const auto& cmd = record.GetUpsertKqpStart();
+                const ui64 tag = GetOrGenerateTag(cmd);
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
+                LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Create new kqp upsert load actor with tag# " << tag);
+                LoadActors.emplace(tag, ctx.Register(CreateKqpUpsertActor(cmd, ctx.SelfID,
+                                GetServiceCounters(Counters, "load_actor"), tag)));
+                break;
+            }
+
+            case NKikimrTxDataShard::TEvTestLoadRequest::CommandCase::kUpsertStart: {
+                const auto& cmd = record.GetUpsertStart();
+                const ui64 tag = GetOrGenerateTag(cmd);
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
                 LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Create new upsert load actor with tag# " << tag);
                 LoadActors.emplace(tag, ctx.Register(CreateUpsertActor(cmd, ctx.SelfID,
                                 GetServiceCounters(Counters, "load_actor"), tag)));

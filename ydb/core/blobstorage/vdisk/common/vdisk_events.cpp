@@ -34,14 +34,6 @@ namespace NKikimr {
         }
     }
 
-    void TEvBlobStorage::TEvVPut::StorePayload(const TString& buffer) {
-        if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-            AddPayload(TRope(buffer));
-        } else {
-            Record.SetBuffer(buffer);
-        }
-    }
-
     void TEvBlobStorage::TEvVPut::StorePayload(TRope&& buffer) {
         Y_VERIFY(KIKIMR_USE_PROTOBUF_WITH_PAYLOAD);
         AddPayload(std::move(buffer));

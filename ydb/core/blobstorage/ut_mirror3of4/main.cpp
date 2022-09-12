@@ -182,7 +182,7 @@ public:
         }
 
         NKikimrProto::EReplyStatus Put(const TVDiskID& vdiskId, const TLogoBlobID& blobId, const TString& data) {
-            Send(GetBackpressureFor(Info->GetOrderNumber(vdiskId)), new TEvBlobStorage::TEvVPut(blobId, data, vdiskId,
+            Send(GetBackpressureFor(Info->GetOrderNumber(vdiskId)), new TEvBlobStorage::TEvVPut(blobId, TRope(data), vdiskId,
                 false, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog));
             auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVPutResult>();
             auto& record = ev->Get()->Record;

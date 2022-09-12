@@ -289,7 +289,7 @@ namespace NKikimr {
                     const auto it = map.find(id.FullID());
                     Y_VERIFY(it != map.end());
                     if (it->second->Status == NKikimrProto::OK) {
-                        const TString& buffer = it->second->GetPartData(id);
+                        const TString& buffer = it->second->GetPartData(id).ConvertToString();
                         res.SetBuffer(buffer.substr(res.GetShift(), res.GetSize() ? res.GetSize() : buffer.size() - res.GetShift()));
                         res.SetStatus(NKikimrProto::OK);
                     }

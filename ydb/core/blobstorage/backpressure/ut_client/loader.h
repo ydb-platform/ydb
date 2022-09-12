@@ -53,7 +53,7 @@ public:
             const TLogoBlobID blobId(0x0123456789abcdefUL, 1, BlobIdx++, 0, 1, Buffer.size());
             LOG_DEBUG(*TlsActivationContext, NActorsServices::TEST, "%s %s", ClientId.ToString().data(),
                 blobId.ToString().data());
-            Send(QueueId, new TEvBlobStorage::TEvVPut(blobId, Buffer, VDiskId, false, nullptr, TInstant::Max(),
+            Send(QueueId, new TEvBlobStorage::TEvVPut(blobId, TRope(Buffer), VDiskId, false, nullptr, TInstant::Max(),
                 NKikimrBlobStorage::EPutHandleClass::TabletLog));
             RequestQ.push_back(blobId);
             --InFlightRemain;

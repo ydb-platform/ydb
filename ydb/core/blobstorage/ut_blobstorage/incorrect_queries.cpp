@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
     void SendPut(TEnvironmentSetup& env, TTestInfo& test,
                 const TLogoBlobID& blobId, NKikimrProto::EReplyStatus status, ui32 blob_size, bool isEmptyObject = false, bool isEmptyMeta = false) {
         const TString data(blob_size, 'a');
-        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, data, test.Info->GetVDiskInSubgroup(0, blobId.Hash()),
+        std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, TRope(data), test.Info->GetVDiskInSubgroup(0, blobId.Hash()),
                                  false, nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob);
 
         if (isEmptyObject) {

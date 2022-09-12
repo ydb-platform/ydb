@@ -43,7 +43,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
         const TActorId& queueId = env.CreateQueueActor(info->GetVDiskId(orderNum), NKikimrBlobStorage::PutTabletLog, 0);
         const TActorId& sender = env.Runtime->AllocateEdgeActor(queueId.NodeId());
         const TLogoBlobID blobId(id, partIdx + 1);
-        TRope buffer = type.PartSize(blobId) ? parts.Parts[partIdx].OwnedString : TString();
+        TRope buffer = type.PartSize(blobId) ? parts.Parts[partIdx].OwnedString : TRope(TString());
         env.Runtime->Send(new IEventHandle(queueId, sender, new TEvBlobStorage::TEvVPut(blobId, buffer,
             info->GetVDiskId(orderNum), false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog)),
             sender.NodeId());

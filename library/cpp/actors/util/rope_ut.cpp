@@ -61,6 +61,26 @@ TString RopeToString(const TRope& rope) {
 TString Text = "No elements are copied or moved, only the internal pointers of the list nodes are re-pointed.";
 
 Y_UNIT_TEST_SUITE(TRope) {
+    Y_UNIT_TEST(StringCompare) {
+        TRope rope = CreateRope(Text, 10);
+        UNIT_ASSERT_EQUAL(rope, Text);
+        UNIT_ASSERT_EQUAL(Text, rope);
+        rope.Erase(rope.Begin() + 10, rope.Begin() + 11);
+        UNIT_ASSERT_UNEQUAL(rope, Text);
+        UNIT_ASSERT_UNEQUAL(Text, rope);
+        TString str("aa");
+        rope = TRope(TString("ab"));
+        UNIT_ASSERT_LT(str, rope);
+        UNIT_ASSERT_GT(rope, str);
+        str = TString("aa");
+        rope = TRope(TString("a"));
+        UNIT_ASSERT_LT(rope, str);
+        UNIT_ASSERT_GT(str, rope);
+        str = TString("a");
+        rope = TRope(TString("aa"));
+        UNIT_ASSERT_LT(str, rope);
+        UNIT_ASSERT_GT(rope, str);
+    }
 
     Y_UNIT_TEST(Leak) {
         const size_t begin = 10, end = 20;
@@ -79,7 +99,7 @@ Y_UNIT_TEST_SUITE(TRope) {
         TRope pf;
         TRope rope;
         TString string = TString(Text.data(), Text.size());
-        rope = string;
+        rope = TRope(string);
         pf = rope;
         pf.GetContiguousSpanMut();
         UNIT_ASSERT(!string.IsDetached());
@@ -91,7 +111,7 @@ Y_UNIT_TEST_SUITE(TRope) {
         TRope pf;
         TRope rope;
         TString string = TString(Text.data(), Text.size());
-        rope = string;
+        rope = TRope(string);
         pf = rope;
         UNIT_ASSERT(pf.IsContiguous());
         UNIT_ASSERT_EQUAL(pf.UnsafeGetContiguousSpanMut().data(), string.data());
@@ -241,11 +261,23 @@ Y_UNIT_TEST_SUITE(TRope) {
             const TRope xRope = CreateRope(x, 7);
             const TRope yRope = CreateRope(y, 11);
             UNIT_ASSERT_VALUES_EQUAL(xRope == yRope, x == y);
+            UNIT_ASSERT_VALUES_EQUAL(xRope == y, x == y);
+            UNIT_ASSERT_VALUES_EQUAL(x == yRope, x == y);
             UNIT_ASSERT_VALUES_EQUAL(xRope != yRope, x != y);
+            UNIT_ASSERT_VALUES_EQUAL(xRope != y, x != y);
+            UNIT_ASSERT_VALUES_EQUAL(x != yRope, x != y);
             UNIT_ASSERT_VALUES_EQUAL(xRope <  yRope, x <  y);
+            UNIT_ASSERT_VALUES_EQUAL(xRope <  y, x <  y);
+            UNIT_ASSERT_VALUES_EQUAL(x <  yRope, x <  y);
             UNIT_ASSERT_VALUES_EQUAL(xRope <= yRope, x <= y);
+            UNIT_ASSERT_VALUES_EQUAL(xRope <= y, x <= y);
+            UNIT_ASSERT_VALUES_EQUAL(x <= yRope, x <= y);
             UNIT_ASSERT_VALUES_EQUAL(xRope >  yRope, x >  y);
+            UNIT_ASSERT_VALUES_EQUAL(xRope >  y, x >  y);
+            UNIT_ASSERT_VALUES_EQUAL(x >  yRope, x >  y);
             UNIT_ASSERT_VALUES_EQUAL(xRope >= yRope, x >= y);
+            UNIT_ASSERT_VALUES_EQUAL(xRope >= y, x >= y);
+            UNIT_ASSERT_VALUES_EQUAL(x >= yRope, x >= y);
         };
 
         TVector<TString> pool;

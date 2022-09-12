@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(SnapshotTesting) {
                 const ui32 len = 1 + RandomNumber(131072u);
                 TString data = env.GenerateRandomString(len);
                 const TLogoBlobID id(tabletId, generation, step, channel, len, 0, 1);
-                auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(id, data, vdiskId, false, nullptr, TInstant::Max(),
+                auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(id, TRope(data), vdiskId, false, nullptr, TInstant::Max(),
                     NKikimrBlobStorage::EPutHandleClass::TabletLog);
                 runtime->Send(new IEventHandle(queue, edge, ev.release()), queue.NodeId());
                 if (putToBlobs) {

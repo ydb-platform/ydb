@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
     }
 
     Y_UNIT_TEST(TestSetMonolith) {
-        TRope inData = TString("123");
+        TRope inData(TString("123"));
         TFragmentedBuffer fb;
         fb.SetMonolith(inData);
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), true);
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
     }
 
     Y_UNIT_TEST(TestReplaceWithSetMonolith) {
-        TRope inData = TString("123");
+        TRope inData(TString("123"));
         const char *data3v2 = "5";
         const char *data4 = "678";
         TFragmentedBuffer fb;

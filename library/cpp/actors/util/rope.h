@@ -676,7 +676,7 @@ public:
         rope.InvalidateIterators();
     }
 
-    TRope(TString s) {
+    explicit TRope(TString s) {
         if (s) {
             Size = s.size();
             if (s.capacity() < 32) {
@@ -971,6 +971,25 @@ public:
         return xIter.Valid() - yIter.Valid();
     }
 
+    static int Compare(const TRope& x, const TString& y) {
+        TConstIterator xIter = x.Begin();
+        const char* yData = y.data();
+        size_t yOffset = 0;
+        while (xIter.Valid() && yOffset != y.size()) {
+            const size_t step = std::min(xIter.ContiguousSize(), y.size() - yOffset);
+            if (int res = memcmp(xIter.ContiguousData(), yData + yOffset, step)) {
+                return res;
+            }
+            xIter += step;
+            yOffset += step;
+        }
+        return xIter.Valid() - (yOffset != y.size());
+    }
+
+    static int Compare(const TString& x, const TRope& y) {
+        return -Compare(y, x);
+    }
+
     // Use this method carefully -- it may significantly reduce performance when misused.
     TString ConvertToString() const {
         // TODO(innokentii): could be microoptimized for single TString case
@@ -1073,8 +1092,14 @@ public:
             TString res = TString::Uninitialized(GetSize());
             Begin().ExtractPlainDataAndAdvance(res.Detach(), res.size());
             Erase(Begin(), End());
-            Insert(End(), res);
+            Insert(End(), TRope(res));
         }
+    }
+
+    static TRope Uninitialized(size_t size)
+    {
+        TString res = TString::Uninitialized(size);
+        return TRope(res);
     }
 
     /**
@@ -1132,6 +1157,20 @@ public:
     friend bool operator<=(const TRope& x, const TRope& y) { return Compare(x, y) <= 0; }
     friend bool operator> (const TRope& x, const TRope& y) { return Compare(x, y) >  0; }
     friend bool operator>=(const TRope& x, const TRope& y) { return Compare(x, y) >= 0; }
+
+    friend bool operator==(const TRope& x, const TString& y) { return Compare(x, y) == 0; }
+    friend bool operator!=(const TRope& x, const TString& y) { return Compare(x, y) != 0; }
+    friend bool operator< (const TRope& x, const TString& y) { return Compare(x, y) <  0; }
+    friend bool operator<=(const TRope& x, const TString& y) { return Compare(x, y) <= 0; }
+    friend bool operator> (const TRope& x, const TString& y) { return Compare(x, y) >  0; }
+    friend bool operator>=(const TRope& x, const TString& y) { return Compare(x, y) >= 0; }
+
+    friend bool operator==(const TString& x, const TRope& y) { return Compare(x, y) == 0; }
+    friend bool operator!=(const TString& x, const TRope& y) { return Compare(x, y) != 0; }
+    friend bool operator< (const TString& x, const TRope& y) { return Compare(x, y) <  0; }
+    friend bool operator<=(const TString& x, const TRope& y) { return Compare(x, y) <= 0; }
+    friend bool operator> (const TString& x, const TRope& y) { return Compare(x, y) >  0; }
+    friend bool operator>=(const TString& x, const TRope& y) { return Compare(x, y) >= 0; }
 
 private:
     void Cut(TIterator begin, TIterator end, TRope *target) {

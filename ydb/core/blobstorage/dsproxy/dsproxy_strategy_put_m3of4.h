@@ -171,7 +171,7 @@ protected:
                     const bool handoff = (ui8)diskIdx < info.Type.BlobSubgroupSize() - requiredNumMetadataParts;
                     groupDiskRequests.AddPut(disk.OrderNumber,
                         TLogoBlobID(state.Id, 3),
-                        TString(),
+                        TRope(TString()),
                         handoff ? TDiskPutRequest::ReasonError : TDiskPutRequest::ReasonInitial,
                         handoff,
                         state.ExtraBlockChecks,

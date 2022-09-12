@@ -261,7 +261,7 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
                 const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
                 const TInstant deadline = noTimeout ? TInstant::Max() : TInstant::Now() + RequestTimeout;
                 ctx.Send(QueueActorId,
-                         new TEvBlobStorage::TEvVPut(logoBlobID, put.Data, VDiskInfo.VDiskID, false,
+                         new TEvBlobStorage::TEvVPut(logoBlobID, TRope(put.Data), VDiskInfo.VDiskID, false,
                                                      nullptr, deadline, HandleClassGen->GetHandleClass()));
                 return;
             } else {
@@ -1393,7 +1393,7 @@ NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, T
 void PutLogoBlobToVDisk(const TActorContext &ctx, const TActorId &actorID, const TVDiskID &vdiskID,
                         const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) {
     LOG_DEBUG(ctx, NActorsServices::TEST, "  Sending TEvPut: id=%s data='%s'", id.ToString().data(), LimitData(data).data());
-    ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, data, vdiskID, false, nullptr, TInstant::Max(), cls));
+    ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, TRope(data), vdiskID, false, nullptr, TInstant::Max(), cls));
 }
 
 // returns number of messages sent

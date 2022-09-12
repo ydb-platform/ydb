@@ -119,7 +119,7 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
             std::vector<TRope> restoredData;
             restoredData.resize(attempts);
             for (auto& restored : restoredData) {
-                restored = TString(dataSize, '\0');
+                restored = TRope(TString(dataSize, '\0'));
             }
             // Remove the 'missing' parts
             for (auto& partSet : partSets) {

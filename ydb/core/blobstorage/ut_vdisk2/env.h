@@ -49,7 +49,7 @@ namespace NKikimr {
 
         NKikimrBlobStorage::TEvVPutResult Put(const TLogoBlobID& id, TString buffer,
                 NKikimrBlobStorage::EPutHandleClass prio = NKikimrBlobStorage::EPutHandleClass::TabletLog) {
-            return ExecuteQuery<TEvBlobStorage::TEvVPutResult>(std::make_unique<TEvBlobStorage::TEvVPut>(id, buffer,
+            return ExecuteQuery<TEvBlobStorage::TEvVPutResult>(std::make_unique<TEvBlobStorage::TEvVPut>(id, TRope(buffer),
                 VDiskId, false, nullptr, TInstant::Max(), prio), GetQueueId(prio));
         }
 

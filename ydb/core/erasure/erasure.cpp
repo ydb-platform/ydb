@@ -46,7 +46,7 @@ namespace NKikimr {
 
 static void Refurbish(TRope &str, ui64 size) {
     if (str.size() != size) {
-        str = TString::Uninitialized(size);
+        str = TRope::Uninitialized(size);
     }
 }
 
@@ -2519,7 +2519,7 @@ void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope
     case TErasureType::CrcModeWholePart:
         {
             ui64 partSize = type.PartSize(crcMode, buffer.size());
-            TRope part = TString::Uninitialized(partSize);
+            TRope part = TRope::Uninitialized(partSize);
             char *dst = part.GetContiguousSpanMut().data();
             if (buffer.size() || part.size()) {
                 Y_VERIFY(part.size() >= buffer.size() + sizeof(ui32), "Part size too small, buffer size# %" PRIu64
@@ -2565,7 +2565,7 @@ void MirrorRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDa
                             Y_VERIFY(outBuffer.size() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
                                     " fullDataSize# %" PRIu64, (ui64)outBuffer.size(), (ui64)partSet.FullDataSize);
                             newOutBuffer.resize(partSet.FullDataSize); // To pad with zeroes!
-                            outBuffer = newOutBuffer;
+                            outBuffer = TRope(newOutBuffer);
                         }
                         partSet.FullDataFragment.ReferenceTo(outBuffer);
                         return;

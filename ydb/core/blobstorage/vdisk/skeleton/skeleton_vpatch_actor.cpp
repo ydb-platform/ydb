@@ -102,7 +102,7 @@ namespace NKikimr::NPrivate {
         TStackVec<ui32, 1> FoundOriginalParts;
 
         TStackVec<TXorReceiver, 2> XorReceivers;
-        TString Buffer;
+        TRope Buffer;
         TVector<TDiff> Diffs;
         TVector<TXorDiffs> ReceivedXorDiffs;
 
@@ -289,7 +289,7 @@ namespace NKikimr::NPrivate {
             TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
 
             Y_VERIFY(item.HasBuffer());
-            Buffer = item.GetBuffer();
+            Buffer = TRope(item.GetBuffer());
 
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP08,
                     VDiskLogPrefix << " TEvVPatch: received part data;",
@@ -301,7 +301,7 @@ namespace NKikimr::NPrivate {
                     (Status, record.GetStatus()),
                     (ResultSize, record.ResultSize()));
 
-            ui8 *buffer = reinterpret_cast<ui8*>(const_cast<char*>(Buffer.data()));
+            ui8 *buffer = reinterpret_cast<ui8*>(Buffer.UnsafeGetContiguousSpanMut().data());
             if (blobId.PartId() <= GType.DataParts()) {
                 if (GType.ErasureFamily() != TErasureType::ErasureMirror) {
                     SendXorDiff();
@@ -376,7 +376,7 @@ namespace NKikimr::NPrivate {
                     (PatchedPartId, (ui32)PatchedPartId),
                     (XorDiffCount, XorReceivers.size()));
 
-            const ui8 *buffer = reinterpret_cast<const ui8*>(Buffer.data());
+            const ui8 *buffer = reinterpret_cast<const ui8*>(Buffer.GetContiguousSpan().data());
             GType.MakeXorDiff(TErasureType::CrcModeNone, OriginalBlobId.BlobSize(), buffer, Diffs, &xorDiffs);
 
             for (TXorReceiver &xorReceiver : XorReceivers) {
@@ -541,7 +541,7 @@ namespace NKikimr::NPrivate {
                     (PatchedBlobId, PatchedBlobId),
                     (FromPart, (ui32)fromPart),
                     (ToPart, (ui32)toPart),
-                    (HasBuffer, (Buffer.empty() ? "no" : "yes")),
+                    (HasBuffer, (Buffer.GetSize() == 0 ? "no" : "yes")),
                     (ReceivedXorDiffCount, TStringBuilder() << ReceivedXorDiffCount << '/' << WaitedXorDiffCount));
 
             TInstant now = TActivationContext::Now();
@@ -564,7 +564,7 @@ namespace NKikimr::NPrivate {
             }
 
             if (Buffer) {
-                ui8 *buffer = reinterpret_cast<ui8*>(const_cast<char*>(Buffer.data()));
+                ui8 *buffer = reinterpret_cast<ui8*>(Buffer.UnsafeGetContiguousSpanMut().data());
                 ui32 dataSize = OriginalBlobId.BlobSize();
                 GType.ApplyXorDiff(TErasureType::CrcModeNone, dataSize, buffer, xorDiffs, fromPart - 1, toPart - 1);
 

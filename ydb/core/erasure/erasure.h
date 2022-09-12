@@ -77,8 +77,8 @@ struct TPartFragment {
     }
 
     void UninitializedOwnedWhole(ui64 size) {
-        OwnedString = TString::Uninitialized(size); //FIXME(innokentii)
-        Bytes = OwnedString.GetContiguousSpanMut().data();
+        OwnedString = TRope::Uninitialized(size);
+        Bytes = OwnedString.UnsafeGetContiguousSpanMut().data();
         Offset = 0;
         Size = size;
         PartSize = size;
@@ -326,12 +326,12 @@ struct TErasureType {
 
     void SplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const;
     void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
-        TRope rope = buffer;
+        TRope rope(buffer);
         SplitData(crcMode, rope, outPartSet);
     }
     void IncrementalSplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const;
     void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
-        TRope rope = buffer;
+        TRope rope(buffer);
         IncrementalSplitData(crcMode, rope, outPartSet);
     }
 

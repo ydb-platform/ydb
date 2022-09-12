@@ -65,7 +65,7 @@ namespace NKikimr {
         void SendItem(const TActorContext &ctx, std::unique_ptr<TEvLocalHandoff> item) {
             auto vd = Info->GetVDiskId(VDiskInfoPtr->OrderNumber);
             auto aid = Info->GetActorId(VDiskInfoPtr->OrderNumber);
-            auto msg = std::make_unique<TEvBlobStorage::TEvVPut>(item->Id, item->Data, vd, true, &item->Cookie,
+            auto msg = std::make_unique<TEvBlobStorage::TEvVPut>(item->Id, TRope(item->Data), vd, true, &item->Cookie, //FIXME(innokentii): RopeFromString
                 TInstant::Max(), NKikimrBlobStorage::AsyncBlob);
             State.InFlightQueueSize++;
             State.InFlightQueueByteSize += item->ByteSize();

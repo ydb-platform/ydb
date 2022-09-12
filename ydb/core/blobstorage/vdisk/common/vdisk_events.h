@@ -511,15 +511,6 @@ namespace NKikimr {
         TEvVPut()
         {}
 
-        TEvVPut(const TLogoBlobID &logoBlobId, const TString &buffer, const TVDiskID &vdisk,
-                const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
-                NKikimrBlobStorage::EPutHandleClass cls)
-        {
-            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls);
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size());
-            StorePayload(buffer);
-        }
-
         TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk,
                 const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
                 NKikimrBlobStorage::EPutHandleClass cls)
@@ -561,8 +552,6 @@ namespace NKikimr {
         TRope GetBuffer() const {
             return Record.HasBuffer() ? TRope(Record.GetBuffer()) : GetPayload(0);
         }
-
-        void StorePayload(const TString& buffer);
 
         void StorePayload(TRope&& buffer);
 

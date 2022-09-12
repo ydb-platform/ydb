@@ -245,7 +245,7 @@ namespace NKikimr {
             const TVDiskID& vdiskId = Info->GetVDiskId(VCtx->ShortSelfVDisk);
             for (ui32 i = item.Needed.FirstPosition(); i != item.Needed.GetSize(); i = item.Needed.NextPosition(i)) {
                 const TLogoBlobID blobId(item.BlobId, i + 1);
-                const TString& buffer = item.GetPartData(blobId);
+                const TRope& buffer = item.GetPartData(blobId);
                 Y_VERIFY(buffer.size() == Info->Type.PartSize(blobId));
                 Y_VERIFY(WriteRestoredParts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,

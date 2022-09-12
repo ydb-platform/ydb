@@ -43,12 +43,12 @@ namespace NKikimr {
                 }
             }
 
-            TString GetPartData(TLogoBlobID id) const {
+            TRope GetPartData(TLogoBlobID id) const {
                 Y_VERIFY(id.FullID() == BlobId);
                 Y_VERIFY(id.PartId());
                 const ui32 partIdx = id.PartId() - 1;
                 Y_VERIFY(PartSet.PartsMask & (1 << partIdx));
-                return PartSet.Parts[partIdx].OwnedString.ConvertToString();
+                return PartSet.Parts[partIdx].OwnedString;
             }
 
             NMatrix::TVectorType GetAvailableParts() const {

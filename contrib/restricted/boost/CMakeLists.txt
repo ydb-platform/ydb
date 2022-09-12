@@ -86,6 +86,7 @@ add_subdirectory(ublas)
 add_subdirectory(units)
 add_subdirectory(unordered)
 add_subdirectory(utility)
+add_subdirectory(uuid)
 add_subdirectory(variant)
 add_subdirectory(winapi)
 add_subdirectory(xpressive)
@@ -152,6 +153,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-units
   restricted-boost-unordered
   restricted-boost-utility
+  restricted-boost-uuid
   restricted-boost-variant
   restricted-boost-winapi
   restricted-boost-xpressive

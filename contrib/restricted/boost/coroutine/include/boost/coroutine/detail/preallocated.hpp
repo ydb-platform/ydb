@@ -22,7 +22,7 @@ namespace boost {
 namespace coroutines {
 namespace detail {
 
-struct preallocated {
+struct BOOST_COROUTINES_DECL preallocated {
     void        *   sp;
     std::size_t     size;
     stack_context   sctx;

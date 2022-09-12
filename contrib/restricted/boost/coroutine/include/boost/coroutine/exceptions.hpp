@@ -11,7 +11,7 @@
 #include <string>
 
 #include <boost/config.hpp>
-#include <boost/detail/scoped_enum_emulation.hpp>
+#include <boost/core/scoped_enum.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/system/system_error.hpp>
 #include <boost/type_traits/integral_constant.hpp>

@@ -19,7 +19,7 @@
 
 #if defined(BOOST_ZLIB_BINARY)
 # if defined(BOOST_MSVC) || \
-     defined(__BORLANDC__) || \
+     defined(BOOST_BORLANDC) || \
      (defined(__MWERKS__) && defined(_WIN32) && (__MWERKS__ >= 0x3000)) || \
      (defined(__ICL) && defined(_MSC_EXTENSIONS)) \
      /**/

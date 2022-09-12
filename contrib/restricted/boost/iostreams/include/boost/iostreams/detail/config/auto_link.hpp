@@ -17,7 +17,7 @@
 
 #if defined(BOOST_EXTERNAL_LIB_NAME)
 # if defined(BOOST_MSVC) \
-     || defined(__BORLANDC__) \
+     || defined(__BORLANDC__) && !defined(__clang__) \
      || (defined(__MWERKS__) && defined(_WIN32) && (__MWERKS__ >= 0x3000)) \
      || (defined(__ICL) && defined(_MSC_EXTENSIONS)) \
      /**/

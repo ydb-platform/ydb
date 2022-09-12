@@ -16,9 +16,9 @@
 #include <algorithm>                             // min, max.
 #include <cassert>
 #include <exception>
-#include <typeinfo>
 #include <boost/config.hpp>                      // Member template friends.
 #include <boost/detail/workaround.hpp>
+#include <boost/core/typeinfo.hpp>
 #include <boost/iostreams/constants.hpp>
 #include <boost/iostreams/detail/adapter/concept_adapter.hpp>
 #include <boost/iostreams/detail/buffer.hpp>
@@ -94,7 +94,7 @@ protected:
     // Declared in linked_streambuf.
     void set_next(streambuf_type* next);
     void close_impl(BOOST_IOS::openmode m);
-    const std::type_info& component_type() const { return typeid(T); }
+    const boost::core::typeinfo& component_type() const { return BOOST_CORE_TYPEID(T); }
     void* component_impl() { return component(); }
 private:
 
@@ -390,11 +390,18 @@ inline void indirect_streambuf<T, Tr, Alloc, Mode>::close_impl
         sync();
         setp(0, 0);
     }
+    #if defined(BOOST_MSVC)
+      #pragma warning(push)
+      #pragma warning(disable: 4127) // conditional expression is constant
+    #endif
     if ( !is_convertible<category, dual_use>::value ||
          is_convertible<Mode, input>::value == (which == BOOST_IOS::in) )
     {
         obj().close(which, next_);
     }
+    #if defined(BOOST_MSVC)
+      #pragma warning(pop)
+    #endif
 }
 
 //----------State changing functions------------------------------------------//

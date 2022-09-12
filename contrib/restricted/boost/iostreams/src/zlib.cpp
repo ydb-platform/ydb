@@ -91,7 +91,8 @@ void zlib_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(int error)
 namespace detail {
 
 zlib_base::zlib_base()
-    : stream_(new z_stream), calculate_crc_(false), crc_(0), crc_imp_(0)
+    : stream_(new z_stream), calculate_crc_(false), crc_(0), crc_imp_(0),
+      total_in_(0), total_out_(0)
     { }
 
 zlib_base::~zlib_base() { delete static_cast<z_stream*>(stream_); }

@@ -18,12 +18,14 @@ target_include_directories(restricted-boost-iostreams PUBLIC
 )
 target_include_directories(restricted-boost-iostreams PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/libbz2
+  ${CMAKE_SOURCE_DIR}/contrib/libs/zstd/include
 )
 target_link_libraries(restricted-boost-iostreams PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-libbz2
   contrib-libs-lzma
   ZLIB::ZLIB
+  contrib-libs-zstd
   restricted-boost-assert
   restricted-boost-bind
   restricted-boost-config
@@ -50,4 +52,5 @@ target_sources(restricted-boost-iostreams PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/lzma.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/mapped_file.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zlib.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zstd.cpp
 )

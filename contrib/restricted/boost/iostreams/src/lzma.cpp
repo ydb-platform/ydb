@@ -18,6 +18,13 @@
 #include <boost/iostreams/detail/config/dyn_link.hpp>
 #include <boost/iostreams/filter/lzma.hpp>
 
+
+#ifndef BOOST_IOSTREAMS_LZMA_NO_MULTITHREADED
+    #if LZMA_VERSION < 50020002
+        #define BOOST_IOSTREAMS_LZMA_NO_MULTITHREADED
+    #endif
+#endif
+
 namespace boost { namespace iostreams {
 
 namespace lzma {
@@ -75,7 +82,7 @@ void lzma_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(int error)
 namespace detail {
 
 lzma_base::lzma_base()
-    : stream_(new lzma_stream)
+    : stream_(new lzma_stream), level_(lzma::default_compression), threads_(1)
     { }
 
 lzma_base::~lzma_base() { delete static_cast<lzma_stream*>(stream_); }
@@ -113,13 +120,7 @@ void lzma_base::reset(bool compress, bool realloc)
     lzma_end(s);
     if (realloc)
     {
-        memset(s, 0, sizeof(*s));
-
-        lzma_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(
-            compress ?
-                lzma_easy_encoder(s, level, LZMA_CHECK_CRC32) :
-                lzma_stream_decoder(s, 100 * 1024 * 1024, LZMA_CONCATENATED)
-        );
+        init_stream(compress);
     }
 }
 
@@ -128,17 +129,40 @@ void lzma_base::do_init
       lzma::alloc_func, lzma::free_func,
       void* )
 {
+
+    level_ = p.level;
+    threads_ = p.threads;
+
+#ifndef BOOST_IOSTREAMS_LZMA_NO_MULTITHREADED
+    if (threads_ == 0) {
+        threads_ = lzma_cputhreads();
+    }
+#endif
+
+    init_stream(compress);
+}
+
+void lzma_base::init_stream(bool compress)
+{
     lzma_stream* s = static_cast<lzma_stream*>(stream_);
 
     memset(s, 0, sizeof(*s));
 
-    level = p.level;
+#ifndef BOOST_IOSTREAMS_LZMA_NO_MULTITHREADED
+    const lzma_mt opt = { 0, threads_, 0, 1000, level_, NULL, LZMA_CHECK_CRC32 };
+#endif
+
     lzma_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(
         compress ?
-            lzma_easy_encoder(s, p.level, LZMA_CHECK_CRC32) :
+#ifdef BOOST_IOSTREAMS_LZMA_NO_MULTITHREADED
+            lzma_easy_encoder(s, level_, LZMA_CHECK_CRC32) :
+#else
+            lzma_stream_encoder_mt(s, &opt) :
+#endif
             lzma_stream_decoder(s, 100 * 1024 * 1024, LZMA_CONCATENATED)
     );
 }
+
 
 } // End namespace detail.
 

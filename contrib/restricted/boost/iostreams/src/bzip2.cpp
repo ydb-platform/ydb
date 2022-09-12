@@ -111,16 +111,19 @@ int bzip2_base::check_end(const char* src_begin, const char* dest_begin)
     }
 }
 
-void bzip2_base::end(bool compress)
+int bzip2_base::end(bool compress, std::nothrow_t)
 {
-    if(!ready_) return;
+    if (!ready_) return bzip2::ok;
     ready_ = false;
     bz_stream* s = static_cast<bz_stream*>(stream_);
+    return compress ? BZ2_bzCompressEnd(s) :  BZ2_bzDecompressEnd(s);
+}
+
+void bzip2_base::end(bool compress)
+{
     bzip2_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(
-        compress ?
-            BZ2_bzCompressEnd(s) : 
-            BZ2_bzDecompressEnd(s)
-    ); 
+        end(compress, std::nothrow)
+    );
 }
 
 int bzip2_base::compress(int action)

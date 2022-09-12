@@ -17,11 +17,11 @@
 #include <iterator>                             // advance.
 #include <list>
 #include <memory>                               // allocator, auto_ptr or unique_ptr.
-#include <typeinfo>
 #include <stdexcept>                            // logic_error, out_of_range.
 #include <boost/checked_delete.hpp>
 #include <boost/config.hpp>                     // BOOST_MSVC, template friends,
 #include <boost/detail/workaround.hpp>          // BOOST_NESTED_TEMPLATE 
+#include <boost/core/typeinfo.hpp>
 #include <boost/iostreams/constants.hpp>
 #include <boost/iostreams/detail/access_control.hpp>
 #include <boost/iostreams/detail/char_traits.hpp>
@@ -164,7 +164,7 @@ public:
 
     //----------Direct component access---------------------------------------//
 
-    const std::type_info& component_type(int n) const
+    const boost::core::typeinfo& component_type(int n) const
     {
         if (static_cast<size_type>(n) >= size())
             boost::throw_exception(std::out_of_range("bad chain offset"));
@@ -173,7 +173,7 @@ public:
 
     // Deprecated.
     template<int N>
-    const std::type_info& component_type() const { return component_type(N); }
+    const boost::core::typeinfo& component_type() const { return component_type(N); }
 
     template<typename T>
     T* component(int n) const { return component(n, boost::type<T>()); }
@@ -191,7 +191,7 @@ public:
         if (static_cast<size_type>(n) >= size())
             boost::throw_exception(std::out_of_range("bad chain offset"));
         streambuf_type* link = *boost::next(list().begin(), n);
-        if (BOOST_IOSTREAMS_COMPARE_TYPE_ID(link->component_type(), typeid(T)))
+        if (BOOST_IOSTREAMS_COMPARE_TYPE_ID(link->component_type(), BOOST_CORE_TYPEID(T)))
             return static_cast<T*>(link->component_impl());
         else
             return 0;
@@ -455,12 +455,12 @@ public:
     chain_client(chain_client* client) : chain_(client->chain_) { }
     virtual ~chain_client() { }
 
-    const std::type_info& component_type(int n) const
+    const boost::core::typeinfo& component_type(int n) const
     { return chain_->component_type(n); }
 
     // Deprecated.
     template<int N>
-    const std::type_info& component_type() const
+    const boost::core::typeinfo& component_type() const
     { return chain_->BOOST_NESTED_TEMPLATE component_type<N>(); }
 
     template<typename T>
@@ -498,7 +498,7 @@ protected:
     void set_chain(chain_type* c)
     { chain_ = c; chain_->register_client(this); }
 #if !defined(BOOST_NO_MEMBER_TEMPLATE_FRIENDS) && \
-    (!BOOST_WORKAROUND(__BORLANDC__, < 0x600))
+    (!BOOST_WORKAROUND(BOOST_BORLANDC, < 0x600))
     template<typename S, typename C, typename T, typename A, typename M>
     friend class chain_base;
 #else

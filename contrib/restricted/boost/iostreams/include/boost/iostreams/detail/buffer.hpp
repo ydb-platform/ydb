@@ -205,7 +205,7 @@ void basic_buffer<Ch, Alloc>::swap(basic_buffer& rhs)
 
 template<typename Ch, typename Alloc>
 buffer<Ch, Alloc>::buffer(std::streamsize buffer_size)
-    : basic_buffer<Ch, Alloc>(buffer_size) { }
+    : basic_buffer<Ch, Alloc>(buffer_size), ptr_(data()), eptr_(data() + buffer_size) { }
 
 template<typename Ch, typename Alloc>
 inline void buffer<Ch, Alloc>::set(std::streamsize ptr, std::streamsize end)

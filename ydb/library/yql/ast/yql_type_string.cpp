@@ -80,6 +80,8 @@ enum EToken
     TOKEN_TYPE_MAX = -47,
     TOKEN_JSON_DOCUMENT = -48,
     TOKEN_DYNUMBER = -49,
+    TOKEN_SCALAR = -50,
+    TOKEN_BLOCK = -51,
 
     // identifiers
     TOKEN_IDENTIFIER = -100,
@@ -142,6 +144,8 @@ EToken TokenTypeFromStr(TStringBuf str)
         { TStringBuf("EmptyDict"), TOKEN_EMPTYDICT },
         { TStringBuf("JsonDocument"), TOKEN_JSON_DOCUMENT },
         { TStringBuf("DyNumber"), TOKEN_DYNUMBER },
+        { TStringBuf("Block"), TOKEN_BLOCK},
+        { TStringBuf("Scalar"), TOKEN_SCALAR},
     };
 
     auto it = map.find(str);
@@ -301,6 +305,14 @@ private:
 
         case TOKEN_ENUM:
             type = ParseEnumType();
+            break;
+
+        case TOKEN_BLOCK:
+            type = ParseBlockType();
+            break;
+
+        case TOKEN_SCALAR:
+            type = ParseScalarType();
             break;
 
         default:
@@ -645,6 +657,28 @@ private:
         return MakeFlowType(itemType);
     }
 
+    TAstNode* ParseBlockType() {
+        GetNextToken(); // eat keyword
+        EXPECT_AND_SKIP_TOKEN('<', nullptr);
+
+        auto itemType = ParseType();
+        if (!itemType) return nullptr;
+
+        EXPECT_AND_SKIP_TOKEN('>', nullptr);
+        return MakeBlockType(itemType);
+    }
+
+    TAstNode* ParseScalarType() {
+        GetNextToken(); // eat keyword
+        EXPECT_AND_SKIP_TOKEN('<', nullptr);
+
+        auto itemType = ParseType();
+        if (!itemType) return nullptr;
+
+        EXPECT_AND_SKIP_TOKEN('>', nullptr);
+        return MakeScalarType(itemType);
+    }
+
     TAstNode* ParseDecimalType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('(', nullptr);
@@ -885,6 +919,22 @@ private:
     TAstNode* MakeFlowType(TAstNode* itemType) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("FlowType")),
+            itemType,
+        };
+        return MakeList(items, Y_ARRAY_SIZE(items));
+    }
+
+    TAstNode* MakeBlockType(TAstNode* itemType) {
+        TAstNode* items[] = {
+            MakeLiteralAtom(TStringBuf("BlockType")),
+            itemType,
+        };
+        return MakeList(items, Y_ARRAY_SIZE(items));
+    }
+
+    TAstNode* MakeScalarType(TAstNode* itemType) {
+        TAstNode* items[] = {
+            MakeLiteralAtom(TStringBuf("ScalarType")),
             itemType,
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -1207,6 +1257,20 @@ private:
     void Visit(const TFlowExprType& type) final {
         TopLevel = false;
         Out_ << TStringBuf("Flow<");
+        type.GetItemType()->Accept(*this);
+        Out_ << '>';
+    }
+
+    void Visit(const TBlockExprType& type) final {
+        TopLevel = false;
+        Out_ << TStringBuf("Block<");
+        type.GetItemType()->Accept(*this);
+        Out_ << '>';
+    }
+
+    void Visit(const TScalarExprType& type) final {
+        TopLevel = false;
+        Out_ << TStringBuf("Scalar<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }

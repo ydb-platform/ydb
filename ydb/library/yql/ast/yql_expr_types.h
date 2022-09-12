@@ -28,7 +28,9 @@ namespace NYql {
     xx(EmptyList, 21) \
     xx(EmptyDict, 22) \
     xx(Multi, 23) \
-    xx(Pg, 24)
+    xx(Pg, 24) \
+    xx(Block, 25) \
+    xx(Scalar, 26)
 
 enum class ETypeAnnotationKind : ui64 {
     YQL_TYPE_ANN_KIND_MAP(ENUM_VALUE_GEN)

@@ -11238,6 +11238,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["VariantType"] = &TypeWrapper<ETypeAnnotationKind::Variant>;
         Functions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
         Functions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
+        Functions["BlockType"] = &TypeWrapper<ETypeAnnotationKind::Block>;
+        Functions["ScalarType"] = &TypeWrapper<ETypeAnnotationKind::Scalar>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
         Functions["List"] = &ListWrapper;

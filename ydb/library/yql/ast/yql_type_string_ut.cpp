@@ -567,6 +567,14 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestFormat("((Flow (Data String)))", "Flow<String>");
     }
 
+    Y_UNIT_TEST(FormatBlock) {
+        TestFormat("((Block (Data String)))", "Block<String>");
+    }
+
+    Y_UNIT_TEST(FormatScalar) {
+        TestFormat("((Scalar (Data String)))", "Scalar<String>");
+    }
+
     Y_UNIT_TEST(FormatOptional) {
         TestFormat("((Optional (Data Uint32)))", "Optional<Uint32>");
         TestFormat("((List (Optional (Data Uint32))))", "List<Uint32?>");

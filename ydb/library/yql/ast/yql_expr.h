@@ -79,6 +79,8 @@ class TStreamExprType;
 class TFlowExprType;
 class TEmptyListExprType;
 class TEmptyDictExprType;
+class TBlockExprType;
+class TScalarExprType;
 
 const size_t DefaultMistypeDistance = 3;
 
@@ -111,6 +113,8 @@ struct TTypeAnnotationVisitor {
     virtual void Visit(const TVariantExprType& type) = 0;
     virtual void Visit(const TEmptyListExprType& type) = 0;
     virtual void Visit(const TEmptyDictExprType& type) = 0;
+    virtual void Visit(const TBlockExprType& type) = 0;
+    virtual void Visit(const TScalarExprType& type) = 0;
 };
 
 enum ETypeAnnotationFlags {
@@ -609,6 +613,60 @@ public:
     }
 
     bool operator==(const TFlowExprType& other) const {
+        return GetItemType() == other.GetItemType();
+    }
+
+private:
+    const TTypeAnnotationNode* ItemType;
+};
+
+class TBlockExprType : public TTypeAnnotationNode {
+public:
+    static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Block;
+
+    TBlockExprType(ui64 hash, const TTypeAnnotationNode* itemType)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash)
+        , ItemType(itemType)
+    {
+    }
+
+    static ui64 MakeHash(const TTypeAnnotationNode* itemType) {
+        ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Block;
+        return StreamHash(itemType->GetHash(), hash);
+    }
+
+    const TTypeAnnotationNode* GetItemType() const {
+        return ItemType;
+    }
+
+    bool operator==(const TBlockExprType& other) const {
+        return GetItemType() == other.GetItemType();
+    }
+
+private:
+    const TTypeAnnotationNode* ItemType;
+};
+
+class TScalarExprType : public TTypeAnnotationNode {
+public:
+    static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Scalar;
+
+    TScalarExprType(ui64 hash, const TTypeAnnotationNode* itemType)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash)
+        , ItemType(itemType)
+    {
+    }
+
+    static ui64 MakeHash(const TTypeAnnotationNode* itemType) {
+        ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Scalar;
+        return StreamHash(itemType->GetHash(), hash);
+    }
+
+    const TTypeAnnotationNode* GetItemType() const {
+        return ItemType;
+    }
+
+    bool operator==(const TScalarExprType& other) const {
         return GetItemType() == other.GetItemType();
     }
 
@@ -1290,6 +1348,12 @@ inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
     case ETypeAnnotationKind::Multi:
         return static_cast<const TMultiExprType&>(*this) == static_cast<const TMultiExprType&>(node);
 
+    case ETypeAnnotationKind::Block:
+        return static_cast<const TBlockExprType&>(*this) == static_cast<const TBlockExprType&>(node);
+
+    case ETypeAnnotationKind::Scalar:
+        return static_cast<const TScalarExprType&>(*this) == static_cast<const TScalarExprType&>(node);
+
     case ETypeAnnotationKind::LastType:
         YQL_ENSURE(false, "Incorrect type");
 
@@ -1347,6 +1411,10 @@ inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
         return visitor.Visit(static_cast<const TEmptyDictExprType&>(*this));
     case ETypeAnnotationKind::Multi:
         return visitor.Visit(static_cast<const TMultiExprType&>(*this));
+    case ETypeAnnotationKind::Block:
+        return visitor.Visit(static_cast<const TBlockExprType&>(*this));
+    case ETypeAnnotationKind::Scalar:
+        return visitor.Visit(static_cast<const TScalarExprType&>(*this));
     case ETypeAnnotationKind::LastType:
         YQL_ENSURE(false, "Incorrect type");
     }
@@ -2259,6 +2327,16 @@ struct TMakeTypeImpl<TStreamExprType> {
 template <>
 struct TMakeTypeImpl<TFlowExprType> {
     static const TFlowExprType* Make(TExprContext& ctx, const TTypeAnnotationNode* itemType);
+};
+
+template <>
+struct TMakeTypeImpl<TBlockExprType> {
+    static const TBlockExprType* Make(TExprContext& ctx, const TTypeAnnotationNode* itemType);
+};
+
+template <>
+struct TMakeTypeImpl<TScalarExprType> {
+    static const TScalarExprType* Make(TExprContext& ctx, const TTypeAnnotationNode* itemType);
 };
 
 using TSingletonTypeCache = std::tuple<

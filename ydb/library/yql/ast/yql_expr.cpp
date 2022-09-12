@@ -559,6 +559,28 @@ namespace {
                         return nullptr;
 
                     return Expr.MakeType<TFlowExprType>(r);
+                } else if (content == TStringBuf("Block")) {
+                    if (node.GetChildrenCount() != 2) {
+                        AddError(node, "Bad block type annotation");
+                        return nullptr;
+                    }
+
+                    auto r = CompileTypeAnnotationNode(*node.GetChild(1));
+                    if (!r)
+                        return nullptr;
+
+                    return Expr.MakeType<TBlockExprType>(r);
+                } else if (content == TStringBuf("Scalar")) {
+                    if (node.GetChildrenCount() != 2) {
+                        AddError(node, "Bad scalar type annotation");
+                        return nullptr;
+                    }
+
+                    auto r = CompileTypeAnnotationNode(*node.GetChild(1));
+                    if (!r)
+                        return nullptr;
+
+                    return Expr.MakeType<TScalarExprType>(r);
                 } else {
                     AddError(node, TStringBuilder() << "Unknown type annotation");
                     return nullptr;
@@ -806,6 +828,23 @@ namespace {
         {
             return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("EmptyDict"), pool);
         }
+
+        case ETypeAnnotationKind::Block:
+        {
+            auto type = annotation.Cast<TBlockExprType>();
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Block"), pool);
+            auto itemType = ConvertTypeAnnotationToAst(*type->GetItemType(), pool, refAtoms);
+            return TAstNode::NewList(TPosition(), pool, self, itemType);
+        }
+
+        case ETypeAnnotationKind::Scalar:
+        {
+            auto type = annotation.Cast<TScalarExprType>();
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Scalar"), pool);
+            auto itemType = ConvertTypeAnnotationToAst(*type->GetItemType(), pool, refAtoms);
+            return TAstNode::NewList(TPosition(), pool, self, itemType);
+        }
+
         case ETypeAnnotationKind::LastType:
             YQL_ENSURE(false, "Unknown kind: " << annotation.GetKind());
 
@@ -3267,6 +3306,24 @@ const TFlowExprType* TMakeTypeImpl<TFlowExprType>::Make(TExprContext& ctx, const
         return found;
 
     return AddType<TFlowExprType>(ctx, hash, itemType);
+}
+
+const TBlockExprType* TMakeTypeImpl<TBlockExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
+    const auto hash = TBlockExprType::MakeHash(itemType);
+    TBlockExprType sample(hash, itemType);
+    if (const auto found = FindType(sample, ctx))
+        return found;
+
+    return AddType<TBlockExprType>(ctx, hash, itemType);
+}
+
+const TScalarExprType* TMakeTypeImpl<TScalarExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
+    const auto hash = TScalarExprType::MakeHash(itemType);
+    TScalarExprType sample(hash, itemType);
+    if (const auto found = FindType(sample, ctx))
+        return found;
+
+    return AddType<TScalarExprType>(ctx, hash, itemType);
 }
 
 bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two) {

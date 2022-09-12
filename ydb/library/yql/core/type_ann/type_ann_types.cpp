@@ -283,6 +283,48 @@ namespace NTypeAnnImpl {
     }
 
     template <>
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Block>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureInspectableType(input->Child(0)->Pos(), *itemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto type = ctx.Expr.MakeType<TBlockExprType>(itemType);
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(type));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Scalar>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureInspectableType(input->Child(0)->Pos(), *itemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto type = ctx.Expr.MakeType<TScalarExprType>(itemType);
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(type));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
     IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Optional>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {

@@ -101,7 +101,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-array
   restricted-boost-assert
   restricted-boost-bind
-  restricted-boost-circular_buffer
   restricted-boost-concept_check
   restricted-boost-config
   restricted-boost-container

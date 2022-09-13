@@ -231,7 +231,6 @@ namespace NActors {
         std::shared_ptr<TLogBackend> LogBackend;
         ui64 IgnoredCount = 0;
         ui64 PassedCount = 0;
-        static TAtomic IsOverflow;
         TDuration WakeupInterval{TDuration::Seconds(5)};
         std::unique_ptr<ILoggerMetrics> Metrics;
         TLogBuffer LogBuffer;

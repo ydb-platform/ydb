@@ -30,8 +30,6 @@ namespace {
 }
 
 namespace NActors {
-    TAtomic TLoggerActor::IsOverflow = 0;
-
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                TAutoPtr<TLogBackend> logBackend,
                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -94,8 +92,9 @@ namespace NActors {
     }
 
     void TLoggerActor::Throttle(const NLog::TSettings& settings) {
-        if (AtomicGet(IsOverflow))
-            Sleep(settings.ThrottleDelay);
+        // throttling via Sleep was removed since it causes unexpected
+        // incidents when users try to set AllowDrop=false.
+        Y_UNUSED(settings);
     }
 
     void TLoggerActor::LogIgnoredCount(TInstant now) {
@@ -179,9 +178,6 @@ namespace NActors {
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
         if (Settings->AllowDrop) {
-            // Disable throttling if it was enabled previously
-            if (AtomicGet(IsOverflow))
-                AtomicSet(IsOverflow, 0);
             if (PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs || IgnoredCount > 0 || !LogBuffer.IsEmpty()) {
                 TLogBufferMessage lbm(ev);
                 if (!TryKeepLog(lbm, ctx)) {
@@ -195,12 +191,6 @@ namespace NActors {
                 return; 
             }
             PassedCount++;
-        } else {
-            // Enable of disable throttling depending on the load
-            if (delayMillisec > (i64)Settings->TimeThresholdMs && !AtomicGet(IsOverflow))
-                AtomicSet(IsOverflow, 1);
-            else if (delayMillisec <= (i64)Settings->TimeThresholdMs && AtomicGet(IsOverflow))
-                AtomicSet(IsOverflow, 0);
         }
 
         if (!OutputRecord(ev->Get()->Stamp, ev->Get()->Level.ToPrio(), ev->Get()->Component, ev->Get()->Line)) {

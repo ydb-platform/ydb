@@ -616,18 +616,38 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
+        auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
-        ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
-        TAutoPtr<TEvWhiteboard::TEvTabletStateResponse> response = new TEvWhiteboard::TEvTabletStateResponse();
+        std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
         auto& record = response->Record;
-        for (const auto& pr : TabletStateInfo) {
-            if (pr.second.GetChangeTime() >= changedSince) {
-                NKikimrWhiteboard::TTabletStateInfo &tabletStateInfo = *record.AddTabletStateInfo();
-                tabletStateInfo.CopyFrom(pr.second);
+        if (request.groupby().empty()) {
+            ui64 changedSince = request.has_changedsince() ? request.changedsince() : 0;
+            for (const auto& pr : TabletStateInfo) {
+                if (pr.second.changetime() >= changedSince) {
+                    NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
+                    tabletStateInfo = pr.second;
+                }
+            }
+        } else if (request.groupby() == "Type,State") { // the only supported group-by for now
+            std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
+                NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
+            for (const auto& [id, stateInfo] : TabletStateInfo) {
+                NKikimrWhiteboard::TTabletStateInfo& state = stateGroupBy[{stateInfo.type(), stateInfo.state()}];
+                auto count = state.count();
+                if (count == 0) {
+                    state.set_type(stateInfo.type());
+                    state.set_state(stateInfo.state());
+                }
+                state.set_count(count + 1);
+            }
+            for (auto& pr : stateGroupBy) {
+                NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
+                tabletStateInfo = std::move(pr.second);
             }
         }
-        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        response->Record.set_responsetime(ctx.Now().MilliSeconds());
+        response->Record.set_processduration((TMonotonic::Now() - now).MicroSeconds());
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) {

@@ -32,6 +32,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   ydb-core-protos
   ydb-core-scheme
   core-tx-schemeshard
+  core-tx-tx_proxy
   ydb-core-util
   core-viewer-json
   core-viewer-protos
@@ -75,6 +76,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   ydb-core-protos
   ydb-core-scheme
   core-tx-schemeshard
+  core-tx-tx_proxy
   ydb-core-util
   core-viewer-json
   core-viewer-protos

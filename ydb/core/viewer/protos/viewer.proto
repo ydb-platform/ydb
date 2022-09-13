@@ -395,6 +395,7 @@ message TNodeInfo {
     uint32 NodeId = 1;
     NKikimrWhiteboard.TSystemStateInfo SystemState = 2;
     repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 3;
+    repeated NKikimrWhiteboard.TTabletStateInfo Tablets = 5;
 }
 
 message TNodesInfo {

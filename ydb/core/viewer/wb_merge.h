@@ -151,7 +151,8 @@ public:
     static THolder<TResponseType> MergeResponsesBase(TMap<ui32, THolder<TResponseType>>& responses, const MergeKey& mergeKey) {
         std::unordered_map<typename MergeKey::KeyType, TElementType*> mergedData;
         ui64 minResponseTime = 0;
-        ui32 maxResponseDuration = 0;
+        ui64 maxResponseDuration = 0;
+        //ui64 sumProcessDuration = 0;
         TWhiteboardMergerComparator<TElementType> comparator;
         for (auto it = responses.begin(); it != responses.end(); ++it) {
             if (it->second != nullptr) {
@@ -174,6 +175,7 @@ public:
                 if (maxResponseDuration == 0 || it->second->Record.GetResponseDuration() > maxResponseDuration) {
                     maxResponseDuration = it->second->Record.GetResponseDuration();
                 }
+                //sumProcessDuration += it->second->Record.GetProcessDuration();
             }
         }
 
@@ -190,6 +192,9 @@ public:
         if (maxResponseDuration) {
             result->Record.SetResponseDuration(maxResponseDuration);
         }
+        //if (sumProcessDuration) {
+        //    result->Record.SetProcessDuration(sumProcessDuration);
+        //}
         return result;
     }
 

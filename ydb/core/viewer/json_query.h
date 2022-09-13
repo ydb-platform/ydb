@@ -321,7 +321,7 @@ private:
             }
         }
 
-        if (Schema == "classic" && Stats.empty()) {
+        if (Schema == "classic" && Stats.empty() && (Action.empty() || Action == "execute")) {
             jsonResponse = std::move(jsonResponse["result"]);
         }
 

@@ -44,7 +44,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::unordered_set<TNodeId> PassedNodeIds;
     std::vector<TNodeId> NodeIds;
     std::optional<ui32> Offset;
-    std::optional<ui32> MaxCount;
+    std::optional<ui32> Limit;
 
     enum class EWith {
         Everything,
@@ -105,8 +105,8 @@ public:
         if (params.Has("offset")) {
             Offset = FromStringWithDefault<ui32>(params.Get("offset"), 0);
         }
-        if (params.Has("max_count")) {
-            MaxCount = FromStringWithDefault<ui32>(params.Get("max_count"), std::numeric_limits<ui32>::max());
+        if (params.Has("limit")) {
+            Limit = FromStringWithDefault<ui32>(params.Get("limit"), std::numeric_limits<ui32>::max());
         }
         if (params.Get("type") == "static") {
             Type = EType::Static;
@@ -211,8 +211,8 @@ public:
                         return;
                     }
                 }
-                if (SortedNodeList && MaxCount.has_value()) {
-                    if (NodeIds.size() >= MaxCount.value()) {
+                if (SortedNodeList && Limit.has_value()) {
+                    if (NodeIds.size() >= Limit.value()) {
                         return;
                     }
                 }
@@ -595,7 +595,13 @@ struct TJsonRequestParameters<TJsonNodes> {
         return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
                       {"name":"ui64","in":"query","description":"return ui64 as numbers","required":false,"type":"boolean"},
                       {"name":"tenant","in":"query","description":"tenant filter","required":false,"type":"string"},
-                      {"name":"with","in":"query","description":"filter groups by missing or space","required":false,"type":"string"},
+                      {"name":"with","in":"query","description":"filter nodes by missing disks or space","required":false,"type":"string"},
+                      {"name":"type","in":"query","description":"nodes type to get (static,dynamic,any)","required":false,"type":"string"},
+                      {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
+                      {"name":"tablets","in":"query","description":"return tablets info","required":false,"type":"boolean"},
+                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Version,Uptime,Memory,CPU,LoadAverage)","required":false,"type":"string"},
+                      {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
+                      {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
     }
 };

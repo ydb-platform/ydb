@@ -117,7 +117,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-fusion
   restricted-boost-integer
   restricted-boost-intrusive
-  restricted-boost-io
   restricted-boost-iterator
   restricted-boost-lambda
   restricted-boost-lexical_cast

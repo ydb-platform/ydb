@@ -66,7 +66,7 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
     data = data.format(
         ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
         ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
-        ydb_force_new_engine=os.getenv("YDB_KQP_FORCE_NEW_ENGINE", "false"),
+        ydb_force_new_engine=os.getenv("YDB_KQP_FORCE_NEW_ENGINE", "true"),
         ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
         ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
         ydb_domain_name=ydb_domain_name,

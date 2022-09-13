@@ -323,7 +323,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CheckFinish(const TActorContext& 
         CloseSession("out of order Writes done before initialization", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    if (!PendingRequest && !PendingQuotaRequest && QuotedRequests.empty() && SentRequests.empty() & AcceptedRequests.empty()) {
+    if (!PendingRequest && !PendingQuotaRequest && QuotedRequests.empty() && SentRequests.empty() && AcceptedRequests.empty()) {
         CloseSession("", PersQueue::ErrorCode::OK, ctx);
         return;
     }

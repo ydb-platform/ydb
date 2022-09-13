@@ -272,12 +272,6 @@ const TStringBuf& KikimrCommitModeFlush();
 const TStringBuf& KikimrCommitModeRollback();
 const TStringBuf& KikimrCommitModeScheme();
 
-const TYdbOperations& KikimrSchemeOps();
-const TYdbOperations& KikimrDataOps();
-const TYdbOperations& KikimrModifyOps();
-const TYdbOperations& KikimrReadOps();
-const TYdbOperations& KikimrRequireUnmodifiedOps();
-
 const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns();
 bool IsKikimrSystemColumn(const TStringBuf columnName);
 

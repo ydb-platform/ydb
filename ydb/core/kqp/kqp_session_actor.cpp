@@ -676,14 +676,11 @@ public:
     }
 
     std::pair<bool, TIssues> ApplyTableOperations(TKqpTransactionContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
-        TVector<NKqpProto::TKqpTableOp> operations(query.GetTableOps().begin(), query.GetTableOps().end());
-        TVector<NKqpProto::TKqpTableInfo> tableInfos(query.GetTableInfos().begin(), query.GetTableInfos().end());
-
         auto isolationLevel = *txCtx->EffectiveIsolationLevel;
         bool strictDml = Config->StrictDml.Get(Settings.Cluster).GetOrElse(false);
 
         TExprContext ctx;
-        bool success = txCtx->ApplyTableOperations(operations, tableInfos, isolationLevel, strictDml, EKikimrQueryType::Dml, ctx);
+        bool success = txCtx->ApplyTableOperations(query.GetTableOps(), query.GetTableInfos(), isolationLevel, strictDml, EKikimrQueryType::Dml, ctx);
         return {success, ctx.IssueManager.GetIssues()};
     }
 

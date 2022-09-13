@@ -1,4 +1,5 @@
 #include "type_ann_core.h"
+#include "type_ann_blocks.h"
 #include "type_ann_expr.h"
 #include "type_ann_impl.h"
 #include "type_ann_list.h"
@@ -11526,6 +11527,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NarrowMap"] = &NarrowMapWrapper;
         Functions["NarrowFlatMap"] = &NarrowFlatMapWrapper;
         Functions["NarrowMultiMap"] = &NarrowMultiMapWrapper;
+
+        Functions["WideToBlocks"] = &WideToBlocksWrapper;
+        Functions["WideFromBlocks"] = &WideFromBlocksWrapper;
+        Functions["AsScalar"] = &AsScalarWrapper;
+        Functions["BlockAdd"] = &BlockAddWrapper;
 
         Functions["AsRange"] = &AsRangeWrapper;
         Functions["RangeCreate"] = &RangeCreateWrapper;

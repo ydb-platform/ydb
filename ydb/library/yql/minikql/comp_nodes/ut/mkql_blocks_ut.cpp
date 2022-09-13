@@ -86,14 +86,14 @@ Y_UNIT_TEST(TestWideToBlocks) {
     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
 }
 
-Y_UNIT_TEST(TestSingle) {
+Y_UNIT_TEST(TestScalar) {
     const ui64 testValue = 42;
 
     TSetup<false> setup;
     auto& pb = *setup.PgmBuilder;
 
     auto dataLiteral = pb.NewDataLiteral<ui64>(testValue);
-    const auto dataAfterBlocks = pb.AsSingle(dataLiteral);
+    const auto dataAfterBlocks = pb.AsScalar(dataLiteral);
 
     const auto graph = setup.BuildGraph(dataAfterBlocks);
     const auto value = graph->GetValue();
@@ -201,7 +201,7 @@ Y_UNIT_TEST(TestBlockAddWithNullables) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestBlockAddWithNullableSingle) {
+Y_UNIT_TEST(TestBlockAddWithNullableScalar) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -224,9 +224,9 @@ Y_UNIT_TEST(TestBlockAddWithNullableSingle) {
     };
 
     {
-        const auto single = pb.AsSingle(emptyOptionalUi64);
+        const auto scalar = pb.AsScalar(emptyOptionalUi64);
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockAdd(single, item)};
+            return {pb.BlockAdd(scalar, item)};
         });
 
         NUdf::TUnboxedValue item;
@@ -243,9 +243,9 @@ Y_UNIT_TEST(TestBlockAddWithNullableSingle) {
     }
 
     {
-        const auto single = pb.AsSingle(emptyOptionalUi64);
+        const auto scalar = pb.AsScalar(emptyOptionalUi64);
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockAdd(item, single)};
+            return {pb.BlockAdd(item, scalar)};
         });
 
         NUdf::TUnboxedValue item;
@@ -262,9 +262,9 @@ Y_UNIT_TEST(TestBlockAddWithNullableSingle) {
     }
 
     {
-        const auto single = pb.AsSingle(pb.NewDataLiteral<ui64>(100));
+        const auto scalar = pb.AsScalar(pb.NewDataLiteral<ui64>(100));
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockAdd(item, single)};
+            return {pb.BlockAdd(item, scalar)};
         });
 
         NUdf::TUnboxedValue item;
@@ -281,7 +281,7 @@ Y_UNIT_TEST(TestBlockAddWithNullableSingle) {
     }
 }
 
-Y_UNIT_TEST(TestBlockAddWithSingle) {
+Y_UNIT_TEST(TestBlockAddWithScalar) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -290,14 +290,14 @@ Y_UNIT_TEST(TestBlockAddWithSingle) {
     const auto data1 = pb.NewDataLiteral<ui64>(10);
     const auto data2 = pb.NewDataLiteral<ui64>(20);
     const auto data3 = pb.NewDataLiteral<ui64>(30);
-    const auto rightSingle = pb.AsSingle(pb.NewDataLiteral<ui64>(100));
-    const auto leftSingle = pb.AsSingle(pb.NewDataLiteral<ui64>(1000));
+    const auto rightScalar = pb.AsScalar(pb.NewDataLiteral<ui64>(100));
+    const auto leftScalar = pb.AsScalar(pb.NewDataLiteral<ui64>(1000));
 
     const auto list = pb.NewList(ui64Type, {data1, data2, data3});
     const auto flow = pb.ToFlow(list);
     const auto blocksFlow = pb.ToBlocks(flow);
     const auto sumBlocksFlow = pb.Map(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode {
-        return {pb.BlockAdd(leftSingle, {pb.BlockAdd(item, rightSingle  )})};
+        return {pb.BlockAdd(leftScalar, {pb.BlockAdd(item, rightScalar  )})};
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumBlocksFlow));
 
@@ -316,6 +316,46 @@ Y_UNIT_TEST(TestBlockAddWithSingle) {
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }
+
+Y_UNIT_TEST(TestWideFromBlocks) {
+    TSetup<false> setup;
+    auto& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
+
+    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<ui64>(10)});
+    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<ui64>(20)});
+    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<ui64>(30)});
+
+    const auto list = pb.NewList(tupleType, {data1, data2, data3});
+    const auto flow = pb.ToFlow(list);
+
+    const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
+    });
+    const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
+    const auto wideFlow2 = pb.WideFromBlocks(wideBlocksFlow);
+    const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+        return items[1];
+    });
+
+    const auto pgmReturn = pb.ForwardList(narrowFlow);
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 10);
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 20);
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
+}
+
 
 }
 

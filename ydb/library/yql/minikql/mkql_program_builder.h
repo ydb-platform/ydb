@@ -237,7 +237,8 @@ public:
     TRuntimeNode ToBlocks(TRuntimeNode flow);
     TRuntimeNode WideToBlocks(TRuntimeNode flow);
     TRuntimeNode FromBlocks(TRuntimeNode flow);
-    TRuntimeNode AsSingle(TRuntimeNode flow);
+    TRuntimeNode WideFromBlocks(TRuntimeNode flow);
+    TRuntimeNode AsScalar(TRuntimeNode value);
 
     TRuntimeNode BlockAdd(TRuntimeNode data1, TRuntimeNode data2);
 

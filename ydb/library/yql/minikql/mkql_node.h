@@ -1382,7 +1382,7 @@ class TBlockType : public TType {
 
 public:
     enum class EShape: ui8 {
-        Single = 0,
+        Scalar = 0,
         Many = 1
     };
 

@@ -119,7 +119,7 @@ private:
 
     static arrow::ValueDescr ToValueDescr(TType* type) {
         auto* blockType = AS_TYPE(TBlockType, type);
-        const auto shape = blockType->GetShape() == TBlockType::EShape::Single
+        const auto shape = blockType->GetShape() == TBlockType::EShape::Scalar
                            ? arrow::ValueDescr::SCALAR
                            : arrow::ValueDescr::ARRAY;
         return arrow::ValueDescr(ConvertType(blockType->GetItemType()), shape);

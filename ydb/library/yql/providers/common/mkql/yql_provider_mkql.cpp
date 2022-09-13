@@ -414,6 +414,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"ToFlow", &TProgramBuilder::ToFlow},
         {"FromFlow", &TProgramBuilder::FromFlow},
 
+        {"WideToBlocks", &TProgramBuilder::WideToBlocks},
+        {"WideFromBlocks", &TProgramBuilder::WideFromBlocks},
+        {"AsScalar", &TProgramBuilder::AsScalar},
+
         {"Just", &TProgramBuilder::NewOptional},
         {"Exists", &TProgramBuilder::Exists},
 
@@ -462,6 +466,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Mul", &TProgramBuilder::Mul},
         {"Div", &TProgramBuilder::Div},
         {"Mod", &TProgramBuilder::Mod},
+
+        {"BlockAdd", &TProgramBuilder::BlockAdd},
 
         {"DecimalMul", &TProgramBuilder::DecimalMul},
         {"DecimalDiv", &TProgramBuilder::DecimalDiv},

@@ -1362,7 +1362,7 @@ namespace {
             }
 
             const auto shapeChar = Read();
-            if (shapeChar != static_cast<char>(TBlockType::EShape::Single) &&
+            if (shapeChar != static_cast<char>(TBlockType::EShape::Scalar) &&
                 shapeChar != static_cast<char>(TBlockType::EShape::Many))
             {
                 ThrowCorrupted();

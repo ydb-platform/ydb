@@ -1447,8 +1447,26 @@ TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::AsSingle(TRuntimeNode value) {
-    TCallableBuilder callableBuilder(Env, __func__, NewBlockType(value.GetStaticType(), TBlockType::EShape::Single));
+TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode flow) {
+    TType* outputTupleType;
+    {
+        const auto* inputTupleType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType());
+        std::vector<TType*> outputTupleItems;
+        outputTupleItems.reserve(inputTupleType->GetElementsCount());
+        for (size_t i = 0; i < inputTupleType->GetElementsCount(); ++i) {
+            auto withoutBlock = AS_TYPE(TBlockType, inputTupleType->GetElementType(i))->GetItemType();
+            outputTupleItems.push_back(withoutBlock);
+        }
+        outputTupleType = NewTupleType(outputTupleItems);
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputTupleType));
+    callableBuilder.Add(flow);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
+    TCallableBuilder callableBuilder(Env, __func__, NewBlockType(value.GetStaticType(), TBlockType::EShape::Scalar));
     callableBuilder.Add(value);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -1462,8 +1480,8 @@ TRuntimeNode TProgramBuilder::BlockAdd(TRuntimeNode arg1, TRuntimeNode arg2) {
     auto* arg2BlockType = AS_TYPE(TBlockType, arg2.GetStaticType());
     auto* arg2Type = UnpackOptionalData(arg2BlockType->GetItemType(), arg2Optional);
 
-    MKQL_ENSURE(arg1BlockType->GetShape() != TBlockType::EShape::Single ||
-        arg2BlockType->GetShape() != TBlockType::EShape::Single,
+    MKQL_ENSURE(arg1BlockType->GetShape() != TBlockType::EShape::Scalar ||
+        arg2BlockType->GetShape() != TBlockType::EShape::Scalar,
         "At least one EShape::Many block expected");
 
     auto* resultDataType = BuildArithmeticCommonType(arg1Type, arg2Type);

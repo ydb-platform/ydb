@@ -101,7 +101,7 @@ public:
     TWideToBlocksWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         size_t width)
-        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Embedded)
+        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
         , Flow(flow)
         , Width(width)
     {
@@ -252,6 +252,96 @@ private:
     const ui32 StateIndex;
 };
 
+class TWideFromBlocksWrapper : public TStatefulWideFlowComputationNode<TWideFromBlocksWrapper> {
+public:
+    TWideFromBlocksWrapper(TComputationMutables& mutables,
+        IComputationWideFlowNode* flow,
+        size_t width)
+        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
+        , Flow(flow)
+        , Width(width)
+    {
+        Y_VERIFY_DEBUG(Width > 0);
+    }
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state,
+        TComputationContext& ctx,
+        NUdf::TUnboxedValue*const* output) const
+    {
+        auto& s = GetState(state, ctx);
+        while (s.Index == s.Count) {
+            for (size_t i = 0; i < Width; ++i) {
+                s.Arrays[i] = nullptr;
+            }
+
+            auto result = Flow->FetchValues(ctx, s.ValuePointers.data());
+            if (result != EFetchResult::One) {
+                return result;
+            }
+
+            s.Index = 0;
+            for (size_t i = 0; i < Width; ++i) {
+                s.Arrays[i] = TArrowBlock::From(s.Values[i]).GetDatum().array();
+            }
+
+            s.Count = s.Arrays[0]->length;
+        }
+
+        for (size_t i = 0; i < Width; ++i) {
+            if (!output[i]) {
+                continue;
+            }
+
+            const auto& array = s.Arrays[i];
+            const auto nullCount = array->GetNullCount();
+            if (nullCount == array->length || (nullCount > 0 && !arrow::BitUtil::GetBit(array->GetValues<uint8_t>(0), s.Index + array->offset))) {
+                *(output[i]) = NUdf::TUnboxedValue();
+            } else {
+                *(output[i]) = NUdf::TUnboxedValuePod(array->GetValues<ui64>(1)[s.Index]);
+            }
+        }
+
+        ++s.Index;
+        return EFetchResult::One;
+    }
+
+private:
+    struct TState : public TComputationValue<TState> {
+        std::vector<NUdf::TUnboxedValue> Values;
+        std::vector<NUdf::TUnboxedValue*> ValuePointers;
+        std::vector<std::shared_ptr<arrow::ArrayData>> Arrays;
+        size_t Count = 0;
+        size_t Index = 0;
+
+        TState(TMemoryUsageInfo* memInfo, size_t width)
+            : TComputationValue(memInfo)
+            , Values(width)
+            , ValuePointers(width)
+            , Arrays(width)
+        {
+            for (size_t i = 0; i < width; ++i) {
+                ValuePointers[i] = &Values[i];
+            }
+        }
+    };
+
+private:
+    void RegisterDependencies() const final {
+        FlowDependsOn(Flow);
+    }
+
+    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+        if (!state.HasValue()) {
+            state = ctx.HolderFactory.Create<TState>(Width);
+        }
+        return *static_cast<TState*>(state.AsBoxed().Get());
+    }
+
+private:
+    IComputationWideFlowNode* Flow;
+    const size_t Width;
+};
+
 arrow::Datum ExtractLiteral(TRuntimeNode n) {
     if (n.GetStaticType()->IsOptional()) {
         const auto* dataLiteral = AS_VALUE(TOptionalLiteral, n);
@@ -293,7 +383,19 @@ IComputationNode* WrapFromBlocks(TCallable& callable, const TComputationNodeFact
     return new TFromBlocksWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
 }
 
-IComputationNode* WrapAsSingle(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    const auto* flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
+    const auto* tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
+
+    auto* wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
+
+    return new TWideFromBlocksWrapper(ctx.Mutables,
+        wideFlow,
+        tupleType->GetElementsCount());
+}
+
+IComputationNode* WrapAsScalar(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
     auto value = ExtractLiteral(callable.GetInput(0U));

@@ -1903,12 +1903,14 @@ IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TEx
 
 IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions,
-    const TPeepHoleOptimizerMap& optimizers, const TExtPeepHoleOptimizerMap& nonDetOptimizers)
+    const TPeepHoleOptimizerMap& optimizers, const TExtPeepHoleOptimizerMap& extOptimizers,
+    const TExtPeepHoleOptimizerMap& nonDetOptimizers)
 {
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
 
-    return OptimizeExpr(input, output, [hasNonDeterministicFunctions, &types, &nonDetOptimizers, &optimizers](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    return OptimizeExpr(input, output, [hasNonDeterministicFunctions, &types, &extOptimizers, &optimizers, &nonDetOptimizers](
+        const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (const auto nrule = nonDetOptimizers.find(node->Content()); nonDetOptimizers.cend() != nrule) {
             if (hasNonDeterministicFunctions) {
                 *hasNonDeterministicFunctions = true;
@@ -1916,8 +1918,14 @@ IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExp
             return (nrule->second)(node, ctx, types);
         }
 
-        if (const auto rule = optimizers.find(node->Content()); optimizers.cend() != rule)
+        if (const auto xrule = extOptimizers.find(node->Content()); extOptimizers.cend() != xrule) {
+            return (xrule->second)(node, ctx, types);
+        }
+
+        if (const auto rule = optimizers.find(node->Content()); optimizers.cend() != rule) {
             return (rule->second)(node, ctx);
+        }
+
         return node;
     }, ctx, settings);
 }
@@ -4274,7 +4282,49 @@ TExprNode::TPtr OptimizeWideChopper(const TExprNode::TPtr& node, TExprContext& c
     return node;
 }
 
-TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    for (const auto& i : multiInputType->GetItems()) {
+        if (i->GetKind() == ETypeAnnotationKind::Block) {
+            return node;
+        }
+    }
+
+    auto lambda = node->TailPtr();
+    TOptimizeExprSettings settings(&types);
+    settings.VisitChanges = true;
+    settings.VisitTuples = true;
+
+    auto status = OptimizeExpr(lambda, lambda, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+        if (node->IsCallable("+")) {
+            auto ret = ctx.RenameNode(*node, "BlockAdd");
+            for (ui32 index = 0; index < ret->ChildrenSize(); ++index) {
+                if (node->Child(index)->IsComplete()) {
+                    ret->ChildRef(index) = ctx.NewCallable(node->Pos(), "AsScalar", { node->ChildPtr(index) });
+                }
+            }
+
+            return ret;
+        }
+
+        return node;
+    }, ctx, settings);
+
+    YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
+
+    return ctx.Builder(node->Pos())
+        .Callable("WideFromBlocks")
+            .Callable(0, "WideMap")
+                .Callable(0, "WideToBlocks")
+                    .Add(0, node->HeadPtr())
+                .Seal()
+                .Add(1, lambda)
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (const auto& input = node->Head(); input.IsCallable("ExpandMap")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         auto lambda = ctx.FuseLambdas(node->Tail(), input.Tail());
@@ -4290,10 +4340,14 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
         return ctx.ChangeChild(input, 0U, ctx.ChangeChild(*node, 0U, input.HeadPtr()));
     }
 
+    if (types.UseBlocks && node->IsCallable("WideMap")) {
+        return OptimizeWideMapBlocks(node, ctx, types);
+    }
+
     return node;
 }
 
-TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto& lambda = node->Tail();
     const auto& body = lambda.Tail();
 
@@ -4359,7 +4413,7 @@ TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext&
         }
     }
 
-    return OptimizeWideMaps(node, ctx);
+    return OptimizeWideMaps(node, ctx, types);
 }
 
 TExprNode::TPtr  OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -5908,15 +5962,18 @@ struct TPeepHoleRules {
         {"WideCombiner", &OptimizeWideCombiner},
         {"WideCondense1", &OptimizeWideCondense1},
         {"WideChopper", &OptimizeWideChopper},
-        {"WideMap", &OptimizeWideMaps},
-        {"NarrowMap", &OptimizeWideMaps},
-        {"NarrowFlatMap", &OptimizeNarrowFlatMap},
-        {"NarrowMultiMap", &OptimizeWideMaps},
         {"MapJoinCore", &OptimizeMapJoinCore},
         {"CommonJoinCore", &OptimizeCommonJoinCore},
         {"BuildTablePath", &DoBuildTablePath},
         {"Exists", &OptimizeExists},
         {"SqueezeToDict", &OptimizeSqueezeToDict}
+    };
+
+    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {
+        {"NarrowFlatMap", &OptimizeNarrowFlatMap},
+        {"NarrowMultiMap", &OptimizeWideMaps},
+        {"WideMap", &OptimizeWideMaps},
+        {"NarrowMap", &OptimizeWideMaps}
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageNonDetRulesInit = {
@@ -5933,6 +5990,7 @@ struct TPeepHoleRules {
         : CommonStageRules(CommonStageRulesInit)
         , CommonStageExtRules(CommonStageExtRulesInit)
         , FinalStageRules(FinalStageRulesInit)
+        , FinalStageExtRules(FinalStageExtRulesInit)
         , SimplifyStageRules(SimplifyStageRulesInit)
         , FinalStageNonDetRules(FinalStageNonDetRulesInit)
     {}
@@ -5944,6 +6002,7 @@ struct TPeepHoleRules {
     const TPeepHoleOptimizerMap CommonStageRules;
     const TExtPeepHoleOptimizerMap CommonStageExtRules;
     const TPeepHoleOptimizerMap FinalStageRules;
+    const TExtPeepHoleOptimizerMap FinalStageExtRules;
     const TPeepHoleOptimizerMap SimplifyStageRules;
     const TExtPeepHoleOptimizerMap FinalStageNonDetRules;
 };
@@ -6005,15 +6064,17 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
             [&types, hasNonDeterministicFunctions, withFinalRules = peepholeSettings.WithFinalStageRules,
             withNonDeterministicRules = peepholeSettings.WithNonDeterministicRules](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 auto stageRules = TPeepHoleRules<EnableNewOptimizers>::Instance().SimplifyStageRules;
+                auto extStageRules = TExtPeepHoleOptimizerMap{};
                 if (withFinalRules) {
                     const auto& finalRules = TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageRules;
                     stageRules.insert(finalRules.begin(), finalRules.end());
+
+                    const auto& finalExtRules = TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageExtRules;
+                    extStageRules.insert(finalExtRules.begin(), finalExtRules.end());
                 }
 
-                const auto& nonDetStageRules = withNonDeterministicRules ?
-                    TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageNonDetRules : TExtPeepHoleOptimizerMap{};
-
-                return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, nonDetStageRules);
+                const auto& nonDetStageRules = withNonDeterministicRules ? TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageNonDetRules : TExtPeepHoleOptimizerMap{};
+                return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, extStageRules, nonDetStageRules);
             }
         ),
         "PeepHoleFinal",

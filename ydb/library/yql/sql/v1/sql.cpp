@@ -9907,6 +9907,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "emitaggapply") {
             Ctx.EmitAggApply = true;
             Ctx.IncrementMonCounter("sql_pragma", "EmitAggApply");
+        } else if (normalizedPragma == "useblocks") {
+            Ctx.UseBlocks = true;
+            Ctx.IncrementMonCounter("sql_pragma", "UseBlocks");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

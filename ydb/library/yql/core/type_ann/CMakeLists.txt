@@ -26,6 +26,7 @@ target_link_libraries(yql-core-type_ann PUBLIC
   yql-parser-pg_catalog
 )
 target_sources(yql-core-type_ann PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_blocks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_columnorder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_core.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_expr.cpp

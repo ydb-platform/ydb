@@ -229,6 +229,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool JsonQueryReturnsJsonDocument = false;
     bool YsonCastToString = true;
     ui32 FolderSubDirsLimit = 1000;
+    bool UseBlocks = false;
 
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;

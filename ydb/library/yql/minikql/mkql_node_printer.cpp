@@ -217,7 +217,7 @@ namespace {
                 WriteNewline();
 
                 WriteIndentation();
-                Out << "Block shape: " << (node.GetShape() == TBlockType::EShape::Single ? "Single" : "Many");
+                Out << "Block shape: " << (node.GetShape() == TBlockType::EShape::Scalar ? "Scalar" : "Many");
                 WriteNewline();
             }
 

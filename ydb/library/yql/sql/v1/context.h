@@ -277,6 +277,7 @@ namespace NSQLTranslationV1 {
         TString PqReadByRtmrCluster;
         bool EmitStartsWith = true;
         bool EmitAggApply = false;
+        bool UseBlocks = false;
     };
 
     class TColumnRefScope {

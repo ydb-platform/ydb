@@ -291,4 +291,8 @@ bool IsCallableTypeHasStreams(const TCallableExprType* callableType);
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx);
 bool HasContextFuncs(const TExprNode& input);
 
+bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx);
+bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar);
+
 }

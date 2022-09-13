@@ -475,7 +475,12 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
                     return false;
                 }
-                Types.OptLLVM = args.empty() ? TString() : TString(args[0]);
+                if (!Types.UseBlocks) {
+                    Types.OptLLVM = args.empty() ? TString() : TString(args[0]);
+                } else {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "UseBlocks isn't compatible with LLVM"));
+                    return false;
+                }
             }
             else if (name == "NodesAllocationLimit") {
                 if (args.size() != 1) {
@@ -756,6 +761,17 @@ namespace {
                 }
 
                 Types.YsonCastToString = (name == "YsonCastToString");
+            }
+            else if (name == "UseBlocks" || name == "DisableUseBlocks") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                Types.UseBlocks = (name == "UseBlocks");
+                if (Types.UseBlocks) {
+                    Types.OptLLVM = "OFF";
+                }
             }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));

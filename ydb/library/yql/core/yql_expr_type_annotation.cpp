@@ -5079,4 +5079,35 @@ bool HasContextFuncs(const TExprNode& input) {
     return needCtx;
 }
 
+bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected block or scalar type, but got lambda"));
+        return false;
+    }
+
+    return EnsureBlockOrScalarType(node.Pos(), *node.GetTypeAnn(), ctx);
+}
+
+bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx) || (type.GetKind() != ETypeAnnotationKind::Block && type.GetKind() != ETypeAnnotationKind::Scalar)) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected block or scalar type, but got: " << type));
+        return false;
+    }
+
+    return true;
+}
+
+const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar) {
+    auto kind = type.GetKind();
+    YQL_ENSURE(kind == ETypeAnnotationKind::Block || kind == ETypeAnnotationKind::Scalar);
+    if (kind == ETypeAnnotationKind::Block) {
+        isScalar = false;
+        return type.Cast<TBlockExprType>()->GetItemType();
+    } else {
+        isScalar = true;
+        return type.Cast<TScalarExprType>()->GetItemType();
+    }
+}
+
 } // NYql

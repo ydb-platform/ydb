@@ -11,6 +11,7 @@
                     "writes": [
                         {
                             "columns": [
+                                "Key",
                                 "Value01",
                                 "Value02",
                                 "Value03",
@@ -30,14 +31,41 @@
                                 "Value33",
                                 "Value34"
                             ],
-                            "key": [
-                                "Key (\"Key\")"
-                            ],
-                            "type": "Upsert"
+                            "type": "MultiUpsert"
                         }
                     ]
                 }
-            ]
+            ],
+            "Plan": {
+                "Plans": [
+                    {
+                        "PlanNodeId": 2,
+                        "Plans": [
+                            {
+                                "Tables": [
+                                    "base_table_types_script_script/TableTypes"
+                                ],
+                                "PlanNodeId": 1,
+                                "Operators": [
+                                    {
+                                        "Name": "Upsert",
+                                        "Table": "base_table_types_script_script/TableTypes"
+                                    },
+                                    {
+                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                        "Name": "Iterator"
+                                    }
+                                ],
+                                "Node Type": "Upsert-ConstantExpr",
+                                "CTE Name": "tx_result_binding_1_0"
+                            }
+                        ],
+                        "Node Type": "Effect"
+                    }
+                ],
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
+            }
         },
         {
             "tables": [

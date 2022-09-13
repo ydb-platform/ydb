@@ -15,8 +15,8 @@
                                 "Group"
                             ],
                             "scan_by": [
-                                "Group",
-                                "Name"
+                                "Group (-\u221e, +\u221e)",
+                                "Name (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"
                         }
@@ -27,17 +27,108 @@
                     "writes": [
                         {
                             "columns": [
+                                "Group",
                                 "MinAmount",
                                 "Value"
-                            ],
-                            "key": [
-                                "Group (expr)"
                             ],
                             "type": "MultiUpsert"
                         }
                     ]
                 }
-            ]
+            ],
+            "Plan": {
+                "Plans": [
+                    {
+                        "PlanNodeId": 6,
+                        "Subplan Name": "CTE tx_result_binding_0_0",
+                        "Plans": [
+                            {
+                                "PlanNodeId": 5,
+                                "Plans": [
+                                    {
+                                        "PlanNodeId": 4,
+                                        "Plans": [
+                                            {
+                                                "PlanNodeId": 3,
+                                                "Plans": [
+                                                    {
+                                                        "PlanNodeId": 2,
+                                                        "Plans": [
+                                                            {
+                                                                "Tables": [
+                                                                    "base_write_write_group_by_script_script/Input1"
+                                                                ],
+                                                                "PlanNodeId": 1,
+                                                                "Operators": [
+                                                                    {
+                                                                        "ReadRange": [
+                                                                            "Group (-\u221e, +\u221e)",
+                                                                            "Name (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "ReadColumns": [
+                                                                            "Amount",
+                                                                            "Group"
+                                                                        ],
+                                                                        "Name": "TableFullScan",
+                                                                        "Table": "base_write_write_group_by_script_script/Input1"
+                                                                    }
+                                                                ],
+                                                                "Node Type": "TableFullScan"
+                                                            }
+                                                        ],
+                                                        "Node Type": "HashShuffle",
+                                                        "KeyColumns": [
+                                                            "Group"
+                                                        ],
+                                                        "PlanNodeType": "Connection"
+                                                    }
+                                                ],
+                                                "Operators": [
+                                                    {
+                                                        "Name": "Aggregate"
+                                                    }
+                                                ],
+                                                "Node Type": "Aggregate"
+                                            }
+                                        ],
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeType": "Connection"
+                                    }
+                                ],
+                                "Node Type": "Collect"
+                            }
+                        ],
+                        "Node Type": "Precompute_0_0",
+                        "Parent Relationship": "InitPlan"
+                    },
+                    {
+                        "PlanNodeId": 2,
+                        "Plans": [
+                            {
+                                "Tables": [
+                                    "base_write_write_group_by_script_script/Temp"
+                                ],
+                                "PlanNodeId": 1,
+                                "Operators": [
+                                    {
+                                        "Name": "Upsert",
+                                        "Table": "base_write_write_group_by_script_script/Temp"
+                                    },
+                                    {
+                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                        "Name": "Iterator"
+                                    }
+                                ],
+                                "Node Type": "Upsert-ConstantExpr",
+                                "CTE Name": "tx_result_binding_1_0"
+                            }
+                        ],
+                        "Node Type": "Effect"
+                    }
+                ],
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
+            }
         },
         {
             "tables": [

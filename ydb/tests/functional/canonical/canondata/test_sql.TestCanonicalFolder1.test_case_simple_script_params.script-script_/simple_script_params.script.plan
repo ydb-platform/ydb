@@ -5,7 +5,30 @@
     },
     "queries": [
         {
-            "tables": []
+            "tables": [],
+            "Plan": {
+                "Plans": [
+                    {
+                        "PlanNodeId": 2,
+                        "Plans": [
+                            {
+                                "PlanNodeId": 1,
+                                "Operators": [
+                                    {
+                                        "Iterator": "[{value: $value}]",
+                                        "Name": "Iterator"
+                                    }
+                                ],
+                                "Node Type": "ConstantExpr"
+                            }
+                        ],
+                        "Node Type": "ResultSet_0_0",
+                        "PlanNodeType": "ResultSet"
+                    }
+                ],
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
+            }
         }
     ]
 }

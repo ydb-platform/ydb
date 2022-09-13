@@ -589,7 +589,7 @@ namespace boost {
 } // end namespace boost
 
 #ifdef BOOST_GRAPH_USE_MPI
-#include <boost/graph/distributed/rmat_graph_generator.hpp>
+#error #include <boost/graph/distributed/rmat_graph_generator.hpp>
 #endif // BOOST_GRAPH_USE_MPI
 
 #endif // BOOST_GRAPH_RMAT_GENERATOR_HPP

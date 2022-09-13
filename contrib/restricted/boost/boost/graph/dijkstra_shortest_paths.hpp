@@ -617,7 +617,7 @@ namespace boost {
 } // namespace boost
 
 #ifdef BOOST_GRAPH_USE_MPI
-#  include <boost/graph/distributed/dijkstra_shortest_paths.hpp>
+#error #  include <boost/graph/distributed/dijkstra_shortest_paths.hpp>
 #endif
 
 #endif // BOOST_GRAPH_DIJKSTRA_HPP

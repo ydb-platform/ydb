@@ -105,5 +105,5 @@ make_two_bit_color_map(std::size_t n, const IndexMap& index_map)
 #endif // BOOST_TWO_BIT_COLOR_MAP_HPP
 
 #ifdef BOOST_GRAPH_USE_MPI
-#  include <boost/graph/distributed/two_bit_color_map.hpp>
+#error #  include <boost/graph/distributed/two_bit_color_map.hpp>
 #endif

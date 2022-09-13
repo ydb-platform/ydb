@@ -101,7 +101,7 @@ namespace boost {
 } // namespace boost
 
 #ifdef BOOST_GRAPH_USE_MPI
-#  include <boost/graph/distributed/connected_components.hpp>
+#error #  include <boost/graph/distributed/connected_components.hpp>
 #endif
 
 #endif // BOOST_GRAPH_CONNECTED_COMPONENTS_HPP

@@ -337,7 +337,7 @@ namespace boost {
 } // namespace boost
 
 #ifdef BOOST_GRAPH_USE_MPI
-#  include <boost/graph/distributed/strong_components.hpp>
+#error #  include <boost/graph/distributed/strong_components.hpp>
 #endif
 
 #endif // BOOST_GRAPH_STRONG_COMPONENTS_HPP

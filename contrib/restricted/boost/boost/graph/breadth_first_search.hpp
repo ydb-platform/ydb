@@ -27,7 +27,7 @@
 #include <boost/concept/assert.hpp>
 
 #ifdef BOOST_GRAPH_USE_MPI
-#include <boost/graph/distributed/concepts.hpp>
+#error #include <boost/graph/distributed/concepts.hpp>
 #endif // BOOST_GRAPH_USE_MPI
 
 namespace boost {
@@ -406,7 +406,7 @@ namespace boost {
 } // namespace boost
 
 #ifdef BOOST_GRAPH_USE_MPI
-#  include <boost/graph/distributed/breadth_first_search.hpp>
+#error #  include <boost/graph/distributed/breadth_first_search.hpp>
 #endif
 
 #endif // BOOST_GRAPH_BREADTH_FIRST_SEARCH_HPP

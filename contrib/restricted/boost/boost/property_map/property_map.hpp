@@ -595,7 +595,7 @@ namespace boost {
 } // namespace boost
 
 #ifdef BOOST_GRAPH_USE_MPI
-#include <boost/property_map/parallel/parallel_property_maps.hpp>
+#error #include <boost/property_map/parallel/parallel_property_maps.hpp>
 #endif
 
 #include <boost/property_map/vector_property_map.hpp>

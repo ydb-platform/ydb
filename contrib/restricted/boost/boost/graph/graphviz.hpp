@@ -952,7 +952,7 @@ bool read_graphviz(std::istream& in, MutableGraph& graph,
 } // namespace boost
 
 #ifdef BOOST_GRAPH_USE_MPI
-#  include <boost/graph/distributed/graphviz.hpp>
+#error #  include <boost/graph/distributed/graphviz.hpp>
 #endif
 
 #endif // BOOST_GRAPHVIZ_HPP

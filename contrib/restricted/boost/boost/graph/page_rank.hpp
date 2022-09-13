@@ -155,7 +155,7 @@ remove_dangling_links(MutableGraph& g
 } } // end namespace boost::graph
 
 #ifdef BOOST_GRAPH_USE_MPI
-#  include <boost/graph/distributed/page_rank.hpp>
+#error #  include <boost/graph/distributed/page_rank.hpp>
 #endif
 
 #endif // BOOST_GRAPH_PAGE_RANK_HPP

@@ -9,6 +9,7 @@
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 
+#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
@@ -236,6 +237,7 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
     NKikimr::NMiniKQL::TScopedAlloc* Alloc = nullptr;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
+    std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
 };
 
 class IDqTaskRunnerExecutionContext {
@@ -293,8 +295,7 @@ public:
 
     virtual void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext(),
-        const TDqTaskRunnerParameterProvider& parameterProvider = {},
-        const std::shared_ptr<NKikimr::NMiniKQL::TPatternWithEnv>& compPattern = {}) = 0;
+        const TDqTaskRunnerParameterProvider& parameterProvider = {}) = 0;
     virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;

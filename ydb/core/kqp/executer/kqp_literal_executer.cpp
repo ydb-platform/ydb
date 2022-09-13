@@ -184,6 +184,7 @@ private:
         // task runner settings
         NMiniKQL::TKqpComputeContextBase computeCtx;
         TDqTaskRunnerContext context = CreateTaskRunnerContext(&computeCtx, &alloc, &typeEnv);
+        context.PatternCache = GetKqpResourceManager()->GetLiteralPatternCache();
         TDqTaskRunnerSettings settings = CreateTaskRunnerSettings(Request.StatsMode);
 
         Y_DEFER {
@@ -269,27 +270,8 @@ private:
         auto taskRunner = CreateKqpTaskRunner(context, settings, log);
         TaskRunners.emplace_back(taskRunner);
 
-        std::shared_ptr<NMiniKQL::TPatternWithEnv> patternEnv;
-        bool useCache = AppData()->FeatureFlags.GetEnableKqpPatternCacheLiteral();
-        bool foundInCache = false;
-        if (useCache) {
-            auto *cache = Singleton<NMiniKQL::TComputationPatternLRUCache>();
-
-            patternEnv = cache->Find(protoTask.GetProgram().GetRaw());
-            if (patternEnv) {
-                foundInCache = true;
-            } else {
-                patternEnv = cache->CreateEnv();
-            }
-        }
-
         taskRunner->Prepare(protoTask, CreateTaskRunnerMemoryLimits(), CreateTaskRunnerExecutionContext(),
-            parameterProvider, patternEnv);
-
-        if (useCache && !foundInCache) {
-            auto *cache = Singleton<NMiniKQL::TComputationPatternLRUCache>();
-            cache->EmplacePattern(protoTask.GetProgram().GetRaw(), std::move(patternEnv));
-        }
+            parameterProvider);
 
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);

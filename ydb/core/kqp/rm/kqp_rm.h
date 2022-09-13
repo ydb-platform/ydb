@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 
 #include <library/cpp/actors/core/actor.h>
 
@@ -86,6 +87,9 @@ public:
 
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
     virtual NKikimrConfig::TTableServiceConfig::TResourceManager GetConfig() = 0;
+
+    virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetLiteralPatternCache() = 0;
+    virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetComputeActorPatternCache() = 0;
 };
 
 } // namespace NRm

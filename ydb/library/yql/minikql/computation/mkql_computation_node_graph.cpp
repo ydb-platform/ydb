@@ -2,6 +2,7 @@
 #include "mkql_value_builder.h"
 #include "mkql_computation_node_codegen.h"
 #include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
@@ -221,7 +222,7 @@ public:
         , ValidatePolicy(opts.ValidatePolicy)
         , GraphPerProcess(opts.GraphPerProcess)
         , PatternNodes(MakeIntrusive<TPatternNodes>(opts.AllocState))
-        , ExternalAlloc(opts.CacheAlloc || opts.PatternEnv)
+        , ExternalAlloc(opts.CacheAlloc)
     {
         PatternNodes->HolderFactory = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes->MemInfo, &FunctionRegistry);
         PatternNodes->ValueBuilder = MakeHolder<TDefaultValueBuilder>(*PatternNodes->HolderFactory, ValidatePolicy);
@@ -525,7 +526,7 @@ private:
     NUdf::EValidatePolicy ValidatePolicy;
     EGraphPerProcess GraphPerProcess;
     TPatternNodes::TPtr PatternNodes;
-    const bool ExternalAlloc;
+    const bool ExternalAlloc; // obsolete, will be removed after YQL-13977
 };
 
 class TComputationGraph : public IComputationGraph {
@@ -843,11 +844,7 @@ TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNode
 
 IComputationPattern::TPtr MakeComputationPattern(TExploringNodeVisitor& explorer, const TRuntimeNode& root,
         const std::vector<TNode*>& entryPoints, const TComputationPatternOpts& opts) {
-    auto pattern = MakeComputationPatternImpl(explorer, root, entryPoints, opts);
-    if (opts.PatternEnv) {
-        pattern->SetTypeEnv(&opts.PatternEnv->Env);
-    }
-    return pattern;
+    return MakeComputationPatternImpl(explorer, root, entryPoints, opts);
 }
 
 class TComputationPatternCache: public IComputationPatternCache {

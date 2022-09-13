@@ -1,6 +1,7 @@
 #include "library/cpp/threading/local_executor/local_executor.h"
 #include "ydb/library/yql/minikql/comp_nodes/ut/mkql_computation_node_ut.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -439,9 +440,9 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
         TComputationPatternLRUCache cache(cacheSize);
 
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
-        std::shared_ptr<TPatternWithEnv> patternEnv = cache.CreateEnv();
-        TScopedAlloc &alloc = patternEnv->Alloc;
-        TTypeEnvironment &typeEnv = patternEnv->Env;
+        auto entry = std::make_shared<TPatternCacheEntry>();
+        TScopedAlloc &alloc = entry->Alloc;
+        TTypeEnvironment &typeEnv = entry->Env;
 
         TProgramBuilder pb(typeEnv, *functionRegistry);
 
@@ -456,10 +457,10 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
             NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception, useLLVM ? "" : "OFF", EGraphPerProcess::Multi);
 
         {
-            auto guard = patternEnv->Env.BindAllocator();
-            patternEnv->Pattern = MakeComputationPattern(explorer, progReturn, {list}, opts);
+            auto guard = entry->Env.BindAllocator();
+            entry->Pattern = MakeComputationPattern(explorer, progReturn, {list}, opts);
         }
-        cache.EmplacePattern("a", patternEnv);
+        cache.EmplacePattern("a", entry);
         auto genData = [&]() {
             std::vector<ui64> data;
             data.reserve(vecSize);
@@ -482,13 +483,13 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
                 auto timeProvider = CreateDeterministicTimeProvider(10000000);
                 TScopedAlloc graphAlloc;
 
-                auto patternEnv = cache.Find(key);
+                auto entry = cache.Find(key);
 
-                TComputationPatternOpts opts(patternEnv->Alloc.Ref(), patternEnv->Env, GetListTestFactory(),
+                TComputationPatternOpts opts(entry->Alloc.Ref(), entry->Env, GetListTestFactory(),
                     functionRegistry.Get(), NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
                     useLLVM ? "" : "OFF", EGraphPerProcess::Multi);
 
-                auto graph = patternEnv->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
+                auto graph = entry->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
                 TUnboxedValue* items = nullptr;
                 graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(data.size(), items));
 
@@ -572,9 +573,9 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
 
         for (ui32 i = 0; i < cacheSize; ++i) {
-            std::shared_ptr<TPatternWithEnv> patternEnv = cache.CreateEnv();
-            TScopedAlloc& alloc = patternEnv->Alloc;
-            TTypeEnvironment& typeEnv = patternEnv->Env;
+            auto entry = std::make_shared<TPatternCacheEntry>();
+            TScopedAlloc& alloc = entry->Alloc;
+            TTypeEnvironment& typeEnv = entry->Env;
 
             TProgramBuilder pb(typeEnv, *functionRegistry);
 
@@ -588,10 +589,10 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
                 "OFF", EGraphPerProcess::Multi);
 
             {
-                auto guard = patternEnv->Env.BindAllocator();
-                patternEnv->Pattern = MakeComputationPattern(explorer, progReturn, {}, opts);
+                auto guard = entry->Env.BindAllocator();
+                entry->Pattern = MakeComputationPattern(explorer, progReturn, {}, opts);
             }
-            cache.EmplacePattern(TString((char)('a' + i)), patternEnv);
+            cache.EmplacePattern(TString((char)('a' + i)), entry);
         }
 
         for (ui32 i = 0; i < cacheSize; ++i) {
@@ -600,13 +601,13 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
             auto randomProvider = CreateDeterministicRandomProvider(1);
             auto timeProvider = CreateDeterministicTimeProvider(10000000);
             TScopedAlloc graphAlloc;
-            auto patternEnv = cache.Find(key);
-            UNIT_ASSERT(patternEnv);
-            TComputationPatternOpts opts(patternEnv->Alloc.Ref(), patternEnv->Env, GetBuiltinFactory(),
+            auto entry = cache.Find(key);
+            UNIT_ASSERT(entry);
+            TComputationPatternOpts opts(entry->Alloc.Ref(), entry->Env, GetBuiltinFactory(),
                 functionRegistry.Get(), NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
                 "OFF", EGraphPerProcess::Multi);
 
-            auto graph = patternEnv->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
+            auto graph = entry->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
             auto value = graph->GetValue();
             UNIT_ASSERT_EQUAL(value.AsStringRef(), NYql::NUdf::TStringRef("qwerty"));
         }

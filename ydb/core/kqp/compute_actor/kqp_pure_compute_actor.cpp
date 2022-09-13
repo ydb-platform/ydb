@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/kqp/rm/kqp_rm.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/sys_view/scan.h>
@@ -35,7 +36,7 @@ public:
     TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask&& task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, 
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         NWilson::TTraceId traceId)
         : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId))
         , ComputeCtx(settings.StatsMode)
@@ -70,6 +71,7 @@ public:
         execCtx.ApplyCtx = nullptr;
         execCtx.Alloc = nullptr;
         execCtx.TypeEnv = nullptr;
+        execCtx.PatternCache = GetKqpResourceManager()->GetComputeActorPatternCache();
 
         TDqTaskRunnerSettings settings;
         settings.CollectBasicStats = RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
@@ -306,7 +308,7 @@ private:
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask&& task,
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, 
+    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId)
 {
     return new TKqpComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),

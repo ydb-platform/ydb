@@ -10,6 +10,7 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 
@@ -252,8 +253,7 @@ public:
         return TaskId;
     }
 
-    void BuildTask(const NDqProto::TDqTask& task, const TDqTaskRunnerParameterProvider& parameterProvider,
-        const std::shared_ptr<TPatternWithEnv>& compPattern)
+    void BuildTask(const NDqProto::TDqTask& task, const TDqTaskRunnerParameterProvider& parameterProvider)
     {
         LOG(TStringBuilder() << "Build task: " << TaskId);
         auto startTime = TInstant::Now();
@@ -264,7 +264,21 @@ public:
         YQL_ENSURE(program.GetRuntimeVersion());
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
-        ProgramParsed.ProgramNode = DeserializeRuntimeNode(program.GetRaw(), typeEnv);
+        std::shared_ptr<TPatternCacheEntry> entry;
+        if (auto& cache = Context.PatternCache) {
+            entry = cache->Find(program.GetRaw());
+            if (!entry) {
+                entry = std::make_shared<TPatternCacheEntry>();
+            }
+        }
+
+        auto& patternAlloc = entry ? entry->Alloc.Ref() : Alloc().Ref();
+        auto& patternEnv = entry ? entry->Env : typeEnv;
+
+        {
+            auto guard = patternEnv.BindAllocator();
+            ProgramParsed.ProgramNode = DeserializeRuntimeNode(program.GetRaw(), patternEnv);
+        }
         YQL_ENSURE(ProgramParsed.ProgramNode.IsImmediate() && ProgramParsed.ProgramNode.GetNode()->GetType()->IsStruct());
         auto& programStruct = static_cast<TStructLiteral&>(*ProgramParsed.ProgramNode.GetNode());
         auto programType = programStruct.GetType();
@@ -275,9 +289,9 @@ public:
         TRuntimeNode programRoot = programStruct.GetValue(*programRootIdx);
         if (Context.FuncProvider) {
             TExploringNodeVisitor explorer;
-            explorer.Walk(programRoot.GetNode(), typeEnv);
+            explorer.Walk(programRoot.GetNode(), patternEnv);
             bool wereChanges = false;
-            programRoot = SinglePassVisitCallables(programRoot, explorer, Context.FuncProvider, typeEnv, true, wereChanges);
+            programRoot = SinglePassVisitCallables(programRoot, explorer, Context.FuncProvider, patternEnv, true, wereChanges);
         }
 
         ProgramParsed.OutputItemTypes.resize(task.OutputsSize());
@@ -336,7 +350,7 @@ public:
         auto paramsCount = paramsStruct->GetMembersCount();
 
         TExploringNodeVisitor programExplorer;
-        programExplorer.Walk(programRoot.GetNode(), typeEnv);
+        programExplorer.Walk(programRoot.GetNode(), patternEnv);
         auto programSize = programExplorer.GetNodes().size();
 
         LOG(TStringBuilder() << "task: " << TaskId << ", program size: " << programSize
@@ -347,9 +361,6 @@ public:
         }
 
         auto validatePolicy = Settings.TerminateOnError ? NUdf::EValidatePolicy::Fail : NUdf::EValidatePolicy::Exception;
-
-        auto& compPatternAlloc = compPattern ? compPattern->Alloc.Ref() : Alloc().Ref();
-        auto& compPatternEnv = compPattern ? compPattern->Env : typeEnv;
 
         auto taskRunnerFactory = [this](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             auto& computationFactory = Context.ComputationFactory;
@@ -362,19 +373,22 @@ public:
             return nullptr;
         };
 
-        TComputationPatternOpts opts(compPatternAlloc, compPatternEnv, taskRunnerFactory,
+        TComputationPatternOpts opts(patternAlloc, patternEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, Settings.OptLLVM, EGraphPerProcess::Multi,
             ProgramParsed.StatsRegistry.Get());
 
-            SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
-            opts.SecureParamsProvider = SecureParamsProvider.get();
+        SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
+        opts.SecureParamsProvider = SecureParamsProvider.get();
 
-        if (compPattern) {
-            if (!compPattern->Pattern) {
-                auto guard = compPattern->Env.BindAllocator();
-                compPattern->Pattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
+        bool filledCacheEntry = false;
+        if (entry) {
+            if (!entry->Pattern) {
+                auto guard = entry->Env.BindAllocator();
+                entry->Pattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
+                filledCacheEntry = true;
             }
-            ProgramParsed.CompPattern = compPattern->Pattern;
+            ProgramParsed.CompPattern = entry->Pattern;
+            ProgramParsed.CompPatternEntry = entry;
             // clone pattern using alloc from current scope
             ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
                 opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider, &Alloc().Ref()));
@@ -382,6 +396,12 @@ public:
             ProgramParsed.CompPattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
             ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
                 opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider));
+        }
+
+        if (filledCacheEntry) {
+            if (auto& cache = Context.PatternCache) {
+                cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
+            }
         }
 
         TBindTerminator term(ProgramParsed.CompGraph->GetTerminator());
@@ -428,11 +448,10 @@ public:
     }
 
     void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider& parameterProvider,
-        const std::shared_ptr<TPatternWithEnv>& compPattern) override
+        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider& parameterProvider) override
     {
         TaskId = task.GetId();
-        BuildTask(task, parameterProvider, compPattern);
+        BuildTask(task, parameterProvider);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
         auto startTime = TInstant::Now();
@@ -836,6 +855,7 @@ private:
     };
 
     struct TProgramParsed {
+        std::shared_ptr<TPatternCacheEntry> CompPatternEntry;
         TRuntimeNode ProgramNode;
         TVector<TType*> InputItemTypes;
         TVector<TType*> OutputItemTypes;

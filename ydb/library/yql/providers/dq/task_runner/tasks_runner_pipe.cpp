@@ -1450,8 +1450,7 @@ public:
     }
 
     void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider&,
-        const std::shared_ptr<NKikimr::NMiniKQL::TPatternWithEnv>&) override
+        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider&) override
     {
         Y_UNUSED(memoryLimits);
         Y_UNUSED(execCtx);

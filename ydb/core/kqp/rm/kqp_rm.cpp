@@ -226,7 +226,10 @@ public:
         , Counters(counters)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , ExecutionUnitsResource(Config.GetComputeActorsCount())
-        , ScanQueryMemoryResource(Config.GetQueryMemoryLimit()) {}
+        , ScanQueryMemoryResource(Config.GetQueryMemoryLimit())
+        //, LiteralPatternCache(std::make_shared<NMiniKQL::TComputationPatternLRUCache>())
+        //, ComputeActorPatternCache(std::make_shared<NMiniKQL::TComputationPatternLRUCache>())
+    {}
 
     void Bootstrap() {
         ActorSystem = TlsActivationContext->ActorSystem();
@@ -590,6 +593,18 @@ public:
         }
     }
 
+    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetLiteralPatternCache() override {
+        with_lock (Lock) {
+            return LiteralPatternCache;
+        }
+    }
+
+    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetComputeActorPatternCache() override {
+        with_lock (Lock) {
+            return ComputeActorPatternCache;
+        }
+    }
+
 private:
     STATEFN(WorkState) {
         switch (ev->GetTypeRewrite()) {
@@ -918,6 +933,10 @@ private:
         std::optional<TInstant> LastPublishTime;
     };
     TWhiteBoardState WbState;
+
+    // pattern caches for different actors
+    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> LiteralPatternCache;
+    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> ComputeActorPatternCache;
 };
 
 } // namespace NRm

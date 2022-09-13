@@ -1,22 +1,22 @@
 //
-//  Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
 //
-//  Distributed under the Boost Software License, Version 1.0. (See
-//  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
-//
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
 #ifndef BOOST_LOCALE_BOUNDARY_SEGMENT_HPP_INCLUDED
 #define BOOST_LOCALE_BOUNDARY_SEGMENT_HPP_INCLUDED
+
 #include <boost/locale/config.hpp>
+#include <iosfwd>
+#include <iterator>
+#include <locale>
+#include <string>
+
 #ifdef BOOST_MSVC
 #  pragma warning(push)
 #  pragma warning(disable : 4275 4251 4231 4660)
 #endif
-#include <locale>
-#include <string>
-#include <iosfwd>
-#include <iterator>
-
 
 namespace boost {
 namespace locale {
@@ -53,7 +53,7 @@ namespace boundary {
         {
             return compare_text(l.begin(),l.end(),r.begin(),r.end());
         }
-        
+
         template<typename Left,typename Char>
         int compare_string(Left const &l,Char const *begin)
         {
@@ -95,14 +95,14 @@ namespace boundary {
     /// \see
     ///
     /// - \ref segment_index
-    /// - \ref boundary_point 
-    /// - \ref boundary_point_index 
+    /// - \ref boundary_point
+    /// - \ref boundary_point_index
     ///
     template<typename IteratorType>
     class segment : public std::pair<IteratorType,IteratorType> {
     public:
         ///
-        /// The type of the underlying character 
+        /// The type of the underlying character
         ///
         typedef typename std::iterator_traits<IteratorType>::value_type char_type;
         ///
@@ -156,7 +156,7 @@ namespace boundary {
         ///
         /// Get the start of the range
         ///
-        IteratorType begin() const 
+        IteratorType begin() const
         {
             return this->first;
         }
@@ -176,7 +176,7 @@ namespace boundary {
         {
             return std::basic_string<char_type, T, A>(this->first, this->second);
         }
-        
+
         ///
         /// Create a string from the range explicitly
         ///
@@ -220,135 +220,135 @@ namespace boundary {
         // make sure we override std::pair's operator==
 
         /// Compare two segments
-        bool operator==(segment const &other)
+        bool operator==(segment const &other) const
         {
             return details::compare_text(*this,other) == 0;
         }
 
         /// Compare two segments
-        bool operator!=(segment const &other)
+        bool operator!=(segment const &other) const
         {
             return details::compare_text(*this,other) != 0;
         }
 
     private:
         rule_type rule_;
-       
+
     };
 
-   
+
     /// Compare two segments
     template<typename IteratorL,typename IteratorR>
     bool operator==(segment<IteratorL> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) == 0; 
+        return details::compare_text(l,r) == 0;
     }
     /// Compare two segments
     template<typename IteratorL,typename IteratorR>
     bool operator!=(segment<IteratorL> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) != 0; 
+        return details::compare_text(l,r) != 0;
     }
 
     /// Compare two segments
     template<typename IteratorL,typename IteratorR>
     bool operator<(segment<IteratorL> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) < 0; 
+        return details::compare_text(l,r) < 0;
     }
     /// Compare two segments
     template<typename IteratorL,typename IteratorR>
     bool operator<=(segment<IteratorL> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) <= 0; 
+        return details::compare_text(l,r) <= 0;
     }
     /// Compare two segments
     template<typename IteratorL,typename IteratorR>
     bool operator>(segment<IteratorL> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) > 0; 
+        return details::compare_text(l,r) > 0;
     }
     /// Compare two segments
     template<typename IteratorL,typename IteratorR>
     bool operator>=(segment<IteratorL> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) >= 0; 
+        return details::compare_text(l,r) >= 0;
     }
 
     /// Compare string and segment
     template<typename CharType,typename Traits,typename Alloc,typename IteratorR>
     bool operator==(std::basic_string<CharType,Traits,Alloc> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) == 0; 
+        return details::compare_text(l,r) == 0;
     }
     /// Compare string and segment
     template<typename CharType,typename Traits,typename Alloc,typename IteratorR>
     bool operator!=(std::basic_string<CharType,Traits,Alloc> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) != 0; 
+        return details::compare_text(l,r) != 0;
     }
 
     /// Compare string and segment
     template<typename CharType,typename Traits,typename Alloc,typename IteratorR>
     bool operator<(std::basic_string<CharType,Traits,Alloc> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) < 0; 
+        return details::compare_text(l,r) < 0;
     }
     /// Compare string and segment
     template<typename CharType,typename Traits,typename Alloc,typename IteratorR>
     bool operator<=(std::basic_string<CharType,Traits,Alloc> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) <= 0; 
+        return details::compare_text(l,r) <= 0;
     }
     /// Compare string and segment
     template<typename CharType,typename Traits,typename Alloc,typename IteratorR>
     bool operator>(std::basic_string<CharType,Traits,Alloc> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) > 0; 
+        return details::compare_text(l,r) > 0;
     }
     /// Compare string and segment
     template<typename CharType,typename Traits,typename Alloc,typename IteratorR>
     bool operator>=(std::basic_string<CharType,Traits,Alloc> const &l,segment<IteratorR> const &r)
     {
-        return details::compare_text(l,r) >= 0; 
+        return details::compare_text(l,r) >= 0;
     }
 
     /// Compare string and segment
     template<typename Iterator,typename CharType,typename Traits,typename Alloc>
     bool operator==(segment<Iterator> const &l,std::basic_string<CharType,Traits,Alloc> const &r)
     {
-        return details::compare_text(l,r) == 0; 
+        return details::compare_text(l,r) == 0;
     }
     /// Compare string and segment
     template<typename Iterator,typename CharType,typename Traits,typename Alloc>
     bool operator!=(segment<Iterator> const &l,std::basic_string<CharType,Traits,Alloc> const &r)
     {
-        return details::compare_text(l,r) != 0; 
+        return details::compare_text(l,r) != 0;
     }
 
     /// Compare string and segment
     template<typename Iterator,typename CharType,typename Traits,typename Alloc>
     bool operator<(segment<Iterator> const &l,std::basic_string<CharType,Traits,Alloc> const &r)
     {
-        return details::compare_text(l,r) < 0; 
+        return details::compare_text(l,r) < 0;
     }
     /// Compare string and segment
     template<typename Iterator,typename CharType,typename Traits,typename Alloc>
     bool operator<=(segment<Iterator> const &l,std::basic_string<CharType,Traits,Alloc> const &r)
     {
-        return details::compare_text(l,r) <= 0; 
+        return details::compare_text(l,r) <= 0;
     }
     /// Compare string and segment
     template<typename Iterator,typename CharType,typename Traits,typename Alloc>
     bool operator>(segment<Iterator> const &l,std::basic_string<CharType,Traits,Alloc> const &r)
     {
-        return details::compare_text(l,r) > 0; 
+        return details::compare_text(l,r) > 0;
     }
     /// Compare string and segment
     template<typename Iterator,typename CharType,typename Traits,typename Alloc>
     bool operator>=(segment<Iterator> const &l,std::basic_string<CharType,Traits,Alloc> const &r)
     {
-        return details::compare_text(l,r) >= 0; 
+        return details::compare_text(l,r) >= 0;
     }
 
 
@@ -356,76 +356,76 @@ namespace boundary {
     template<typename CharType,typename IteratorR>
     bool operator==(CharType const *l,segment<IteratorR> const &r)
     {
-        return details::compare_string(l,r) == 0; 
+        return details::compare_string(l,r) == 0;
     }
     /// Compare C string and segment
     template<typename CharType,typename IteratorR>
     bool operator!=(CharType const *l,segment<IteratorR> const &r)
     {
-        return details::compare_string(l,r) != 0; 
+        return details::compare_string(l,r) != 0;
     }
 
     /// Compare C string and segment
     template<typename CharType,typename IteratorR>
     bool operator<(CharType const *l,segment<IteratorR> const &r)
     {
-        return details::compare_string(l,r) < 0; 
+        return details::compare_string(l,r) < 0;
     }
     /// Compare C string and segment
     template<typename CharType,typename IteratorR>
     bool operator<=(CharType const *l,segment<IteratorR> const &r)
     {
-        return details::compare_string(l,r) <= 0; 
+        return details::compare_string(l,r) <= 0;
     }
     /// Compare C string and segment
     template<typename CharType,typename IteratorR>
     bool operator>(CharType const *l,segment<IteratorR> const &r)
     {
-        return details::compare_string(l,r) > 0; 
+        return details::compare_string(l,r) > 0;
     }
     /// Compare C string and segment
     template<typename CharType,typename IteratorR>
     bool operator>=(CharType const *l,segment<IteratorR> const &r)
     {
-        return details::compare_string(l,r) >= 0; 
+        return details::compare_string(l,r) >= 0;
     }
 
     /// Compare C string and segment
     template<typename Iterator,typename CharType>
     bool operator==(segment<Iterator> const &l,CharType const *r)
     {
-        return details::compare_string(l,r) == 0; 
+        return details::compare_string(l,r) == 0;
     }
     /// Compare C string and segment
     template<typename Iterator,typename CharType>
     bool operator!=(segment<Iterator> const &l,CharType const *r)
     {
-        return details::compare_string(l,r) != 0; 
+        return details::compare_string(l,r) != 0;
     }
 
     /// Compare C string and segment
     template<typename Iterator,typename CharType>
     bool operator<(segment<Iterator> const &l,CharType const *r)
     {
-        return details::compare_string(l,r) < 0; 
+        return details::compare_string(l,r) < 0;
     }
     /// Compare C string and segment
     template<typename Iterator,typename CharType>
     bool operator<=(segment<Iterator> const &l,CharType const *r)
     {
-        return details::compare_string(l,r) <= 0; 
+        return details::compare_string(l,r) <= 0;
     }
     /// Compare C string and segment
     template<typename Iterator,typename CharType>
     bool operator>(segment<Iterator> const &l,CharType const *r)
     {
-        return details::compare_string(l,r) > 0; 
+        return details::compare_string(l,r) > 0;
     }
     /// Compare C string and segment
     template<typename Iterator,typename CharType>
     bool operator>=(segment<Iterator> const &l,CharType const *r)
     {
-        return details::compare_string(l,r) >= 0; 
+        return details::compare_string(l,r) >= 0;
     }
 
 
@@ -441,7 +441,7 @@ namespace boundary {
     #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
     typedef segment<std::u32string::const_iterator> u32ssegment;///< convenience typedef
     #endif
-   
+
     typedef segment<char const *> csegment;                     ///< convenience typedef
     typedef segment<wchar_t const *> wcsegment;                 ///< convenience typedef
     #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
@@ -453,8 +453,8 @@ namespace boundary {
 
 
 
- 
-    
+
+
     ///
     /// Write the segment to the stream character by character
     ///
@@ -480,4 +480,3 @@ namespace boundary {
 
 #endif
 
-// vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4

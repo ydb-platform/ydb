@@ -1,24 +1,22 @@
 //
-//  Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
 //
-//  Distributed under the Boost Software License, Version 1.0. (See
-//  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
-//
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
 #ifndef BOOST_LOCALE_MESSAGE_HPP_INCLUDED
 #define BOOST_LOCALE_MESSAGE_HPP_INCLUDED
 
-#include <boost/locale/config.hpp>
+#include <boost/locale/formatting.hpp>
+#include <locale>
+#include <memory>
+#include <set>
+#include <string>
+
 #ifdef BOOST_MSVC
 #  pragma warning(push)
 #  pragma warning(disable : 4275 4251 4231 4660)
 #endif
-#include <locale>
-#include <string>
-#include <vector>
-#include <set>
-#include <memory>
-#include <boost/locale/formatting.hpp>
 
 // glibc < 2.3.4 declares those as macros if compiled with optimization turned on
 #ifdef gettext
@@ -31,27 +29,25 @@
 namespace boost {
     namespace locale {
         ///
-        /// \defgroup message Message Formatting (translation) 
+        /// \defgroup message Message Formatting (translation)
         ///
         ///This module provides message translation functionality, i.e. allow your application to speak native language
         ///
         /// @{
-        /// 
+        ///
 
-        /// \cond INTERNAL 
+        /// \cond INTERNAL
 
         template<typename CharType>
-        struct base_message_format: public std::locale::facet
-        {
-        };
-       
+        struct base_message_format;
+
         /// \endcond
-       
+
         ///
         /// \brief This facet provides message formatting abilities
         ///
         template<typename CharType>
-        class message_format : public base_message_format<CharType>
+        class BOOST_SYMBOL_VISIBLE message_format : public base_message_format<CharType>
         {
         public:
 
@@ -67,8 +63,7 @@ namespace boost {
             ///
             /// Default constructor
             ///
-            message_format(size_t refs = 0) : 
-                base_message_format<CharType>(refs)
+            message_format(size_t refs = 0) : base_message_format<CharType>(refs)
             {
             }
 
@@ -80,12 +75,12 @@ namespace boost {
             /// If \a context is NULL it is not considered to be a part of the key
             ///
             /// If a translated string is found, it is returned, otherwise NULL is returned
-            /// 
+            ///
             ///
             virtual char_type const *get(int domain_id,char_type const *context,char_type const *id) const = 0;
             ///
             /// This function returns a pointer to the string for a plural message defined by a \a context
-            /// and identification string \a single_id. 
+            /// and identification string \a single_id.
             ///
             /// If \a context is NULL it is not considered to be a part of the key
             ///
@@ -94,7 +89,7 @@ namespace boost {
             /// number.
             ///
             /// If a translated string is found, it is returned, otherwise NULL is returned
-            /// 
+            ///
             ///
             virtual char_type const *get(int domain_id,char_type const *context,char_type const *single_id,int n) const = 0;
 
@@ -117,19 +112,16 @@ namespace boost {
             std::locale::id& __get_id (void) const { return id; }
 #endif
         protected:
-            virtual ~message_format()
-            {
-            }
-
+            virtual ~message_format() {}
         };
-        
+
         /// \cond INTERNAL
 
         namespace details {
             inline bool is_us_ascii_char(char c)
             {
                 // works for null terminated strings regardless char "signness"
-                return 0<c && c<0x7F; 
+                return 0<c && c<0x7F;
             }
             inline bool is_us_ascii_string(char const *msg)
             {
@@ -171,7 +163,7 @@ namespace boost {
         /// \brief This class represents a message that can be converted to a specific locale message
         ///
         /// It holds the original ASCII string that is queried in the dictionary when converting to the output string.
-        /// The created string may be UTF-8, UTF-16, UTF-32 or other 8-bit encoded string according to the target 
+        /// The created string may be UTF-8, UTF-16, UTF-32 or other 8-bit encoded string according to the target
         /// character type and locale encoding.
         ///
         template<typename CharType>
@@ -184,7 +176,7 @@ namespace boost {
 
             ///
             /// Create default empty message
-            /// 
+            ///
             basic_message() :
                 n_(0),
                 c_id_(0),
@@ -196,7 +188,7 @@ namespace boost {
             ///
             /// Create a simple message from 0 terminated string. The string should exist
             /// until the message is destroyed. Generally useful with static constant strings
-            /// 
+            ///
             explicit basic_message(char_type const *id) :
                 n_(0),
                 c_id_(id),
@@ -210,7 +202,7 @@ namespace boost {
             /// until the message is destroyed. Generally useful with static constant strings.
             ///
             /// \a n is the number, \a single and \a plural are singular and plural forms of the message
-            /// 
+            ///
             explicit basic_message(char_type const *single,char_type const *plural,int n) :
                 n_(n),
                 c_id_(single),
@@ -223,7 +215,7 @@ namespace boost {
             /// Create a simple message from 0 terminated strings, with context
             /// information. The string should exist
             /// until the message is destroyed. Generally useful with static constant strings
-            /// 
+            ///
             explicit basic_message(char_type const *context,char_type const *id) :
                 n_(0),
                 c_id_(id),
@@ -237,7 +229,7 @@ namespace boost {
             /// until the message is destroyed. Generally useful with static constant strings.
             ///
             /// \a n is the number, \a single and \a plural are singular and plural forms of the message
-            /// 
+            ///
             explicit basic_message(char_type const *context,char_type const *single,char_type const *plural,int n) :
                 n_(n),
                 c_id_(single),
@@ -263,7 +255,7 @@ namespace boost {
             /// Create a simple plural form message from strings.
             ///
             /// \a n is the number, \a single and \a plural are single and plural forms of the message
-            /// 
+            ///
             explicit basic_message(string_type const &single,string_type const &plural,int number) :
                 n_(number),
                 c_id_(0),
@@ -291,7 +283,7 @@ namespace boost {
             /// Create a simple plural form message from strings.
             ///
             /// \a n is the number, \a single and \a plural are single and plural forms of the message
-            /// 
+            ///
             explicit basic_message(string_type const &context,string_type const &single,string_type const &plural,int number) :
                 n_(number),
                 c_id_(0),
@@ -362,7 +354,7 @@ namespace boost {
                 std::locale loc;
                 return str(loc,0);
             }
-            
+
             ///
             /// Translate message to a string in the locale \a locale, using default domain
             ///
@@ -370,10 +362,10 @@ namespace boost {
             {
                 return str(locale,0);
             }
-           
+
             ///
             /// Translate message to a string using locale \a locale and message domain  \a domain_id
-            /// 
+            ///
             string_type str(std::locale const &locale,std::string const &domain_id) const
             {
                 int id=0;
@@ -384,7 +376,7 @@ namespace boost {
 
             ///
             /// Translate message to a string using the default locale and message domain  \a domain_id
-            /// 
+            ///
             string_type str(std::string const &domain_id) const
             {
                 int id=0;
@@ -394,13 +386,13 @@ namespace boost {
                 return str(loc,id);
             }
 
-            
+
             ///
             /// Translate message to a string using locale \a loc and message domain index  \a id
-            /// 
+            ///
             string_type str(std::locale const &loc,int id) const
             {
-                string_type buffer;                
+                string_type buffer;
                 char_type const *ptr = write(loc,id,buffer);
                 if(ptr == buffer.c_str())
                     return buffer;
@@ -411,7 +403,7 @@ namespace boost {
 
 
             ///
-            /// Translate message and write to stream \a out, using imbued locale and domain set to the 
+            /// Translate message and write to stream \a out, using imbued locale and domain set to the
             /// stream
             ///
             void write(std::basic_ostream<char_type> &out) const
@@ -444,7 +436,7 @@ namespace boost {
             {
                 return c_id_ ? c_id_ : id_.c_str();
             }
-            
+
             char_type const *write(std::locale const &loc,int domain_id,string_type &buffer) const
             {
                 char_type const *translated = 0;
@@ -453,15 +445,15 @@ namespace boost {
                 char_type const *id = this->id();
                 char_type const *context = this->context();
                 char_type const *plural = this->plural();
-                
+
                 if(*id == 0)
                     return empty_string;
-                
+
                 facet_type const *facet = 0;
                 if(std::has_facet<facet_type>(loc))
                     facet = &std::use_facet<facet_type>(loc);
 
-                if(facet) { 
+                if(facet) {
                     if(!plural) {
                         translated = facet->get(domain_id,context,id);
                     }
@@ -531,7 +523,7 @@ namespace boost {
         /// @{
 
         ///
-        /// \brief Translate a message, \a msg is not copied 
+        /// \brief Translate a message, \a msg is not copied
         ///
         template<typename CharType>
         inline basic_message<CharType> translate(CharType const *msg)
@@ -539,7 +531,7 @@ namespace boost {
             return basic_message<CharType>(msg);
         }
         ///
-        /// \brief Translate a message in context, \a msg and \a context are not copied 
+        /// \brief Translate a message in context, \a msg and \a context are not copied
         ///
         template<typename CharType>
         inline basic_message<CharType> translate(   CharType const *context,
@@ -548,7 +540,7 @@ namespace boost {
             return basic_message<CharType>(context,msg);
         }
         ///
-        /// \brief Translate a plural message form, \a single and \a plural are not copied 
+        /// \brief Translate a plural message form, \a single and \a plural are not copied
         ///
         template<typename CharType>
         inline basic_message<CharType> translate(   CharType const *single,
@@ -558,7 +550,7 @@ namespace boost {
             return basic_message<CharType>(single,plural,n);
         }
         ///
-        /// \brief Translate a plural message from in constext, \a context, \a single and \a plural are not copied 
+        /// \brief Translate a plural message from in constext, \a context, \a single and \a plural are not copied
         ///
         template<typename CharType>
         inline basic_message<CharType> translate(   CharType const *context,
@@ -568,18 +560,18 @@ namespace boost {
         {
             return basic_message<CharType>(context,single,plural,n);
         }
-        
+
         ///
-        /// \brief Translate a message, \a msg is copied 
+        /// \brief Translate a message, \a msg is copied
         ///
         template<typename CharType>
         inline basic_message<CharType> translate(std::basic_string<CharType> const &msg)
         {
             return basic_message<CharType>(msg);
         }
-        
+
         ///
-        /// \brief Translate a message in context,\a context and \a msg is copied 
+        /// \brief Translate a message in context,\a context and \a msg is copied
         ///
         template<typename CharType>
         inline basic_message<CharType> translate(   std::basic_string<CharType> const &context,
@@ -588,7 +580,7 @@ namespace boost {
             return basic_message<CharType>(context,msg);
         }
         ///
-        /// \brief Translate a plural message form in constext, \a context, \a single and \a plural are copied 
+        /// \brief Translate a plural message form in constext, \a context, \a single and \a plural are copied
         ///
         template<typename CharType>
         inline basic_message<CharType> translate(   std::basic_string<CharType> const &context,
@@ -600,7 +592,7 @@ namespace boost {
         }
 
         ///
-        /// \brief Translate a plural message form, \a single and \a plural are copied 
+        /// \brief Translate a plural message form, \a single and \a plural are copied
         ///
 
         template<typename CharType>
@@ -613,8 +605,8 @@ namespace boost {
 
         /// @}
 
-        /// 
-        /// \anchor boost_locale_gettext_family \name Direct message translation functions family 
+        ///
+        /// \anchor boost_locale_gettext_family \name Direct message translation functions family
         ///
 
         ///
@@ -710,29 +702,29 @@ namespace boost {
         ///
         /// \cond INTERNAL
         ///
-        
+
         template<>
-        struct BOOST_LOCALE_DECL base_message_format<char> : public std::locale::facet 
+        struct BOOST_LOCALE_DECL base_message_format<char> : public std::locale::facet
         {
             base_message_format(size_t refs = 0) : std::locale::facet(refs)
             {
             }
             static std::locale::id id;
         };
-        
+
         template<>
-        struct BOOST_LOCALE_DECL base_message_format<wchar_t> : public std::locale::facet 
+        struct BOOST_LOCALE_DECL base_message_format<wchar_t> : public std::locale::facet
         {
             base_message_format(size_t refs = 0) : std::locale::facet(refs)
             {
             }
             static std::locale::id id;
         };
-        
+
         #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
 
         template<>
-        struct BOOST_LOCALE_DECL base_message_format<char16_t> : public std::locale::facet 
+        struct BOOST_LOCALE_DECL base_message_format<char16_t> : public std::locale::facet
         {
             base_message_format(size_t refs = 0) : std::locale::facet(refs)
             {
@@ -745,14 +737,14 @@ namespace boost {
         #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
 
         template<>
-        struct BOOST_LOCALE_DECL base_message_format<char32_t> : public std::locale::facet 
+        struct BOOST_LOCALE_DECL base_message_format<char32_t> : public std::locale::facet
         {
             base_message_format(size_t refs = 0) : std::locale::facet(refs)
             {
             }
             static std::locale::id id;
         };
-        
+
         #endif
 
         /// \endcond
@@ -781,17 +773,17 @@ namespace boost {
             /// \addtogroup manipulators
             ///
             /// @{
-            
+
             ///
             /// Manipulator for switching message domain in ostream,
             ///
             /// \note The returned object throws std::bad_cast if the I/O stream does not have \ref message_format facet installed
-            /// 
-            inline 
+            ///
+            inline
             #ifdef BOOST_LOCALE_DOXYGEN
             unspecified_type
             #else
-            details::set_domain 
+            details::set_domain
             #endif
             domain(std::string const &id)
             {
@@ -800,7 +792,7 @@ namespace boost {
             }
             /// @}
         } // as
-    } // locale 
+    } // locale
 } // boost
 
 #ifdef BOOST_MSVC
@@ -810,5 +802,4 @@ namespace boost {
 
 #endif
 
-// vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 

@@ -1,10 +1,9 @@
 //
-//  Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
 //
-//  Distributed under the Boost Software License, Version 1.0. (See
-//  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
-//
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
 #ifndef BOOST_LOCALE_BOUNDARY_BOUNDARY_POINT_HPP_INCLUDED
 #define BOOST_LOCALE_BOUNDARY_BOUNDARY_POINT_HPP_INCLUDED
 
@@ -19,13 +18,13 @@ namespace boundary {
     /// @{
 
     ///
-    /// \brief This class represents a boundary point in the text. 
+    /// \brief This class represents a boundary point in the text.
     ///
-    /// It represents a pair - an iterator and a rule that defines this 
+    /// It represents a pair - an iterator and a rule that defines this
     /// point.
     ///
     /// This type of object is dereference by the iterators of boundary_point_index. Using a rule()
-    /// member function you can get the reason why this specific boundary point was selected. 
+    /// member function you can get the reason why this specific boundary point was selected.
     ///
     /// For example, When you use a sentence boundary analysis, the (rule() & \ref sentence_term) != 0 means
     /// that this boundary point was selected because a sentence terminator (like .?!) was spotted
@@ -56,7 +55,7 @@ namespace boundary {
         /// Empty default constructor
         ///
         boundary_point() : rule_(0) {}
-        
+
         ///
         /// Create a new boundary_point using iterator \p and a rule \a r
         ///
@@ -82,7 +81,7 @@ namespace boundary {
         ///
         /// Fetch an iterator
         ///
-        iterator_type iterator() const 
+        iterator_type iterator() const
         {
             return iterator_;
         }
@@ -133,7 +132,7 @@ namespace boundary {
     private:
         iterator_type iterator_;
         rule_type rule_;
-       
+
     };
     ///
     /// Check if the boundary point \a r points to same location as an iterator \a l
@@ -153,7 +152,7 @@ namespace boundary {
     }
 
     /// @}
-    
+
     typedef boundary_point<std::string::const_iterator> sboundary_point;      ///< convenience typedef
     typedef boundary_point<std::wstring::const_iterator> wsboundary_point;    ///< convenience typedef
     #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
@@ -162,7 +161,7 @@ namespace boundary {
     #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
     typedef boundary_point<std::u32string::const_iterator> u32sboundary_point;///< convenience typedef
     #endif
-   
+
     typedef boundary_point<char const *> cboundary_point;                     ///< convenience typedef
     typedef boundary_point<wchar_t const *> wcboundary_point;                 ///< convenience typedef
     #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
@@ -171,7 +170,7 @@ namespace boundary {
     #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
     typedef boundary_point<char32_t const *> u32cboundary_point;              ///< convenience typedef
     #endif
-    
+
 
 } // boundary
 } // locale
@@ -180,4 +179,3 @@ namespace boundary {
 
 #endif
 
-// vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4

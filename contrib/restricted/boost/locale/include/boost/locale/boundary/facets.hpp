@@ -1,31 +1,27 @@
 //
-//  Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
 //
-//  Distributed under the Boost Software License, Version 1.0. (See
-//  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
-//
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
 #ifndef BOOST_LOCALE_BOUNDARY_FACETS_HPP_INCLUDED
 #define BOOST_LOCALE_BOUNDARY_FACETS_HPP_INCLUDED
 
-#include <boost/locale/config.hpp>
 #include <boost/locale/boundary/types.hpp>
+#include <locale>
+#include <vector>
+
 #ifdef BOOST_MSVC
 #  pragma warning(push)
 #  pragma warning(disable : 4275 4251 4231 4660)
 #endif
-#include <locale>
-#include <vector>
-
-
-
 
 namespace boost {
 
     namespace locale {
-        
+
         ///
-        /// \brief This namespae contains all operations required for boundary analysis of text
+        /// \brief This namespace contains all operations required for boundary analysis of text
         ///
         namespace boundary {
             ///
@@ -34,7 +30,7 @@ namespace boost {
             /// @{
             ///
 
-            
+
             ///
             /// \brief This structure is used for representing boundary point
             /// that follows the offset.
@@ -44,7 +40,7 @@ namespace boost {
                 ///
                 /// Create empty break point at beginning
                 ///
-                break_info() : 
+                break_info() :
                     offset(0),
                     rule(0)
                 {
@@ -60,15 +56,15 @@ namespace boost {
                 }
 
                 ///
-                /// Offset from the beggining of the text where a break occurs.
+                /// Offset from the beginning of the text where a break occurs.
                 ///
                 size_t offset;
                 ///
-                /// The identification of this break point according to 
+                /// The identification of this break point according to
                 /// various break types
                 ///
                 rule_type rule;
-               
+
                 ///
                 /// Compare two break points' offset. Allows to search with
                 /// standard algorithms over the index.
@@ -78,7 +74,7 @@ namespace boost {
                     return offset < other.offset;
                 }
             };
-            
+
             ///
             /// This type holds the analysis of the text - all its break points
             /// with marks
@@ -117,7 +113,7 @@ namespace boost {
                 /// Identification of this facet
                 ///
                 static std::locale::id id;
-                
+
                 #if defined (__SUNPRO_CC) && defined (_RWSTD_VER)
                 std::locale::id& __get_id (void) const { return id; }
                 #endif
@@ -131,19 +127,21 @@ namespace boost {
                 boundary_indexing(size_t refs=0) : std::locale::facet(refs)
                 {
                 }
+                ~boundary_indexing();
                 virtual index_type map(boundary_type t,char const *begin,char const *end) const = 0;
                 static std::locale::id id;
                 #if defined (__SUNPRO_CC) && defined (_RWSTD_VER)
                 std::locale::id& __get_id (void) const { return id; }
                 #endif
             };
-            
+
             template<>
             class BOOST_LOCALE_DECL boundary_indexing<wchar_t> : public std::locale::facet {
             public:
                 boundary_indexing(size_t refs=0) : std::locale::facet(refs)
                 {
                 }
+                ~boundary_indexing();
                 virtual index_type map(boundary_type t,wchar_t const *begin,wchar_t const *end) const = 0;
 
                 static std::locale::id id;
@@ -151,7 +149,7 @@ namespace boost {
                 std::locale::id& __get_id (void) const { return id; }
                 #endif
             };
-            
+
             #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
             template<>
             class BOOST_LOCALE_DECL boundary_indexing<char16_t> : public std::locale::facet {
@@ -159,6 +157,7 @@ namespace boost {
                 boundary_indexing(size_t refs=0) : std::locale::facet(refs)
                 {
                 }
+                ~boundary_indexing();
                 virtual index_type map(boundary_type t,char16_t const *begin,char16_t const *end) const = 0;
                 static std::locale::id id;
                 #if defined (__SUNPRO_CC) && defined (_RWSTD_VER)
@@ -166,7 +165,7 @@ namespace boost {
                 #endif
             };
             #endif
-            
+
             #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
             template<>
             class BOOST_LOCALE_DECL boundary_indexing<char32_t> : public std::locale::facet {
@@ -174,6 +173,7 @@ namespace boost {
                 boundary_indexing(size_t refs=0) : std::locale::facet(refs)
                 {
                 }
+                ~boundary_indexing();
                 virtual index_type map(boundary_type t,char32_t const *begin,char32_t const *end) const = 0;
                 static std::locale::id id;
                 #if defined (__SUNPRO_CC) && defined (_RWSTD_VER)
@@ -200,4 +200,3 @@ namespace boost {
 #endif
 
 #endif
-// vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4

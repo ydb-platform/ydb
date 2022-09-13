@@ -1,21 +1,20 @@
 //
-//  Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
 //
-//  Distributed under the Boost Software License, Version 1.0. (See
-//  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
-//
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
 #ifndef BOOST_LOCALE_DATE_TIME_FACET_HPP_INCLUDED
 #define BOOST_LOCALE_DATE_TIME_FACET_HPP_INCLUDED
 
 #include <boost/locale/config.hpp>
+#include <boost/cstdint.hpp>
+#include <locale>
+
 #ifdef BOOST_MSVC
 #  pragma warning(push)
 #  pragma warning(disable : 4275 4251 4231 4660)
 #endif
-
-#include <boost/cstdint.hpp>
-#include <locale>
 
 namespace boost {
     namespace locale {
@@ -41,7 +40,7 @@ namespace boost {
                                                 ///< If first day of week is Monday and the current day is Tuesday then setting
                                                 ///< the value to Sunday (1) would forward the date by 5 days forward and not backward
                                                 ///< by two days as it could be expected if the numbers were taken as is.
-                    day_of_week_in_month,       ///< Original number of the day of the week in month. For example 1st Sunday, 
+                    day_of_week_in_month,       ///< Original number of the day of the week in month. For example 1st Sunday,
                                                 ///< 2nd Sunday, etc. in Gregorian [1..5]
                     day_of_week_local,          ///< Local day of week, for example in France Monday is 1, in US Sunday is 1, [1..7]
                     hour,                       ///< 24 clock hour [0..23]
@@ -72,13 +71,13 @@ namespace boost {
                 ///
                 /// Create a period of specific type, default is invalid.
                 ///
-                period_type(marks::period_mark m = marks::invalid) : mark_(m) 
+                period_type(marks::period_mark m = marks::invalid) : mark_(m)
                 {
                 }
-               
+
                 ///
                 /// Get the value of marks::period_mark it was created with.
-                /// 
+                ///
                 marks::period_mark mark() const
                 {
                     return mark_;
@@ -167,7 +166,7 @@ namespace boost {
             ///
             /// If normalize() is not called after set_value, the behavior is undefined
             ///
-            virtual void set_value(period::marks::period_mark p,int value) = 0;
+            virtual void set_value(period::marks::period_mark m,int value) = 0;
 
             ///
             /// Recalculate all periods after setting them, should be called after use of set_value() function.
@@ -177,7 +176,7 @@ namespace boost {
             ///
             /// Get specific value for period \a p according to a value_type \a v
             ///
-            virtual int get_value(period::marks::period_mark p,value_type v) const = 0;
+            virtual int get_value(period::marks::period_mark m,value_type v) const = 0;
 
             ///
             /// Set current time point
@@ -201,12 +200,12 @@ namespace boost {
             /// Adjust period's \a p value by \a difference items using a update_type \a u.
             /// Note: not all values are adjustable
             ///
-            virtual void adjust_value(period::marks::period_mark p,update_type u,int difference) = 0;
+            virtual void adjust_value(period::marks::period_mark m,update_type u,int difference) = 0;
 
             ///
             /// Calculate the difference between this calendar  and \a other in \a p units
             ///
-            virtual int difference(abstract_calendar const *other,period::marks::period_mark p) const = 0;
+            virtual int difference(abstract_calendar const *other,period::marks::period_mark m) const = 0;
 
             ///
             /// Set time zone, empty - use system
@@ -222,10 +221,7 @@ namespace boost {
             ///
             virtual bool same(abstract_calendar const *other) const = 0;
 
-            virtual ~abstract_calendar()
-            {
-            }
-
+            virtual ~abstract_calendar() {}
         };
 
         ///
@@ -236,7 +232,7 @@ namespace boost {
             ///
             /// Basic constructor
             ///
-            calendar_facet(size_t refs = 0) : std::locale::facet(refs) 
+            calendar_facet(size_t refs = 0) : std::locale::facet(refs)
             {
             }
             ///
@@ -259,5 +255,4 @@ namespace boost {
 
 
 #endif
-// vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 

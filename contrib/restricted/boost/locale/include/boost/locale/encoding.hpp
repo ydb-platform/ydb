@@ -1,23 +1,21 @@
 //
-//  Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
 //
-//  Distributed under the Boost Software License, Version 1.0. (See
-//  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
-//
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
 #ifndef BOOST_LOCALE_ENCODING_HPP_INCLUDED
 #define BOOST_LOCALE_ENCODING_HPP_INCLUDED
 
 #include <boost/locale/config.hpp>
-#ifdef BOOST_MSVC
-#  pragma warning(push)
-#  pragma warning(disable : 4275 4251 4231 4660)
-#endif
 #include <boost/locale/info.hpp>
 #include <boost/locale/encoding_errors.hpp>
 #include <boost/locale/encoding_utf.hpp>
 
-
+#ifdef BOOST_MSVC
+#  pragma warning(push)
+#  pragma warning(disable : 4275 4251 4231 4660)
+#endif
 
 namespace boost {
     namespace locale {
@@ -47,7 +45,7 @@ namespace boost {
             /// convert string to UTF string from text in range [begin,end) encoded according to locale \a loc according to policy \a how
             ///
             /// \note throws std::bad_cast if the loc does not have \ref info facet installed
-            /// 
+            ///
             template<typename CharType>
             std::basic_string<CharType> to_utf(char const *begin,char const *end,std::locale const &loc,method_type how=default_method)
             {
@@ -58,7 +56,7 @@ namespace boost {
             /// convert UTF text in range [begin,end) to a text encoded according to locale \a loc according to policy \a how
             ///
             /// \note throws std::bad_cast if the loc does not have \ref info facet installed
-            /// 
+            ///
             template<typename CharType>
             std::string from_utf(CharType const *begin,CharType const *end,std::locale const &loc,method_type how=default_method)
             {
@@ -68,7 +66,7 @@ namespace boost {
             ///
             /// convert a string \a text encoded with \a charset to UTF string
             ///
-            
+
             template<typename CharType>
             std::basic_string<CharType> to_utf(std::string const &text,std::string const &charset,method_type how=default_method)
             {
@@ -91,7 +89,7 @@ namespace boost {
             std::basic_string<CharType> to_utf(char const *text,std::string const &charset,method_type how=default_method)
             {
                 char const *text_end = text;
-                while(*text_end) 
+                while(*text_end)
                     text_end++;
                 return to_utf<CharType>(text,text_end,charset,how);
             }
@@ -103,7 +101,7 @@ namespace boost {
             std::string from_utf(CharType const *text,std::string const &charset,method_type how=default_method)
             {
                 CharType const *text_end = text;
-                while(*text_end) 
+                while(*text_end)
                     text_end++;
                 return from_utf(text,text_end,charset,how);
             }
@@ -112,7 +110,7 @@ namespace boost {
             /// Convert a \a text in locale encoding given by \a loc to UTF
             ///
             /// \note throws std::bad_cast if the loc does not have \ref info facet installed
-            /// 
+            ///
             template<typename CharType>
             std::basic_string<CharType> to_utf(std::string const &text,std::locale const &loc,method_type how=default_method)
             {
@@ -123,7 +121,7 @@ namespace boost {
             /// Convert a \a text in UTF to locale encoding given by \a loc
             ///
             /// \note throws std::bad_cast if the loc does not have \ref info facet installed
-            /// 
+            ///
             template<typename CharType>
             std::string from_utf(std::basic_string<CharType> const &text,std::locale const &loc,method_type how=default_method)
             {
@@ -134,12 +132,12 @@ namespace boost {
             /// Convert a \a text in locale encoding given by \a loc to UTF
             ///
             /// \note throws std::bad_cast if the loc does not have \ref info facet installed
-            /// 
+            ///
             template<typename CharType>
             std::basic_string<CharType> to_utf(char const *text,std::locale const &loc,method_type how=default_method)
             {
                 char const *text_end = text;
-                while(*text_end) 
+                while(*text_end)
                     text_end++;
                 return to_utf<CharType>(text,text_end,loc,how);
             }
@@ -148,12 +146,12 @@ namespace boost {
             /// Convert a \a text in UTF to locale encoding given by \a loc
             ///
             /// \note throws std::bad_cast if the loc does not have \ref info facet installed
-            /// 
+            ///
             template<typename CharType>
             std::string from_utf(CharType const *text,std::locale const &loc,method_type how=default_method)
             {
                 CharType const *text_end = text;
-                while(*text_end) 
+                while(*text_end)
                     text_end++;
                 return from_utf(text,text_end,loc,how);
             }
@@ -162,7 +160,7 @@ namespace boost {
             ///
             /// Convert a text in range [begin,end) to \a to_encoding from \a from_encoding
             ///
-            
+
             BOOST_LOCALE_DECL
             std::string between(char const *begin,
                                 char const *end,
@@ -173,7 +171,7 @@ namespace boost {
             ///
             /// Convert a \a text to \a to_encoding from \a from_encoding
             ///
-            
+
             inline
             std::string between(char const *text,
                                 std::string const &to_encoding,
@@ -197,7 +195,7 @@ namespace boost {
             {
                 return boost::locale::conv::between(text.c_str(),text.c_str()+text.size(),to_encoding,from_encoding,how);
             }
-          
+
             /// \cond INTERNAL
 
             template<>
@@ -244,5 +242,4 @@ namespace boost {
 
 #endif
 
-// vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 

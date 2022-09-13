@@ -1,32 +1,29 @@
 //
-//  Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
 //
-//  Distributed under the Boost Software License, Version 1.0. (See
-//  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
-//
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
 #ifndef BOOST_LOCALE_DATE_TIME_HPP_INCLUDED
 #define BOOST_LOCALE_DATE_TIME_HPP_INCLUDED
 
-#include <boost/locale/config.hpp>
+#include <boost/locale/date_time_facet.hpp>
+#include <boost/locale/formatting.hpp>
+#include <boost/locale/hold_ptr.hpp>
+#include <boost/locale/time_zone.hpp>
+#include <locale>
+#include <stdexcept>
+#include <vector>
+
 #ifdef BOOST_MSVC
 #  pragma warning(push)
 #  pragma warning(disable : 4275 4251 4231 4660)
 #endif
 
-#include <boost/locale/hold_ptr.hpp>
-#include <boost/locale/date_time_facet.hpp>
-#include <boost/locale/formatting.hpp>
-#include <boost/locale/time_zone.hpp>
-#include <locale>
-#include <vector>
-#include <stdexcept>
-
-
 namespace boost {
     namespace locale {
         ///
-        /// \defgroup date_time Date, Time, Timezone and Calendar manipulations 
+        /// \defgroup date_time Date, Time, Timezone and Calendar manipulations
         ///
         /// This module provides various calendar, timezone and date time services
         ///
@@ -40,7 +37,7 @@ namespace boost {
         public:
             ///
             /// Constructor of date_time_error class
-            /// 
+            ///
             date_time_error(std::string const &e) : std::runtime_error(e) {}
         };
 
@@ -52,8 +49,8 @@ namespace boost {
         /// Usually obtained as product of period_type and integer or
         /// my calling a representative functions
         /// For example day()*3 == date_time_period(day(),3) == day(3)
-        /// 
-        struct date_time_period 
+        ///
+        struct date_time_period
         {
             period::period_type type;   ///< The type of period, i.e. era, year, day etc.
             int value;                  ///< The value the actual number of \a periods
@@ -65,7 +62,7 @@ namespace boost {
             /// Operator -, switches the sign of period
             ///
             date_time_period operator-() const { return date_time_period(type,-value); }
-            
+
             ///
             /// Constructor that creates date_time_period from period_type \a f and a value \a v -- default 1.
             ///
@@ -111,7 +108,7 @@ namespace boost {
             ///
             inline period_type day_of_week(){ return period_type(marks::day_of_week); }
             ///
-            ///  Get period_type for: Original number of the day of the week in month. For example 1st Sunday, 
+            ///  Get period_type for: Original number of the day of the week in month. For example 1st Sunday,
             /// 2nd Sunday, etc. in Gregorian [1..5]
             ///
             inline period_type day_of_week_in_month(){ return period_type(marks::day_of_week_in_month); }
@@ -155,27 +152,27 @@ namespace boost {
             ///
             ///  Get date_time_period for: Era i.e. AC, BC in Gregorian and Julian calendar, range [0,1]
             ///
-            inline date_time_period era(int v) { return date_time_period(era(),v); } 
+            inline date_time_period era(int v) { return date_time_period(era(),v); }
             ///
             ///  Get date_time_period for: Year, it is calendar specific, for example 2011 in Gregorian calendar.
             ///
-            inline date_time_period year(int v) { return date_time_period(year(),v); } 
+            inline date_time_period year(int v) { return date_time_period(year(),v); }
             ///
             ///  Get date_time_period for: Extended year for Gregorian/Julian calendars, where 1 BC == 0, 2 BC == -1.
             ///
-            inline date_time_period extended_year(int v) { return date_time_period(extended_year(),v); } 
+            inline date_time_period extended_year(int v) { return date_time_period(extended_year(),v); }
             ///
             ///  Get date_time_period for: The month of year, calendar specific, in Gregorian [0..11]
             ///
-            inline date_time_period month(int v) { return date_time_period(month(),v); } 
+            inline date_time_period month(int v) { return date_time_period(month(),v); }
             ///
             ///  Get date_time_period for: The day of month, calendar specific, in Gregorian [1..31]
             ///
-            inline date_time_period day(int v) { return date_time_period(day(),v); } 
+            inline date_time_period day(int v) { return date_time_period(day(),v); }
             ///
             ///  Get date_time_period for: The number of day in year, starting from 1, in Gregorian  [1..366]
             ///
-            inline date_time_period day_of_year(int v) { return date_time_period(day_of_year(),v); } 
+            inline date_time_period day_of_year(int v) { return date_time_period(day_of_year(),v); }
             ///
             ///  Get date_time_period for: Day of week, Sunday=1, Monday=2,..., Saturday=7.
             ///
@@ -184,48 +181,48 @@ namespace boost {
             /// the value to Sunday (1) would forward the date by 5 days forward and not backward
             /// by two days as it could be expected if the numbers were taken as is.
             ///
-            inline date_time_period day_of_week(int v) { return date_time_period(day_of_week(),v); } 
+            inline date_time_period day_of_week(int v) { return date_time_period(day_of_week(),v); }
             ///
-            ///  Get date_time_period for: Original number of the day of the week in month. For example 1st Sunday, 
+            ///  Get date_time_period for: Original number of the day of the week in month. For example 1st Sunday,
             /// 2nd Sunday, etc. in Gregorian [1..5]
             ///
-            inline date_time_period day_of_week_in_month(int v) { return date_time_period(day_of_week_in_month(),v); } 
+            inline date_time_period day_of_week_in_month(int v) { return date_time_period(day_of_week_in_month(),v); }
             ///
             ///  Get date_time_period for: Local day of week, for example in France Monday is 1, in US Sunday is 1, [1..7]
             ///
-            inline date_time_period day_of_week_local(int v) { return date_time_period(day_of_week_local(),v); } 
+            inline date_time_period day_of_week_local(int v) { return date_time_period(day_of_week_local(),v); }
             ///
             ///  Get date_time_period for: 24 clock hour [0..23]
             ///
-            inline date_time_period hour(int v) { return date_time_period(hour(),v); } 
+            inline date_time_period hour(int v) { return date_time_period(hour(),v); }
             ///
             ///  Get date_time_period for: 12 clock hour [0..11]
             ///
-            inline date_time_period hour_12(int v) { return date_time_period(hour_12(),v); } 
+            inline date_time_period hour_12(int v) { return date_time_period(hour_12(),v); }
             ///
             ///  Get date_time_period for: am or pm marker [0..1]
             ///
-            inline date_time_period am_pm(int v) { return date_time_period(am_pm(),v); } 
+            inline date_time_period am_pm(int v) { return date_time_period(am_pm(),v); }
             ///
             ///  Get date_time_period for: minute [0..59]
             ///
-            inline date_time_period minute(int v) { return date_time_period(minute(),v); } 
+            inline date_time_period minute(int v) { return date_time_period(minute(),v); }
             ///
             ///  Get date_time_period for: second [0..59]
             ///
-            inline date_time_period second(int v) { return date_time_period(second(),v); } 
+            inline date_time_period second(int v) { return date_time_period(second(),v); }
             ///
             ///  Get date_time_period for: The week number in the year
             ///
-            inline date_time_period week_of_year(int v) { return date_time_period(week_of_year(),v); } 
+            inline date_time_period week_of_year(int v) { return date_time_period(week_of_year(),v); }
             ///
             ///  Get date_time_period for: The week number within current month
             ///
-            inline date_time_period week_of_month(int v) { return date_time_period(week_of_month(),v); } 
+            inline date_time_period week_of_month(int v) { return date_time_period(week_of_month(),v); }
             ///
             ///  Get date_time_period for: First day of week, constant, for example Sunday in US = 1, Monday in France = 2
             ///
-            inline date_time_period first_day_of_week(int v) { return date_time_period(first_day_of_week(),v); } 
+            inline date_time_period first_day_of_week(int v) { return date_time_period(first_day_of_week(),v); }
 
             ///
             /// Get predefined constant for January
@@ -264,7 +261,7 @@ namespace boost {
             ///
             inline date_time_period september() { return date_time_period(month(),8); }
             ///
-            /// Get predefined constant for October 
+            /// Get predefined constant for October
             ///
             inline date_time_period october() { return date_time_period(month(),9); }
             ///
@@ -281,7 +278,7 @@ namespace boost {
             ///
             inline date_time_period sunday() { return date_time_period(day_of_week(),1); }
             ///
-            /// Get predefined constant for Monday 
+            /// Get predefined constant for Monday
             ///
             inline date_time_period monday() { return date_time_period(day_of_week(),2); }
             ///
@@ -316,7 +313,7 @@ namespace boost {
             ///
             /// convert period_type to date_time_period(f,1)
             ///
-            inline date_time_period operator+(period::period_type f) 
+            inline date_time_period operator+(period::period_type f)
             {
                 return date_time_period(f);
             }
@@ -329,7 +326,7 @@ namespace boost {
             }
 
             ///
-            /// Create date_time_period of type \a f with value \a v. 
+            /// Create date_time_period of type \a f with value \a v.
             ///
             template<typename T>
             date_time_period operator*(period::period_type f,T v)
@@ -338,7 +335,7 @@ namespace boost {
             }
 
             ///
-            /// Create date_time_period of type \a f with value \a v. 
+            /// Create date_time_period of type \a f with value \a v.
             ///
             template<typename T>
             date_time_period operator*(T v,period::period_type f)
@@ -346,7 +343,7 @@ namespace boost {
                 return date_time_period(f,v);
             }
             ///
-            /// Create date_time_period of type \a f with value \a v. 
+            /// Create date_time_period of type \a f with value \a v.
             ///
             template<typename T>
             date_time_period operator*(T v,date_time_period f)
@@ -355,7 +352,7 @@ namespace boost {
             }
 
             ///
-            /// Create date_time_period of type \a f with value \a v. 
+            /// Create date_time_period of type \a f with value \a v.
             ///
             template<typename T>
             date_time_period operator*(date_time_period f,T v)
@@ -368,14 +365,14 @@ namespace boost {
 
 
         ///
-        /// \brief this class that represents a set of periods, 
+        /// \brief this class that represents a set of periods,
         ///
         /// It is generally created by operations on periods:
         /// 1995*year + 3*month + 1*day. Note: operations are not commutative.
         ///
         class date_time_period_set {
         public:
-            
+
             ///
             /// Default constructor - empty set
             ///
@@ -425,7 +422,7 @@ namespace boost {
             ///
             /// Get item at position \a n the set, n should be in range [0,size)
             ///
-            date_time_period const &operator[](size_t n) const 
+            date_time_period const &operator[](size_t n) const
             {
                 if(n >= size())
                     throw std::out_of_range("Invalid index to date_time_period");
@@ -439,9 +436,9 @@ namespace boost {
             std::vector<date_time_period> periods_;
         };
 
-        
+
         ///
-        /// Append two periods sets. Note this operator is not commutative 
+        /// Append two periods sets. Note this operator is not commutative
         ///
         inline date_time_period_set operator+(date_time_period_set const &a,date_time_period_set const &b)
         {
@@ -450,7 +447,7 @@ namespace boost {
                 s.add(b[i]);
             return s;
         }
-        
+
         ///
         /// Append two period sets when all periods of set \b change their sign
         ///
@@ -464,7 +461,7 @@ namespace boost {
 
 
         ///
-        /// \brief this class provides an access to general calendar information. 
+        /// \brief this class provides an access to general calendar information.
         ///
         /// This information is not connected to specific date but generic to locale, and timezone.
         /// It is used in obtaining general information about calendar and is essential for creation of
@@ -475,34 +472,34 @@ namespace boost {
 
             ///
             /// Create calendar taking locale and timezone information from ios_base instance.
-            /// 
+            ///
             /// \note throws std::bad_cast if ios does not have a locale with installed \ref calendar_facet
             /// facet installed
-            /// 
+            ///
             calendar(std::ios_base &ios);
             ///
             /// Create calendar with locale \a l and time_zone \a zone
             ///
             /// \note throws std::bad_cast if loc does not have \ref calendar_facet facet installed
-            /// 
+            ///
             calendar(std::locale const &l,std::string const &zone);
             ///
             /// Create calendar with locale \a l and default timezone
             ///
             /// \note throws std::bad_cast if loc does not have \ref calendar_facet facet installed
-            /// 
+            ///
             calendar(std::locale const &l);
             ///
             /// Create calendar with default locale and timezone \a zone
             ///
             /// \note throws std::bad_cast if global locale does not have \ref calendar_facet facet installed
-            /// 
+            ///
             calendar(std::string const &zone);
             ///
-            /// Create calendar with default locale and timezone 
+            /// Create calendar with default locale and timezone
             ///
             /// \note throws std::bad_cast if global locale does not have \ref calendar_facet facet installed
-            /// 
+            ///
             calendar();
             ~calendar();
 
@@ -586,7 +583,7 @@ namespace boost {
         /// some_time = year * 1995 that sets the year to 1995.
         ///
         ///
-        
+
         class BOOST_LOCALE_DECL date_time {
         public:
 
@@ -594,7 +591,7 @@ namespace boost {
             /// Dafault constructor, uses default calendar initialized date_time object to current time.
             ///
             /// \note throws std::bad_cast if the global locale does not have \ref calendar_facet facet installed
-            /// 
+            ///
             date_time();
             ///
             /// copy date_time
@@ -614,7 +611,7 @@ namespace boost {
             /// Create a date_time object using POSIX time \a time and default calendar
             ///
             /// \note throws std::bad_cast if the global locale does not have \ref calendar_facet facet installed
-            /// 
+            ///
             date_time(double time);
             ///
             /// Create a date_time object using POSIX time \a time and calendar \a cal
@@ -624,21 +621,21 @@ namespace boost {
             /// Create a date_time object using calendar \a cal and initializes it to current time.
             ///
             date_time(calendar const &cal);
-            
+
             ///
             /// Create a date_time object using default calendar and define values given in \a set
             ///
             /// \note throws std::bad_cast if the global locale does not have \ref calendar_facet facet installed
-            /// 
+            ///
             date_time(date_time_period_set const &set);
             ///
             /// Create a date_time object using calendar \a cal and define values given in \a set
             ///
             date_time(date_time_period_set const &set,calendar const &cal);
 
-           
+
             ///
-            /// assign values to various periods in set \a f  
+            /// assign values to various periods in set \a f
             ///
             date_time const &operator=(date_time_period_set const &f);
 
@@ -695,7 +692,7 @@ namespace boost {
             ///
             date_time operator<<(period::period_type f) const
             {
-                return *this<<date_time_period(f);
+                return *this << date_time_period(f);
             }
 
             ///
@@ -711,14 +708,14 @@ namespace boost {
             ///
             date_time const &operator<<=(period::period_type f)
             {
-                return *this<<=date_time_period(f);
+                return *this <<= date_time_period(f);
             }
             ///
             /// roll backward a date by single period f.
             ///
             date_time const &operator>>=(period::period_type f)
             {
-                return *this>>=date_time_period(f);
+                return *this >>= date_time_period(f);
             }
 
             ///
@@ -849,7 +846,7 @@ namespace boost {
             int maximum(period::period_type f) const;
 
             ///
-            /// Check if *this time point is in daylight saving time 
+            /// Check if *this time point is in daylight saving time
             ///
             bool is_in_daylight_saving_time() const;
 
@@ -865,22 +862,22 @@ namespace boost {
         /// For example:
         /// \code
         ///  date_time now(time(0),hebrew_calendar)
-        ///  cout << "Year: " << period::year(now) <<" Full Date:"<< now;
+        ///  std::cout << "Year: " << period::year(now) << " Full Date:" << now;
         /// \endcode
         ///
         /// The output may be Year:5770 Full Date:Jan 1, 2010
-        /// 
+        ///
         template<typename CharType>
         std::basic_ostream<CharType> &operator<<(std::basic_ostream<CharType> &out,date_time const &t)
         {
             double time_point = t.time();
             uint64_t display_flags = ios_info::get(out).display_flags();
             if  (
-                    display_flags == flags::date 
-                    || display_flags == flags::time 
-                    || display_flags == flags::datetime 
+                    display_flags == flags::date
+                    || display_flags == flags::time
+                    || display_flags == flags::datetime
                     || display_flags == flags::strftime
-                ) 
+                )
             {
                 out << time_point;
             }
@@ -903,11 +900,11 @@ namespace boost {
             double v;
             uint64_t display_flags = ios_info::get(in).display_flags();
             if  (
-                    display_flags == flags::date 
-                    || display_flags == flags::time 
-                    || display_flags == flags::datetime 
+                    display_flags == flags::date
+                    || display_flags == flags::time
+                    || display_flags == flags::datetime
                     || display_flags == flags::strftime
-                ) 
+                )
             {
                 in >> v;
             }
@@ -921,9 +918,13 @@ namespace boost {
             return in;
         }
 
+#ifdef BOOST_MSVC
+#pragma warning(push)
+#pragma warning(disable:4512) //assignment operator could not be generated
+#endif
         ///
         /// \brief This class represents a period: a pair of two date_time objects.
-        /// 
+        ///
         /// It is generally used as syntactic sugar to calculate difference between two dates.
         ///
         /// Note: it stores references to the original objects, so it is not recommended to be used
@@ -935,13 +936,13 @@ namespace boost {
             ///
             /// Create an object were \a first represents earlier point on time line and \a second is later
             /// point.
-            /// 
+            ///
             date_time_duration(date_time const &first,date_time const &second) :
                 s_(first),
                 e_(second)
             {
             }
-            
+
             ///
             /// find a difference in terms of period_type \a f
             ///
@@ -970,6 +971,9 @@ namespace boost {
             date_time const &s_;
             date_time const &e_;
         };
+#ifdef BOOST_MSVC
+#pragma warning(pop)
+#endif
 
         ///
         /// Calculates the difference between two dates, the left operand is a later point on time line.
@@ -980,32 +984,32 @@ namespace boost {
             return date_time_duration(earlier,later);
         }
 
-        
+
         namespace period {
             ///
             ///  Extract from date_time numerical value of Era i.e. AC, BC in Gregorian and Julian calendar, range [0,1]
             ///
-            inline int era(date_time const &dt) { return dt.get(era()); } 
+            inline int era(date_time const &dt) { return dt.get(era()); }
             ///
             ///  Extract from date_time numerical value of Year, it is calendar specific, for example 2011 in Gregorian calendar.
             ///
-            inline int year(date_time const &dt) { return dt.get(year()); } 
+            inline int year(date_time const &dt) { return dt.get(year()); }
             ///
             ///  Extract from date_time numerical value of Extended year for Gregorian/Julian calendars, where 1 BC == 0, 2 BC == -1.
             ///
-            inline int extended_year(date_time const &dt) { return dt.get(extended_year()); } 
+            inline int extended_year(date_time const &dt) { return dt.get(extended_year()); }
             ///
             ///  Extract from date_time numerical value of The month of year, calendar specific, in Gregorian [0..11]
             ///
-            inline int month(date_time const &dt) { return dt.get(month()); } 
+            inline int month(date_time const &dt) { return dt.get(month()); }
             ///
             ///  Extract from date_time numerical value of The day of month, calendar specific, in Gregorian [1..31]
             ///
-            inline int day(date_time const &dt) { return dt.get(day()); } 
+            inline int day(date_time const &dt) { return dt.get(day()); }
             ///
             ///  Extract from date_time numerical value of The number of day in year, starting from 1, in Gregorian  [1..366]
             ///
-            inline int day_of_year(date_time const &dt) { return dt.get(day_of_year()); } 
+            inline int day_of_year(date_time const &dt) { return dt.get(day_of_year()); }
             ///
             ///  Extract from date_time numerical value of Day of week, Sunday=1, Monday=2,..., Saturday=7.
             ///
@@ -1014,121 +1018,121 @@ namespace boost {
             /// the value to Sunday (1) would forward the date by 5 days forward and not backward
             /// by two days as it could be expected if the numbers were taken as is.
             ///
-            inline int day_of_week(date_time const &dt) { return dt.get(day_of_week()); } 
+            inline int day_of_week(date_time const &dt) { return dt.get(day_of_week()); }
             ///
-            ///  Extract from date_time numerical value of Original number of the day of the week in month. For example 1st Sunday, 
+            ///  Extract from date_time numerical value of Original number of the day of the week in month. For example 1st Sunday,
             /// 2nd Sunday, etc. in Gregorian [1..5]
             ///
-            inline int day_of_week_in_month(date_time const &dt) { return dt.get(day_of_week_in_month()); } 
+            inline int day_of_week_in_month(date_time const &dt) { return dt.get(day_of_week_in_month()); }
             ///
             ///  Extract from date_time numerical value of Local day of week, for example in France Monday is 1, in US Sunday is 1, [1..7]
             ///
-            inline int day_of_week_local(date_time const &dt) { return dt.get(day_of_week_local()); } 
+            inline int day_of_week_local(date_time const &dt) { return dt.get(day_of_week_local()); }
             ///
             ///  Extract from date_time numerical value of 24 clock hour [0..23]
             ///
-            inline int hour(date_time const &dt) { return dt.get(hour()); } 
+            inline int hour(date_time const &dt) { return dt.get(hour()); }
             ///
             ///  Extract from date_time numerical value of 12 clock hour [0..11]
             ///
-            inline int hour_12(date_time const &dt) { return dt.get(hour_12()); } 
+            inline int hour_12(date_time const &dt) { return dt.get(hour_12()); }
             ///
             ///  Extract from date_time numerical value of am or pm marker [0..1]
             ///
-            inline int am_pm(date_time const &dt) { return dt.get(am_pm()); } 
+            inline int am_pm(date_time const &dt) { return dt.get(am_pm()); }
             ///
             ///  Extract from date_time numerical value of minute [0..59]
             ///
-            inline int minute(date_time const &dt) { return dt.get(minute()); } 
+            inline int minute(date_time const &dt) { return dt.get(minute()); }
             ///
             ///  Extract from date_time numerical value of second [0..59]
             ///
-            inline int second(date_time const &dt) { return dt.get(second()); } 
+            inline int second(date_time const &dt) { return dt.get(second()); }
             ///
             ///  Extract from date_time numerical value of The week number in the year
             ///
-            inline int week_of_year(date_time const &dt) { return dt.get(week_of_year()); } 
+            inline int week_of_year(date_time const &dt) { return dt.get(week_of_year()); }
             ///
             ///  Extract from date_time numerical value of The week number within current month
             ///
-            inline int week_of_month(date_time const &dt) { return dt.get(week_of_month()); } 
+            inline int week_of_month(date_time const &dt) { return dt.get(week_of_month()); }
             ///
             ///  Extract from date_time numerical value of First day of week, constant, for example Sunday in US = 1, Monday in France = 2
             ///
-            inline int first_day_of_week(date_time const &dt) { return dt.get(first_day_of_week()); } 
-            
+            inline int first_day_of_week(date_time const &dt) { return dt.get(first_day_of_week()); }
+
             ///
             ///  Extract from date_time_duration numerical value of duration in  Era i.e. AC, BC in Gregorian and Julian calendar, range [0,1]
             ///
-            inline int era(date_time_duration const &dt) { return dt.get(era()); } 
+            inline int era(date_time_duration const &dt) { return dt.get(era()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in years
             ///
-            inline int year(date_time_duration const &dt) { return dt.get(year()); } 
+            inline int year(date_time_duration const &dt) { return dt.get(year()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in extended years (for Gregorian/Julian calendars, where 1 BC == 0, 2 BC == -1).
             ///
-            inline int extended_year(date_time_duration const &dt) { return dt.get(extended_year()); } 
+            inline int extended_year(date_time_duration const &dt) { return dt.get(extended_year()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in months
             ///
-            inline int month(date_time_duration const &dt) { return dt.get(month()); } 
+            inline int month(date_time_duration const &dt) { return dt.get(month()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in days of month
             ///
-            inline int day(date_time_duration const &dt) { return dt.get(day()); } 
+            inline int day(date_time_duration const &dt) { return dt.get(day()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in days of year
             ///
-            inline int day_of_year(date_time_duration const &dt) { return dt.get(day_of_year()); } 
+            inline int day_of_year(date_time_duration const &dt) { return dt.get(day_of_year()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in days of week
             ///
-            inline int day_of_week(date_time_duration const &dt) { return dt.get(day_of_week()); } 
+            inline int day_of_week(date_time_duration const &dt) { return dt.get(day_of_week()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in original number of the day of the week in month
             ///
-            inline int day_of_week_in_month(date_time_duration const &dt) { return dt.get(day_of_week_in_month()); } 
+            inline int day_of_week_in_month(date_time_duration const &dt) { return dt.get(day_of_week_in_month()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in local day of week
             ///
-            inline int day_of_week_local(date_time_duration const &dt) { return dt.get(day_of_week_local()); } 
+            inline int day_of_week_local(date_time_duration const &dt) { return dt.get(day_of_week_local()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in hours
             ///
-            inline int hour(date_time_duration const &dt) { return dt.get(hour()); } 
+            inline int hour(date_time_duration const &dt) { return dt.get(hour()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in  12 clock hours
             ///
-            inline int hour_12(date_time_duration const &dt) { return dt.get(hour_12()); } 
+            inline int hour_12(date_time_duration const &dt) { return dt.get(hour_12()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in  am or pm markers
             ///
-            inline int am_pm(date_time_duration const &dt) { return dt.get(am_pm()); } 
+            inline int am_pm(date_time_duration const &dt) { return dt.get(am_pm()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in  minutes
             ///
-            inline int minute(date_time_duration const &dt) { return dt.get(minute()); } 
+            inline int minute(date_time_duration const &dt) { return dt.get(minute()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in  seconds
             ///
-            inline int second(date_time_duration const &dt) { return dt.get(second()); } 
+            inline int second(date_time_duration const &dt) { return dt.get(second()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in the week number in the year
             ///
-            inline int week_of_year(date_time_duration const &dt) { return dt.get(week_of_year()); } 
+            inline int week_of_year(date_time_duration const &dt) { return dt.get(week_of_year()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in  The week number within current month
             ///
-            inline int week_of_month(date_time_duration const &dt) { return dt.get(week_of_month()); } 
+            inline int week_of_month(date_time_duration const &dt) { return dt.get(week_of_month()); }
             ///
             ///  Extract from date_time_duration numerical value of duration in the first day of week
             ///
-            inline int first_day_of_week(date_time_duration const &dt) { return dt.get(first_day_of_week()); } 
+            inline int first_day_of_week(date_time_duration const &dt) { return dt.get(first_day_of_week()); }
 
 
         }
-        
+
         /// @}
 
 
@@ -1147,4 +1151,3 @@ namespace boost {
 /// Example of using date_time functions for generating calendar for current year.
 ///
 
-// vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4

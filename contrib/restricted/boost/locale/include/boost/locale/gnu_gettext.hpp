@@ -1,16 +1,16 @@
 //
-//  Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
 //
-//  Distributed under the Boost Software License, Version 1.0. (See
-//  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
-//
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
 #ifndef BOOST_LOCLAE_GNU_GETTEXT_HPP
 #define BOOST_LOCLAE_GNU_GETTEXT_HPP
 
 #include <boost/locale/message.hpp>
 #include <boost/function.hpp>
 #include <stdexcept>
+#include <vector>
 
 namespace boost {
 namespace locale {
@@ -38,7 +38,7 @@ namespace gnu_gettext {
         {
         }
 
-        std::string language;   ///< The language we load the catalog for, like "ru", "en", "de" 
+        std::string language;   ///< The language we load the catalog for, like "ru", "en", "de"
         std::string country;    ///< The country we load the catalog for, like "US", "IL"
         std::string variant;    ///< Language variant, like "euro" so it would look for catalog like de_DE\@euro
         std::string encoding;   ///< Required target charset encoding. Ignored for wide characters.
@@ -47,7 +47,7 @@ namespace gnu_gettext {
         ///
         /// \brief This type represents GNU Gettext domain name for the messages.
         ///
-        /// It consists of two parameters: 
+        /// It consists of two parameters:
         ///
         /// - name - the name of the domain - used for opening the file name
         /// - encoding - the encoding of the keys in the sources, default - UTF-8
@@ -63,7 +63,7 @@ namespace gnu_gettext {
             /// be "cp1255" and if n is "hello" then the name would be the same but encoding would be
             /// "UTF-8"
             ///
-            domain(std::string const &n) 
+            domain(std::string const &n)
             {
                 size_t pos = n.find('/');
                 if(pos==std::string::npos) {
@@ -93,14 +93,14 @@ namespace gnu_gettext {
             }
 
         };
-        
+
         typedef std::vector<domain> domains_type;   ///< Type that defines a list of domains that are loaded
                                                     ///< The first one is the default one
         domains_type domains;           ///< Message domains - application name, like my_app. So files named my_app.mo
                                         ///< would be loaded
         std::vector<std::string> paths; ///< Paths to search files in. Under MS Windows it uses encoding
                                         ///< parameter to convert them to wide OS specific paths.
-        
+
         ///
         /// The callback for custom file system support. This callback should read the file named \a file_name
         /// encoded in \a encoding character set into std::vector<char> and return it.
@@ -115,13 +115,13 @@ namespace gnu_gettext {
                     std::vector<char>(
                         std::string const &file_name,
                         std::string const &encoding
-                    ) 
+                    )
                 > callback_type;
 
         ///
         /// The callback for handling custom file systems, if it is empty, the real OS file-system
         /// is being used.
-        /// 
+        ///
         callback_type callback;
 
     };
@@ -135,10 +135,10 @@ namespace gnu_gettext {
     message_format<CharType> *create_messages_facet(messages_info const &info);
 
     /// \cond INTERNAL
-    
+
     template<>
     BOOST_LOCALE_DECL message_format<char> *create_messages_facet(messages_info const &info);
-    
+
     template<>
     BOOST_LOCALE_DECL message_format<wchar_t> *create_messages_facet(messages_info const &info);
 
@@ -146,7 +146,7 @@ namespace gnu_gettext {
     template<>
     BOOST_LOCALE_DECL message_format<char16_t> *create_messages_facet(messages_info const &info);
     #endif
-    
+
     #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
     template<>
     BOOST_LOCALE_DECL message_format<char32_t> *create_messages_facet(messages_info const &info);
@@ -163,5 +163,4 @@ namespace gnu_gettext {
 
 #endif
 
-// vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 

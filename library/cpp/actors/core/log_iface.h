@@ -68,6 +68,7 @@ namespace NActors {
             LevelReq,
             LevelResp,
             Ignored,
+            Buffer,
             End
         };
 

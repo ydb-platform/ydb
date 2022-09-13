@@ -72,6 +72,7 @@ namespace NActors {
             TActorId LoggerActorId;
             EComponent LoggerComponent;
             ui64 TimeThresholdMs;
+            ui64 BufferSizeLimitBytes;
             bool AllowDrop;
             TDuration ThrottleDelay;
             TArrayHolder<TAtomic> ComponentInfo;
@@ -101,11 +102,11 @@ namespace NActors {
             TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                       EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
                       EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
-                      ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
+                      ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000, ui64 bufferSizeLimitBytes = 1024 * 1024 * 300);
 
             TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                       EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
-                      ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
+                      ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000, ui64 bufferSizeLimitBytes = 1024 * 1024 * 300);
 
             void Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func);
 

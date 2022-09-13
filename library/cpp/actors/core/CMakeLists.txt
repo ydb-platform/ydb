@@ -46,6 +46,7 @@ target_sources(cpp-actors-core PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/io_dispatcher.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log_settings.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log_buffer.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/mailbox.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/monotonic.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/monotonic_provider.cpp

@@ -117,6 +117,12 @@ namespace NRopeDetails {
         using TListIterator = typename TList::iterator;
     };
 
+    template<typename TContainer>
+    struct TContainerTraits {
+        static char* UnsafeGetDataMut(const TContainer& backend) {
+            return const_cast<char*>(backend.data());
+        }
+    };
 } // NRopeDetails
 
 class TRopeArena;
@@ -238,9 +244,29 @@ class TRope {
                 });
             }
 
+            template <class TType>
+            bool ContainsNativeType() const {
+                return Visit(Owner, [](EType, auto& value) {
+                    using T = std::decay_t<decltype(value)>;
+                    return std::is_same_v<T, TType>;
+                });
+            }
+
+            template <class TResult>
+            TResult GetRaw() const {
+                return Visit(Owner, [](EType, auto& value) {
+                    using T = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<T, TResult>) {
+                        return value;
+                    } else {
+                        Y_FAIL();
+                        return TResult{}; // unreachable
+                    }
+                });
+            }
+
             explicit operator bool() const {
                 return Owner;
-
             }
 
         private:
@@ -386,6 +412,21 @@ class TRope {
 
         TChunk& operator =(const TChunk&) = default;
         TChunk& operator =(TChunk&&) = default;
+
+        template <class TType>
+        bool ContainsNativeType() const {
+            return Backend.ContainsNativeType<TType>();
+        }
+
+        template <class TResult>
+        TResult GetRaw() const {
+            return Backend.GetRaw<TResult>();
+        }
+
+        bool OwnsWholeContainer() const {
+            auto [data, size] = Backend.GetData();
+            return size == GetSize();
+        }
 
         size_t GetSize() const {
             return End - Begin;
@@ -995,6 +1036,24 @@ public:
         // TODO(innokentii): could be microoptimized for single TString case
         TString res = TString::Uninitialized(GetSize());
         Begin().ExtractPlainDataAndAdvance(res.Detach(), res.size());
+        return res;
+    }
+
+    /**
+     * WARN: this method supports extracting only for natively supported types for any other type the data *will* be copied
+     */
+    template <class TResult>
+    TResult ExtractUnderlyingContainerOrCopy() const {
+        if (IsContiguous() && GetSize() != 0) {
+            const auto& chunk = Begin().GetChunk();
+            if (chunk.ContainsNativeType<TResult>() && chunk.OwnsWholeContainer()) {
+                return chunk.GetRaw<TResult>();
+            }
+        }
+
+        TResult res = TResult::Uninitialized(GetSize());
+        char* data = NRopeDetails::TContainerTraits<TResult>::UnsafeGetDataMut(res);
+        Begin().ExtractPlainDataAndAdvance(data, res.size());
         return res;
     }
 

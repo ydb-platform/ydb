@@ -95,6 +95,25 @@ Y_UNIT_TEST_SUITE(TRope) {
     }
 
 #ifndef TSTRING_IS_STD_STRING
+    Y_UNIT_TEST(ExtractZeroCopy) {
+        TString str = Text;
+        TRope packed(str);
+        TString extracted = packed.ExtractUnderlyingContainerOrCopy<TString>();
+        UNIT_ASSERT_EQUAL(str.data(), extracted.data());
+    }
+
+    Y_UNIT_TEST(ExtractZeroCopySlice) {
+        TString str = Text;
+        TRope sliced(str);
+        sliced.EraseFront(1);
+        TString extracted = sliced.ExtractUnderlyingContainerOrCopy<TString>();
+        UNIT_ASSERT_UNEQUAL(str.data(), extracted.data());
+        TRope sliced2(str);
+        sliced2.EraseBack(1);
+        TString extracted2 = sliced2.ExtractUnderlyingContainerOrCopy<TString>();
+        UNIT_ASSERT_UNEQUAL(str.data(), extracted2.data());
+    }
+
     Y_UNIT_TEST(TStringDetach) {
         TRope pf;
         TRope rope;

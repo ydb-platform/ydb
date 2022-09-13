@@ -17,5 +17,5 @@ from .tracing import *  # noqa
 
 try:
     import ydb.aio as aio  # noqa
-except ImportError:
+except Exception:
     pass

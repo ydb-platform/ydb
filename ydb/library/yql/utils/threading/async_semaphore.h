@@ -37,7 +37,6 @@ public:
     NThreading::TFuture<TPtr> AcquireAsync();
     void Release();
     void Cancel();
-    std::function<void (const NThreading::TFuture<void>&)> DeferRelease();
 
     TAutoRelease MakeAutoRelease() {
         return {this};

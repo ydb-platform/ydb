@@ -64,12 +64,4 @@ std::function<void (const NThreading::TFuture<void>&)> TAsyncSemaphore::TAutoRel
     };
 }
 
-
-std::function<void (const NThreading::TFuture<void>&)> TAsyncSemaphore::DeferRelease() {
-    return [s = TPtr(this)](const NThreading::TFuture<void>& f) {
-        f.GetValue();
-        s->Release();
-    };
-}
-
 }

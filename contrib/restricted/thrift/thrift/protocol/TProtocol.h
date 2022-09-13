@@ -90,7 +90,7 @@ static inline To bitwise_cast(From from) {
 #  define __THRIFT_BIG_ENDIAN BIG_ENDIAN
 # else
 #  include <boost/config.hpp>
-#  include <boost/detail/endian.hpp>
+#  include <boost/predef/other/endian.h>
 #  define __THRIFT_BYTE_ORDER BOOST_BYTE_ORDER
 #  ifdef BOOST_LITTLE_ENDIAN
 #   define __THRIFT_LITTLE_ENDIAN __THRIFT_BYTE_ORDER

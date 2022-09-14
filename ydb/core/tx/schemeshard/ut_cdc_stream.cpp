@@ -557,6 +557,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         limits.MaxTableCdcStreams = 2;
         SetSchemeshardSchemaLimits(runtime, limits);
 
+        ui32 nStreams = 0;
+
         for (ui32 i = 0; i <= limits.MaxTableCdcStreams; ++i) {
             const auto status = i < limits.MaxTableCdcStreams
                 ? NKikimrScheme::StatusAccepted
@@ -571,6 +573,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                 }
             )", i), {status});
             env.TestWaitNotification(runtime, txId);
+
+            if (status == NKikimrScheme::StatusAccepted) {
+                nStreams++;
+            }
         }
 
         limits.MaxChildrenInDir = limits.MaxTableCdcStreams + 1 + 1 /* for index */;
@@ -579,6 +585,30 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         for (ui32 i = limits.MaxTableCdcStreams; i <= limits.MaxChildrenInDir; ++i) {
             const auto status = i < limits.MaxChildrenInDir
+                ? NKikimrScheme::StatusAccepted
+                : NKikimrScheme::StatusResourceExhausted;
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%u"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+            )", i), {status});
+            env.TestWaitNotification(runtime, txId);
+
+            if (status == NKikimrScheme::StatusAccepted) {
+                nStreams++;
+            }
+        }
+
+        limits = TSchemeLimits();
+        limits.MaxPQPartitions = 3;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        for (ui32 i = nStreams; i <= limits.MaxPQPartitions; ++i) {
+            const auto status = i < limits.MaxPQPartitions
                 ? NKikimrScheme::StatusAccepted
                 : NKikimrScheme::StatusResourceExhausted;
 

@@ -2,7 +2,8 @@
 #include "defs.h"
 
 #include <ydb/core/base/row_version.h>
-#include <util/generic/hash.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/ptr.h>
 
 #include <unordered_map>
@@ -143,7 +144,7 @@ namespace NTable {
      */
     class TTransactionMap {
     private:
-        using TTxMap = std::unordered_map<ui64, TRowVersion>;
+        using TTxMap = absl::flat_hash_map<ui64, TRowVersion>;
 
         struct TState final : public ITransactionMap, public TTxMap {
             const TRowVersion* Find(ui64 txId) const override {
@@ -249,7 +250,7 @@ namespace NTable {
      */
     class TTransactionSet {
     private:
-        using TTxSet = std::unordered_set<ui64>;
+        using TTxSet = absl::flat_hash_set<ui64>;
 
         struct TState : public TThrRefBase, TTxSet {
         };

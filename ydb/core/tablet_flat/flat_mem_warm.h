@@ -15,6 +15,8 @@
 #include <ydb/core/util/btree_cow.h>
 #include <ydb/core/util/yverify_stream.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/vector.h>
@@ -183,7 +185,7 @@ namespace NMem {
             ui64 OpsCount = 0;
         };
 
-        using TTxIdStats = THashMap<ui64, TTxIdStat>;
+        using TTxIdStats = absl::flat_hash_map<ui64, TTxIdStat>;
 
     public:
         using TTree = NMem::TTree;
@@ -494,11 +496,11 @@ namespace NMem {
             }
         }
 
-        const THashMap<ui64, TRowVersion>& GetCommittedTransactions() const {
+        const absl::flat_hash_map<ui64, TRowVersion>& GetCommittedTransactions() const {
             return Committed;
         }
 
-        const THashSet<ui64>& GetRemovedTransactions() const {
+        const absl::flat_hash_set<ui64>& GetRemovedTransactions() const {
             return Removed;
         }
 
@@ -549,8 +551,8 @@ namespace NMem {
         TRowVersion MinRowVersion = TRowVersion::Max();
         TRowVersion MaxRowVersion = TRowVersion::Min();
         TTxIdStats TxIdStats;
-        THashMap<ui64, TRowVersion> Committed;
-        THashSet<ui64> Removed;
+        absl::flat_hash_map<ui64, TRowVersion> Committed;
+        absl::flat_hash_set<ui64> Removed;
 
     private:
         struct TRollbackState {

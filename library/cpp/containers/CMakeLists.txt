@@ -7,6 +7,7 @@
 
 
 add_subdirectory(2d_array)
+add_subdirectory(absl_flat_hash)
 add_subdirectory(atomizer)
 add_subdirectory(bitseq)
 add_subdirectory(compact_vector)

@@ -4234,7 +4234,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     bool compactTxStatus = false;
     for (const auto& memTableSnapshot : snapshot->Subset->Frozen) {
-        if (memTableSnapshot->GetCommittedTransactions() || memTableSnapshot->GetRemovedTransactions()) {
+        if (!memTableSnapshot->GetCommittedTransactions().empty() || !memTableSnapshot->GetRemovedTransactions().empty()) {
             // We must compact tx status when mem table has changes
             compactTxStatus = true;
         }

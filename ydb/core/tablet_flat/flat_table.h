@@ -17,6 +17,7 @@
 #include "util_basics.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/deque.h>
@@ -341,8 +342,8 @@ private:
 
     TRowVersionRanges RemovedRowVersions;
 
-    THashMap<ui64, size_t> TxRefs;
-    THashSet<ui64> CheckTransactions;
+    absl::flat_hash_map<ui64, size_t> TxRefs;
+    absl::flat_hash_set<ui64> CheckTransactions;
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
 

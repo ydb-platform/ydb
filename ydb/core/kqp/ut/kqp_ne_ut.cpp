@@ -3343,7 +3343,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
             SELECT * FROM `/Root/EightShard`
             WHERE Key IN $subquery OR Key == 101 OR Key IN $subquery2;
-        )", TTxControl::BeginTx()).ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[[1];[101u];["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -3383,6 +3383,55 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([["Data1";"Name1";"Value22"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(SqlInAsScalar) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$value1").Int32(3).Build()
+            .AddParam("$value2").Uint64(2).Build()
+            .AddParam("$value3").Int32(5).Build()
+            .AddParam("$value4").OptionalInt32(3).Build()
+            .AddParam("$value5").OptionalInt32({}).Build()
+            .AddParam("$value6").OptionalInt64(1).Build()
+            .AddParam("$value7").OptionalInt64(7).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            DECLARE $value1 AS Int32;
+            DECLARE $value2 AS Uint64;
+            DECLARE $value3 AS Int32;
+            DECLARE $value4 AS Int32?;
+            DECLARE $value5 AS Int32?;
+            DECLARE $value6 AS Int64?;
+            DECLARE $value7 AS Int64?;
+
+            $data = SELECT Data FROM EightShard WHERE Text = "Value1";
+
+            SELECT
+                $value1 IN $data,
+                $value2 IN $data,
+                $value3 IN $data,
+                $value4 IN $data,
+                $value5 IN $data,
+                $value6 IN $data,
+                $value7 IN $data;
+        )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[
+            %true;
+            %true;
+            %false;
+            [%true];
+            #;
+            [%true];
+            [%false]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

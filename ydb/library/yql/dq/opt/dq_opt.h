@@ -58,6 +58,7 @@ ui32 GetStageOutputsCount(const NNodes::TDqStageBase& stage);
 
 TVector<NNodes::TDqConnection> FindDqConnections(const NNodes::TExprBase& node);
 bool IsDqPureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true);
+bool IsDqSelfContainedExpr(const NNodes::TExprBase& node);
 bool IsDqDependsOnStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);
 
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqStageBase& stage);

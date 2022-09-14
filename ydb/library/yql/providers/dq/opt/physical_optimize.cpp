@@ -46,6 +46,7 @@ public:
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
         if (enablePrecompute) {
             AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
+            AddHandler(0, &TCoSqlIn::Match, HNDL(BuildSqlIn<false>));
             AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
             AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
             AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecompute));
@@ -67,6 +68,7 @@ public:
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
         if (enablePrecompute) {
+            AddHandler(1, &TCoSqlIn::Match, HNDL(BuildSqlIn<true>));
             AddHandler(1, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
             AddHandler(1, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
             AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
@@ -304,6 +306,11 @@ protected:
 
     TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
         return DqBuildHasItems(node, ctx, optCtx);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildSqlIn(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildSqlIn(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>

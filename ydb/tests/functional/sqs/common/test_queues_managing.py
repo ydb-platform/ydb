@@ -53,6 +53,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_create_fifo_queue_wo_postfix(self, tables_format):
         self._init_with_params(tables_format=tables_format)
+
         def call_create():
             self.called = True
             self._sqs_api.create_queue(self.queue_name, is_fifo=True)
@@ -91,6 +92,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_create_queue_with_invalid_name(self, tables_format):
         self._init_with_params(tables_format=tables_format)
+
         def call_create():
             self._sqs_api.create_queue('invalid_queue_name!')
 

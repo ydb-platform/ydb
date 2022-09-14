@@ -510,6 +510,7 @@ class SerializabilityChecker(object):
             parts = []
             first = None
             last = None
+
             def flush():
                 if first is not None:
                     if (last - first) > 1:

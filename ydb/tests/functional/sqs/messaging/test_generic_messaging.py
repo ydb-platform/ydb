@@ -28,6 +28,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             return
         # break a queue and check failure
         self._break_queue(self._username, self.queue_name, is_fifo)
+
         def call_send():
             group = 'trololo' if is_fifo else None
             dedup = group
@@ -1036,6 +1037,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_invalid_queue_url(self, tables_format):
         self._init_with_params(tables_format=tables_format)
+
         def call_with_invalid_queue_url():
             self._sqs_api.get_queue_attributes('invalid_queue_url')
 
@@ -1047,6 +1049,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_empty_queue_url(self, tables_format):
         self._init_with_params(tables_format=tables_format)
+
         def call_with_empty_queue_url():
             self._sqs_api.send_message(queue_url='', message_body='body')
 

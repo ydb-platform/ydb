@@ -268,8 +268,10 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
     class SessionHolder(object):
         def __init__(self, session):
             self.session = session
+
         def __enter__(self):
             return self.session
+
         def __exit__(self, exc_type=None, exc_value=None, exc_traceback=None):
             if exc_type is None and exc_value is None:
                 sessions.append(self.session)

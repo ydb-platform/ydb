@@ -488,7 +488,7 @@ inline std::string value::to_str() const {
   case int64_type: {
     char buf[sizeof("-9223372036854775808")];
 #if defined(__APPLE__)
-    SNPRINTF(buf, sizeof(buf), "%lld" PRId64, u_.int64_);
+    SNPRINTF(buf, sizeof(buf), "%lld", u_.int64_);
 #else
     SNPRINTF(buf, sizeof(buf), "%" PRId64, u_.int64_);
 #endif

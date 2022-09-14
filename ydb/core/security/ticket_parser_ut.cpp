@@ -133,5 +133,47 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT_EQUAL(result->Error.Message, "Token is not in correct format");
     }
+
+    Y_UNIT_TEST(LoginEmptyTicketBad) {
+        using namespace Tests;
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(true);
+        auto settings = TServerSettings(kikimrPort, authConfig);
+        settings.SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        NLogin::TLoginProvider provider;
+
+        provider.Audience = "/Root";
+        provider.RotateKeys();
+
+        TActorId sender = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
+
+        provider.CreateUser({.User = "user1", .Password = "password1"});
+        auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
+
+        TString emptyUserToken = "";
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(emptyUserToken)), 0);
+
+        TAutoPtr<IEventHandle> handle;
+
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(!result->Error.empty());
+        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_EQUAL(result->Error.Message, "Ticket is empty");
+    }
 }
 }

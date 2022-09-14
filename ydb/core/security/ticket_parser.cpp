@@ -317,6 +317,14 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         ui64 cookie = ev->Cookie;
 
         CounterTicketsReceived->Inc();
+        if (ticket.empty()) {
+            TEvTicketParser::TError error;
+            error.Message = "Ticket is empty";
+            error.Retryable = false;
+            LOG_ERROR_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(ticket) << ": " << error);
+            ctx.Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
+            return;
+        }
         auto it = UserTokens.find(key);
         if (it != UserTokens.end()) {
             auto& record = it->second;

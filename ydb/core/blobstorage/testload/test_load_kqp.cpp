@@ -523,10 +523,10 @@ private:
             << Total->WindowHist.GetTotalCount() << " | "
             << Total->WindowHist.GetTotalCount() / (WindowDuration * std::max(ui64(1), Phase) * 1.0) << " | "
             << Total->WindowErrors << " | "
-            << Total->WindowHist.GetValueAtPercentile(50.0) / (WindowDuration * 1000.0) << " | "
-            << Total->WindowHist.GetValueAtPercentile(95.0) / (WindowDuration * 1000.0) << " | "
-            << Total->WindowHist.GetValueAtPercentile(99.0) / (WindowDuration * 1000.0) << " | "
-            << Total->WindowHist.GetMax() / (WindowDuration * 1000.0)
+            << Total->WindowHist.GetValueAtPercentile(50.0) / 1000.0 << " | "
+            << Total->WindowHist.GetValueAtPercentile(95.0) / 1000.0 << " | "
+            << Total->WindowHist.GetValueAtPercentile(99.0) / 1000.0 << " | "
+            << Total->WindowHist.GetMax() / 1000.0
         );
 
         if (Phase >= WindowCount) {
@@ -688,10 +688,10 @@ private:
                         TABLED() { str << Total->WindowHist.GetTotalCount(); };
                         TABLED() { str << Total->WindowHist.GetTotalCount() / (WindowDuration * std::max(ui64(1), Phase) * 1.0); };
                         TABLED() { str << Total->WindowErrors; };
-                        TABLED() { str << Total->WindowHist.GetValueAtPercentile(50.0) / (WindowDuration * 1000.0); };
-                        TABLED() { str << Total->WindowHist.GetValueAtPercentile(95.0) / (WindowDuration * 1000.0); };
-                        TABLED() { str << Total->WindowHist.GetValueAtPercentile(99.0) / (WindowDuration * 1000.0); };
-                        TABLED() { str << Total->WindowHist.GetMax() / (WindowDuration * 1000.0); };
+                        TABLED() { str << Total->WindowHist.GetValueAtPercentile(50.0) / 1000.0; };
+                        TABLED() { str << Total->WindowHist.GetValueAtPercentile(95.0) / 1000.0; };
+                        TABLED() { str << Total->WindowHist.GetValueAtPercentile(99.0) / 1000.0; };
+                        TABLED() { str << Total->WindowHist.GetMax() / 1000.0; };
                     }
                     for (size_t i = Phase; i >= 1; --i) {
                         TABLER() {
@@ -699,10 +699,10 @@ private:
                             TABLED() { str << Chunk[i - 1]->WindowHist.GetTotalCount(); };
                             TABLED() { str << Chunk[i - 1]->WindowHist.GetTotalCount() / (WindowDuration * 1.0); };
                             TABLED() { str << Chunk[i - 1]->WindowErrors; };
-                            TABLED() { str << Chunk[i - 1]->WindowHist.GetValueAtPercentile(50.0) / (WindowDuration * 1000.0); };
-                            TABLED() { str << Chunk[i - 1]->WindowHist.GetValueAtPercentile(95.0) / (WindowDuration * 1000.0); };
-                            TABLED() { str << Chunk[i - 1]->WindowHist.GetValueAtPercentile(99.0) / (WindowDuration * 1000.0); };
-                            TABLED() { str << Chunk[i - 1]->WindowHist.GetMax() / (WindowDuration * 1000.0); };
+                            TABLED() { str << Chunk[i - 1]->WindowHist.GetValueAtPercentile(50.0) / 1000.0; };
+                            TABLED() { str << Chunk[i - 1]->WindowHist.GetValueAtPercentile(95.0) / 1000.0; };
+                            TABLED() { str << Chunk[i - 1]->WindowHist.GetValueAtPercentile(99.0) / 1000.0; };
+                            TABLED() { str << Chunk[i - 1]->WindowHist.GetMax() / 1000.0; };
                         }
                     }
                 }

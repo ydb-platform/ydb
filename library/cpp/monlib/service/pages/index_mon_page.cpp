@@ -97,7 +97,6 @@ TIndexMonPage* TIndexMonPage::RegisterIndexPage(const TString& path, const TStri
 IMonPage* TIndexMonPage::FindPage(const TString& relativePath) {
     TGuard<TMutex> g(Mtx);
 
-    Y_VERIFY(!relativePath.StartsWith('/'));
     TPagesByPath::iterator i = PagesByPath.find("/" + relativePath);
     if (i == PagesByPath.end()) {
         return nullptr;

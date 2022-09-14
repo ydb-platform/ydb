@@ -1,43 +1,53 @@
 #pragma once
 
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/event_local.h>
 
+#include <library/cpp/actors/core/actor.h>
+
+#include <util/generic/hash.h>
+#include <util/generic/map.h>
+#include <util/generic/maybe.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NGRpcProxy {
 
-    struct TTopicHolder {
-        ui64 TabletID;
-        TActorId PipeClient;
-        bool ACLRequestInfly;
-        TString CloudId;
-        TString DbId;
-        TString FolderId;
-        NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
-        NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
-        NPersQueue::TTopicConverterPtr FullConverter;
-        TMaybe<TString> CdcStreamPath;
+struct TTopicInitInfo {
+    NPersQueue::TTopicConverterPtr TopicNameConverter;
+    ui64 TabletID;
+    TString CloudId;
+    TString DbId;
+    TString FolderId;
+    NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
+};
 
-        TVector<ui32> Groups;
-        TMap<ui64, ui64> Partitions;
+using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
 
-        TTopicHolder()
-                : TabletID(0)
-                , PipeClient()
-                , ACLRequestInfly(false)
-        {}
-    };
+struct TTopicHolder {
+    ui64 TabletID = 0;
+    TActorId PipeClient;
+    bool ACLRequestInfly = false;
+    TString CloudId;
+    TString DbId;
+    TString FolderId;
+    NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
+    NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
+    NPersQueue::TTopicConverterPtr FullConverter;
+    TMaybe<TString> CdcStreamPath;
 
-    struct TTopicInitInfo {
-        NPersQueue::TTopicConverterPtr TopicNameConverter;
-        ui64 TabletID;
-        TString CloudId;
-        TString DbId;
-        TString FolderId;
-        NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
-    };
+    TVector<ui32> Groups;
+    TMap<ui64, ui64> Partitions;
 
-    using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
+    inline static TTopicHolder FromTopicInfo(const TTopicInitInfo& info) {
+        return TTopicHolder{
+            .TabletID = info.TabletID,
+            .ACLRequestInfly = false,
+            .CloudId = info.CloudId,
+            .DbId = info.DbId,
+            .FolderId = info.FolderId,
+            .MeteringMode = info.MeteringMode,
+            .FullConverter = info.TopicNameConverter,
+        };
+    }
+};
 
-} //    namespace NKikimr::NGRpcProxy
+} // namespace NKikimr::NGRpcProxy

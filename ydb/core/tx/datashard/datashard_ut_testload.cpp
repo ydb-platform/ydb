@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
     Y_UNIT_TEST(ShouldWriteKqpUpsert) {
         TTestHelper helper;
 
-        const ui64 expectedRowCount = 10;
+        const ui64 expectedRowCount = 20;
 
         std::unique_ptr<TEvDataShard::TEvTestLoadRequest> request(new TEvDataShard::TEvTestLoadRequest());
         auto& record = request->Record;
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         command.SetRowCount(expectedRowCount);
         command.SetTabletId(helper.Table.TabletId);
         command.SetTableId(helper.Table.UserTable.GetPathId());
-        command.SetInflight(1);
+        command.SetInflight(5);
         command.SetPath("/Root");
 
         helper.TestLoad(std::move(request), expectedRowCount);

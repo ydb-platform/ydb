@@ -1,5 +1,4 @@
 #include "actors.h"
-#include "test_load_actor.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -229,19 +228,20 @@ class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
 
 public:
     TKqpUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag, TRequestsVector requests)
         : Config(cmd)
         , Parent(parent)
         , Tag(tag)
         , Path(cmd.GetPath())
+        , Requests(std::move(requests))
     {
         Y_UNUSED(counters);
         google::protobuf::TextFormat::PrintToString(cmd, &ConfingString);
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
-            << " TKqpUpsertActor Bootstrap called: " << ConfingString);
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
+            << " Bootstrap called: " << ConfingString);
 
         Become(&TKqpUpsertActor::StateFunc);
         CreateSession(ctx);
@@ -270,10 +270,12 @@ private:
 
     void SendRows(const TActorContext &ctx) {
         while (Inflight < Config.GetInflight() && CurrentRequest < Requests.size()) {
-            const auto* request = Requests[CurrentRequest].get();
+            auto* request = static_cast<NKqp::TEvKqp::TEvQueryRequest*>(Requests[CurrentRequest].get());
+            request->Record.MutableRequest()->SetSessionId(Session);
+
             auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
-                << "KqpUpsertActor# " << Tag << " send request# " << CurrentRequest
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag
+                << " send request# " << CurrentRequest
                 << " to proxy# " << kqpProxy << ": " << request->ToString());
 
             ctx.Send(kqpProxy, Requests[CurrentRequest].release());
@@ -302,32 +304,6 @@ private:
         }
     }
 
-    void GenerateRequests(const TActorContext&) {
-        Requests.reserve(Config.GetRowCount());
-        for (size_t i = 0; i < Config.GetRowCount(); ++i) {
-            auto queryInfo = GenerateUpsert(i);
-
-            std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request(new NKqp::TEvKqp::TEvQueryRequest());
-            request->Record.MutableRequest()->SetSessionId(Session);
-            request->Record.MutableRequest()->SetKeepSession(true);
-            request->Record.MutableRequest()->SetDatabase(Path);
-
-            request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-            request->Record.MutableRequest()->SetQuery(queryInfo.Query);
-
-            request->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
-            request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-            request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-
-            NKikimrMiniKQL::TParams params;
-            ConvertYdbParamsToMiniKQLParams(queryInfo.Params, params);
-            request->Record.MutableRequest()->MutableParameters()->Swap(&params);
-
-            Requests.emplace_back(std::move(request));
-        }
-    }
-
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag << " tablet recieved PoisonPill, going to die");
         CloseSession(ctx);
@@ -340,7 +316,6 @@ private:
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
             LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag << " session: " << Session);
-            this->GenerateRequests(ctx);
             SendRows(ctx);
         } else {
             StopWithError(ctx, "failed to create session: " + ev->Get()->ToString());
@@ -348,7 +323,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag
             << " received from " << ev->Sender << ": " << ev->Get()->Record.DebugString());
 
         --Inflight;
@@ -362,7 +337,7 @@ private:
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet stopped with error: " << reason);
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet stopped with error: " << reason);
         ctx.Send(Parent, new TEvTestLoadFinished(Tag, reason));
         Die(ctx);
     }
@@ -388,6 +363,182 @@ private:
         HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle)
     )
 };
+
+// creates multiple TKqpUpsertActor for inflight > 1 and waits completion
+class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMultiSession> {
+    const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart Config;
+    const TActorId Parent;
+    const ui64 Tag;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+    const TString Path;
+
+    TString ConfingString;
+
+    TVector<TActorId> Actors;
+
+    size_t Inflight = 0;
+
+    TInstant StartTs;
+    TInstant EndTs;
+
+    size_t Oks = 0;
+    size_t Errors = 0;
+
+public:
+    TKqpUpsertActorMultiSession(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+        : Config(cmd)
+        , Parent(parent)
+        , Tag(tag)
+        , Counters(counters)
+        , Path(cmd.GetPath())
+    {
+        Y_UNUSED(counters);
+        google::protobuf::TextFormat::PrintToString(cmd, &ConfingString);
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+            << " Bootstrap called: " << ConfingString);
+
+        Become(&TKqpUpsertActorMultiSession::StateFunc);
+        StartActors(ctx);
+    }
+
+private:
+    void StartActors(const TActorContext& ctx) {
+        const auto actorsCount = Config.GetInflight();
+        const auto requestsPerActor = Config.GetRowCount() / actorsCount;
+
+        TVector<TRequestsVector> perActorRequests;
+        perActorRequests.reserve(actorsCount);
+
+        size_t rowCount = 0;
+        for (size_t i = 0; i < actorsCount; ++i) {
+            TRequestsVector requests;
+
+            requests.reserve(requestsPerActor);
+            for (size_t i = 0; i < requestsPerActor; ++i) {
+                auto queryInfo = GenerateUpsert(rowCount++);
+
+                std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request(new NKqp::TEvKqp::TEvQueryRequest());
+                request->Record.MutableRequest()->SetKeepSession(true);
+                request->Record.MutableRequest()->SetDatabase(Path);
+
+                request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+                request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+                request->Record.MutableRequest()->SetQuery(queryInfo.Query);
+
+                request->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
+                request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+                request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+
+                NKikimrMiniKQL::TParams params;
+                ConvertYdbParamsToMiniKQLParams(queryInfo.Params, params);
+                request->Record.MutableRequest()->MutableParameters()->Swap(&params);
+
+                requests.emplace_back(std::move(request));
+            }
+            perActorRequests.emplace_back(std::move(requests));
+        }
+
+        StartTs = TInstant::Now();
+
+        Actors.reserve(actorsCount);
+        Inflight = actorsCount;
+        for (size_t i = 0; i < actorsCount; ++i) {
+            ui32 pseudoTag = 1000000 + i;
+            auto configCopy = Config;
+            configCopy.SetInflight(1); // we have only 1 session
+            configCopy.SetRowCount(requestsPerActor);
+            configCopy.SetTag(pseudoTag);
+
+            auto* kqpActor = new TKqpUpsertActor(
+                configCopy,
+                SelfId(),
+                Counters,
+                pseudoTag,
+                std::move(perActorRequests[i]));
+            Actors.emplace_back(ctx.Register(kqpActor));
+        }
+
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+            << " started# " << actorsCount << " actors each with inflight# " << requestsPerActor);
+    }
+
+    void Handle(const TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
+        const auto* msg = ev->Get();
+        if (msg->ErrorReason || !msg->Report) {
+            TStringStream ss;
+            ss << "kqp actor# " << msg->Tag << " finished with error: " << msg->ErrorReason;
+            if (msg->Report)
+                ss << ", report: " << msg->Report->ToString();
+
+            StopWithError(ctx, ss.Str());
+            return;
+        }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "kqp# " << Tag << " finished: " << msg->Report->ToString());
+
+        Errors += msg->Report->OperationsError;
+        Oks += msg->Report->OperationsOK;
+
+        --Inflight;
+        if (Inflight == 0) {
+            EndTs = TInstant::Now();
+            auto delta = EndTs - StartTs;
+            std::unique_ptr<TEvTestLoadFinished> response(new TEvTestLoadFinished(Tag));
+            response->Report = TLoadReport();
+            response->Report->Duration = delta;
+            response->Report->OperationsOK = Oks;
+            response->Report->OperationsError = Errors;
+            ctx.Send(Parent, response.release());
+
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+                << " finished in " << delta << ", oks# " << Oks << ", errors# " << Errors);
+
+            Stop(ctx);
+        }
+    }
+
+    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        TStringStream str;
+        HTML(str) {
+            str << "TKqpUpsertActorMultiSession# " << Tag << " started on " << StartTs;
+        }
+        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
+    }
+
+    void HandlePoison(const TActorContext& ctx) {
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+            << " tablet recieved PoisonPill, going to die");
+        Die(ctx);
+    }
+
+    void StopWithError(const TActorContext& ctx, const TString& reason) {
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+            << " stopped with error: " << reason);
+
+        ctx.Send(Parent, new TEvTestLoadFinished(Tag, reason));
+        Stop(ctx);
+    }
+
+    void Stop(const TActorContext& ctx) {
+        for (const auto& actorId: Actors) {
+            ctx.Send(actorId, new TEvents::TEvPoison());
+        }
+
+        Die(ctx);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
+        HFunc(NMon::TEvHttpInfo, Handle)
+        HFunc(TEvTestLoadFinished, Handle);
+    )
+};
+
+
 
 class TUpsertActor : public TActorBootstrapped<TUpsertActor> {
     const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart Config;
@@ -581,7 +732,7 @@ NActors::IActor *CreateLocalMkqlUpsertActor(const NKikimrTxDataShard::TEvTestLoa
 NActors::IActor *CreateKqpUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
-    return new TKqpUpsertActor(cmd, parent, std::move(counters), tag);
+    return new TKqpUpsertActorMultiSession(cmd, parent, std::move(counters), tag);
 }
 
 NActors::IActor *CreateUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,

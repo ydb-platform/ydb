@@ -1,0 +1,22 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(boost-context-fcontext_impl)
+target_compile_options(boost-context-fcontext_impl PRIVATE
+  -Wno-everything
+)
+target_link_libraries(boost-context-fcontext_impl PUBLIC
+  contrib-libs-cxxsupp
+  boost-context-impl_common
+)
+target_sources(boost-context-fcontext_impl PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/jump_x86_64_sysv_macho_gas.S
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/make_x86_64_sysv_macho_gas.S
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/ontop_x86_64_sysv_macho_gas.S
+)

@@ -25,7 +25,7 @@ struct TEvKeyValue {
         EvReportWriteLatency,
         EvUpdateWeights,
         EvCompleteGC,
-        EvPartitialCompleteGC,
+        EvPartialCompleteGC,
         EvContinueGC,
 
         EvRead = EvRequest + 16,
@@ -202,11 +202,14 @@ struct TEvKeyValue {
         TEvCompleteGC() { }
     };
 
-    struct TEvPartitialCompleteGC : public TEventLocal<TEvPartitialCompleteGC, EvPartitialCompleteGC> {
-        TMaybe<NKeyValue::THelpers::TGenerationStep> CollectedGenerationStep;
+    struct TEvPartialCompleteGC : public TEventLocal<TEvPartialCompleteGC, EvPartialCompleteGC> {
         TVector<TLogoBlobID> CollectedDoNotKeep;
 
-        TEvPartitialCompleteGC() { }
+        TEvPartialCompleteGC() { }
+
+        TEvPartialCompleteGC(TVector<TLogoBlobID> &&doNotKeeps)
+            : CollectedDoNotKeep(std::move(doNotKeeps))
+        { }
     };
 
     struct TEvContinueGC : public TEventLocal<TEvContinueGC, EvContinueGC> {

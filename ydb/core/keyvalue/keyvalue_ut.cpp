@@ -25,6 +25,7 @@ void SetupLogging(TTestActorRuntime& runtime) {
     NActors::NLog::EPriority otherPriority = NLog::PRI_ERROR;
 
     runtime.SetLogPriority(NKikimrServices::KEYVALUE, priority);
+    runtime.SetLogPriority(NKikimrServices::KEYVALUE_GC, priority);
     runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, priority);
     runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, priority);
     runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, priority);
@@ -88,6 +89,7 @@ struct TTestContext {
         Runtime.Reset(new TTestBasicRuntime);
         Runtime->SetScheduledLimit(200);
         Runtime->SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
+        Runtime->SetDispatchedEventsLimit(25'000'000);
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
         setup(*Runtime);
@@ -2376,17 +2378,12 @@ Y_UNIT_TEST(TestLargeWriteAndDelete) {
         tc.Prepare(dispatchName, setup, activeZone);
         ExecuteObtainLock(tc, 1);
         ui32 iteration = 0;
-        // for (ui32 iteration = 0; iteration < 10; ++iteration) {
-            TDeque<TKeyValuePair> keys;
-            for (ui32 idx = 0; idx < 15'000; ++idx) {
-                TString key = TStringBuilder() << iteration << ':' << idx;
-                keys.push_back({key, "value"});
-            }
-            ExecuteWrite(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
-
-            TString fromKey = TStringBuilder()  << iteration << ':' << 1'000;
-            ExecuteDeleteRange(tc, fromKey, EBorderKind::Include, "", EBorderKind::Without, 1);
-        // }
+        TDeque<TKeyValuePair> keys;
+        for (ui32 idx = 0; idx < 15'000; ++idx) {
+            TString key = TStringBuilder() << iteration << ':' << idx;
+            keys.push_back({key, ""});
+        }
+        ExecuteWrite(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
         ExecuteDeleteRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, 1);
    });
 }

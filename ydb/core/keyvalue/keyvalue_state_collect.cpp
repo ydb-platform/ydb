@@ -1,4 +1,5 @@
 #include "keyvalue_state.h"
+#include <ydb/core/util/stlog.h>
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -59,6 +60,10 @@ void TKeyValueState::RemoveFromTrashDoNotKeep(ISimpleDb &db, const TActorContext
         Y_VERIFY(num == 1);
         CountTrashCollected(id.BlobSize());
     }
+    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "Remove from Trash",
+        (TabletId, TabletId),
+        (RemovedCount, collectedDoNotKeep.size()),
+        (TrashCount, Trash.size()));
 }
 
 void TKeyValueState::RemoveFromTrashBySoftBarrier(ISimpleDb &db, const TActorContext &ctx,
@@ -69,6 +74,7 @@ void TKeyValueState::RemoveFromTrashBySoftBarrier(ISimpleDb &db, const TActorCon
 
     // remove trash entries that were not marked as 'Keep' before, but which are automatically deleted by this barrier
     // to prevent them from being added to 'DoNotKeep' list after
+    ui32 counter = 0;
     for (auto it = Trash.begin(); it != Trash.end(); ) {
         THelpers::TGenerationStep trashGenStep = THelpers::GenerationStep(*it);
         bool afterStoredSoftBarrier = trashGenStep > THelpers::TGenerationStep(storedCollectGeneration, storedCollectStep);
@@ -77,6 +83,10 @@ void TKeyValueState::RemoveFromTrashBySoftBarrier(ISimpleDb &db, const TActorCon
             CountTrashCollected(it->BlobSize());
             THelpers::DbEraseTrash(*it, db, ctx);
             it = Trash.erase(it);
+            if (++counter >= MaxCollectGarbageFlagsPerMessage) {
+                RepeatGCTX = true;
+                break;
+            }
         } else {
             ++it;
         }
@@ -91,12 +101,8 @@ void TKeyValueState::UpdateStoredState(ISimpleDb &db, const TActorContext &ctx,
     THelpers::DbUpdateState(StoredState, db, ctx);
 }
 
-void TKeyValueState::UpdateAfterPartitialGC(ISimpleDb &db, const TActorContext &ctx) {
-    RemoveFromTrashDoNotKeep(db, ctx, PartitialCollectedDoNotKeep);
-    if (PartitialCollectedGenerationStep) {
-        RemoveFromTrashBySoftBarrier(db, ctx, *PartitialCollectedGenerationStep);
-        UpdateStoredState(db, ctx, *PartitialCollectedGenerationStep);
-    }
+void TKeyValueState::UpdateAfterPartialGC(ISimpleDb &db, const TActorContext &ctx) {
+    RemoveFromTrashDoNotKeep(db, ctx, PartialCollectedDoNotKeep);
 }
 
 void TKeyValueState::UpdateGC(ISimpleDb &db, const TActorContext &ctx, bool updateTrash, bool updateState) {
@@ -174,24 +180,42 @@ void TKeyValueState::EraseCollectComplete(const TActorContext &ctx) {
 }
 
 void TKeyValueState::CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx) {
-    UpdateGC(db, ctx, true, true);
+    ui64 collectGeneration = CollectOperation->Header.GetCollectGeneration();
+    ui64 collectStep = CollectOperation->Header.GetCollectStep();
+    auto collectGenStep = THelpers::TGenerationStep(collectGeneration, collectStep);
+    RemoveFromTrashBySoftBarrier(db, ctx, collectGenStep);
+    UpdateStoredState(db, ctx, collectGenStep);
 }
 
 void TKeyValueState::CompleteGCComplete(const TActorContext &ctx) {
+    if (RepeatGCTX) {
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC20, "Repeat CompleteGC",
+            (TabletId, TabletId),
+            (TrashCount, Trash.size()));
+        ctx.Send(ctx.SelfID, new TEvKeyValue::TEvCompleteGC());
+        RepeatGCTX = false;
+        return;
+    }
     Y_VERIFY(CollectOperation);
     CollectOperation.Reset(nullptr);
     IsCollectEventSent = false;
+    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC22, "CompleteGC Complete",
+        (TabletId, TabletId),
+        (TrashCount, Trash.size()));
     PrepareCollectIfNeeded(ctx);
 }
 
 
-void TKeyValueState::PartitialCompleteGCExecute(ISimpleDb &db, const TActorContext &ctx) {
-    UpdateAfterPartitialGC(db, ctx);
+void TKeyValueState::PartialCompleteGCExecute(ISimpleDb &db, const TActorContext &ctx) {
+    UpdateAfterPartialGC(db, ctx);
 }
 
-void TKeyValueState::PartitialCompleteGCComplete(const TActorContext &ctx) {
-    PartitialCollectedDoNotKeep.clear();
-    ctx.Send(CollectorActorId, new TEvKeyValue::TEvContinueGC(std::move(PartitialCollectedDoNotKeep)));
+void TKeyValueState::PartialCompleteGCComplete(const TActorContext &ctx) {
+    PartialCollectedDoNotKeep.clear();
+    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC23, "Send ContinueGC",
+        (TabletId, TabletId),
+        (TrashCount, Trash.size()));
+    ctx.Send(CollectorActorId, new TEvKeyValue::TEvContinueGC(std::move(PartialCollectedDoNotKeep)));
 }
 
 // Prepare the completely new full collect operation with the same gen/step, but with correct keep & doNotKeep lists
@@ -302,11 +326,9 @@ void TKeyValueState::OnEvCompleteGC() {
     CountLatencyBsCollect();
 }
 
-void TKeyValueState::OnEvPartitialCompleteGC(TEvKeyValue::TEvPartitialCompleteGC *ev) {
-    PartitialCollectedGenerationStep = std::move(ev->CollectedGenerationStep);
-    PartitialCollectedDoNotKeep = std::move(ev->CollectedDoNotKeep);
+void TKeyValueState::OnEvPartialCompleteGC(TEvKeyValue::TEvPartialCompleteGC *ev) {
+    PartialCollectedDoNotKeep = std::move(ev->CollectedDoNotKeep);
 }
 
 } // NKeyValue
 } // NKikimr
-

@@ -4,6 +4,6 @@
 
 namespace NYql {
 
-IRetryPolicy<long>::TPtr GetHTTPDefaultRetryPolicy();
+IRetryPolicy<long>::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime = TDuration::Zero()); // Zero means default maxTime
 
 }

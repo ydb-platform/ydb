@@ -94,10 +94,12 @@ public:
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         NYdb::TCredentialsProviderPtr credProvider,
-        const TString& key, const TString& url, size_t sizeLimit, const std::string_view& compression)
+        const TString& key, const TString& url, size_t sizeLimit, const std::string_view& compression,
+        const IRetryPolicy<long>::TPtr& retryPolicy)
         : TxId(txId)
         , Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
+        , RetryPolicy(retryPolicy)
         , ActorSystem(TActivationContext::ActorSystem())
         , Key(key), Url(url), SizeLimit(sizeLimit), Parts(MakeCompressorQueue(compression))
     {
@@ -111,10 +113,10 @@ public:
             const auto size = Parts->Volume();
             InFlight += size;
             SentSize += size;
-            Gateway->Upload(Url, MakeHeader(), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), true, GetHTTPDefaultRetryPolicy());
+            Gateway->Upload(Url, MakeHeader(), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), true, RetryPolicy);
         } else {
             Become(&TS3FileWriteActor::InitialStateFunc);
-            Gateway->Upload(Url + "?uploads", MakeHeader(), 0, std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetHTTPDefaultRetryPolicy());
+            Gateway->Upload(Url + "?uploads", MakeHeader(), 0, std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, RetryPolicy);
         }
     }
 
@@ -278,7 +280,7 @@ private:
             Tags.emplace_back();
             InFlight += size;
             SentSize += size;
-            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(part), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, GetHTTPDefaultRetryPolicy());
+            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(part), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, RetryPolicy);
         }
     }
 
@@ -291,7 +293,7 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), false, GetHTTPDefaultRetryPolicy());
+        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), false, RetryPolicy);
     }
 
     IHTTPGateway::THeaders MakeHeader() const {
@@ -307,6 +309,7 @@ private:
     const TTxId TxId;
     const IHTTPGateway::TPtr Gateway;
     const NYdb::TCredentialsProviderPtr CredProvider;
+    const IRetryPolicy<long>::TPtr RetryPolicy;
 
     TActorSystem* const ActorSystem;
     TActorId ParentId;
@@ -335,10 +338,12 @@ public:
         const size_t memoryLimit,
         const size_t maxFileSize,
         const TString& compression,
-        IDqComputeActorAsyncOutput::ICallbacks* callbacks)
+        IDqComputeActorAsyncOutput::ICallbacks* callbacks,
+        const IRetryPolicy<long>::TPtr& retryPolicy)
         : Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
         , RandomProvider(randomProvider)
+        , RetryPolicy(retryPolicy)
         , OutputIndex(outputIndex)
         , TxId(txId)
         , Prefix(prefix)
@@ -402,7 +407,7 @@ private:
             const auto& key = MakePartitionKey(v);
             const auto ins = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
             if (ins.second || ins.first->second.empty() || ins.first->second.back()->IsFinishing()) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeOutputName(), MaxFileSize, Compression);
+                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeOutputName(), MaxFileSize, Compression, RetryPolicy);
                 ins.first->second.emplace_back(fileWrite.get());
                 RegisterWithSameMailbox(fileWrite.release());
             }
@@ -464,8 +469,9 @@ private:
 
     const IHTTPGateway::TPtr Gateway;
     const NYdb::TCredentialsProviderPtr CredProvider;
-    IRandomProvider * RandomProvider;
+    IRandomProvider* RandomProvider;
     TIntrusivePtr<IRandomProvider> DefaultRandomProvider;
+    const IRetryPolicy<long>::TPtr RetryPolicy;
 
     const ui64 OutputIndex;
     const TTxId TxId;
@@ -497,7 +503,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const TString& prefix,
     const THashMap<TString, TString>& secureParams,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const IRetryPolicy<long>::TPtr& retryPolicy)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
@@ -513,7 +520,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         params.HasMemoryLimit() ? params.GetMemoryLimit() : 1_GB,
         params.HasMaxFileSize() ? params.GetMaxFileSize() : 50_MB,
         params.HasCompression() ? params.GetCompression() : "",
-        callbacks);
+        callbacks,
+        retryPolicy);
     return {actor, actor};
 }
 

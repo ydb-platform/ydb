@@ -378,18 +378,20 @@ public:
                 return true;
             case TEvPrivate::TEvReadFinished::EventType:
                 InputFinished = true;
-                LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
+                LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
                 return false;
             case TEvPrivate::TEvReadError::EventType:
                 InputFinished = true;
                 Issues = std::move(ev->Get<TEvPrivate::TEvReadError>()->Error);
-                LOG_CORO_W("TS3ReadCoroImpl", "TEvReadError: " << Issues.ToOneLineString() << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
+                LOG_CORO_W("TS3ReadCoroImpl", "TEvReadError: " << Issues.ToOneLineString() << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
                 return false;
             case TEvPrivate::TEvDataPart::EventType:
                 if (200L == HttpResponseCode || 206L == HttpResponseCode) {
                     value = ev->Get<TEvPrivate::TEvDataPart>()->Result.Extract();
                     RetryStuff->Offset += value.size();
                     RetryStuff->SizeLimit -= value.size();
+                    LastOffset = RetryStuff->Offset;
+                    LastData = value;
                     LOG_CORO_T("TS3ReadCoroImpl", "TEvDataPart, size: " << value.size() << ", Url: " << RetryStuff->Url << ", Offset (updated): " << RetryStuff->Offset);
                     Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
                 } else if (HttpResponseCode && !RetryStuff->IsCancelled() && !RetryStuff->NextRetryDelay) {
@@ -398,7 +400,7 @@ public:
                     else if (!ErrorText.EndsWith(TruncatedSuffix))
                         ErrorText.append(TruncatedSuffix);
                     value.clear();
-                    LOG_CORO_W("TS3ReadCoroImpl", "TEvDataPart, ERROR: " << ErrorText << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
+                    LOG_CORO_W("TS3ReadCoroImpl", "TEvDataPart, ERROR: " << ErrorText << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
                 }
                 return true;
             default:
@@ -500,9 +502,41 @@ private:
         }
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}));
     }
+
+    TString GetLastDataAsText() {
+
+        if (LastData.empty()) {
+            return "[]";
+        }
+
+        auto begin = const_cast<char*>(LastData.data());
+        auto end = begin + LastData.size();
+
+        TStringBuilder result;
+
+        result << "[";
+
+        if (LastData.size() > 32) {
+            begin += LastData.size() - 32;
+            result << "...";
+        }
+
+        while (begin < end) {
+            char c = *begin++;
+            if (c >= 32 && c <= 126) {
+                result << c;
+            } else {
+                result << "\\" << Hex(static_cast<ui8>(c));
+            }
+        }
+
+        result << "]";
+
+        return result;
+    }
 private:
     const ui64 InputIndex;
-    const TTxId& TxId;
+    const TTxId TxId;
     const TRetryStuff::TPtr RetryStuff;
     const TReadSpec::TPtr ReadSpec;
     const TString Format, RowType, Compression;
@@ -514,6 +548,9 @@ private:
     long HttpResponseCode = 0L;
     TString ErrorText;
     TIssues Issues;
+
+    std::size_t LastOffset = 0;
+    TString LastData;
 };
 
 class TS3ReadCoroActor : public TActorCoro {
@@ -539,9 +576,10 @@ private:
             }
         }
 
-        if (!retryStuff->IsCancelled() && retryStuff->NextRetryDelay && retryStuff->SizeLimit > 0ULL) {
+        auto nextRetryDelay = retryStuff->NextRetryDelay;
+        if (!retryStuff->IsCancelled() && nextRetryDelay && retryStuff->SizeLimit > 0ULL) {
             LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3ReadCoroActor" << ": " << self << ", TxId: " << retryStuff->TxId << ". " << "Retry Download, Url: " << retryStuff->Url << ", Offset: " << retryStuff->Offset);
-            actorSystem->Schedule(*retryStuff->NextRetryDelay, new IEventHandle(parent, self, new TEvPrivate::TEvRetryEventFunc(std::bind(&TS3ReadCoroActor::DownloadStart, retryStuff, actorSystem, self, parent))));
+            actorSystem->Schedule(*nextRetryDelay, new IEventHandle(parent, self, new TEvPrivate::TEvRetryEventFunc(std::bind(&TS3ReadCoroActor::DownloadStart, retryStuff, actorSystem, self, parent))));
         } else {
             actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadFinished));
         }

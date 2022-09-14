@@ -4,6 +4,7 @@
 
 #include <util/system/types.h>
 
+#include <type_traits>
 #include <algorithm>
 #include <atomic>
 #include <limits>
@@ -19,8 +20,8 @@ private:
     static constexpr ui64 TIME_SLOT_PART_COUNT = TIME_SLOT_MAX_VALUE + 1;
     static constexpr auto TIME_SLOT_PART_LENGTH_NS = TIME_SLOT_LENGTH_NS / TIME_SLOT_PART_COUNT;
 
-    template <int MAX_VALUE, typename T>
-    static void AtomicAddBound(std::atomic<T>& val, int inc) {
+    template <typename T>
+    static void AtomicAddBound(std::atomic<T>& val, i64 inc) {
         if (inc == 0) {
             return;
         }
@@ -29,27 +30,29 @@ private:
         auto oldVal = newVal;
 
         do {
-            if (oldVal > MAX_VALUE) {
+            static constexpr auto MAX_VALUE = std::numeric_limits<T>::max();
+
+            if (oldVal >= MAX_VALUE) {
                 return;
             }
-            newVal = std::min<int>(MAX_VALUE, oldVal + inc);
+            newVal = std::min<i64>(MAX_VALUE, static_cast<i64>(oldVal) + inc);
         } while (!val.compare_exchange_weak(oldVal, newVal));
     }
 
     template <typename T>
-    static void AtomicSubBound(std::atomic<T>& val, int sub) {
+    static void AtomicSubBound(std::atomic<T>& val, i64 sub) {
         if (sub == 0) {
             return;
         }
 
         auto newVal = val.load();
-        auto oldVal = val.load();
+        auto oldVal = newVal;
 
         do {
             if (oldVal == 0) {
                 return;
             }
-            newVal = std::max<int>(0, static_cast<int>(oldVal) - sub);
+            newVal = std::max<i64>(0, static_cast<i64>(oldVal) - sub);
         } while (!val.compare_exchange_weak(oldVal, newVal));
     }
 
@@ -86,6 +89,8 @@ public:
     std::atomic<bool> LastRegisteredPeriodIsBusy = false;
 
     explicit TThreadLoad(ui64 timeNs = 0) {
+        static_assert(std::is_unsigned<TimeSlotType>::value);
+
         LastTimeNs = timeNs;
         for (size_t i = 0; i < TIME_SLOT_COUNT; ++i) {
             TimeSlots[i] = 0;
@@ -146,7 +151,7 @@ public:
         if (firstSlotNumber == lastSlotNumber) {
             ui32 slotLengthNs = timeNs - lastTimeNs;
             ui32 slotPartsCount = (slotLengthNs + TIME_SLOT_PART_LENGTH_NS - 1) / TIME_SLOT_PART_LENGTH_NS;
-            AtomicAddBound<TIME_SLOT_MAX_VALUE>(TimeSlots[firstSlotIndex], slotPartsCount);
+            AtomicAddBound(TimeSlots[firstSlotIndex], slotPartsCount);
 
             if (ModifyLastTime) {
                 LastTimeNs = timeNs;
@@ -160,13 +165,13 @@ public:
         ui32 lastSlotPartsCount = (lastSlotLengthNs + TIME_SLOT_PART_LENGTH_NS - 1) / TIME_SLOT_PART_LENGTH_NS;
 
         // process first time slot
-        AtomicAddBound<TIME_SLOT_MAX_VALUE>(TimeSlots[firstSlotIndex], firstSlotPartsCount);
+        AtomicAddBound(TimeSlots[firstSlotIndex], firstSlotPartsCount);
 
         // process complete time slots
         UpdateCompleteTimeSlots(firstSlotNumber, lastSlotNumber, TIME_SLOT_MAX_VALUE);
 
         // process last time slot
-        AtomicAddBound<TIME_SLOT_MAX_VALUE>(TimeSlots[lastSlotIndex], lastSlotPartsCount);
+        AtomicAddBound(TimeSlots[lastSlotIndex], lastSlotPartsCount);
 
         if (ModifyLastTime) {
             LastTimeNs = timeNs;

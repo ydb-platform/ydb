@@ -1,4 +1,5 @@
 #include "yql_s3_write_actor.h"
+#include "yql_s3_actors_util.h"
 
 #include <ydb/core/protos/services.pb.h>
 
@@ -105,7 +106,7 @@ public:
 
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
-        LOG_D("TS3FileWriteActor", "Bootstrapped by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "]");
+        LOG_D("TS3FileWriteActor", __func__ << " by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "]");
         if (Parts->IsSealed() && 1U == Parts->Size()) {
             const auto size = Parts->Volume();
             InFlight += size;
@@ -121,9 +122,9 @@ public:
 
     void PassAway() override {
         if (InFlight || !Parts->Empty()) {
-            LOG_W("TS3FileWriteActor", "PassAway but NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size());
+            LOG_W("TS3FileWriteActor", __func__ << " but NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size());
         } else {
-            LOG_D("TS3FileWriteActor", "PassAway");
+            LOG_D("TS3FileWriteActor", __func__);
         }
         TActorBootstrapped<TS3FileWriteActor>::PassAway();
     }
@@ -241,13 +242,10 @@ private:
     static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U:
-            {
-                auto content = std::get<IHTTPGateway::TContent>(std::move(result));
-                if (content.HttpResponseCode >= 300) {
-                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "HTTP error code: " << content.HttpResponseCode)})));
-                } else {
-                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url)));
-                }
+            if (auto content = std::get<IHTTPGateway::TContent>(std::move(result)); content.HttpResponseCode >= 300) {
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(ParseS3ErrorResponse(content.HttpResponseCode, content.Extract()))})));
+            } else {
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url)));
             }
             break;
         case 1U:
@@ -359,7 +357,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3WriteActor", "Bootstrapped");
+        LOG_D("TS3WriteActor", __func__);
         Become(&TS3WriteActor::StateFunc);
     }
 
@@ -456,9 +454,9 @@ private:
         FileWriteActors.clear();
 
         if (fileWriterCount) {
-            LOG_W("TS3WriteActor", "PassAway with " << fileWriterCount << " NOT finished FileWriter(s)");
+            LOG_W("TS3WriteActor", __func__ << " with " << fileWriterCount << " NOT finished FileWriter(s)");
         } else {
-            LOG_D("TS3WriteActor", "PassAway");
+            LOG_D("TS3WriteActor", __func__);
         }
 
         TActorBootstrapped<TS3WriteActor>::PassAway();

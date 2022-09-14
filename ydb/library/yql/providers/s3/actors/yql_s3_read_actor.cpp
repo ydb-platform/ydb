@@ -21,6 +21,7 @@
 #endif
 
 #include "yql_s3_read_actor.h"
+#include "yql_s3_actors_util.h"
 
 #include <ydb/core/protos/services.pb.h>
 
@@ -173,7 +174,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("TS3ReadActor", "Bootstrapped, InputIndex: " << InputIndex);
+        LOG_D("TS3ReadActor", __func__ << ", InputIndex: " << InputIndex);
         Become(&TS3ReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
             const TPath& path = Paths[pathInd];
@@ -242,13 +243,17 @@ private:
         return total;
     }
 
-
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         ++IsDoneCounter;
-        auto id = result->Get()->PathIndex;
-        LOG_D("TS3ReadActor", "ID: " << id << ", TEvReadResult size: " << result->Get()->Result.size());
-        Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), id));
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        const auto id = result->Get()->PathIndex;
+        const auto httpCode = result->Get()->Result.HttpResponseCode;
+        LOG_D("TS3ReadActor", "ID: " << id << ", TEvReadResult size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode);
+        if (200 == httpCode || 206 == httpCode) {
+            Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), id));
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        } else {
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, {TIssue(ParseS3ErrorResponse(httpCode, result->Get()->Result.Extract()))}, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        }
     }
 
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
@@ -260,7 +265,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        LOG_D("TS3ReadActor", "PassAway");
+        LOG_D("TS3ReadActor", __func__);
         ContainerCache.Clear();
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
@@ -409,7 +414,7 @@ public:
     }
 private:
     void WaitFinish() {
-        LOG_CORO_D("TS3ReadCoroImpl", "WaitFinish()");   
+        LOG_CORO_D("TS3ReadCoroImpl", __func__);
         if (InputFinished)
             return;
 
@@ -438,7 +443,7 @@ private:
 
     void Run() final try {
 
-        LOG_CORO_D("TS3ReadCoroImpl", "Run, Path: " << Path);   
+        LOG_CORO_D("TS3ReadCoroImpl", __func__ << ", Path: " << Path);
 
         NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
 
@@ -460,23 +465,7 @@ private:
         WaitFinish();
 
         if (!ErrorText.empty()) {
-            TStringBuilder str;
-
-            if (HttpResponseCode)
-                str << "HTTP response code: " << HttpResponseCode << ", ";
-
-            if (ErrorText.StartsWith("<?xml") && !ErrorText.EndsWith(TruncatedSuffix)) {
-                const NXml::TDocument xml(ErrorText, NXml::TDocument::String);
-                if (const auto& root = xml.Root(); root.Name() == "Error") {
-                    const auto& code = root.Node("Code", true).Value<TString>();
-                    const auto& message = root.Node("Message", true).Value<TString>();
-                    str << message << ", error code: " << code;
-                } else
-                    str << ErrorText;
-            } else
-                str << ErrorText;
-
-            Issues.AddIssues({TIssue(str)});
+            Issues.AddIssues({TIssue(ParseS3ErrorResponse(HttpResponseCode, ErrorText))});
         }
 
         if (exceptIssue.Message) {
@@ -635,7 +624,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("TS3StreamReadActor", "Bootstrapped");
+        LOG_D("TS3StreamReadActor", __func__);
         Become(&TS3StreamReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
             const TPath& path = Paths[pathInd];
@@ -703,7 +692,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        LOG_D("TS3StreamReadActor", "PassAway");
+        LOG_D("TS3StreamReadActor", __func__);
         for (auto stuff: RetryStuffForFile) {
             stuff->Cancel();
         }

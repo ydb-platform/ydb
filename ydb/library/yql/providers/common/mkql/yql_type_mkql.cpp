@@ -203,6 +203,24 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         return pgmBuilder.GetTypeEnvironment().GetTypeOfEmptyDict();
     }
 
+    case ETypeAnnotationKind::Block: {
+        auto block = annotation.Cast<TBlockExprType>();
+        auto itemType = BuildType(*block->GetItemType(), pgmBuilder, err, withTagged);
+        if (!itemType) {
+            return nullptr;
+        }
+        return pgmBuilder.NewBlockType(itemType, NKikimr::NMiniKQL::TBlockType::EShape::Many);
+    }
+
+    case ETypeAnnotationKind::Scalar: {
+        auto scalar = annotation.Cast<TScalarExprType>();
+        auto itemType = BuildType(*scalar->GetItemType(), pgmBuilder, err, withTagged);
+        if (!itemType) {
+            return nullptr;
+        }
+        return pgmBuilder.NewBlockType(itemType, NKikimr::NMiniKQL::TBlockType::EShape::Scalar);
+    }
+
     default:
         return nullptr;
     }
@@ -363,6 +381,17 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
         auto taggedType = static_cast<TTaggedType*>(type);
         auto baseType = ConvertMiniKQLType(position, taggedType->GetBaseType(), ctx);
         return ctx.MakeType<TTaggedExprType>(baseType, taggedType->GetTag());
+    }
+
+    case TType::EKind::Block:
+    {
+        auto blockType = static_cast<TBlockType*>(type);
+        auto itemType = ConvertMiniKQLType(position, blockType->GetItemType(), ctx);
+        if (blockType->GetShape() == NKikimr::NMiniKQL::TBlockType::EShape::Many) {
+            return ctx.MakeType<TBlockExprType>(itemType);
+        } else {
+            return ctx.MakeType<TScalarExprType>(itemType);
+        }
     }
 
     default:

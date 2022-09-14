@@ -101,12 +101,13 @@ Y_UNIT_TEST(TestScalar) {
     UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(value).GetDatum().scalar_as<arrow::UInt64Scalar>().value, testValue);
 }
 
-Y_UNIT_TEST(TestBlockAdd) {
+Y_UNIT_TEST(TestBlockFunc) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
+    const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
 
     const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<ui64>(10)});
     const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<ui64>(20)});
@@ -120,7 +121,7 @@ Y_UNIT_TEST(TestBlockAdd) {
     });
     const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
     const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
-        return {pb.BlockAdd(items[0], items[1])};
+        return {pb.BlockFunc("add", ui64BlockType, {items[0], items[1]})};
     });
     const auto sumNarrowFlow = pb.NarrowMap(sumWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
@@ -143,13 +144,14 @@ Y_UNIT_TEST(TestBlockAdd) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestBlockAddWithNullables) {
+Y_UNIT_TEST(TestBlockFuncWithNullables) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, true);
     const auto tupleType = pb.NewTupleType({optionalUi64Type, optionalUi64Type});
     const auto emptyOptionalUi64 = pb.NewEmptyOptional(optionalUi64Type);
+    const auto ui64OptBlockType = pb.NewBlockType(optionalUi64Type, TBlockType::EShape::Many);
 
     const auto data1 = pb.NewTuple(tupleType, {
         pb.NewOptional(pb.NewDataLiteral<ui64>(1)),
@@ -176,7 +178,7 @@ Y_UNIT_TEST(TestBlockAddWithNullables) {
     });
     const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
     const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
-        return {pb.BlockAdd(items[0], items[1])};
+        return {pb.BlockFunc("add", ui64OptBlockType, {items[0], items[1]})};
     });
     const auto sumNarrowFlow = pb.NarrowMap(sumWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
@@ -201,11 +203,12 @@ Y_UNIT_TEST(TestBlockAddWithNullables) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestBlockAddWithNullableScalar) {
+Y_UNIT_TEST(TestBlockFuncWithNullableScalar) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, true);
+    const auto ui64OptBlockType = pb.NewBlockType(optionalUi64Type, TBlockType::EShape::Many);
     const auto emptyOptionalUi64 = pb.NewEmptyOptional(optionalUi64Type);
 
     const auto list = pb.NewList(optionalUi64Type, {
@@ -226,7 +229,7 @@ Y_UNIT_TEST(TestBlockAddWithNullableScalar) {
     {
         const auto scalar = pb.AsScalar(emptyOptionalUi64);
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockAdd(scalar, item)};
+            return {pb.BlockFunc("add", ui64OptBlockType, {scalar, item})};
         });
 
         NUdf::TUnboxedValue item;
@@ -245,7 +248,7 @@ Y_UNIT_TEST(TestBlockAddWithNullableScalar) {
     {
         const auto scalar = pb.AsScalar(emptyOptionalUi64);
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockAdd(item, scalar)};
+            return {pb.BlockFunc("add", ui64OptBlockType, {item, scalar})};
         });
 
         NUdf::TUnboxedValue item;
@@ -264,7 +267,7 @@ Y_UNIT_TEST(TestBlockAddWithNullableScalar) {
     {
         const auto scalar = pb.AsScalar(pb.NewDataLiteral<ui64>(100));
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockAdd(item, scalar)};
+            return {pb.BlockFunc("add", ui64OptBlockType, {item, scalar})};
         });
 
         NUdf::TUnboxedValue item;
@@ -281,11 +284,12 @@ Y_UNIT_TEST(TestBlockAddWithNullableScalar) {
     }
 }
 
-Y_UNIT_TEST(TestBlockAddWithScalar) {
+Y_UNIT_TEST(TestBlockFuncWithScalar) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
 
     const auto data1 = pb.NewDataLiteral<ui64>(10);
     const auto data2 = pb.NewDataLiteral<ui64>(20);
@@ -297,7 +301,7 @@ Y_UNIT_TEST(TestBlockAddWithScalar) {
     const auto flow = pb.ToFlow(list);
     const auto blocksFlow = pb.ToBlocks(flow);
     const auto sumBlocksFlow = pb.Map(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode {
-        return {pb.BlockAdd(leftScalar, {pb.BlockAdd(item, rightScalar  )})};
+        return {pb.BlockFunc("add", ui64BlockType, { leftScalar, {pb.BlockFunc("add", ui64BlockType, { item, rightScalar } )}})};
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumBlocksFlow));
 

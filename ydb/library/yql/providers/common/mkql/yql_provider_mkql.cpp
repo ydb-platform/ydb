@@ -467,8 +467,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Div", &TProgramBuilder::Div},
         {"Mod", &TProgramBuilder::Mod},
 
-        {"BlockAdd", &TProgramBuilder::BlockAdd},
-
         {"DecimalMul", &TProgramBuilder::DecimalMul},
         {"DecimalDiv", &TProgramBuilder::DecimalDiv},
         {"DecimalMod", &TProgramBuilder::DecimalMod},
@@ -2334,6 +2332,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     AddCallable("WithContext", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
         return ctx.ProgramBuilder.WithContext(input, node.Child(1)->Content());
+    });
+
+    AddCallable("BlockFunc", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        TVector<TRuntimeNode> args;
+        for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
+            args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
+        }
+
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockFunc(node.Child(0)->Content(), returnType, args);
     });
 
     AddCallable("PgArray", [](const TExprNode& node, TMkqlBuildContext& ctx) {

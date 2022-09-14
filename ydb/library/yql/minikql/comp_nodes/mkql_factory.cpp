@@ -4,7 +4,7 @@
 #include "mkql_aggrcount.h"
 #include "mkql_append.h"
 #include "mkql_apply.h"
-#include "mkql_block_add.h"
+#include "mkql_block_func.h"
 #include "mkql_blocks.h"
 #include "mkql_callable.h"
 #include "mkql_chain_map.h"
@@ -263,7 +263,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"FromFlow", &WrapFromFlow},
         {"ToBlocks", &WrapToBlocks},
         {"WideToBlocks", &WrapWideToBlocks},
-        {"BlockAdd", &WrapBlockAdd},
+        {"BlockFunc", &WrapBlockFunc},
         {"FromBlocks", &WrapFromBlocks},
         {"WideFromBlocks", &WrapWideFromBlocks},
         {"AsScalar", &WrapAsScalar},

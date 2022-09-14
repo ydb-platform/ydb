@@ -240,7 +240,7 @@ public:
     TRuntimeNode WideFromBlocks(TRuntimeNode flow);
     TRuntimeNode AsScalar(TRuntimeNode value);
 
-    TRuntimeNode BlockAdd(TRuntimeNode data1, TRuntimeNode data2);
+    TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
 
     // udfs
     TRuntimeNode Udf(

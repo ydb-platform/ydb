@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-IComputationNode* WrapBlockAdd(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 }
 }

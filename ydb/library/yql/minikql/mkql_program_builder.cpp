@@ -1471,30 +1471,6 @@ TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockAdd(TRuntimeNode arg1, TRuntimeNode arg2) {
-    bool arg1Optional;
-    auto* arg1BlockType = AS_TYPE(TBlockType, arg1.GetStaticType());
-    auto* arg1Type = UnpackOptionalData(arg1BlockType->GetItemType(), arg1Optional);
-
-    bool arg2Optional;
-    auto* arg2BlockType = AS_TYPE(TBlockType, arg2.GetStaticType());
-    auto* arg2Type = UnpackOptionalData(arg2BlockType->GetItemType(), arg2Optional);
-
-    MKQL_ENSURE(arg1BlockType->GetShape() != TBlockType::EShape::Scalar ||
-        arg2BlockType->GetShape() != TBlockType::EShape::Scalar,
-        "At least one EShape::Many block expected");
-
-    auto* resultDataType = BuildArithmeticCommonType(arg1Type, arg2Type);
-    if (arg1Optional || arg2Optional) {
-        resultDataType = NewOptionalType(resultDataType);
-    }
-    auto* callableType = TCallableBuilder(Env, __func__, NewBlockType(resultDataType, TBlockType::EShape::Many))
-        .Add(arg1)
-        .Add(arg2)
-        .Build();
-    return TRuntimeNode(callableType, false);
-}
-
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
@@ -5192,6 +5168,20 @@ TRuntimeNode TProgramBuilder::WithContext(TRuntimeNode input, const std::string_
 TRuntimeNode TProgramBuilder::PgInternal0(TType* returnType) {
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args) {
+    for (const auto& arg : args) {
+        MKQL_ENSURE(arg.GetStaticType()->IsBlock(), "Expected Block type");
+    }
+
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(NewDataLiteral<NUdf::EDataSlot::String>(funcName));
+    for (const auto& arg : args) {
+        builder.Add(arg);
+    }
+
+    return TRuntimeNode(builder.Build(), false);
 }
 
 bool CanExportType(TType* type, const TTypeEnvironment& env) {

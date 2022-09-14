@@ -4297,10 +4297,10 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
     auto status = OptimizeExpr(lambda, lambda, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->IsCallable("+")) {
-            auto ret = ctx.RenameNode(*node, "BlockAdd");
-            for (ui32 index = 0; index < ret->ChildrenSize(); ++index) {
+            auto ret = ctx.NewCallable(node->Pos(), "BlockFunc", { ctx.NewAtom(node->Pos(), "add"), node->ChildPtr(0), node->ChildPtr(1) });
+            for (ui32 index = 0; index < node->ChildrenSize(); ++index) {
                 if (node->Child(index)->IsComplete()) {
-                    ret->ChildRef(index) = ctx.NewCallable(node->Pos(), "AsScalar", { node->ChildPtr(index) });
+                    ret->ChildRef(index + 1) = ctx.NewCallable(node->Pos(), "AsScalar", { node->ChildPtr(index) });
                 }
             }
 

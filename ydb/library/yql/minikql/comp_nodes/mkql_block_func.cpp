@@ -1,4 +1,4 @@
-#include "mkql_block_add.h"
+#include "mkql_block_func.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -18,21 +18,23 @@ namespace NMiniKQL {
 
 namespace {
 
-class TBlockAddWrapper : public TMutableComputationNode<TBlockAddWrapper> {
+class TBlockFuncWrapper : public TMutableComputationNode<TBlockFuncWrapper> {
 public:
-    TBlockAddWrapper(TComputationMutables& mutables,
+    TBlockFuncWrapper(TComputationMutables& mutables,
+        const TString& funcName,
         IComputationNode* leftArg,
         IComputationNode* rightArg,
         TType* leftArgType,
         TType* rightArgType,
         TType* outputType)
         : TMutableComputationNode(mutables)
+        , FuncName(funcName)
         , LeftArg(leftArg)
         , RightArg(rightArg)
         , LeftValueDesc(ToValueDescr(leftArgType))
         , RightValueDesc(ToValueDescr(rightArgType))
         , OutputValueDescr(ToValueDescr(outputType))
-        , Kernel(ResolveKernel(LeftValueDesc, RightValueDesc))
+        , Kernel(ResolveKernel(FuncName, LeftValueDesc, RightValueDesc))
         , OutputTypeBitWidth(static_cast<const arrow::FixedWidthType&>(*OutputValueDescr.type).bit_width())
         , FunctionRegistry(*arrow::compute::GetFunctionRegistry())
     {
@@ -93,12 +95,13 @@ private:
         this->DependsOn(RightArg);
     }
 
-    static const arrow::compute::ScalarKernel& ResolveKernel(const arrow::ValueDescr& leftArg,
+    static const arrow::compute::ScalarKernel& ResolveKernel(const TString& funcName,
+        const arrow::ValueDescr& leftArg,
         const arrow::ValueDescr& rightArg)
     {
         auto* functionRegistry = arrow::compute::GetFunctionRegistry();
         Y_VERIFY_DEBUG(functionRegistry != nullptr);
-        auto function = ARROW_RESULT(functionRegistry->GetFunction("add"));
+        auto function = ARROW_RESULT(functionRegistry->GetFunction(funcName));
         Y_VERIFY_DEBUG(function != nullptr);
         Y_VERIFY_DEBUG(function->kind() == arrow::compute::Function::SCALAR);
 
@@ -126,6 +129,7 @@ private:
     }
 
 private:
+    const TString FuncName;
     IComputationNode* LeftArg;
     IComputationNode* RightArg;
     const arrow::ValueDescr LeftValueDesc;
@@ -138,13 +142,16 @@ private:
 
 }
 
-IComputationNode* WrapBlockAdd(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const auto* callableType = callable.GetType();
-    return new TBlockAddWrapper(ctx.Mutables,
-        LocateNode(ctx.NodeLocator, callable, 0),
+    const auto funcNameData = AS_VALUE(TDataLiteral, callable.GetInput(0));
+    const auto funcName = TString(funcNameData->AsValue().AsStringRef());
+    return new TBlockFuncWrapper(ctx.Mutables,
+        funcName,
         LocateNode(ctx.NodeLocator, callable, 1),
-        callableType->GetArgumentType(0),
+        LocateNode(ctx.NodeLocator, callable, 2),
         callableType->GetArgumentType(1),
+        callableType->GetArgumentType(2),
         callableType->GetReturnType());
 }
 

@@ -46,6 +46,7 @@ target_link_libraries(providers-s3-provider PUBLIC
   providers-s3-proto
   providers-s3-range_helpers
   library-yql-utils
+  yql-utils-threading
 )
 target_sources(providers-s3-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/provider/yql_s3_datasink.cpp

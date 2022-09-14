@@ -58,6 +58,7 @@ int s2n_init(void)
     POSIX_GUARD(s2n_mem_init());
     /* Must run before any init method that calls libcrypto methods. */
     POSIX_GUARD_RESULT(s2n_locking_init());
+    POSIX_GUARD_RESULT(s2n_libcrypto_init());
     POSIX_GUARD(s2n_fips_init());
     POSIX_GUARD_RESULT(s2n_rand_init());
     POSIX_GUARD(s2n_cipher_suites_init());
@@ -88,10 +89,11 @@ static bool s2n_cleanup_atexit_impl(void)
     /* the configs need to be wiped before resetting the memory callbacks */
     s2n_wipe_static_configs();
 
-    return s2n_result_is_ok(s2n_rand_cleanup_thread()) &&
-           s2n_result_is_ok(s2n_rand_cleanup()) &&
-           s2n_result_is_ok(s2n_locking_cleanup()) &&
-           (s2n_mem_cleanup() == S2N_SUCCESS);
+    return s2n_result_is_ok(s2n_libcrypto_cleanup()) &&
+        s2n_result_is_ok(s2n_rand_cleanup_thread()) &&
+        s2n_result_is_ok(s2n_rand_cleanup()) &&
+        s2n_result_is_ok(s2n_locking_cleanup()) &&
+        (s2n_mem_cleanup() == S2N_SUCCESS);
 }
 
 int s2n_cleanup(void)

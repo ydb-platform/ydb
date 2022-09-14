@@ -26,6 +26,7 @@ target_link_libraries(contrib-libs-hyperscan PUBLIC
   contrib-restricted-boost
   restricted-boost-icl
   boost-libs-graph
+  restricted-boost-property_map
 )
 target_sources(contrib-libs-hyperscan PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/hyperscan/src/alloc.c

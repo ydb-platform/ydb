@@ -93,6 +93,8 @@ struct Schema : NIceDb::Schema {
         struct DataCentersPreference : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersPreference; };
         struct AllowedDataCenterIds : Column<122, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
 
+        struct BalancerPolicy : Column<123, NScheme::NTypeIds::Uint64> { using Type = NKikimrHive::EBalancerPolicy; static constexpr NKikimrHive::EBalancerPolicy Default = NKikimrHive::EBalancerPolicy::POLICY_BALANCE; };
+
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
             ID,
@@ -118,7 +120,8 @@ struct Schema : NIceDb::Schema {
             ReassignReason,
             Statistics,
             DataCentersPreference,
-            AllowedDataCenterIds
+            AllowedDataCenterIds,
+            BalancerPolicy
         >;
     };
 

@@ -487,6 +487,7 @@ protected:
     void Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&);
     void Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr&);
     void Handle(TEvPrivate::TEvProcessPendingOperations::TPtr&);
+    void Handle(TEvPrivate::TEvBalancerOut::TPtr&);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);

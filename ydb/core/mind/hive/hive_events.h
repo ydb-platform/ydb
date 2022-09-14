@@ -23,6 +23,7 @@ struct TEvPrivate {
         EvUnlockTabletReconnectTimeout,
         EvProcessPendingOperations,
         EvRestartComplete,
+        EvBalancerOut,
         EvEnd
     };
 
@@ -37,7 +38,7 @@ struct TEvPrivate {
     };
 
     struct TEvProcessBootQueue : TEventLocal<TEvProcessBootQueue, EvProcessBootQueue> {};
-    
+
     struct TEvPostponeProcessBootQueue : TEventLocal<TEvPostponeProcessBootQueue, EvPostponeProcessBootQueue> {};
 
     struct TEvProcessDisconnectNode : TEventLocal<TEvProcessDisconnectNode, EvProcessDisconnectNode> {
@@ -78,6 +79,8 @@ struct TEvPrivate {
     };
 
     struct TEvProcessPendingOperations : TEventLocal<TEvProcessPendingOperations, EvProcessPendingOperations> {};
+
+    struct TEvBalancerOut : TEventLocal<TEvBalancerOut, EvBalancerOut> {};
 };
 
 } // NHive

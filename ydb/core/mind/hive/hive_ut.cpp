@@ -20,6 +20,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/mediator/mediator.h>
 
+#include <ydb/core/mind/hive/hive_events.h>
+
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 
 #include <library/cpp/malloc/api/malloc.h>
@@ -245,7 +247,7 @@ namespace {
         }
     }
 
-    void SetupServices(TTestActorRuntime &runtime, bool isLocalEnabled) {
+    void SetupServices(TTestActorRuntime &runtime, bool isLocalEnabled, const std::function<void(TAppPrepare&)> & appConfigSetup) {
         TAppPrepare app;
 
         SetupDomainInfo(runtime, app);
@@ -254,6 +256,10 @@ namespace {
         app.SetMinRequestSequenceSize(10); // for smaller sequences and high interaction between root and domain hives
         app.SetRequestSequenceSize(10);
         app.SetHiveStoragePoolFreshPeriod(0);
+
+        if (appConfigSetup) {
+            appConfigSetup(app);
+        }
 
         SetupNodeWarden(runtime);
         SetupPDisk(runtime);
@@ -352,12 +358,12 @@ namespace {
         UNIT_ASSERT(configureResponse->Record.GetResponse().GetSuccess());
     }
 
-    void Setup(TTestActorRuntime& runtime, bool isLocalEnabled = true, ui32 numGroups = 1) {
+    void Setup(TTestActorRuntime& runtime, bool isLocalEnabled = true, ui32 numGroups = 1, const std::function<void(TAppPrepare&)> & appConfigSetup = nullptr) {
         using namespace NMalloc;
         TMallocInfo mallocInfo = MallocInfo();
         mallocInfo.SetParam("FillMemoryOnAllocation", "false");
         SetupLogging(runtime);
-        SetupServices(runtime, isLocalEnabled);
+        SetupServices(runtime, isLocalEnabled, appConfigSetup);
         SetupBoxAndStoragePool(runtime, numGroups);
     }
 
@@ -3593,6 +3599,319 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0], 2);
             UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1], 0);
             UNIT_ASSERT_VALUES_EQUAL(nodeTablets[2], NUM_TABLETS - 2);
+        }
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerIgnoreTablet) {
+        // Test plan:
+        // - create configuration where:
+        //  - there is single node which run several tablets with different BalancerPolicy
+        //  - and all tablets report very high resource usage
+        //  (so that balancer wants to unload the node but have no space to move tablets to)
+        // - then add enough empty nodes
+        // - test that balancer moved out all tablets except those with BalancerPolicy=BALANCER_IGNORE
+        // - change BalancerPolicy to BALANCER_BALANCE for all remaining tablets
+        // - test that balancer also moved out former BALANCER_IGNORE tablets
+        //
+        static const int NUM_NODES = 4;
+        static const int NUM_TABLETS = 3;
+        static const ui64 SINGLE_TABLET_NETWORK_USAGE = 5000000;
+
+        TTestBasicRuntime runtime(NUM_NODES, false);
+
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMaxMovementsOnAutoBalancer(100);
+            app.HiveConfig.SetMinPeriodBetweenBalance(0.1);
+            app.HiveConfig.SetTabletKickCooldownPeriod(0);
+            app.HiveConfig.SetResourceChangeReactionPeriod(0);
+            // this value of MaxNodeUsageToKick is selected specifically to make test scenario work
+            // in link with number of tablets and values of network usage metrics used below
+            app.HiveConfig.SetMaxNodeUsageToKick(0.01);
+        });
+
+        TActorId senderA = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+
+        // stop all but one local services to emulate single node configuration
+        for (int i = 1; i < NUM_NODES; ++i) {
+            SendKillLocal(runtime, i);
+        }
+
+        struct TTabletMiniInfo {
+            ui64 TabletId;
+            ui64 ObjectId;
+            ui32 NodeIndex;
+            NKikimrHive::EBalancerPolicy BalancerPolicy;
+        };
+        auto getTabletInfos = [&runtime, senderA] (ui64 hiveTablet) {
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            const int nodeBase = runtime.GetNodeId(0);
+            std::vector<TTabletMiniInfo> tabletInfos;
+            for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                int nodeIndex = (int)tablet.GetNodeID() - nodeBase;
+                UNIT_ASSERT_C(nodeIndex >= 0 && nodeIndex < NUM_NODES, "nodeId# " << tablet.GetNodeID() << " nodeBase# " << nodeBase);
+                tabletInfos.push_back({tablet.GetTabletID(), tablet.GetObjectId(), tablet.GetNodeID() - nodeBase, tablet.GetBalancerPolicy()});
+            }
+            std::reverse(tabletInfos.begin(), tabletInfos.end());
+            return tabletInfos;
+        };
+        auto reportTabletMetrics = [&runtime, senderA, hiveTablet](ui64 tabletId, ui64 network, bool sync) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+            metric->SetTabletID(tabletId);
+            metric->MutableResourceUsage()->SetNetwork(network);
+
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+
+            if (sync) {
+                TAutoPtr<IEventHandle> handle;
+                auto* response = runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetricsAck>(handle);
+                Y_UNUSED(response);
+            }
+        };
+
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+        const TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+
+        Ctest << "Step A: create tablets" << Endl;
+
+        // create NUM_TABLETS tablets, some with BalancerPolicy set to "ignore"
+        for (int i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i);
+            switch (i % NUM_TABLETS) {
+                case 0: // policy not explicitly set
+                    break;
+                case 1: // policy explicitly set to default value
+                    ev->Record.SetBalancerPolicy(NKikimrHive::EBalancerPolicy::POLICY_BALANCE);
+                    break;
+                case 2: // policy explicitly set to ignore
+                    ev->Record.SetBalancerPolicy(NKikimrHive::EBalancerPolicy::POLICY_IGNORE);
+                    break;
+            }
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        Ctest << "Step A: get tablets info" << Endl;
+        auto tabletInfos_A = getTabletInfos(hiveTablet);
+
+        // check that tablets retain their BalancerPolicy flags...
+        for (const auto& i : tabletInfos_A) {
+            Ctest << "Step A: tablet index " << i.ObjectId << ", tablet id " << i.TabletId << ", node index " << i.NodeIndex << ", balancer policy " << NKikimrHive::EBalancerPolicy_Name(i.BalancerPolicy) << Endl;
+            switch (i.ObjectId % NUM_TABLETS) {
+                case 0:
+                case 1:
+                    UNIT_ASSERT_EQUAL_C(i.BalancerPolicy, NKikimrHive::EBalancerPolicy::POLICY_BALANCE, "objectId# " << i.ObjectId << " value# " << (ui64)i.BalancerPolicy << " name# " << NKikimrHive::EBalancerPolicy_Name(i.BalancerPolicy));
+                    break;
+                case 2:
+                    UNIT_ASSERT_EQUAL_C(i.BalancerPolicy, NKikimrHive::EBalancerPolicy::POLICY_IGNORE, "value# " << (ui64)i.BalancerPolicy << " name# " << NKikimrHive::EBalancerPolicy_Name(i.BalancerPolicy));
+                    break;
+            }
+        }
+        // ...and that all tablets are distributed on a single node
+        {
+            std::array<int, NUM_NODES> nodeTablets = {};
+            for (auto& i : tabletInfos_A) {
+                ++nodeTablets[i.NodeIndex];
+            }
+            Ctest << "Step A: tablet distribution";
+            for (auto i : nodeTablets) {
+                Ctest << " " << i;
+            }
+            Ctest << Endl;
+            auto minmax = std::minmax_element(nodeTablets.begin(), nodeTablets.end());
+            UNIT_ASSERT_VALUES_EQUAL(*minmax.first, 0);
+            UNIT_ASSERT_VALUES_EQUAL(*minmax.second, NUM_TABLETS);
+        }
+
+        Ctest << "Step B: report tablets metrics" << Endl;
+
+        // report raised tablet metrics (to kickoff the balancer)
+        for (const auto& i: tabletInfos_A) {
+            reportTabletMetrics(i.TabletId, SINGLE_TABLET_NETWORK_USAGE, true);
+        }
+
+        Ctest << "Step B: wait for balancer to complete" << Endl;
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+
+        Ctest << "Step B: get tablets info" << Endl;
+        auto tabletInfos_B = getTabletInfos(hiveTablet);
+
+        // check that all tablet are still on a single node
+        {
+            std::array<int, NUM_NODES> nodeTablets = {};
+            for (auto& i : tabletInfos_B) {
+                ++nodeTablets[i.NodeIndex];
+            }
+            Ctest << "Step B: tablet distribution";
+            for (auto i : nodeTablets) {
+                Ctest << " " << i;
+            }
+            Ctest << Endl;
+            auto minmax = std::minmax_element(nodeTablets.begin(), nodeTablets.end());
+            UNIT_ASSERT_VALUES_EQUAL(*minmax.first, 0);
+            UNIT_ASSERT_VALUES_EQUAL(*minmax.second, NUM_TABLETS);
+        }
+
+        Ctest << "Step C: add empty nodes" << Endl;
+        for (int i = 1; i < NUM_NODES; ++i) {
+            CreateLocal(runtime, i);
+        }
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES - 1);
+            runtime.DispatchEvents(options);
+        }
+
+        Ctest << "Step C: touch tablets metrics" << Endl;
+        // touch tablet metrics (to kickoff the balancer)
+        for (const auto& i: tabletInfos_B) {
+            reportTabletMetrics(i.TabletId, 0, true);
+        }
+
+        Ctest << "Step C: wait for balancer to complete" << Endl;
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+
+        Ctest << "Step C: get tablets info" << Endl;
+        auto tabletInfos_C = getTabletInfos(hiveTablet);
+
+        // check that ignored tablets stayed as they are...
+        for (const auto& i : tabletInfos_C) {
+            Ctest << "Step C: tablet index " << i.ObjectId << ", tablet id " << i.TabletId << ", node index " << i.NodeIndex << ", balancer policy " << NKikimrHive::EBalancerPolicy_Name(i.BalancerPolicy) << Endl;
+            switch (i.ObjectId % NUM_TABLETS) {
+                case 0:
+                case 1:
+                    break;
+                case 2:
+                    UNIT_ASSERT_EQUAL_C(i.BalancerPolicy, NKikimrHive::EBalancerPolicy::POLICY_IGNORE, "value# " << (ui64)i.BalancerPolicy << " name# " << NKikimrHive::EBalancerPolicy_Name(i.BalancerPolicy));
+                    ui32 oldNodeIndex = tabletInfos_B[i.ObjectId].NodeIndex;
+                    ui32 newNodeIndex = i.NodeIndex;
+                    UNIT_ASSERT_VALUES_EQUAL(oldNodeIndex, newNodeIndex);
+                    break;
+            }
+        }
+        // ...but ordinary tablets did move out to other nodes
+        {
+            std::array<int, NUM_NODES> nodeTablets = {};
+            for (auto& i : tabletInfos_C) {
+                ++nodeTablets[i.NodeIndex];
+            }
+            Ctest << "Step C: tablet distribution";
+            for (auto i : nodeTablets) {
+                Ctest << " " << i;
+            }
+            Ctest << Endl;
+            auto minmax = std::minmax_element(nodeTablets.begin(), nodeTablets.end());
+            UNIT_ASSERT_VALUES_EQUAL(*minmax.first, 0);
+            UNIT_ASSERT_VALUES_EQUAL(*minmax.second, 1);
+            UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0], 1);
+        }
+
+        Ctest << "Step D: change tablets BalancerPolicy" << Endl;
+
+        // set all tablets with BalancerPolicy "ignore" back to "balance"
+        for (int i = 0; i < NUM_TABLETS; ++i) {
+            switch(i % NUM_TABLETS) {
+                case 0:
+                case 1:
+                    break;
+                case 2:
+                    THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+                    ev->Record.SetObjectId(i);
+                    ev->Record.SetBalancerPolicy(NKikimrHive::EBalancerPolicy::POLICY_BALANCE);
+                    ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+                    Y_UNUSED(tabletId);
+                    break;
+            }
+        }
+
+        Ctest << "Step D: get tablets info" << Endl;
+        auto tabletInfos_D = getTabletInfos(hiveTablet);
+
+        // check that all BalancerPolicy "ignore" flags are dropped
+        for (const auto& i : tabletInfos_D) {
+            Ctest << "Step D: tablet index " << i.ObjectId << ", tablet id " << i.TabletId << ", node index " << i.NodeIndex << ", balancer policy " << NKikimrHive::EBalancerPolicy_Name(i.BalancerPolicy) << Endl;
+            UNIT_ASSERT_EQUAL_C(i.BalancerPolicy, NKikimrHive::EBalancerPolicy::POLICY_BALANCE, "objectId# " << i.ObjectId << " value# " << (ui64)i.BalancerPolicy << " name# " << NKikimrHive::EBalancerPolicy_Name(i.BalancerPolicy));
+        }
+
+        Ctest << "Step D: raise metrics for previously ignored tablets" << Endl;
+        for (const auto& i: tabletInfos_D) {
+            switch(i.ObjectId % NUM_TABLETS) {
+                case 0:
+                case 1:
+                    break;
+                case 2:
+                    reportTabletMetrics(i.TabletId, NUM_TABLETS * SINGLE_TABLET_NETWORK_USAGE, true);
+                    break;
+            }
+        }
+
+        Ctest << "Step D: wait for balancer to complete" << Endl;
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+
+        Ctest << "Step E: get tablets info" << Endl;
+        auto tabletInfos_E = getTabletInfos(hiveTablet);
+
+        // check that (some) former ignored tablets have moved now...
+        {
+            bool ignoredTabletsAreMoved = false;
+            for (const auto& i : tabletInfos_E) {
+                Ctest << "Step E: tablet index " << i.ObjectId << ", tablet id " << i.TabletId << ", node index " << i.NodeIndex << ", balancer policy " << NKikimrHive::EBalancerPolicy_Name(i.BalancerPolicy) << Endl;
+                switch (i.ObjectId % NUM_TABLETS) {
+                    case 0:
+                    case 1:
+                        break;
+                    case 2:
+                        ui32 oldNodeIndex = tabletInfos_A[i.ObjectId].NodeIndex;
+                        ui32 newNodeIndex = i.NodeIndex;
+                        if (oldNodeIndex != newNodeIndex) {
+                            ignoredTabletsAreMoved = true;
+                        }
+                        break;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ignoredTabletsAreMoved, true);
+        }
+        // ...and that the original node is completely void of tablets
+        {
+            std::array<int, NUM_NODES> nodeTablets = {};
+            for (auto& i : tabletInfos_E) {
+                ++nodeTablets[i.NodeIndex];
+            }
+            Ctest << "Step E: tablet distribution";
+            for (auto i : nodeTablets) {
+                Ctest << " " << i;
+            }
+            Ctest << Endl;
+            auto minmax = std::minmax_element(nodeTablets.begin(), nodeTablets.end());
+            UNIT_ASSERT_VALUES_EQUAL(*minmax.first, 0);
+            UNIT_ASSERT_VALUES_EQUAL(*minmax.second, 1);
+            UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0], 0);
         }
     }
 

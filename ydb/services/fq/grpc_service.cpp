@@ -89,6 +89,8 @@ void TGRpcFederatedQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
         }
         if (request.content().acl().visibility() == FederatedQuery::Acl::SCOPE) {
             permissions.push_back(NPerms::Required("yq.resources.managePublic"));
+        } else {
+            permissions.push_back(NPerms::Optional("yq.resources.managePublic"));
         }
         return permissions;
     }};
@@ -166,6 +168,8 @@ void TGRpcFederatedQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
         };
         if (request.content().acl().visibility() == FederatedQuery::Acl::SCOPE) {
             permissions.push_back(NPerms::Required("yq.resources.managePublic"));
+        } else {
+            permissions.push_back(NPerms::Optional("yq.resources.managePublic"));
         }
         return permissions;
     }};

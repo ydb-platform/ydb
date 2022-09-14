@@ -129,13 +129,14 @@ bool TKeyRanges::DeserializeFromProto(const NKikimrKqp::TEvRemoteCostData::TCost
         std::shared_ptr<arrow::RecordBatch> batch = NArrow::DeserializeBatch(proto.GetColumnsData(), schema);
         Y_VERIFY(batch->num_columns() == (int)ColumnsCount());
         resultLocal.reserve(batch->num_rows());
+        auto& batchColumns = batch->columns();
         for (ui32 rowIdx = 0; rowIdx < batch->num_rows(); ++rowIdx) {
             TKeyMark mark;
-            for (ui32 cIdx = 0; cIdx < ColumnsCount(); ++cIdx) {
-                if (batch->column(cIdx)->IsNull(rowIdx)) {
+            for (auto&& c: batchColumns) {
+                if (c->IsNull(rowIdx)) {
                     break;
                 }
-                auto valueStatus = batch->column(cIdx)->GetScalar(rowIdx);
+                auto valueStatus = c->GetScalar(rowIdx);
                 Y_VERIFY(valueStatus.ok());
                 mark.AddValue(valueStatus.ValueUnsafe());
             }

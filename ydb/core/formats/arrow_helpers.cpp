@@ -751,7 +751,7 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
         using TWrap = std::decay_t<decltype(type)>;
         using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
-        if constexpr (arrow::has_string_view<TScalar>()) {
+        if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
             return TStringBuf((char*)xval->data(), xval->size()) < TStringBuf((char*)yval->data(), yval->size());

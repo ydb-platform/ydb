@@ -49,6 +49,13 @@ public:
             auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
         }
+        
+        // TODO(t1mursadykov): Add role for static nodes with sys tablets only
+        if (AppData(ctx)->DynamicNameserviceConfig) {
+            if (SelfId().NodeId() <= AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId)
+                ctx.Send(ctx.SelfID, new TEvWhiteboard::TEvSystemStateAddRole("Storage"));
+        }
+        
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ProcessStats.Fill(getpid());
         if (ProcessStats.CGroupMemLim != 0) {

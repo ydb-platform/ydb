@@ -1,5 +1,6 @@
 #include "cms_impl.h"
 #include "info_collector.h"
+#include "library/cpp/actors/core/actor.h"
 #include "scheme.h"
 #include "sentinel.h"
 
@@ -270,7 +271,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
-        if (CheckAction(action, opts, error)) {
+        if (CheckAction(action, opts, error, ctx)) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
 
             auto *permission = response.AddPermissions();
@@ -422,16 +423,17 @@ bool TCms::CheckAccess(const TString &token,
 
 bool TCms::CheckAction(const TAction &action,
                        const TActionOptions &opts,
-                       TErrorInfo &error) const
+                       TErrorInfo &error,
+                       const TActorContext &ctx) const
 {
     if (!IsActionHostValid(action, error))
         return false;
 
     switch (action.GetType()) {
         case TAction::RESTART_SERVICES:
-            return CheckActionRestartServices(action, opts, error);
+            return CheckActionRestartServices(action, opts, error, ctx);
         case TAction::SHUTDOWN_HOST:
-            return CheckActionShutdownHost(action, opts, error);
+            return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
         case TAction::START_SERVICES:
@@ -454,7 +456,8 @@ bool TCms::CheckAction(const TAction &action,
 bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
                                    const TActionOptions &opts,
                                    const TNodeInfo &node,
-                                   TErrorInfo &error) const
+                                   TErrorInfo &error,
+                                   const TActorContext &ctx) const
 {
     if (!TryToLockNode(action, opts, node, error)) {
         return false;
@@ -469,12 +472,18 @@ bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
         return false;
     }
 
+    if (!AppData(ctx)->DisableCheckingSysNodesCms && 
+        !CheckSysTabletsNode(action, opts, node, error)) {
+        return false;
+    }
+
     return true;
 }
 
 bool TCms::CheckActionRestartServices(const TAction &action,
                                       const TActionOptions &opts,
-                                      TErrorInfo &error) const
+                                      TErrorInfo &error,
+                                      const TActorContext &ctx) const
 {
     TServices services;
     if (!ParseServices(action, services, error))
@@ -490,7 +499,7 @@ bool TCms::CheckActionRestartServices(const TAction &action,
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
         if (node->Services & services) {
             found = true;
-            if (!CheckActionShutdownNode(action, opts, *node, error)) {
+            if (!CheckActionShutdownNode(action, opts, *node, error, ctx)) {
                 return false;
             }
         }
@@ -509,10 +518,11 @@ bool TCms::CheckActionRestartServices(const TAction &action,
 
 bool TCms::CheckActionShutdownHost(const TAction &action,
                                    const TActionOptions &opts,
-                                   TErrorInfo &error) const
+                                   TErrorInfo &error,
+                                   const TActorContext &ctx) const
 {
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
-        if (!CheckActionShutdownNode(action, opts, *node, error)) {
+        if (!CheckActionShutdownNode(action, opts, *node, error, ctx)) {
             return false;
         }
     }
@@ -587,6 +597,61 @@ bool TCms::CheckActionShutdownStateStorage(
         return false;
     }
 
+    return true;
+}
+
+bool TCms::CheckSysTabletsNode(const TAction &action,
+                               const TActionOptions &opts, 
+                               const TNodeInfo &node, 
+                               TErrorInfo &error) const
+{ 
+    if (node.Services & EService::DynamicNode || node.PDisks.size()) {
+        return true;
+    }
+ 
+    auto nodes = ClusterInfo->GetSysTabletNodes();
+
+    ui32 disabledNodesCnt = 0;
+    TErrorInfo err;
+    TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
+    TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+    for (auto node : nodes) {
+        if (node->IsLocked(err, State->Config.DefaultRetryTime, 
+                           TActivationContext::Now(), duration) || 
+            node->IsDown(err, defaultDeadline))
+        { 
+            ++disabledNodesCnt;
+        }
+    }
+
+    switch (opts.AvailabilityMode) {
+        case MODE_MAX_AVAILABILITY:
+            if (disabledNodesCnt > 0) {
+                error.Code = TStatus::DISALLOW_TEMP;
+                error.Reason = TStringBuilder() << "Too many locked sys nodes: " << disabledNodesCnt;
+                error.Deadline = defaultDeadline;
+                return false;
+            }
+            break;
+        case MODE_KEEP_AVAILABLE:
+            if (disabledNodesCnt * 8 >= nodes.size()) {
+                error.Code = TStatus::DISALLOW_TEMP;
+                error.Reason = TStringBuilder() << "Too many locked sys nodes: " << disabledNodesCnt;
+                error.Deadline = defaultDeadline;
+                return false;
+            }
+            break;
+        case MODE_FORCE_RESTART:
+            break;
+        default:
+            error.Code = TStatus::WRONG_REQUEST;
+            error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
+                                   EAvailabilityMode_Name(opts.AvailabilityMode).data(),
+                                   static_cast<ui32>(opts.AvailabilityMode));
+            error.Deadline = defaultDeadline;
+            return false;
+        }
+ 
     return true;
 }
 

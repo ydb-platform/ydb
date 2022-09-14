@@ -115,7 +115,8 @@ public:
                    ui32 tenantRatioLimit,
                    ui32 clusterLimit,
                    ui32 clusterRatioLimit);
-    
+
+    void EnableSysNodeChecking(); 
     TIntrusiveConstPtr<NKikimr::TStateStorageInfo> GetStateStorageInfo();
 
     NKikimrCms::TClusterState

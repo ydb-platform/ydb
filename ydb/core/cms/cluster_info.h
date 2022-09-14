@@ -528,6 +528,19 @@ public:
         return nodes;
     }
 
+    void ChooseSysNodes() {
+        for (auto &[nodeId, node] : Nodes) {
+            if (!node->PDisks.size()) {
+                SysNodes.push_back(node.Get());
+            }
+        }
+    }
+
+    TVector<const TNodeInfo *> GetSysTabletNodes() const
+    {
+        return SysNodes;
+    }
+
     size_t NodesCount() const
     {
         return Nodes.size();
@@ -820,6 +833,8 @@ private:
     ui64 RollbackPoint = 0;
     bool HasTenantsInfo = false;
     bool Outdated = false;
+    
+    TVector<const TNodeInfo *> SysNodes; // nodes with sys tablets
 
     // Fast access structures.
     TMultiMap<TString, ui32> HostNameToNodeId;

@@ -1257,7 +1257,33 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         env.CheckWalleStoreTaskIsFailed(event_store.Release());
     }
-}
 
+    Y_UNIT_TEST(SysTabletsNode)
+    {
+        TTestEnvOpts opt(16);
+        opt.VDisks = 0;
+
+        TCmsTestEnv env(opt); 
+        
+        env.EnableSysNodeChecking();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(3)].Connected = false;
+        env.RestartCms();
+ 
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+    }
+}
 } // NCmsTest
 } // NKikimr

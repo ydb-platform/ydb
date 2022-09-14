@@ -418,6 +418,7 @@ static void SetupServices(TTestActorRuntime &runtime,
     dnsConfig->MaxStaticNodeId = 1000;
     dnsConfig->MaxDynamicNodeId = 2000;
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
+    runtime.GetAppData().DisableCheckingSysNodesCms = true;
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -584,6 +585,10 @@ void TCmsTestEnv::SetLimits(ui32 tenantLimit,
     config.MutableClusterLimits()->SetDisabledNodesLimit(clusterLimit);
     config.MutableClusterLimits()->SetDisabledNodesRatioLimit(clusterRatioLimit);
     SetCmsConfig(config);
+}
+
+void TCmsTestEnv::EnableSysNodeChecking() {
+    GetAppData().DisableCheckingSysNodesCms = false;
 }
 
 NKikimrCms::TClusterState

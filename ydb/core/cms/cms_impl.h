@@ -303,20 +303,27 @@ private:
                      TString &error,
                      const TActorContext &ctx);
     bool CheckAction(const NKikimrCms::TAction &action, const TActionOptions &options,
-                     TErrorInfo &error) const;
+                     TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckActionShutdownNode(const NKikimrCms::TAction &action,
                                  const TActionOptions &options,
                                  const TNodeInfo &node,
-                                 TErrorInfo &error) const;
+                                 TErrorInfo &error,
+                                 const TActorContext &ctx) const;
     bool CheckActionRestartServices(const NKikimrCms::TAction &action,
                                     const TActionOptions &options,
-                                    TErrorInfo &error) const;
+                                    TErrorInfo &error,
+                                    const TActorContext &ctx) const;
     bool CheckActionShutdownHost(const NKikimrCms::TAction &action,
                                  const TActionOptions &options,
-                                 TErrorInfo &error) const;
+                                 TErrorInfo &error,
+                                 const TActorContext &ctx) const;
     bool CheckActionReplaceDevices(const NKikimrCms::TAction &action,
                                    const TActionOptions &options,
                                    TErrorInfo &error) const;
+    bool CheckSysTabletsNode(const NKikimrCms::TAction &action,
+                             const TActionOptions &opts,
+                             const TNodeInfo &node, 
+                             TErrorInfo &error) const;
     bool TryToLockNode(const NKikimrCms::TAction &action,
                        const TActionOptions &options,
                        const TNodeInfo &node,

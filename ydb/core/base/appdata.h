@@ -162,6 +162,9 @@ struct TAppData {
 
     // Used to disable object deletion in schemeshard for cleanup tests
     bool DisableSchemeShardCleanupOnDropForTest = false;
+    
+    // Used to disable checking nodes with sys tablets only in cms
+    bool  DisableCheckingSysNodesCms = false;
 
     TKikimrScopeId LocalScopeId;
 

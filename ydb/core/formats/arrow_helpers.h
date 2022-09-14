@@ -137,6 +137,7 @@ std::shared_ptr<TArr> GetTypedColumn(const std::shared_ptr<arrow::RecordBatch>& 
 
 std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& column);
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position);
+bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 
 class IRowWriter;

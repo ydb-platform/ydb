@@ -722,6 +722,20 @@ void TTxScan::Complete(const TActorContext& ctx) {
         detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")"
             << " req: " << request;
     }
+    TVector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;
+    if (request.GetCostDataOnly()) {
+        for (auto&& i : ReadMetadataRanges) {
+            NOlap::TReadMetadata::TConstPtr rMetadata = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(i);
+            if (!rMetadata || !rMetadata->SelectInfo) {
+                NOlap::NCosts::TKeyRanges ranges;
+                ranges.SetLeftBorderOpened(true);
+                auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(std::move(ranges), scanId);
+                ctx.Send(scanComputeActor, ev.Release());
+                return;
+            }
+            rMetadataRanges.emplace_back(rMetadata);
+        }
+    }
 
     if (ReadMetadataRanges.empty()) {
         LOG_S_DEBUG("TTxScan failed "
@@ -742,6 +756,28 @@ void TTxScan::Complete(const TActorContext& ctx) {
             << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription);
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
+        ctx.Send(scanComputeActor, ev.Release());
+        return;
+    }
+
+    if (request.GetCostDataOnly()) {
+        NOlap::NCosts::TKeyRanges ranges;
+        if (request.GetReverse()) {
+            std::reverse(rMetadataRanges.begin(), rMetadataRanges.end());
+        }
+        {
+            ui32 recordsCount = 0;
+            for (auto&& i : rMetadataRanges) {
+                recordsCount += i->SelectInfo->Granules.size() + 2;
+            }
+            ranges.Reserve(recordsCount);
+        }
+        for (auto&& i : rMetadataRanges) {
+            NOlap::NCosts::TCostsOperator cOperator(i->SelectInfo->Granules, i->IndexInfo);
+            cOperator.FillRangeMarks(ranges, i->GreaterPredicate, i->LessPredicate);
+        }
+        LOG_S_DEBUG("TCostsOperator::BuildRangeMarks::Result " << ranges.ToString());
+        auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(std::move(ranges), scanId);
         ctx.Send(scanComputeActor, ev.Release());
         return;
     }

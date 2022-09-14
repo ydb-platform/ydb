@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 }
 
                 /*
-                 * Check that remote scan actually happend.
+                 * Check that remote scan actually happened.
                  */
                 case NKqp::TKqpComputeEvents::EvScanData: {
                     remoteScanDetected = remoteScanDetected || ev->Sender.NodeId() != ev->Recipient.NodeId();

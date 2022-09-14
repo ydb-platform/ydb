@@ -26,6 +26,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
 )
 target_sources(tx-columnshard-engines PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine_logs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/db_wrapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/index_info.cpp

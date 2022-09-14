@@ -344,7 +344,8 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
     bool leftTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.From.GetCells();
-        size_t size = cells.size();
+        const size_t size = cells.size();
+        Y_ASSERT(size <= columns.size());
         leftCells.reserve(size);
         leftColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {
@@ -363,7 +364,8 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
     bool rightTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.To.GetCells();
-        size_t size = cells.size();
+        const size_t size = cells.size();
+        Y_ASSERT(size <= columns.size());
         rightCells.reserve(size);
         rightColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {

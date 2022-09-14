@@ -576,6 +576,24 @@ message TEvRemoteScanDataAck {
     optional uint32 Generation = 2;
 }
 
+message TEvRemoteCostData {
+    message TIntervalMeta {
+        optional bool IntervalSkipped = 1[default = false];
+        optional bool MarkIncluded = 2[default = true];
+    }
+
+    message TCostInfo {
+        repeated TIntervalMeta IntervalMeta = 1;
+        optional bool LeftBorderOpened = 2;
+        // ColumnsData contains RecordBatch with schema that serialized in ColumnsSchema
+        optional bytes ColumnsData = 3;
+        optional bytes ColumnsSchema = 4;
+    }
+
+    optional uint32 ScanId = 1;
+    optional TCostInfo CostInfo = 2;
+}
+
 message TEvKillScanTablet {
 }
 

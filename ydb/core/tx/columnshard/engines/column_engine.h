@@ -253,7 +253,7 @@ struct TSelectInfo {
         }
     };
 
-    TVector<TGranuleRecord> Granules; // oredered by key (asc)
+    TVector<TGranuleRecord> Granules; // ordered by key (ascending)
     TVector<TPortionInfo> Portions;
 
     TVector<ui64> GranulesOrder(bool rev = false) const {

@@ -1426,6 +1426,7 @@ message TEvKqpScan {
     optional NYql.NDqProto.EDqStatsMode StatsMode = 18;
     optional bytes OlapProgram = 19;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20;
+    optional bool CostDataOnly = 21[default = false];
 }
 
 message TEvCompactTable {

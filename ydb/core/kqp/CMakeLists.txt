@@ -68,6 +68,7 @@ target_sources(ydb-core-kqp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compile_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compile_request.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compile_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compute.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_shutdown_controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_ic_gateway.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_metadata_loader.cpp

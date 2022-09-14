@@ -738,6 +738,12 @@ std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& ar
     return out;
 }
 
+bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_VERIFY(x);
+    Y_VERIFY(y);
+    return ScalarLess(*x, *y);
+}
+
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
     Y_VERIFY(x.type->Equals(y.type));
 
@@ -745,7 +751,11 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
         using TWrap = std::decay_t<decltype(type)>;
         using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
-
+        if constexpr (arrow::has_string_view<TScalar>()) {
+            const auto& xval = static_cast<const TScalar&>(x).value;
+            const auto& yval = static_cast<const TScalar&>(y).value;
+            return TStringBuf((char*)xval->data(), xval->size()) < TStringBuf((char*)yval->data(), yval->size());
+        }
         if constexpr (std::is_arithmetic_v<TValue>) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;

@@ -15,7 +15,6 @@ add_subdirectory(assert)
 add_subdirectory(atomic)
 add_subdirectory(bind)
 add_subdirectory(chrono)
-add_subdirectory(circular_buffer)
 add_subdirectory(concept_check)
 add_subdirectory(config)
 add_subdirectory(container)
@@ -67,7 +66,6 @@ add_subdirectory(program_options)
 add_subdirectory(property_map)
 add_subdirectory(property_tree)
 add_subdirectory(proto)
-add_subdirectory(ptr_container)
 add_subdirectory(random)
 add_subdirectory(range)
 add_subdirectory(ratio)
@@ -137,7 +135,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-preprocessor
   restricted-boost-property_tree
   restricted-boost-proto
-  restricted-boost-ptr_container
   restricted-boost-random
   restricted-boost-range
   restricted-boost-smart_ptr

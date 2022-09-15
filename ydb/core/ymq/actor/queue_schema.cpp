@@ -1065,8 +1065,6 @@ void TCreateQueueSchemaActorV2::MatchQueueAttributes(
 ) {
     Become(&TCreateQueueSchemaActorV2::MatchAttributes);
 
-    Y_VERIFY(currentVersion != 0);
-
     TDbQueriesMaker queryMaker(
         Cfg().GetRoot(),
         QueuePath_.UserName,

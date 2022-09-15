@@ -193,7 +193,7 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(1)
             .StoreResult(&PartitionsCount_);
         config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
-            .DefaultValue(18)
+            .DefaultValue(24)
             .Optional()
             .StoreResult(&RetentionPeriodHours_);
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")

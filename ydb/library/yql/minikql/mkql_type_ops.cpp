@@ -952,10 +952,10 @@ bool FromLocalTimeValidated(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hou
 
 } // namespace
 
-ui32 ParseNumber(ui32& pos, NUdf::TStringRef buf, ui32& value) {
+ui32 ParseNumber(ui32& pos, NUdf::TStringRef buf, ui32& value, i8 dig_cnt) {
     value = 0;
     ui32 count = 0;
-    for (; pos < buf.Size(); ++pos) {
+    for (; dig_cnt && pos < buf.Size(); --dig_cnt, ++pos) {
         char c = buf.Data()[pos];
         if (c >= '0' && c <= '9') {
             value = value * 10 + (c - '0');
@@ -1074,19 +1074,19 @@ bool ParseUuid(NUdf::TStringRef buf, void* out, bool shortForm) {
 NUdf::TUnboxedValuePod ParseDate(NUdf::TStringRef buf) {
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.Size() || buf.Data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, year, 4) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.Size() || buf.Data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, month, 2) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos != buf.Size()) {
+    if (!ParseNumber(pos, buf, day, 2) || pos != buf.Size()) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1113,19 +1113,19 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
 
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, year, 4) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, month, 2) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos != buf.size()) {
+    if (!ParseNumber(pos, buf, day, 2) || pos != buf.size()) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1143,19 +1143,19 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
 NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.Size() || buf.Data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, year, 4) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.Size() || buf.Data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, month, 2) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos == buf.Size() || buf.Data()[pos] != 'T') {
+    if (!ParseNumber(pos, buf, day, 2) || pos == buf.Size() || buf.Data()[pos] != 'T') {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1167,26 +1167,61 @@ NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
     ui32 hour, minute, second;
     // skip 'T'
     ++pos;
-    if (!ParseNumber(pos, buf, hour) || pos == buf.Size() || buf.Data()[pos] != ':') {
+    if (!ParseNumber(pos, buf, hour, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, minute) || pos == buf.Size() || buf.Data()[pos] != ':') {
+    if (!ParseNumber(pos, buf, minute, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, second) || pos == buf.Size() || buf.Data()[pos] != 'Z') {
+    if (!ParseNumber(pos, buf, second, 2) || pos == buf.Size()) {
         return NUdf::TUnboxedValuePod();
     }
 
-    // skip 'Z'
-    ++pos;
-    if (pos != buf.Size()) {
-        return NUdf::TUnboxedValuePod();
+    bool waiting_for_z = true;
+    
+    ui32 offset_hours = 0;
+    ui32 offset_minutes = 0;
+    bool is_offset_negative = false;
+    if (buf.Data()[pos] == '+' || buf.Data()[pos] == '-') {
+        is_offset_negative = buf.Data()[pos] == '-';
+
+        // Skip sign
+        ++pos;
+
+        if (!ParseNumber(pos, buf, offset_hours, 2) || 
+            pos == buf.Size() || buf.Data()[pos] != ':')
+        {
+            return NUdf::TUnboxedValuePod();
+        }
+ 
+        // Skip ':'
+        ++pos;
+
+        if (!ParseNumber(pos, buf, offset_minutes, 2) || pos != buf.Size()) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        waiting_for_z = false;
+    }
+
+    ui32 offset_value = ((offset_hours) * 60 + offset_minutes) * 60;
+
+    if (waiting_for_z) {
+        if (pos == buf.Size() || buf.Data()[pos] != 'Z') {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        // skip 'Z'
+        ++pos;
+        if (pos != buf.Size()) {
+            return NUdf::TUnboxedValuePod();
+        }
     }
 
     ui32 timeValue;
@@ -1195,6 +1230,19 @@ NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
     }
 
     ui32 value = dateValue * 86400u + timeValue;
+
+    if (is_offset_negative) {
+        if (UINT32_MAX - value < offset_value) {
+            return NUdf::TUnboxedValuePod();
+        }
+        value += offset_value;
+    } else {
+        if (value < offset_value) {
+            return NUdf::TUnboxedValuePod();
+        }
+        value -= offset_value;
+    }
+
     if (value >= NUdf::MAX_DATETIME) {
         return NUdf::TUnboxedValuePod();
     }
@@ -1213,38 +1261,38 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
 
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, year, 4) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, month, 2) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos == buf.size() || buf.data()[pos] != 'T') {
+    if (!ParseNumber(pos, buf, day, 2) || pos == buf.size() || buf.data()[pos] != 'T') {
         return NUdf::TUnboxedValuePod();
     }
 
     ui32 hour, minute, second;
     // skip 'T'
     ++pos;
-    if (!ParseNumber(pos, buf, hour) || pos == buf.size() || buf.data()[pos] != ':') {
+    if (!ParseNumber(pos, buf, hour, 2) || pos == buf.size() || buf.data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, minute) || pos == buf.size() || buf.data()[pos] != ':') {
+    if (!ParseNumber(pos, buf, minute, 2) || pos == buf.size() || buf.data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, second) || pos != buf.size()) {
+    if (!ParseNumber(pos, buf, second, 2) || pos != buf.size()) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1262,19 +1310,19 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
 NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.Size() || buf.Data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, year, 4) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.Size() || buf.Data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, month, 2) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos == buf.Size() || buf.Data()[pos] != 'T') {
+    if (!ParseNumber(pos, buf, day, 2) || pos == buf.Size() || buf.Data()[pos] != 'T') {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1286,53 +1334,88 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
     ui32 hour, minute, second;
     // skip 'T'
     ++pos;
-    if (!ParseNumber(pos, buf, hour) || pos == buf.Size() || buf.Data()[pos] != ':') {
+    if (!ParseNumber(pos, buf, hour, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, minute) || pos == buf.Size() || buf.Data()[pos] != ':') {
+    if (!ParseNumber(pos, buf, minute, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, second) || pos == buf.Size()) {
+    if (!ParseNumber(pos, buf, second, 2) || pos == buf.Size()) {
         return NUdf::TUnboxedValuePod();
     }
+
+    bool waiting_for_z = true;
 
     ui32 microseconds = 0;
-    if (buf.Data()[pos] != 'Z') {
-        if (buf.Data()[pos] != '.') {
-            return NUdf::TUnboxedValuePod();
-        }
-
+    if (buf.Data()[pos] == '.') {
+        // Skip dot
         ++pos;
         ui32 prevPos = pos;
-        if (!ParseNumber(pos, buf, microseconds)) {
+        if (!ParseNumber(pos, buf, microseconds, 6)) {
             return NUdf::TUnboxedValuePod();
         }
 
         prevPos = pos - prevPos;
-        if (prevPos > 6) {
-            return NUdf::TUnboxedValuePod();
-        }
 
         while (prevPos < 6) {
             microseconds *= 10;
             ++prevPos;
         }
 
+        // Skip unused digits
+        while (pos < buf.Size() && '0' <= buf.Data()[pos] && buf.Data()[pos] <= '9') {
+            ++pos;
+        }
+
+        if (pos == buf.Size()) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+    }
+
+    ui32 offset_hours = 0;
+    ui32 offset_minutes = 0;
+    bool is_offset_negative = false;
+    if (buf.Data()[pos] == '+' || buf.Data()[pos] == '-') {
+        is_offset_negative = buf.Data()[pos] == '-';
+
+        // Skip sign
+        ++pos;
+
+        if (!ParseNumber(pos, buf, offset_hours, 2) || 
+            pos == buf.Size() || buf.Data()[pos] != ':')
+        {
+            return NUdf::TUnboxedValuePod();
+        }
+ 
+        // Skip ':'
+        ++pos;
+
+        if (!ParseNumber(pos, buf, offset_minutes, 2) || pos != buf.Size()) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        waiting_for_z = false;
+    }
+
+    ui64 offset_value = ((offset_hours) * 60 + offset_minutes) * 60 * 1000000ull;
+
+    if (waiting_for_z) {
         if (pos == buf.Size() || buf.Data()[pos] != 'Z') {
             return NUdf::TUnboxedValuePod();
         }
-    }
 
-    // skip 'Z'
-    ++pos;
-    if (pos != buf.Size()) {
-        return NUdf::TUnboxedValuePod();
+        // skip 'Z'
+        ++pos;
+        if (pos != buf.Size()) {
+            return NUdf::TUnboxedValuePod();
+        }
     }
 
     ui32 timeValue;
@@ -1341,6 +1424,19 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
     }
 
     ui64 value = dateValue * 86400000000ull + timeValue * 1000000ull + microseconds;
+    
+    if (is_offset_negative) {
+        if (UINT64_MAX - value < offset_value) {
+            return NUdf::TUnboxedValuePod();
+        }
+        value += offset_value;
+    } else {
+        if (value < offset_value) {
+            return NUdf::TUnboxedValuePod();
+        }
+        value -= offset_value;
+    }
+
     if (value >= NUdf::MAX_TIMESTAMP) {
         return NUdf::TUnboxedValuePod();
     }
@@ -1359,38 +1455,38 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
 
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, year, 4) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') {
+    if (!ParseNumber(pos, buf, month, 2) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos == buf.size() || buf.data()[pos] != 'T') {
+    if (!ParseNumber(pos, buf, day, 2) || pos == buf.size() || buf.data()[pos] != 'T') {
         return NUdf::TUnboxedValuePod();
     }
 
     ui32 hour, minute, second;
     // skip 'T'
     ++pos;
-    if (!ParseNumber(pos, buf, hour) || pos == buf.size() || buf.data()[pos] != ':') {
+    if (!ParseNumber(pos, buf, hour, 2) || pos == buf.size() || buf.data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, minute) || pos == buf.size() || buf.data()[pos] != ':') {
+    if (!ParseNumber(pos, buf, minute, 2) || pos == buf.size() || buf.data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, second)) {
+    if (!ParseNumber(pos, buf, second, 2)) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1402,18 +1498,20 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
 
         ++pos;
         ui32 prevPos = pos;
-        if (!ParseNumber(pos, buf, microseconds)) {
+        if (!ParseNumber(pos, buf, microseconds, 6)) {
             return NUdf::TUnboxedValuePod();
         }
 
         prevPos = pos - prevPos;
-        if (prevPos > 6) {
-            return NUdf::TUnboxedValuePod();
-        }
 
         while (prevPos < 6) {
             microseconds *= 10;
             ++prevPos;
+        }
+
+        // Skip unused digits
+        while (pos < buf.size() && '0' <= buf.data()[pos] && buf.data()[pos] <= '9') {
+            ++pos;
         }
 
         if (pos != buf.size()) {

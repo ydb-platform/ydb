@@ -5,7 +5,6 @@
 
 #include <util/stream/format.h>
 #include <util/stream/str.h>
-
 using namespace NYql;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -102,5 +101,60 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             SerializeTzTimestamp(timestamp, tzId, out);
             UNIT_ASSERT_VALUES_EQUAL(out.Str(), TStringBuilder() << "\x00\x00\x00\x00\x00\x00\x03\x7a"sv << "\x00\x01"sv);
         }
+    }
+
+    NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
+        return ValueFromString(NUdf::EDataSlot::Timestamp, buf);
+    }
+
+    Y_UNIT_TEST(TimestampSeriailization) {
+        UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05.55045#"));
+        UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05.55045"));
+        UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05."));
+        UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05.Z"));
+        UNIT_ASSERT(!ParseTimestamp("2020-071-28T21:46:05.1Z"));
+        
+        UNIT_ASSERT(!!ParseTimestamp("2020-07-28T21:46:05.1Z"));
+        UNIT_ASSERT(!!ParseTimestamp("2020-07-28T21:46:05.1+01:00"));
+        
+        UNIT_ASSERT(!ParseTimestamp("4294969318-09-4294967318T14:28:17Z"));
+        const auto& val1 = ParseTimestamp("2022-09-15T16:42:01.123456Z");
+        const auto& val2 = ParseTimestamp("2022-09-15T16:42:01.123456131231223Z");
+
+        UNIT_ASSERT(!!val1);
+        UNIT_ASSERT(!!val2);
+        UNIT_ASSERT_VALUES_EQUAL(val1.Get<ui64>(), val2.Get<ui64>());
+
+        const auto& val3 = ParseTimestamp("2022-09-15T18:16:01.123456Z");
+        const auto& val4 = ParseTimestamp("2022-09-15T16:42:01.123456131231223-12:34");
+
+        UNIT_ASSERT(!!val3);
+        UNIT_ASSERT(!!val4);
+        UNIT_ASSERT_VALUES_EQUAL(val1.Get<ui64>(), val2.Get<ui64>());
+    }
+
+    NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
+        return ValueFromString(NUdf::EDataSlot::Datetime, buf);
+    }
+
+    Y_UNIT_TEST(DatetimeSeriailization) {
+        UNIT_ASSERT(!ParseDatetime("2020-07-28T21:46:05.55045#"));
+        UNIT_ASSERT(!ParseDatetime("2020-07-28T21:46:05.55045"));
+        UNIT_ASSERT(!ParseDatetime("2020-07-28T21:46:05"));
+        UNIT_ASSERT(!ParseDatetime("2020-07-28T21:46:05."));
+        UNIT_ASSERT(!ParseDatetime("2020-071-28T21:46:05Z"));
+        
+        UNIT_ASSERT(!!ParseDatetime("2020-07-28T21:46:05Z"));
+        UNIT_ASSERT(!!ParseDatetime("2020-07-28T21:46:05+01:00"));
+        
+        UNIT_ASSERT(!ParseDatetime("4294969318-09-4294967318T14:28:17Z"));
+
+        const auto& val1 = ParseDatetime("2022-09-15T04:08:01Z");
+        const auto& val2 = ParseDatetime("2022-09-15T16:42:01+12:34");
+
+        UNIT_ASSERT(!!val1);
+        UNIT_ASSERT(!!val2);
+        UNIT_ASSERT_VALUES_EQUAL(val1.Get<ui32>(), val2.Get<ui32>());
+
     }
 }

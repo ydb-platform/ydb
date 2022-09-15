@@ -135,23 +135,19 @@ namespace NKikimr::NBlobDepot {
         }, response);
     }
 
-    void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context) {
-        auto ev = std::make_unique<TEvBlobDepot::TEvBlock>();
+    template<typename T, typename TEvent>
+    void TBlobDepotAgent::Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context) {
+        auto ev = std::make_unique<TEvent>();
         msg.Swap(&ev->Record);
         Issue(std::move(ev), sender, std::move(context));
     }
 
-    void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context) {
-        auto ev = std::make_unique<TEvBlobDepot::TEvResolve>();
-        msg.Swap(&ev->Record);
-        Issue(std::move(ev), sender, std::move(context));
-    }
-
-    void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context) {
-        auto ev = std::make_unique<TEvBlobDepot::TEvCommitBlobSeq>();
-        msg.Swap(&ev->Record);
-        Issue(std::move(ev), sender, std::move(context));
-    }
+    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
 
     void TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
         const ui64 id = NextRequestId++;

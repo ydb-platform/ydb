@@ -3,6 +3,7 @@
 #include "blocks.h"
 #include "garbage_collection.h"
 #include "data.h"
+#include "data_uncertain.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -32,6 +33,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
                 hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
                 hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
+                hFunc(TEvBlobDepot::TEvDiscardSpoiledBlobSeq, Handle);
                 hFunc(TEvBlobDepot::TEvResolve, Data->Handle);
 
                 hFunc(TEvBlobDepot::TEvBlock, BlocksManager->Handle);
@@ -41,11 +43,14 @@ namespace NKikimr::NBlobDepot {
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvRangeResult, Data->Handle);
+                hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);
 
                 hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
 
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+
+                cFunc(TEvPrivate::EvCommitCertainKeys, Data->HandleCommitCertainKeys);
 
                 default:
                     if (!HandleDefaultEvents(ev, ctx)) {

@@ -120,7 +120,8 @@ namespace NKikimr::NBlobDepot {
         template<typename T>
         void ProcessRow(T&& row, Schema::Data*) {
             auto key = TData::TKey::FromBinaryKey(row.template GetValue<Schema::Data::Key>(), Self->Config);
-            Self->Data->AddDataOnLoad(key, row.template GetValue<Schema::Data::Value>(), *Txc, this);
+            Self->Data->AddDataOnLoad(key, row.template GetValue<Schema::Data::Value>(),
+                row.template GetValueOrDefault<Schema::Data::UncertainWrite>(), *Txc, this);
             Y_VERIFY(!Self->Data->LastLoadedKey || *Self->Data->LastLoadedKey < key);
             Self->Data->LastLoadedKey = std::move(key);
         }

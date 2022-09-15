@@ -6,45 +6,75 @@ namespace NKikimr::NBlobDepot {
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev) {
         class TPutQuery : public TQuery {
-            ui32 BlockChecksRemain = 3;
-            ui32 PutsInFlight = 0;
             const bool SuppressFooter = true;
+            const bool IssueUncertainWrites = true;
+
+            std::vector<ui32> BlockChecksRemain;
+            ui32 PutsInFlight = 0;
+            bool PutsIssued = false;
+            bool WaitingForCommitBlobSeq = false;
+            bool IsInFlight = false;
             NKikimrBlobDepot::TEvCommitBlobSeq CommitBlobSeq;
             TBlobSeqId BlobSeqId;
 
         public:
             using TQuery::TQuery;
 
-            ~TPutQuery() {
-                if (BlobSeqId != TBlobSeqId()) {
-                    Agent.ChannelToKind[BlobSeqId.Channel]->WritesInFlight.erase(BlobSeqId);
+            void OnDestroy(bool success) override {
+                if (IsInFlight) {
+                    Y_VERIFY(!success);
+                    RemoveBlobSeqFromInFlight();
+                    NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
+                    BlobSeqId.ToProto(msg.AddItems());
+                    Agent.Issue(std::move(msg), this, nullptr);
                 }
             }
 
             void Initiate() override {
-                auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
+                auto& msg = GetQuery();
                 if (msg.Buffer.size() > MaxBlobSize) {
                     return EndWithError(NKikimrProto::ERROR, "blob is way too big");
+                } else if (msg.Buffer.size() != msg.Id.BlobSize()) {
+                    return EndWithError(NKikimrProto::ERROR, "blob size mismatch");
+                } else if (!msg.Buffer) {
+                    return EndWithError(NKikimrProto::ERROR, "no blob data");
+                } else if (!msg.Id) {
+                    return EndWithError(NKikimrProto::ERROR, "blob id is zero");
                 }
 
-                // zero step -- for decommission blobs just issue put immediately
-                if (msg.Decommission) {
-                    return IssuePuts();
-                }
+                BlockChecksRemain.resize(1 + msg.ExtraBlockChecks.size(), 3); // set number of tries for every block
+                CheckBlocks();
+            }
 
-                // first step -- check blocks
-                const auto status = Agent.BlocksManager.CheckBlockForTablet(msg.Id.TabletID(), msg.Id.Generation(), this, nullptr);
-                if (status == NKikimrProto::OK) {
+            void CheckBlocks() {
+                auto& msg = GetQuery();
+                bool someBlocksMissing = false;
+                for (size_t i = 0; i <= msg.ExtraBlockChecks.size(); ++i) {
+                    const auto *blkp = i ? &msg.ExtraBlockChecks[i - 1] : nullptr;
+                    const ui64 tabletId = blkp ? blkp->first : msg.Id.TabletID();
+                    const ui32 generation = blkp ? blkp->second : msg.Id.Generation();
+                    const auto status = msg.Decommission
+                        ? NKikimrProto::OK // suppress blocks check when copying blob from decommitted group
+                        : Agent.BlocksManager.CheckBlockForTablet(tabletId, generation, this, nullptr);
+                    if (status == NKikimrProto::OK) {
+                        continue;
+                    } else if (status != NKikimrProto::UNKNOWN) {
+                        return EndWithError(status, "block race detected");
+                    } else if (!--BlockChecksRemain[i]) {
+                        return EndWithError(NKikimrProto::ERROR, "failed to acquire blocks");
+                    } else {
+                        someBlocksMissing = true;
+                    }
+                }
+                if (!someBlocksMissing) {
                     IssuePuts();
-                } else if (status != NKikimrProto::UNKNOWN) {
-                    EndWithError(status, "block race detected");
-                } else if (!--BlockChecksRemain) {
-                    EndWithError(NKikimrProto::ERROR, "failed to acquire blocks");
                 }
             }
 
             void IssuePuts() {
-                auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
+                Y_VERIFY(!PutsIssued);
+
+                auto& msg = GetQuery();
 
                 const auto it = Agent.ChannelKinds.find(NKikimrBlobDepot::TChannelKind::Data);
                 if (it == Agent.ChannelKinds.end()) {
@@ -59,7 +89,12 @@ namespace NKikimr::NBlobDepot {
                     return kind.EnqueueQueryWaitingForId(this);
                 }
                 BlobSeqId = *blobSeqId;
-                kind.WritesInFlight.insert(BlobSeqId);
+                if (!IssueUncertainWrites) {
+                    // small optimization -- do not put this into WritesInFlight as it will be deleted right after in
+                    // this function
+                    kind.WritesInFlight.insert(BlobSeqId);
+                    IsInFlight = true;
+                }
 
                 Y_VERIFY(CommitBlobSeq.ItemsSize() == 0);
                 auto *commitItem = CommitBlobSeq.AddItems();
@@ -72,10 +107,13 @@ namespace NKikimr::NBlobDepot {
                     locator->SetFooterLen(sizeof(TVirtualGroupBlobFooter));
                 }
 
-                TVirtualGroupBlobFooter footer;
-                memset(&footer, 0, sizeof(footer));
-                footer.StoredBlobId = msg.Id;
-                TStringBuf footerData(reinterpret_cast<const char*>(&footer), sizeof(footer));
+                TString footerData;
+                if (!SuppressFooter) {
+                    footerData = TString::Uninitialized(sizeof(TVirtualGroupBlobFooter));
+                    auto& footer = *reinterpret_cast<TVirtualGroupBlobFooter*>(footerData.Detach());
+                    memset(&footer, 0, sizeof(footer));
+                    footer.StoredBlobId = msg.Id;
+                }
 
                 auto put = [&](EBlobType type, TRope&& buffer) {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
@@ -92,23 +130,57 @@ namespace NKikimr::NBlobDepot {
 
                 if (SuppressFooter) {
                     // write the blob as is, we don't need footer for this kind
-                    put(EBlobType::VG_DATA_BLOB, TRope(msg.Buffer));
+                    put(EBlobType::VG_DATA_BLOB, TRope(std::move(msg.Buffer)));
                 } else if (msg.Buffer.size() + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize) {
                     // write single blob with footer
-                    TRope buffer = msg.Buffer;
-                    buffer.Insert(buffer.End(), TRope(TString(footerData))); //FIXME(innokentii)
+                    TRope buffer = std::move(msg.Buffer);
+                    buffer.Insert(buffer.End(), TRope(std::move(footerData)));
                     buffer.Compact();
                     put(EBlobType::VG_COMPOSITE_BLOB, std::move(buffer));
                 } else {
                     // write data blob and blob with footer
-                    put(EBlobType::VG_DATA_BLOB, TRope(msg.Buffer));
-                    put(EBlobType::VG_FOOTER_BLOB, TRope(TString(footerData)));
-               }
+                    put(EBlobType::VG_DATA_BLOB, TRope(std::move(msg.Buffer)));
+                    put(EBlobType::VG_FOOTER_BLOB, TRope(std::move(footerData)));
+                }
+
+                if (IssueUncertainWrites) {
+                    IssueCommitBlobSeq(true);
+                }
+
+                PutsIssued = true;
+            }
+
+            void IssueCommitBlobSeq(bool uncertainWrite) {
+                auto *item = CommitBlobSeq.MutableItems(0);
+                if (uncertainWrite) {
+                    item->SetUncertainWrite(true);
+                } else {
+                    item->ClearUncertainWrite();
+                }
+                Agent.Issue(CommitBlobSeq, this, nullptr);
+
+                Y_VERIFY(!WaitingForCommitBlobSeq);
+                WaitingForCommitBlobSeq = true;
+            }
+
+            void RemoveBlobSeqFromInFlight() {
+                Y_VERIFY(IsInFlight);
+                IsInFlight = false;
+
+                // find and remove the write in flight record to ensure it won't be reported upon TEvPushNotify
+                // reception AND to check that it wasn't already trimmed by answering TEvPushNotifyResult
+                const auto it = Agent.ChannelKinds.find(NKikimrBlobDepot::TChannelKind::Data);
+                if (it == Agent.ChannelKinds.end()) {
+                    return EndWithError(NKikimrProto::ERROR, "no Data channels");
+                }
+                auto& kind = it->second;
+                const size_t numErased = kind.WritesInFlight.erase(BlobSeqId);
+                Y_VERIFY(numErased);
             }
 
             void OnUpdateBlock(bool success) override {
                 if (success) {
-                    Initiate(); // just restart request
+                    CheckBlocks(); // just restart request
                 } else {
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                 }
@@ -145,33 +217,48 @@ namespace NKikimr::NBlobDepot {
                     // however, if it did not, we can't try to commit this records as it may be already scheduled for
                     // garbage collection by the tablet
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet was restarting during write");
+                } else if (!IssueUncertainWrites) { // proceed to second phase
+                    IssueCommitBlobSeq(false);
+                    RemoveBlobSeqFromInFlight();
                 } else {
-                    // find and remove the write in flight record to ensure it won't be reported upon TEvPushNotify
-                    // reception AND to check that it wasn't already trimmed by answering TEvPushNotifyResult
-                    const auto it = Agent.ChannelKinds.find(NKikimrBlobDepot::TChannelKind::Data);
-                    if (it == Agent.ChannelKinds.end()) {
-                        return EndWithError(NKikimrProto::ERROR, "no Data channels");
-                    }
-                    auto& kind = it->second;
-                    const size_t numErased = kind.WritesInFlight.erase(BlobSeqId);
-                    Y_VERIFY(numErased);
-
-                    Agent.Issue(std::move(CommitBlobSeq), this, nullptr);
+                    CheckIfFinished();
                 }
             }
 
             void HandleCommitBlobSeqResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCommitBlobSeqResult& msg) {
-                // FIXME: make this part optional
+                Y_VERIFY(WaitingForCommitBlobSeq);
+                WaitingForCommitBlobSeq = false;
 
                 Y_VERIFY(msg.ItemsSize() == 1);
                 auto& item = msg.GetItems(0);
-                if (item.GetStatus() != NKikimrProto::OK) {
+                if (const auto status = item.GetStatus(); status != NKikimrProto::OK && status != NKikimrProto::RACE) {
                     EndWithError(item.GetStatus(), item.GetErrorReason());
                 } else {
-                    auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
-                    EndWithSuccess(std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::OK, msg.Id,
-                        Agent.GetStorageStatusFlags(), Agent.VirtualGroupId, Agent.GetApproximateFreeSpaceShare()));
+                    // it's okay to treat RACE as OK here since values are immutable in Virtual Group mode
+                    CheckIfFinished();
                 }
+            }
+
+            void CheckIfFinished() {
+                if (!PutsInFlight && !WaitingForCommitBlobSeq) {
+                    EndWithSuccess();
+                }
+            }
+
+            void EndWithSuccess() {
+                if (IssueUncertainWrites) { // send a notification
+                    auto *item = CommitBlobSeq.MutableItems(0);
+                    item->SetCommitNotify(true);
+                    IssueCommitBlobSeq(false);
+                }
+
+                auto& msg = GetQuery();
+                TQuery::EndWithSuccess(std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::OK, msg.Id,
+                    Agent.GetStorageStatusFlags(), Agent.VirtualGroupId, Agent.GetApproximateFreeSpaceShare()));
+            }
+
+            TEvBlobStorage::TEvPut& GetQuery() const {
+                return *Event->Get<TEvBlobStorage::TEvPut>();
             }
         };
 

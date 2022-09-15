@@ -2,24 +2,11 @@
 
 namespace NKikimr::NBlobDepot {
 
-    struct TBlobDepotAgent::TChannelKind::TGivenIdRangeHeapComp {
-        using TValue = TBlobDepotAgent::TChannelKind::TGivenIdRangePerChannel::value_type*;
-
-        bool operator ()(TValue x, TValue y) const {
-            // FIXME: incorrect algorithm with respect to steps; we need to balance using per-channel window of written
-            // bytes or items
-            return x->second.GetMinimumValue() > y->second.GetMinimumValue();
-        }
-    };
-
     void TBlobDepotAgent::TChannelKind::IssueGivenIdRange(const NKikimrBlobDepot::TGivenIdRange& proto) {
         for (const auto& range : proto.GetChannelRanges()) {
             GivenIdRangePerChannel[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
             NumAvailableItems += range.GetEnd() - range.GetBegin();
         }
-
-        // build min-heap for ids
-        RebuildHeap();
 
         ProcessQueriesWaitingForId();
     }
@@ -36,22 +23,26 @@ namespace NKikimr::NBlobDepot {
     }
 
     std::optional<TBlobSeqId> TBlobDepotAgent::TChannelKind::Allocate(TBlobDepotAgent& agent) {
-        if (GivenIdRangeHeap.empty()) {
+        ui64 accum = 0;
+        std::vector<std::tuple<ui64, ui8>> options;
+        for (const auto& [channel, range] : GivenIdRangePerChannel) {
+            if (!range.IsEmpty()) {
+                accum += range.GetNumAvailableItems();
+                options.emplace_back(accum, channel);
+            }
+        }
+        if (options.empty()) {
             return std::nullopt;
         }
 
-        std::pop_heap(GivenIdRangeHeap.begin(), GivenIdRangeHeap.end(), TGivenIdRangeHeapComp());
-        auto& [channel, range] = *GivenIdRangeHeap.back();
+        const ui64 v = RandomNumber(accum);
+        const auto it = std::upper_bound(options.begin(), options.end(), std::make_tuple(v, 0));
+        const ui8 channel = std::get<1>(*it);
+        TGivenIdRange& range = GivenIdRangePerChannel[channel];
         const ui64 value = range.Allocate();
-        if (range.IsEmpty()) {
-            GivenIdRangeHeap.pop_back();
-        } else {
-            std::push_heap(GivenIdRangeHeap.begin(), GivenIdRangeHeap.end(), TGivenIdRangeHeapComp());
-        }
+
         --NumAvailableItems;
-
         agent.IssueAllocateIdsIfNeeded(*this);
-
         return TBlobSeqId::FromSequentalNumber(channel, agent.BlobDepotGeneration, value);
     }
 
@@ -70,17 +61,6 @@ namespace NKikimr::NBlobDepot {
         NumAvailableItems -= givenIdRanges.GetNumAvailableItems();
         givenIdRanges.Trim(validSince);
         NumAvailableItems += givenIdRanges.GetNumAvailableItems();
-        RebuildHeap();
-    }
-
-    void TBlobDepotAgent::TChannelKind::RebuildHeap() {
-        GivenIdRangeHeap.clear();
-        for (auto& kv : GivenIdRangePerChannel) {
-            if (!kv.second.IsEmpty()) {
-                GivenIdRangeHeap.push_back(&kv);
-            }
-        }
-        std::make_heap(GivenIdRangeHeap.begin(), GivenIdRangeHeap.end(), TGivenIdRangeHeapComp());
     }
 
     void TBlobDepotAgent::TChannelKind::EnqueueQueryWaitingForId(TQuery *query) {

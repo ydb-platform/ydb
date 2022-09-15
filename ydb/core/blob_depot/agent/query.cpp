@@ -91,6 +91,7 @@ namespace NKikimr::NBlobDepot {
         }
         Y_VERIFY(response);
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
+        OnDestroy(false);
         delete this;
     }
 
@@ -98,6 +99,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "query ends with success", (VirtualGroupId, Agent.VirtualGroupId),
             (QueryId, QueryId), (Response, response->ToString()), (Duration, TActivationContext::Monotonic() - StartTime));
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
+        OnDestroy(true);
         delete this;
     }
 

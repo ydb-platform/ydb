@@ -26,6 +26,7 @@ namespace NKikimr {
             EvCommitBlobSeqResult,
             EvResolve,
             EvResolveResult,
+            EvDiscardSpoiledBlobSeq,
         };
 
 #define BLOBDEPOT_PARAM_ARG(ARG) std::optional<std::decay_t<decltype(Record.Get##ARG())>> param##ARG,
@@ -69,6 +70,7 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvCommitBlobSeqResult);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvResolve);
         BLOBDEPOT_EVENT_PB(EvResolveResult, Status, ErrorReason);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvDiscardSpoiledBlobSeq);
 
         template<typename TEvent>
         struct TResponseFor {};
@@ -92,6 +94,16 @@ namespace NKikimr {
             }
             return std::make_tuple(std::move(handle), record);
         }
+
+        template<typename TProto>
+        struct TEventFor {};
+
+        template<> struct TEventFor<NKikimrBlobDepot::TEvCollectGarbage> { using Type = TEvCollectGarbage; };
+        template<> struct TEventFor<NKikimrBlobDepot::TEvQueryBlocks> { using Type = TEvQueryBlocks; };
+        template<> struct TEventFor<NKikimrBlobDepot::TEvBlock> { using Type = TEvBlock; };
+        template<> struct TEventFor<NKikimrBlobDepot::TEvResolve> { using Type = TEvResolve; };
+        template<> struct TEventFor<NKikimrBlobDepot::TEvCommitBlobSeq> { using Type = TEvCommitBlobSeq; };
+        template<> struct TEventFor<NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq> { using Type = TEvDiscardSpoiledBlobSeq; };
     };
 
 } // NKikimr

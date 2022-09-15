@@ -100,65 +100,43 @@ namespace NKikimr::NBlobDepot {
             auto& kind = it->second;
             auto *givenIdRange = record->MutableGivenIdRange();
 
-            // FIXME: optimize for faster range selection
-
-            struct THeapItem {
-                ui64 Size;
+            struct TGroupInfo {
                 std::vector<TChannelInfo*> Channels;
-
-                struct TCompare {
-                    bool operator ()(const THeapItem& x, const THeapItem& y) const { return x.Size > y.Size; }
-                };
-
-                struct TChannelCompare {
-                    bool operator ()(TChannelInfo *x, TChannelInfo *y) const { return x->NextBlobSeqId > y->NextBlobSeqId; }
-                };
-
-                void MakeChannelHeap() {
-                    std::make_heap(Channels.begin(), Channels.end(), TChannelCompare());
-                }
-
-                std::tuple<ui8, ui64> PickChannelBlobSeq() {
-                    std::pop_heap(Channels.begin(), Channels.end(), TChannelCompare());
-                    TChannelInfo *channel = Channels.back();
-                    auto res = std::make_tuple(channel->Index, channel->NextBlobSeqId++);
-                    std::push_heap(Channels.begin(), Channels.end(), TChannelCompare());
-                    Size += 4 << 20; // assume each written blob of this size in a first approximation
-                    return res;
-                }
             };
-            std::vector<THeapItem> heap;
-            THashMap<ui32, size_t> groupToHeapIndex;
+            std::unordered_map<ui32, TGroupInfo> groups;
 
             for (const auto& [channel, groupId] : kind.ChannelGroups) {
                 Y_VERIFY_DEBUG(channel < Channels.size() && Channels[channel].ChannelKind == it->first);
-
-                const auto [it, inserted] = groupToHeapIndex.emplace(groupId, heap.size());
-                if (inserted) {
-                    heap.push_back(THeapItem{Groups[groupId].AllocatedBytes, {1, &Channels[channel]}});
-                } else {
-                    heap[it->second].Channels.push_back(&Channels[channel]);
-                }
+                groups[groupId].Channels.push_back(&Channels[channel]);
             }
 
-            for (auto& item : heap) {
-                item.MakeChannelHeap();
-            }
+            std::vector<std::tuple<ui64, const TGroupInfo*>> options;
 
-            std::make_heap(heap.begin(), heap.end(), THeapItem::TCompare());
+            ui64 accum = 0;
+            for (const auto& [groupId, group] : groups) {
+                //const ui64 allocatedBytes = Groups[groupId].AllocatedBytes;
+                const ui64 groupWeight = 1;
+                accum += groupWeight;
+                options.emplace_back(accum, &group);
+            }
 
             THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
             for (ui32 i = 0, count = ev->Get()->Record.GetCount(); i < count; ++i) {
-                // pick channel/sequence number
-                std::pop_heap(heap.begin(), heap.end(), THeapItem::TCompare());
-                auto [channel, value] = heap.back().PickChannelBlobSeq();
-                std::push_heap(heap.begin(), heap.end(), THeapItem::TCompare());
+                const ui64 selection = RandomNumber(accum);
+                const auto it = std::upper_bound(options.begin(), options.end(), selection,
+                    [](ui64 x, const auto& y) { return x < std::get<0>(y); });
+                const auto& [_, group] = *it;
+
+                const size_t channelIndex = RandomNumber(group->Channels.size());
+                TChannelInfo* const channel = group->Channels[channelIndex];
+
+                const ui64 value = channel->NextBlobSeqId++;
 
                 // fill in range item
-                auto& range = issuedRanges[channel];
+                auto& range = issuedRanges[channel->Index];
                 if (!range || range->GetEnd() != value) {
                     range = givenIdRange->AddChannelRanges();
-                    range->SetChannel(channel);
+                    range->SetChannel(channel->Index);
                     range->SetBegin(value);
                 }
                 range->SetEnd(value + 1);

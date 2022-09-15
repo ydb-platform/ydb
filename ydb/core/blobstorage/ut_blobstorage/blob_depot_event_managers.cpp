@@ -103,7 +103,7 @@ void VerifyTEvPutResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> res
             UNIT_FAIL("Unexpected status");
         }
     } else if (status != NKikimrProto::OK && status != NKikimrProto::ERROR) {
-        UNIT_FAIL("Unexpected status");
+        UNIT_FAIL(TStringBuilder() << "Unexpected status: " << NKikimrProto::EReplyStatus_Name(status));
     }
 }
 

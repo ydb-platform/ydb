@@ -1,9 +1,72 @@
 #include "data.h"
+#include "data_resolve.h"
+#include "data_uncertain.h"
 #include "schema.h"
 
 namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
+
+    TData::TResolveResultAccumulator::TResolveResultAccumulator(TEventHandle<TEvBlobDepot::TEvResolve>& ev)
+        : Sender(ev.Sender)
+        , Cookie(ev.Cookie)
+        , InterconnectSession(ev.InterconnectSession)
+    {}
+
+    void TData::TResolveResultAccumulator::AddItem(NKikimrBlobDepot::TEvResolveResult::TResolvedKey&& item) {
+        Items.push_back(std::move(item));
+    }
+
+    void TData::TResolveResultAccumulator::Send(TActorIdentity selfId, NKikimrProto::EReplyStatus status,
+            std::optional<TString> errorReason, const std::unordered_set<TKey> *filter,
+            const NKikimrBlobDepot::TBlobDepotConfig *config) {
+        auto sendResult = [&](std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev) {
+            auto handle = std::make_unique<IEventHandle>(Sender, selfId, ev.release(), 0, Cookie);
+            if (InterconnectSession) {
+                handle->Rewrite(TEvInterconnect::EvForward, InterconnectSession);
+            }
+            TActivationContext::Send(handle.release());
+        };
+
+        if (status != NKikimrProto::OK) {
+            return sendResult(std::make_unique<TEvBlobDepot::TEvResolveResult>(status, std::move(errorReason)));
+        }
+
+        size_t lastResponseSize;
+        std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev;
+
+        for (auto& item : Items) {
+            if (filter) {
+                Y_VERIFY_DEBUG(config);
+                const TKey key(TKey::FromBinaryKey(item.GetKey(), *config));
+                if (filter->contains(key)) {
+                    continue;
+                }
+            }
+
+            const size_t itemSize = item.ByteSizeLong();
+            if (!ev || lastResponseSize + itemSize > EventMaxByteSize) {
+                if (ev) {
+                    sendResult(std::move(ev));
+                }
+                ev = std::make_unique<TEvBlobDepot::TEvResolveResult>(NKikimrProto::OVERRUN, std::nullopt);
+                lastResponseSize = ev->CalculateSerializedSize();
+            }
+            item.Swap(ev->Record.AddResolvedKeys());
+            lastResponseSize += itemSize;
+        }
+
+        if (ev) {
+            ev->Record.SetStatus(NKikimrProto::OK);
+            sendResult(std::move(ev));
+        } else { // no items in response -- all got filtered out
+            sendResult(std::make_unique<TEvBlobDepot::TEvResolveResult>(NKikimrProto::OK, std::nullopt));
+        }
+    }
+
+    std::deque<NKikimrBlobDepot::TEvResolveResult::TResolvedKey> TData::TResolveResultAccumulator::ReleaseItems() {
+        return std::exchange(Items, {});
+    }
 
     class TData::TTxResolve : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         std::unique_ptr<TEvBlobDepot::TEvResolve::THandle> Request;
@@ -12,13 +75,15 @@ namespace NKikimr::NBlobDepot {
         ui32 NumKeysRead = 0; // number of keys already read for this item
 
         // final state
-        std::deque<std::unique_ptr<TEvBlobDepot::TEvResolveResult>> Outbox;
+        TResolveResultAccumulator Result;
         std::unique_ptr<TTxResolve> SuccessorTx;
+        std::deque<TKey> Uncertainties;
 
     public:
         TTxResolve(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr request)
             : TTransactionBase(self)
             , Request(request.Release())
+            , Result(*Request)
         {}
 
         TTxResolve(TTxResolve& predecessor)
@@ -27,6 +92,7 @@ namespace NKikimr::NBlobDepot {
             , ItemIndex(predecessor.ItemIndex)
             , LastScannedKey(std::move(predecessor.LastScannedKey))
             , NumKeysRead(predecessor.NumKeysRead)
+            , Result(std::move(predecessor.Result))
         {}
 
         bool GetScanParams(const NKikimrBlobDepot::TEvResolve::TItem& item, std::optional<TKey> *begin,
@@ -136,7 +202,8 @@ namespace NKikimr::NBlobDepot {
                         if (key != LastScannedKey) {
                             LastScannedKey = key;
                             progress = true;
-                            Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(), txc, this);
+                            Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
+                                rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>(), txc, this);
 
                             const bool matchBegin = !begin || (flags & EScanFlags::INCLUDE_BEGIN ? *begin <= key : *begin < key);
                             const bool matchEnd = !end || (flags & EScanFlags::INCLUDE_END ? key <= *end : key < *end);
@@ -185,29 +252,20 @@ namespace NKikimr::NBlobDepot {
         void Complete(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT30, "TTxResolve::Complete", (Id, Self->GetLogId()),
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (SuccessorTx, bool(SuccessorTx)),
-                (Outbox.size, Outbox.size()));
+                (Uncertainties.size, Uncertainties.size()));
 
             Self->Data->CommitTrash(this);
 
             if (SuccessorTx) {
                 Self->Execute(std::move(SuccessorTx));
+            } else if (Uncertainties.empty()) {
+                Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt);
             } else {
-                if (Outbox.empty()) {
-                    Outbox.push_back(std::make_unique<TEvBlobDepot::TEvResolveResult>(NKikimrProto::OK, std::nullopt));
-                }
-                for (auto& ev : Outbox) {
-                    auto handle = std::make_unique<IEventHandle>(Request->Sender, Self->SelfId(), ev.release(), 0, Request->Cookie);
-                    if (Request->InterconnectSession) {
-                        handle->Rewrite(TEvInterconnect::EvForward, Request->InterconnectSession);
-                    }
-                    TActivationContext::Send(handle.release());
-                }
+                Self->Data->UncertaintyResolver->PushResultWithUncertainties(std::move(Result), std::move(Uncertainties));
             }
         }
 
         void GenerateResponse() {
-            size_t lastResponseSize;
-
             for (const auto& item : Request->Get()->Record.GetItems()) {
                 std::optional<ui64> cookie = item.HasCookie() ? std::make_optional(item.GetCookie()) : std::nullopt;
 
@@ -219,7 +277,7 @@ namespace NKikimr::NBlobDepot {
                 Y_VERIFY_DEBUG(success);
 
                 auto callback = [&](const TKey& key, const TValue& value) {
-                    IssueResponseItem(cookie, key, value, lastResponseSize);
+                    IssueResponseItem(cookie, key, value);
                     return --count != 0;
                 };
 
@@ -227,7 +285,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        void IssueResponseItem(std::optional<ui64> cookie, const TKey& key, const TValue& value, size_t& lastResponseSize) {
+        void IssueResponseItem(std::optional<ui64> cookie, const TKey& key, const TValue& value) {
             NKikimrBlobDepot::TEvResolveResult::TResolvedKey item;
 
             if (cookie) {
@@ -248,9 +306,11 @@ namespace NKikimr::NBlobDepot {
                 }
             });
             if (value.OriginalBlobId) {
+                Y_VERIFY(item.GetValueChain().empty());
                 auto *out = item.AddValueChain();
                 out->SetGroupId(Self->Config.GetDecommitGroupId());
                 LogoBlobIDFromLogoBlobID(*value.OriginalBlobId, out->MutableBlobId());
+                Y_VERIFY(!value.UncertainWrite);
             }
             if (value.Meta) {
                 item.SetMeta(value.Meta.data(), value.Meta.size());
@@ -261,20 +321,10 @@ namespace NKikimr::NBlobDepot {
                     (Key, key), (Value, value), (Item, item), (Sender, Request->Sender), (Cookie, Request->Cookie));
             }
 
-            size_t itemSize = item.ByteSizeLong();
-            if (Outbox.empty() || lastResponseSize + itemSize > EventMaxByteSize) {
-                if (!Outbox.empty()) {
-                    auto& lastEvent = Outbox.back();
-                    lastEvent->Record.SetStatus(NKikimrProto::OVERRUN);
-                }
-                auto ev = std::make_unique<TEvBlobDepot::TEvResolveResult>(NKikimrProto::OK, std::nullopt);
-                lastResponseSize = ev->CalculateSerializedSize();
-                Outbox.push_back(std::move(ev));
+            Result.AddItem(std::move(item));
+            if (value.UncertainWrite && !value.ValueChain.empty()) {
+                Uncertainties.push_back(key);
             }
-
-            auto& lastEvent = Outbox.back();
-            item.Swap(lastEvent->Record.AddResolvedKeys());
-            lastResponseSize += itemSize;
         }
     };
 

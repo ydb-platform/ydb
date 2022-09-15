@@ -172,6 +172,13 @@ namespace NKikimr::NBlobDepot {
             friend bool operator > (const TKey& x, const TKey& y) { return Compare(x, y) >  0; }
             friend bool operator >=(const TKey& x, const TKey& y) { return Compare(x, y) >= 0; }
 
+            struct THash {
+                size_t operator ()(const TKey& key) const {
+                    const auto v = key.AsVariant();
+                    return std::visit([&](auto& value) { return MultiHash(v.index(), value); }, v);
+                }
+            };
+
         private:
             void Reset() {
                 if (Data.Type == StringType) {
@@ -214,8 +221,8 @@ namespace NKikimr::NBlobDepot {
             TValueChain ValueChain;
             NKikimrBlobDepot::EKeepState KeepState = NKikimrBlobDepot::EKeepState::Default;
             bool Public = false;
-            bool Unconfirmed = false;
             std::optional<TLogoBlobID> OriginalBlobId;
+            bool UncertainWrite = false;
 
             TValue() = default;
             TValue(const TValue&) = delete;
@@ -224,21 +231,21 @@ namespace NKikimr::NBlobDepot {
             TValue& operator =(const TValue&) = delete;
             TValue& operator =(TValue&&) = default;
 
-            explicit TValue(NKikimrBlobDepot::TValue&& proto)
+            explicit TValue(NKikimrBlobDepot::TValue&& proto, bool uncertainWrite)
                 : Meta(proto.GetMeta())
                 , ValueChain(std::move(*proto.MutableValueChain()))
                 , KeepState(proto.GetKeepState())
                 , Public(proto.GetPublic())
-                , Unconfirmed(proto.GetUnconfirmed())
                 , OriginalBlobId(proto.HasOriginalBlobId()
                     ? std::make_optional(LogoBlobIDFromLogoBlobID(proto.GetOriginalBlobId()))
                     : std::nullopt)
+                , UncertainWrite(uncertainWrite)
             {}
 
-            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item)
+            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item, bool uncertainWrite)
                 : Meta(item.GetMeta())
                 , Public(false)
-                , Unconfirmed(item.GetUnconfirmed())
+                , UncertainWrite(uncertainWrite)
             {
                 auto *chain = ValueChain.Add();
                 auto *locator = chain->MutableLocator();
@@ -248,7 +255,7 @@ namespace NKikimr::NBlobDepot {
             explicit TValue(NKikimrBlobDepot::EKeepState keepState)
                 : KeepState(keepState)
                 , Public(false)
-                , Unconfirmed(false)
+                , UncertainWrite(true)
             {}
 
             void SerializeToProto(NKikimrBlobDepot::TValue *proto) const {
@@ -264,13 +271,13 @@ namespace NKikimr::NBlobDepot {
                 if (Public != proto->GetPublic()) {
                     proto->SetPublic(Public);
                 }
-                if (Unconfirmed != proto->GetUnconfirmed()) {
-                    proto->SetUnconfirmed(Unconfirmed);
-                }
                 if (OriginalBlobId) {
                     LogoBlobIDFromLogoBlobID(*OriginalBlobId, proto->MutableOriginalBlobId());
                 }
             }
+
+            static bool Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item);
+            bool SameValueChainAsIn(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) const;
 
             TString SerializeToString() const {
                 NKikimrBlobDepot::TValue proto;
@@ -292,8 +299,8 @@ namespace NKikimr::NBlobDepot {
                     << " ValueChain# " << FormatList(ValueChain)
                     << " KeepState# " << NKikimrBlobDepot::EKeepState_Name(KeepState)
                     << " Public# " << (Public ? "true" : "false")
-                    << " Unconfirmed# " << (Unconfirmed ? "true" : "false")
                     << " OriginalBlobId# " << (OriginalBlobId ? OriginalBlobId->ToString() : "<none>")
+                    << " UncertainWrite# " << (UncertainWrite ? "true" : "false")
                     << "}";
             }
         };
@@ -365,11 +372,18 @@ namespace NKikimr::NBlobDepot {
 
         class TTxLoadSpecificKeys;
         class TTxResolve;
+        class TResolveResultAccumulator;
+
+        class TUncertaintyResolver;
+        std::unique_ptr<TUncertaintyResolver> UncertaintyResolver;
+        friend class TBlobDepot;
+
+        std::deque<TKey> KeysMadeCertain; // but not yet committed
+        bool CommitCertainKeysScheduled = false;
 
     public:
-        TData(TBlobDepot *self)
-            : Self(self)
-        {}
+        TData(TBlobDepot *self);
+        ~TData();
 
         template<typename TCallback>
         bool ScanRange(const TKey *begin, const TKey *end, TScanFlags flags, TCallback&& callback) {
@@ -407,12 +421,15 @@ namespace NKikimr::NBlobDepot {
         template<typename T, typename... TArgs>
         bool UpdateKey(TKey key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie, T&& callback, TArgs&&... args);
 
-        void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
+        void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item, bool uncertainWrite,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+
+        void MakeKeyCertain(const TKey& key);
+        void HandleCommitCertainKeys();
 
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
 
-        void AddDataOnLoad(TKey key, TString value, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        void AddDataOnLoad(TKey key, TString value, bool uncertainWrite, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddTrashOnLoad(TLogoBlobID id);
@@ -469,3 +486,6 @@ namespace NKikimr::NBlobDepot {
     Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TData::TScanFlags)
 
 } // NKikimr::NBlobDepot
+
+template<> struct THash<NKikimr::NBlobDepot::TBlobDepot::TData::TKey> : NKikimr::NBlobDepot::TBlobDepot::TData::TKey::THash {};
+template<> struct std::hash<NKikimr::NBlobDepot::TBlobDepot::TData::TKey> : THash<NKikimr::NBlobDepot::TBlobDepot::TData::TKey> {};

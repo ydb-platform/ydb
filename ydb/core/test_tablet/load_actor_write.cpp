@@ -46,6 +46,8 @@ namespace NKikimr::NTestShard {
         if (const auto wifIt = WritesInFlight.find(cookie); wifIt != WritesInFlight.end()) {
             TWriteInfo& info = wifIt->second;
             const TDuration latency = TDuration::Seconds(info.Timer.Passed());
+            STLOG(PRI_DEBUG, TEST_SHARD, TS29, "data written", (TabletId, TabletId), (Key, info.KeysInQuery),
+                (Latency, latency));
             WriteLatency.Add(latency);
             Y_VERIFY(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
             for (size_t i = 0; i < info.KeysInQuery.size(); ++i) {

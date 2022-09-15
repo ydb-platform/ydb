@@ -16,6 +16,7 @@ namespace NKikimr::NBlobDepot {
         struct TEvPrivate {
             enum {
                 EvCheckExpiredAgents = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvCommitCertainKeys,
             };
         };
 
@@ -36,6 +37,9 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
+
+        struct TToken {};
+        std::shared_ptr<TToken> Token = std::make_shared<TToken>();
 
         // when in decommission mode and not all blocks are yet recovered, then we postpone agent registration
         THashMap<TActorId, std::deque<std::unique_ptr<IEventHandle>>> RegisterAgentQ;
@@ -194,6 +198,7 @@ namespace NKikimr::NBlobDepot {
         std::unique_ptr<TData> Data;
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
+        void Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Monitoring
@@ -206,9 +211,6 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group assimilation
-
-        struct TToken {};
-        std::shared_ptr<TToken> Token = std::make_shared<TToken>();
 
         TActorId GroupAssimilatorId;
         EDecommitState DecommitState = EDecommitState::Default;

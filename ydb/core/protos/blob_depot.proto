@@ -35,8 +35,7 @@ message TValue {
     repeated TValueChain ValueChain = 2;
     optional EKeepState KeepState = 3;
     optional bool Public = 4;
-    optional bool Unconfirmed = 5;
-    optional NKikimrProto.TLogoBlobID OriginalBlobId = 6;
+    optional NKikimrProto.TLogoBlobID OriginalBlobId = 5;
 }
 
 message TGivenIdRange {
@@ -158,7 +157,8 @@ message TEvCommitBlobSeq {
         optional TBlobLocator BlobLocator = 1; // GroupId and Generation are for validation purposes
         optional bytes Key = 2;
         optional bytes Meta = 3;
-        optional bool Unconfirmed = 4; // if true, then write to BS hasn't been actually performed yet
+        optional bool UncertainWrite = 4;
+        optional bool CommitNotify = 5;
     }
 
     repeated TItem Items = 1;
@@ -171,6 +171,10 @@ message TEvCommitBlobSeqResult {
     }
 
     repeated TItem Items = 1;
+}
+
+message TEvDiscardSpoiledBlobSeq {
+    repeated TBlobSeqId Items = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

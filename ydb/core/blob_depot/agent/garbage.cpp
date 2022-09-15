@@ -2,10 +2,6 @@
 
 namespace NKikimr::NBlobDepot {
 
-    void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context) {
-        auto ev = std::make_unique<TEvBlobDepot::TEvCollectGarbage>();
-        msg.Swap(&ev->Record);
-        Issue(std::move(ev), sender, std::move(context));
-    }
+    // some garbage-handling code goes here :)
 
 } // NKikimr::NBlobDepot

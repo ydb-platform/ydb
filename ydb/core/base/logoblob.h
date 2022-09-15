@@ -355,6 +355,8 @@ struct THash<NKikimr::TLogoBlobID> {
     }
 };
 
+template<> struct std::hash<NKikimr::TLogoBlobID> : THash<NKikimr::TLogoBlobID> {};
+
 template<>
 inline NKikimr::TLogoBlobID Min<NKikimr::TLogoBlobID>() noexcept {
     return {};

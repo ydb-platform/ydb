@@ -412,7 +412,7 @@ private:
         hFunc(TEvInternalService::TEvGetTaskResponse, Handle)
         hFunc(NActors::TEvents::TEvPoisonTaken, HandlePoisonTaken)
         hFunc(TEvPrivate::TEvCleanupCounters, HandleCleanupCounters)
-        hFunc(NMon::TEvHttpInfo, Handle);
+        hFunc(NMon::TEvHttpInfo, Handle)
     );
 
     NYq::TYqSharedResources::TPtr YqSharedResources;

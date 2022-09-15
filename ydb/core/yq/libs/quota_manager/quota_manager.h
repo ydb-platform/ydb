@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/mon/mon.h>
+
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
 #include <ydb/core/yq/libs/config/protos/quotas_manager.pb.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
@@ -40,6 +42,7 @@ NActors::IActor* CreateQuotaServiceActor(
     const TYqSharedResources::TPtr& yqSharedResources,
     NKikimr::TYdbCredentialsProviderFactory credProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    std::vector<TQuotaDescription> quotaDesc);
+    std::vector<TQuotaDescription> quotaDesc,
+    NActors::TMon* monitoring = nullptr);
 
 } /* NYq */

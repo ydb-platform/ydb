@@ -312,7 +312,8 @@ void Init(
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_ANALYTICS_DURATION_LIMIT, 1440),
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_STREAMING_DURATION_LIMIT, 0),
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_QUERY_RESULT_LIMIT, 20_MB, 2_GB)
-            });
+            },
+            appData->Mon);
         actorRegistrator(NYq::MakeQuotaServiceActorId(nodeId), quotaService);
 
         auto quotaProxy = NYq::CreateQuotaProxyActor(

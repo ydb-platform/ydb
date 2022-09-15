@@ -144,12 +144,14 @@ public:
         const TYqSharedResources::TPtr& yqSharedResources,
         NKikimr::TYdbCredentialsProviderFactory credProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        std::vector<TQuotaDescription> quotaDescriptions)
+        std::vector<TQuotaDescription> quotaDescriptions,
+        NActors::TMon* monitoring)
         : Config(config)
         , StorageConfig(storageConfig)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
         , ServiceCounters(counters->GetSubgroup("subsystem", "quota_manager"))
+        , Monitoring(monitoring)
     {
         for (auto& description : quotaDescriptions) {
             QuotaInfoMap[description.SubjectType].emplace(description.MetricName, description.Info);
@@ -161,6 +163,11 @@ public:
     static constexpr char ActorName[] = "FQ_QUOTA_SERVICE";
 
     void Bootstrap() {
+        if (Monitoring) {
+            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"), 
+                "quotas", "Quota Manager", false, TActivationContext::ActorSystem(), SelfId());
+        }
+
         YdbConnection = NewYdbConnection(StorageConfig, CredProviderFactory, YqSharedResources->CoreYdbDriver);
         DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
         Send(GetNameserviceActorId(), new NActors::TEvInterconnect::TEvListNodes());
@@ -175,10 +182,12 @@ private:
         hFunc(TEvQuotaService::TQuotaUsageResponse, Handle)
         hFunc(TEvQuotaService::TQuotaLimitChangeResponse, Handle)
         hFunc(TEvQuotaService::TQuotaSetRequest, Handle)
+        hFunc(TEvQuotaService::TQuotaSetResponse, Handle)
         hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
         hFunc(NActors::TEvInterconnect::TEvNodesInfo, Handle)
         hFunc(TEvQuotaService::TEvQuotaUpdateNotification, Handle)
         hFunc(NActors::TEvents::TEvUndelivered, Handle)
+        hFunc(NMon::TEvHttpInfo, Handle)
     );
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
@@ -672,6 +681,58 @@ private:
         }
     }
 
+    void Handle(TEvQuotaService::TQuotaSetResponse::TPtr& ev) {
+
+        TStringStream html;
+        html << "<table class='table simple-table1 table-hover table-condensed'>";
+        html << "<thead><tr>";
+        html << "<th>Quota Set Response</th>";
+        html << "<th></th>";
+        html << "</tr></thead><tbody>";
+        html << "<tr><td>Subject Type:</td><td>" << ev->Get()->SubjectType << "</td></tr>";
+        html << "<tr><td>Subject ID:</td><td>" << ev->Get()->SubjectId << "</td></tr>";
+        for (auto& limit : ev->Get()->Limits) {
+            html << "<tr><td>" << limit.first << "</td><td>" << limit.second << "</td></tr>";
+        }
+        html << "</tbody></table>";
+
+        Send(HttpMonId, new NMon::TEvHttpInfoRes(html.Str()));
+    }
+
+    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+
+        const auto& params = ev->Get()->Request.GetParams();
+
+        if (params.Has("submit")) {
+            TString subjectId = params.Get("subject_id");
+            TString subjectType = params.Get("subject_type");
+            if (subjectType.empty()) {
+                subjectType = "cloud";
+            }
+            TString metricName = params.Get("metric_name");
+            TString metricValue = params.Get("metric_value");
+
+            auto request = MakeHolder<TEvQuotaService::TQuotaSetRequest>(subjectType, subjectId);
+            request->Limits.emplace(metricName, FromStringWithDefault(metricValue, 0));
+
+            Send(SelfId(), request.Release());
+
+            HttpMonId = ev->Sender;
+            return;
+        }
+
+        TStringStream html;
+        html << "<form method='get'>";
+        html << "<p>Subject ID (i.e. Cloud ID):<input name='subject_id' type='text'/></p>";
+        html << "<p>Subject Type (defaulted to 'cloud'):<input name='subject_type' type='text'/></p>";
+        html << "<p>Quota Name:<input name='metric_name' type='text'/></p>";
+        html << "<p>New value:<input name='metric_value' type='number'/></p>";
+        html << "<button name='submit' type='submit'><b>Change</b></button>";
+        html << "</form>";
+
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(html.Str()));
+    }
+
     NConfig::TQuotasManagerConfig Config;
     NConfig::TYdbStorageConfig StorageConfig;
     ::NYq::TYqSharedResources::TPtr YqSharedResources;
@@ -684,6 +745,8 @@ private:
     TDuration LimitRefreshPeriod;
     TDuration UsageRefreshPeriod;
     std::vector<ui32> NodeIds;
+    NActors::TMon* Monitoring;
+    NActors::TActorId HttpMonId;
 };
 
 NActors::IActor* CreateQuotaServiceActor(
@@ -692,8 +755,9 @@ NActors::IActor* CreateQuotaServiceActor(
     const TYqSharedResources::TPtr& yqSharedResources,
     NKikimr::TYdbCredentialsProviderFactory credProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    std::vector<TQuotaDescription> quotaDesc) {
-        return new TQuotaManagementService(config, storageConfig, yqSharedResources, credProviderFactory, counters, quotaDesc);
+    std::vector<TQuotaDescription> quotaDesc,
+    NActors::TMon* monitoring) {
+        return new TQuotaManagementService(config, storageConfig, yqSharedResources, credProviderFactory, counters, quotaDesc, monitoring);
 }
 
 } /* NYq */

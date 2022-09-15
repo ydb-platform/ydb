@@ -69,7 +69,7 @@ public:
         return 0;
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TDqSettings& dqSettings, const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
             const auto& pqReadTopic = maybePqReadTopic.Cast();
 
@@ -126,7 +126,7 @@ public:
                 .Input<TDqPqTopicSource>()
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columns))
-                    .Settings(BuildTopicReadSettings(clusterName, read->Pos(), ctx))
+                    .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -200,6 +200,9 @@ public:
                         srcDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         srcDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
+                    } else if (name == WatermarksGranularityUsSetting) {
+                        srcDesc.MutableWatermarks()->SetEnabled(true);
+                        srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
                     }
                 }
 
@@ -259,7 +262,12 @@ public:
         }
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicReadSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
+    NNodes::TCoNameValueTupleList BuildTopicReadSettings(
+        const TString& cluster,
+        const TDqSettings& dqSettings,
+        TPositionHandle pos,
+        TExprContext& ctx) const
+    {
         TVector<TCoNameValueTuple> props;
 
         {
@@ -281,6 +289,11 @@ public:
 
         if (clusterConfiguration->AddBearerToToken) {
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
+        }
+
+        if (dqSettings.WatermarksMode.Get().GetOrElse("") == "default") {
+            const auto granularity = TDuration::MilliSeconds(dqSettings.WatermarksGranularityMs.Get().GetOrElse(1000));
+            Add(props, WatermarksGranularityUsSetting, ToString(granularity.MicroSeconds()), pos, ctx);
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)

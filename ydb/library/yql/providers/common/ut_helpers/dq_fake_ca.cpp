@@ -91,8 +91,12 @@ TFakeCASetup::TFakeCASetup()
             NActors::TMailboxType::Simple,
             0));
 
+    Runtime->SetLogBackend(CreateStderrBackend());
+
     TAutoPtr<NKikimr::TAppPrepare> app = new NKikimr::TAppPrepare();
     Runtime->Initialize(app->Unwrap());
+
+    Runtime->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
 }
 
 TFakeCASetup::~TFakeCASetup() {

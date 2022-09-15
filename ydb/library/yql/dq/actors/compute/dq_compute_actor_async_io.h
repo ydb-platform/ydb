@@ -69,9 +69,14 @@ struct IDqComputeActorAsyncInput {
     virtual ui64 GetInputIndex() const = 0;
 
     // Gets data and returns space used by filled data batch.
+    // Watermark will be returned if source watermark was moved forward. Watermark should be handled AFTER data.
     // Method should be called under bound mkql allocator.
     // Could throw YQL errors.
-    virtual i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, bool& finished, i64 freeSpace) = 0;
+    virtual i64 GetAsyncInputData(
+        NKikimr::NMiniKQL::TUnboxedValueVector& batch,
+        TMaybe<TInstant>& watermark,
+        bool& finished,
+        i64 freeSpace) = 0;
 
     // Checkpointing.
     virtual void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) = 0;
@@ -150,6 +155,7 @@ public:
         const NDqProto::TTaskInput& InputDesc;
         ui64 InputIndex;
         TTxId TxId;
+        ui64 TaskId;
         const THashMap<TString, TString>& SecureParams;
         const THashMap<TString, TString>& TaskParams;
         const NActors::TActorId& ComputeActorId;
@@ -161,6 +167,7 @@ public:
         const NDqProto::TTaskOutput& OutputDesc;
         ui64 OutputIndex;
         TTxId TxId;
+        ui64 TaskId;
         IDqComputeActorAsyncOutput::ICallbacks* Callback;
         const THashMap<TString, TString>& SecureParams;
         const THashMap<TString, TString>& TaskParams;
@@ -173,6 +180,7 @@ public:
         const NDqProto::TTaskInput& InputDesc;
         const ui64 InputIndex;
         TTxId TxId;
+        ui64 TaskId;
         const NUdf::TUnboxedValue TransformInput;
         const THashMap<TString, TString>& SecureParams;
         const THashMap<TString, TString>& TaskParams;
@@ -186,6 +194,7 @@ public:
         const NDqProto::TTaskOutput& OutputDesc;
         const ui64 OutputIndex;
         TTxId TxId;
+        ui64 TaskId;
         const IDqOutputConsumer::TPtr TransformOutput;
         IDqComputeActorAsyncOutput::ICallbacks* Callback;
         const THashMap<TString, TString>& SecureParams;

@@ -345,6 +345,7 @@ private:
                             channelId,
                             std::move(chunks),
                             Nothing(),
+                            Nothing(),
                             isFinished,
                             changed,
                             GetSensors(response),

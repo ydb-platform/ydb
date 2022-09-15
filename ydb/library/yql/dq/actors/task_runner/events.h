@@ -199,6 +199,7 @@ struct TEvTaskRunFinished
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
         THolder<NDqProto::TMiniKqlProgramState>&& programState = nullptr,
+        bool watermarkInjectedToOutputs = false,
         bool checkpointRequestedFromTaskRunner = false,
         TDuration computeTime = TDuration::Zero())
         : RunStatus(runStatus)
@@ -208,6 +209,7 @@ struct TEvTaskRunFinished
         , ProfileStats(profileStats)
         , MkqlMemoryLimit(mkqlMemoryLimit)
         , ProgramState(std::move(programState))
+        , WatermarkInjectedToOutputs(watermarkInjectedToOutputs)
         , CheckpointRequestedFromTaskRunner(checkpointRequestedFromTaskRunner)
         , ComputeTime(computeTime)
     { }
@@ -220,13 +222,16 @@ struct TEvTaskRunFinished
     TDqMemoryQuota::TProfileStats ProfileStats;
     ui64 MkqlMemoryLimit = 0;
     THolder<NDqProto::TMiniKqlProgramState> ProgramState;
+    bool WatermarkInjectedToOutputs = false;
     bool CheckpointRequestedFromTaskRunner = false;
     TDuration ComputeTime;
 };
 
 struct TEvChannelPopFinished
-    : NActors::TEventLocal<TEvChannelPopFinished, TTaskRunnerEvents::ES_POP_FINISHED> {
+    : NActors::TEventLocal<TEvChannelPopFinished, TTaskRunnerEvents::ES_POP_FINISHED>
+{
     TEvChannelPopFinished() = default;
+
     TEvChannelPopFinished(ui32 channelId)
         : Stats()
         , ChannelId(channelId)
@@ -234,11 +239,21 @@ struct TEvChannelPopFinished
         , Finished(false)
         , Changed(false)
     { }
-    TEvChannelPopFinished(ui32 channelId, TVector<NDqProto::TData>&& data, TMaybe<NDqProto::TCheckpoint>&& checkpoint, bool finished, bool changed, const TTaskRunnerActorSensors& sensors = {}, TDqTaskRunnerStatsView&& stats = {})
+
+    TEvChannelPopFinished(
+            ui32 channelId,
+            TVector<NDqProto::TData>&& data,
+            TMaybe<NDqProto::TWatermark>&& watermark,
+            TMaybe<NDqProto::TCheckpoint>&& checkpoint,
+            bool finished,
+            bool changed,
+            const TTaskRunnerActorSensors& sensors = {},
+            TDqTaskRunnerStatsView&& stats = {})
         : Sensors(sensors)
         , Stats(std::move(stats))
         , ChannelId(channelId)
         , Data(std::move(data))
+        , Watermark(std::move(watermark))
         , Checkpoint(std::move(checkpoint))
         , Finished(finished)
         , Changed(changed)
@@ -248,10 +263,22 @@ struct TEvChannelPopFinished
     NDq::TDqTaskRunnerStatsView Stats;
 
     const ui32 ChannelId;
+    // The order is Data -> Watermark -> Checkpoint
     TVector<NDqProto::TData> Data;
-    TMaybe<NDqProto::TCheckpoint> Checkpoint;  // checkpoint follows the last data in this->Data (if it is not empty)
+    TMaybe<NDqProto::TWatermark> Watermark;
+    TMaybe<NDqProto::TCheckpoint> Checkpoint;
     bool Finished;
     bool Changed;
+};
+
+struct TWatermarkRequest {
+    TWatermarkRequest(TVector<ui32>&& channelIds, TInstant watermark)
+        : ChannelIds(std::move(channelIds))
+        , Watermark(watermark) {
+    }
+
+    TVector<ui32> ChannelIds;
+    TInstant Watermark;
 };
 
 // Holds info required to inject barriers to outputs
@@ -272,10 +299,15 @@ struct TEvContinueRun
 
     TEvContinueRun() = default;
 
-    explicit TEvContinueRun(TMaybe<TCheckpointRequest>&& checkpointRequest, bool checkpointOnly)
+    explicit TEvContinueRun(
+        TMaybe<TWatermarkRequest>&& watermarkRequest,
+        TMaybe<TCheckpointRequest>&& checkpointRequest,
+        bool checkpointOnly
+    )
         : ChannelId(0)
         , MemLimit(0)
         , FreeSpace(0)
+        , WatermarkRequest(std::move(watermarkRequest))
         , CheckpointRequest(std::move(checkpointRequest))
         , CheckpointOnly(checkpointOnly)
     { }
@@ -299,6 +331,7 @@ struct TEvContinueRun
     const THashSet<ui32> InputChannels;
     ui64 MemLimit;
     ui64 FreeSpace;
+    TMaybe<TWatermarkRequest> WatermarkRequest = Nothing();
     TMaybe<TCheckpointRequest> CheckpointRequest = Nothing();
     bool CheckpointOnly = false;
 };

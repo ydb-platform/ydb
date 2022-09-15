@@ -265,7 +265,7 @@ private:
     void OnFailure(TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
         if (!Finished) {
             YQL_LOG_CTX_ROOT_SCOPE(TraceId);
-            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ 
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__
                             << ", status=" << static_cast<int>(ev->Get()->Record.GetStatusCode())
                             << ", issues size=" << ev->Get()->Record.IssuesSize()
                             << ", sender=" << ev->Sender;

@@ -74,6 +74,7 @@ struct TChannel {
     ui32 DstInputIndex = 0;
     bool InMemory = true;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+    NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
 };
 
 using TChannelList = TVector<ui64>;
@@ -117,6 +118,7 @@ struct TTaskInput {
     TChannelList Channels;
     TMaybe<::google::protobuf::Any> SourceSettings;
     TString SourceType;
+    NYql::NDqProto::EWatermarksMode WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
     TInputMeta Meta;
     TMaybe<TTransform> Transform;
 
@@ -167,6 +169,7 @@ struct TTask {
     NActors::TActorId ComputeActorId;
     TTaskMeta Meta;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+    NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
 };
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>

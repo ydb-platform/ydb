@@ -11,11 +11,17 @@ namespace {
 
 class TDqAsyncOutputBuffer : public IDqAsyncOutputBuffer {
     struct TValueDesc {
-        std::variant<NUdf::TUnboxedValue, NDqProto::TCheckpoint> Value;
+        std::variant<NUdf::TUnboxedValue, NDqProto::TWatermark, NDqProto::TCheckpoint> Value;
         ui64 EstimatedSize;
 
         TValueDesc(NUdf::TUnboxedValue&& value, ui64 size)
             : Value(std::move(value))
+            , EstimatedSize(size)
+        {
+        }
+
+        TValueDesc(NDqProto::TWatermark&& watermark, ui64 size)
+            : Value(std::move(watermark))
             , EstimatedSize(size)
         {
         }
@@ -57,6 +63,14 @@ public:
         Y_VERIFY(EstimatedRowBytes > 0);
         Values.emplace_back(std::move(value), EstimatedRowBytes);
         EstimatedStoredBytes += EstimatedRowBytes;
+
+        ReportChunkIn();
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        const ui64 bytesSize = watermark.ByteSize();
+        Values.emplace_back(std::move(watermark), bytesSize);
+        EstimatedStoredBytes += bytesSize;
 
         ReportChunkIn();
     }
@@ -103,6 +117,21 @@ public:
         ReportChunkOut(batch.size(), usedBytes);
 
         return usedBytes;
+    }
+
+    bool Pop(NDqProto::TWatermark& watermark) override {
+        if (!Values.empty() && std::holds_alternative<NDqProto::TWatermark>(Values.front().Value)) {
+            watermark = std::move(std::get<NDqProto::TWatermark>(Values.front().Value));
+            const auto size = Values.front().EstimatedSize;
+            Y_VERIFY(EstimatedStoredBytes >= size);
+            EstimatedStoredBytes -= size;
+            Values.pop_front();
+
+            ReportChunkOut(1, size);
+
+            return true;
+        }
+        return false;
     }
 
     bool Pop(NDqProto::TCheckpoint& checkpoint) override {

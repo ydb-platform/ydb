@@ -5003,7 +5003,7 @@ namespace {
                 TStringBuilder() << "Unsupported agg name: " << name));
             return IGraphTransformer::TStatus::Error;
         }
-        
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -6053,7 +6053,7 @@ namespace {
 
     IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 13, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 14, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         auto& item = input->ChildRef(0);

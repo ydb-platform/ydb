@@ -12,7 +12,7 @@
 
 namespace NYql::NDq {
     struct TPqMetaExtractor {
-        using TPqMetaExtractorLambda = std::function<NYql::NUdf::TUnboxedValuePod(const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage&)>;
+        using TPqMetaExtractorLambda = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage&)>;
 
     public:
         TPqMetaExtractor();

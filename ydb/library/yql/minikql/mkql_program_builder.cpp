@@ -4759,7 +4759,8 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     const TUnaryLambda& load,
     const TBinaryLambda& merge,
     const TTernaryLambda& finish,
-    TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay, TRuntimeNode dataWatermarks)
+    TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
+    TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode)
 {
     if constexpr (RuntimeVersion < 22U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -4829,6 +4830,7 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     callableBuilder.Add(interval);
     callableBuilder.Add(delay);
     callableBuilder.Add(dataWatermarks);
+    callableBuilder.Add(watermarksMode);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

@@ -33,6 +33,9 @@ public:
     // Pop data to send. Return estimated size of returned data.
     [[nodiscard]]
     virtual ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch, ui64 bytes) = 0;
+    // Pop watermark
+    [[nodiscard]]
+    virtual bool Pop(NDqProto::TWatermark& watermark) = 0;
     // Pop chechpoint. Checkpoints may be taken from sink even after it is finished.
     [[nodiscard]]
     virtual bool Pop(NDqProto::TCheckpoint& checkpoint) = 0;

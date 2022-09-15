@@ -226,7 +226,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinato
     AbortCheckpoint();
     if (resumeInputs) {
         LOG_W("Drop pending checkpoint since coordinator is stale");
-        ComputeActor->ResumeInputs();
+        ComputeActor->ResumeInputsByCheckpoint();
     }
 }
 

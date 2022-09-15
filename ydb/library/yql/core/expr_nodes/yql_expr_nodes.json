@@ -1690,7 +1690,8 @@
                 {"Index": 9,  "Name": "SaveHandler",    "Type": "TExprBase"},
                 {"Index": 10, "Name": "LoadHandler",    "Type": "TExprBase"},
                 {"Index": 11, "Name": "MergeHandler",   "Type": "TCoLambda"},
-                {"Index": 12, "Name": "FinishHandler",  "Type": "TCoLambda"}
+                {"Index": 12, "Name": "FinishHandler",  "Type": "TCoLambda"},
+                {"Index": 13, "Name": "WatermarkMode",  "Type": "TExprBase"}
             ]
         },
         {

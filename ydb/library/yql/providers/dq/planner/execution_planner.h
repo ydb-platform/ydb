@@ -72,7 +72,7 @@ namespace NYql::NDqs {
         void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
 
         void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables);
-        void BuildCheckpointingMode();
+        void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks);
         bool IsEgressTask(const TDqsTasksGraph::TTaskType& task) const;
 
     private:

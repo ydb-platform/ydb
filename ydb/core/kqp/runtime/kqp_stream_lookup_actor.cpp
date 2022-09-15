@@ -152,7 +152,7 @@ private:
         TActorBootstrapped<TKqpStreamLookupActor>::PassAway();
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, bool& finished, i64) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, TMaybe<TInstant>&, bool& finished, i64) final {
         i64 totalDataSize = 0;
 
         if (TableScheme) {

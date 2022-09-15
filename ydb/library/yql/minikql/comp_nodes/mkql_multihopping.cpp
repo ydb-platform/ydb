@@ -44,11 +44,11 @@ public:
             ui64 intervalHopCount,
             ui64 delayHopCount,
             bool dataWatermarks,
+            bool watermarkMode,
             TComputationContext& ctx,
             const THashFunc& hash,
             const TEqualsFunc& equal,
-            TWatermark& watermark,
-            bool watermarkMode)
+            TWatermark& watermark)
             : TBase(memInfo)
             , Stream(std::move(stream))
             , Self(self)
@@ -60,7 +60,7 @@ public:
             , Watermark(watermark)
             , WatermarkMode(watermarkMode)
         {
-            if (dataWatermarks) {
+            if (!watermarkMode && dataWatermarks) {
                 DataWatermarkTracker.emplace(TWatermarkTracker(delayHopCount * hopTime, hopTime));
             }
         }
@@ -238,11 +238,11 @@ public:
 
                 auto& keyState = GetOrCreateKeyState(key, WatermarkMode ? GetWatermark().MicroSeconds() / HopTime : hopIndex);
                 if (hopIndex < keyState.HopIndex) {
-                    ++EarlyEventsThrown;
+                    ++LateEventsThrown;
                     continue;
                 }
                 if (WatermarkMode && (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount)) {
-                    ++LateEventsThrown;
+                    ++EarlyEventsThrown;
                     continue;
                 }
 
@@ -429,10 +429,10 @@ public:
         IComputationNode* interval,
         IComputationNode* delay,
         IComputationNode* dataWatermarks,
+        IComputationNode* watermarkMode,
         TType* keyType,
         TType* stateType,
-        TWatermark& watermark,
-        bool watermarkMode)
+        TWatermark& watermark)
         : TBaseComputation(mutables)
         , Stream(stream)
         , Item(item)
@@ -454,6 +454,7 @@ public:
         , Interval(interval)
         , Delay(delay)
         , DataWatermarks(dataWatermarks)
+        , WatermarkMode(watermarkMode)
         , KeyType(keyType)
         , StateType(stateType)
         , KeyPacker(mutables)
@@ -462,7 +463,6 @@ public:
         , IsTuple(false)
         , UseIHash(false)
         , Watermark(watermark)
-        , WatermarkMode(watermarkMode)
     {
         Stateless = false;
         bool encoded;
@@ -475,6 +475,7 @@ public:
         const auto interval = Interval->GetValue(ctx).Get<i64>();
         const auto delay = Delay->GetValue(ctx).Get<i64>();
         const auto dataWatermarks = DataWatermarks->GetValue(ctx).Get<bool>();
+        const auto watermarkMode = WatermarkMode->GetValue(ctx).Get<bool>();
 
         // TODO: move checks from here
         MKQL_ENSURE(hopTime > 0, "hop must be positive");
@@ -489,10 +490,10 @@ public:
 
         return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), this, (ui64)hopTime,
                                                       (ui64)intervalHopCount, (ui64)delayHopCount,
-                                                      dataWatermarks, ctx,
+                                                      dataWatermarks, watermarkMode, ctx,
                                                       TValueHasher(KeyTypes, IsTuple, UseIHash ? MakeHashImpl(KeyType) : nullptr),
                                                       TValueEqual(KeyTypes, IsTuple, UseIHash ? MakeEquateImpl(KeyType) : nullptr),
-                                                      Watermark, WatermarkMode);
+                                                      Watermark);
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {
@@ -532,6 +533,7 @@ private:
         DependsOn(Interval);
         DependsOn(Delay);
         DependsOn(DataWatermarks);
+        DependsOn(WatermarkMode);
     }
 
     IComputationNode* const Stream;
@@ -557,6 +559,7 @@ private:
     IComputationNode* const Interval;
     IComputationNode* const Delay;
     IComputationNode* const DataWatermarks;
+    IComputationNode* const WatermarkMode;
 
     TType* const KeyType;
     TType* const StateType;
@@ -567,13 +570,12 @@ private:
     bool IsTuple;
     bool UseIHash;
     TWatermark& Watermark;
-    bool WatermarkMode;
 };
 
 }
 
-IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx, TWatermark& watermark, bool watermarkMode) {
-    MKQL_ENSURE(callable.GetInputsCount() == 20, "Expected 20 args");
+IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx, TWatermark& watermark) {
+    MKQL_ENSURE(callable.GetInputsCount() == 21, "Expected 21 args");
 
     auto hasSaveLoad = !callable.GetInput(12).GetStaticType()->IsVoid();
 
@@ -604,6 +606,7 @@ IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNo
     auto interval = LocateNode(ctx.NodeLocator, callable, 17);
     auto delay = LocateNode(ctx.NodeLocator, callable, 18);
     auto dataWatermarks = LocateNode(ctx.NodeLocator, callable, 19);
+    auto watermarkMode = LocateNode(ctx.NodeLocator, callable, 20);
 
     auto item = LocateExternalNode(ctx.NodeLocator, callable, 1);
     auto key = LocateExternalNode(ctx.NodeLocator, callable, 2);
@@ -620,7 +623,7 @@ IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNo
     return new TMultiHoppingCoreWrapper(ctx.Mutables,
         stream, item, key, state, state2, time, inSave, inLoad, keyExtract,
         outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
-        hop, interval, delay, dataWatermarks, keyType, stateType, watermark, watermarkMode);
+        hop, interval, delay, dataWatermarks, watermarkMode, keyType, stateType, watermark);
 }
 
 }

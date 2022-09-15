@@ -125,6 +125,11 @@ public:
         }
     }
 
+    void Push(NDqProto::TWatermark&& watermark) override {
+        YQL_ENSURE(!Watermark);
+        Watermark.ConstructInPlace(std::move(watermark));
+    }
+
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
         YQL_ENSURE(!Checkpoint);
         Checkpoint.ConstructInPlace(std::move(checkpoint));
@@ -206,6 +211,16 @@ public:
 
         Data.erase(Data.begin(), last);
         return true;
+    }
+
+    [[nodiscard]]
+    bool Pop(NDqProto::TWatermark& watermark) override {
+        if (!HasData() && Watermark) {
+            watermark = std::move(*Watermark);
+            Watermark = Nothing();
+            return true;
+        }
+        return false;
     }
 
     [[nodiscard]]
@@ -313,6 +328,7 @@ private:
     ui32 EstimatedRowBytes = 0;
     bool Finished = false;
 
+    TMaybe<NDqProto::TWatermark> Watermark;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
 };
 
@@ -549,6 +565,11 @@ public:
 #endif
     }
 
+    void Push(NDqProto::TWatermark&& watermark) override {
+        YQL_ENSURE(!Watermark);
+        Watermark.ConstructInPlace(std::move(watermark));
+    }
+
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
         YQL_ENSURE(!Checkpoint);
         Checkpoint.ConstructInPlace(std::move(checkpoint));
@@ -670,6 +691,16 @@ public:
         ValidateUsedMemory();
 
         return true;
+    }
+
+    [[nodiscard]]
+    bool Pop(NDqProto::TWatermark& watermark) override {
+        if (!HasData() && Watermark) {
+            watermark = std::move(*Watermark);
+            Watermark = Nothing();
+            return true;
+        }
+        return false;
     }
 
     [[nodiscard]]
@@ -830,6 +861,7 @@ private:
 
     bool Finished = false;
 
+    TMaybe<NDqProto::TWatermark> Watermark;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
 };
 

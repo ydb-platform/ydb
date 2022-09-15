@@ -182,44 +182,64 @@ struct TFakeCASetup {
     ~TFakeCASetup();
 
     template<typename T>
-    std::vector<T> AsyncInputRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) {
-        std::vector<T> result;
-        Execute([&result, &parser, freeSpace](TFakeActor& actor) {
+    std::vector<std::variant<T, TInstant>> AsyncInputRead(
+        const TReadValueParser<T> parser,
+        NThreading::TFuture<void>& nextDataFutureOut,
+        i64 freeSpace = 12345)
+    {
+        std::vector<std::variant<T, TInstant>> result;
+        NThreading::TFuture<bool> nextDataFuture;
+        Execute([&result, &parser, freeSpace, &nextDataFutureOut, this](TFakeActor& actor) {
+            TMaybe<TInstant> watermark;
             NKikimr::NMiniKQL::TUnboxedValueVector buffer;
             bool finished = false;
-            actor.DqAsyncInput->GetAsyncInputData(buffer, finished, freeSpace);
+            actor.DqAsyncInput->GetAsyncInputData(buffer, watermark, finished, freeSpace);
 
             for (const auto& uv : buffer) {
                 for (const auto item : parser(uv)) {
                     result.emplace_back(item);
                 }
             }
+
+            if (watermark) {
+                result.emplace_back(*watermark);
+            }
+
+            nextDataFutureOut = AsyncInputPromises.NewAsyncInputDataArrived.GetFuture();
         });
 
         return result;
     }
 
     template<typename T>
-    std::vector<T> AsyncInputReadUntil(
+    std::vector<std::variant<T, TInstant>> AsyncInputReadUntil(
         const TReadValueParser<T> parser,
         ui64 size,
         i64 eachReadFreeSpace = 1000,
-        TDuration timeout = TDuration::Seconds(10))
+        TDuration timeout = TDuration::Seconds(30))
     {
-        std::vector<T> result;
+        std::vector<std::variant<T, TInstant>> result;
+        TInstant startedAt = TInstant::Now();
         DoWithRetry([&](){
-                auto batch = AsyncInputRead<T>(parser, eachReadFreeSpace);
+                NThreading::TFuture<void> nextDataFuture;
+                auto batch = AsyncInputRead<T>(parser, nextDataFuture, eachReadFreeSpace);
                 for (const auto& item : batch) {
                     result.emplace_back(item);
                 }
 
+                if (TInstant::Now() > startedAt + timeout) {
+                    return;
+                }
+
                 if (result.size() < size) {
-                    AsyncInputPromises.NewAsyncInputDataArrived.GetFuture().Wait(timeout);
+                    nextDataFuture.Wait(timeout);
                     ythrow yexception() << "Not enough data";
                 }
             },
-            TRetryOptions(3),
-            false);
+            TRetryOptions(std::numeric_limits<ui32>::max()),
+            true);
+
+        UNIT_ASSERT_EQUAL_C(result.size(), size, "Waited for " << size << " items but only " << result.size() << " received");
 
         return result;
     }

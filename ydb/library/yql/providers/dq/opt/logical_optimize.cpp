@@ -171,6 +171,10 @@ private:
         const auto loadLambda = BuildLoadHopLambda(aggregate, ctx);
         const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
         const auto finishLambda = BuildFinishHopLambda(aggregate, ctx);
+        const auto watermarkMode = BuildWatermarkMode(aggregate, ctx);
+        if (!watermarkMode) {
+            return nullptr;
+        }
 
         const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
         auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
@@ -185,7 +189,8 @@ private:
             .MergeHandler(mergeLambda)
             .FinishHandler(finishLambda)
             .SaveHandler(saveLambda)
-            .LoadHandler(loadLambda);
+            .LoadHandler(loadLambda)
+            .WatermarkMode(*watermarkMode);
 
         if (Config->AnalyticsHopping.Get().GetOrElse(false)) {
             return Build<TCoPartitionsByKeys>(ctx, node.Pos())
@@ -779,6 +784,17 @@ private:
                 .Build()
             .Done()
             .Ptr();
+    }
+
+    TMaybe<TExprNode::TPtr> BuildWatermarkMode(const TCoAggregate& aggregate, TExprContext& ctx) {
+        const auto analyticsMode = Config->AnalyticsHopping.Get().GetOrElse(false);
+        const bool enableWatermarks = !analyticsMode && Config->WatermarksMode.Get() == "default";
+        if (enableWatermarks && Config->ComputeActorType.Get() != "async") {
+            ctx.AddError(TIssue(ctx.GetPosition(aggregate.Pos()), "Watermarks should be used only with async compute actor"));
+            return Nothing();
+        }
+
+        return ctx.NewAtom(aggregate.Pos(), ToString(enableWatermarks));
     }
 
 private:

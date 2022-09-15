@@ -175,7 +175,8 @@ namespace {
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&hop, sizeof(hop))), // hop
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&interval, sizeof(interval))), // interval
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&delay, sizeof(delay))),  // delay
-            pgmBuilder.NewDataLiteral<bool>(dataWatermarks)  // dataWatermarks
+            pgmBuilder.NewDataLiteral<bool>(dataWatermarks),  // dataWatermarks
+            pgmBuilder.NewDataLiteral<bool>(false)
         );
 
         auto graph = setup.BuildGraph(pgmReturn, {streamNode});

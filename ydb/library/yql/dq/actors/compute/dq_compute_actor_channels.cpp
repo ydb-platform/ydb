@@ -109,6 +109,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
         << ", seqNo: " << record.GetSeqNo()
         << ", size: " << channelData.GetData().GetRaw().size()
         << ", rows: " << channelData.GetData().GetRows()
+        << ", watermark: " << channelData.HasWatermark()
         << ", checkpoint: " << channelData.HasCheckpoint()
         << ", finished: " << channelData.GetFinished()
         << ", from: " << ev->Sender
@@ -555,6 +556,7 @@ void TDqComputeActorChannels::SendChannelData(NDqProto::TChannelData&& channelDa
         << ", peer: " << *outputChannel.Peer
         << ", rows: " << chunkRows
         << ", bytes: " << chunkBytes
+        << ", watermark: " << channelData.HasWatermark()
         << ", checkpoint: " << channelData.HasCheckpoint()
         << ", seqNo: " << seqNo
         << ", finished: " << finished);

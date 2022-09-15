@@ -15,33 +15,55 @@ namespace {
     const std::unordered_map<TString, NYql::NDq::TPqMetaExtractor::TPqMetaExtractorLambda> ExtractorsMap = {
         {
             "_yql_sys_create_time", [](const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
-                return NYql::NUdf::TUnboxedValuePod(static_cast<NYql::NUdf::TDataType<NYql::NUdf::TTimestamp>::TLayout>(message.GetCreateTime().MicroSeconds()));
+                using TDataType = NYql::NUdf::TDataType<NYql::NUdf::TTimestamp>;
+                return std::make_pair(
+                    NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetCreateTime().MicroSeconds())),
+                    NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize
+                );
             }
         },
         {
             "_yql_sys_write_time", [](const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
-                return NYql::NUdf::TUnboxedValuePod(static_cast<NYql::NUdf::TDataType<NYql::NUdf::TTimestamp>::TLayout>(message.GetWriteTime().MicroSeconds()));
+                using TDataType = NYql::NUdf::TDataType<NYql::NUdf::TTimestamp>;
+                return std::make_pair(
+                    NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetWriteTime().MicroSeconds())),
+                    NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize
+                );
             }
         },
         {
             "_yql_sys_partition_id", [](const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
-                return NYql::NUdf::TUnboxedValuePod(message.GetPartitionStream()->GetPartitionId());
+                using TDataType = NYql::NUdf::TDataType<ui64>;
+                return std::make_pair(
+                    NYql::NUdf::TUnboxedValuePod(message.GetPartitionStream()->GetPartitionId()),
+                    NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize
+                );
             }
         },
         {
             "_yql_sys_offset", [](const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
-                return NYql::NUdf::TUnboxedValuePod(message.GetOffset());
+                using TDataType = NYql::NUdf::TDataType<ui64>;
+                return std::make_pair(
+                    NYql::NUdf::TUnboxedValuePod(message.GetOffset()),
+                    NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize);
             }
         },
         {
             "_yql_sys_message_group_id", [](const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 const auto& data = message.GetMessageGroupId();
-                return NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.Data(), data.Size()));
+                return std::make_pair(
+                    NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.Data(), data.Size())),
+                    data.Size()
+                );
             }
         },
         {
             "_yql_sys_seq_no", [](const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
-                return NYql::NUdf::TUnboxedValuePod(static_cast<NYql::NUdf::TDataType<NYql::NUdf::TTimestamp>::TLayout>(message.GetSeqNo()));
+                using TDataType = NYql::NUdf::TDataType<ui64>;
+                return std::make_pair(
+                    NYql::NUdf::TUnboxedValuePod(message.GetSeqNo()),
+                    NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize
+                );
             }
         },
     };

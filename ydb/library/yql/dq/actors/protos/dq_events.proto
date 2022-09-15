@@ -15,17 +15,23 @@ message TCheckpoint {
     optional uint64 Generation = 2;
 };
 
+message TWatermark {
+    optional uint64 TimestampUs = 1;
+};
+
 /*
     Data and control messages will be processed in the following order:
     1) Data
-    2) Checkpoint
-    3) Finished
+    2) Watermark
+    3) Checkpoint
+    4) Finished
 */
 message TChannelData {
     optional uint64 ChannelId = 1;
     optional NYql.NDqProto.TData Data = 2;
     optional bool Finished = 3;
     optional TCheckpoint Checkpoint = 4;
+    optional TWatermark Watermark = 5;
 };
 
 message TEvRun {

@@ -14,6 +14,11 @@ enum EClusterType {
     DataStreams = 2;
 }
 
+message TWatermarks {
+    bool Enabled = 1;
+    uint64 GranularityUs = 2;
+}
+
 message TDqPqTopicSource {
     string TopicPath = 1;
     string ConsumerName = 2;
@@ -25,6 +30,7 @@ message TDqPqTopicSource {
     bool AddBearerToToken = 8;
     string DatabaseId = 9;
     repeated string MetadataFields = 10;
+    TWatermarks Watermarks = 11;
 }
 
 message TDqPqTopicSink {

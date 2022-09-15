@@ -684,8 +684,12 @@ public:
         return TaskHasEffects;
     }
 
-    void SetWatermark(TInstant time) {
+    void SetWatermarkIn(TInstant time) override {
         Watermark.WatermarkIn = std::move(time);
+    }
+
+    const NKikimr::NMiniKQL::TWatermark& GetWatermark() const override {
+        return Watermark;
     }
 
     IDqInputChannel::TPtr GetInputChannel(ui64 channelId) override {

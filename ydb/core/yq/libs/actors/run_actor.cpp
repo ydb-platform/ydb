@@ -1328,6 +1328,8 @@ private:
         apply("EnableComputeActor", "1");
         apply("ComputeActorType", "async");
         apply("_EnablePrecompute", "1");
+        apply("WatermarksMode", "disable");
+        apply("WatermarksGranularityMs", "1000");
 
         switch (Params.QueryType) {
         case YandexQuery::QueryContent::STREAMING: {

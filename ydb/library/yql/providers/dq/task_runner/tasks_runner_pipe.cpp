@@ -913,6 +913,11 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
         Y_UNUSED(checkpoint);
         ythrow yexception() << "unimplemented";
@@ -954,6 +959,10 @@ public:
         } catch (...) {
             TaskRunner->RaiseException();
         }
+    }
+
+    bool Pop(NDqProto::TWatermark&) override {
+        return false;
     }
 
     bool Pop(NDqProto::TCheckpoint&) override {
@@ -1179,6 +1188,11 @@ public:
         Y_FAIL("Unimplemented");
     }
 
+    bool Pop(NDqProto::TWatermark& watermark) override {
+        Y_UNUSED(watermark);
+        Y_FAIL("Watermarks are not supported");
+    }
+
     bool Pop(NDqProto::TCheckpoint& checkpoint) override {
         Y_UNUSED(checkpoint);
         Y_FAIL("Checkpoints are not supported");
@@ -1191,6 +1205,11 @@ public:
     void Push(NUdf::TUnboxedValue&& value) override {
         Y_UNUSED(value);
         Y_FAIL("Unimplemented");
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Y_UNUSED(watermark);
+        Y_FAIL("Watermarks are not supported");
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
@@ -1595,6 +1614,14 @@ public:
 
     void Load(TStringBuf in) override {
         Y_UNUSED(in);
+        ythrow yexception() << "unimplemented";
+    }
+
+    void SetWatermarkIn(TInstant) override {
+        ythrow yexception() << "unimplemented";
+    }
+
+    const NKikimr::NMiniKQL::TWatermark& GetWatermark() const override {
         ythrow yexception() << "unimplemented";
     }
 

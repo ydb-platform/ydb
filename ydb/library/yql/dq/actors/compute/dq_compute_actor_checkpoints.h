@@ -72,7 +72,7 @@ public:
         virtual void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const = 0;
         virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) = 0;
-        virtual void ResumeInputs() = 0;
+        virtual void ResumeInputsByCheckpoint() = 0;
 
         virtual void Start() = 0;
         virtual void Stop() = 0;

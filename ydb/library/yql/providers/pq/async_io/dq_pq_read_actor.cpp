@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
@@ -94,6 +95,7 @@ public:
     TDqPqReadActor(
         ui64 inputIndex,
         const TTxId& txId,
+        ui64 taskId,
         const THolderFactory& holderFactory,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
@@ -108,7 +110,7 @@ public:
         , BufferSize(bufferSize)
         , RangesMode(rangesMode)
         , HolderFactory(holderFactory)
-        , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", PQ source. ")
+        , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << taskId << ". PQ source. ")
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , SourceParams(std::move(sourceParams))
@@ -121,6 +123,8 @@ public:
         for (const auto& fieldName : SourceParams.GetMetadataFields()) {
             MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
         }
+
+        InitWatermarkTracker();
     }
 
     NYdb::NPersQueue::TPersQueueClientSettings GetPersQueueClientSettings() const {
@@ -190,6 +194,8 @@ public:
             }
         }
         StartingMessageTimestamp = minStartingMessageTs;
+        InitWatermarkTracker();
+
         if (ReadSession) {
             ReadSession.reset();
             GetReadSession();
@@ -228,12 +234,16 @@ private:
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr&, const TActorContext& ctx) {
+        SRC_LOG_T("Source data ready");
         SubscribedOnEvent = false;
         ctx.Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        std::queue<TReadyBatch> empty;
+        ReadyBuffer.swap(empty);
+
         if (ReadSession) {
             ReadSession->Close(TDuration::Zero());
             ReadSession.reset();
@@ -242,37 +252,70 @@ private:
         TActor<TDqPqReadActor>::PassAway();
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool&, i64 freeSpace) override {
-        auto events = GetReadSession().GetEvents(false, TMaybe<size_t>(), static_cast<size_t>(Max<i64>(freeSpace, 0)));
-
-        ui32 batchSize = 0;
-        for (auto& event : events) {
-            if (const auto* val = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                batchSize += val->GetMessages().size();
-            }
-        }
-        buffer.clear();
-        buffer.reserve(batchSize);
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
+        SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
 
         i64 usedSpace = 0;
-        for (auto& event : events) {
-            std::visit(TPQEventProcessor{*this, buffer, usedSpace, LogPrefix}, event);
+        if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
+            return usedSpace;
         }
 
-        SubscribeOnNextEvent();
+        auto events = GetReadSession().GetEvents(false, TMaybe<size_t>(), static_cast<size_t>(Max<i64>(freeSpace, 0)));
 
-        return usedSpace;
+        ui32 batchItemsEstimatedCount = 0;
+        for (auto& event : events) {
+            if (const auto* val = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                batchItemsEstimatedCount += val->GetMessages().size();
+            }
+        }
+
+        for (auto& event : events) {
+            std::visit(TPQEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
+        }
+
+        if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
+            return usedSpace;
+        }
+
+        watermark = Nothing();
+        buffer.clear();
+        return 0;
     }
 
 private:
+    std::vector<ui64> GetPartitionsToRead() const {
+        std::vector<ui64> res;
+
+        ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
+        do {
+            res.emplace_back(currentPartition + 1); // 1-based.
+            currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
+        } while (currentPartition < ReadParams.GetPartitioningParams().GetTopicPartitionsCount());
+
+        return res;
+    }
+
+    void InitWatermarkTracker() {
+        SRC_LOG_D("Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
+            << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
+
+        if (!SourceParams.GetWatermarks().GetEnabled()) {
+            return;
+        }
+
+        WatermarkTracker = std::make_unique<TDqSourceWatermarkTracker<TPartitionKey>>(
+            TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
+            StartingMessageTimestamp,
+            GetPartitionsToRead().size() // TODO: for the internal LB there is a problem here. See YQ-1384
+        );
+    }
+
     NYdb::NPersQueue::TReadSessionSettings GetReadSessionSettings() const {
         NYdb::NPersQueue::TTopicReadSettings topicReadSettings;
         topicReadSettings.Path(SourceParams.GetTopicPath());
-        ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
-        do {
-            topicReadSettings.AppendPartitionGroupIds(currentPartition + 1); // 1-based.
-            currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
-        } while (currentPartition < ReadParams.GetPartitioningParams().GetTopicPartitionsCount());
+        for (const auto partitionId : GetPartitionsToRead()) {
+            topicReadSettings.AppendPartitionGroupIds(partitionId);
+        }
 
         return NYdb::NPersQueue::TReadSessionSettings()
             .DisableClusterDiscovery(SourceParams.GetClusterType() == NPq::NProto::DataStreams)
@@ -281,18 +324,6 @@ private:
             .MaxMemoryUsageBytes(BufferSize)
             .StartingMessageTimestamp(StartingMessageTimestamp)
             .RangesMode(RangesMode);
-    }
-
-    void UpdateStateWithNewReadData(const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) {
-        if (event.GetMessages().empty()) {
-            return;
-        }
-
-        assert(MaxElementBy(event.GetMessages(), [](const auto& message){ return message.GetOffset(); })
-                ->GetOffset() == event.GetMessages().back().GetOffset());
-
-        const auto maxOffset = event.GetMessages().back().GetOffset();
-        PartitionToOffset[MakePartitionKey(event.GetPartitionStream())] = maxOffset + 1; // Next offset to read from.
     }
 
     static TPartitionKey MakePartitionKey(const NYdb::NPersQueue::TPartitionStream::TPtr& partitionStreamPtr) {
@@ -309,8 +340,55 @@ private:
         }
     }
 
+    struct TReadyBatch {
+    public:
+        TReadyBatch(TMaybe<TInstant> watermark, ui32 dataCapacity) : Watermark(watermark){
+            Data.reserve(dataCapacity);
+        }
+
+    public:
+        TMaybe<TInstant> Watermark;
+        TUnboxedValueVector Data;
+        i64 UsedSpace = 0;
+        THashMap<NYdb::NPersQueue::TPartitionStream::TPtr, TList<std::pair<ui64, ui64>>> OffsetRanges; // [start, end)
+    };
+
+    bool MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, TMaybe<TInstant>& watermark, i64& usedSpace) {
+        if (ReadyBuffer.empty()) {
+            SubscribeOnNextEvent();
+            return false;
+        }
+
+        auto& readyBatch = ReadyBuffer.front();
+        buffer.swap(readyBatch.Data);
+        watermark = readyBatch.Watermark;
+        usedSpace = readyBatch.UsedSpace;
+
+        for (const auto& [partitionStream, ranges] : readyBatch.OffsetRanges) {
+            for (const auto& [start, end] : ranges) {
+                CurrentDeferredCommit.Add(partitionStream, start, end);
+            }
+            PartitionToOffset[MakePartitionKey(partitionStream)] = ranges.back().second;
+        }
+
+        ReadyBuffer.pop();
+
+        if (ReadyBuffer.empty()) {
+            SubscribeOnNextEvent();
+        } else {
+            Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
+        }
+
+        SRC_LOG_T("Return ready batch."
+            << " DataCount = " << buffer.size()
+            << " Watermark = " << (watermark ? ToString(*watermark) : "none")
+            << " Used space = " << usedSpace);
+        return true;
+    }
+
     struct TPQEventProcessor {
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) {
+            const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
             for (const auto& message : event.GetMessages()) {
                 const TString& data = message.GetData();
 
@@ -322,24 +400,19 @@ private:
                     continue;
                 }
 
-                NUdf::TUnboxedValuePod item;
-                if (Self.MetadataFields.empty()) {
-                    item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
+                auto [item, size] = CreateItem(message);
+
+                auto& curBatch = GetActiveBatch(partitionKey, message.GetWriteTime());
+                curBatch.Data.emplace_back(std::move(item));
+                curBatch.UsedSpace += size;
+
+                auto& offsets = curBatch.OffsetRanges[message.GetPartitionStream()];
+                if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
+                    offsets.back().second = message.GetOffset() + 1;
                 } else {
-                    NUdf::TUnboxedValue* itemPtr;
-                    item = Self.HolderFactory.CreateDirectArrayHolder(Self.MetadataFields.size() + 1, itemPtr);
-                    *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
-
-                    for (const auto& [name, extractor] : Self.MetadataFields) {
-                        *(itemPtr++) = extractor(message);
-                    }
+                    offsets.emplace_back(message.GetOffset(), message.GetOffset() + 1);
                 }
-
-                Batch.emplace_back(item);
-                UsedSpace += data.Size();
             }
-            Self.UpdateStateWithNewReadData(event);
-            Self.CurrentDeferredCommit.Add(event);
         }
 
         void operator()(NYdb::NPersQueue::TSessionClosedEvent& ev) {
@@ -366,9 +439,56 @@ private:
 
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent&) { }
 
+        TReadyBatch& GetActiveBatch(const TPartitionKey& partitionKey, TInstant time) {
+            if (Y_UNLIKELY(Self.ReadyBuffer.empty())) {
+                Self.ReadyBuffer.emplace(Nothing(), BatchCapacity);
+            }
+
+            TReadyBatch& activeBatch = Self.ReadyBuffer.back();
+
+            if (!Self.WatermarkTracker) {
+                // Watermark tracker disabled => there is no way more than one batch will be used
+                return activeBatch;
+            }
+
+            const auto maybeNewWatermark = Self.WatermarkTracker->NotifyNewPartitionTime(partitionKey, time);
+            if (!maybeNewWatermark) {
+                // Watermark wasn't moved => use current active batch
+                return activeBatch;
+            }
+
+            SRC_LOG_D("New watermark " << *maybeNewWatermark << " was generated");
+            activeBatch.Watermark = maybeNewWatermark; // Write watermark to current batch
+
+            return Self.ReadyBuffer.emplace(Nothing(), BatchCapacity); // And open new batch
+        }
+
+        std::pair<NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+            const TString& data = message.GetData();
+
+            i64 usedSpace = 0;
+            NUdf::TUnboxedValuePod item;
+            if (Self.MetadataFields.empty()) {
+                item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
+                usedSpace += data.Size();
+            } else {
+                NUdf::TUnboxedValue* itemPtr;
+                item = Self.HolderFactory.CreateDirectArrayHolder(Self.MetadataFields.size() + 1, itemPtr);
+                *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
+                usedSpace += data.Size();
+
+                for (const auto& [name, extractor] : Self.MetadataFields) {
+                    auto [ub, size] = extractor(message);
+                    *(itemPtr++) = std::move(ub);
+                    usedSpace += size;
+                }
+            }
+
+            return std::make_pair(item, usedSpace);
+        }
+
         TDqPqReadActor& Self;
-        TUnboxedValueVector& Batch;
-        i64& UsedSpace;
+        ui32 BatchCapacity;
         const TString& LogPrefix;
     };
 
@@ -393,12 +513,15 @@ private:
     NYdb::NPersQueue::TDeferredCommit CurrentDeferredCommit;
     bool SubscribedOnEvent = false;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
+    std::queue<TReadyBatch> ReadyBuffer;
+    std::unique_ptr<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
     TTxId txId,
+    ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     NYdb::TDriver driver,
@@ -422,6 +545,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     TDqPqReadActor* actor = new TDqPqReadActor(
         inputIndex,
         txId,
+        taskId,
         holderFactory,
         std::move(settings),
         std::move(readTaskParamsMsg),
@@ -446,6 +570,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             std::move(settings),
             args.InputIndex,
             args.TxId,
+            args.TaskId,
             args.SecureParams,
             args.TaskParams,
             driver,

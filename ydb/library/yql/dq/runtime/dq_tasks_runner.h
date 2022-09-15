@@ -12,8 +12,9 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_watermark.h>
 
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
@@ -326,6 +327,9 @@ public:
     [[nodiscard]]
     virtual TString Save() const = 0;
     virtual void Load(TStringBuf in) = 0;
+
+    virtual void SetWatermarkIn(TInstant time) = 0;
+    virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,

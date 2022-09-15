@@ -52,6 +52,9 @@ public:
     // can throw TDqChannelStorageException
     [[nodiscard]]
     virtual bool Pop(NDqProto::TData& data, ui64 bytes) = 0;
+    // Pop watermark.
+    [[nodiscard]]
+    virtual bool Pop(NDqProto::TWatermark& watermark) = 0;
     // Pop chechpoint. Checkpoints may be taken from channel even after it is finished.
     [[nodiscard]]
     virtual bool Pop(NDqProto::TCheckpoint& checkpoint) = 0;

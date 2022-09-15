@@ -1648,9 +1648,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildLambda(*node.Child(12), ctx, {key, state, time});
         };
 
+        const auto watermarksMode = ctx.ProgramBuilder.NewDataLiteral(FromString<bool>(*node.Child(13), NUdf::EDataSlot::Bool));
+
         return ctx.ProgramBuilder.MultiHoppingCore(
             stream, keyExtractor, timeExtractor, init, update, save, load, merge, finish,
-            hop, interval, delay, dataWatermarks);
+            hop, interval, delay, dataWatermarks, watermarksMode);
     });
 
     AddCallable("ToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {

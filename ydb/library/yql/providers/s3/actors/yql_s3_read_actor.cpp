@@ -227,7 +227,7 @@ private:
         }
     }
 
-    i64 GetAsyncInputData(TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(TUnboxedValueVector& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         i64 total = 0LL;
         if (!Blocks.empty()) {
             buffer.reserve(buffer.size() + Blocks.size());
@@ -680,7 +680,7 @@ private:
     void CommitState(const NDqProto::TCheckpoint&) final {}
     ui64 GetInputIndex() const final { return InputIndex; }
 
-    i64 GetAsyncInputData(TUnboxedValueVector& output, bool& finished, i64 free) final {
+    i64 GetAsyncInputData(TUnboxedValueVector& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
         i64 total = 0LL;
         if (!Blocks.empty()) do {
             auto& block = std::get<NDB::Block>(Blocks.front());

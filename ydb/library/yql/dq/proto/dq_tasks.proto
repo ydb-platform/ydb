@@ -20,6 +20,14 @@ enum ECheckpointingMode {
     CHECKPOINTING_MODE_DISABLED = 1; // Checkpoints are not used in this part of graph (channels, tasks). This is typically when we are deadling with finite part of graph.
 }
 
+// Mode of watermarks support.
+// There can be different watermarks settings
+// in different graph parts.
+enum EWatermarksMode {
+    WATERMARKS_MODE_DEFAULT = 0; // Watermarks are used according to common settings for our type of query.
+    WATERMARKS_MODE_DISABLED = 1; // Watermarks are not used in this part of graph (channels, tasks).
+}
+
 message TProgram {
     message TSettings {
         bool HasMapJoin = 1;
@@ -58,6 +66,7 @@ message TChannel {
     bool IsPersistent = 7;
     bool InMemory = 8;
     ECheckpointingMode CheckpointingMode = 9;
+    EWatermarksMode WatermarksMode = 10;
 }
 
 message TUnionAllInput {
@@ -66,6 +75,7 @@ message TUnionAllInput {
 message TSourceInput {
     string Type = 1;
     google.protobuf.Any Settings = 2;
+    EWatermarksMode WatermarksMode = 3;
 }
 
 message TSortColumn {

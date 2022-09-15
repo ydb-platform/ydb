@@ -259,7 +259,7 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        BuildCheckpointingMode();
+        BuildCheckpointingAndWatermarksMode(true, settings->WatermarksMode.Get().GetOrElse("") == "default");
 
         return TasksGraph.GetTasks().size();
     }
@@ -279,7 +279,7 @@ namespace NYql::NDqs {
         return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
     }
 
-    void TDqsExecutionPlanner::BuildCheckpointingMode() {
+    void TDqsExecutionPlanner::BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
         std::stack<TDqsTasksGraph::TTaskType*> tasksStack;
         std::vector<bool> processedTasks(TasksGraph.GetTasks().size());
         for (TDqsTasksGraph::TTaskType& task : TasksGraph.GetTasks()) {
@@ -312,33 +312,62 @@ namespace NYql::NDqs {
                 continue;
             }
 
-            // Current task has all inputs processed, so determine its checkpointing mode now.
+            // Current task has all inputs processed, so determine its checkpointing and watermarks mode now.
             NDqProto::ECheckpointingMode checkpointingMode = NDqProto::CHECKPOINTING_MODE_DISABLED;
-            for (const auto& input : task.Inputs) {
-                if (input.SourceType) {
-                    if (IsInfiniteSourceType(input.SourceType)) {
-                        checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
-                        break;
-                    }
-                } else {
-                    for (ui64 channelId : input.Channels) {
-                        const NDq::TChannel& channel = TasksGraph.GetChannel(channelId);
-                        if (channel.CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+            if (enableCheckpoints) {
+                for (const auto& input : task.Inputs) {
+                    if (input.SourceType) {
+                        if (IsInfiniteSourceType(input.SourceType)) {
                             checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
                             break;
                         }
+                    } else {
+                        for (ui64 channelId : input.Channels) {
+                            const NDq::TChannel& channel = TasksGraph.GetChannel(channelId);
+                            if (channel.CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                                checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+                                break;
+                            }
+                        }
+                        if (checkpointingMode == NDqProto::CHECKPOINTING_MODE_DEFAULT) {
+                            break;
+                        }
                     }
-                    if (checkpointingMode == NDqProto::CHECKPOINTING_MODE_DEFAULT) {
-                        break;
+                }
+            }
+
+            NDqProto::EWatermarksMode watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+            if (enableWatermarks) {
+                for (auto& input : task.Inputs) {
+                    if (input.SourceType) {
+                        if (IsInfiniteSourceType(input.SourceType)) {
+                            watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                            input.WatermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                            break;
+                        }
+                    } else {
+                        for (ui64 channelId : input.Channels) {
+                            const NDq::TChannel& channel = TasksGraph.GetChannel(channelId);
+                            if (channel.WatermarksMode != NDqProto::WATERMARKS_MODE_DEFAULT) {
+                                watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                                break;
+                            }
+                        }
+                        if (watermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                            break;
+                        }
                     }
                 }
             }
 
             // Apply mode to task and its outputs.
             task.CheckpointingMode = checkpointingMode;
+            task.WatermarksMode = watermarksMode;
             for (const auto& output : task.Outputs) {
                 for (ui64 channelId : output.Channels) {
-                    TasksGraph.GetChannel(channelId).CheckpointingMode = checkpointingMode;
+                    auto& channel = TasksGraph.GetChannel(channelId);
+                    channel.CheckpointingMode = checkpointingMode;
+                    channel.WatermarksMode = watermarksMode;
                 }
             }
 
@@ -398,6 +427,7 @@ namespace NYql::NDqs {
                     auto* sourceProto = inputDesc.MutableSource();
                     *sourceProto->MutableSettings() = *input.SourceSettings;
                     sourceProto->SetType(input.SourceType);
+                    sourceProto->SetWatermarksMode(input.WatermarksMode);
                 } else {
                     FillInputDesc(inputDesc, input);
                 }

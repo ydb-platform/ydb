@@ -20,6 +20,7 @@
 #include <util/generic/queue.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
@@ -144,10 +145,21 @@ private:
         NYql::NDq::ERunStatus res = ERunStatus::Finished;
         THashMap<ui32, ui64> inputChannelFreeSpace;
         THashMap<ui32, ui64> sourcesFreeSpace;
+
+        const bool shouldHandleWatermark = ev->Get()->WatermarkRequest.Defined()
+            && ev->Get()->WatermarkRequest->Watermark > TaskRunner->GetWatermark().WatermarkIn;
+
         if (!ev->Get()->CheckpointOnly) {
+            if (shouldHandleWatermark) {
+                const auto watermark = ev->Get()->WatermarkRequest->Watermark;
+                LOG_T("Task runner. Inject watermark " << watermark);
+                TaskRunner->SetWatermarkIn(watermark);
+            }
+
             res = TaskRunner->Run();
             LOG_T("Resume execution, run status: " << res);
         }
+
         if (res == ERunStatus::PendingInput) {
             for (auto& channelId : inputMap) {
                 inputChannelFreeSpace[channelId] = TaskRunner->GetInputChannel(channelId)->GetFreeSpace();
@@ -158,25 +170,38 @@ private:
             }
         }
 
+        auto watermarkInjectedToOutputs = false;
         THolder<NDqProto::TMiniKqlProgramState> mkqlProgramState;
-        if ((res == ERunStatus::PendingInput || res == ERunStatus::Finished) && ev->Get()->CheckpointRequest.Defined() && ReadyToCheckpoint()) {
-            mkqlProgramState = MakeHolder<NDqProto::TMiniKqlProgramState>();
-            try {
-                mkqlProgramState->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-                NDqProto::TStateData::TData& data = *mkqlProgramState->MutableData()->MutableStateData();
-                data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
-                data.SetBlob(TaskRunner->Save());
-                // inject barriers
-                // todo:(whcrc) barriers are injected even if source state save failed
-                for (const auto& channelId : ev->Get()->CheckpointRequest->ChannelIds) {
-                    TaskRunner->GetOutputChannel(channelId)->Push(NDqProto::TCheckpoint(ev->Get()->CheckpointRequest->Checkpoint));
+        if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
+            if (shouldHandleWatermark) {
+                for (const auto& channelId : ev->Get()->WatermarkRequest->ChannelIds) {
+                    NDqProto::TWatermark watermark;
+                    watermark.SetTimestampUs(ev->Get()->WatermarkRequest->Watermark.MicroSeconds());
+                    TaskRunner->GetOutputChannel(channelId)->Push(std::move(watermark));
                 }
-                for (const auto& sinkId : ev->Get()->CheckpointRequest->SinkIds) {
-                    TaskRunner->GetSink(sinkId)->Push(NDqProto::TCheckpoint(ev->Get()->CheckpointRequest->Checkpoint));
+
+                watermarkInjectedToOutputs = true;
+            }
+
+            if (ev->Get()->CheckpointRequest.Defined() && ReadyToCheckpoint()) {
+                mkqlProgramState = MakeHolder<NDqProto::TMiniKqlProgramState>();
+                try {
+                    mkqlProgramState->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
+                    NDqProto::TStateData::TData& data = *mkqlProgramState->MutableData()->MutableStateData();
+                    data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
+                    data.SetBlob(TaskRunner->Save());
+                    // inject barriers
+                    // todo:(whcrc) barriers are injected even if source state save failed
+                    for (const auto& channelId : ev->Get()->CheckpointRequest->ChannelIds) {
+                        TaskRunner->GetOutputChannel(channelId)->Push(NDqProto::TCheckpoint(ev->Get()->CheckpointRequest->Checkpoint));
+                    }
+                    for (const auto& sinkId : ev->Get()->CheckpointRequest->SinkIds) {
+                        TaskRunner->GetSink(sinkId)->Push(NDqProto::TCheckpoint(ev->Get()->CheckpointRequest->Checkpoint));
+                    }
+                } catch (const std::exception& e) {
+                    LOG_E("Failed to save state: " << e.what());
+                    mkqlProgramState = nullptr;
                 }
-            } catch (const std::exception& e) {
-                LOG_E("Failed to save state: " << e.what());
-                mkqlProgramState = nullptr;
             }
         }
 
@@ -194,6 +219,7 @@ private:
                 MemoryQuota ? *MemoryQuota->GetProfileStats() : TDqMemoryQuota::TProfileStats(),
                 MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : 0,
                 std::move(mkqlProgramState),
+                watermarkInjectedToOutputs,
                 ev->Get()->CheckpointRequest.Defined(),
                 TInstant::Now() - start),
             /*flags=*/0,
@@ -281,22 +307,31 @@ private:
         }
 
         TVector<NDqProto::TData> chunks;
+        TMaybe<NDqProto::TWatermark> watermark = Nothing();
         TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing();
         for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
             NDqProto::TData data;
             hasData = channel->Pop(data, remain);
+
+            NDqProto::TWatermark poppedWatermark;
+            bool hasWatermark = channel->Pop(poppedWatermark);
+
             NDqProto::TCheckpoint poppedCheckpoint;
             bool hasCheckpoint = channel->Pop(poppedCheckpoint);
+
             dataSize = data.GetRaw().size();
             isFinished = !hasData && channel->IsFinished();
 
-            changed = changed || hasData || hasCheckpoint || (isFinished != wasFinished);
+            changed = changed || hasData || hasWatermark || hasCheckpoint || (isFinished != wasFinished);
 
             if (hasData) {
                 chunks.emplace_back(std::move(data));
             }
+
+            watermark = hasWatermark ? std::move(poppedWatermark) : TMaybe<NDqProto::TWatermark>();
+            checkpoint = hasCheckpoint ? std::move(poppedCheckpoint) : TMaybe<NDqProto::TCheckpoint>();
+
             if (hasCheckpoint) {
-                checkpoint = std::move(poppedCheckpoint);
                 ResumeInputs();
                 break;
             }
@@ -307,6 +342,7 @@ private:
             new TEvChannelPopFinished(
                 channelId,
                 std::move(chunks),
+                std::move(watermark),
                 std::move(checkpoint),
                 isFinished,
                 changed,

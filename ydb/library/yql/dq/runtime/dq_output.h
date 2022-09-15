@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 
 #include <util/datetime/base.h>
@@ -42,6 +43,7 @@ public:
     virtual bool IsFull() const = 0;
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
+    virtual void Push(NDqProto::TWatermark&& watermark) = 0;
     // Push checkpoint. Checkpoints may be pushed to channel even after it is finished.
     virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;

@@ -722,20 +722,20 @@ private:
     void Handle(TEvents::TEvGraphParams::TPtr& ev) {
         LOG_D("Graph (" << (ev->Get()->IsEvaluation ? "evaluation" : "execution") << ") with tasks: " << ev->Get()->GraphParams.TasksSize());
 
+        if (RateLimiterPath) {
+            const TString rateLimiterResource = GetRateLimiterResourcePath(Params.CloudId, Params.Scope.ParseFolder(), Params.QueryId);
+            for (auto& task : *ev->Get()->GraphParams.MutableTasks()) {
+                task.SetRateLimiter(RateLimiterPath);
+                task.SetRateLimiterResource(rateLimiterResource);
+            }
+        }
+
         if (ev->Get()->IsEvaluation) {
             auto info = RunEvalDqGraph(ev->Get()->GraphParams);
             info.Result = ev->Get()->Result;
-            EvalInfos.emplace(info.ExecuterId, info); 
+            EvalInfos.emplace(info.ExecuterId, info);
         } else {
             DqGraphParams.push_back(ev->Get()->GraphParams);
-
-            if (RateLimiterPath) {
-                const TString rateLimiterResource = GetRateLimiterResourcePath(Params.CloudId, Params.Scope.ParseFolder(), Params.QueryId);
-                for (auto& task : *DqGraphParams.back().MutableTasks()) {
-                    task.SetRateLimiter(RateLimiterPath);
-                    task.SetRateLimiterResource(rateLimiterResource);
-                }
-            }
 
             NYql::IDqGateway::TResult gatewayResult;
             // fake it till you make it

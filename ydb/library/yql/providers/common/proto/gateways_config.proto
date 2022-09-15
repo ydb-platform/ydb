@@ -402,6 +402,7 @@ message TPostgresqlClusterConfig {
     optional string Name = 1;
     optional string Cluster = 2;
     optional string PGtoken = 3;
+    optional string TargetServerType = 4;
 }
 
 message TPostgresqlGatewayConfig {

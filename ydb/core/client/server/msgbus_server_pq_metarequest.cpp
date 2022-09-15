@@ -418,11 +418,11 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
                     location.SetHost(hostName->second);
                     location.SetErrorCode(NPersQueue::NErrorCode::OK);
                     auto dynamicIter = NodesInfo->DynamicNodeIdsOverride.find(nodeId);
-                    if (!dynamicIter.IsEnd()) {
-                        Y_VERIFY(dynamicIter->first < dynamicIter->second);
-                        location.SetHostId(dynamicIter->second);
-                    } else {
+                    if (dynamicIter.IsEnd()) {
                         location.SetHostId(nodeId);
+		    } else {
+                        Y_VERIFY(dynamicIter->first > dynamicIter->second);
+                        location.SetHostId(dynamicIter->second);
                     }
                 } else {
                     statusInitializing = true;

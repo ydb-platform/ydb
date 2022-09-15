@@ -35,7 +35,7 @@ public:
     // pathPrefix is a "constant" path prefix
     virtual NThreading::TFuture<TListResult> ListRegex(const TString& token, const TString& url, const TString& pattern, const TString& pathPrefix) = 0;
 
-    static TPtr Make(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery = 0);
+    static TPtr Make(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery, ui64 maxInflightListsPerQuery);
 };
 
 }

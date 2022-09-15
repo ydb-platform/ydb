@@ -357,6 +357,7 @@ message TS3GatewayConfig {
     optional uint64 MaxFilesPerQuery = 3;
     optional uint64 MaxReadSizePerQuery = 4;
     optional uint64 MaxDiscoveryFilesPerQuery = 5;
+    optional uint64 MaxInflightListsPerQuery = 7;
 
     repeated TAttr DefaultSettings = 100;
 }

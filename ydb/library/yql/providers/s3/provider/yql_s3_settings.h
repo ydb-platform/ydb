@@ -41,6 +41,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 MaxFilesPerQuery;
     ui64 MaxDiscoveryFilesPerQuery;
     ui64 MaxReadSizePerQuery;
+    ui64 MaxInflightListsPerQuery;
 };
 
 } // NYql

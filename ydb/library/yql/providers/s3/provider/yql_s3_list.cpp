@@ -321,9 +321,9 @@ private:
 
 }
 
-IS3Lister::TPtr IS3Lister::Make(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery) {
+IS3Lister::TPtr IS3Lister::Make(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery, ui64 maxInflightListsPerQuery) {
     auto lister = IS3Lister::TPtr(new TS3Lister(httpGateway, maxFilesPerQuery));
-    return IS3Lister::TPtr(new TS3ParallelLimitedLister(lister, 1));
+    return IS3Lister::TPtr(new TS3ParallelLimitedLister(lister, maxInflightListsPerQuery));
 }
 
 }

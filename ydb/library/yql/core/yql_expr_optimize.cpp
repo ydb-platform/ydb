@@ -91,7 +91,7 @@ namespace {
 
     template<typename TContext>
     TExprNode::TPtr OptimizeNode(const TExprNode::TPtr& node, TContext& ctx, size_t level) {
-        if (node->Type() == TExprNode::Atom || node->Type() == TExprNode::Argument ||
+        if ((!ctx.Replaces && node->Type() == TExprNode::Argument) || node->Type() == TExprNode::Atom ||
             node->Type() == TExprNode::Arguments || node->Type() == TExprNode::World) {
             return node;
         }

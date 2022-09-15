@@ -1556,6 +1556,11 @@ public:
         return Type() == TExprNode::Argument;
     }
 
+    bool IsArguments() const {
+        ENSURE_NOT_DELETED
+        return Type() == TExprNode::Arguments;
+    }
+
     bool IsComposable() const {
         ENSURE_NOT_DELETED
         return !IsLambda() && TypeAnnotation_->IsComposable();

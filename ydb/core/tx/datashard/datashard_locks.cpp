@@ -8,6 +8,27 @@
 namespace NKikimr {
 namespace NDataShard {
 
+/**
+ * Locks are tested without an actor system, where actor context is unavailable
+ *
+ * This class is the minimum context implementation that doesn't log anything
+ * when running outside an event handler.
+ */
+struct TLockLoggerContext {
+    TLockLoggerContext() = default;
+
+    NLog::TSettings* LoggerSettings() const {
+        return TlsActivationContext ? TlsActivationContext->LoggerSettings() : nullptr;
+    }
+
+    bool Send(TAutoPtr<IEventHandle> ev) const {
+        return TlsActivationContext ? TlsActivationContext->Send(ev) : false;
+    }
+};
+
+// Logger requires an l-value, so we use an empty static variable
+static TLockLoggerContext LockLoggerContext;
+
 // TLockInfo
 
 TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId)
@@ -93,6 +114,8 @@ void TLockInfo::SetBroken(TRowVersion at) {
     }
 
     if (!IsBroken(at)) {
+        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "Lock " << LockId << " marked broken at " << at);
+
         BreakVersion = at;
         Locker->ScheduleRemoveBrokenRanges(LockId, at);
 
@@ -820,6 +843,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         auto it = Cache->Locks.find(lockTxId);
         if (it != Cache->Locks.end())
             return it->second;
+        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found in cache");
         return TLock();
     }
 
@@ -828,8 +852,8 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     auto &checkVersion = Update->CheckVersion;
     TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, checkVersion);
     if (txLock) {
-        const auto& tableIds = txLock->GetReadTables();
         if (key.size() == 2) { // locks v1
+            const auto& tableIds = txLock->GetReadTables();
             Y_VERIFY(tableIds.size() == 1);
             return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin());
         } else { // locks v2
@@ -837,9 +861,20 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
             TPathId tableId;
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::SchemeShard, tableId.OwnerId);
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId);
-            if (ok && tableId && tableIds.contains(tableId))
-                return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId);
+            if (ok && tableId) {
+                if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
+                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId);
+                } else {
+                    LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
+                            "TSysLocks::GetLock: lock " << lockTxId << " exists, but not set for table " << tableId);
+                }
+            } else {
+                LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
+                        "TSysLocks::GetLock: bad request for lock " << lockTxId);
+            }
         }
+    } else {
+        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found");
     }
 
     Self->IncCounter(COUNTER_LOCKS_LOST);
@@ -849,6 +884,18 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
 void TSysLocks::EraseLock(const TArrayRef<const TCell>& key) {
     Y_VERIFY(Update);
     if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
+        Update->AddEraseLock(lock);
+    }
+}
+
+void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
+    Y_VERIFY(Update);
+    if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
+        for (auto& pr : lock->ConflictLocks) {
+            if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
+                Update->AddBreakLock(pr.first);
+            }
+        }
         Update->AddEraseLock(lock);
     }
 }

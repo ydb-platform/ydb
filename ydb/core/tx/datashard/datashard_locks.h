@@ -714,6 +714,7 @@ public:
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
+    void CommitLock(const TArrayRef<const TCell>& syslockKey);
     void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId);
     void SetLock(const TTableId& tableId, const TTableRange& range, ui64 lockTxId, ui32 lockNodeId);
     void SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId);

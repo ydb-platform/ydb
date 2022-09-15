@@ -168,7 +168,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         dataTx->SetReadVersion(readVersion);
         dataTx->SetWriteVersion(writeVersion);
 
-        KqpCommitLockChanges(tabletId, tx, DataShard, txc);
+        KqpCommitLocks(tabletId, tx, DataShard, txc);
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
@@ -183,8 +183,6 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         Y_VERIFY(result);
         op->Result().Swap(result);
         op->SetKqpAttachedRSFlag();
-
-        KqpEraseLocks(tabletId, tx, DataShard.SysLocksTable());
 
         if (dataTx->GetCounters().InvisibleRowSkips) {
             DataShard.SysLocksTable().BreakSetLocks(op->LockTxId(), op->LockNodeId());

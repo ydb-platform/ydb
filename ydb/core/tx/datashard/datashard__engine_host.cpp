@@ -793,7 +793,7 @@ void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TCo
     }
 
     LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-        "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry));
+        "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
 
     auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit,
         0 /* bytesLimit */, reverse);
@@ -816,6 +816,9 @@ void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range
         op.ImmediateUpdateSize = writeColumn.MaxValueSizeBytes;
         columnOps.emplace_back(std::move(op));
     }
+
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+        "-- AddWriteRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
 
     auto rowOp = isPureEraseOp ? TKeyDesc::ERowOperation::Erase : TKeyDesc::ERowOperation::Update;
     auto desc = MakeHolder<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);

@@ -205,7 +205,7 @@ bool NeedEraseLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
     }
 }
 
-bool NeedCommitLockChanges(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
+bool NeedCommitLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
     switch (op) {
         case NKikimrTxDataShard::TKqpLocks::Commit:
             return true;
@@ -256,6 +256,10 @@ TVector<NKikimrTxDataShard::TLock> ValidateLocks(const NKikimrTxDataShard::TKqpL
 
         auto lock = sysLocks.GetLock(lockKey);
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock "
+                    << lockProto.GetLockId()
+                    << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter()
+                    << " found " << lock.Generation << ":" << lock.Counter);
             brokenLocks.push_back(lockProto);
         }
     }
@@ -669,19 +673,26 @@ void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     }
 }
 
-void KqpCommitLockChanges(ui64 origin, TActiveTransaction* tx, TDataShard& dataShard, TTransactionContext& txc) {
+void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, TDataShard& dataShard, TTransactionContext& txc) {
     auto& kqpTx = tx->GetDataTx()->GetKqpTransaction();
 
     if (!kqpTx.HasLocks()) {
         return;
     }
 
-    if (NeedCommitLockChanges(kqpTx.GetLocks().GetOp())) {
+    TSysLocks& sysLocks = dataShard.SysLocksTable();
+
+    if (NeedCommitLocks(kqpTx.GetLocks().GetOp())) {
         // We assume locks have been validated earlier
         for (auto& lockProto : kqpTx.GetLocks().GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
                 continue;
             }
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLock " << lockProto.ShortDebugString());
+
+            auto lockKey = MakeLockKey(lockProto);
+            sysLocks.CommitLock(lockKey);
 
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto localTid = dataShard.GetLocalTableId(tableId);
@@ -692,9 +703,11 @@ void KqpCommitLockChanges(ui64 origin, TActiveTransaction* tx, TDataShard& dataS
                 continue;
             }
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLockChanges: committing txId# " << txId << " in localTid# " << localTid);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLocks: commit txId# " << txId << " in localTid# " << localTid);
             txc.DB.CommitTx(localTid, txId);
         }
+    } else {
+        KqpEraseLocks(origin, tx, sysLocks);
     }
 }
 

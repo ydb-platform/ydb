@@ -81,6 +81,43 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND));
     }
 
+    Y_UNIT_TEST_QUAD(LocksAbortOnCommit, UseNewEngine, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, "One");
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (2, "Two");
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (3, "Three");
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (4, "Four");
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            SELECT * FROM `/Root/KeyValue`;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteDataQuery(Q_(R"(
+            UPDATE `/Root/KeyValue` SET Value = "second" WHERE Key = 3;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(Q_(R"(
+            UPDATE `/Root/KeyValue` SET Value = "third" WHERE Key = 4;
+        )"), TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+
+        auto commitResult = tx->Commit().ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(InteractiveTx) {
         auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();

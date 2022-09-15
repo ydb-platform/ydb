@@ -242,10 +242,8 @@ public:
                 TStringBuilder() << "Transaction not found: " << txControl.tx_id())};
             ReplyQueryError(requestInfo, Ydb::StatusIds::NOT_FOUND, "", MessageFromIssues(issues));
         } else {
-            QueryState->TxCtx = txCtx;
             txCtx->Invalidate();
-            TransactionsToBeAborted.emplace_back(txCtx);
-            RemoveTransaction(txId);
+            InvalidateExplicitTransaction(txCtx, txId);
 
             ReplySuccess();
         }
@@ -963,10 +961,6 @@ public:
         auto& txCtx = *QueryState->TxCtx;
 
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-        if (!CheckTransacionLocks()) {
-            return;
-        }
-
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         YQL_ENSURE(QueryState->CurrentTx < phyQuery.TransactionsSize());
 
@@ -978,8 +972,9 @@ public:
                 ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST)
                     << "Failed to mix queries with old- and new- engines";
             }
+            LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
+
             if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
-                LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
                 ++QueryState->CurrentTx;
                 tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
                         &phyQuery.GetTransactions(QueryState->CurrentTx));
@@ -987,6 +982,9 @@ public:
                 tx = nullptr;
                 break;
             }
+        }
+        if (!CheckTransacionLocks()) {
+            return;
         }
 
         bool commit = QueryState->Commit && QueryState->CurrentTx == phyQuery.TransactionsSize() - 1;
@@ -1007,10 +1005,6 @@ public:
             : PreparePhysicalRequest(QueryState.get());
         LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " commit: " << commit
                 << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
-
-        if (!CheckTransacionLocks()) {
-            return true;
-        }
 
         // TODO Handle timeouts -- request.Timeout, request.CancelAfter
 
@@ -1150,10 +1144,7 @@ public:
             LOG_I(SelfId() << " " << requestInfo << " TEvTxResponse has non-success status, CurrentTx: "
                     << QueryState->CurrentTx << " response->DebugString(): " << response->DebugString());
 
-            auto& txCtx = QueryState->TxCtx;
-            txCtx->Invalidate();
-            TransactionsToBeAborted.emplace_back(txCtx);
-            RemoveTransaction(QueryState->TxId);
+            QueryState->TxCtx->Invalidate();
 
             auto status = response->GetStatus();
             TIssues issues;
@@ -1535,8 +1526,7 @@ public:
         auto txCtx = FindTransaction(txId);
         if (txCtx) {
             txCtx->Invalidate();
-            TransactionsToBeAborted.emplace_back(txCtx);
-            RemoveTransaction(txId);
+            InvalidateExplicitTransaction(txCtx, txId);
         }
         txId = CreateEmptyULID();
         txId_Human = "";
@@ -1775,8 +1765,17 @@ public:
         Cleanup(true);
     }
 
+    void InvalidateExplicitTransaction(TIntrusivePtr<TKqpTransactionContext> txCtx, const TULID& txId) {
+        TransactionsToBeAborted.emplace_back(std::move(txCtx));
+        RemoveTransaction(txId);
+    }
+
     void Cleanup(bool isFinal = false) {
         isFinal = isFinal || !QueryState->KeepSession;
+
+        if (QueryState && QueryState->TxCtx && QueryState->TxCtx->IsInvalidated()) {
+            InvalidateExplicitTransaction(QueryState->TxCtx, QueryState->TxId);
+        }
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);

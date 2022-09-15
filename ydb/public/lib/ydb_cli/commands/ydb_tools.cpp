@@ -87,7 +87,7 @@ int TCommandDump::Run(TConfig& config) {
         throw yexception() << "Incorrect consistency level. Available options: \"database\", \"table\"" << Endl;
     }
 
-    NYdb::SetVerbosity(config.IsVerbose);
+    NYdb::SetVerbosity(config.IsVerbose());
 
     try {
         TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
@@ -184,7 +184,7 @@ void TCommandRestore::Parse(TConfig& config) {
 }
 
 int TCommandRestore::Run(TConfig& config) {
-    NYdb::SetVerbosity(config.IsVerbose);
+    NYdb::SetVerbosity(config.IsVerbose());
 
     auto settings = NDump::TRestoreSettings()
         .DryRun(IsDryRun)

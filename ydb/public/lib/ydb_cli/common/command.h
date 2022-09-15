@@ -63,6 +63,13 @@ public:
             TArgSetting Max;
         };
 
+        enum EVerbosityLevel : ui32 {
+            NONE = 0,
+            WARN = 1,
+            INFO = 2,
+            DEBUG = 3,
+        };
+
         int ArgC;
         char** ArgV;
         int InitialArgC;
@@ -79,8 +86,9 @@ public:
         TString Address;
         TString Database;
         TString CaCerts;
-        bool IsVerbose = false;
         bool EnableSsl = false;
+
+        EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
 
         bool JsonUi64AsText = false;
         bool JsonBinaryAsBase64 = false;
@@ -129,6 +137,10 @@ public:
 
         bool HasHelpCommand() const {
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
+        }
+
+        bool IsVerbose() const {
+            return VerbosityLevel != EVerbosityLevel::NONE;
         }
 
         void SetFreeArgsMin(size_t value) {

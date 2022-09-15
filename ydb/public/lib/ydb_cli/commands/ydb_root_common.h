@@ -46,7 +46,12 @@ private:
     void ParseDatabase(TConfig& config);
 
     TString Database;
-    bool IsVerbose = false;
+
+    ui32 VerbosityLevel = 0;
+    bool IsVerbose() const {
+        return VerbosityLevel > 0;
+    }
+
     TString ProfileName;
     std::shared_ptr<IProfile> Profile;
     std::shared_ptr<IProfileManager> ProfileManager;

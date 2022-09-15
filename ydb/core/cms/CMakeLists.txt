@@ -52,6 +52,7 @@ target_sources(ydb-core-cms PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_update_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_update_downtimes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/downtime.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/erasure_checkers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/http.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/info_collector.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/logger.cpp

@@ -114,36 +114,6 @@ private:
         bool CheckRatio(ui32 ratio, NKikimrCms::EAvailabilityMode mode) const;
     };
 
-    // Used to count down and locked disks in a group
-    // excluding one them. It allows to check if excluded
-    // disk may be locked.
-    struct TGroupCounter {
-        ui32 Down;
-        ui32 Locked;
-        const TVDiskInfo &VDisk;
-        ui32 GroupId;
-        NKikimrCms::TStatus::ECode Code;
-        TVector<TString> Errors;
-        TInstant Deadline;
-
-        TGroupCounter(const TVDiskInfo &vdisk,
-                      ui32 groupId,
-                      TInstant defaultDeadline)
-            : Down(0)
-            , Locked(0)
-            , VDisk(vdisk)
-            , GroupId(groupId)
-            , Code(NKikimrCms::TStatus::DISALLOW_TEMP)
-            , Deadline(defaultDeadline)
-        {
-        }
-
-        void CountVDisk(const TVDiskInfo &vdisk,
-                        TClusterInfoPtr info,
-                        TDuration retryTime,
-                        TDuration duration);
-    };
-
     ITransaction *CreateTxGetLogTail(TEvCms::TEvGetLogTailRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();

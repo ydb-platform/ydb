@@ -69,11 +69,13 @@ public:
 struct TTestEnvOpts {
     ui32 NodeCount;
     ui32 VDisks;
-
     ui32 NToSelect;
     ui32 NRings;
     ui32 RingSize;
+    ui32 DataCenterCount;
     TNodeTenantsMap Tenants;
+    bool UseMirror3dcErasure;
+
 
     TTestEnvOpts() = default;
 
@@ -84,8 +86,10 @@ struct TTestEnvOpts {
             , VDisks(vdisks)
             , NToSelect(1)
             , NRings(1)
-            , RingSize(3)
-            , Tenants(tenants) 
+            , RingSize(nodeCount)
+            , DataCenterCount(1)
+            , Tenants(tenants)
+            , UseMirror3dcErasure(false)
     {
     }
 };

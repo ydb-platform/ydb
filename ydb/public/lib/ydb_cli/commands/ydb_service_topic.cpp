@@ -259,7 +259,6 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
         config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
-            .DefaultValue(1024)
             .Optional()
             .StoreResult(&RetentionStorageMb_);
         config.Opts->SetFreeArgsNum(1);

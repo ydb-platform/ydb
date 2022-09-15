@@ -37,7 +37,7 @@ namespace NActors {
         , Settings(settings)
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerCounters>(counters))
-        , LogBuffer(Metrics.get())
+        , LogBuffer(*Metrics, *Settings)
     {
     }
 
@@ -48,7 +48,7 @@ namespace NActors {
         , Settings(settings)
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerCounters>(counters))
-        , LogBuffer(Metrics.get())
+        , LogBuffer(*Metrics, *Settings)
     {
     }
 
@@ -59,7 +59,7 @@ namespace NActors {
         , Settings(settings)
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
-        , LogBuffer(Metrics.get())
+        , LogBuffer(*Metrics, *Settings)
     {
     }
 
@@ -70,7 +70,7 @@ namespace NActors {
         , Settings(settings)
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
-        , LogBuffer(Metrics.get())
+        , LogBuffer(*Metrics, *Settings)
     {
     }
 
@@ -97,39 +97,33 @@ namespace NActors {
         Y_UNUSED(settings);
     }
 
-    void TLoggerActor::LogIgnoredCount(TInstant now) {
-        TString message = Sprintf("Ignored IgnoredCount# %" PRIu64 " log records due to logger overflow!", IgnoredCount);
-        if (!OutputRecord(now, NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
-            BecomeDefunct();
-        }
-    }
-
-    void TLoggerActor::HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx) {
-        Y_UNUSED(ev);
-        LogIgnoredCount(ctx.Now());
-        IgnoredCount = 0;
-        PassedCount = 0;
-    }
-
-    void TLoggerActor::ReleaseLogBufferMessage() {
-        if (LogBuffer.GetLogsNumber() > 0) {
-            auto message = LogBuffer.GetMessage();  
-            if (!OutputRecord(message.Time, message.Priority, message.Component, message.Formatted)) {
+    void TLoggerActor::FlushLogBufferMessage() {
+        if (!LogBuffer.IsEmpty()) {
+            NLog::TEvLog *log = LogBuffer.Pop();  
+            if (!OutputRecord(log)) {
                 BecomeDefunct();
             }
+            delete log;
         }
     }
 
-    void TLoggerActor::ReleaseLogBufferMessageEvent(TReleaseLogBuffer::TPtr& ev, const NActors::TActorContext& ctx) {
+    void TLoggerActor::FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ev);
-        ReleaseLogBufferMessage();
-        if (LogBuffer.GetLogsNumber() > 0) {
-            ctx.Send(ctx.SelfID, new TReleaseLogBuffer());
+        FlushLogBufferMessage();
+        
+        ui64 ignoredCount = LogBuffer.GetIgnoredCount();
+        if (ignoredCount > 0) {
+            NLog::EPrio prio = LogBuffer.GetIgnoredHighestPrio();
+            TString message = Sprintf("Logger overflow! Ignored %" PRIu64 "  log records with priority [%s] or lower!", ignoredCount, PriorityToString(prio));
+            if (!OutputRecord(ctx.Now(), NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
+                BecomeDefunct();
+            }
+            LogBuffer.ClearIgnoredCount();
         }
-    }
 
-    void TLoggerActor::HandleIgnoredEventDrop() {
-        // logger backend is unavailable, just ignore
+        if (!LogBuffer.IsEmpty()) {
+            ctx.Send(ctx.SelfID, ev->Release().Release());
+        }
     }
 
     void TLoggerActor::WriteMessageStat(const NLog::TEvLog& ev) {
@@ -150,50 +144,27 @@ namespace NActors {
 
     }
 
-    bool TLoggerActor::TryAddLogBuffer(TLogBufferMessage& lbm) {
-        ui64 messageSize = sizeof(lbm);
-        if (LogBuffer.GetSizeBytes() + messageSize < Settings->BufferSizeLimitBytes)
-            return LogBuffer.TryAddMessage(lbm);
-
-        return false;
-    }
-
-    bool TLoggerActor::TryKeepLog(TLogBufferMessage& lbm, const NActors::TActorContext& ctx) {
-        bool wasEmtpyBuffer = LogBuffer.IsEmpty();
-        
-        if (TryAddLogBuffer(lbm)) {
-        } else if (!LogBuffer.TryReduceLogsNumber()) {
-            return false;
-        } else if (!TryAddLogBuffer(lbm)) {
-            return false;
-        }
-
-        if (wasEmtpyBuffer) {
-            ctx.Send(ctx.SelfID, new TReleaseLogBuffer());
-        }
-        return true;
-    }
-
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
         if (Settings->AllowDrop) {
-            if (PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs || IgnoredCount > 0 || !LogBuffer.IsEmpty()) {
-                TLogBufferMessage lbm(ev);
-                if (!TryKeepLog(lbm, ctx)) {
-                    Metrics->IncIgnoredMsgs();
-                    if (IgnoredCount == 0) {
-                        ctx.Send(ctx.SelfID, new TLogIgnored());
-                    }
-                    ++IgnoredCount;
-                    PassedCount = 0;
+            if (PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs || !LogBuffer.IsEmpty() || LogBuffer.CheckLogIgnoring()) {
+                if (LogBuffer.IsEmpty() && !LogBuffer.CheckLogIgnoring()) {
+                    ctx.Send(ctx.SelfID, new TFlushLogBuffer());
+                }
+                LogBuffer.AddLog(ev->Release().Release());
+                PassedCount = 0;
+
+                if (delayMillisec < (i64)Settings->TimeThresholdMs && !LogBuffer.CheckLogIgnoring()) {
+                    FlushLogBufferMessage();
                 }
                 return; 
             }
+            
             PassedCount++;
         }
 
-        if (!OutputRecord(ev->Get()->Stamp, ev->Get()->Level.ToPrio(), ev->Get()->Component, ev->Get()->Line)) {
+        if (!OutputRecord(ev->Get())) {
             BecomeDefunct();
         }
     }
@@ -474,6 +445,10 @@ namespace NActors {
     }
 
     constexpr size_t TimeBufSize = 512;
+
+    bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
+        return OutputRecord(evLog->Stamp, evLog->Level.ToPrio(), evLog->Component, evLog->Line);
+    }
 
     bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component,
                                     const TString& formatted) noexcept try {

@@ -2,36 +2,39 @@
 
 #include "log_metrics.h"
 #include "log_iface.h"
+#include "log_settings.h"
 
-#include <deque>
+#include <util/generic/intrlist.h>
 
 namespace NActors {
-
-struct TLogBufferMessage {
-    TString Formatted;
-    TInstant Time;
-    NLog::EComponent Component;
-    NLog::EPrio Priority; 
-
-    TLogBufferMessage(NLog::TEvLog::TPtr& ev);
-};
-
 class TLogBuffer {
-    ILoggerMetrics *Metrics;
-    std::deque<TLogBufferMessage> Buffer;
-    ui64 BufferSize = 0;
-    std::map<NLog::EPrio, ui32> PrioStats;
+    static const size_t LOG_STRUCTURE_BYTES = sizeof(NLog::TEvLog);
+    static const ui16 LOG_PRIORITIES_NUMBER = 9;
+    
+    ILoggerMetrics &Metrics;
+    const NLog::TSettings &Settings;
 
-    void FilterByLogPriority(NLog::EPrio prio);
-    bool inline CheckMessagesNumberEnoughForClearing(ui32 number);
+    TIntrusiveListWithAutoDelete<NLog::TEvLog, TDelete, NLog::TEvLogBufferMainListTag> Logs;
+    TIntrusiveList<NLog::TEvLog, NLog::TEvLogBufferLevelListTag> PrioLogsList[LOG_PRIORITIES_NUMBER];
+
+    ui64 SizeBytes = 0;    
+    ui64 IgnoredCount = 0;
+    ui16 IgnoredHighestPrio = LOG_PRIORITIES_NUMBER - 1;
+
+    size_t GetLogCostInBytes(NLog::TEvLog *log) const;
+    void HandleIgnoredLog(NLog::TEvLog *log);
+    bool CheckSize(NLog::TEvLog *log);
+    static inline ui16 GetPrioIndex(NLog::EPrio);
+    inline TIntrusiveList<NLog::TEvLog, NLog::TEvLogBufferLevelListTag> &GetPrioLogs(NLog::EPrio);
 
     public:
-    TLogBuffer(ILoggerMetrics *metrics);
-    bool TryAddMessage(TLogBufferMessage message);
-    TLogBufferMessage GetMessage();
+    TLogBuffer(ILoggerMetrics &metrics, const NLog::TSettings &Settings);
+    void AddLog(NLog::TEvLog *log);
+    NLog::TEvLog *Pop();
     bool IsEmpty() const;
-    size_t GetLogsNumber() const;
-    ui64 GetSizeBytes() const;
-    bool TryReduceLogsNumber();
+    bool CheckLogIgnoring() const;
+    ui64 GetIgnoredCount();
+    NLog::EPrio GetIgnoredHighestPrio();
+    void ClearIgnoredCount();
 };
 }

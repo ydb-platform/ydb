@@ -6,93 +6,103 @@
 using namespace NActors::NLog;
 
 namespace NActors {
-TLogBufferMessage::TLogBufferMessage(NLog::TEvLog::TPtr& ev)
-    : Formatted(ev->Get()->Line)
-    , Time(ev->Get()->Stamp)
-    , Component(ev->Get()->Component)
-    , Priority(ev->Get()->Level.ToPrio())
-{}
-
-TLogBuffer::TLogBuffer(ILoggerMetrics *metrics)
+TLogBuffer::TLogBuffer(ILoggerMetrics &metrics, const NLog::TSettings &settings)
     : Metrics(metrics)
+    , Settings(settings)
 {}
 
-bool TLogBuffer::TryAddMessage(TLogBufferMessage message) {
-    Buffer.push_back(std::move(message));
-    BufferSize += sizeof(message);
-    PrioStats[message.Priority]++;
-
-    return true;
+size_t TLogBuffer::GetLogCostInBytes(NLog::TEvLog *log) const {
+    return LOG_STRUCTURE_BYTES + log->Line.length();
 }
 
-TLogBufferMessage TLogBuffer::GetMessage() {
-    auto message = Buffer.front();
+ui16 TLogBuffer::GetPrioIndex(NLog::EPrio prio) {
+    return Min(ui16(prio), ui16(LOG_PRIORITIES_NUMBER - 1));
+}
 
-    ui64 messageSize = sizeof(message);
-    BufferSize -= messageSize;
-    Buffer.pop_front();
-    PrioStats[message.Priority]--;
+TIntrusiveList<NLog::TEvLog, NLog::TEvLogBufferLevelListTag> &TLogBuffer::GetPrioLogs(NLog::EPrio prio) {
+    return PrioLogsList[GetPrioIndex(prio)];
+}
 
-    return message;
+void TLogBuffer::AddLog(NLog::TEvLog *log) {
+    NLog::EPrio prio = log->Level.ToPrio();
+    if (!CheckSize(log) && prio > NLog::EPrio::Emerg) { // always keep logs with prio Emerg = 0
+        HandleIgnoredLog(log);
+        return;
+    }
+
+    SizeBytes += GetLogCostInBytes(log);
+    Logs.PushBack(log);
+    GetPrioLogs(prio).PushBack(log);
+}
+
+NLog::TEvLog* TLogBuffer::Pop() {
+    NLog::TEvLog* log = Logs.PopFront();
+    static_cast<TIntrusiveListItem<TEvLog, TEvLogBufferLevelListTag>&>(*log).Unlink();
+
+    SizeBytes -= GetLogCostInBytes(log);
+
+    return log;
 }
 
 bool TLogBuffer::IsEmpty() const {
-    return Buffer.empty();
+    return Logs.Empty();
 }
 
-size_t TLogBuffer::GetLogsNumber() const {
-    return Buffer.size();
+bool TLogBuffer::CheckLogIgnoring() const {
+    return IgnoredCount > 0;
 }
 
-ui64 TLogBuffer::GetSizeBytes() const {
-    return BufferSize;
-}
+bool TLogBuffer::CheckSize(NLog::TEvLog *log) {
+    size_t startSizeBytes = SizeBytes;
 
-void TLogBuffer::FilterByLogPriority(NLog::EPrio prio) {
-    bool isFirstRemoving = true;
-    auto it = Buffer.begin();
-    while (it != Buffer.end())
-    {
-        if (it->Priority >= prio) {
-            ui64 messageSize = sizeof(*it);
-            BufferSize -= messageSize;
-            Metrics->IncIgnoredMsgs();
-            PrioStats[it->Priority]--;
+    size_t logSize = GetLogCostInBytes(log);
+    if (SizeBytes + logSize <= Settings.BufferSizeLimitBytes) {
+        return true;
+    }
 
-            if (isFirstRemoving && prio > NLog::EPrio::Error) {
-                it->Priority = NLog::EPrio::Error;
-                it->Formatted = Sprintf("Ignored log records due to log buffer overflow! IgnoredCount# %" PRIu32 " ", PrioStats[prio]);
-
-                PrioStats[NLog::EPrio::Error]++;
-                BufferSize += sizeof(*it);
-                it++;
-                isFirstRemoving = false;    
-            }
-            else {
-                it = Buffer.erase(it);
+    ui16 scanHighestPrio = Max((ui16)1, GetPrioIndex(log->Level.ToPrio())); // always keep logs with prio Emerg = 0
+    for (ui16 scanPrio = LOG_PRIORITIES_NUMBER - 1; scanPrio >= scanHighestPrio; scanPrio--) {
+        TIntrusiveList<NLog::TEvLog, NLog::TEvLogBufferLevelListTag> &scanLogs = PrioLogsList[scanPrio];
+        while (!scanLogs.Empty()) {
+            NLog::TEvLog* log = scanLogs.PopFront();
+            SizeBytes -= GetLogCostInBytes(log);
+            HandleIgnoredLog(log);
+            
+            if (SizeBytes + logSize <= Settings.BufferSizeLimitBytes) {
+                return true;
             }
         }
-        else {
-            it++;
-        }
     }
-}
 
-bool inline TLogBuffer::CheckMessagesNumberEnoughForClearing(ui32 number) {
-    return number * 10 > Buffer.size();
-}
-
-bool TLogBuffer::TryReduceLogsNumber() {
-    ui32 removeLogsNumber = 0;
-    for (ui16 p = ui16(NLog::EPrio::Trace); p > ui16(NLog::EPrio::Alert); p--)
-    {
-        NLog::EPrio prio = static_cast<NLog::EPrio>(p);
-        removeLogsNumber += PrioStats[prio];
-        if (CheckMessagesNumberEnoughForClearing(removeLogsNumber)) {
-            FilterByLogPriority(prio);
-            return true;
-        }
+    if (startSizeBytes > SizeBytes) {
+        return true;
     }
+
     return false;
 }
+
+void TLogBuffer::HandleIgnoredLog(NLog::TEvLog *log) {
+    ui16 logPrio = GetPrioIndex(log->Level.ToPrio());
+    Metrics.IncIgnoredMsgs();
+    if (IgnoredHighestPrio > logPrio) {
+        IgnoredHighestPrio = logPrio;
+    }
+    IgnoredCount++;
+    delete log;
+}
+
+ui64 TLogBuffer::GetIgnoredCount() {
+    return IgnoredCount;
+}
+
+NLog::EPrio TLogBuffer::GetIgnoredHighestPrio() {
+    NLog::EPrio prio = static_cast<NLog::EPrio>(IgnoredHighestPrio);
+    return prio;
+}
+
+void TLogBuffer::ClearIgnoredCount() {
+    IgnoredHighestPrio = LOG_PRIORITIES_NUMBER - 1;
+    IgnoredCount = 0;
+}
+
 }

@@ -108,12 +108,12 @@ namespace {
             Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(TInstant::Zero(), TLevel{EPrio::Emerg}, 0, "foo")});
         }
 
-        void WriteLog(TInstant ts, EPrio prio = EPrio::Emerg) {
-            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(ts, TLevel{prio}, 0, "foo")});
+        void WriteLog(TInstant ts, EPrio prio = EPrio::Emerg, TString msg = "foo") {
+            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(ts, TLevel{prio}, 0, msg)});
         }
 
-        void ReleaseLogBuffer() {
-            Runtime.Send(new IEventHandle{LoggerActor, {}, new TReleaseLogBuffer()});
+        void FlushLogBuffer() {
+            Runtime.Send(new IEventHandle{LoggerActor, {}, new TFlushLogBuffer()});
         }
 
         void Wakeup() {
@@ -219,11 +219,15 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
         auto now = test.Runtime.GetCurrentTime();
 
         for (auto i = 0; i < COUNT; ++i) {
-            test.WriteLog(now - TDuration::Seconds(10), EPrio::Debug);
+            test.WriteLog(now - TDuration::Seconds(10), EPrio::Debug, std::to_string(i));
         }
 
         for (auto i = 0; i < COUNT; ++i) {
-            test.ReleaseLogBuffer();
+            test.FlushLogBuffer();
+        }
+
+        for (ui64 i = 0; i < messages.size(); ++i) {
+            Cerr << messages[i] << Endl;
         }
 
         return messages.size();
@@ -231,15 +235,15 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
 
     Y_UNIT_TEST(ShouldUseLogBufferWhenOverloaded) {
         TFixture test{BufferSettings(1024 * 1024 * 300)};
-        const auto LOG_COUNT = 500;
+        const auto LOG_COUNT = 100;
         auto outputLogSize = BufferTest(test, LOG_COUNT);
 
         UNIT_ASSERT_VALUES_EQUAL(outputLogSize, LOG_COUNT);
     }
 
-    Y_UNIT_TEST(ShouldLoseLogsWithoutBuffer) {
+    Y_UNIT_TEST(ShouldLoseLogsIfBufferZeroSize) {
         TFixture test{NoBufferSettings()};
-        const auto LOG_COUNT = 500;
+        const auto LOG_COUNT = 100;
         auto outputLogSize = BufferTest(test, LOG_COUNT);
 
         UNIT_ASSERT(outputLogSize < LOG_COUNT);

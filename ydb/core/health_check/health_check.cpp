@@ -440,7 +440,7 @@ public:
     TTabletRequestsState TabletRequests;
 
     TDuration Timeout = TDuration::MilliSeconds(10000);
-
+    bool IgnoreServerlessDatabases = true;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     void Bootstrap() {
@@ -462,6 +462,7 @@ public:
             TabletRequests.TabletStates[ConsoleId].Type = TTabletTypes::Console;
             if (FilterDatabase) {
                 if (FilterDatabase != DomainPath) {
+                    IgnoreServerlessDatabases = false; // we don't ignore sl database if it was exactly specified
                     RequestTenantStatus(FilterDatabase);
                 } else {
                     TTenantInfo& tenant = TenantByPath[DomainPath];
@@ -953,9 +954,13 @@ public:
             Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
             operation.result().UnpackTo(&getTenantStatusResult);
             TString path = getTenantStatusResult.path();
-            DatabaseStatusByPath[path] = std::move(getTenantStatusResult);
-            DatabaseState[path];
-            RequestSchemeCacheNavigate(path);
+            if (!getTenantStatusResult.has_serverless_resources() || !IgnoreServerlessDatabases) {
+                DatabaseStatusByPath[path] = std::move(getTenantStatusResult);
+                DatabaseState[path];
+                RequestSchemeCacheNavigate(path);
+            } else {
+                DatabaseState.erase(path);
+            }
         }
         RequestDone("TEvGetTenantStatusResponse");
     }

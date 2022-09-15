@@ -646,6 +646,9 @@ struct TTestHelper {
 
         waitFor([&]{ return result.ReadSets.size() == 1; }, "intercepted RS");
 
+        // restore original observer (note we used lambda function and stack variables)
+        Server->GetRuntime()->SetObserverFunc(prevObserverFunc);
+
         return result;
     }
 

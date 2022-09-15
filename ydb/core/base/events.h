@@ -147,6 +147,7 @@ struct TKikimrEvents : TEvents {
         ES_REPLICATION_CONTROLLER,
         ES_HTTP_PROXY,
         ES_BLOB_DEPOT,
+        ES_DATASHARD_LOAD,
     };
 };
 

@@ -73,6 +73,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_mediator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/database_basic_sausage_metainfo.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/datashard_load.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/drivemodel.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/export.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/flat_tx_scheme.proto

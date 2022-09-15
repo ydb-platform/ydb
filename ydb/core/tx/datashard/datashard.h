@@ -1573,22 +1573,6 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvTestLoadRequest
-        : public TEventPB<TEvTestLoadRequest,
-                          NKikimrTxDataShard::TEvTestLoadRequest,
-                          EvTestLoadRequest>
-    {
-        TEvTestLoadRequest() = default;
-    };
-
-    struct TEvTestLoadResponse
-        : public TEventPB<TEvTestLoadResponse,
-                          NKikimrTxDataShard::TEvTestLoadResponse,
-                          EvTestLoadResponse>
-    {
-        TEvTestLoadResponse() = default;
-    };
-
 };
 
 IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info);

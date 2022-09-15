@@ -1,51 +1,28 @@
 #pragma once
 
 #include "defs.h"
+#include "test_load_actor.h"
 
 #include <ydb/core/tx/datashard/datashard.h>
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NDataShardLoad {
 
-NActors::IActor *CreateBulkUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
+NActors::IActor *CreateUpsertBulkActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
 
-NActors::IActor *CreateLocalMkqlUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
+NActors::IActor *CreateLocalMkqlUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
 
-NActors::IActor *CreateKqpUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
+NActors::IActor *CreateKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
 
-NActors::IActor *CreateUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
+NActors::IActor *CreateProposeUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+        const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
+
+NActors::IActor *CreateReadIteratorActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
 
 class TLoadActorException : public yexception {
-};
-
-struct TLoadReport {
-    TDuration Duration;
-    ui64 OperationsOK = 0;
-    ui64 OperationsError = 0;
-
-    TString ToString() const {
-        TStringStream ss;
-        ss << "Load duration: " << Duration << ", OK=" << OperationsOK << ", Error=" << OperationsError;
-        if (OperationsOK && Duration.Seconds()) {
-            ui64 throughput = OperationsOK / Duration.Seconds();
-            ss << ", throughput=" << throughput << " OK_ops/s";
-        }
-        return ss.Str();
-    }
-};
-
-struct TEvTestLoadFinished : public TEventLocal<TEvTestLoadFinished, TEvDataShard::EvTestLoadFinished> {
-    ui64 Tag;
-    std::optional<TLoadReport> Report;
-    TString ErrorReason;
-
-    TEvTestLoadFinished(ui64 tag, const TString& error = {})
-        : Tag(tag)
-        , ErrorReason(error)
-    {}
 };
 
 #define VERIFY_PARAM2(FIELD, NAME) \
@@ -57,4 +34,4 @@ struct TEvTestLoadFinished : public TEventLocal<TEvTestLoadFinished, TEvDataShar
 
 #define VERIFY_PARAM(NAME) VERIFY_PARAM2(cmd, NAME)
 
-} // NKikimr::NDataShard
+} // NKikimr::NDataShardLoad

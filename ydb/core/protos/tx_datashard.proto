@@ -1791,37 +1791,3 @@ message TEvReplicationSourceOffsetsCancel {
     // Cancels a previously started read for (Sender, ReadId)
     optional uint64 ReadId = 1;
 }
-
-message TEvTestLoadRequest {
-    message TLoadStop {
-        optional uint64 Tag = 1;
-        optional bool RemoveAllTags = 2;
-    }
-
-    message TUpdateStart {
-        optional uint64 Tag = 1;
-        optional uint64 RowCount = 2;
-        optional uint64 TabletId = 3;
-        optional uint64 TableId = 4;
-        optional uint32 Inflight = 5;
-
-        // in some cases we need full DB path with table
-        optional string Path = 6;
-    }
-
-    optional uint64 Cookie = 1;
-
-    oneof Command {
-        TLoadStop LoadStop = 2;
-        TUpdateStart BulkUpsertStart = 3;
-        TUpdateStart UpsertLocalMkqlStart = 4;
-        TUpdateStart UpsertKqpStart = 5;
-        TUpdateStart UpsertStart = 6;
-    }
-}
-
-message TEvTestLoadResponse {
-    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
-    optional string ErrorReason = 2;
-    optional uint64 Cookie = 3;
-}

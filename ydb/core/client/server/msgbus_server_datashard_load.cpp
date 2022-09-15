@@ -1,13 +1,13 @@
 #include "msgbus_servicereq.h"
 
 #include <ydb/core/base/services/datashard_service_id.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/testload/test_load_actor.h>
 
 namespace NKikimr::NMsgBusProxy {
 
 class TDsTestLoadActorRequest : public TActorBootstrapped<TDsTestLoadActorRequest>, public TMessageBusSessionIdentHolder {
     ui32 NodeId = 0;
-    NKikimrTxDataShard::TEvTestLoadRequest Cmd;
+    NKikimrDataShardLoad::TEvTestLoadRequest Cmd;
     NKikimrClient::TDsTestLoadResponse Response;
 
 public:
@@ -22,15 +22,15 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        auto msg = MakeHolder<TEvDataShard::TEvTestLoadRequest>();
+        auto msg = std::make_unique<TEvDataShardLoad::TEvTestLoadRequest>();
         msg->Record = Cmd;
         msg->Record.SetCookie(NodeId);
-        ctx.Send(MakeDataShardLoadId(NodeId), msg.Release());
+        ctx.Send(MakeDataShardLoadId(NodeId), msg.release());
 
         Become(&TDsTestLoadActorRequest::StateFunc);
     }
 
-    void Handle(TEvDataShard::TEvTestLoadResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvDataShardLoad::TEvTestLoadResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
         ui32 nodeId = record.GetCookie();
 
@@ -51,7 +51,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvDataShard::TEvTestLoadResponse, Handle);
+            HFunc(TEvDataShardLoad::TEvTestLoadResponse, Handle);
         }
     }
 };

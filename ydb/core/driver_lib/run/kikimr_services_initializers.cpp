@@ -1840,7 +1840,7 @@ void TLoadInitializer::InitializeServices(NActors::TActorSystemSetup *setup, con
     setup->LocalServices.emplace_back(MakeBlobStorageLoadID(NodeId), TActorSetupCmd(bsActor, TMailboxType::HTSwap, appData->UserPoolId));
     // FIXME: correct service id
 
-    IActor *dsActor = NDataShard::CreateTestLoadActor(appData->Counters);
+    IActor *dsActor = NDataShardLoad::CreateTestLoadActor(appData->Counters);
     setup->LocalServices.emplace_back(MakeDataShardLoadId(NodeId), TActorSetupCmd(dsActor, TMailboxType::HTSwap, appData->UserPoolId));
 }
 

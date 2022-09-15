@@ -3,9 +3,9 @@ import "library/cpp/actors/protos/interconnect.proto";
 import "ydb/core/protos/console_base.proto";
 import "ydb/core/protos/console_config.proto";
 import "ydb/core/protos/console_tenant.proto";
+import "ydb/core/protos/datashard_load.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
-import "ydb/core/protos/tx_datashard.proto";
 import "ydb/core/protos/tx_proxy.proto";
 import "ydb/core/protos/tx_scheme.proto";
 import "ydb/core/protos/node_whiteboard.proto";
@@ -464,7 +464,7 @@ message TSchemeOperationStatus {
 
 message TDsTestLoadRequest {
     optional uint32 NodeId = 1;
-    optional NKikimrTxDataShard.TEvTestLoadRequest Event = 2;
+    optional NKikimrDataShardLoad.TEvTestLoadRequest Event = 2;
 };
 
 message TDsTestLoadResponse {

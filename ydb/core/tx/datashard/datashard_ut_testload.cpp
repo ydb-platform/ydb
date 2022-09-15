@@ -8,7 +8,7 @@
 
 namespace NKikimr {
 
-using namespace NKikimr::NDataShard;
+using namespace NKikimr::NDataShardLoad;
 using namespace NSchemeShard;
 using namespace Tests;
 
@@ -159,7 +159,7 @@ struct TTestHelper {
         return WaitReadResult();
     }
 
-    void TestLoad(std::unique_ptr<TEvDataShard::TEvTestLoadRequest> request, size_t expectedRowCount) {
+    void TestLoad(std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request, size_t expectedRowCount) {
         auto &runtime = *Server->GetRuntime();
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
         auto testLoadActor = runtime.Register(CreateTestLoadActor(counters));
@@ -167,9 +167,9 @@ struct TTestHelper {
         runtime.Send(new IEventHandle(testLoadActor, Sender, request.release()), 0, true);
 
         TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEventRethrow<TEvDataShard::TEvTestLoadResponse>(handle);
+        runtime.GrabEdgeEventRethrow<TEvDataShardLoad::TEvTestLoadResponse>(handle);
         UNIT_ASSERT(handle);
-        auto response = handle->Release<TEvDataShard::TEvTestLoadResponse>();
+        auto response = handle->Release<TEvDataShardLoad::TEvTestLoadResponse>();
         auto& responseRecord = response->Record;
         UNIT_ASSERT_VALUES_EQUAL(responseRecord.GetStatus(), NMsgBusProxy::MSTATUS_OK);
 
@@ -213,9 +213,9 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShard::TEvTestLoadRequest> request(new TEvDataShard::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
         auto& record = request->Record;
-        auto& command = *record.MutableBulkUpsertStart();
+        auto& command = *record.MutableUpsertBulkStart();
 
         command.SetTag(1);
         command.SetRowCount(expectedRowCount);
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShard::TEvTestLoadRequest> request(new TEvDataShard::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertLocalMkqlStart();
 
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 20;
 
-        std::unique_ptr<TEvDataShard::TEvTestLoadRequest> request(new TEvDataShard::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertKqpStart();
 

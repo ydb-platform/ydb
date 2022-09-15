@@ -1,0 +1,51 @@
+option cc_enable_arenas = true;
+
+import "ydb/core/protos/tx_datashard.proto";
+
+package NKikimrDataShardLoad;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvTestLoadRequest {
+    message TLoadStop {
+        optional uint64 Tag = 1;
+        optional bool RemoveAllTags = 2;
+    }
+
+    message TUpdateStart {
+        optional uint64 Tag = 1;
+        optional uint64 RowCount = 2;
+        optional uint64 TabletId = 3;
+        optional uint64 TableId = 4;
+        optional uint32 Inflight = 5;
+
+        // in some cases we need full DB path with table
+        optional string Path = 6;
+    }
+
+    message TReadStart {
+        optional uint64 Tag = 1;
+        optional uint64 TabletId = 2;
+        optional uint64 TableId = 3;
+
+        // Specifies the format for result data in TEvReadResult
+        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 4;
+    }
+
+    optional uint64 Cookie = 1;
+
+    oneof Command {
+        TLoadStop LoadStop = 2;
+        TUpdateStart UpsertBulkStart = 3;
+        TUpdateStart UpsertLocalMkqlStart = 4;
+        TUpdateStart UpsertKqpStart = 5;
+        TUpdateStart UpsertProposeStart = 6;
+
+        TReadStart ReadIteratorStart = 7;
+    }
+}
+
+message TEvTestLoadResponse {
+    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
+    optional string ErrorReason = 2;
+    optional uint64 Cookie = 3;
+}

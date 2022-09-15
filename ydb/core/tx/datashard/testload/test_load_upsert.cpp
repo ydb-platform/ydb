@@ -21,7 +21,7 @@
 // table name is "usertable", 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NDataShardLoad {
 
 using TUploadRowsRequestPtr = std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>;
 
@@ -31,10 +31,8 @@ using TRequestsVector = std::vector<TUploadRequest>;
 namespace {
 
 enum class ERequestType {
-    BulkUpsert,
+    UpsertBulk,
     UpsertLocalMkql,
-    KqpUpsert,
-    Upsert,
 };
 
 TString GetKey(size_t n) {
@@ -114,17 +112,10 @@ TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum) {
         (let row1_ '('('key (Utf8 '%s))))
     )", key.data()) + programWithoutKey;
 
-    auto request = std::unique_ptr<TEvTablet::TEvLocalMKQL>(new TEvTablet::TEvLocalMKQL);
+    auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
     request->Record.MutableProgram()->MutableProgram()->SetText(programText);
 
     return TUploadRequest(request.release());
-}
-
-TUploadRequest GenerateRowRequest(ui64 tableId, ui64 keyNum) {
-    Y_UNUSED(tableId);
-    TString key = GetKey(keyNum);
-
-    return nullptr;
 }
 
 TRequestsVector GenerateRequests(ui64 tableId, ui64 n, ERequestType requestType) {
@@ -134,14 +125,11 @@ TRequestsVector GenerateRequests(ui64 tableId, ui64 n, ERequestType requestType)
     for (size_t i = 0; i < n; ++i) {
         auto keyNum = RandomNumber(Max<ui64>());
         switch (requestType) {
-        case ERequestType::BulkUpsert:
+        case ERequestType::UpsertBulk:
             requests.emplace_back(GenerateBulkRowRequest(tableId, keyNum));
             break;
         case ERequestType::UpsertLocalMkql:
             requests.emplace_back(GenerateMkqlRowRequest(tableId, keyNum));
-            break;
-        case ERequestType::Upsert:
-            requests.emplace_back(GenerateRowRequest(tableId, keyNum));
             break;
         default:
             // should not happen, just for compiler
@@ -209,7 +197,7 @@ TQueryInfo GenerateUpsert(size_t n) {
 // it's a partial copy-paste from TUpsertActor: logic slightly differs, so that
 // it seems better to have copy-paste rather if/else for different loads
 class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
-    const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
     const TActorId Parent;
     const ui64 Tag;
     const TString Path;
@@ -227,7 +215,7 @@ class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
     size_t Errors = 0;
 
 public:
-    TKqpUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
+    TKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag, TRequestsVector requests)
         : Config(cmd)
         , Parent(parent)
@@ -291,8 +279,8 @@ private:
         } else if (Inflight == 0) {
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
-            std::unique_ptr<TEvTestLoadFinished> response(new TEvTestLoadFinished(Tag));
-            response->Report = TLoadReport();
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
+            response->Report = TEvDataShardLoad::TLoadReport();
             response->Report->Duration = delta;
             response->Report->OperationsOK = Requests.size() - Errors;
             response->Report->OperationsError = Errors;
@@ -338,7 +326,7 @@ private:
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
         LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet stopped with error: " << reason);
-        ctx.Send(Parent, new TEvTestLoadFinished(Tag, reason));
+        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));
         Die(ctx);
     }
 
@@ -366,7 +354,7 @@ private:
 
 // creates multiple TKqpUpsertActor for inflight > 1 and waits completion
 class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMultiSession> {
-    const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
     const TActorId Parent;
     const ui64 Tag;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
@@ -385,7 +373,7 @@ class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMul
     size_t Errors = 0;
 
 public:
-    TKqpUpsertActorMultiSession(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
+    TKqpUpsertActorMultiSession(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
         : Config(cmd)
         , Parent(parent)
@@ -421,7 +409,7 @@ private:
             for (size_t i = 0; i < requestsPerActor; ++i) {
                 auto queryInfo = GenerateUpsert(rowCount++);
 
-                std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request(new NKqp::TEvKqp::TEvQueryRequest());
+                auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
                 request->Record.MutableRequest()->SetKeepSession(true);
                 request->Record.MutableRequest()->SetDatabase(Path);
 
@@ -466,7 +454,7 @@ private:
             << " started# " << actorsCount << " actors each with inflight# " << requestsPerActor);
     }
 
-    void Handle(const TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
+    void Handle(const TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         if (msg->ErrorReason || !msg->Report) {
             TStringStream ss;
@@ -487,8 +475,8 @@ private:
         if (Inflight == 0) {
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
-            std::unique_ptr<TEvTestLoadFinished> response(new TEvTestLoadFinished(Tag));
-            response->Report = TLoadReport();
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
+            response->Report = TEvDataShardLoad::TLoadReport();
             response->Report->Duration = delta;
             response->Report->OperationsOK = Oks;
             response->Report->OperationsError = Errors;
@@ -519,7 +507,7 @@ private:
         LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
             << " stopped with error: " << reason);
 
-        ctx.Send(Parent, new TEvTestLoadFinished(Tag, reason));
+        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));
         Stop(ctx);
     }
 
@@ -534,14 +522,14 @@ private:
     STRICT_STFUNC(StateFunc,
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
         HFunc(NMon::TEvHttpInfo, Handle)
-        HFunc(TEvTestLoadFinished, Handle);
+        HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle);
     )
 };
 
 
 
 class TUpsertActor : public TActorBootstrapped<TUpsertActor> {
-    const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
     const TActorId Parent;
     const ui64 Tag;
     const ERequestType RequestType;
@@ -563,7 +551,7 @@ public:
         return NKikimrServices::TActivity::DS_LOAD_ACTOR;
     }
 
-    TUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
+    TUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag, ERequestType requestType)
         : Config(cmd)
         , Parent(parent)
@@ -632,8 +620,8 @@ private:
         } else if (Inflight == 0) {
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
-            std::unique_ptr<TEvTestLoadFinished> response(new TEvTestLoadFinished(Tag));
-            response->Report = TLoadReport();
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
+            response->Report = TEvDataShardLoad::TLoadReport();
             response->Report->Duration = delta;
             response->Report->OperationsOK = Requests.size() - Errors;
             response->Report->OperationsError = Errors;
@@ -701,7 +689,7 @@ private:
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
         LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet stopped with error: " << reason);
-        ctx.Send(Parent, new TEvTestLoadFinished(Tag, reason));
+        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));
         NTabletPipe::CloseClient(SelfId(), Pipe);
         Die(ctx);
     }
@@ -717,28 +705,32 @@ private:
     )
 };
 
-NActors::IActor *CreateBulkUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
+NActors::IActor *CreateUpsertBulkActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
-    return new TUpsertActor(cmd, parent, std::move(counters), tag, ERequestType::BulkUpsert);
+    return new TUpsertActor(cmd, parent, std::move(counters), tag, ERequestType::UpsertBulk);
 }
 
-NActors::IActor *CreateLocalMkqlUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
+NActors::IActor *CreateLocalMkqlUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
     return new TUpsertActor(cmd, parent, std::move(counters), tag, ERequestType::UpsertLocalMkql);
 }
 
-NActors::IActor *CreateKqpUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
+NActors::IActor *CreateKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
     return new TKqpUpsertActorMultiSession(cmd, parent, std::move(counters), tag);
 }
 
-NActors::IActor *CreateUpsertActor(const NKikimrTxDataShard::TEvTestLoadRequest::TUpdateStart& cmd,
+NActors::IActor *CreateProposeUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
         const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
-    return new TUpsertActor(cmd, parent, std::move(counters), tag, ERequestType::Upsert);
+    Y_UNUSED(cmd);
+    Y_UNUSED(parent);
+    Y_UNUSED(counters);
+    Y_UNUSED(tag);
+    return nullptr; // not yet implemented
 }
 
-} // NKikimr::NDataShard
+} // NKikimr::NDataShardLoad

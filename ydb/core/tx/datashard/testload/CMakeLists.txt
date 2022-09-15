@@ -24,4 +24,5 @@ target_link_libraries(tx-datashard-testload PUBLIC
 target_sources(tx-datashard-testload PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/test_load_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/test_load_upsert.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/test_load_read_iterator.cpp
 )

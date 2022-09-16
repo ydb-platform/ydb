@@ -165,7 +165,9 @@ size_t TReadBuffer::DecompressLegacy() {
     return size_t(decodeSize);
 }
 
-class TCompressor : public TOutputQueue<5_MB> {
+namespace {
+
+class TCompressor : public TOutputQueue<> {
 static constexpr size_t BlockSize = 4_MB;
 public:
     TCompressor(int level)
@@ -176,6 +178,7 @@ public:
         Prefs.frameInfo.blockMode = LZ4F_blockMode_t(1);
         Prefs.frameInfo.blockSizeID = LZ4F_blockSizeID_t(7);
         Prefs.frameInfo.blockChecksumFlag = LZ4F_blockChecksum_t(0);
+        Prefs.frameInfo.contentSize = 0ULL;
         Prefs.frameInfo.contentChecksumFlag = LZ4F_contentChecksum_t(1);
         Prefs.favorDecSpeed = 0;
 
@@ -254,6 +257,8 @@ private:
     TOutputQueue<BlockSize, BlockSize> InputQueue;
     bool IsFirstBlock = true;
 };
+
+}
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(LZ4HC_CLEVEL_DEFAULT));

@@ -50,7 +50,7 @@ namespace {
         "xz"sv
     };
     constexpr std::array<std::string_view, 1> CompressionsForOutput = {
-        "lz4"sv
+        "gzip"sv
     };
     constexpr std::array<std::string_view, 10> IntervalUnits = {
         "MICROSECONDS"sv,

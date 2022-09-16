@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #include <zlib.h>
+#include "output_queue.h"
 
 namespace NYql {
 
@@ -19,6 +20,8 @@ private:
 
     z_stream Z_;
 };
+
+IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel = {});
 
 }
 

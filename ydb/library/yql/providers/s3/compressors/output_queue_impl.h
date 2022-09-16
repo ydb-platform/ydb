@@ -9,24 +9,41 @@
 
 namespace NYql {
 
-template <size_t MinItemSize = 5_MB, size_t MaxItemSize = 0ULL>
+// https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
+constexpr size_t S3PartUploadMinSize = 5_MB;
+
+template <size_t MinItemSize = S3PartUploadMinSize, size_t MaxItemSize = 0ULL>
 class TOutputQueue : public IOutputQueue {
 public:
     TOutputQueue() = default;
 
     void Push(TString&& item) override {
         YQL_ENSURE(!Sealed, "Queue is sealed.");
-        if (!Queue.empty() && Queue.back().size() < MinItemSize)
-            if constexpr (MaxItemSize > 0ULL)
+        if (!Queue.empty() && Queue.back().size() < MinItemSize) {
+            if constexpr (MaxItemSize > 0ULL) {
                 if (Queue.back().size() + item.size() > MaxItemSize) {
                     Queue.back().append(item.substr(0U, MaxItemSize - Queue.back().size()));
-                    Queue.emplace_back(item.substr(item.size() +  Queue.back().size() - MaxItemSize));
-                } else
+                    item = item.substr(item.size() + Queue.back().size() - MaxItemSize);
+                } else {
                     Queue.back().append(std::move(item));
-            else
+                    item.clear();
+                }
+            } else {
                 Queue.back().append(std::move(item));
-        else
+                item.clear();
+            }
+        }
+
+        if (!item.empty()) {
+            if constexpr (MaxItemSize > 0ULL) {
+                while (item.size() > MaxItemSize) {
+                    Queue.emplace_back(item.substr(0U, MaxItemSize));
+                    item = item.substr(MaxItemSize);
+                }
+            }
+
             Queue.emplace_back(std::move(item));
+        }
     }
 
     TString Pop() override {

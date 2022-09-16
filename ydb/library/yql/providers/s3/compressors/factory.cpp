@@ -30,6 +30,9 @@ IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& compression) {
     if ("lz4" == compression)
         return NLz4::MakeCompressor();
 
+    if ("gzip" == compression)
+        return NGz::MakeCompressor();
+
     if (compression.empty())
         return std::make_unique<TOutputQueue<5_MB>>();
 

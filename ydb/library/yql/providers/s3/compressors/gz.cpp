@@ -2,6 +2,7 @@
 
 #include <util/generic/size_literals.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include "output_queue_impl.h"
 
 namespace NYql {
 
@@ -59,6 +60,82 @@ bool TReadBuffer::nextImpl() {
                 ythrow yexception() << GetErrMsg(Z_) << ", code: " << code;
         }
     }
+}
+
+namespace {
+
+class TCompressor : public TOutputQueue<> {
+public:
+    TCompressor(int level) {
+        Zero(Z_);
+        YQL_ENSURE(deflateInit2(&Z_, level, Z_DEFLATED, 16 | MAX_WBITS, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY) == Z_OK, "Can not init deflate engine.");
+    }
+
+    ~TCompressor() {
+        deflateEnd(&Z_);
+   }
+private:
+    void Push(TString&& item) override {
+        InputQueue.Push(std::move(item));
+        DoCompression();
+    }
+
+    void Seal() override {
+        InputQueue.Seal();
+        DoCompression();
+    }
+
+    size_t Size() const override {
+        return TOutputQueue::Size() + InputQueue.Size();
+    }
+
+    bool Empty() const override {
+        return TOutputQueue::Empty() && InputQueue.Empty();
+    }
+
+    size_t Volume() const override {
+        return TOutputQueue::Volume() + InputQueue.Volume();
+    }
+
+    void DoCompression() {
+        while (true) {
+            const auto& pop = InputQueue.Pop();
+            const bool done = InputQueue.IsSealed() && InputQueue.Empty();
+            if (pop.empty() && !done)
+                break;
+
+            Z_.next_in = const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(pop.data()));
+            Z_.avail_in = pop.size();
+
+            if (const auto bound = deflateBound(&Z_, Z_.avail_in); bound > OutputBufferSize)
+                OutputBuffer = std::make_unique<char[]>(OutputBufferSize = bound);
+
+            Z_.next_out = reinterpret_cast<unsigned char*>(OutputBuffer.get());
+            Z_.avail_out = OutputBufferSize;
+
+            const auto code = deflate(&Z_, done ? Z_FINISH : Z_BLOCK);
+            YQL_ENSURE((done ? Z_STREAM_END : Z_OK) == code, "code: " << code << ", error: " << GetErrMsg(Z_));
+
+            if (const auto size = OutputBufferSize - Z_.avail_out)
+                TOutputQueue::Push(TString(OutputBuffer.get(), size));
+
+            if (done)
+                return TOutputQueue::Seal();
+        };
+    }
+
+    std::size_t OutputBufferSize = 0ULL;
+    std::unique_ptr<char[]> OutputBuffer;
+
+    z_stream Z_;
+
+    TOutputQueue<6_MB, 6_MB> InputQueue;
+};
+
+}
+
+IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
+    return std::make_unique<TCompressor>(cLevel.value_or(Z_DEFAULT_COMPRESSION));
 }
 
 }

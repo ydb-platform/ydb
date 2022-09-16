@@ -681,6 +681,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             for (auto i = from->GetSize(); i < to->GetSize(); ++i) {
                 switch (const auto newType = to->GetItems()[i]; newType->GetKind()) {
                     case ETypeAnnotationKind::Optional:
+                    case ETypeAnnotationKind::Pg:
                         valueTransforms.push_back(ctx.NewCallable(node->Pos(), "Nothing", {ExpandType(node->Pos(), *newType, ctx)}));
                         continue;
                     case ETypeAnnotationKind::Null:
@@ -721,6 +722,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             for (auto i = from->GetSize(); i < to->GetSize(); ++i) {
                 switch (const auto newType = to->GetItems()[i]; newType->GetKind()) {
                     case ETypeAnnotationKind::Optional:
+                    case ETypeAnnotationKind::Pg:
                         valueTransforms.push_back(ctx.NewCallable(node->Pos(), "Nothing", {ExpandType(node->Pos(), *newType, ctx)}));
                         continue;
                     case ETypeAnnotationKind::Null:
@@ -1010,12 +1012,12 @@ NUdf::TCastResultOptions CastResult(const TTupleExprType* source, const TTupleEx
     NUdf::TCastResultOptions result = NUdf::ECastOptions::Complete;
     for (size_t i = 0U; i < std::max(sItems.size(), tItems.size()); ++i) {
         if (i >= sItems.size()) {
-            if (AllOrAnyElements && tItems[i]->GetKind() != ETypeAnnotationKind::Optional && tItems[i]->GetKind() != ETypeAnnotationKind::Null) {
+            if (AllOrAnyElements && !tItems[i]->IsOptionalOrNull()) {
                 return NUdf::ECastOptions::Impossible;
             }
         } else if (i >= tItems.size()) {
             if (sItems[i]->GetKind() != ETypeAnnotationKind::Null) {
-                if (sItems[i]->GetKind() == ETypeAnnotationKind::Optional) {
+                if (sItems[i]->IsOptionalOrNull()) {
                     result |= Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
                 } else {
                     if (Strong && AllOrAnyElements) {
@@ -1046,12 +1048,12 @@ NUdf::TCastResultOptions CastResult(const TStructExprType* source, const TStruct
     bool hasCommon = false;
     for (const auto& field : fields) {
         if (!field.second.front()) {
-            if (AllOrAnyMembers && field.second.back()->GetKind() != ETypeAnnotationKind::Optional && field.second.back()->GetKind() != ETypeAnnotationKind::Null) {
+            if (AllOrAnyMembers && !field.second.back()->IsOptionalOrNull()) {
                 return NUdf::ECastOptions::Impossible;
             }
         } else if (!field.second.back()) {
             if (field.second.front()->GetKind() != ETypeAnnotationKind::Null) {
-                if (field.second.front()->GetKind() == ETypeAnnotationKind::Optional) {
+                if (field.second.front()->IsOptionalOrNull()) {
                     result |= Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
                 } else {
                     if (Strong && AllOrAnyMembers) {

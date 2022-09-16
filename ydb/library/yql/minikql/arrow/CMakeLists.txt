@@ -18,5 +18,6 @@ target_link_libraries(yql-minikql-arrow PUBLIC
   library-yql-minikql
 )
 target_sources(yql-minikql-arrow PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/arrow/mkql_functions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/arrow/mkql_memory_pool.cpp
 )

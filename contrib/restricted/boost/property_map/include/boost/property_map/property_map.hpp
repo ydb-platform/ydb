@@ -20,6 +20,7 @@
 #include <boost/concept_check.hpp>
 #include <boost/concept_archetype.hpp>
 #include <boost/mpl/assert.hpp>
+#include <boost/mpl/if.hpp>
 #include <boost/mpl/or.hpp>
 #include <boost/mpl/and.hpp>
 #include <boost/mpl/has_xxx.hpp>

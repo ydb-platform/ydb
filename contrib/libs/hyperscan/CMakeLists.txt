@@ -24,8 +24,8 @@ target_include_directories(contrib-libs-hyperscan PRIVATE
 target_link_libraries(contrib-libs-hyperscan PUBLIC
   contrib-libs-cxxsupp
   contrib-restricted-boost
+  restricted-boost-graph
   restricted-boost-icl
-  boost-libs-graph
   restricted-boost-property_map
 )
 target_sources(contrib-libs-hyperscan PRIVATE

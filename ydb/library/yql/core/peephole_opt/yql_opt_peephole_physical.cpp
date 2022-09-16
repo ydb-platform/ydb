@@ -4320,7 +4320,9 @@ struct TBlockRules {
 
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto& funcs = TBlockRules::Instance().Funcs;
-    Y_UNUSED(types);
+    if (!types.ArrowResolver) {
+        return node;
+    }
 
     auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
     for (const auto& i : multiInputType->GetItems()) {
@@ -4386,6 +4388,26 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
                 funcArgs.push_back(rit->second);
             }
+        }
+
+        const TTypeAnnotationNode* outType = nullptr;
+        TVector<const TTypeAnnotationNode*> argTypes;
+        for (const auto& child : node->Children()) {
+            if (child->IsComplete()) {
+                argTypes.push_back(ctx.MakeType<TScalarExprType>(child->GetTypeAnn()));
+            } else {
+                argTypes.push_back(ctx.MakeType<TBlockExprType>(child->GetTypeAnn()));
+            }
+        }
+
+        YQL_ENSURE(types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), fit->second, argTypes, outType, ctx));
+        if (!outType) {
+            return true;
+        }
+
+        bool isScalar;
+        if (!IsSameAnnotation(*node->GetTypeAnn(), *GetBlockItemType(*outType, isScalar))) {
+            return true;
         }
 
         rewrites[node.Get()] = ctx.NewCallable(node->Pos(), "BlockFunc", std::move(funcArgs));

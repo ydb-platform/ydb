@@ -2118,10 +2118,6 @@ TType* TProgramBuilder::NewFlowType(TType* itemType) {
 }
 
 TType* TProgramBuilder::NewBlockType(TType* itemType, TBlockType::EShape shape) {
-    bool isOptional;
-    auto* dataType = UnpackOptionalData(itemType, isOptional);
-    MKQL_ENSURE(dataType->GetDataSlot() == NUdf::EDataSlot::Uint64, "Expected Uint64");
-
     return TBlockType::Create(itemType, shape, Env);
 }
 

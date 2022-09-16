@@ -4,6 +4,7 @@
 #include "yql_udf_index_package_set.h"
 #include "yql_udf_resolver.h"
 #include "yql_user_data_storage.h"
+#include "yql_arrow_resolver.h"
 
 #include <ydb/library/yql/public/udf/udf_validate.h>
 
@@ -230,6 +231,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool YsonCastToString = true;
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
+    IArrowResolver::TPtr ArrowResolver;
 
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;

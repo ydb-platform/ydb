@@ -53,6 +53,7 @@ public:
     void SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet);
     void SetFileStorage(TFileStoragePtr fileStorage);
     void EnableRangeComputeFor();
+    void SetArrowResolver(IArrowResolver::TPtr arrowResolver);
 
     TProgramPtr Create(
             const TFile& file,
@@ -82,6 +83,7 @@ private:
     TFileStoragePtr FileStorage_;
     TString Runner_;
     bool EnableRangeComputeFor_ = false;
+    IArrowResolver::TPtr ArrowResolver_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -319,6 +321,7 @@ private:
         const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
+        const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
@@ -392,6 +395,7 @@ private:
     TOperationProgressWriter ProgressWriter_ = [](const TOperationProgress&) {};
     TString ExtractedQueryParametersMetadataYson_;
     const bool EnableRangeComputeFor_;
+    const IArrowResolver::TPtr ArrowResolver_;
     i64 FallbackCounter = 0;
     std::function<void()> BeforeFallback = [](){};
     const EHiddenMode HiddenMode_ = EHiddenMode::Disable;

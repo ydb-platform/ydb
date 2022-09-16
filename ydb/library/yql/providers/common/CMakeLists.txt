@@ -7,6 +7,7 @@
 
 
 add_subdirectory(activation)
+add_subdirectory(arrow_resolve)
 add_subdirectory(codec)
 add_subdirectory(comp_nodes)
 add_subdirectory(config)

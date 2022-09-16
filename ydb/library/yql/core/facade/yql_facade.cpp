@@ -19,6 +19,7 @@
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
+#include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -123,6 +124,7 @@ TProgramFactory::TProgramFactory(
     , DataProvidersInit_(dataProvidersInit)
     , GatewaysConfig_(nullptr)
     , Runner_(runner)
+    , ArrowResolver_(MakeSimpleArrowResolver(*functionRegistry))
 {
     AddCredentialsTable(std::make_shared<TCredentialTable>());
 }
@@ -172,6 +174,10 @@ void TProgramFactory::SetFileStorage(TFileStoragePtr fileStorage) {
     FileStorage_ = fileStorage;
 }
 
+void TProgramFactory::SetArrowResolver(IArrowResolver::TPtr arrowResolver) {
+    ArrowResolver_ = arrowResolver;
+}
+
 TProgramPtr TProgramFactory::Create(
         const TFile& file,
         const TString& sessionId)
@@ -199,7 +205,7 @@ TProgramPtr TProgramFactory::Create(
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
         UserDataTable_, CredentialTables_, UserCredentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_,
-        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, hiddenMode);
+        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -225,6 +231,7 @@ TProgram::TProgram(
         const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
+        const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode
     )
     : FunctionRegistry_(functionRegistry)
@@ -251,6 +258,7 @@ TProgram::TProgram(
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
+    , ArrowResolver_(arrowResolver)
     , HiddenMode_(hiddenMode)
 {
     if (SessionId_.empty()) {
@@ -1287,6 +1295,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     if (DiagnosticFormat_) {
         typeAnnotationContext->Diagnostics = true;
     }
+    typeAnnotationContext->ArrowResolver = ArrowResolver_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
 
     if (UdfIndex_ && UdfIndexPackageSet_) {

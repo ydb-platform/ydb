@@ -26,9 +26,9 @@ IGraphTransformer::TStatus AsScalarWrapper(const TExprNode::TPtr& input, TExprNo
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
+    if (!EnsureMinArgsCount(*input, 1U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -36,48 +36,35 @@ IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureBlockOrScalarType(*input->Child(1), ctx.Expr)) {
+    auto name = input->Child(0)->Content();
+
+    for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+        if (!EnsureBlockOrScalarType(*input->Child(i), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (!ctx.Types.ArrowResolver) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Arrow resolver isn't available"));
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureBlockOrScalarType(*input->Child(2), ctx.Expr)) {
+    const TTypeAnnotationNode* outType = nullptr;
+    TVector<const TTypeAnnotationNode*> argTypes;
+    for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+        argTypes.push_back(input->Child(i)->GetTypeAnn());
+    }
+
+    if (!ctx.Types.ArrowResolver->LoadFunctionMetadata(ctx.Expr.GetPosition(input->Pos()), name, argTypes, outType, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    bool scalarLeft, scalarRight;
-    auto leftItemType = GetBlockItemType(*input->Child(1)->GetTypeAnn(), scalarLeft);
-    auto rightItemType = GetBlockItemType(*input->Child(2)->GetTypeAnn(), scalarRight);
-    if (scalarLeft && scalarRight) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "At least one input should be a block"));
+    if (!outType) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "No such Arrow function: " << name));
         return IGraphTransformer::TStatus::Error;
     }
 
-    bool isOptional1;
-    const TDataExprType* dataType1;
-    if (!EnsureDataOrOptionalOfData(input->Child(1)->Pos(), leftItemType, isOptional1, dataType1, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!EnsureSpecificDataType(input->Child(1)->Pos(), *dataType1, EDataSlot::Uint64, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    bool isOptional2;
-    const TDataExprType* dataType2;
-    if (!EnsureDataOrOptionalOfData(input->Child(2)->Pos(), rightItemType, isOptional2, dataType2, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!EnsureSpecificDataType(input->Child(2)->Pos(), *dataType2, EDataSlot::Uint64, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    const TTypeAnnotationNode* retType = dataType1;
-    if (isOptional1 || isOptional2) {
-        retType = ctx.Expr.MakeType<TOptionalExprType>(retType);
-    }
-
-    input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(retType));
+    input->SetTypeAnn(outType);
     return IGraphTransformer::TStatus::Ok;
 }
 

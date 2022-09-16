@@ -32,6 +32,7 @@ target_link_libraries(yql-core-facade PUBLIC
   providers-common-proto
   providers-common-provider
   providers-common-udf_resolve
+  providers-common-arrow_resolve
   yql-providers-config
   providers-result-provider
 )

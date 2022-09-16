@@ -159,42 +159,54 @@ struct TTestHelper {
         return WaitReadResult();
     }
 
-    void TestLoad(std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request, size_t expectedRowCount) {
+    void RunTestLoad(std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request) {
+        request->Record.SetNotifyWhenFinished(true);
         auto &runtime = *Server->GetRuntime();
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
         auto testLoadActor = runtime.Register(CreateTestLoadActor(counters));
 
         runtime.Send(new IEventHandle(testLoadActor, Sender, request.release()), 0, true);
 
-        TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEventRethrow<TEvDataShardLoad::TEvTestLoadResponse>(handle);
-        UNIT_ASSERT(handle);
-        auto response = handle->Release<TEvDataShardLoad::TEvTestLoadResponse>();
-        auto& responseRecord = response->Record;
-        UNIT_ASSERT_VALUES_EQUAL(responseRecord.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        {
+            // check load started
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvDataShardLoad::TEvTestLoadResponse>(handle);
+            UNIT_ASSERT(handle);
+            auto response = handle->Release<TEvDataShardLoad::TEvTestLoadResponse>();
+            auto& responseRecord = response->Record;
+            UNIT_ASSERT_VALUES_EQUAL(responseRecord.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        }
+
+        {
+            // wait until load finished
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvDataShardLoad::TEvTestLoadFinished>(handle);
+            UNIT_ASSERT(handle);
+            auto response = handle->Release<TEvDataShardLoad::TEvTestLoadFinished>();
+            UNIT_ASSERT(response->Report);
+            UNIT_ASSERT(!response->ErrorReason);
+        }
+    }
+
+    void RunUpsertTestLoad(std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> loadRequest, size_t expectedRowCount) {
+        RunTestLoad(std::move(loadRequest));
 
         // holds memory for TCell
         TVector<TString> from = {TString("user")};
         TVector<TString> to = {TString("zzz")};
 
-        // busywait
-        while (1) {
-            auto request = GetBaseReadRequest();
-            AddRangeQuery(
-                *request,
-                from,
-                true,
-                to,
-                true
-            );
+        auto request = GetBaseReadRequest();
+        AddRangeQuery(
+            *request,
+            from,
+            true,
+            to,
+            true
+        );
 
-            auto readResult = SendRead(request.release());
-            UNIT_ASSERT(readResult);
-            if (readResult->GetRowsCount() == expectedRowCount)
-                break;
-
-            SimulateSleep(Server, TDuration::Seconds(1));
-        }
+        auto readResult = SendRead(request.release());
+        UNIT_ASSERT(readResult);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), expectedRowCount);
     }
 
 public:
@@ -217,13 +229,12 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         auto& record = request->Record;
         auto& command = *record.MutableUpsertBulkStart();
 
-        command.SetTag(1);
         command.SetRowCount(expectedRowCount);
         command.SetTabletId(helper.Table.TabletId);
         command.SetTableId(helper.Table.UserTable.GetPathId());
         command.SetInflight(3);
 
-        helper.TestLoad(std::move(request), expectedRowCount);
+        helper.RunUpsertTestLoad(std::move(request), expectedRowCount);
     }
 
     Y_UNIT_TEST(ShouldWriteDataBulkUpsertLocalMkql) {
@@ -235,13 +246,12 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         auto& record = request->Record;
         auto& command = *record.MutableUpsertLocalMkqlStart();
 
-        command.SetTag(1);
         command.SetRowCount(expectedRowCount);
         command.SetTabletId(helper.Table.TabletId);
         command.SetTableId(helper.Table.UserTable.GetPathId());
         command.SetInflight(3);
 
-        helper.TestLoad(std::move(request), expectedRowCount);
+        helper.RunUpsertTestLoad(std::move(request), expectedRowCount);
     }
 
     Y_UNIT_TEST(ShouldWriteKqpUpsert) {
@@ -253,14 +263,13 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         auto& record = request->Record;
         auto& command = *record.MutableUpsertKqpStart();
 
-        command.SetTag(1);
         command.SetRowCount(expectedRowCount);
         command.SetTabletId(helper.Table.TabletId);
         command.SetTableId(helper.Table.UserTable.GetPathId());
         command.SetInflight(5);
         command.SetPath("/Root");
 
-        helper.TestLoad(std::move(request), expectedRowCount);
+        helper.RunUpsertTestLoad(std::move(request), expectedRowCount);
     }
 
 } // Y_UNIT_TEST_SUITE(UpsertLoad)

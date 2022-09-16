@@ -54,6 +54,8 @@ struct TEvDataShardLoad {
         std::optional<TLoadReport> Report;
         TString ErrorReason;
 
+        TEvTestLoadFinished() = default;
+
         TEvTestLoadFinished(ui64 tag, const TString& error = {})
             : Tag(tag)
             , ErrorReason(error)

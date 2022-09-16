@@ -32,6 +32,4 @@ class TLoadActorException : public yexception {
         } \
     } while (false)
 
-#define VERIFY_PARAM(NAME) VERIFY_PARAM2(cmd, NAME)
-
 } // NKikimr::NDataShardLoad

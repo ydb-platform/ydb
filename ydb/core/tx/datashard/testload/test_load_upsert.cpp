@@ -439,7 +439,6 @@ private:
             auto configCopy = Config;
             configCopy.SetInflight(1); // we have only 1 session
             configCopy.SetRowCount(requestsPerActor);
-            configCopy.SetTag(pseudoTag);
 
             auto* kqpActor = new TKqpUpsertActor(
                 configCopy,

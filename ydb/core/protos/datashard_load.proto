@@ -12,35 +12,36 @@ message TEvTestLoadRequest {
     }
 
     message TUpdateStart {
-        optional uint64 Tag = 1;
-        optional uint64 RowCount = 2;
-        optional uint64 TabletId = 3;
-        optional uint64 TableId = 4;
-        optional uint32 Inflight = 5;
+        optional uint64 RowCount = 1;
+        optional uint64 TabletId = 2;
+        optional uint64 TableId = 3;
+        optional uint32 Inflight = 4;
 
         // in some cases we need full DB path with table
         optional string Path = 6;
     }
 
     message TReadStart {
-        optional uint64 Tag = 1;
-        optional uint64 TabletId = 2;
-        optional uint64 TableId = 3;
+        optional uint64 TabletId = 1;
+        optional uint64 TableId = 2;
 
         // Specifies the format for result data in TEvReadResult
-        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 4;
+        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 3;
     }
 
     optional uint64 Cookie = 1;
 
-    oneof Command {
-        TLoadStop LoadStop = 2;
-        TUpdateStart UpsertBulkStart = 3;
-        TUpdateStart UpsertLocalMkqlStart = 4;
-        TUpdateStart UpsertKqpStart = 5;
-        TUpdateStart UpsertProposeStart = 6;
+    // normally should be used by ut only
+    optional bool NotifyWhenFinished = 2;
 
-        TReadStart ReadIteratorStart = 7;
+    oneof Command {
+        TLoadStop LoadStop = 20;
+        TUpdateStart UpsertBulkStart = 21;
+        TUpdateStart UpsertLocalMkqlStart = 22;
+        TUpdateStart UpsertKqpStart = 23;
+        TUpdateStart UpsertProposeStart = 24;
+
+        TReadStart ReadIteratorStart = 25;
     }
 }
 
@@ -48,4 +49,7 @@ message TEvTestLoadResponse {
     optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
     optional string ErrorReason = 2;
     optional uint64 Cookie = 3;
+
+    // if load acter has been started, then it is the assigned tag
+    optional uint64 Tag = 4;
 }

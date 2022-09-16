@@ -540,10 +540,9 @@ private:
             TString copyLocationTemplate = locationTemplate;
             const TString time = Strftime(rule.Format.c_str(), current);
             ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);
-            columnsWithValue.push_back(TColumnWithValue{.Name=rule.Name, .Type=NUdf::EDataSlot::String, .Value=time});
+            columnsWithValue.push_back(TColumnWithValue{.Name=rule.Name, .Type=NUdf::EDataSlot::Date, .Value=Strftime("%F", current)});
             DoGenerate(rules, copyLocationTemplate, columnsWithValue, result, pathsLimit, now, p + 1);
             columnsWithValue.pop_back();
-
             if (IsOverflow(current.GetValue(), interval.GetValue())) {
                 return; // correct overflow handling
             }

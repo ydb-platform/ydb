@@ -11,31 +11,29 @@
 #define BOOST_CONTAINER_SOURCE
 #include <boost/container/detail/config_begin.hpp>
 #include <boost/container/detail/workaround.hpp>
-#include <boost/container/detail/dlmalloc.hpp>
+#include <boost/container/detail/thread_mutex.hpp>
 
 #include <boost/container/pmr/synchronized_pool_resource.hpp>
 #include <cstddef>
 
 namespace {
 
-using namespace boost::container;
+using namespace boost::container::dtl;
 
-class dlmalloc_sync_scoped_lock
+class thread_mutex_lock
 {
-   void *m_sync;
+   thread_mutex &m_mut;
 
    public:
-   explicit dlmalloc_sync_scoped_lock(void *sync)
-      : m_sync(sync)
+   explicit thread_mutex_lock(thread_mutex &m)
+      : m_mut(m)
    {
-      if(!dlmalloc_sync_lock(m_sync)){
-         throw_bad_alloc();
-      }
+      m_mut.lock();
    }
 
-   ~dlmalloc_sync_scoped_lock()
+   ~thread_mutex_lock()
    {
-      dlmalloc_sync_unlock(m_sync);
+      m_mut.unlock();
    }
 };
 
@@ -46,32 +44,28 @@ namespace container {
 namespace pmr {
 
 synchronized_pool_resource::synchronized_pool_resource(const pool_options& opts, memory_resource* upstream) BOOST_NOEXCEPT
-   : m_pool_resource(opts, upstream), m_opaque_sync()
+   : m_mut(), m_pool_resource(opts, upstream)
 {}
 
 synchronized_pool_resource::synchronized_pool_resource() BOOST_NOEXCEPT
-   : m_pool_resource(), m_opaque_sync()
+   : m_mut(), m_pool_resource()
 {}
 
 synchronized_pool_resource::synchronized_pool_resource(memory_resource* upstream) BOOST_NOEXCEPT
-   : m_pool_resource(upstream), m_opaque_sync()
+   : m_mut(), m_pool_resource(upstream)
 {}
 
 synchronized_pool_resource::synchronized_pool_resource(const pool_options& opts) BOOST_NOEXCEPT
-   : m_pool_resource(opts), m_opaque_sync()
+   : m_mut(), m_pool_resource(opts)
 {}
 
 synchronized_pool_resource::~synchronized_pool_resource() //virtual
-{
-   if(m_opaque_sync)
-      dlmalloc_sync_destroy(m_opaque_sync);
-}
+{}
 
 void synchronized_pool_resource::release()
 {
-   if(m_opaque_sync){   //If there is no mutex, no allocation could be done
-      m_pool_resource.release();
-   }
+   thread_mutex_lock lck(m_mut); (void)lck;
+   m_pool_resource.release();
 }
 
 memory_resource* synchronized_pool_resource::upstream_resource() const
@@ -82,24 +76,18 @@ pool_options synchronized_pool_resource::options() const
 
 void* synchronized_pool_resource::do_allocate(std::size_t bytes, std::size_t alignment) //virtual
 {
-   if(!m_opaque_sync){   //If there is no mutex, no allocation could be done
-      m_opaque_sync = dlmalloc_sync_create();
-      if(!m_opaque_sync){
-         throw_bad_alloc();
-      }
-   }
-   dlmalloc_sync_scoped_lock lock(m_opaque_sync); (void)lock;
+   thread_mutex_lock lck(m_mut); (void)lck;
    return m_pool_resource.do_allocate(bytes, alignment);
 }
 
 void synchronized_pool_resource::do_deallocate(void* p, std::size_t bytes, std::size_t alignment) //virtual
 {
-   dlmalloc_sync_scoped_lock lock(m_opaque_sync); (void)lock;
+   thread_mutex_lock lck(m_mut); (void)lck;
    return m_pool_resource.do_deallocate(p, bytes, alignment);
 }
 
 bool synchronized_pool_resource::do_is_equal(const memory_resource& other) const BOOST_NOEXCEPT //virtual
-{  return this == dynamic_cast<const synchronized_pool_resource*>(&other);  }
+{  return this == &other;  }
 
 std::size_t synchronized_pool_resource::pool_count() const
 {  return m_pool_resource.pool_count();  }

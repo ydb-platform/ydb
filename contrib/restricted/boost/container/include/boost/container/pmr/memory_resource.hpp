@@ -17,7 +17,9 @@
 
 #include <boost/container/detail/config_begin.hpp>
 #include <boost/container/detail/workaround.hpp>
+#include <boost/container/container_fwd.hpp>
 #include <boost/move/detail/type_traits.hpp>
+#include <boost/container/detail/placement_new.hpp>
 #include <cstddef>
 
 namespace boost {
@@ -40,7 +42,11 @@ class memory_resource
    //! <b>Effects</b>: Equivalent to
    //! `return do_allocate(bytes, alignment);`
    void* allocate(std::size_t bytes, std::size_t alignment = max_align)
-   {  return this->do_allocate(bytes, alignment);  }
+   {  
+      //Obtain a pointer to enough storage and initialize the lifetime 
+      //of an array object of the given size in the address
+      return ::operator new(bytes, this->do_allocate(bytes, alignment), boost_container_new_t());
+   }
 
    //! <b>Effects</b>: Equivalent to
    //! `return do_deallocate(bytes, alignment);`
@@ -51,6 +57,8 @@ class memory_resource
    //! `return return do_is_equal(other);`
    bool is_equal(const memory_resource& other) const BOOST_NOEXCEPT
    {  return this->do_is_equal(other);  }
+   
+   #if !defined(BOOST_EMBTC)
 
    //! <b>Returns</b>:
    //!   `&a == &b || a.is_equal(b)`.
@@ -61,6 +69,18 @@ class memory_resource
    //!   !(a == b).
    friend bool operator!=(const memory_resource& a, const memory_resource& b) BOOST_NOEXCEPT
    {  return !(a == b); }
+   
+   #else
+   
+   //! <b>Returns</b>:
+   //!   `&a == &b || a.is_equal(b)`.
+   friend bool operator==(const memory_resource& a, const memory_resource& b) BOOST_NOEXCEPT;
+
+   //! <b>Returns</b>:
+   //!   !(a == b).
+   friend bool operator!=(const memory_resource& a, const memory_resource& b) BOOST_NOEXCEPT;
+   
+   #endif
 
    protected:
    //! <b>Requires</b>: Alignment shall be a power of two.
@@ -92,6 +112,20 @@ class memory_resource
    virtual bool do_is_equal(const memory_resource& other) const BOOST_NOEXCEPT = 0;
 };
 
+#if defined(BOOST_EMBTC)
+
+//! <b>Returns</b>:
+//!   `&a == &b || a.is_equal(b)`.
+inline bool operator==(const memory_resource& a, const memory_resource& b) BOOST_NOEXCEPT
+{  return &a == &b || a.is_equal(b);   }
+
+//! <b>Returns</b>:
+//!   !(a == b).
+inline bool operator!=(const memory_resource& a, const memory_resource& b) BOOST_NOEXCEPT
+{  return !(a == b); }
+
+#endif
+   
 }  //namespace pmr {
 }  //namespace container {
 }  //namespace boost {

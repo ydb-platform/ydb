@@ -23,13 +23,20 @@
 
 #include <boost/intrusive/detail/iterator.hpp>
 #include <boost/move/utility_core.hpp>
+#include <boost/container/detail/mpl.hpp>
 
 namespace boost {
 namespace container {
 
 using ::boost::intrusive::iterator_traits;
+using ::boost::intrusive::iter_difference;
+using ::boost::intrusive::iter_category;
+using ::boost::intrusive::iter_value;
+using ::boost::intrusive::iter_size;
 using ::boost::intrusive::iterator_distance;
+using ::boost::intrusive::iterator_udistance;
 using ::boost::intrusive::iterator_advance;
+using ::boost::intrusive::iterator_uadvance;
 using ::boost::intrusive::iterator;
 using ::boost::intrusive::iterator_enable_if_tag;
 using ::boost::intrusive::iterator_disable_if_tag;
@@ -63,6 +70,21 @@ class back_emplacer
    back_emplacer& operator++(int){ return *this; }
 };
 
+#ifndef BOOST_CONTAINER_NO_CXX17_CTAD
+
+template<class InputIterator>
+using it_based_non_const_first_type_t = typename dtl::remove_const<typename iterator_traits<InputIterator>::value_type::first_type>::type;
+
+template<class InputIterator>
+using it_based_const_first_type_t = const typename dtl::remove_const<typename iterator_traits<InputIterator>::value_type::first_type>::type;
+
+template<class InputIterator>
+using it_based_second_type_t = typename iterator_traits<InputIterator>::value_type::second_type;
+
+template<class InputIterator>
+using it_based_value_type_t = typename iterator_traits<InputIterator>::value_type;
+
+#endif
 
 }  //namespace container {
 }  //namespace boost {

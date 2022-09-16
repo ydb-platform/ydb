@@ -18,6 +18,7 @@
 #include <boost/container/detail/config_begin.hpp>
 #include <boost/container/detail/workaround.hpp>
 #include <boost/container/detail/auto_link.hpp>
+#include <boost/container/container_fwd.hpp>
 #include <boost/container/pmr/memory_resource.hpp>
 #include <boost/container/detail/block_slist.hpp>
 
@@ -51,9 +52,11 @@ class BOOST_CONTAINER_DECL monotonic_buffer_resource
    : public memory_resource
 {
    block_slist       m_memory_blocks;
-   void*             m_current_buffer;
+   void *            m_current_buffer;
    std::size_t       m_current_buffer_size;
    std::size_t       m_next_buffer_size;
+   void * const      m_initial_buffer;
+   std::size_t const m_initial_buffer_size;
 
    /// @cond
    void increase_next_buffer();
@@ -106,7 +109,7 @@ class BOOST_CONTAINER_DECL monotonic_buffer_resource
 
    //! <b>Effects</b>: Calls
    //!   `this->release()`.
-   virtual ~monotonic_buffer_resource();
+   ~monotonic_buffer_resource() BOOST_OVERRIDE;
 
    //! <b>Effects</b>: `upstream_resource()->deallocate()` as necessary to release all allocated memory.
    //!   [Note: memory is released back to `upstream_resource()` even if some blocks that were allocated
@@ -131,7 +134,7 @@ class BOOST_CONTAINER_DECL monotonic_buffer_resource
    std::size_t remaining_storage(std::size_t alignment = 1u) const BOOST_NOEXCEPT;
 
    //! <b>Returns</b>:
-   //!   The number of bytes of storage available for the specified alignment.
+   //!   The address pointing to the start of the current free storage.
    //!
    //! <b>Note</b>: Non-standard extension.
    const void *current_buffer() const BOOST_NOEXCEPT;
@@ -157,18 +160,18 @@ class BOOST_CONTAINER_DECL monotonic_buffer_resource
    //!   then allocate the return block from the newly-allocated internal `current_buffer`.
    //!
    //! <b>Throws</b>: Nothing unless `upstream_resource()->allocate()` throws.
-   virtual void* do_allocate(std::size_t bytes, std::size_t alignment);
+   virtual void* do_allocate(std::size_t bytes, std::size_t alignment) BOOST_OVERRIDE;
 
    //! <b>Effects</b>: None
    //!
    //! <b>Throws</b>: Nothing
    //!
    //! <b>Remarks</b>: Memory used by this resource increases monotonically until its destruction.
-   virtual void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) BOOST_NOEXCEPT;
+   virtual void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) BOOST_NOEXCEPT BOOST_OVERRIDE;
 
    //! <b>Returns</b>:
    //!   `this == dynamic_cast<const monotonic_buffer_resource*>(&other)`.
-   virtual bool do_is_equal(const memory_resource& other) const BOOST_NOEXCEPT;
+   virtual bool do_is_equal(const memory_resource& other) const BOOST_NOEXCEPT BOOST_OVERRIDE;
 };
 
 }  //namespace pmr {

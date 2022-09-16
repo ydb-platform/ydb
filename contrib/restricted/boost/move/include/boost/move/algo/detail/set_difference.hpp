@@ -15,8 +15,12 @@
 #include <boost/move/iterator.hpp>
 #include <boost/move/utility_core.hpp>
 
-namespace boost {
+#if defined(BOOST_CLANG) || (defined(BOOST_GCC) && (BOOST_GCC >= 40600))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif
 
+namespace boost {
 namespace move_detail{
 
 template<class InputIt, class OutputIt>
@@ -174,7 +178,7 @@ ForwardOutputIt1 inplace_set_unique_difference
          ++first2;
       }
       else if (comp(*first1, *first2)){
-         //skip any adjacent equivalent elementin range 1
+         //skip any adjacent equivalent element in range 1
          ForwardOutputIt1 result = first1;
          if (++first1 != last1 && !comp(*result, *first1)) {
             //Some elements from range 1 must be skipped, no longer an inplace operation
@@ -199,7 +203,9 @@ ForwardOutputIt1 inplace_set_unique_difference
    return first1;
 }
 
-
+#if defined(BOOST_CLANG) || (defined(BOOST_GCC) && (BOOST_GCC >= 40600))
+#pragma GCC diagnostic pop
+#endif
 
 }  //namespace movelib {
 }  //namespace boost {

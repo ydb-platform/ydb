@@ -151,23 +151,31 @@ class new_allocator
    {}
 
    //!Allocates memory for an array of count elements.
-   //!Throws std::bad_alloc if there is no enough memory
+   //!Throws bad_alloc if there is no enough memory
    pointer allocate(size_type count)
    {
-      if(BOOST_UNLIKELY(count > this->max_size()))
+      const std::size_t max_count = std::size_t(-1)/(2*sizeof(T));
+      if(BOOST_UNLIKELY(count > max_count))
          throw_bad_alloc();
       return static_cast<T*>(::operator new(count*sizeof(T)));
    }
 
    //!Deallocates previously allocated memory.
    //!Never throws
-   void deallocate(pointer ptr, size_type) BOOST_NOEXCEPT_OR_NOTHROW
-     { ::operator delete((void*)ptr); }
+   void deallocate(pointer ptr, size_type n) BOOST_NOEXCEPT_OR_NOTHROW
+   {
+      (void)n;
+      # if __cpp_sized_deallocation
+      ::operator delete((void*)ptr, n * sizeof(T));
+      #else
+      ::operator delete((void*)ptr);
+      # endif
+   }
 
    //!Returns the maximum number of elements that could be allocated.
    //!Never throws
    size_type max_size() const BOOST_NOEXCEPT_OR_NOTHROW
-   {  return size_type(-1)/sizeof(T);   }
+   {  return std::size_t(-1)/(2*sizeof(T));   }
 
    //!Swaps two allocators, does nothing
    //!because this new_allocator is stateless

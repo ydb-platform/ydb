@@ -546,7 +546,7 @@ struct is_unary_function
 #  define BOOST_MOVEUP_HAS_VIRTUAL_DESTRUCTOR(T) __has_virtual_destructor(T)
 #elif defined(__ghs__) && (__GHS_VERSION_NUMBER >= 600)
 #  define BOOST_MOVEUP_HAS_VIRTUAL_DESTRUCTOR(T) __has_virtual_destructor(T)
-#elif defined(__CODEGEARC__)
+#elif defined(BOOST_CODEGEARC)
 #  define BOOST_MOVEUP_HAS_VIRTUAL_DESTRUCTOR(T) __has_virtual_destructor(T)
 #endif
 
@@ -558,32 +558,6 @@ struct is_unary_function
    template<class T>
    struct has_virtual_destructor{   static const bool value = true;  };
 #endif
-
-//////////////////////////////////////
-//       missing_virtual_destructor
-//////////////////////////////////////
-
-template< class T, class U
-        , bool enable =  is_convertible< U*, T*>::value &&
-                        !is_array<T>::value &&
-                        !is_same<typename remove_cv<T>::type, void>::value &&
-                        !is_same<typename remove_cv<U>::type, typename remove_cv<T>::type>::value
-        >
-struct missing_virtual_destructor_default_delete
-{  static const bool value = !has_virtual_destructor<T>::value;  };
-
-template<class T, class U>
-struct missing_virtual_destructor_default_delete<T, U, false>
-{  static const bool value = false;  };
-
-template<class Deleter, class U>
-struct missing_virtual_destructor
-{  static const bool value = false;  };
-
-template<class T, class U>
-struct missing_virtual_destructor< ::boost::movelib::default_delete<T>, U >
-   : missing_virtual_destructor_default_delete<T, U>
-{};
 
 }  //namespace move_upmu {
 }  //namespace boost {

@@ -20,6 +20,7 @@
 #include <boost/container/detail/auto_link.hpp>
 #include <boost/container/pmr/memory_resource.hpp>
 #include <boost/container/detail/pool_resource.hpp>
+#include <boost/container/detail/thread_mutex.hpp>
 
 #include <cstddef>
 
@@ -60,8 +61,8 @@ namespace pmr {
 class BOOST_CONTAINER_DECL synchronized_pool_resource
    : public memory_resource
 {
-   pool_resource m_pool_resource;
-   void *m_opaque_sync;
+   dtl::thread_mutex m_mut;
+   pool_resource     m_pool_resource;
 
    public:
 
@@ -88,7 +89,7 @@ class BOOST_CONTAINER_DECL synchronized_pool_resource
    #endif
 
    //! @copydoc ::boost::container::pmr::unsynchronized_pool_resource::~unsynchronized_pool_resource()
-   virtual ~synchronized_pool_resource();
+   ~synchronized_pool_resource() BOOST_OVERRIDE;
 
    //! @copydoc ::boost::container::pmr::unsynchronized_pool_resource::release()
    void release();
@@ -102,13 +103,13 @@ class BOOST_CONTAINER_DECL synchronized_pool_resource
    protected:
 
    //! @copydoc ::boost::container::pmr::unsynchronized_pool_resource::do_allocate()
-   virtual void* do_allocate(std::size_t bytes, std::size_t alignment);
+   virtual void* do_allocate(std::size_t bytes, std::size_t alignment) BOOST_OVERRIDE;
 
    //! @copydoc ::boost::container::pmr::unsynchronized_pool_resource::do_deallocate(void*,std::size_t,std::size_t)
-   virtual void do_deallocate(void* p, std::size_t bytes, std::size_t alignment);
+   virtual void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) BOOST_OVERRIDE;
 
    //! @copydoc ::boost::container::pmr::unsynchronized_pool_resource::do_is_equal(const memory_resource&)const
-   virtual bool do_is_equal(const memory_resource& other) const BOOST_NOEXCEPT;
+   virtual bool do_is_equal(const memory_resource& other) const BOOST_NOEXCEPT BOOST_OVERRIDE;
 
    //Non-standard observers
    public:

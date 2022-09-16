@@ -19,6 +19,8 @@
 #define MSPACES      1
 #define NO_MALLINFO  1
 #define NO_MALLOC_STATS 1
+//disable sbrk as it's deprecated in some systems and weakens ASLR
+#define HAVE_MORECORE 0
 
 
 #if !defined(NDEBUG)
@@ -33,7 +35,6 @@
 #ifdef __GNUC__
 #define FORCEINLINE inline
 #endif
-#include "dlmalloc_2_8_6.c"
 
 #ifdef _MSC_VER
 #pragma warning (push)
@@ -43,7 +44,12 @@
 #pragma warning (disable : 4702)
 #pragma warning (disable : 4390) /*empty controlled statement found; is this the intent?*/
 #pragma warning (disable : 4251 4231 4660) /*dll warnings*/
+#pragma warning (disable : 4057) /*differs in indirection to slightly different base types from*/
+#pragma warning (disable : 4702) /*unreachable code*/
+#pragma warning (disable : 4127) /*conditional expression is constant*/
 #endif
+
+#include "dlmalloc_2_8_6.c"
 
 #define DL_SIZE_IMPL(p) (chunksize(mem2chunk(p)) - overhead_for(mem2chunk(p)))
 
@@ -80,7 +86,6 @@ static void mspace_free_lockless(mspace msp, void* mem)
       if (RTCHECK(ok_address(fm, p) && ok_inuse(p))) {
         size_t psize = chunksize(p);
         mchunkptr next = chunk_plus_offset(p, psize);
-        s_allocated_memory -= psize;
         if (!pinuse(p)) {
           size_t prevsize = p->prev_foot;
           if (is_mmapped(p)) {
@@ -366,89 +371,6 @@ static mchunkptr try_realloc_chunk_with_min(mstate m, mchunkptr p, size_t min_nb
     USAGE_ERROR_ACTION(m, chunk2mem(p));
   }
   return newp;
-}
-
-#define BOOST_ALLOC_PLUS_MEMCHAIN_MEM_JUMP_NEXT(THISMEM, NEXTMEM) \
-   *((void**)(THISMEM)) = *((void**)((NEXTMEM)))
-
-//This function is based on internal_bulk_free
-//replacing iteration over array[] with boost_cont_memchain.
-//Instead of returning the unallocated nodes, returns a chain of non-deallocated nodes.
-//After forward merging, backwards merging is also tried
-static void internal_multialloc_free(mstate m, boost_cont_memchain *pchain)
-{
-#if FOOTERS
-  boost_cont_memchain ret_chain;
-  BOOST_CONTAINER_MEMCHAIN_INIT(&ret_chain);
-#endif
-  if (!PREACTION(m)) {
-    boost_cont_memchain_it a_it = BOOST_CONTAINER_MEMCHAIN_BEGIN_IT(pchain);
-    while(!BOOST_CONTAINER_MEMCHAIN_IS_END_IT(pchain, a_it)) { /* Iterate though all memory holded by the chain */
-      void* a_mem = BOOST_CONTAINER_MEMIT_ADDR(a_it);
-      mchunkptr a_p = mem2chunk(a_mem);
-      size_t psize = chunksize(a_p);
-#if FOOTERS
-      if (get_mstate_for(a_p) != m) {
-         BOOST_CONTAINER_MEMIT_NEXT(a_it);
-         BOOST_CONTAINER_MEMCHAIN_PUSH_BACK(&ret_chain, a_mem);
-         continue;
-      }
-#endif
-      check_inuse_chunk(m, a_p);
-      if (RTCHECK(ok_address(m, a_p) && ok_inuse(a_p))) {
-         while(1) { /* Internal loop to speed up forward and backward merging (avoids some redundant checks) */
-            boost_cont_memchain_it b_it = a_it;
-            BOOST_CONTAINER_MEMIT_NEXT(b_it);
-            if(!BOOST_CONTAINER_MEMCHAIN_IS_END_IT(pchain, b_it)){
-               void *b_mem   = BOOST_CONTAINER_MEMIT_ADDR(b_it);
-               mchunkptr b_p = mem2chunk(b_mem);
-               if (b_p == next_chunk(a_p)) { /* b chunk is contiguous and next so b's size can be added to a */
-                  psize += chunksize(b_p);
-                  set_inuse(m, a_p, psize);
-                  BOOST_ALLOC_PLUS_MEMCHAIN_MEM_JUMP_NEXT(a_mem, b_mem);
-                  continue;
-               }
-               if(RTCHECK(ok_address(m, b_p) && ok_inuse(b_p))){
-                  /* b chunk is contiguous and previous so a's size can be added to b */
-                  if(a_p == next_chunk(b_p)) {
-                     psize += chunksize(b_p);
-                     set_inuse(m, b_p, psize);
-                     a_it = b_it;
-                     a_p = b_p;
-                     a_mem = b_mem;
-                     continue;
-                  }
-               }
-            }
-            /* Normal deallocation starts again in the outer loop */
-            a_it = b_it;
-            s_allocated_memory -= psize;
-            dispose_chunk(m, a_p, psize);
-            break;
-         }
-       }
-       else {
-         CORRUPTION_ERROR_ACTION(m);
-         break;
-       }
-    }
-    if (should_trim(m, m->topsize))
-      sys_trim(m, 0);
-    POSTACTION(m);
-  }
-#if FOOTERS
-  {
-   boost_cont_memchain_it last_pchain = BOOST_CONTAINER_MEMCHAIN_LAST_IT(pchain);
-   BOOST_CONTAINER_MEMCHAIN_INIT(pchain);
-   BOOST_CONTAINER_MEMCHAIN_INCORPORATE_AFTER
-         (pchain
-         , last_pchain
-         , BOOST_CONTAINER_MEMCHAIN_FIRSTMEM(&ret_chain)
-         , BOOST_CONTAINER_MEMCHAIN_LASTMEM(&ret_chain)
-         , BOOST_CONTAINER_MEMCHAIN_SIZE(&ret_chain)
-         );
-   }
-#endif
 }
 
 ///////////////////////////////////////////////////////////////
@@ -840,128 +762,232 @@ static int internal_shrink(mstate m, void* oldmem, size_t minbytes, size_t maxby
                   mchunkptr remainder = chunk_plus_offset(oldp, nb);
                   set_inuse(m, oldp, nb);
                   set_inuse(m, remainder, rsize);
+                  s_allocated_memory -= rsize;
                   extra = chunk2mem(remainder);
+                  mspace_free_lockless(m, extra);
+                  check_inuse_chunk(m, oldp);
                }
                *received_size = nb - overhead_for(oldp);
-               if(!do_commit)
-                  return 1;
+               return 1;
             }
          }
       }
       else {
          USAGE_ERROR_ACTION(m, oldmem);
-         return 0;
       }
-
-      if (extra != 0 && do_commit) {
-         mspace_free_lockless(m, extra);
-         check_inuse_chunk(m, oldp);
-         return 1;
-      }
-      else {
-         return 0;
-      }
+      return 0;
    }
 }
 
-
 #define INTERNAL_MULTIALLOC_DEFAULT_CONTIGUOUS_MEM 4096
-
 #define SQRT_MAX_SIZE_T           (((size_t)-1)>>(sizeof(size_t)*CHAR_BIT/2))
 
 static int internal_node_multialloc
-   (mstate m, size_t n_elements, size_t element_size, size_t contiguous_elements, boost_cont_memchain *pchain) {
-   void*     mem;            /* malloced aggregate space */
-   mchunkptr p;              /* corresponding chunk */
-   size_t    remainder_size; /* remaining bytes while splitting */
-   flag_t    was_enabled;    /* to disable mmap */
-   size_t    elements_per_segment = 0;
-   size_t    element_req_size = request2size(element_size);
-   boost_cont_memchain_it prev_last_it = BOOST_CONTAINER_MEMCHAIN_LAST_IT(pchain);
+(mstate m, size_t n_elements, size_t element_size, size_t contiguous_elements, boost_cont_memchain *pchain) {
+	void*     mem;            /* malloced aggregate space */
+	mchunkptr p;              /* corresponding chunk */
+	size_t    remainder_size; /* remaining bytes while splitting */
+	flag_t    was_enabled;    /* to disable mmap */
+	size_t    elements_per_segment = 0;
+	size_t    element_req_size = request2size(element_size);
+	boost_cont_memchain_it prev_last_it = BOOST_CONTAINER_MEMCHAIN_LAST_IT(pchain);
 
-   /*Error if wrong element_size parameter */
-   if( !element_size ||
-      /*OR Error if n_elements less thatn contiguous_elements */
-      ((contiguous_elements + 1) > (DL_MULTIALLOC_DEFAULT_CONTIGUOUS + 1) && n_elements < contiguous_elements) ||
-      /* OR Error if integer overflow */
-      (SQRT_MAX_SIZE_T < (element_req_size | contiguous_elements) &&
-         (MAX_SIZE_T/element_req_size) < contiguous_elements)){
-      return 0;
-   }
-   switch(contiguous_elements){
-      case DL_MULTIALLOC_DEFAULT_CONTIGUOUS:
-      {
-         /* Default contiguous, just check that we can store at least one element */
-         elements_per_segment = INTERNAL_MULTIALLOC_DEFAULT_CONTIGUOUS_MEM/element_req_size;
-         elements_per_segment += (size_t)(!elements_per_segment);
-      }
-      break;
-      case DL_MULTIALLOC_ALL_CONTIGUOUS:
-         /* All elements should be allocated in a single call */
-         elements_per_segment = n_elements;
-      break;
-      default:
-         /* Allocate in chunks of "contiguous_elements" */
-         elements_per_segment = contiguous_elements;
-   }
+	/*Error if wrong element_size parameter */
+	if (!element_size ||
+		/*OR Error if n_elements less than contiguous_elements */
+		((contiguous_elements + 1) > (BOOST_CONTAINER_DL_MULTIALLOC_DEFAULT_CONTIGUOUS + 1) && n_elements < contiguous_elements) ||
+		/* OR Error if integer overflow */
+		(SQRT_MAX_SIZE_T < (element_req_size | contiguous_elements) &&
+		(MAX_SIZE_T / element_req_size) < contiguous_elements)) {
+		return 0;
+	}
+	switch (contiguous_elements) {
+	case BOOST_CONTAINER_DL_MULTIALLOC_DEFAULT_CONTIGUOUS:
+	{
+		/* Default contiguous, just check that we can store at least one element */
+		elements_per_segment = INTERNAL_MULTIALLOC_DEFAULT_CONTIGUOUS_MEM / element_req_size;
+		elements_per_segment += (size_t)(!elements_per_segment);
+	}
+	break;
+	case BOOST_CONTAINER_DL_MULTIALLOC_ALL_CONTIGUOUS:
+		/* All elements should be allocated in a single call */
+		elements_per_segment = n_elements;
+		break;
+	default:
+		/* Allocate in chunks of "contiguous_elements" */
+		elements_per_segment = contiguous_elements;
+	}
 
-   {
-      size_t    i;
-      size_t next_i;
-      /*
-         Allocate the aggregate chunk.  First disable direct-mmapping so
-         malloc won't use it, since we would not be able to later
-         free/realloc space internal to a segregated mmap region.
-      */
-      was_enabled = use_mmap(m);
-      disable_mmap(m);
-      for(i = 0; i != n_elements; i = next_i)
-      {
-         size_t accum_size;
-         size_t n_elements_left = n_elements - i;
-         next_i = i + ((n_elements_left < elements_per_segment) ? n_elements_left : elements_per_segment);
-         accum_size = element_req_size*(next_i - i);
+	{
+		size_t    i;
+		size_t next_i;
+		/*
+		   Allocate the aggregate chunk.  First disable direct-mmapping so
+		   malloc won't use it, since we would not be able to later
+		   free/realloc space internal to a segregated mmap region.
+		*/
+		was_enabled = use_mmap(m);
+		disable_mmap(m);
+		for (i = 0; i != n_elements; i = next_i)
+		{
+			size_t accum_size;
+			size_t n_elements_left = n_elements - i;
+			next_i = i + ((n_elements_left < elements_per_segment) ? n_elements_left : elements_per_segment);
+			accum_size = element_req_size * (next_i - i);
 
-         mem = mspace_malloc_lockless(m, accum_size - CHUNK_OVERHEAD);
-         if (mem == 0){
-            BOOST_CONTAINER_MEMIT_NEXT(prev_last_it);
-            while(i--){
-               void *addr = BOOST_CONTAINER_MEMIT_ADDR(prev_last_it);
-               BOOST_CONTAINER_MEMIT_NEXT(prev_last_it);
-               mspace_free_lockless(m, addr);
-            }
-            if (was_enabled)
-               enable_mmap(m);
-            return 0;
-         }
-         p = mem2chunk(mem);
-         remainder_size = chunksize(p);
-         s_allocated_memory += remainder_size;
+			mem = mspace_malloc_lockless(m, accum_size - CHUNK_OVERHEAD);
+			if (mem == 0) {
+				BOOST_CONTAINER_MEMIT_NEXT(prev_last_it);
+				while (i) {
+					void *addr = BOOST_CONTAINER_MEMIT_ADDR(prev_last_it);
+					--i;
+					BOOST_CONTAINER_MEMIT_NEXT(prev_last_it);
+               s_allocated_memory -= chunksize(mem2chunk(addr));
+					mspace_free_lockless(m, addr);
+				}
+				if (was_enabled)
+					enable_mmap(m);
+				return 0;
+			}
+			p = mem2chunk(mem);
+			remainder_size = chunksize(p);
+			s_allocated_memory += remainder_size;
 
-         assert(!is_mmapped(p));
-         {  /* split out elements */
-            void *mem_orig = mem;
-            boost_cont_memchain_it last_it = BOOST_CONTAINER_MEMCHAIN_LAST_IT(pchain);
-            size_t num_elements = next_i-i;
+			assert(!is_mmapped(p));
+			{  /* split out elements */
+			   //void *mem_orig = mem;
+			   //boost_cont_memchain_it last_it = BOOST_CONTAINER_MEMCHAIN_LAST_IT(pchain);
+				size_t num_elements = next_i - i;
 
-            size_t num_loops = num_elements - 1;
-            remainder_size -= element_req_size*num_loops;
-            while(num_loops--){
-               void **mem_prev = ((void**)mem);
-               set_size_and_pinuse_of_inuse_chunk(m, p, element_req_size);
-               p = chunk_plus_offset(p, element_req_size);
-               mem = chunk2mem(p);
-               *mem_prev = mem;
-            }
-            set_size_and_pinuse_of_inuse_chunk(m, p, remainder_size);
-            BOOST_CONTAINER_MEMCHAIN_INCORPORATE_AFTER(pchain, last_it, mem_orig, mem, num_elements);
-         }
-      }
-      if (was_enabled)
-         enable_mmap(m);
-   }
-   return 1;
+				size_t num_loops = num_elements - 1;
+				remainder_size -= element_req_size * num_loops;
+				while (num_loops) {
+					--num_loops;
+					//void **mem_prev = ((void**)mem);
+					set_size_and_pinuse_of_inuse_chunk(m, p, element_req_size);
+					BOOST_CONTAINER_MEMCHAIN_PUSH_BACK(pchain, mem);
+					p = chunk_plus_offset(p, element_req_size);
+					mem = chunk2mem(p);
+					//*mem_prev = mem;
+				}
+				set_size_and_pinuse_of_inuse_chunk(m, p, remainder_size);
+				BOOST_CONTAINER_MEMCHAIN_PUSH_BACK(pchain, mem);
+				//BOOST_CONTAINER_MEMCHAIN_INCORPORATE_AFTER(pchain, last_it, mem_orig, mem, num_elements);
+			}
+		}
+		if (was_enabled)
+			enable_mmap(m);
+	}
+	return 1;
 }
+
+#define BOOST_CONTAINER_DLMALLOC_SIMPLE_MULTIDEALLOC
+#ifndef BOOST_CONTAINER_DLMALLOC_SIMPLE_MULTIDEALLOC
+
+#define BOOST_ALLOC_PLUS_MEMCHAIN_MEM_JUMP_NEXT(THISMEM, NEXTMEM) \
+   *((void**)(THISMEM)) = *((void**)((NEXTMEM)))
+
+//This function is based on internal_bulk_free
+//replacing iteration over array[] with boost_cont_memchain.
+//Instead of returning the unallocated nodes, returns a chain of non-deallocated nodes.
+//After forward merging, backwards merging is also tried
+static void internal_multialloc_free(mstate m, boost_cont_memchain *pchain)
+{
+#if FOOTERS
+	boost_cont_memchain ret_chain;
+	BOOST_CONTAINER_MEMCHAIN_INIT(&ret_chain);
+#endif
+	if (!PREACTION(m)) {
+		boost_cont_memchain_it a_it = BOOST_CONTAINER_MEMCHAIN_BEGIN_IT(pchain);
+		while (!BOOST_CONTAINER_MEMCHAIN_IS_END_IT(pchain, a_it)) { /* Iterate though all memory holded by the chain */
+			void* a_mem = BOOST_CONTAINER_MEMIT_ADDR(a_it);
+			mchunkptr a_p = mem2chunk(a_mem);
+			size_t psize = chunksize(a_p);
+#if FOOTERS
+			if (get_mstate_for(a_p) != m) {
+				BOOST_CONTAINER_MEMIT_NEXT(a_it);
+				BOOST_CONTAINER_MEMCHAIN_PUSH_BACK(&ret_chain, a_mem);
+				continue;
+			}
+#endif
+			check_inuse_chunk(m, a_p);
+			if (RTCHECK(ok_address(m, a_p) && ok_inuse(a_p))) {
+				while (1) { /* Internal loop to speed up forward and backward merging (avoids some redundant checks) */
+					boost_cont_memchain_it b_it = a_it;
+					BOOST_CONTAINER_MEMIT_NEXT(b_it);
+					if (!BOOST_CONTAINER_MEMCHAIN_IS_END_IT(pchain, b_it)) {
+						void *b_mem = BOOST_CONTAINER_MEMIT_ADDR(b_it);
+						mchunkptr b_p = mem2chunk(b_mem);
+						if (b_p == next_chunk(a_p)) { /* b chunk is contiguous and next so b's size can be added to a */
+							psize += chunksize(b_p);
+							set_inuse(m, a_p, psize);
+							BOOST_ALLOC_PLUS_MEMCHAIN_MEM_JUMP_NEXT(a_mem, b_mem);
+							continue;
+						}
+						if (RTCHECK(ok_address(m, b_p) && ok_inuse(b_p))) {
+							/* b chunk is contiguous and previous so a's size can be added to b */
+							if (a_p == next_chunk(b_p)) {
+								psize += chunksize(b_p);
+								set_inuse(m, b_p, psize);
+								a_it = b_it;
+								a_p = b_p;
+								a_mem = b_mem;
+								continue;
+							}
+						}
+					}
+					/* Normal deallocation starts again in the outer loop */
+					a_it = b_it;
+					s_allocated_memory -= psize;
+					dispose_chunk(m, a_p, psize);
+					break;
+				}
+			}
+			else {
+				CORRUPTION_ERROR_ACTION(m);
+				break;
+			}
+		}
+		if (should_trim(m, m->topsize))
+			sys_trim(m, 0);
+		POSTACTION(m);
+	}
+#if FOOTERS
+	{
+		boost_cont_memchain_it last_pchain = BOOST_CONTAINER_MEMCHAIN_LAST_IT(pchain);
+		BOOST_CONTAINER_MEMCHAIN_INIT(pchain);
+		BOOST_CONTAINER_MEMCHAIN_INCORPORATE_AFTER
+		(pchain
+			, last_pchain
+			, BOOST_CONTAINER_MEMCHAIN_FIRSTMEM(&ret_chain)
+			, BOOST_CONTAINER_MEMCHAIN_LASTMEM(&ret_chain)
+			, BOOST_CONTAINER_MEMCHAIN_SIZE(&ret_chain)
+		);
+	}
+#endif
+}
+
+#else	//BOOST_CONTAINER_DLMALLOC_SIMPLE_MULTIDEALLOC
+
+//This function is based on internal_bulk_free
+//replacing iteration over array[] with boost_cont_memchain.
+//Instead of returning the unallocated nodes, returns a chain of non-deallocated nodes.
+//After forward merging, backwards merging is also tried
+static void internal_multialloc_free(mstate m, boost_cont_memchain *pchain)
+{
+	if (!PREACTION(m)) {
+		boost_cont_memchain_it a_it = BOOST_CONTAINER_MEMCHAIN_BEGIN_IT(pchain);
+		while (!BOOST_CONTAINER_MEMCHAIN_IS_END_IT(pchain, a_it)) { /* Iterate though all memory holded by the chain */
+			void* a_mem = BOOST_CONTAINER_MEMIT_ADDR(a_it);
+			BOOST_CONTAINER_MEMIT_NEXT(a_it);
+         s_allocated_memory -= chunksize(mem2chunk(a_mem));
+			mspace_free_lockless(m, a_mem);
+		}
+		POSTACTION(m);
+	}
+}
+
+#endif	//BOOST_CONTAINER_DLMALLOC_SIMPLE_MULTIDEALLOC
 
 static int internal_multialloc_arrays
    (mstate m, size_t n_elements, const size_t* sizes, size_t element_size, size_t contiguous_elements, boost_cont_memchain *pchain) {
@@ -980,11 +1006,11 @@ static int internal_multialloc_arrays
    max_size = MAX_REQUEST/element_size;
    /* Different sizes*/
    switch(contiguous_elements){
-      case DL_MULTIALLOC_DEFAULT_CONTIGUOUS:
+      case BOOST_CONTAINER_DL_MULTIALLOC_DEFAULT_CONTIGUOUS:
          /* Use default contiguous mem */
          boost_cont_multialloc_segmented_malloc_size = INTERNAL_MULTIALLOC_DEFAULT_CONTIGUOUS_MEM;
       break;
-      case DL_MULTIALLOC_ALL_CONTIGUOUS:
+      case BOOST_CONTAINER_DL_MULTIALLOC_ALL_CONTIGUOUS:
          boost_cont_multialloc_segmented_malloc_size = MAX_REQUEST + CHUNK_OVERHEAD;
       break;
       default:
@@ -1036,6 +1062,7 @@ static int internal_multialloc_arrays
             while(i--){
                void *addr = BOOST_CONTAINER_MEMIT_ADDR(it);
                BOOST_CONTAINER_MEMIT_NEXT(it);
+               s_allocated_memory -= chunksize(mem2chunk(addr));
                mspace_free_lockless(m, addr);
             }
             if (was_enabled)
@@ -1143,6 +1170,8 @@ void boost_cont_free(void* mem)
       USAGE_ERROR_ACTION(ms,ms);
    }
    else if (!PREACTION(ms)) {
+      if(mem)
+         s_allocated_memory -= chunksize(mem2chunk(mem));
       mspace_free_lockless(ms, mem);
       POSTACTION(ms);
    }

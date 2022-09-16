@@ -40,6 +40,7 @@ using boost::move_detail::remove_pointer;
 using boost::move_detail::add_pointer;
 using boost::move_detail::true_type;
 using boost::move_detail::false_type;
+using boost::move_detail::voider;
 using boost::move_detail::enable_if_c;
 using boost::move_detail::enable_if;
 using boost::move_detail::disable_if_c;
@@ -154,7 +155,7 @@ template <class T>\
 struct TRAITS_PREFIX##_bool\
 {\
    template<bool Add>\
-   struct two_or_three {yes_type _[2 + Add];};\
+   struct two_or_three {yes_type _[2u + (unsigned)Add];};\
    template <class U> static yes_type test(...);\
    template <class U> static two_or_three<U::TYPEDEF_TO_FIND> test (int);\
    static const std::size_t value = sizeof(test<T>(0));\

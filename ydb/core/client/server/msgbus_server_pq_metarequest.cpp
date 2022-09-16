@@ -417,12 +417,15 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
                 if (hostName != NodesInfo->HostNames.end()) {
                     location.SetHost(hostName->second);
                     location.SetErrorCode(NPersQueue::NErrorCode::OK);
-                    auto dynamicIter = NodesInfo->DynamicNodeIdsOverride.find(nodeId);
-                    if (dynamicIter.IsEnd()) {
+                    if (nodeId < 1000) {
                         location.SetHostId(nodeId);
-		    } else {
-                        Y_VERIFY(dynamicIter->first > dynamicIter->second);
-                        location.SetHostId(dynamicIter->second);
+                    } else {
+                        auto minIter = NodesInfo->MinNodeIdByHost.find(hostName->second);
+                        if (minIter.IsEnd()) {
+                            location.SetHostId(nodeId);
+                        } else {
+                            location.SetHostId(minIter->second);
+                        }
                     }
                 } else {
                     statusInitializing = true;

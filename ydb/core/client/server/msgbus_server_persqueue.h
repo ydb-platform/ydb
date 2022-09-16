@@ -83,7 +83,7 @@ public:
     struct TNodesInfo {
         THolder<TEvInterconnect::TEvNodesInfo> NodesInfoReply;
         THashMap<ui32, TString> HostNames;
-        THashMap<ui32, ui32> DynamicNodeIdsOverride;
+        THashMap<TString, ui32> MinNodeIdByHost;
 
         explicit TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply);
     };

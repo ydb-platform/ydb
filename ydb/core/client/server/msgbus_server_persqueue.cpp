@@ -419,24 +419,14 @@ NKikimrClient::TResponse TPersQueueBaseRequestProcessor::MergeSubactorReplies() 
 TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply)
     : NodesInfoReply(std::move(nodesInfoReply))
 {
-    THashMap<TString, ui32> staticNodeIdsByHost;
-    THashMap<TString, TVector<ui32>> dynamicNodeIdsByHost;
     HostNames.reserve(NodesInfoReply->Nodes.size());
     for (const NActors::TEvInterconnect::TNodeInfo& info : NodesInfoReply->Nodes) {
         HostNames.emplace(info.NodeId, info.Host);
-        if (info.NodeId < 1000) {
-            staticNodeIdsByHost.insert(std::make_pair(info.Host, info.NodeId));
-        } else {
-            dynamicNodeIdsByHost[info.Host].push_back(info.NodeId);
-        }
-    }
-    for (const auto& [host, nodeIds] : dynamicNodeIdsByHost) {
-        auto staticIter = staticNodeIdsByHost.find(host);
-        if (staticIter.IsEnd())
-            continue;
-        for (auto& dynamicId : nodeIds) {
-            auto insRes = DynamicNodeIdsOverride.insert(std::make_pair(dynamicId, staticIter->second));
-            Y_VERIFY(insRes.second);
+        auto insRes = MinNodeIdByHost.insert(std::make_pair(info.Host, info.NodeId));
+        if (insRes.second) {
+            if (insRes.first->second > info.NodeId) {
+                insRes.first->second = info.NodeId;
+            }
         }
     }
 }

@@ -190,7 +190,8 @@ namespace NTabletPipe {
 
             TActorId proxy = TActivationContext::InterconnectProxy(nodeId);
             if (!proxy) {
-                BLOG_ERROR("remote node on broken proxy");
+                BLOG_ERROR("remote node " << nodeId << " on broken proxy");
+                NotifyNodeProblem(nodeId, ctx);
                 return NotifyConnectFail(ctx);
             }
 
@@ -479,7 +480,11 @@ namespace NTabletPipe {
         }
 
         void NotifyNodeProblem(const TActorContext &ctx) {
-            ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvNodeProblem(InterconnectNodeId, LastCacheEpoch));
+            NotifyNodeProblem(InterconnectNodeId, ctx);
+        }
+
+        void NotifyNodeProblem(ui32 nodeId, const TActorContext &ctx) {
+            ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvNodeProblem(nodeId, LastCacheEpoch));
         }
 
         void ForgetNetworkSession() {

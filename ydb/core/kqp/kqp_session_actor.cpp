@@ -958,11 +958,15 @@ public:
     }
 
     void ExecuteOrDefer() {
+        if (!(QueryState->PreparedQuery
+            && QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()))
+        {
+            ReplySuccess();
+            return;
+        }
         auto& txCtx = *QueryState->TxCtx;
-
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-        const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        YQL_ENSURE(QueryState->CurrentTx < phyQuery.TransactionsSize());
+        const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
         auto tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
                 &phyQuery.GetTransactions(QueryState->CurrentTx));
@@ -1193,13 +1197,7 @@ public:
             exec->Swap(txResult.MutableStats());
         }
 
-        if (QueryState->PreparedQuery &&
-            QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize())
-        {
             ExecuteOrDefer();
-        } else {
-            ReplySuccess();
-        }
     }
 
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {

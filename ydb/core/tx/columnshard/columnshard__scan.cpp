@@ -720,17 +720,14 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
     TStringStream detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")"
-            << " req: " << request;
+        detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")" << " req: " << request;
     }
     TVector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;
     if (request.GetCostDataOnly()) {
         for (auto&& i : ReadMetadataRanges) {
             NOlap::TReadMetadata::TConstPtr rMetadata = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(i);
             if (!rMetadata || !rMetadata->SelectInfo) {
-                NOlap::NCosts::TKeyRanges ranges;
-                ranges.SetLeftBorderOpened(true);
-                auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(std::move(ranges), scanId);
+                auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(NOlap::NCosts::TKeyRanges(), scanId);
                 ctx.Send(scanComputeActor, ev.Release());
                 return;
             }
@@ -762,23 +759,21 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
 
     if (request.GetCostDataOnly()) {
-        NOlap::NCosts::TKeyRanges ranges;
         if (request.GetReverse()) {
             std::reverse(rMetadataRanges.begin(), rMetadataRanges.end());
         }
+        NOlap::NCosts::TKeyRangesBuilder krBuilder(Self->PrimaryIndex->GetIndexInfo());
         {
             ui32 recordsCount = 0;
             for (auto&& i : rMetadataRanges) {
                 recordsCount += i->SelectInfo->Granules.size() + 2;
             }
-            ranges.Reserve(recordsCount);
+            krBuilder.Reserve(recordsCount);
         }
         for (auto&& i : rMetadataRanges) {
-            NOlap::NCosts::TCostsOperator cOperator(i->SelectInfo->Granules, i->IndexInfo);
-            cOperator.FillRangeMarks(ranges, i->GreaterPredicate, i->LessPredicate);
+            krBuilder.FillRangeMarks(i->GreaterPredicate, i->SelectInfo->Granules, i->LessPredicate);
         }
-        LOG_S_DEBUG("TCostsOperator::BuildRangeMarks::Result " << ranges.ToString());
-        auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(std::move(ranges), scanId);
+        auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(krBuilder.Build(), scanId);
         ctx.Send(scanComputeActor, ev.Release());
         return;
     }

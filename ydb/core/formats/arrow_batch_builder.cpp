@@ -68,6 +68,123 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
 
 }
 
+NKikimr::NArrow::TRecordBatchConstructor::TRecordConstructor& TRecordBatchConstructor::TRecordConstructor::AddRecordValue(
+    const std::shared_ptr<arrow::Scalar>& value)
+{
+    Y_VERIFY(CurrentBuilder != Owner.Builders.end());
+    AddValueToBuilder(**CurrentBuilder, value, WithCast);
+    ++CurrentBuilder;
+    return *this;
+}
+
+void TRecordBatchConstructor::AddValueToBuilder(arrow::ArrayBuilder& builder,
+    const std::shared_ptr<arrow::Scalar>& value, const bool withCast) {
+    if (!value) {
+        Y_VERIFY(builder.AppendNull().ok());
+    } else if (!withCast) {
+        Y_VERIFY(builder.AppendScalar(*value).ok());
+    } else {
+        auto castStatus = value->CastTo(builder.type());
+        Y_VERIFY(castStatus.ok());
+        Y_VERIFY(builder.AppendScalar(*castStatus.ValueUnsafe()).ok());
+    }
+}
+
+NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::AddRecordsBatchSlow(
+    const std::shared_ptr<arrow::RecordBatch>& value, const bool withCast /*= false*/, const bool withRemap /*= false*/)
+{
+    Y_VERIFY(!!value);
+    Y_VERIFY(!!Schema);
+    Y_VERIFY(!InConstruction);
+    std::vector<std::shared_ptr<arrow::Array>> batchColumns;
+    if (withRemap) {
+        for (auto&& f : Schema->fields()) {
+            batchColumns.emplace_back(value->GetColumnByName(f->name()));
+        }
+    } else {
+        Y_VERIFY(value->num_columns() <= Schema->num_fields());
+        for (auto&& i : value->columns()) {
+            batchColumns.emplace_back(i);
+        }
+        for (i32 i = value->num_columns(); i < Schema->num_fields(); ++i) {
+            batchColumns.emplace_back(nullptr);
+        }
+    }
+    Y_VERIFY((int)batchColumns.size() == Schema->num_fields());
+    Y_VERIFY((int)Builders.size() == Schema->num_fields());
+    ui32 cIdx = 0;
+    std::vector<std::unique_ptr<arrow::ArrayBuilder>>::const_iterator currentBuilder = Builders.begin();
+    for (auto&& c : batchColumns) {
+        if (!c) {
+            Y_VERIFY((*currentBuilder)->AppendNulls(value->num_rows()).ok());
+        } else {
+            for (ui32 r = 0; r < value->num_rows(); ++r) {
+                std::shared_ptr<arrow::Scalar> value;
+                if (c->IsNull(r)) {
+                    value = nullptr;
+                } else {
+                    auto statusGet = c->GetScalar(r);
+                    Y_VERIFY(statusGet.ok());
+                    value = statusGet.ValueUnsafe();
+                }
+                AddValueToBuilder(**currentBuilder, value, withCast);
+            }
+        }
+        ++currentBuilder;
+        ++cIdx;
+    }
+    RecordsCount += value->num_rows();
+    return *this;
+}
+
+NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::InitColumns(const std::shared_ptr<arrow::Schema>& schema) {
+    Schema = schema;
+    Builders.clear();
+    Builders.reserve(Schema->num_fields());
+    for (auto&& f : Schema->fields()) {
+        std::unique_ptr<arrow::ArrayBuilder> arrayBuilder;
+        Y_VERIFY(arrow::MakeBuilder(arrow::default_memory_pool(), f->type(), &arrayBuilder).ok());
+        Builders.emplace_back(std::move(arrayBuilder));
+    }
+    return *this;
+}
+
+NKikimr::NArrow::TRecordBatchReader TRecordBatchConstructor::Finish() {
+    Y_VERIFY(!InConstruction);
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    columns.reserve(Builders.size());
+    for (auto&& i : Builders) {
+        arrow::Result<std::shared_ptr<arrow::Array>> aData = i->Finish();
+        Y_VERIFY(aData.ok());
+        columns.emplace_back(aData.ValueUnsafe());
+    }
+    std::shared_ptr<arrow::RecordBatch> batch = arrow::RecordBatch::Make(Schema, RecordsCount, columns);
+#if !defined(NDEBUG)
+    auto statusValidation = batch->ValidateFull();
+    if (!statusValidation.ok()) {
+        Cerr << statusValidation.ToString() << "/" << statusValidation.message() << Endl;
+        Y_VERIFY(false);
+    }
+#endif
+
+    return TRecordBatchReader(batch);
+}
+
+void TRecordBatchReader::SerializeToStrings(TString& schema, TString& data) const {
+    Y_VERIFY(!!Batch);
+    schema = NArrow::SerializeSchema(*Batch->schema());
+    data = NArrow::SerializeBatchNoCompression(Batch);
+}
+
+bool TRecordBatchReader::DeserializeFromStrings(const TString& schemaString, const TString& dataString) {
+    std::shared_ptr<arrow::Schema> schema = NArrow::DeserializeSchema(schemaString);
+    if (!schema) {
+        return false;
+    }
+    Batch = NArrow::DeserializeBatch(dataString, schema);
+    return true;
+}
+
 TArrowBatchBuilder::TArrowBatchBuilder(arrow::Compression::type codec)
     : WriteOptions(arrow::ipc::IpcWriteOptions::Defaults())
 {

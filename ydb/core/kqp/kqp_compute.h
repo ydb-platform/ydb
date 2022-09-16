@@ -157,7 +157,7 @@ struct TEvKqpCompute {
         const NOlap::NCosts::TKeyRanges& GetTableRanges() const {
             return TableRanges;
         }
-        TVector<TSerializedTableRange> GetSerializedTableRanges() const;
+        TVector<TSerializedTableRange> GetSerializedTableRanges(const ui32 splitFactor = 1) const;
 
         virtual bool IsSerializable() const override {
             return true;

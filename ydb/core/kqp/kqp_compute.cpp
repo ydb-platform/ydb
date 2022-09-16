@@ -18,31 +18,53 @@ NActors::IEventBase* TEvKqpCompute::TEvCostData::Load(TEventSerializedData* data
     return result.Release();
 }
 
-TVector<NKikimr::TSerializedTableRange> TEvKqpCompute::TEvCostData::GetSerializedTableRanges() const {
+TVector<NKikimr::TSerializedTableRange> TEvKqpCompute::TEvCostData::GetSerializedTableRanges(const ui32 splitFactor) const {
+    TVector<NOlap::NCosts::TKeyRanges::TMark> usefulMarks;
+    {
+        ui32 currentCount = (TableRanges.IsLeftBorderOpened() ? 1 : 0);
+        const ui32 realCount = TableRanges.GetMarksCount() + currentCount + 1;
+        const double countPerSection = 1.0 * realCount / splitFactor;
+        bool predSkipped = !TableRanges.IsLeftBorderOpened();
+        for (auto&& i : TableRanges.GetBatch()) {
+            auto& features = TableRanges.GetMarkFeatures(i.GetIndex());
+            ++currentCount;
+            if (currentCount >= countPerSection || predSkipped || features.GetIntervalSkipped()) {
+                currentCount = 0;
+                usefulMarks.emplace_back(i);
+            }
+            predSkipped = features.GetIntervalSkipped();
+        }
+    }
+
     TVector<TSerializedTableRange> result;
     TVector<TCell> borderPred;
-    borderPred.resize(TableRanges.ColumnsCount(), TCell());
+    borderPred.resize(TableRanges.GetColumnsCount(), TCell());
     bool predSkipped = !TableRanges.IsLeftBorderOpened();
     bool predIncluded = false;
-    for (auto&& i : TableRanges.GetRangeMarks()) {
+
+    for (auto&& i : usefulMarks) {
+        auto& features = TableRanges.GetMarkFeatures(i.GetIndex());
         TVector<TCell> borderCurrent;
-        for (auto&& value : i.GetMark()) {
+        for (auto&& value : i) {
+            if (!value) {
+                break;
+            }
             borderCurrent.emplace_back(SerializeScalarToCell(value));
         }
         if (!predSkipped) {
-            for (ui32 additional = borderPred.size(); additional < TableRanges.ColumnsCount(); ++additional) {
+            for (ui32 additional = borderPred.size(); additional < TableRanges.GetColumnsCount(); ++additional) {
                 borderPred.emplace_back(TCell());
             }
-            if (!i.GetMarkIncluded()) {
-                for (ui32 additional = borderCurrent.size(); additional < TableRanges.ColumnsCount(); ++additional) {
+            if (!features.GetMarkIncluded()) {
+                for (ui32 additional = borderCurrent.size(); additional < TableRanges.GetColumnsCount(); ++additional) {
                     borderCurrent.emplace_back(TCell());
                 }
             }
-            TSerializedTableRange serializedRange(borderPred, predIncluded, borderCurrent, i.GetMarkIncluded());
+            TSerializedTableRange serializedRange(borderPred, predIncluded, borderCurrent, features.GetMarkIncluded());
             result.emplace_back(std::move(serializedRange));
         }
-        predSkipped = i.GetIntervalSkipped();
-        predIncluded = i.GetMarkIncluded();
+        predSkipped = features.GetIntervalSkipped();
+        predIncluded = features.GetMarkIncluded();
         std::swap(borderCurrent, borderPred);
     }
     if (predSkipped) {

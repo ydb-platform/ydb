@@ -5,6 +5,142 @@
 
 namespace NKikimr::NArrow {
 
+class TRecordBatchReader {
+private:
+    std::shared_ptr<arrow::RecordBatch> Batch;
+public:
+    TRecordBatchReader() = default;
+    TRecordBatchReader(const std::shared_ptr<arrow::RecordBatch>& batch)
+        : Batch(batch)
+    {
+    }
+    class TRecordIterator {
+    private:
+        friend class TRecordBatchReader;
+        ui32 RecordIdx = 0;
+        const TRecordBatchReader& Reader;
+        TRecordIterator(const ui32 recordIdx, const TRecordBatchReader& reader)
+            : RecordIdx(recordIdx)
+            , Reader(reader) {
+
+        }
+    public:
+        class TColumnIterator {
+        private:
+            friend class TRecordIterator;
+            ui32 ColumnIdx = 0;
+            const ui32 RecordIdx = 0;
+            const TRecordBatchReader& Reader;
+            TColumnIterator(const ui32 columnIdx, const ui32 recordIdx, const TRecordBatchReader& reader)
+                : ColumnIdx(columnIdx)
+                , RecordIdx(recordIdx)
+                , Reader(reader) {
+
+            }
+        public:
+            std::shared_ptr<arrow::Scalar> operator*() const {
+                auto c = Reader.Batch->column(ColumnIdx);
+                if (c->IsNull(RecordIdx)) {
+                    return nullptr;
+                } else {
+                    auto status = c->GetScalar(RecordIdx);
+                    Y_VERIFY(status.ok());
+                    return *status;
+                }
+            }
+            void operator++() {
+                ++ColumnIdx;
+            }
+            bool operator==(const TColumnIterator& value) const {
+                return RecordIdx == value.RecordIdx && ColumnIdx == value.ColumnIdx && Reader.Batch.get() == value.Reader.Batch.get();
+            }
+        };
+        TRecordIterator operator*() const {
+            return *this;
+        }
+        bool operator==(const TRecordIterator& value) const {
+            return RecordIdx == value.RecordIdx && Reader.Batch.get() == value.Reader.Batch.get();
+        }
+        void operator++() {
+            ++RecordIdx;
+        }
+        ui32 GetIndex() const {
+            return RecordIdx;
+        }
+        TColumnIterator begin() const {
+            return TColumnIterator(0, RecordIdx, Reader);
+        }
+        TColumnIterator end() const {
+            return TColumnIterator(Reader.Batch->schema()->num_fields(), RecordIdx, Reader);
+        }
+    };
+    ui32 GetColumnsCount() const {
+        return Batch ? Batch->num_columns() : 0;
+    }
+    ui32 GetRowsCount() const {
+        return Batch ? Batch->num_rows() : 0;
+    }
+    TRecordIterator begin() const {
+        return TRecordIterator(0, *this);
+    }
+    TRecordIterator end() const {
+        return TRecordIterator(GetRowsCount(), *this);
+    }
+    void SerializeToStrings(TString& schema, TString& data) const;
+    bool DeserializeFromStrings(const TString& schemaString, const TString& dataString);
+};
+
+class TRecordBatchConstructor {
+private:
+    ui32 RecordsCount = 0;
+    bool InConstruction = false;
+    static void AddValueToBuilder(arrow::ArrayBuilder& builder, const std::shared_ptr<arrow::Scalar>& value, const bool withCast);
+protected:
+    std::shared_ptr<arrow::Schema> Schema;
+    std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
+public:
+    class TRecordConstructor {
+    private:
+        TRecordBatchConstructor& Owner;
+        const bool WithCast = false;
+        std::vector<std::unique_ptr<arrow::ArrayBuilder>>::const_iterator CurrentBuilder;
+    public:
+        TRecordConstructor(TRecordBatchConstructor& owner, const bool withCast)
+            : Owner(owner)
+            , WithCast(withCast)
+        {
+            Y_VERIFY(!Owner.InConstruction);
+            CurrentBuilder = Owner.Builders.begin();
+            Owner.InConstruction = true;
+        }
+        ~TRecordConstructor() {
+            for (; CurrentBuilder != Owner.Builders.end(); ++CurrentBuilder) {
+                Y_VERIFY((*CurrentBuilder)->AppendNull().ok());
+            }
+            Owner.InConstruction = false;
+            ++Owner.RecordsCount;
+        }
+        TRecordConstructor& AddRecordValue(const std::shared_ptr<arrow::Scalar>& value);
+    };
+
+    TRecordBatchConstructor& InitColumns(const std::shared_ptr<arrow::Schema>& schema);
+
+    TRecordConstructor StartRecord(const bool withCast = false) {
+        Y_VERIFY(!InConstruction);
+        return TRecordConstructor(*this, withCast);
+    }
+
+    TRecordBatchConstructor& AddRecordsBatchSlow(const std::shared_ptr<arrow::RecordBatch>& value, const bool withCast = false, const bool withRemap = false);
+
+    void Reserve(const ui32 recordsCount) {
+        for (auto&& i : Builders) {
+            Y_VERIFY(i->Reserve(recordsCount).ok());
+        }
+    }
+
+    TRecordBatchReader Finish();
+};
+
 /// YDB rows to arrow::RecordBatch converter
 class TArrowBatchBuilder : public NKikimr::IBlockBuilder {
 public:

@@ -37,9 +37,7 @@ enum class ERequestType {
 
 TString GetKey(size_t n) {
     // user1000385178204227360
-    char buf[24];
-    sprintf(buf, "user%.19lu", n);
-    return buf;
+    return Sprintf("user%.19lu", n);
 }
 
 const TString Value = TString(100, 'x');

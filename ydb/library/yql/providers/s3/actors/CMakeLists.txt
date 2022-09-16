@@ -21,6 +21,7 @@ target_link_libraries(providers-s3-actors PUBLIC
   yutil
   contrib-libs-fmt
   libs-poco-Util
+  cpp-actors-http
   cpp-string_utils-base64
   cpp-string_utils-quote
   cpp-xml-document

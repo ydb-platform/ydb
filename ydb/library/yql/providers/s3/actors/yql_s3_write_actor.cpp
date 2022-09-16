@@ -13,6 +13,7 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/http/http.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -199,16 +200,12 @@ private:
         switch (response.index()) {
         case 0U: {
             const auto& str = std::get<IHTTPGateway::TContent>(response).Headers;
-
-            if (const auto p = str.find("etag: \""); p != TString::npos) {
-                if (const auto p1 = p + 7, p2 = str.find("\"", p1); p2 != TString::npos) {
-                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, str.substr(p1, p2 - p1))));
-                    break;
-                }
+            if (const NHttp::THeaders headers(str.substr(str.rfind("HTTP/"))); headers.Has("Etag"))
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, TString(headers.Get("Etag")))));
+            else
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response:" << Endl << str)})));
             }
-            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response:" << Endl << str)})));
             break;
-        }
         case 1U:
             actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(response)))));
             break;

@@ -31,7 +31,7 @@ Data is deleted by the *Background Removal Operation* (*BRO*), consisting of two
 
 The *BRO* has the following properties:
 
-* The concurrency unit is a [table partition](../datamodel.md#partitioning).
+* The concurrency unit is a [table partition](../datamodel/table.md#partitioning).
 * For tables with [secondary indexes](../secondary_indexes.md), the delete stage is a [distributed transaction](../transactions.md#distributed-tx).
 
 ## Guarantees {#guarantees}

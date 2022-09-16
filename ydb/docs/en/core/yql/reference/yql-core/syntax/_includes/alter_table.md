@@ -12,7 +12,7 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 
 {{ backend_name }} lets you add columns to a table and delete non-key columns from it.
 
-```ADD COLUMN```: Adds a column with the specified name and type. The code below adds the ```is_deleted``` column with the ```Bool data``` type to the ```episodes``` table.
+```ADD COLUMN```: Adds a column with the specified name and type. The code below adds the ```is_deleted``` column with the ```Bool``` data type to the ```episodes``` table.
 
 ```sql
 ALTER TABLE episodes ADD COLUMN is_deleted Bool;
@@ -44,7 +44,44 @@ Deleting an index:
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
+You can also add or remove a secondary index using the {{ ydb-short-name }} CLI [table index](https://ydb.tech/en/docs/reference/ydb-cli/commands/secondary_index) command.
+
 {% endif %}
+
+{% if feature_changefeed %}
+
+## Adding and deleting a changefeed {#changefeed}
+
+`ADD CHANGEFEED <name> WITH (option = value[, ...])` adds a [changefeed](../../../../concepts/cdc) with the specified name and parameters.
+
+### Changefeed parameters {#changefeed-options}
+
+* `MODE`: Operation mode. Specifies what exactly is to be written to a changefeed each time the table data is altered.
+   * `KEYS_ONLY`: Only the primary key components and change flag are written.
+   * `UPDATES`: Updated column values that result from updates are written.
+   * `NEW_IMAGE`: Any column values resulting from updates are written.
+   * `OLD_IMAGE`: Any column values before updates are written.
+   * `NEW_AND_OLD_IMAGES`: A combination of `NEW_IMAGE` and `OLD_IMAGE` modes. Any column values _prior to_ and _resulting from_ updates are written.
+* `FORMAT`: Data write format.
+   * `JSON`: The record structure is given on the [changefeed description](../../../../concepts/cdc#record-structure) page.
+
+The code below adds a changefeed named `updates_feed` where the values of updated table columns will be exported in JSON format:
+
+```sql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES'
+);
+```
+
+`DROP CHANGEFEED`: Deletes the changefeed with the specified name. The code below deletes the `updates_feed` changefeed:
+
+```sql
+ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
+```
+
+{% endif %}
+
 {% if feature_map_tables %}
 
 ## Renaming a table {#rename}
@@ -97,11 +134,18 @@ Using the ```ALTER FAMILY``` command, you can change the parameters of the colum
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 ```
 
-You can specify any column family parameters from the [`CREATE TABLE`](create_table#column-family) command.
+{% note info %}
+
+Available types of storage devices depend on the {{ ydb-short-name }} cluster configuration.
+
+{% endnote %}
+
+You can specify any parameters of a group of columns from the [`CREATE TABLE`](create_table#column-family) command.
+
 
 ## Changing additional table parameters {#additional-alter}
 
-Most of the table parameters in YDB described on the [table description]({{ concept_table }}) page can be changed with the ```ALTER``` command.
+Most of the table parameters in YDB specified on the [table description]({{ concept_table }}) page can be changed with the ```ALTER``` command.
 
 In general, the command to change any table parameter looks like this:
 
@@ -134,6 +178,4 @@ For example, this command resets (deletes) TTL settings for the table:
 ```sql
 ALTER TABLE series RESET (TTL);
 ```
-
 {% endif %}
-

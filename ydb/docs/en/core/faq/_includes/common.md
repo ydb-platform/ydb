@@ -22,7 +22,7 @@ To read data, {{ ydb-short-name }} uses a model of strict data consistency.
 
 To design a primary key properly, follow the rules below.
 
-* Avoid situations where the main load falls on a single [partition](../../concepts/datamodel.md#partitioning) of a table. With even load distribution, it's easier to achieve high overall performance.
+* Avoid situations where the main load falls on a single [partition](../../concepts/datamodel/table.md#partitioning) of a table. With even load distribution, it's easier to achieve high overall performance.
 
   This rule implies that you shouldn't use a monotonically increasing sequence, such as timestamp, as a table's primary key.
 

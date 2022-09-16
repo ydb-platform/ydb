@@ -10,7 +10,7 @@ The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table
 
     CREATE TABLE table_name (
         column1 type1,
-{% if feature_not_null == true %}         column2 type2 NOT NULL,{% else %}         column2 type2,{% endif %}
+{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
         ...
         columnN typeN,
 {% if feature_secondary_index == true %}
@@ -18,8 +18,8 @@ The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table
         INDEX index2_name GLOBAL ON ( column1, column2, ... ),
 {% endif %}
 {% if feature_map_tables %}
-        PRIMARY KEY (column, ...),
-        FAMILY column_family ()
+        PRIMARY KEY ( column, ... ),
+        FAMILY column_family ( family_options, ... )
 {% else %}
         ...
 {% endif %}
@@ -33,13 +33,15 @@ The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table
 {% if feature_column_container_type == true %}
 In non-key columns, you can use any data types, but for key columns, only [primitive ones](../../types/primitive.md). When specifying complex types (for example, `List<String>`), the type is enclosed in double quotes.
 {% else %}
-For key columns and non-key columns, only [primitive](../../types/primitive.md) data types are allowed. {% endif %}
+For the key and non-key columns, you can only use [primitive](../../types/primitive.md) data types.
+{% endif %}
 
 {% if feature_not_null == true %}
-Without additional modifiers, the column is assigned the [optional type](../../types/optional.md) and can accept `NULL` values. To create a non-optional type, use `NOT NULL`.
+Without additional modifiers, a column gets an [optional type](../../types/optional.md) and allows `NULL` values to be written. To create a non-optional type, use `NOT NULL`.
 {% else %}
+
 {% if feature_not_null_for_pk %}
-By default, all columns are [optional](../../types/optional.md) and can accept `NULL` values. `NOT NULL` constraint is supported only for primary keys.
+All columns are [optional](../../types/optional.md) by default and can be assigned NULL values. The `NOT NULL` limit can only be specified for columns that are part of the primary key..
 {% else %}
 All columns allow writing `NULL` values, that is, they are [optional](../../types/optional.md).
 {% endif %}
@@ -47,6 +49,7 @@ All columns allow writing `NULL` values, that is, they are [optional](../../type
 {% if feature_map_tables %}
 It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. Those columns become part of the key in the listed order.
 {% endif %}
+
 
 **Example**
 
@@ -60,14 +63,15 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
 {% endif %}
     )
 
-{% if feature_secondary_index %}
 
+
+{% if feature_secondary_index %}
 ## Secondary indexes {#secondary_index}
 
 The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
 
 ```sql
-CREATE TABLE table_name ( 
+CREATE TABLE table_name (
     ...
     INDEX <Index_name> GLOBAL [SYNC|ASYNC] ON ( <Index_columns> ) COVER ( <Cover_columns> ),
     ...
@@ -75,7 +79,6 @@ CREATE TABLE table_name (
 ```
 
 where:
-
 * **Index_name** is the unique name of the index to be used to access data.
 * **SYNC/ASYNC** indicates synchronous/asynchronous data writes to the index. If not specified, synchronous.
 * **Index_columns** is a list of comma-separated names of columns in the created table to be used for a search in the index.
@@ -94,11 +97,9 @@ CREATE TABLE my_table (
     PRIMARY KEY (a)
 )
 ```
-
 {% endif %}
 
 {% if feature_map_tables and concept_table %}
-
 ## Additional parameters {#additional}
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When creating a table using YQL, such parameters are listed in the ```WITH``` section:
@@ -114,7 +115,7 @@ WITH (
 
 Here, key is the name of the parameter and value is its value.
 
-For a list of possible parameter names and their values, see [{{ backend_name }} table description]({{ concept_table }}).
+For a list of possible parameter names and their values, see the [{{ backend_name }} table description]({{ concept_table }}).
 
 For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
 
@@ -136,12 +137,12 @@ WITH (
 
 Columns of the same table can be grouped to set the following parameters:
 
-* `DATA`: A storage type for the data in this column group. Acceptable values: ```ssd```, ```hdd```.
+* `DATA`: A storage device type for the data in this column group. Acceptable values: ```ssd```, ```hdd```.
 * `COMPRESSION`: A data compression codec. Acceptable values: ```off```, ```lz4```.
 
 By default, all columns are in the same group named ```default```.  If necessary, the parameters of this group can also be redefined.
 
-In the example below, for the created table, the ```family_large``` group of columns is added and set for the ```series_info``` column, and the parameters for the ```default``` group, which is set by default for all other columns, are also redefined.
+In the example below, for the created table, the ```family_large``` group of columns is added and set for the ```series_info``` column, and the parameters for the default group, which is set by ```default``` for all other columns, are also redefined.
 
 ```sql
 CREATE TABLE series_with_families (
@@ -161,7 +162,14 @@ CREATE TABLE series_with_families (
 );
 ```
 
-{% endif %}
+{% note info %}
+
+Available types of storage devices depend on the {{ ydb-short-name }} cluster configuration.
+
+{% endnote %}
 
 {% endif %}
 
+
+
+{% endif %}

@@ -4,7 +4,7 @@ Proper design of the table's primary key is important for the performance for bo
 
 General recommendations for choosing a primary key:
 
-* Avoid situations when the significant part of the workload falls on a single [partition](../../concepts/datamodel.md#partitioning) of a table. The more evenly the workload is distributed across the partitions, the higher the performance.
+* Avoid situations when the significant part of the workload falls on a single [partition](../../concepts/datamodel/table.md#partitioning) of a table. The more evenly the workload is distributed across the partitions, the higher the performance.
 * Reduce the number of table partitions that are affected by a single request. Moreover, if the request affects no more than one partition, it is executed using a special simplified protocol. This significantly increases the speed of execution and conserves the resources.
 
 All {{ ydb-short-name }} tables are sorted by primary key in ascending order. In a table with a monotonically increasing primary key, this will result in new data being added at the end of a table. As {{ ydb-short-name }} splits table data into partitions based on key ranges, inserts are always processed by the same server that is responsible for the "last" partition. Concentrating the load on a single server results in slow data uploading and inefficient use of a distributed system.

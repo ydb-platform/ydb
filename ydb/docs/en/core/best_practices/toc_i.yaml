@@ -11,6 +11,8 @@ items:
   hidden: true
 - name: Secondary indexes
   href: secondary_indexes.md
+- name: Change Data Capture
+  href: cdc.md
 - name: Paginated output
   href: paging.md
 - name: Loading large data volumes

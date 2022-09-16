@@ -1,6 +1,6 @@
 # Directories
 
-The {{ ydb-short-name }} database maintains an internal hierarchical structure of [directories](../../../../concepts/datamodel.md#dir) that can host database objects.
+The {{ ydb-short-name }} database maintains an internal hierarchical structure of [directories](../../../../concepts/datamodel/dir.md) that can host database objects.
 
 {{ ydb-short-name }} CLI supports operations to change the directory structure and to access schema objects by their directory name.
 

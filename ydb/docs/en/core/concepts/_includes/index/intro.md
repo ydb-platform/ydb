@@ -16,7 +16,7 @@ description: "Yandex Database (YDB): is a horizontally scalable distributed faul
 
 To interact with {{ ydb-short-name }}, you can use the [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md) or [SDK](../../../reference/ydb-sdk/index.md) for {% if oss %}C++,{% endif %} Java, Python, Node.js, PHP, and Go.
 
-{{ ydb-short-name }} supports a relational [data model](../../../concepts/datamodel.md) and manages tables with a predefined schema. To make it easier to organize tables, directories can be created like in the file system.
+{{ ydb-short-name }} supports a relational [data model](../../../concepts/datamodel/table.md) and manages tables with a predefined schema. To make it easier to organize tables, directories can be created like in the file system.
 
 Database commands are mainly written in YQL, an SQL dialect. This gives the user a powerful and familiar way to interact with the database.
 

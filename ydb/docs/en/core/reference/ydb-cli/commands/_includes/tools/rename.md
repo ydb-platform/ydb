@@ -1,6 +1,6 @@
 # Renaming a table
 
-Using the `tools rename` subcommand, you can [rename](../../../../../concepts/datamodel.md#rename) one or more tables at the same time, move a table to another directory within the same database, replace one table with another one within the same transaction.
+Using the `tools rename` subcommand, you can [rename](../../../../../concepts/datamodel/table.md#rename) one or more tables at the same time, move a table to another directory within the same database, replace one table with another one within the same transaction.
 
 General command format:
 

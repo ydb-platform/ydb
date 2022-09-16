@@ -1,7 +1,7 @@
 items:
-  - name: Install
+  - name: Installation
     href: install.md
-  - name: Structure of YDB CLI commands
+  - name: All commands in alphabetical order
     href: commands.md
   - name: Service commands
     href: commands/service.md
@@ -25,7 +25,7 @@ items:
     items:
     - name: Making a DB query
       href: commands/query.md
-    - name: Query execution plan
+    - name: Getting a query execution plan and AST
       href: commands/explain-plan.md
     - name: Streaming table reads
       href: commands/readtable.md
@@ -33,6 +33,26 @@ items:
       href: commands/scan-query.md
   - name: Importing and exporting data
     include: { mode: link, path: export_import/toc_p.yaml }
+  - name: Working with topics
+    items:
+    - name: Commands for topics
+      href: topic-overview.md
+    - name: Creating a topic
+      href: topic-create.md
+    - name: Updating a topic
+      href: topic-alter.md
+    - name: Deleting a topic
+      href: topic-drop.md
+    - name: Adding a topic consumer
+      href: topic-consumer-add.md
+    - name: Deleting a topic consumer
+      href: topic-consumer-drop.md
+    - name: Reading messages from a topic
+      href: topic-read.md
+    - name: Writing messages to a topic
+      href: topic-write.md
+    - name: Message pipeline processing
+      href: topic-pipeline.md
 #  - name: Utilities
 #    items:
     # - name: Copy tables
@@ -49,7 +69,7 @@ items:
       href: commands/discovery-list.md
     - name: Authentication
       href: commands/discovery-whoami.md
-    - name: YDB CLI version output
+    - name: Getting the YDB CLI version
       href: version.md
   - name: Load testing
     items:
@@ -57,3 +77,5 @@ items:
       href: commands/workload/index.md
     - name: Stock load
       href: commands/workload/stock.md
+
+

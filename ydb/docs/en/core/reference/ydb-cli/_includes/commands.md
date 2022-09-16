@@ -8,7 +8,7 @@ General syntax for calling {{ ydb-short-name }} CLI commands:
 
 , where:
 
-- `{{ ydb-cli}}` is the command to run the {{ ydb-short-name }} CLI from the OS command line.
+- `{{ ydb-cli}}` is the command to run the {{ ydb-short-name }}CLI from the OS command line.
 - `[global options]` are [global options](../commands/global-options.md) that are common for all {{ ydb-short-name }} CLI commands.
 - `<command>` is the command.
 - `[<subcomand> ...]` are subcommands specified if the selected command contains subcommands.
@@ -18,10 +18,10 @@ General syntax for calling {{ ydb-short-name }} CLI commands:
 
 You can learn about the necessary commands by selecting the subject section in the menu on the left or using the alphabetical list below.
 
-Any command can be run from the command line with the `--help` option to get help on it. You can get a list of all supported {{ ydb-short-name }} CLI of commands by running the {{ ydb-short-name }} CLI with the `--help` option [with no command specified](../commands/service.md).
+Any command can be run from the command line with the `--help` option to get help on it. You can get a list of all commands supported by the {{ ydb-short-name }} CLI by running the {{ ydb-short-name }} CLI with the `--help` option, but [without any command](../commands/service.md).
 
 | Command / subcommand | Brief description |
-| --- | --- |
+--- | ---
 | [config profile activate](../profile/activate.md) | Activating a [profile](../profile/index.md) |
 | [config profile create](../profile/create.md) | Creating a [profile](../profile/index.md) |
 | [config profile delete](../profile/create.md) | Deleting a [profile](../profile/index.md) |
@@ -35,9 +35,9 @@ Any command can be run from the command line with the `--help` option to get hel
 | [import file tsv](../export_import/import-file.md) | Importing data from a TSV file |
 | [import s3](../export_import/s3_import.md) | Importing data from S3 storage |
 | [init](../profile/create.md) | Initializing the CLI, creating a [profile](../profile/index.md) |
-| operation cancel | Aborting a background operation |
-| operation forget | Removing a background operation from history |
-| operation get | Background operation status |
+| operation cancel | Aborting background operations |
+| operation forget | Deleting background operations from history |
+| operation get | Status of background operations |
 | operation list | List of background operations |
 | [scheme describe](../commands/scheme-describe.md) | Description of a data schema object |
 | [scheme ls](../commands/scheme-ls.md) | List of data schema objects |
@@ -66,9 +66,16 @@ Any command can be run from the command line with the `--help` option to get hel
 | [tools dump](../export_import/tools_dump.md) | Dumping a directory or table to the file system |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |
 | [tools restore](../export_import/tools_restore.md) | Restoring data from the file system |
+| [topic create](../topic-create.md) | Creating a topic |
+| [topic alter](../topic-alter.md) | Updating topic parameters and consumers |
+| [topic drop](../topic-drop.md) | Deleting a topic |
+| [topic consumer add](../topic-consumer-add.md) | Adding a consumer to a topic |
+| [topic consumer drop](../topic-consumer-drop.md) | Deleting a consumer from a topic |
+| [topic read](../topic-read.md) | Reading messages from a topic |
+| [topic write](../topic-write.md) | Writing messages to a topic |
 {% if ydb-cli == "ydb" %}
-[update](../commands/service.md) | Updating the {{ ydb-short-name }} CLI
-[version](../commands/service.md) | Displaying the version of the {{ ydb-short-name }} CLI
+[update](../commands/service.md) | Update the {{ ydb-short-name }} CLI
+[version](../commands/service.md) | Output details about the {{ ydb-short-name }} CLI version
 {% endif %}
-[workload](../commands/workload/index.md) | Generating YQL load | Running a YQL script (with streaming support)
+[workload](../commands/workload/index.md) | Generate the yql workload | Execute a YQL script (with streaming support)
 

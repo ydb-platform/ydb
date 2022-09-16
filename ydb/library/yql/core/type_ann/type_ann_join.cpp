@@ -522,6 +522,159 @@ namespace NTypeAnnImpl {
         }
     }
 
+
+    IGraphTransformer::TStatus GraceJoinCoreWrapperImp(const TExprNode::TPtr& input, const TMultiExprType& leftTupleType, const TMultiExprType& rightTupleType, TContext& ctx) {
+
+        if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto joinKind = input->Child(2)->Content();
+
+        const auto& leftKeyColumns = *input->Child(3);
+        const auto& rightKeyColumns = *input->Child(4);
+
+        if (!EnsureTupleOfAtoms(leftKeyColumns, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTupleOfAtoms(rightKeyColumns, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+      
+
+        const auto& leftRenames = *input->Child(5);
+        const auto& rightRenames = *input->Child(6);
+
+        if (!EnsureTupleOfAtoms(leftRenames, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (leftRenames.ChildrenSize() % 2 != 0) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(leftRenames.Pos()), TStringBuilder() << "Expected even count of atoms"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTupleOfAtoms(rightRenames, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (rightRenames.ChildrenSize() % 2 != 0) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(rightRenames.Pos()), TStringBuilder() << "Expected even count of atoms"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto outputSize = (leftRenames.ChildrenSize() + rightRenames.ChildrenSize())  / 2;
+        TVector<const TTypeAnnotationNode*> resultItems;
+        resultItems.resize(outputSize);
+
+        THashSet<TStringBuf> outputColumns;
+        outputColumns.reserve(outputSize);
+
+        for (ui32 i = 0; i < leftRenames.ChildrenSize(); i += 2) {
+            const auto oldName = leftRenames.Child(i);
+            const auto newName = leftRenames.Child(i + 1);
+
+            const auto oldPos = GetFieldPosition(leftTupleType, oldName->Content());
+            if (!oldPos) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(oldName->Pos()), TStringBuilder() << "Unknown column: " << oldName->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (newName->Content().empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), "Empty column is not allowed"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!outputColumns.emplace(newName->Content()).second) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), TStringBuilder() << "Duplicate output field: " << newName->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto columnType = GetFieldType(leftTupleType, *oldPos);
+
+            if (ui32 index; !TryFromString(newName->Content(), index) || index >= resultItems.size()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), TStringBuilder() << "Invalid output field index: " << newName->Content()));
+                return IGraphTransformer::TStatus::Error;
+            } else {
+                    resultItems[index] = columnType;
+            }
+            
+        }
+
+        for (ui32 i = 0; i < rightRenames.ChildrenSize(); i += 2) {
+            const auto oldName = rightRenames.Child(i);
+            const auto newName = rightRenames.Child(i + 1);
+
+            const auto oldPos =  GetFieldPosition(rightTupleType, oldName->Content());
+            if (!oldPos) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(oldName->Pos()), TStringBuilder() << "Unknown column: " << oldName->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (newName->Content().empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), "Empty column is not allowed"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!outputColumns.emplace(newName->Content()).second) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), TStringBuilder() << "Duplicate output field: " << newName->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto columnType =  GetFieldType(rightTupleType, *oldPos);
+            if (joinKind == "Left" && !columnType->IsOptionalOrNull()) {
+                columnType = ctx.Expr.MakeType<TOptionalExprType>(columnType);
+            }
+
+            if (ui32 index; !TryFromString(newName->Content(), index) || index >= resultItems.size()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), TStringBuilder() << "Invalid output field index: " << newName->Content()));
+                return IGraphTransformer::TStatus::Error;
+            } else {
+                resultItems[index] = columnType;
+            }
+            
+        }
+
+        const auto resultItemType = ctx.Expr.MakeType<TMultiExprType>(resultItems);
+        if (!resultItemType->Validate(input->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(resultItemType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+
+    IGraphTransformer::TStatus GraceJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+ 
+        if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* leftItemType = nullptr;
+        if (!EnsureNewSeqType<true>(input->Head(), ctx.Expr, &leftItemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* rightItemType = nullptr;
+        if (!EnsureNewSeqType<true>(*input->Child(1), ctx.Expr, &rightItemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if ( !EnsureWideFlowType(*input->Child(0), ctx.Expr) ) {
+            return IGraphTransformer::TStatus::Error;           
+        }
+
+        if ( !EnsureWideFlowType(*input->Child(1), ctx.Expr) ) {
+            return IGraphTransformer::TStatus::Error;           
+        }
+
+         return GraceJoinCoreWrapperImp(input, *leftItemType->Cast<TMultiExprType>(), *rightItemType->Cast<TMultiExprType>(), ctx);
+
+    }
+
+
     template<class TInputType>
     IGraphTransformer::TStatus CommonJoinCoreWrapperT(const TExprNode::TPtr& input, const TInputType& inputItemType, TContext& ctx) {
         constexpr bool ByStruct = std::is_same<TInputType, TStructExprType>::value;

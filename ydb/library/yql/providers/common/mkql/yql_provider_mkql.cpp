@@ -1435,7 +1435,43 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.MapJoinCore(list, dict, joinKind, leftKeyColumns, leftRenames, rightRenames, returnType);
     });
 
-// TODO: Add GraceJoinCore callable here
+    AddCallable("GraceJoinCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto flowLeft = MkqlBuildExpr(*node.Child(0), ctx);
+        const auto flowRight = MkqlBuildExpr(*node.Child(1), ctx);
+        const auto joinKind = GetJoinKind(node, node.Child(2)->Content());
+
+        const auto outputItemType = GetSeqItemType(node.GetTypeAnn());
+
+        std::vector<ui32> leftKeyColumns, rightKeyColumns, leftRenames, rightRenames;
+        const auto leftItemType = GetSeqItemType(node.Child(0)->GetTypeAnn());
+        const auto rightItemType = GetSeqItemType(node.Child(1)->GetTypeAnn());
+
+        if (leftItemType->GetKind() != ETypeAnnotationKind::Multi ||
+            rightItemType->GetKind() != ETypeAnnotationKind::Multi ) {
+            ythrow TNodeException(node) << "Wrong GraceJoinCore input item type: " << *leftItemType << " " << *rightItemType;
+
+        }
+
+        if (outputItemType->GetKind() != ETypeAnnotationKind::Multi ) {
+            ythrow TNodeException(node) << "Wrong GraceJoinCore output item type: " << *outputItemType;
+
+        }
+
+        const auto leftTupleType = leftItemType->Cast<TMultiExprType>();
+        const auto rightTupleType = leftItemType->Cast<TMultiExprType>();
+        const auto outputTupleType = outputItemType->Cast<TMultiExprType>();
+
+        node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetFieldPosition(*leftTupleType, child.Content())); });
+        node.Child(4)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetFieldPosition(*rightTupleType, child.Content())); });
+        bool s = false;
+        node.Child(5)->ForEachChild([&](const TExprNode& child){ leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *leftTupleType : *outputTupleType, child.Content())); });
+        s = false;
+        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightRenames.emplace_back(*GetFieldPosition((s = !s) ?  *rightTupleType : *outputTupleType, child.Content())); });
+
+        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType);
+    });
+
 
     AddCallable("CommonJoinCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);

@@ -595,17 +595,8 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
 EFetchResult GraceJoinState::DoCalculateWrapper(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
 
-/*        
-            const auto statePtr = static_cast<TState*>(state.AsBoxed().Get());
 
-            auto & JoinCompleted = statePtr->State->JoinCompleted;
-            auto & LeftPacker = statePtr->State->LeftPacker;
-            auto & RightPacker = statePtr->State->RightPacker;
-            auto & JoinedTablePtr = statePtr->State->JoinedTablePtr;
-            auto & JoinedTuple = statePtr->State->JoinedTuple;
-*/
-
-            while (!*JoinCompleted) {
+             while (!*JoinCompleted) {
 
                 const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
                 const NKikimr::NMiniKQL::EFetchResult resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
@@ -624,7 +615,7 @@ EFetchResult GraceJoinState::DoCalculateWrapper(TComputationContext& ctx, NUdf::
                     return EFetchResult::Yield;
                 }
 
-                if (resultRight == EFetchResult::Finish && resultRight == EFetchResult::Finish && !*JoinCompleted) {
+                if (resultRight == EFetchResult::Finish && resultLeft == EFetchResult::Finish && !*JoinCompleted) {
                     *JoinCompleted = true;
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind);
                     JoinedTablePtr->ResetIterator();

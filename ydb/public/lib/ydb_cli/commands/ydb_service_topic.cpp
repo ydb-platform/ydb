@@ -38,7 +38,6 @@ namespace NYdb::NConsoleClient {
             std::pair<NTopic::EMeteringMode, TString>(NTopic::EMeteringMode::RequestUnits, "Read/write operations valued in request units, storage usage on hourly basis."),
         };
 
-        // TODO(shmel1k@): improve docs
         THashMap<ETopicMetadataField, TString> TopicMetadataFieldsDescriptions = {
             {ETopicMetadataField::Body, "Message data"},
             {ETopicMetadataField::WriteTime, "Message write time, a UNIX timestamp the message was written to server."},
@@ -78,6 +77,21 @@ namespace NYdb::NConsoleClient {
 
         bool IsStreamingFormat(EMessagingFormat format) {
             return format == EMessagingFormat::NewlineDelimited || format == EMessagingFormat::Concatenated;
+        }
+
+        ELogPriority VerbosityLevelToELogPriority(TClientCommand::TConfig::EVerbosityLevel lvl) {
+            switch (lvl) {
+                case TClientCommand::TConfig::EVerbosityLevel::NONE:
+                    return ELogPriority::TLOG_EMERG;
+                case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
+                    return ELogPriority::TLOG_DEBUG;
+                case TClientCommand::TConfig::EVerbosityLevel::INFO:
+                    return ELogPriority::TLOG_INFO;
+                case TClientCommand::TConfig::EVerbosityLevel::WARN:
+                    return ELogPriority::TLOG_WARNING;
+                default:
+                    return ELogPriority::TLOG_EMERG;
+            }
         }
     } // namespace
 
@@ -595,7 +609,8 @@ namespace NYdb::NConsoleClient {
     int TCommandTopicRead::Run(TConfig& config) {
         ValidateConfig();
 
-        auto driver = std::make_unique<TDriver>(CreateDriver(config));
+        auto driver =
+            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
@@ -725,7 +740,8 @@ namespace NYdb::NConsoleClient {
     int TCommandTopicWrite::Run(TConfig& config) {
         SetInterruptHandlers();
 
-        auto driver = std::make_unique<TDriver>(CreateDriver(config));
+        auto driver =
+            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
         TTopicInitializationChecker checker = TTopicInitializationChecker(topicClient);
         checker.CheckTopicExistence(TopicName);

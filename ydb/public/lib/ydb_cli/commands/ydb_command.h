@@ -5,6 +5,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
+#include <library/cpp/logger/backend.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -16,6 +18,10 @@ public:
         const TString& description = TString()
     );
     TDriver CreateDriver(TConfig& config);
+    TDriver CreateDriver(TConfig& config, THolder<TLogBackend>&& loggingBackend);
+
+private:
+    TDriverConfig CreateDriverConfig(TConfig& config);
 };
 
 class TYdbSimpleCommand : public TYdbCommand {

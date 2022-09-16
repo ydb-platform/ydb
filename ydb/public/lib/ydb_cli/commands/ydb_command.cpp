@@ -8,7 +8,7 @@ TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TStrin
     :TClientCommand(name, aliases, description)
 {}
 
-TDriver TYdbCommand::CreateDriver(TConfig& config) {
+TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(config.Address)
         .SetDatabase(config.Database)
@@ -16,6 +16,18 @@ TDriver TYdbCommand::CreateDriver(TConfig& config) {
     if (config.EnableSsl) {
         driverConfig.UseSecureConnection(config.CaCerts);
     }
+
+    return driverConfig;
+}
+
+TDriver TYdbCommand::CreateDriver(TConfig& config) {
+    return TDriver(CreateDriverConfig(config));
+}
+
+TDriver TYdbCommand::CreateDriver(TConfig& config, THolder<TLogBackend>&& loggingBackend) {
+    auto driverConfig = CreateDriverConfig(config);
+    driverConfig.SetLog(std::move(loggingBackend));
+
     return TDriver(driverConfig);
 }
 

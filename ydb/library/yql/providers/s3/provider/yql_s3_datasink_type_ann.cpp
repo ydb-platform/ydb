@@ -162,14 +162,20 @@ private:
             return TStatus::Error;
         }
 
-        if (const auto keysCount = input->Child(TS3SinkOutput::idx_KeyColumns)->ChildrenSize()) {
-            const auto source = input->Child(TS3SinkOutput::idx_Input);
-            const auto itemType = source->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
-            if (!EnsureStructType(source->Pos(), *itemType, ctx)) {
+        const auto source = input->Child(TS3SinkOutput::idx_Input);
+        const auto itemType = source->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
+        if (!EnsureStructType(source->Pos(), *itemType, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto structType = itemType->Cast<TStructExprType>();
+        const auto keysCount = input->Child(TS3SinkOutput::idx_KeyColumns)->ChildrenSize();
+
+        if (const auto format = input->Child(TS3SinkOutput::idx_Format); keysCount) {
+            if (format->IsAtom({"raw","json_list"})) {
+                ctx.AddError(TIssue(ctx.GetPosition(format->Pos()), TStringBuilder() << "Partitioned isn't supporter for " << format->Content() << " output format."));
                 return TStatus::Error;
             }
-
-            const auto structType = itemType->Cast<TStructExprType>();
             for (auto i = 0U; i < keysCount; ++i) {
                 const auto key = input->Child(TS3SinkOutput::idx_KeyColumns)->Child(i);
                 if (const auto keyType = structType->FindItemType(key->Content())) {
@@ -185,8 +191,20 @@ private:
                 itemTypes.front() = ctx.MakeType<TDataExprType>(EDataSlot::String);
                 input->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TTupleExprType>(itemTypes)));
             }
-        } else
+        } else {
+            if (format->IsAtom("raw")) {
+                if (const auto width = structType->GetSize(); width > 1U) {
+                    ctx.AddError(TIssue(ctx.GetPosition(format->Pos()), TStringBuilder() << "Expected single column for " << format->Content() << " output format, but got " << width));
+                    return TStatus::Error;
+                }
+
+                if (!EnsureDataType(format->Pos(), *structType->GetItems().front()->GetItemType(), ctx)) {
+                    return TStatus::Error;
+                }
+            }
+
             input->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
+        }
 
         return TStatus::Ok;
     }

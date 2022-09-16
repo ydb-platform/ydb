@@ -423,7 +423,7 @@ TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(THolder<TEvInterconnect::
     for (const NActors::TEvInterconnect::TNodeInfo& info : NodesInfoReply->Nodes) {
         HostNames.emplace(info.NodeId, info.Host);
         auto insRes = MinNodeIdByHost.insert(std::make_pair(info.Host, info.NodeId));
-        if (insRes.second) {
+        if (!insRes.second) {
             if (insRes.first->second > info.NodeId) {
                 insRes.first->second = info.NodeId;
             }

@@ -270,10 +270,16 @@ public:
                 continue;
             }
 
+            auto format = ExtractFormat(settings);
+            if (!format) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Ref().Child(4)->Pos()), "No read format specified."));
+                return TStatus::Error;
+            }
+
             TExprNode::TPtr s3Object;
             s3Object = Build<TS3Object>(ctx, object.Pos())
                     .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
-                    .Format(ExtractFormat(settings))
+                    .Format(std::move(format))
                     .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
 

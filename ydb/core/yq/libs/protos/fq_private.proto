@@ -159,6 +159,7 @@ message WriteTaskResultRequest {
 
 message WriteTaskResultResult {
     uint64 request_id = 1;
+    NYql.NDqProto.StatusIds.StatusCode status_code = 2;
 }
 
 message WriteTaskResultResponse {

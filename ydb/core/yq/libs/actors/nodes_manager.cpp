@@ -68,14 +68,14 @@ public:
     static constexpr char ActorName[] = "YQ_NODES_MANAGER";
 
     void PassAway() final {
-        LOG_I("PassAway STOPPED");
+        LOG_I("PassAway, InstanceId: " << InstanceId);
         NActors::IActor::PassAway();
     }
 
     void Bootstrap(const TActorContext&) {
         Become(&TNodesManagerActor::StateFunc);
         ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc();
-        LOG_I("Bootstrap STARTED");
+        LOG_I("Bootstrap, InstanceId: " << InstanceId);
         NodesHealthCheck();
     }
 

@@ -97,11 +97,11 @@ private:
         HasError = true;
     }
 
-    void SendIssuesAndSetErrorFlag(const TIssues& issues) {
+    void SendIssuesAndSetErrorFlag(const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode statusCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
         LOG_E("ControlPlane WriteResult Issues: " << issues.ToString());
         Issues.AddIssues(issues);
         HasError = true;
-        auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, Issues);
+        auto req = MakeHolder<TEvDqFailure>(statusCode, Issues);
         Send(ExecuterId, req.Release());
     }
 
@@ -128,9 +128,13 @@ private:
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) { }
 
     void HandleResponse(NFq::TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
+        auto statusCode = ev->Get()->Result.status_code();
         const auto& issues = ev->Get()->Status.GetIssues();
-        if (issues) {
-            SendIssuesAndSetErrorFlag(issues);
+        if (issues && statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
+            statusCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+        }
+        if (statusCode != NYql::NDqProto::StatusIds::UNSPECIFIED) {
+            SendIssuesAndSetErrorFlag(issues, statusCode);
             return;
         }
 
@@ -243,7 +247,7 @@ private:
         const auto splittedResultSets = rowsSplitter.Split();
 
         if (!splittedResultSets.Success) {
-            SendIssuesAndSetErrorFlag(splittedResultSets.Issues);
+            SendIssuesAndSetErrorFlag(splittedResultSets.Issues, NYql::NDqProto::StatusIds::LIMIT_EXCEEDED);
             return;
         }
 
@@ -278,7 +282,7 @@ private:
         if (OccupiedSpace > ResultBytesLimit) {
             TIssues issues;
             issues.AddIssue(TStringBuilder() << "Can not write results with size > " << ResultBytesLimit << " byte(s)");
-            SendIssuesAndSetErrorFlag(issues);
+            SendIssuesAndSetErrorFlag(issues, NYql::NDqProto::StatusIds::LIMIT_EXCEEDED);
             return;
         }
 

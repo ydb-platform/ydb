@@ -1,12 +1,12 @@
 #pragma once
 
-#include <library/cpp/actors/util/rope.h>
+#include <library/cpp/actors/util/contiguous_data.h>
 
 #include "shared_data.h"
 
 namespace NActors {
 
-class TRopeSharedDataBackend : public IRopeChunkBackend {
+class TRopeSharedDataBackend : public IContiguousChunk {
     TSharedData Buffer;
 
 public:
@@ -14,18 +14,18 @@ public:
         : Buffer(std::move(buffer))
     {}
 
-    TData GetData() const override {
+    TContiguousSpan GetData() const override {
         return {Buffer.data(), Buffer.size()};
     }
 
-    TMutData GetDataMut() override {
+    TMutableContiguousSpan GetDataMut() override {
         if(Buffer.IsShared()) {
             Buffer = TSharedData::Copy(Buffer.data(), Buffer.size());
         }
         return {Buffer.mutable_data(), Buffer.size()};
     }
 
-    TMutData UnsafeGetDataMut() override {
+    TMutableContiguousSpan UnsafeGetDataMut() override {
         return {const_cast<char *>(Buffer.data()), Buffer.size()};
     }
 

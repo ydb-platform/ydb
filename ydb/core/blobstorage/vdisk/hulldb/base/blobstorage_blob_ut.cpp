@@ -3,7 +3,7 @@
 
 namespace NKikimr {
 
-    TIntrusivePtr<IRopeChunkBackend> AllocateArena() {
+    TIntrusivePtr<IContiguousChunk> AllocateArena() {
         return TRopeAlignedBuffer::Allocate(65536);
     }
 

@@ -14,6 +14,7 @@ target_link_libraries(core-blobstorage-crypto PUBLIC
   yutil
   contrib-libs-t1ha
   library-cpp-sse
+  cpp-actors-util
 )
 target_sources(core-blobstorage-crypto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha.cpp

@@ -9,12 +9,12 @@
 
 namespace NKikimr {
 
-    class TRopeArenaBackend : public IRopeChunkBackend {
-        static constexpr size_t Capacity = 2 * 1024 * 1024 - 4096 /* lfalloc overhead */ - sizeof(IRopeChunkBackend);
+    class TRopeArenaBackend : public IContiguousChunk {
+        static constexpr size_t Capacity = 2 * 1024 * 1024 - 4096 /* lfalloc overhead */ - sizeof(IContiguousChunk);
         char Data[Capacity];
 
     public:
-        TData GetData() const override {
+        TContiguousSpan GetData() const override {
             return {Data, Capacity};
         }
 
@@ -22,11 +22,11 @@ namespace NKikimr {
             return Capacity;
         }
 
-        TMutData GetDataMut() override {
+        TMutableContiguousSpan GetDataMut() override {
             return {Data, Capacity};
         }
 
-        static TIntrusivePtr<IRopeChunkBackend> Allocate() {
+        static TIntrusivePtr<IContiguousChunk> Allocate() {
             return MakeIntrusive<TRopeArenaBackend>();
         }
     };

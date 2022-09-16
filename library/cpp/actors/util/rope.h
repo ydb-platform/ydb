@@ -13,33 +13,9 @@
 //#include "rope_cont_list.h"
 //#include "rope_cont_deque.h"
 
-struct IRopeChunkBackend : TThrRefBase {
-    using TData = std::tuple<const char*, size_t>;
-    using TMutData = std::tuple<char*, size_t>;
-    virtual ~IRopeChunkBackend() = default;
-    /**
-     * Should give immutable access to data
-     */
-    virtual TData GetData() const = 0;
-    /**
-     * Should give mutable access to underlying data
-     * If data is shared - data should be copied
-     * E.g. for TString str.Detach() should be used
-     */
-    virtual TMutData GetDataMut() = 0;
-    /**
-     * Should give mutable access to undelying data as fast as possible
-     * Even if data is shared this property should be ignored
-     * E.g. in TString const_cast<char *>(str.data()) should be used
-     */
-    virtual TMutData UnsafeGetDataMut() {
-        return GetDataMut();
-    }
-    virtual size_t GetCapacity() const = 0;
-    using TPtr = TIntrusivePtr<IRopeChunkBackend>;
-};
+#include "contiguous_data.h"
 
-class TRopeAlignedBuffer : public IRopeChunkBackend {
+class TRopeAlignedBuffer : public IContiguousChunk {
     static constexpr size_t Alignment = 16;
     static constexpr size_t MallocAlignment = sizeof(size_t);
 
@@ -78,11 +54,11 @@ public:
         Y_UNUSED(ptr);
     }
 
-    TData GetData() const override {
+    TContiguousSpan GetData() const override {
         return {Data + Offset, Size};
     }
 
-    TMutData GetDataMut() override {
+    TMutableContiguousSpan GetDataMut() override {
         return {Data + Offset, Size};
     }
 
@@ -117,12 +93,6 @@ namespace NRopeDetails {
         using TListIterator = typename TList::iterator;
     };
 
-    template<typename TContainer>
-    struct TContainerTraits {
-        static char* UnsafeGetDataMut(const TContainer& backend) {
-            return const_cast<char*>(backend.data());
-        }
-    };
 } // NRopeDetails
 
 class TRopeArena;
@@ -133,332 +103,7 @@ struct always_false : std::false_type {};
 class TRope {
     friend class TRopeArena;
 
-    struct TChunk
-    {
-        class TBackend {
-            enum class EType : uintptr_t {
-                STRING,
-                ROPE_CHUNK_BACKEND,
-            };
-
-            uintptr_t Owner = 0; // lower bits contain type of the owner
-
-        public:
-            TBackend() = default;
-
-            TBackend(const TBackend& other)
-                : Owner(Clone(other.Owner))
-            {}
-
-            TBackend(TBackend&& other)
-                : Owner(std::exchange(other.Owner, 0))
-            {}
-
-            TBackend(TString s)
-                : Owner(Construct<TString>(EType::STRING, std::move(s)))
-            {}
-
-            TBackend(IRopeChunkBackend::TPtr backend)
-                : Owner(Construct<IRopeChunkBackend::TPtr>(EType::ROPE_CHUNK_BACKEND, std::move(backend)))
-            {}
-
-            ~TBackend() {
-                if (Owner) {
-                    Destroy(Owner);
-                }
-            }
-
-            TBackend& operator =(const TBackend& other) {
-                if (Owner) {
-                    Destroy(Owner);
-                }
-                Owner = Clone(other.Owner);
-                return *this;
-            }
-
-            TBackend& operator =(TBackend&& other) {
-                if (Owner) {
-                    Destroy(Owner);
-                }
-                Owner = std::exchange(other.Owner, 0);
-                return *this;
-            }
-
-            bool operator ==(const TBackend& other) const {
-                return Owner == other.Owner;
-            }
-
-            const void *UniqueId() const {
-                return reinterpret_cast<const void*>(Owner);
-            }
-
-            const IRopeChunkBackend::TData GetData() const {
-                return Visit(Owner, [](EType, auto& value) -> IRopeChunkBackend::TData {
-                    using T = std::decay_t<decltype(value)>;
-                    if constexpr (std::is_same_v<T, TString>) {
-                        return {value.data(), value.size()};
-                    } else if constexpr (std::is_same_v<T, IRopeChunkBackend::TPtr>) {
-                        return value->GetData();
-                    } else {
-                        return {};
-                    }
-                });
-            }
-
-            const IRopeChunkBackend::TMutData GetDataMut() {
-                return Visit(Owner, [](EType, auto& value) -> IRopeChunkBackend::TMutData {
-                    using T = std::decay_t<decltype(value)>;
-                    if constexpr (std::is_same_v<T, TString>) {
-                        return {value.Detach(), value.size()};
-                    } else if constexpr (std::is_same_v<T, IRopeChunkBackend::TPtr>) {
-                        return value->GetDataMut();
-                    } else {
-                        return {};
-                    }
-                });
-            }
-
-            const IRopeChunkBackend::TMutData UnsafeGetDataMut() const {
-                return Visit(Owner, [](EType, auto& value) -> IRopeChunkBackend::TMutData {
-                    using T = std::decay_t<decltype(value)>;
-                    if constexpr (std::is_same_v<T, TString>) {
-                        return {const_cast<char*>(value.data()), value.size()};
-                    } else if constexpr (std::is_same_v<T, IRopeChunkBackend::TPtr>) {
-                        return value->UnsafeGetDataMut();
-                    } else {
-                        return {};
-                    }
-                });
-            }
-
-            size_t GetCapacity() const {
-                return Visit(Owner, [](EType, auto& value) {
-                    using T = std::decay_t<decltype(value)>;
-                    if constexpr (std::is_same_v<T, TString>) {
-                        return value.capacity();
-                    } else if constexpr (std::is_same_v<T, IRopeChunkBackend::TPtr>) {
-                        return value->GetCapacity();
-                    } else {
-                        Y_FAIL();
-                    }
-                });
-            }
-
-            template <class TType>
-            bool ContainsNativeType() const {
-                return Visit(Owner, [](EType, auto& value) {
-                    using T = std::decay_t<decltype(value)>;
-                    return std::is_same_v<T, TType>;
-                });
-            }
-
-            template <class TResult>
-            TResult GetRaw() const {
-                return Visit(Owner, [](EType, auto& value) {
-                    using T = std::decay_t<decltype(value)>;
-                    if constexpr (std::is_same_v<T, TResult>) {
-                        return value;
-                    } else {
-                        Y_FAIL();
-                        return TResult{}; // unreachable
-                    }
-                });
-            }
-
-            explicit operator bool() const {
-                return Owner;
-            }
-
-        private:
-            static constexpr uintptr_t TypeMask = (1 << 3) - 1;
-            static constexpr uintptr_t ValueMask = ~TypeMask;
-
-            template<typename T>
-            struct TObjectHolder {
-                struct TWrappedObject : TThrRefBase {
-                    T Value;
-                    TWrappedObject(T&& value)
-                        : Value(std::move(value))
-                    {}
-                };
-                TIntrusivePtr<TWrappedObject> Object;
-
-                TObjectHolder(T&& object)
-                    : Object(MakeIntrusive<TWrappedObject>(std::move(object)))
-                {}
-            };
-
-            template<typename TObject>
-            static uintptr_t Construct(EType type, TObject object) {
-                if constexpr (sizeof(TObject) <= sizeof(uintptr_t)) {
-                    uintptr_t res = 0;
-                    new(&res) TObject(std::move(object));
-                    Y_VERIFY_DEBUG((res & ValueMask) == res);
-                    return res | static_cast<uintptr_t>(type);
-                } else {
-                    return Construct<TObjectHolder<TObject>>(type, TObjectHolder<TObject>(std::move(object)));
-                }
-            }
-
-            template<typename TOwner, typename TCallback, bool IsConst = std::is_const_v<TOwner>>
-            static std::invoke_result_t<TCallback, EType, std::conditional_t<IsConst, const TString&, TString&>> VisitRaw(TOwner& origValue, TCallback&& callback) {
-                Y_VERIFY_DEBUG(origValue);
-                const EType type = static_cast<EType>(origValue & TypeMask);
-                uintptr_t value = origValue & ValueMask;
-                // bring object type back
-                Y_SCOPE_EXIT(&value, &origValue, type){
-                    if constexpr(!IsConst) {
-                        origValue = value | static_cast<uintptr_t>(type);
-                    } else {
-                        Y_UNUSED(value);
-                        Y_UNUSED(origValue);
-                        Y_UNUSED(type);
-                    }
-                };
-                auto caller = [&](auto& value) { return std::invoke(std::forward<TCallback>(callback), type, value); };
-                auto wrapper = [&](auto& value) {
-                    using T = std::decay_t<decltype(value)>;
-                    if constexpr (sizeof(T) <= sizeof(uintptr_t)) {
-                        return caller(value);
-                    } else {
-                        return caller(reinterpret_cast<std::conditional_t<IsConst, const TObjectHolder<T>&, TObjectHolder<T>&>>(value));
-                    }
-                };
-                switch (type) {
-                    case EType::STRING:             return wrapper(reinterpret_cast<std::conditional_t<IsConst, const TString&, TString&>>(value));
-                    case EType::ROPE_CHUNK_BACKEND: return wrapper(reinterpret_cast<std::conditional_t<IsConst, const IRopeChunkBackend::TPtr&, IRopeChunkBackend::TPtr&>>(value));
-                }
-                Y_FAIL("Unexpected type# %" PRIu64, static_cast<ui64>(type));
-            }
-
-            template<typename TOwner, typename TCallback, bool IsConst = std::is_const_v<TOwner>>
-            static std::invoke_result_t<TCallback, EType, std::conditional_t<IsConst, const TString&, TString&>> Visit(TOwner& value, TCallback&& callback) {
-                return VisitRaw(value, [&](EType type, auto& value) {
-                    return std::invoke(std::forward<TCallback>(callback), type, Unwrap(value));
-                });
-            }
-
-            template<typename T> static T& Unwrap(T& object) { return object; }
-            template<typename T> static T& Unwrap(TObjectHolder<T>& holder) { return holder.Object->Value; }
-            template<typename T> static const T& Unwrap(const TObjectHolder<T>& holder) { return holder.Object->Value; }
-
-            template<typename TOwner>
-            static uintptr_t Clone(TOwner& value) {
-                return VisitRaw(value, [](EType type, auto& value) { return Construct(type, value); });
-            }
-
-            template<typename TOwner>
-            static void Destroy(TOwner& value) {
-                VisitRaw(value, [](EType, auto& value) { CallDtor(value); });
-            }
-
-            template<typename T>
-            static void CallDtor(T& value) {
-                value.~T();
-            }
-        };
-
-        TBackend Backend; // who actually holds the data
-        const char *Begin; // data start
-        const char *End; // data end
-
-        static constexpr struct TSlice {} Slice{};
-
-        TChunk()
-            : Begin(nullptr)
-            , End(nullptr)
-        {}
-
-        template<typename T>
-        TChunk(T&& backend, const IRopeChunkBackend::TData& data)
-            : Backend(std::forward<T>(backend))
-            , Begin(std::get<0>(data))
-            , End(Begin + std::get<1>(data))
-        {
-            Y_VERIFY_DEBUG(Begin != End);
-        }
-
-        TChunk(TString s)
-            : Backend(std::move(s))
-        {
-            size_t size;
-            std::tie(Begin, size) = Backend.GetData();
-            End = Begin + size;
-        }
-
-        TChunk(IRopeChunkBackend::TPtr backend)
-            : TChunk(backend, backend->GetData())
-        {}
-
-        TChunk(TSlice, const char *data, size_t size, const TChunk& from)
-            : TChunk(from.Backend, {data, size})
-        {}
-
-        TChunk(TSlice, const char *begin, const char *end, const TChunk& from)
-            : TChunk(Slice, begin, end - begin, from)
-        {}
-
-        explicit TChunk(const TChunk& other)
-            : Backend(other.Backend)
-            , Begin(other.Begin)
-            , End(other.End)
-        {}
-
-        TChunk(TChunk&& other)
-            : Backend(std::move(other.Backend))
-            , Begin(other.Begin)
-            , End(other.End)
-        {}
-
-        TChunk& operator =(const TChunk&) = default;
-        TChunk& operator =(TChunk&&) = default;
-
-        template <class TType>
-        bool ContainsNativeType() const {
-            return Backend.ContainsNativeType<TType>();
-        }
-
-        template <class TResult>
-        TResult GetRaw() const {
-            return Backend.GetRaw<TResult>();
-        }
-
-        bool OwnsWholeContainer() const {
-            auto [data, size] = Backend.GetData();
-            return size == GetSize();
-        }
-
-        size_t GetSize() const {
-            return End - Begin;
-        }
-
-        size_t GetCapacity() const {
-            return Backend.GetCapacity();
-        }
-
-        char* GetDataMut() {
-            const char* oldBegin = std::get<0>(Backend.GetData());
-            ptrdiff_t offset = Begin - oldBegin;
-            size_t size = GetSize();
-            char* newBegin = std::get<0>(Backend.GetDataMut());
-            Begin = newBegin + offset;
-            End = Begin + size;
-            return newBegin + offset;
-        }
-
-        char* UnsafeGetDataMut() {
-            const char* oldBegin = std::get<0>(Backend.GetData());
-            ptrdiff_t offset = Begin - oldBegin;
-            size_t size = GetSize();
-            char* newBegin = std::get<0>(Backend.UnsafeGetDataMut());
-            Begin = newBegin + offset;
-            End = Begin + size;
-            return newBegin + offset;
-        }
-
-    };
-
-    using TChunkList = NRopeDetails::TChunkList<TChunk>;
+    using TChunkList = NRopeDetails::TChunkList<TContiguousData>;
 
 private:
     // we use list here to store chain items as we have to keep valid iterators when erase/insert operations are invoked;
@@ -666,13 +311,13 @@ private:
             return Iter;
         }
 
-        const TChunk& GetChunk() const {
+        const TContiguousData& GetChunk() const {
             CheckValid();
             return *Iter;
         }
 
         template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
-        TChunk& GetChunk() {
+        TContiguousData& GetChunk() {
             CheckValid();
             return *Iter;
         }
@@ -710,6 +355,14 @@ public:
     TRope() = default;
     TRope(const TRope& rope) = default;
 
+    TRope(const TContiguousData& data) {
+        Chain.PutToEnd(data);
+    }
+
+    TRope(TContiguousData&& data) {
+        Chain.PutToEnd(std::move(data));
+    }
+
     TRope(TRope&& rope)
         : Chain(std::move(rope.Chain))
         , Size(std::exchange(rope.Size, 0))
@@ -727,8 +380,13 @@ public:
         }
     }
 
-    TRope(IRopeChunkBackend::TPtr item) {
-        std::tie(std::ignore, Size) = item->GetData();
+    explicit TRope(NActors::TSharedData s) {
+        Size = s.size();
+        Chain.PutToEnd(std::move(s));
+    }
+
+    TRope(IContiguousChunk::TPtr item) {
+        Size = item->GetData().size();
         Chain.PutToEnd(std::move(item));
     }
 
@@ -742,13 +400,13 @@ public:
 
         while (begin.Iter != end.Iter) {
             const size_t size = begin.ContiguousSize();
-            Chain.PutToEnd(TChunk::Slice, begin.ContiguousData(), size, begin.GetChunk());
+            Chain.PutToEnd(TContiguousData::Slice, begin.ContiguousData(), size, begin.GetChunk());
             begin.AdvanceToNextContiguousBlock();
             Size += size;
         }
 
         if (begin != end && end.PointsToChunkMiddle()) {
-            Chain.PutToEnd(TChunk::Slice, begin.Ptr, end.Ptr, begin.GetChunk());
+            Chain.PutToEnd(TContiguousData::Slice, begin.Ptr, end.Ptr, begin.GetChunk());
             Size += end.Ptr - begin.Ptr;
         }
     }
@@ -869,7 +527,7 @@ public:
                     return;
                 }
             }
-            dest->Chain.PutToEnd(TChunk::Slice, first->Begin, first->Begin + num, *first);
+            dest->Chain.PutToEnd(TContiguousData::Slice, first->Begin, first->Begin + num, *first);
             first->Begin += num;
         }
     }
@@ -887,14 +545,14 @@ public:
 
         // check if we have to split the block
         if (pos.PointsToChunkMiddle()) {
-            pos.Iter = Chain.InsertBefore(pos.Iter, TChunk::Slice, pos->Begin, pos.Ptr, pos.GetChunk());
+            pos.Iter = Chain.InsertBefore(pos.Iter, TContiguousData::Slice, pos->Begin, pos.Ptr, pos.GetChunk());
             ++pos.Iter;
             pos->Begin = pos.Ptr;
         }
 
         // perform glueing if possible
-        TChunk *ropeLeft = &rope.Chain.GetFirstChunk();
-        TChunk *ropeRight = &rope.Chain.GetLastChunk();
+        TContiguousData *ropeLeft = &rope.Chain.GetFirstChunk();
+        TContiguousData *ropeRight = &rope.Chain.GetLastChunk();
         bool gluedLeft = false, gluedRight = false;
         if (pos.Iter != Chain.begin()) { // glue left part whenever possible
             // obtain iterator to previous chunk
@@ -935,7 +593,7 @@ public:
 
         while (len) {
             Y_VERIFY_DEBUG(Chain);
-            TChunk& item = Chain.GetFirstChunk();
+            TContiguousData& item = Chain.GetFirstChunk();
             const size_t itemSize = item.GetSize();
             if (len >= itemSize) {
                 Chain.EraseFront();
@@ -955,7 +613,7 @@ public:
 
         while (len) {
             Y_VERIFY_DEBUG(Chain);
-            TChunk& item = Chain.GetLastChunk();
+            TContiguousData& item = Chain.GetLastChunk();
             const size_t itemSize = item.GetSize();
             if (len >= itemSize) {
                 Chain.EraseBack();
@@ -1012,7 +670,7 @@ public:
         return xIter.Valid() - yIter.Valid();
     }
 
-    static int Compare(const TRope& x, const TString& y) {
+    static int Compare(const TRope& x, const TContiguousSpan& y) {
         TConstIterator xIter = x.Begin();
         const char* yData = y.data();
         size_t yOffset = 0;
@@ -1027,7 +685,7 @@ public:
         return xIter.Valid() - (yOffset != y.size());
     }
 
-    static int Compare(const TString& x, const TRope& y) {
+    static int Compare(const TContiguousSpan& x, const TRope& y) {
         return -Compare(y, x);
     }
 
@@ -1046,93 +704,14 @@ public:
     TResult ExtractUnderlyingContainerOrCopy() const {
         if (IsContiguous() && GetSize() != 0) {
             const auto& chunk = Begin().GetChunk();
-            if (chunk.ContainsNativeType<TResult>() && chunk.OwnsWholeContainer()) {
-                return chunk.GetRaw<TResult>();
-            }
+            return chunk.ExtractUnderlyingContainerOrCopy<TResult>();
         }
 
         TResult res = TResult::Uninitialized(GetSize());
-        char* data = NRopeDetails::TContainerTraits<TResult>::UnsafeGetDataMut(res);
+        char* data = NContiguousDataDetails::TContainerTraits<TResult>::UnsafeGetDataMut(res);
         Begin().ExtractPlainDataAndAdvance(data, res.size());
         return res;
     }
-
-    class TContiguousSpan;
-    class TMutableContiguousSpan {
-        friend class TContiguousSpan;
-    private:
-        char *Data;
-        size_t Size;
-
-    public:
-        TMutableContiguousSpan(char *data, size_t size)
-            : Data(data)
-            , Size(size)
-        {}
-
-        char *data() {
-            return Data;
-        }
-
-        const char *data() const {
-            return Data;
-        }
-
-        size_t size() const {
-            return Size;
-        }
-
-        char *GetData() {
-            return Data;
-        }
-
-        const char *GetData() const {
-            return Data;
-        }
-
-        size_t GetSize() const {
-            return Size;
-        }
-    };
-
-    class TContiguousSpan {
-    private:
-        const char *Data;
-        size_t Size;
-
-    public:
-        TContiguousSpan(const char *data, size_t size)
-            : Data(data)
-            , Size(size)
-        {}
-
-        TContiguousSpan(const TMutableContiguousSpan& other)
-            : Data(other.Data)
-            , Size(other.Size)
-        {}
-
-        TContiguousSpan& operator =(const TMutableContiguousSpan& other) {
-            Data = other.Data;
-            Size = other.Size;
-            return *this;
-        }
-
-        const char *data() const {
-            return Data;
-        }
-
-        size_t size() const {
-            return Size;
-        }
-
-        const char *GetData() const {
-            return Data;
-        }
-
-        size_t GetSize() const {
-            return Size;
-        }
-    };
 
     void clear() {
         Erase(Begin(), End());
@@ -1170,7 +749,7 @@ public:
             return {nullptr, 0};
         }
         Compact();
-        return {Begin().ContiguousData(), Begin().ContiguousSize()};
+        return Begin()->GetContiguousSpan();
     }
 
     /**
@@ -1182,7 +761,7 @@ public:
             return {nullptr, 0};
         }
         Compact();
-        return {Begin().ContiguousDataMut(), Begin().ContiguousSize()};
+        return Begin()->GetContiguousSpanMut();
     }
 
     /**
@@ -1195,7 +774,7 @@ public:
             return {nullptr, 0};
         }
         Compact();
-        return {Begin().UnsafeContiguousDataMut(), Begin().ContiguousSize()};
+        return Begin()->UnsafeGetContiguousSpanMut();
     }
 
     TString DebugString() const {
@@ -1203,11 +782,16 @@ public:
         s << "{Size# " << Size;
         for (const auto& chunk  : Chain) {
             const char *data;
-            std::tie(data, std::ignore) = chunk.Backend.GetData();
+            data = chunk.Backend.GetData().data();
             s << " [" << chunk.Begin - data << ", " << chunk.End - data << ")@" << chunk.Backend.UniqueId();
         }
         s << "}";
         return s.Str();
+    }
+
+    explicit operator TContiguousData() {
+        Compact();
+        return TContiguousData(Begin().GetChunk());
     }
 
     friend bool operator==(const TRope& x, const TRope& y) { return Compare(x, y) == 0; }
@@ -1217,19 +801,35 @@ public:
     friend bool operator> (const TRope& x, const TRope& y) { return Compare(x, y) >  0; }
     friend bool operator>=(const TRope& x, const TRope& y) { return Compare(x, y) >= 0; }
 
-    friend bool operator==(const TRope& x, const TString& y) { return Compare(x, y) == 0; }
-    friend bool operator!=(const TRope& x, const TString& y) { return Compare(x, y) != 0; }
-    friend bool operator< (const TRope& x, const TString& y) { return Compare(x, y) <  0; }
-    friend bool operator<=(const TRope& x, const TString& y) { return Compare(x, y) <= 0; }
-    friend bool operator> (const TRope& x, const TString& y) { return Compare(x, y) >  0; }
-    friend bool operator>=(const TRope& x, const TString& y) { return Compare(x, y) >= 0; }
+    friend bool operator==(const TRope& x, const TContiguousSpan& y) { return Compare(x, y) == 0; }
+    friend bool operator!=(const TRope& x, const TContiguousSpan& y) { return Compare(x, y) != 0; }
+    friend bool operator< (const TRope& x, const TContiguousSpan& y) { return Compare(x, y) <  0; }
+    friend bool operator<=(const TRope& x, const TContiguousSpan& y) { return Compare(x, y) <= 0; }
+    friend bool operator> (const TRope& x, const TContiguousSpan& y) { return Compare(x, y) >  0; }
+    friend bool operator>=(const TRope& x, const TContiguousSpan& y) { return Compare(x, y) >= 0; }
 
-    friend bool operator==(const TString& x, const TRope& y) { return Compare(x, y) == 0; }
-    friend bool operator!=(const TString& x, const TRope& y) { return Compare(x, y) != 0; }
-    friend bool operator< (const TString& x, const TRope& y) { return Compare(x, y) <  0; }
-    friend bool operator<=(const TString& x, const TRope& y) { return Compare(x, y) <= 0; }
-    friend bool operator> (const TString& x, const TRope& y) { return Compare(x, y) >  0; }
-    friend bool operator>=(const TString& x, const TRope& y) { return Compare(x, y) >= 0; }
+    friend bool operator==(const TContiguousSpan& x, const TRope& y) { return Compare(x, y) == 0; }
+    friend bool operator!=(const TContiguousSpan& x, const TRope& y) { return Compare(x, y) != 0; }
+    friend bool operator< (const TContiguousSpan& x, const TRope& y) { return Compare(x, y) <  0; }
+    friend bool operator<=(const TContiguousSpan& x, const TRope& y) { return Compare(x, y) <= 0; }
+    friend bool operator> (const TContiguousSpan& x, const TRope& y) { return Compare(x, y) >  0; }
+    friend bool operator>=(const TContiguousSpan& x, const TRope& y) { return Compare(x, y) >= 0; }
+
+    // FIXME(innokentii) temporary hack
+    friend bool operator==(const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) == 0; }
+    friend bool operator!=(const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) != 0; }
+    friend bool operator< (const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) <  0; }
+    friend bool operator<=(const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) <= 0; }
+    friend bool operator> (const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) >  0; }
+    friend bool operator>=(const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) >= 0; }
+
+    friend bool operator==(const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) == 0; }
+    friend bool operator!=(const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) != 0; }
+    friend bool operator< (const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) <  0; }
+    friend bool operator<=(const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) <= 0; }
+    friend bool operator> (const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) >  0; }
+    friend bool operator>=(const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) >= 0; }
+
 
 private:
     void Cut(TIterator begin, TIterator end, TRope *target) {
@@ -1242,9 +842,9 @@ private:
             return;
         }
 
-        auto addBlock = [&](const TChunk& from, const char *begin, const char *end) {
+        auto addBlock = [&](const TContiguousData& from, const char *begin, const char *end) {
             if (target) {
-                target->Chain.PutToEnd(TChunk::Slice, begin, end, from);
+                target->Chain.PutToEnd(TContiguousData::Slice, begin, end, from);
                 target->Size += end - begin;
             }
             Size -= end - begin;
@@ -1257,7 +857,7 @@ private:
             const char *firstChunkBegin = begin.PointsToChunkMiddle() ? begin->Begin : nullptr;
             begin->Begin = end.Ptr; // this affects both begin and end iterator pointed values
             if (firstChunkBegin) {
-                Chain.InsertBefore(begin.Iter, TChunk::Slice, firstChunkBegin, begin.Ptr, begin.GetChunk());
+                Chain.InsertBefore(begin.Iter, TContiguousData::Slice, firstChunkBegin, begin.Ptr, begin.GetChunk());
             }
         } else {
             // check the first iterator -- if it starts not from the begin of the block, we have to adjust end of the
@@ -1296,7 +896,7 @@ private:
 };
 
 class TRopeArena {
-    using TAllocateCallback = std::function<TIntrusivePtr<IRopeChunkBackend>()>;
+    using TAllocateCallback = std::function<TIntrusivePtr<IContiguousChunk>()>;
 
     TAllocateCallback Allocator;
     TRope Arena;
@@ -1339,7 +939,7 @@ public:
         return Size;
     }
 
-    void AccountChunk(const TRope::TChunk& chunk) {
+    void AccountChunk(const TContiguousData& chunk) {
         if (AccountedBuffers.insert(chunk.Backend.UniqueId()).second) {
             Size += chunk.GetCapacity();
         }
@@ -1472,7 +1072,7 @@ public:
 
 inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, TRopeArena& arena) {
     TRope res;
-    for (TChunk& chunk : origin.Chain) {
+    for (TContiguousData& chunk : origin.Chain) {
         size_t ratio = chunk.GetSize() * 1024 / chunk.GetCapacity();
         if (ratio < 1024 - worstRatioPer1k) {
             res.Insert(res.End(), arena.CreateRope(chunk.Begin, chunk.GetSize()));
@@ -1482,7 +1082,7 @@ inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, T
     }
     res.Size = origin.Size;
     origin = TRope();
-    for (const TChunk& chunk : res.Chain) {
+    for (const TContiguousData& chunk : res.Chain) {
         arena.AccountChunk(chunk);
     }
     return res;

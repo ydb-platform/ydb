@@ -48,7 +48,7 @@ class TChunkList {
         template<typename... TArgs>
         TItem *PrepareForUse(TArgs&&... args) {
             Y_VERIFY_DEBUG(!IsInUse());
-            static_cast<TChunk&>(*this) = {std::forward<TArgs>(args)...};
+            static_cast<TChunk&>(*this) = TChunk(std::forward<TArgs>(args)...);
             Next = Prev = this;
             Invalidate();
             return this;

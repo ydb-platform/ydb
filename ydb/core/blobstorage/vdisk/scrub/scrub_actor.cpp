@@ -233,7 +233,7 @@ namespace NKikimr {
         }
     }
 
-    TIntrusivePtr<IRopeChunkBackend> TScrubCoroImpl::AllocateRopeArenaChunk() {
+    TIntrusivePtr<IContiguousChunk> TScrubCoroImpl::AllocateRopeArenaChunk() {
         return TRopeAlignedBuffer::Allocate(1 << 20); // 1 MB
     }
 

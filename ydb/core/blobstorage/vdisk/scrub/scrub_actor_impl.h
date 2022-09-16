@@ -168,7 +168,7 @@ namespace NKikimr {
         void HandleScrubAwait(TAutoPtr<IEventHandle> ev);
 
     private:
-        static TIntrusivePtr<IRopeChunkBackend> AllocateRopeArenaChunk();
+        static TIntrusivePtr<IContiguousChunk> AllocateRopeArenaChunk();
     };
 
 } // NKikimr

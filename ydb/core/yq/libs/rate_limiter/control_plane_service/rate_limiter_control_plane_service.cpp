@@ -171,7 +171,7 @@ private:
 
     void ProcessResponse(TRequest& req, TEvents::TEvSchemaCreated::TPtr& ev) {
         TEvRateLimiter::TEvCreateResource::TPtr& originalRequest = std::get<TEvRateLimiter::TEvCreateResource::TPtr>(req.OriginalRequest);
-        if (ev->Get()->Result.IsSuccess()) {
+        if (ev->Get()->Result.IsSuccess() || ev->Get()->Result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
             NActors::TActivationContext::AsActorContext().Send(
                 originalRequest->Sender,
                 new TEvRateLimiter::TEvCreateResourceResponse(

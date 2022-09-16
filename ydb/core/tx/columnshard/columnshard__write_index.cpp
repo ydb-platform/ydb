@@ -64,6 +64,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             for (const auto& cmtd : changes->DataToIndex) {
                 Self->InsertTable->EraseCommitted(dbWrap, cmtd);
                 Self->BlobManager->DeleteBlob(cmtd.BlobId, blobManagerDb);
+                Self->BatchCache.EraseCommitted(cmtd.BlobId);
             }
             if (!changes->DataToIndex.empty()) {
                 Self->UpdateInsertTableCounters();

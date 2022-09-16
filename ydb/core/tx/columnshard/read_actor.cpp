@@ -143,6 +143,7 @@ public:
         ui32 notIndexed = 0;
         for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++notIndexed) {
             const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
+
             CommittedBlobs.emplace(cmtBlob.BlobId);
             WaitCommitted.emplace(cmtBlob, notIndexed);
         }
@@ -152,8 +153,19 @@ public:
             WaitIndexed.insert(blobRange);
         }
 
-        LOG_S_DEBUG("Starting read (" << WaitIndexed.size() << " indexed, " << WaitCommitted.size()
-            << " committed blobs) at tablet " << TabletId);
+        // Add cached batches without read
+        for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
+            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
+            Y_VERIFY(!cmt.empty());
+
+            const NOlap::TCommittedBlob& cmtBlob = cmt.key();
+            ui32 batchNo = cmt.mapped();
+            IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.PlanStep, cmtBlob.TxId);
+        }
+
+        LOG_S_DEBUG("Starting read (" << WaitIndexed.size() << " indexed, "
+            << ReadMetadata->CommittedBlobs.size() << " committed, "
+            << WaitCommitted.size() << " not cached committed) at tablet " << TabletId);
 
         bool earlyExit = false;
         if (Deadline != TInstant::Max()) {

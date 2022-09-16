@@ -40,6 +40,8 @@ IActor* CreateS3Actor(ui64 tabletId, const TActorId& parent, const TString& tier
 #endif
 
 struct TSettings {
+    static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
+
     TControlWrapper BlobWriteGrouppingEnabled;
     TControlWrapper CacheDataAfterIndexing;
     TControlWrapper CacheDataAfterCompaction;
@@ -338,6 +340,7 @@ private:
     ui64 StorePathId = 0;
     ui64 StatsReportRound = 0;
     ui64 BackgroundActivation = 0;
+    ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
@@ -360,6 +363,7 @@ private:
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
+    TBatchCache BatchCache;
     THashMap<TString, TTierConfig> TierConfigs;
     THashSet<NOlap::TUnifiedBlobId> DelayedForgetBlobs;
     TTtl Ttl;

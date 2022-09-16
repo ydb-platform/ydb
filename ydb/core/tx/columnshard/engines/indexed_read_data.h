@@ -81,6 +81,7 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
     ui64 TxId = 0;
     std::shared_ptr<TSelectInfo> SelectInfo;
     std::vector<TCommittedBlob> CommittedBlobs;
+    THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CommittedBatches;
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const TIndexInfo& info)
@@ -194,12 +195,17 @@ public:
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
     TVector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
 
-    void AddNotIndexed(ui32 batchNo, TString serializedBach, ui64 planStep, ui64 txId) {
+    void AddNotIndexed(ui32 batchNo, TString blob, ui64 planStep, ui64 txId) {
+        auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->BlobSchema);
+        AddNotIndexed(batchNo, batch, planStep, txId);
+    }
+
+    void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) {
         Y_VERIFY(batchNo < NotIndexed.size());
         if (!NotIndexed[batchNo]) {
             ++ReadyNotIndexed;
         }
-        NotIndexed[batchNo] = MakeNotIndexedBatch(serializedBach, planStep, txId);
+        NotIndexed[batchNo] = MakeNotIndexedBatch(batch, planStep, txId);
     }
 
     void AddIndexed(const TBlobRange& blobRange, const TString& column);
@@ -242,7 +248,8 @@ private:
         return PortionGranule.find(portion)->second;
     }
 
-    std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(const TString& blob, ui64 planStep, ui64 txId) const;
+    std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(
+        const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) const;
     std::shared_ptr<arrow::RecordBatch> AssembleIndexedBatch(ui32 batchNo);
     void UpdateGranuleWaits(ui32 batchNo);
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SplitByGranules(

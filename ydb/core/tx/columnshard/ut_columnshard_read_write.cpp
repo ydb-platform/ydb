@@ -698,11 +698,11 @@ void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeId>>& ydb
 
         if (ydbSchema == TTestSchema::YdbSchema()) {
             if (codec == "" || codec == "lz4") {
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes(), 5054176);
+                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 50);
             } else if (codec == "none") {
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes(), 7557872);
+                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 75);
             } else if (codec == "zstd") {
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes(), 2636440);
+                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 26);
             } else {
                 UNIT_ASSERT(false);
             }

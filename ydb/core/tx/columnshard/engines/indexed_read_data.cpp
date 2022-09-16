@@ -270,20 +270,22 @@ void TIndexedReadData::UpdateGranuleWaits(ui32 batchNo) {
 }
 
 std::shared_ptr<arrow::RecordBatch>
-TIndexedReadData::MakeNotIndexedBatch(const TString& blob, ui64 planStep, ui64 txId) const {
-    auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->BlobSchema);
-    Y_VERIFY(batch);
+TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+                                      ui64 planStep, ui64 txId) const {
+    Y_VERIFY(srcBatch);
 
-    batch = TIndexInfo::AddSpecialColumns(batch, planStep, txId);
-    Y_VERIFY(batch);
+    // Extract columns (without check), filter, attach snapshot, extract columns with check
+    // (do not filter snapshot columns)
 
-    batch = NArrow::ExtractColumns(batch, ReadMetadata->LoadSchema);
+    auto batch = NArrow::ExtractExistedColumns(srcBatch, ReadMetadata->LoadSchema);
     Y_VERIFY(batch);
 
     { // Apply predicate
         // TODO: Extract this info function
         std::vector<bool> less;
         if (ReadMetadata->LessPredicate) {
+            Y_VERIFY(NArrow::HasAllColumns(batch, ReadMetadata->LessPredicate->Batch->schema()));
+
             auto cmpType = ReadMetadata->LessPredicate->Inclusive ?
                 NArrow::ECompareType::LESS_OR_EQUAL : NArrow::ECompareType::LESS;
             less = NArrow::MakePredicateFilter(batch, ReadMetadata->LessPredicate->Batch, cmpType);
@@ -291,6 +293,8 @@ TIndexedReadData::MakeNotIndexedBatch(const TString& blob, ui64 planStep, ui64 t
 
         std::vector<bool> greater;
         if (ReadMetadata->GreaterPredicate) {
+            Y_VERIFY(NArrow::HasAllColumns(batch, ReadMetadata->GreaterPredicate->Batch->schema()));
+
             auto cmpType = ReadMetadata->GreaterPredicate->Inclusive ?
                 NArrow::ECompareType::GREATER_OR_EQUAL : NArrow::ECompareType::GREATER;
             greater = NArrow::MakePredicateFilter(batch, ReadMetadata->GreaterPredicate->Batch, cmpType);
@@ -305,6 +309,10 @@ TIndexedReadData::MakeNotIndexedBatch(const TString& blob, ui64 planStep, ui64 t
         }
     }
 
+    batch = TIndexInfo::AddSpecialColumns(batch, planStep, txId);
+    Y_VERIFY(batch);
+
+    batch = NArrow::ExtractColumns(batch, ReadMetadata->LoadSchema);
     Y_VERIFY(batch);
     return batch;
 }

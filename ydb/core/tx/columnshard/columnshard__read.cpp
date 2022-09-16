@@ -41,6 +41,7 @@ std::shared_ptr<NOlap::TReadMetadata>
 TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescription& read,
                                  const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index,
+                                 const TBatchCache& batchCache,
                                  TString& error) const {
     Y_UNUSED(ctx);
 
@@ -85,6 +86,11 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
     // insert table
 
     out.CommittedBlobs = insertTable->Read(read.PathId, read.PlanStep, read.TxId);
+    for (auto& cmt : out.CommittedBlobs) {
+        if (auto batch = batchCache.Get(cmt.BlobId)) {
+            out.CommittedBatches.emplace(cmt.BlobId, batch);
+        }
+    }
 
     // index
 
@@ -220,7 +226,7 @@ bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapP
     if (!ssaProgramSteps->Program.empty() && Self->PrimaryIndex) {
         ssaProgramSteps->Program = NKikimr::NSsaOptimizer::OptimizeProgram(ssaProgramSteps->Program, Self->PrimaryIndex->GetIndexInfo());
     }
-        
+
     read.Program = ssaProgramSteps->Program;
     read.ProgramSourceColumns = ssaProgramSteps->ProgramSourceColumns;
     return true;
@@ -269,7 +275,8 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {
-        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, ErrorDescription);
+        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, Self->BatchCache,
+                                       ErrorDescription);
     }
 
     ui32 status = NKikimrTxColumnShard::EResultStatus::ERROR;

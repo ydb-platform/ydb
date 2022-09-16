@@ -209,6 +209,7 @@ struct TEvColumnShard {
 
         NKikimrProto::EReplyStatus PutStatus = NKikimrProto::UNKNOWN;
         NColumnShard::TUnifiedBlobId BlobId;
+        std::shared_ptr<arrow::RecordBatch> WrittenBatch;
         NColumnShard::TBlobBatch BlobBatch;
         NColumnShard::TUsage ResourceUsage;
         TVector<ui32> YellowMoveChannels;

@@ -265,6 +265,7 @@ protected:
                                     const TReadDescription& readDescription,
                                     const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                     const std::unique_ptr<NOlap::IColumnEngine>& index,
+                                    const TBatchCache& batchCache,
                                     TString& error) const;
 
 protected:

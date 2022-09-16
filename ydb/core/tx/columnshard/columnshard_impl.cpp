@@ -603,10 +603,16 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     }
 
     if (bytesToIndex < (ui64)Limits.MinInsertBytes && blobs < TLimits::MIN_SMALL_BLOBS_TO_INSERT) {
-        LOG_S_DEBUG("Indexing not started: less data (" << bytesToIndex << " bytes in " << blobs << " blobs, ignored "
-            << ignored << ") then MIN_BYTES_TO_INSERT / MIN_SMALL_BLOBS_TO_INSERT at tablet " << TabletID());
-        return {};
+        LOG_S_DEBUG("Few data for indexation (" << bytesToIndex << " bytes in " << blobs << " blobs, ignored "
+            << ignored << ") at tablet " << TabletID());
+
+        // Force small indexations simetimes to keep BatchCache smaller
+        if (!bytesToIndex || SkippedIndexations < TSettings::MAX_INDEXATIONS_TO_SKIP) {
+            ++SkippedIndexations;
+            return {};
+        }
     }
+    SkippedIndexations = 0;
 
     LOG_S_DEBUG("Prepare indexing " << bytesToIndex << " bytes in " << dataToIndex.size() << " batches of committed "
         << size << " bytes in " << blobs << " blobs ignored " << ignored

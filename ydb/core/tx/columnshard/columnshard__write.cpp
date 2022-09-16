@@ -62,7 +62,9 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         // First write wins
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-        ok = Self->InsertTable->Insert(dbTable, NOlap::TInsertedData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time));
+
+        NOlap::TInsertedData insertData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time);
+        ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
         if (ok) {
             auto writesToAbort = Self->InsertTable->OldWritesToAbort(time);
             std::vector<TWriteId> failedAborts;
@@ -70,6 +72,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
                 if (!Self->RemoveLongTxWrite(db, writeId)) {
                     failedAborts.push_back(writeId);
                 }
+                Self->BatchCache.EraseInserted(TWriteId(writeId));
             }
             for (auto& writeId : failedAborts) {
                 writesToAbort.erase(writeId);
@@ -87,9 +90,13 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
                 Self->BlobManager->DeleteBlob(abortedData.BlobId, blobManagerDb);
             }
 
-            // Put new data into cache
+            // Put new data into blob cache
             Y_VERIFY(logoBlobId.BlobSize() == data.size());
             NBlobCache::AddRangeToCache(NBlobCache::TBlobRange(logoBlobId, 0, data.size()), data);
+
+            // Put new data into batch cache
+            Y_VERIFY(Ev->Get()->WrittenBatch);
+            Self->BatchCache.Insert(TWriteId(writeId), logoBlobId, Ev->Get()->WrittenBatch);
 
             Self->UpdateInsertTableCounters();
 

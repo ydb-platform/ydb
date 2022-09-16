@@ -390,7 +390,25 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
     return arrow::RecordBatch::Make(dstSchema, srcBatch->num_rows(), columns);
 }
 
+std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+                                                          const arrow::FieldVector& fieldsToExtract) {
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(fieldsToExtract.size());
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    columns.reserve(fieldsToExtract.size());
 
+    auto srcSchema = srcBatch->schema();
+    for (auto& fldToExtract : fieldsToExtract) {
+        auto& name = fldToExtract->name();
+        auto field = srcSchema->GetFieldByName(name);
+        if (field && field->type()->Equals(fldToExtract->type())) {
+            fields.push_back(field);
+            columns.push_back(srcBatch->GetColumnByName(name));
+        }
+    }
+
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), srcBatch->num_rows(), columns);
+}
 
 std::shared_ptr<arrow::Table> CombineInTable(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
     auto res = arrow::Table::FromRecordBatches(batches);
@@ -566,6 +584,15 @@ bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
     } else {
         return IsSelfSorted<false, true>(keyBatch);
     }
+}
+
+bool HasAllColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& schema) {
+    for (auto& field : schema->fields()) {
+        if (batch->schema()->GetFieldIndex(field->name()) < 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema,

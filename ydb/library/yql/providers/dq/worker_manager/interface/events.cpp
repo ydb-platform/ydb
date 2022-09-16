@@ -23,9 +23,9 @@ namespace NYql::NDqs {
         Record.MutableError()->SetMessage("Unknown error");
     }
 
-    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::EErrorCode code) {
+    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::StatusIds::StatusCode statusCode) {
         Record.MutableError()->SetMessage(error);
-        Record.MutableError()->SetErrorCode(code);
+        Record.MutableError()->SetStatusCode(statusCode);
     }
 
     TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids) {

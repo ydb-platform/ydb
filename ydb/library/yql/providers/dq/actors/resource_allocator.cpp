@@ -294,7 +294,7 @@ private:
         }
         TString message = "Disconnected from worker: `" + workerInfo + "', reason: " + reason;
         YQL_CLOG(ERROR, ProviderDq) << message;
-        auto response = MakeHolder<TEvAllocateWorkersResponse>(message);
+        auto response = MakeHolder<TEvAllocateWorkersResponse>(message, NYql::NDqProto::StatusIds::UNAVAILABLE);
         QueryStat.FlushCounters(response->Record);
         Send(SenderId, response.Release());
     }

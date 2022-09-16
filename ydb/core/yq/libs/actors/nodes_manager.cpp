@@ -89,7 +89,7 @@ private:
 
         if (count == 0) {
             auto& error = *req->Record.MutableError();
-            error.SetErrorCode(NYql::NDqProto::EMISMATCH);
+            error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
             error.SetMessage("Incorrect request - 0 nodes requested");
         } else {
             auto resourceId = rec.GetResourceId();
@@ -140,7 +140,7 @@ private:
                     } else {
                         placementFailure = true;
                         auto& error = *req->Record.MutableError();
-                        error.SetErrorCode(NYql::NDqProto::EMISMATCH);
+                        error.SetStatusCode(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED);
                         error.SetMessage("Not enough free memory in the cluster");
                         break;
                     }

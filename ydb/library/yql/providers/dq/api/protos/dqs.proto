@@ -55,7 +55,8 @@ enum EErrorCode {
 
 message TDqError {
     string Message = 1;
-    EErrorCode ErrorCode = 2;
+    EErrorCode DeprecatedErrorCode = 2; // deprecated
+    NYql.NDqProto.StatusIds.StatusCode StatusCode = 3;
 }
 
 message TAllocateWorkersResponse {

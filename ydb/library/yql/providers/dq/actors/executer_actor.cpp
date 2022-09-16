@@ -329,9 +329,9 @@ private:
             case TAllocateWorkersResponse::kError: {
                 YQL_CLOG(ERROR, ProviderDq) << "Error on allocate workers "
                     << ev->Get()->Record.GetError().GetMessage() << ":"
-                    << static_cast<int>(ev->Get()->Record.GetError().GetErrorCode());
+                    << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetError().GetStatusCode());
                 Issues.AddIssue(TIssue(ev->Get()->Record.GetError().GetMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
-                Finish(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED);
+                Finish(ev->Get()->Record.GetError().GetStatusCode());
                 return;
             }
             case TAllocateWorkersResponse::kNodes:

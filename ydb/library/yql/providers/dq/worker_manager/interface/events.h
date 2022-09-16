@@ -31,7 +31,7 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         : NActors::TEventPB<TEvAllocateWorkersResponse, NYql::NDqProto::TAllocateWorkersResponse,
                             TDqResManEvents::ES_ALLOCATE_WORKERS_RESPONSE> {
         TEvAllocateWorkersResponse();
-        explicit TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::EErrorCode code = NYql::NDqProto::EUNKNOWN);
+        explicit TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::StatusIds::StatusCode statusCode);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<TWorkerInfo::TPtr>& workerInfos);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes);

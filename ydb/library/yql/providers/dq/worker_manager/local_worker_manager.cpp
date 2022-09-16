@@ -203,7 +203,7 @@ private:
         TString computeActorType = ev->Get()->Record.GetComputeActorType();
 
         if (createComputeActor && !Options.CanUseComputeActor) {
-            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Compute Actor Disabled"), 0, ev->Cookie);
+            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Compute Actor Disabled", NYql::NDqProto::StatusIds::BAD_REQUEST), 0, ev->Cookie);
             return;
         }
 
@@ -222,7 +222,7 @@ private:
         bool canAllocate = MemoryQuoter->Allocate(traceId, 0, count * Options.MkqlInitialMemoryLimit);
 
         if (!canAllocate) {
-            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Not enough memory to allocate tasks"), 0, ev->Cookie);
+            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Not enough memory to allocate tasks", NYql::NDqProto::StatusIds::OVERLOADED), 0, ev->Cookie);
             return;
         }
 

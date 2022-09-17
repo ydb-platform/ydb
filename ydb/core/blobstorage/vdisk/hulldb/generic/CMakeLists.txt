@@ -13,6 +13,7 @@ target_link_libraries(vdisk-hulldb-generic PUBLIC
   contrib-libs-cxxsupp
   yutil
   vdisk-hulldb-base
+  vdisk-hulldb-fresh
   blobstorage-vdisk-protos
   ydb-core-protos
 )

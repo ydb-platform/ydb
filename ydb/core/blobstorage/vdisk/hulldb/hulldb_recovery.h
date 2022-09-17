@@ -2,8 +2,8 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/vdisk/hulldb/barriers/hullds_cache_barrier.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
-#include "hullds_cache_block.h"
 #include "hulldb_bulksst_add.h"
 
 namespace NKikimr {

@@ -8,11 +8,11 @@
 
 add_subdirectory(barriers)
 add_subdirectory(base)
+add_subdirectory(cache_block)
 add_subdirectory(compstrat)
 add_subdirectory(fresh)
 add_subdirectory(generic)
 add_subdirectory(test)
-add_subdirectory(ut)
 
 add_library(blobstorage-vdisk-hulldb)
 target_link_libraries(blobstorage-vdisk-hulldb PUBLIC
@@ -32,5 +32,4 @@ target_sources(blobstorage-vdisk-hulldb PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksstmngr.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/hulldb_recovery.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/hullds_cache_block.cpp
 )

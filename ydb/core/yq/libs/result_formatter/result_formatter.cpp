@@ -95,7 +95,7 @@ NKikimr::NMiniKQL::TType* MakeStructType(
     const TVector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& items,
     NKikimr::NMiniKQL::TTypeEnvironment& env)
 {
-    return TStructType::Create(&items[0], items.size(), env);
+    return TStructType::Create(items.data(), items.size(), env);
 }
 
 const NYql::TTypeAnnotationNode* MakeTupleType(
@@ -109,7 +109,7 @@ NKikimr::NMiniKQL::TType* MakeTupleType(
     const TVector<NKikimr::NMiniKQL::TType*>& items,
     NKikimr::NMiniKQL::TTypeEnvironment& env)
 {
-    return TTupleType::Create(items.size(), &items[0], env);
+    return TTupleType::Create(items.size(), items.data(), env);
 }
 
 const NYql::TTypeAnnotationNode* MakeDictType(
@@ -225,15 +225,11 @@ TType MakeType(NYdb::TTypeParser& parser, TContext& env)
             auto colName = parser.GetMemberName();
             node = MakeType<TType>(parser, env);
             if (!node) {
-                break;
+                return nullptr;
             }
             items.push_back({colName, node});
         }
         parser.CloseStruct();
-        if (!node) {
-            return nullptr;
-        }
-
         return MakeStructType(items, env);
     }
     case NYdb::TTypeParser::ETypeKind::Tuple: {
@@ -243,12 +239,9 @@ TType MakeType(NYdb::TTypeParser& parser, TContext& env)
         while (parser.TryNextElement()) {
             node = MakeType<TType>(parser, env);
             if (!node) {
-                break;
+                return nullptr;
             }
             items.push_back(node);
-        }
-        if (!node) {
-            return nullptr;
         }
         parser.CloseTuple();
         return MakeTupleType(items, env);

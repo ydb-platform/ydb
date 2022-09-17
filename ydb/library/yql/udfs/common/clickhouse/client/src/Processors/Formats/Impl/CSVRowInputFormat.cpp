@@ -142,6 +142,9 @@ static bool checkTypeValidness(ReadBuffer& in, const char delimiter, bool is_las
         }
     }
     else {
+        if (in.eof())
+            return false;
+
         if (*in.position() == delimiter) {
             return true;
         }

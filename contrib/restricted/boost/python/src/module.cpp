@@ -21,7 +21,7 @@ namespace
             object m_obj(((borrowed_reference_t*)m));
             scope current_module(m_obj);
 
-            handle_exception(init_function);
+            if (handle_exception(init_function)) return NULL;
         }
 
         return m;

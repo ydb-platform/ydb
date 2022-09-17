@@ -1,5 +1,5 @@
-#ifndef PTR_DWA20020601_HPP
-# define PTR_DWA20020601_HPP
+#ifndef BOOST_PYTHON_PTR_HPP
+# define BOOST_PYTHON_PTR_HPP
 
 # include <boost/python/detail/prefix.hpp>
 // Copyright David Abrahams 2002.
@@ -10,8 +10,6 @@
 // Based on boost/ref.hpp, thus:
 //  Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
 //  Copyright (C) 2001 Peter Dimov
-
-# pragma once
 
 # include <boost/config.hpp>
 # include <boost/mpl/bool.hpp>
@@ -64,4 +62,4 @@ class unwrap_pointer<pointer_wrapper<T> >
 
 }} // namespace boost::python
 
-#endif // #ifndef PTR_DWA20020601_HPP
+#endif

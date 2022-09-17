@@ -69,7 +69,7 @@ call_method(PyObject* self, char const* name
     // This conversion *must not* be done in the same expression as
     // the call, because, in the special case where the result is a
     // reference a Python object which was created by converting a C++
-    // argument for passing to PyEval_CallFunction, its reference
+    // argument for passing to PyObject_CallFunction, its reference
     // count will be 2 until the end of the full expression containing
     // the conversion, and that interferes with dangling
     // pointer/reference detection.

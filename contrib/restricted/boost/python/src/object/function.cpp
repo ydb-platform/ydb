@@ -107,7 +107,7 @@ function::function(
     PyObject* p = this;
     if (Py_TYPE(&function_type) == 0)
     {
-        Py_TYPE(&function_type) = &PyType_Type;
+        Py_SET_TYPE(&function_type, &PyType_Type);
         ::PyType_Ready(&function_type);
     }
     
@@ -157,11 +157,6 @@ PyObject* function::call(PyObject* args, PyObject* keywords) const
                     if (PyTuple_Size(f->m_arg_names.ptr()) == 0)
                     {
                         // no argument preprocessing
-                    }
-                    else if (n_actual > max_arity)
-                    {
-                        // too many arguments
-                        inner_args = handle<>();
                     }
                     else
                     {

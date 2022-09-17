@@ -93,7 +93,7 @@ PyObject* make_nurse_and_patient(PyObject* nurse, PyObject* patient)
     
     if (Py_TYPE(&life_support_type) == 0)
     {
-        Py_TYPE(&life_support_type) = &PyType_Type;
+        Py_SET_TYPE(&life_support_type, &PyType_Type);
         PyType_Ready(&life_support_type);
     }
     

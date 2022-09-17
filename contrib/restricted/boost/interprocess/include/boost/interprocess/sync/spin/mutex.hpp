@@ -21,7 +21,6 @@
 
 #include <boost/interprocess/detail/config_begin.hpp>
 #include <boost/interprocess/detail/workaround.hpp>
-#include <boost/interprocess/detail/posix_time_types_wrk.hpp>
 #include <boost/assert.hpp>
 #include <boost/interprocess/detail/atomic.hpp>
 #include <boost/cstdint.hpp>
@@ -43,11 +42,37 @@ class spin_mutex
 
    void lock();
    bool try_lock();
-   bool timed_lock(const boost::posix_time::ptime &abs_time);
+   template<class TimePoint>
+   bool timed_lock(const TimePoint &abs_time);
+
+   template<class TimePoint> bool try_lock_until(const TimePoint &abs_time)
+   {  return this->timed_lock(abs_time);  }
+
+   template<class Duration>  bool try_lock_for(const Duration &dur)
+   {  return this->timed_lock(duration_to_ustime(dur)); }
+
    void unlock();
-   void take_ownership(){};
+   void take_ownership(){}
    private:
    volatile boost::uint32_t m_s;
+
+   struct common_lock_wrapper
+   {
+      common_lock_wrapper(spin_mutex &sp)
+         : m_sp(sp)
+      {}
+
+      void lock()
+      {
+         ipcdetail::try_based_lock(m_sp);
+      }
+
+      template<class TimePoint>
+      bool timed_lock(const TimePoint &abs_time)
+      {  return m_sp.timed_lock(abs_time);   }
+
+      spin_mutex &m_sp;
+   };
 };
 
 inline spin_mutex::spin_mutex()
@@ -64,7 +89,10 @@ inline spin_mutex::~spin_mutex()
 }
 
 inline void spin_mutex::lock(void)
-{  return ipcdetail::try_based_lock(*this); }
+{
+   common_lock_wrapper clw(*this);
+   ipcdetail::timeout_when_locking_aware_lock(clw);
+}
 
 inline bool spin_mutex::try_lock(void)
 {
@@ -72,7 +100,8 @@ inline bool spin_mutex::try_lock(void)
    return m_s == 1 && prev_s == 0;
 }
 
-inline bool spin_mutex::timed_lock(const boost::posix_time::ptime &abs_time)
+template<class TimePoint>
+inline bool spin_mutex::timed_lock(const TimePoint &abs_time)
 {  return ipcdetail::try_based_timed_lock(*this, abs_time); }
 
 inline void spin_mutex::unlock(void)

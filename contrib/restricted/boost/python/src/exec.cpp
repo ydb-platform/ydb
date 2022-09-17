@@ -116,7 +116,7 @@ object BOOST_PYTHON_DECL exec_file(char const *filename, object global, object l
 #elif PY_VERSION_HEX >= 0x03000000
   // Let python open the file to avoid potential binary incompatibilities.
   PyObject *fo = Py_BuildValue("s", f);
-  FILE *fs = _Py_fopen(fo, "r"); // Private CPython API
+  FILE *fs = fopen(fo, "r");
   Py_DECREF(fo);
 #else
   // Let python open the file to avoid potential binary incompatibilities.
@@ -128,7 +128,7 @@ object BOOST_PYTHON_DECL exec_file(char const *filename, object global, object l
   PyObject* result = PyRun_File(fs,
                 f,
                 Py_file_input,
-		global.ptr(), local.ptr());
+                global.ptr(), local.ptr());
   if (!result) throw_error_already_set();
   return object(detail::new_reference(result));
 }

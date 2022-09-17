@@ -24,8 +24,8 @@ namespace detail
       BOOST_PYTHON_FORWARD_OBJECT_CONSTRUCTORS(long_base, object)
           
    private:
-      static detail::new_non_null_reference call(object const&);
-      static detail::new_non_null_reference call(object const&, object const&);
+      static detail::new_reference call(object const&);
+      static detail::new_reference call(object const&, object const&);
   };
 }
 

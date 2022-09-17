@@ -47,7 +47,7 @@ struct make_instance_impl
               
             // Note the position of the internally-stored Holder,
             // for the sake of destruction
-            Py_SIZE(instance) = offsetof(instance_t, storage);
+            Py_SET_SIZE(instance, offsetof(instance_t, storage));
 
             // Release ownership of the python object
             protect.cancel();

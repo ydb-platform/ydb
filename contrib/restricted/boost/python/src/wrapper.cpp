@@ -25,7 +25,7 @@ namespace detail
             
               if (
                   PyMethod_Check(m.get())
-                  && ((PyMethodObject*)m.get())->im_self == this->m_self
+                  && PyMethod_GET_SELF(m.get()) == this->m_self
                   && class_object->tp_dict != 0
               )
               {
@@ -34,7 +34,7 @@ namespace detail
 
 
               }
-              if (borrowed_f != ((PyMethodObject*)m.get())->im_func)
+              if (borrowed_f != PyMethod_GET_FUNCTION(m.get()))
                   return override(m);
           }
       }

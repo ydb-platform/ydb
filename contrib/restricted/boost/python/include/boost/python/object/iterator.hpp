@@ -25,7 +25,7 @@
 
 # include <boost/type.hpp>
 
-# include <boost/detail/iterator.hpp>
+# include <iterator>
 
 namespace boost { namespace python { namespace objects {
 
@@ -42,7 +42,7 @@ struct iterator_range
 {
     iterator_range(object sequence, Iterator start, Iterator finish);
 
-    typedef boost::detail::iterator_traits<Iterator> traits_t;
+    typedef std::iterator_traits<Iterator> traits_t;
 
     struct next
     {

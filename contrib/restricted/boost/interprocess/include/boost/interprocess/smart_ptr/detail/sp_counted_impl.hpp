@@ -43,17 +43,19 @@ namespace ipcdetail {
 template <class Allocator>
 struct scoped_ptr_dealloc_functor
 {
-   typedef typename Allocator::pointer pointer;
+   typedef typename boost::container::
+      allocator_traits<Allocator>::pointer pointer;
+
    typedef ipcdetail::integral_constant<unsigned,
       boost::interprocess::version<Allocator>::value>                   alloc_version;
    typedef ipcdetail::integral_constant<unsigned, 1>     allocator_v1;
    typedef ipcdetail::integral_constant<unsigned, 2>     allocator_v2;
 
    private:
-   void priv_deallocate(const typename Allocator::pointer &p, allocator_v1)
+   void priv_deallocate(const pointer &p, allocator_v1)
    {  m_alloc.deallocate(p, 1); }
 
-   void priv_deallocate(const typename Allocator::pointer &p, allocator_v2)
+   void priv_deallocate(const pointer &p, allocator_v2)
    {  m_alloc.deallocate_one(p); }
 
    public:
@@ -85,7 +87,11 @@ class sp_counted_impl_pd
       allocator_traits<A>::template
          portable_rebind_alloc
             < const this_type >::type        const_this_allocator;
-   typedef typename this_allocator::pointer  this_pointer;
+   typedef typename boost::container::
+      allocator_traits<this_allocator>
+         ::pointer                           this_pointer;
+   typedef typename boost::container::
+      allocator_traits<A>::pointer           a_pointer;
    typedef typename boost::intrusive::
       pointer_traits<this_pointer>           this_pointer_traits;
 
@@ -93,10 +99,10 @@ class sp_counted_impl_pd
    sp_counted_impl_pd & operator= ( sp_counted_impl_pd const & );
 
    typedef typename boost::intrusive::
-      pointer_traits<typename A::pointer>::template
+      pointer_traits<a_pointer>::template
          rebind_pointer<const D>::type                   const_deleter_pointer;
    typedef typename boost::intrusive::
-      pointer_traits<typename A::pointer>::template
+      pointer_traits<a_pointer>::template
          rebind_pointer<const A>::type                   const_allocator_pointer;
 
    typedef typename D::pointer   pointer;
@@ -127,8 +133,7 @@ class sp_counted_impl_pd
       //Do it now!
       scoped_ptr< this_type, scoped_ptr_dealloc_functor<this_allocator> >
          deleter_ptr(this_ptr, a_copy);
-      typedef typename this_allocator::value_type value_type;
-      ipcdetail::to_raw_pointer(this_ptr)->~value_type();
+      ipcdetail::to_raw_pointer(this_ptr)->~this_type();
    }
 
    void release() // nothrow

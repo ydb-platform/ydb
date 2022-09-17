@@ -208,7 +208,7 @@ namespace objects
   {
       if (static_data_object.tp_dict == 0)
       {
-          Py_TYPE(&static_data_object) = &PyType_Type;
+          Py_SET_TYPE(&static_data_object, &PyType_Type);
           static_data_object.tp_base = &PyProperty_Type;
           if (PyType_Ready(&static_data_object))
               return 0;
@@ -316,7 +316,7 @@ namespace objects
   {
       if (class_metatype_object.tp_dict == 0)
       {
-          Py_TYPE(&class_metatype_object) = &PyType_Type;
+          Py_SET_TYPE(&class_metatype_object, &PyType_Type);
           class_metatype_object.tp_base = &PyType_Type;
           if (PyType_Ready(&class_metatype_object))
               return type_handle();
@@ -374,12 +374,7 @@ namespace objects
               // like, so we'll store the total size of the object
               // there. A negative number indicates that the extra
               // instance memory is not yet allocated to any holders.
-#if PY_VERSION_HEX >= 0x02060000
-              Py_SIZE(result) =
-#else
-              result->ob_size =
-#endif
-                  -(static_cast<int>(offsetof(instance<>,storage) + instance_size));
+              Py_SET_SIZE(result,-static_cast<int>(offsetof(instance<>,storage) + instance_size));
           }
           return (PyObject*)result;
       }
@@ -470,7 +465,7 @@ namespace objects
   {
       if (class_type_object.tp_dict == 0)
       {
-          Py_TYPE(&class_type_object) = incref(class_metatype().get());
+          Py_SET_TYPE(&class_type_object, incref(class_metatype().get()));
           class_type_object.tp_base = &PyBaseObject_Type;
           if (PyType_Ready(&class_type_object))
               return type_handle();
@@ -618,7 +613,7 @@ namespace objects
   {
       object property(
           (python::detail::new_reference)
-          PyObject_CallFunction((PyObject*)&PyProperty_Type, const_cast<char*>("Osss"), fget.ptr(), 0, 0, docstr));
+          PyObject_CallFunction((PyObject*)&PyProperty_Type, const_cast<char*>("Osss"), fget.ptr(), (char*)NULL, (char*)NULL, docstr));
       
       this->setattr(name, property);
   }
@@ -628,7 +623,7 @@ namespace objects
   {
       object property(
           (python::detail::new_reference)
-          PyObject_CallFunction((PyObject*)&PyProperty_Type, const_cast<char*>("OOss"), fget.ptr(), fset.ptr(), 0, docstr));
+          PyObject_CallFunction((PyObject*)&PyProperty_Type, const_cast<char*>("OOss"), fget.ptr(), fset.ptr(), (char*)NULL, docstr));
       
       this->setattr(name, property);
   }
@@ -739,7 +734,7 @@ void* instance_holder::allocate(PyObject* self_, std::size_t holder_offset, std:
         assert(holder_offset >= offsetof(objects::instance<>,storage));
 
         // Record the fact that the storage is occupied, noting where it starts
-        Py_SIZE(self) = holder_offset;
+        Py_SET_SIZE(self, holder_offset);
         return (char*)self + holder_offset;
     }
     else

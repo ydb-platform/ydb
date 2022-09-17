@@ -36,17 +36,17 @@ namespace interprocess {
 class BOOST_SYMBOL_VISIBLE interprocess_exception : public std::exception
 {
    public:
-   interprocess_exception(const char *err)
+   interprocess_exception(const char *err) BOOST_NOEXCEPT
       :  m_err(other_error)
    {
-      try   {  m_str = err; }
-      catch (...) {}
+      BOOST_TRY   {  m_str = err; }
+      BOOST_CATCH(...) {} BOOST_CATCH_END
    }
 
    interprocess_exception(const error_info &err_info, const char *str = 0)
       :  m_err(err_info)
    {
-      try{
+      BOOST_TRY{
          if(m_err.get_native_error() != 0){
             fill_system_message(m_err.get_native_error(), m_str);
          }
@@ -57,18 +57,18 @@ class BOOST_SYMBOL_VISIBLE interprocess_exception : public std::exception
             m_str = "boost::interprocess_exception::library_error";
          }
       }
-      catch(...){}
+      BOOST_CATCH(...){} BOOST_CATCH_END
    }
 
-   virtual ~interprocess_exception(){}
+   ~interprocess_exception() BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE {}
 
-   virtual const char * what() const noexcept
+   const char * what() const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE
    {  return m_str.c_str();  }
 
-   native_error_t get_native_error()const { return m_err.get_native_error(); }
+   native_error_t get_native_error() const BOOST_NOEXCEPT { return m_err.get_native_error(); }
 
    // Note: a value of other_error implies a library (rather than system) error
-   error_code_t   get_error_code()  const { return m_err.get_error_code(); }
+   error_code_t   get_error_code()  const BOOST_NOEXCEPT { return m_err.get_error_code(); }
 
    #if !defined(BOOST_INTERPROCESS_DOXYGEN_INVOKED)
    private:
@@ -82,11 +82,11 @@ class BOOST_SYMBOL_VISIBLE interprocess_exception : public std::exception
 class BOOST_SYMBOL_VISIBLE lock_exception : public interprocess_exception
 {
    public:
-   lock_exception()
-      :  interprocess_exception(lock_error)
+   lock_exception(error_code_t err = lock_error) BOOST_NOEXCEPT
+      :  interprocess_exception(err)
    {}
 
-   virtual const char* what() const noexcept
+   const char* what() const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE
    {  return "boost::interprocess::lock_exception";  }
 };
 
@@ -96,9 +96,10 @@ class BOOST_SYMBOL_VISIBLE lock_exception : public interprocess_exception
 class BOOST_SYMBOL_VISIBLE bad_alloc : public interprocess_exception
 {
  public:
-   bad_alloc() : interprocess_exception("::boost::interprocess::bad_alloc"){}
-   virtual const char* what() const noexcept
-      {  return "boost::interprocess::bad_alloc";  }
+   bad_alloc() : interprocess_exception("::boost::interprocess::bad_alloc") {}
+
+   const char* what() const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE
+   {  return "boost::interprocess::bad_alloc";  }
 };
 
 }  // namespace interprocess {

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(providers-s3-provider)
 target_compile_options(providers-s3-provider PRIVATE
@@ -16,6 +17,7 @@ target_link_libraries(providers-s3-provider PUBLIC
   yutil
   contrib-libs-re2
   library-cpp-json
+  cpp-protobuf-util
   library-cpp-random_provider
   library-cpp-retry
   library-cpp-time_provider

@@ -7,7 +7,9 @@
 namespace NYql::NS3 {
 
 TString NormalizePath(const TString& path, char slash) {
-    YQL_ENSURE(!path.empty());
+    if (path.empty()) {
+        throw yexception() << "Path should not be empty";
+    }
     TString result;
     bool start = true;
     for (char c : path) {

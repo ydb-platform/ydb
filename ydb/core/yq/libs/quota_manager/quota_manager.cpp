@@ -153,8 +153,23 @@ public:
         , ServiceCounters(counters->GetSubgroup("subsystem", "quota_manager"))
         , Monitoring(monitoring)
     {
-        for (auto& description : quotaDescriptions) {
+        for (const auto& description : quotaDescriptions) {
             QuotaInfoMap[description.SubjectType].emplace(description.MetricName, description.Info);
+        }
+        // Override static settings with config
+        for (const auto& config : Config.GetQuotaDescriptions()) {
+            Y_VERIFY(config.GetSubjectType());
+            Y_VERIFY(config.GetMetricName());
+            auto& metricsMap = QuotaInfoMap[config.GetSubjectType()];
+            auto infoIt = metricsMap.find(config.GetMetricName());
+            Y_VERIFY(infoIt != metricsMap.end());
+            auto& info = infoIt->second;
+            if (config.GetDefaultLimit()) {
+                info.DefaultLimit = config.GetDefaultLimit();
+            }
+            if (config.GetHardLimit()) {
+                info.HardLimit = config.GetHardLimit();
+            }
         }
         LimitRefreshPeriod = GetDuration(Config.GetLimitRefreshPeriod(), LIMIT_REFRESH_PERIOD);
         UsageRefreshPeriod = GetDuration(Config.GetUsageRefreshPeriod(), USAGE_REFRESH_PERIOD);
@@ -164,7 +179,7 @@ public:
 
     void Bootstrap() {
         if (Monitoring) {
-            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"), 
+            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
                 "quotas", "Quota Manager", false, TActivationContext::ActorSystem(), SelfId());
         }
 

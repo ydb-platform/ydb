@@ -30,12 +30,18 @@
  *  ----------------------------------------------------------------------------------  *
  *                                                                                      *
  ****************************************************************************************/
-
+# if defined __CET__
+#  include <cet.h>
+# else
+#  define _CET_ENDBR
+# endif
+.file "jump_x86_64_sysv_elf_gas.S"
 .text
 .globl jump_fcontext
 .type jump_fcontext,@function
 .align 16
 jump_fcontext:
+    _CET_ENDBR
     leaq  -0x40(%rsp), %rsp /* prepare stack */
 
 #if !defined(BOOST_USE_TSX)
@@ -68,7 +74,7 @@ jump_fcontext:
     fldcw    0x4(%rsp)  /* restore x87 control-word */
 #endif
 
-#if defined(TLS_STACK_PROTECTOR)
+#if defined(BOOST_CONTEXT_TLS_STACK_PROTECTOR)
     movq  0x8(%rsp), %rdx  /* load stack guard */
     movq  %rdx, %fs:0x28   /* restore stack guard to TLS record */
 #endif
@@ -83,10 +89,20 @@ jump_fcontext:
     leaq  0x48(%rsp), %rsp /* prepare stack */
 
     /* return transfer_t from jump */
+#if !defined(_ILP32)
     /* RAX == fctx, RDX == data */
     movq  %rsi, %rdx
+#else
+    /* RAX == data:fctx */
+    salq  $32, %rsi
+    orq   %rsi, %rax
+#endif
     /* pass transfer_t as first arg in context function */
+#if !defined(_ILP32)
     /* RDI == fctx, RSI == data */
+#else
+    /* RDI == data:fctx */
+#endif
     movq  %rax, %rdi
 
     /* indirect jump to context */

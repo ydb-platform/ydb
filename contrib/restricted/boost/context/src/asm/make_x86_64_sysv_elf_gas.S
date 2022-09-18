@@ -30,12 +30,18 @@
  *  ----------------------------------------------------------------------------------  *
  *                                                                                      *
  ****************************************************************************************/
-
+# if defined __CET__
+#  include <cet.h>
+# else
+#  define _CET_ENDBR
+# endif
+.file "make_x86_64_sysv_elf_gas.S"
 .text
 .globl make_fcontext
 .type make_fcontext,@function
 .align 16
 make_fcontext:
+    _CET_ENDBR
     /* first arg of make_fcontext() == top of context-stack */
     movq  %rdi, %rax
 
@@ -55,7 +61,7 @@ make_fcontext:
     /* save x87 control-word */
     fnstcw   0x4(%rax)
 
-#if defined(TLS_STACK_PROTECTOR)
+#if defined(BOOST_CONTEXT_TLS_STACK_PROTECTOR)
     /* save stack guard */
     movq  %fs:0x28, %rcx    /* read stack guard from TLS record */
     movq  %rcx, 0x8(%rsp)   /* save stack guard */
@@ -76,6 +82,7 @@ make_fcontext:
     ret /* return pointer to context-data */
 
 trampoline:
+    _CET_ENDBR
     /* store return address on stack */
     /* fix stack alignment */
     push %rbp
@@ -83,6 +90,7 @@ trampoline:
     jmp *%rbx
 
 finish:
+    _CET_ENDBR
     /* exit code is zero */
     xorq  %rdi, %rdi
     /* exit application */

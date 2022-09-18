@@ -19,12 +19,12 @@ target_link_libraries(boost-context-impl_common PUBLIC
   contrib-libs-cxxsupp
   restricted-boost-assert
   restricted-boost-config
+  restricted-boost-mp11
   restricted-boost-pool
   restricted-boost-predef
   restricted-boost-smart_ptr
   restricted-boost-thread
 )
 target_sources(boost-context-impl_common PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/execution_context.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/posix/stack_traits.cpp
 )

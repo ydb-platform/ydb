@@ -85,8 +85,7 @@ struct BOOST_CONTEXT_DECL fiber_activation_record {
 #else
         fiber = ::ConvertThreadToFiber( nullptr);
         if ( BOOST_UNLIKELY( nullptr == fiber) ) {
-            DWORD err = ::GetLastError();
-            BOOST_ASSERT( ERROR_ALREADY_FIBER == err);
+            BOOST_ASSERT( ERROR_ALREADY_FIBER == ::GetLastError());
             fiber = ::GetCurrentFiber(); 
             BOOST_ASSERT( nullptr != fiber);
             BOOST_ASSERT( reinterpret_cast< LPVOID >( 0x1E00) != fiber);
@@ -185,7 +184,7 @@ struct BOOST_CONTEXT_DECL fiber_activation_record_initializer {
 };
 
 struct forced_unwind {
-    fiber_activation_record  *   from{ nullptr };
+    fiber_activation_record  *  from{ nullptr };
 
     explicit forced_unwind( fiber_activation_record * from_) :
         from{ from_ } {
@@ -396,30 +395,12 @@ public:
         return nullptr == ptr_ || ptr_->terminated;
     }
 
-    bool operator==( fiber const& other) const noexcept {
-        return ptr_ == other.ptr_;
-    }
-
-    bool operator!=( fiber const& other) const noexcept {
-        return ptr_ != other.ptr_;
-    }
-
     bool operator<( fiber const& other) const noexcept {
         return ptr_ < other.ptr_;
     }
-
-    bool operator>( fiber const& other) const noexcept {
-        return other.ptr_ < ptr_;
-    }
-
-    bool operator<=( fiber const& other) const noexcept {
-        return ! ( * this > other);
-    }
-
-    bool operator>=( fiber const& other) const noexcept {
-        return ! ( * this < other);
-    }
-
+    
+    #if !defined(BOOST_EMBTC)
+    
     template< typename charT, class traitsT >
     friend std::basic_ostream< charT, traitsT > &
     operator<<( std::basic_ostream< charT, traitsT > & os, fiber const& other) {
@@ -430,15 +411,39 @@ public:
         }
     }
 
+    #else
+    
+    template< typename charT, class traitsT >
+    friend std::basic_ostream< charT, traitsT > &
+    operator<<( std::basic_ostream< charT, traitsT > & os, fiber const& other);
+
+    #endif
+
     void swap( fiber & other) noexcept {
         std::swap( ptr_, other.ptr_);
     }
 };
 
+#if defined(BOOST_EMBTC)
+
+    template< typename charT, class traitsT >
+    inline std::basic_ostream< charT, traitsT > &
+    operator<<( std::basic_ostream< charT, traitsT > & os, fiber const& other) {
+        if ( nullptr != other.ptr_) {
+            return os << other.ptr_;
+        } else {
+            return os << "{not-a-context}";
+        }
+    }
+
+#endif
+
 inline
 void swap( fiber & l, fiber & r) noexcept {
     l.swap( r);
 }
+
+typedef fiber fiber_context;
 
 }}
 

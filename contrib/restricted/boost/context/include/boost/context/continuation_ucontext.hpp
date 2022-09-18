@@ -209,7 +209,7 @@ struct BOOST_CONTEXT_DECL activation_record_initializer {
 };
 
 struct forced_unwind {
-    activation_record  *   from{ nullptr };
+    activation_record   *   from{ nullptr };
 
     forced_unwind( activation_record * from_) noexcept :
         from{ from_ } {
@@ -287,6 +287,8 @@ static activation_record * create_context1( StackAlloc && salloc, Fn && fn) {
             reinterpret_cast< uintptr_t >( sctx.sp) - static_cast< uintptr_t >( sctx.size) );
     // create user-context
     if ( BOOST_UNLIKELY( 0 != ::getcontext( & record->uctx) ) ) {
+        record->~capture_t();
+        salloc.deallocate( sctx);
         throw std::system_error(
                 std::error_code( errno, std::system_category() ),
                 "getcontext() failed");
@@ -320,6 +322,8 @@ static activation_record * create_context2( preallocated palloc, StackAlloc && s
             reinterpret_cast< uintptr_t >( palloc.sctx.sp) - static_cast< uintptr_t >( palloc.sctx.size) );
     // create user-context
     if ( BOOST_UNLIKELY( 0 != ::getcontext( & record->uctx) ) ) {
+        record->~capture_t();
+        salloc.deallocate( palloc.sctx);
         throw std::system_error(
                 std::error_code( errno, std::system_category() ),
                 "getcontext() failed");
@@ -445,30 +449,12 @@ public:
         return nullptr == ptr_ || ptr_->terminated;
     }
 
-    bool operator==( continuation const& other) const noexcept {
-        return ptr_ == other.ptr_;
-    }
-
-    bool operator!=( continuation const& other) const noexcept {
-        return ptr_ != other.ptr_;
-    }
-
     bool operator<( continuation const& other) const noexcept {
         return ptr_ < other.ptr_;
     }
 
-    bool operator>( continuation const& other) const noexcept {
-        return other.ptr_ < ptr_;
-    }
-
-    bool operator<=( continuation const& other) const noexcept {
-        return ! ( * this > other);
-    }
-
-    bool operator>=( continuation const& other) const noexcept {
-        return ! ( * this < other);
-    }
-
+    #if !defined(BOOST_EMBTC)
+    
     template< typename charT, class traitsT >
     friend std::basic_ostream< charT, traitsT > &
     operator<<( std::basic_ostream< charT, traitsT > & os, continuation const& other) {
@@ -479,11 +465,33 @@ public:
         }
     }
 
+    #else
+    
+    template< typename charT, class traitsT >
+    friend std::basic_ostream< charT, traitsT > &
+    operator<<( std::basic_ostream< charT, traitsT > & os, continuation const& other);
+
+    #endif
+
     void swap( continuation & other) noexcept {
         std::swap( ptr_, other.ptr_);
     }
 };
 
+#if defined(BOOST_EMBTC)
+
+    template< typename charT, class traitsT >
+    inline std::basic_ostream< charT, traitsT > &
+    operator<<( std::basic_ostream< charT, traitsT > & os, continuation const& other) {
+        if ( nullptr != other.ptr_) {
+            return os << other.ptr_;
+        } else {
+            return os << "{not-a-context}";
+        }
+    }
+
+#endif
+    
 template<
     typename Fn,
     typename = detail::disable_overload< continuation, Fn >

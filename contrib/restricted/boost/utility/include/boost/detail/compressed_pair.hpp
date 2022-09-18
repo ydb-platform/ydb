@@ -24,6 +24,7 @@
 
 #include <boost/type_traits/remove_cv.hpp>
 #include <boost/type_traits/is_empty.hpp>
+#include <boost/type_traits/is_final.hpp>
 #include <boost/type_traits/is_same.hpp>
 #include <boost/call_traits.hpp>
 
@@ -42,6 +43,14 @@ class compressed_pair;
 
 namespace details
 {
+   template<class T, bool E = boost::is_final<T>::value>
+   struct compressed_pair_empty
+      : ::boost::false_type { };
+
+   template<class T>
+   struct compressed_pair_empty<T, false>
+      : ::boost::is_empty<T> { };
+
    // JM altered 26 Jan 2000:
    template <class T1, class T2, bool IsSame, bool FirstEmpty, bool SecondEmpty>
    struct compressed_pair_switch;
@@ -338,13 +347,15 @@ namespace details
 
 template <class T1, class T2>
 class compressed_pair
-   : private ::boost::details::compressed_pair_imp<T1, T2,
+#ifndef BOOST_UTILITY_DOCS
+    : private ::boost::details::compressed_pair_imp<T1, T2,
              ::boost::details::compressed_pair_switch<
                     T1,
                     T2,
                     ::boost::is_same<typename remove_cv<T1>::type, typename remove_cv<T2>::type>::value,
-                    ::boost::is_empty<T1>::value,
-                    ::boost::is_empty<T2>::value>::value>
+                    ::boost::details::compressed_pair_empty<T1>::value,
+                    ::boost::details::compressed_pair_empty<T2>::value>::value>
+#endif // BOOST_UTILITY_DOCS
 {
 private:
    typedef details::compressed_pair_imp<T1, T2,
@@ -352,8 +363,8 @@ private:
                     T1,
                     T2,
                     ::boost::is_same<typename remove_cv<T1>::type, typename remove_cv<T2>::type>::value,
-                    ::boost::is_empty<T1>::value,
-                    ::boost::is_empty<T2>::value>::value> base;
+                    ::boost::details::compressed_pair_empty<T1>::value,
+                    ::boost::details::compressed_pair_empty<T2>::value>::value> base;
 public:
    typedef T1                                                 first_type;
    typedef T2                                                 second_type;
@@ -383,13 +394,15 @@ public:
 //
 template <class T>
 class compressed_pair<T, T>
+#ifndef BOOST_UTILITY_DOCS
    : private details::compressed_pair_imp<T, T,
              ::boost::details::compressed_pair_switch<
                     T,
                     T,
                     ::boost::is_same<typename remove_cv<T>::type, typename remove_cv<T>::type>::value,
-                    ::boost::is_empty<T>::value,
-                    ::boost::is_empty<T>::value>::value>
+                    ::boost::details::compressed_pair_empty<T>::value,
+                    ::boost::details::compressed_pair_empty<T>::value>::value>
+#endif // BOOST_UTILITY_DOCS
 {
 private:
    typedef details::compressed_pair_imp<T, T,
@@ -397,8 +410,8 @@ private:
                     T,
                     T,
                     ::boost::is_same<typename remove_cv<T>::type, typename remove_cv<T>::type>::value,
-                    ::boost::is_empty<T>::value,
-                    ::boost::is_empty<T>::value>::value> base;
+                    ::boost::details::compressed_pair_empty<T>::value,
+                    ::boost::details::compressed_pair_empty<T>::value>::value> base;
 public:
    typedef T                                                  first_type;
    typedef T                                                  second_type;

@@ -519,7 +519,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto planRes = CollectStreamResult(res);
         auto ast = planRes.QueryStats->Getquery_ast();
-
+//        Cerr << ast << Endl;
         for (auto planNode : planNodes) {
             UNIT_ASSERT_C(ast.find(planNode) != std::string::npos,
                 TStringBuilder() << planNode << " was not pushed down. Query: " << query);
@@ -1106,11 +1106,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         TInstant tsPrev = TInstant::MicroSeconds(1000000);
+
+        std::set<ui64> results = { 1000096, 1000097, 1000098, 1000099, 1000999, 1001000 };
         for (const auto& r : rows) {
             TInstant ts = GetTimestamp(r.at("timestamp"));
             UNIT_ASSERT_GE_C(ts, tsPrev, "result is not sorted in ASC order");
+            UNIT_ASSERT(results.erase(ts.GetValue()));
             tsPrev = ts;
         }
+        UNIT_ASSERT(rows.size() == 6);
     }
 
     Y_UNIT_TEST_TWIN(ExtractRangesReverse, UseSessionActor) {
@@ -1129,6 +1133,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             SELECT `timestamp` FROM `/Root/olapStore/olapTable`
                 WHERE
                     (`timestamp` < CAST(1000100 AS Timestamp) AND `timestamp` > CAST(1000095 AS Timestamp)) OR
+                    (`timestamp` < CAST(1000300 AS Timestamp) AND `timestamp` >= CAST(1000295 AS Timestamp)) OR
+                    (`timestamp` <= CAST(1000400 AS Timestamp) AND `timestamp` > CAST(1000395 AS Timestamp)) OR
+
+                    (`timestamp` <= CAST(1000500 AS Timestamp) AND `timestamp` >= CAST(1000495 AS Timestamp)) OR
+                    (`timestamp` <= CAST(1000505 AS Timestamp) AND `timestamp` >= CAST(1000499 AS Timestamp)) OR
+                    (`timestamp` < CAST(1000510 AS Timestamp) AND `timestamp` >= CAST(1000505 AS Timestamp)) OR
+
                     (`timestamp` <= CAST(1001000 AS Timestamp) AND `timestamp` >= CAST(1000999 AS Timestamp)) OR
                     (`timestamp` > CAST(1002000 AS Timestamp))
                 ORDER BY `timestamp` DESC;
@@ -1136,11 +1147,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         TInstant tsPrev = TInstant::MicroSeconds(2000000);
+        std::set<ui64> results = { 1000096, 1000097, 1000098, 1000099,
+            1000999, 1001000,
+            1000295, 1000296, 1000297, 1000298, 1000299,
+            1000396, 1000397, 1000398, 1000399, 1000400,
+            1000495, 1000496, 1000497, 1000498, 1000499, 1000500, 1000501, 1000502, 1000503, 1000504, 1000505, 1000506, 1000507, 1000508, 1000509 };
+        const ui32 expectedCount = results.size();
         for (const auto& r : rows) {
             TInstant ts = GetTimestamp(r.at("timestamp"));
             UNIT_ASSERT_LE_C(ts, tsPrev, "result is not sorted in DESC order");
+            UNIT_ASSERT(results.erase(ts.GetValue()));
             tsPrev = ts;
         }
+        UNIT_ASSERT(rows.size() == expectedCount);
     }
 
     Y_UNIT_TEST_TWIN(PredicatePushdown, UseSessionActor) {
@@ -1742,6 +1761,93 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
         auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
         UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
+    }
+
+    Y_UNIT_TEST(GranulesInShard) {
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetNodeCount(2);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+
+        auto runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        EnableDebugLogging(runtime);
+
+        ui32 numShards = 1;
+        ui32 numIterations = 100;
+        CreateTestOlapTable(*server, "largeOlapTable", "largeOlapStore", numShards, numShards);
+        ui32 insertRows = 0;
+        const ui32 iterationPackSize = 2000;
+        for (ui64 i = 0; i < numIterations; ++i) {
+            SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i * 1000000, iterationPackSize);
+            insertRows += iterationPackSize;
+        }
+
+        ui64 result = 0;
+        bool testProcessed = false;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TKqpComputeEvents::EvCostData:
+                {
+
+                    auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvCostData>();
+                    if (msg->GetTableRanges().GetMarksCount()) {
+                        Y_VERIFY(msg->GetSerializedTableRanges(1).size() == 1);
+                        Y_VERIFY(msg->GetSerializedTableRanges(2).size() == 2);
+                        testProcessed = true;
+                    }
+                    break;
+                }
+
+                case NKqp::TKqpExecuterEvents::EvShardsResolveStatus:
+                {
+
+                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    for (auto& [shardId, nodeId] : msg->ShardNodes) {
+                        Cerr << "-- nodeId: " << nodeId << Endl;
+                        nodeId = runtime->GetNodeId(0);
+                    }
+                    break;
+                }
+
+                case NKqp::TKqpExecuterEvents::EvStreamData:
+                {
+                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+
+                    Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
+                    Cerr.Flush();
+
+                    Y_ASSERT(record.GetResultSet().rows().size() == 1);
+                    Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
+                    result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
+
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    resp->Record.SetEnough(false);
+                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
+                    resp->Record.SetFreeSpace(100);
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime->SetObserverFunc(captureEvents);
+        auto streamSender = runtime->AllocateEdgeActor();
+        const TInstant start = Now();
+        while (Now() - start < TDuration::Seconds(20) && !testProcessed) {
+            SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
+            auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+            UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(testProcessed);
     }
 
     Y_UNIT_TEST(ManyColumnShardsWithRestarts) {

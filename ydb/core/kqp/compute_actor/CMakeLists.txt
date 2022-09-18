@@ -21,10 +21,19 @@ target_link_libraries(core-kqp-compute_actor PUBLIC
   core-tx-scheme_cache
   dq-actors-compute
   yql-public-issue
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-compute_actor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_actor_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_state.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_pure_compute_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_stat.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_actor.cpp
+)
+generate_enum_serilization(core-kqp-compute_actor
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_state.h
+  INCLUDE_HEADERS
+  ydb/core/kqp/compute_actor/kqp_compute_state.h
 )

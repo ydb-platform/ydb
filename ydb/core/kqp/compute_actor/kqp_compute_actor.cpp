@@ -40,7 +40,48 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
             return nullptr;
         };
 }
-
 } // namespace NMiniKQL
+
+namespace NKqp {
+
+void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta,
+    ui32& maxInFlight, bool& isAggregationRequest) const {
+    const bool isSorted = (meta.HasSorted() ? meta.GetSorted() : true);
+
+    isAggregationRequest = false;
+    maxInFlight = 1;
+
+    NKikimrSSA::TProgram program;
+    bool hasNoGroupBy = false;
+    bool hasGroupByWithFields = false;
+    bool hasGroupByWithNoFields = false;
+    if (meta.HasOlapProgram()) {
+        Y_VERIFY(program.ParseFromString(meta.GetOlapProgram().GetProgram()));
+        for (auto&& command : program.GetCommand()) {
+            if (!command.HasGroupBy()) {
+                hasNoGroupBy = true;
+                continue;
+            }
+            if (command.GetGroupBy().GetKeyColumns().size()) {
+                hasGroupByWithFields = true;
+            } else {
+                hasGroupByWithNoFields = true;
+            }
+        }
+    } else {
+        hasNoGroupBy = true;
+    }
+    isAggregationRequest = hasGroupByWithFields || hasGroupByWithNoFields;
+    if (isSorted) {
+        maxInFlight = 1;
+    } else if (hasGroupByWithFields) {
+        maxInFlight = ProtoConfig.GetAggregationGroupByLimit();
+    } else if (hasGroupByWithNoFields) {
+        maxInFlight = ProtoConfig.GetAggregationNoGroupLimit();
+    } else {
+        maxInFlight = ProtoConfig.GetScanLimit();
+    }
+}
+}
 } // namespace NKikimr
 

@@ -300,8 +300,9 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res) {
 
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<TTupleType*>(type);
+            auto resTuple = res.mutable_tuple_type();
             for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
-                ExportTypeToProtoImpl(tupleType->GetElementType(index), *res.mutable_tuple_type()->add_elements());
+                ExportTypeToProtoImpl(tupleType->GetElementType(index), *resTuple->add_elements());
             }
 
             break;

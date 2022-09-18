@@ -7,7 +7,7 @@ LICENSE(BSL-1.0)
 SET(BOOST_ROOT contrib/restricted/boost)
 
 # XXX: fix selective checkout
-SRCDIR(${BOOST_ROOT}/boost)
+SRCDIR(${BOOST_ROOT})
 
 IF (DYNAMIC_BOOST)
     CFLAGS(

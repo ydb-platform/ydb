@@ -41,6 +41,7 @@ target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_command.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_profile.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_root_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_auth.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_discovery.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_export.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_import.cpp

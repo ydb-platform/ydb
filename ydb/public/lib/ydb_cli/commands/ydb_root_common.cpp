@@ -1,5 +1,6 @@
 #include "ydb_root_common.h"
 #include "ydb_profile.h"
+#include "ydb_service_auth.h"
 #include "ydb_service_discovery.h"
 #include "ydb_service_export.h"
 #include "ydb_service_import.h"
@@ -27,6 +28,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TClientSettings& settin
     , Settings (settings)
 {
     ValidateSettings();
+    AddCommand(std::make_unique<TCommandAuth>());
     AddCommand(std::make_unique<TCommandDiscovery>());
     AddCommand(std::make_unique<TCommandScheme>());
     AddCommand(std::make_unique<TCommandScripting>());

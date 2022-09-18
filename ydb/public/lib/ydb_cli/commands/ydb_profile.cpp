@@ -1,5 +1,7 @@
 #include "ydb_profile.h"
 
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 #include <util/folder/dirut.h>
 
 #if defined(_win32_)
@@ -285,21 +287,6 @@ namespace {
         }
 
         picker.PickOptionAndDoAction();
-    }
-
-    bool AskYesOrNo() {
-        TString input;
-        for (;;) {
-            Cin >> input;
-            if (to_lower(input) == "y" || to_lower(input) == "yes") {
-                return true;
-            } else if (to_lower(input) == "n" || to_lower(input) == "n") {
-                return false;
-            } else {
-                Cout << "Type \"y\" (yes) or \"n\" (no): ";
-            }
-        }
-        return false;
     }
 
     void ConfigureProfile(const TString& profileName, std::shared_ptr<IProfileManager> profileManager,

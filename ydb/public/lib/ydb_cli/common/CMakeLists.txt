@@ -30,6 +30,7 @@ target_sources(common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/examples.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/format.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/interactive.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/interruptible.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameters.cpp

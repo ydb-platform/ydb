@@ -198,6 +198,8 @@ namespace Tests {
             , PQConfig(pqConfig)
         {
             AddStoragePool("test", "/" + DomainName + ":test");
+            AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetParallelScanningAvailable(true);
+            AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetShardSplitFactor(16);
         }
 
         TServerSettings(const TServerSettings& settings) = default;

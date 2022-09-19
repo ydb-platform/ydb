@@ -1,4 +1,5 @@
 #pragma once
+#include "kqp_compute_actor.h"
 #include "kqp_compute_state.h"
 #include "kqp_scan_compute_stat.h"
 
@@ -14,8 +15,40 @@ private:
     std::set<ui32> ActualScannerIds;
     ui32 LastGeneration = 0;
     std::map<ui32, TShardState::TPtr> NeedAckStates;
-
+    std::set<ui64> AffectedShards;
+    std::map<ui32, TShardCostsState::TPtr> CostRequestsByScanId;
+    std::map<ui64, TShardCostsState::TPtr> CostRequestsByShardId;
+    const TShardsScanningPolicy& ScanningPolicy;
+    bool IsActiveFlag = true;
 public:
+    TInFlightShards(const TShardsScanningPolicy& scanningPolicy)
+        : ScanningPolicy(scanningPolicy)
+    {
+
+    }
+    ui32 GetAvailableTasks() const {
+        return GetScansCount() + GetCostRequestsCount();
+    }
+    bool IsActive() const {
+        return IsActiveFlag;
+    }
+    void Stop() {
+        Y_VERIFY(GetAvailableTasks() == 0);
+        IsActiveFlag = false;
+    }
+    void ClearAll();
+    const std::set<ui64>& GetAffectedShards() const {
+        return AffectedShards;
+    }
+
+    TShardCostsState::TPtr GetCostsState(const ui64 shardId) const;
+
+
+    bool ProcessCostReply(TEvKqpCompute::TEvCostData::TPtr ev, const TShardCostsState::TReadData*& readData,
+        TSmallVec<TSerializedTableRange>& result);
+
+    TShardCostsState::TPtr PrepareCostRequest(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& read);
+
     TString TraceToString() const;
 
     const std::map<ui32, TShardState::TPtr>& GetNeedAck() const {
@@ -30,9 +63,13 @@ public:
     void NeedAck(TShardState::TPtr state) {
         Y_VERIFY(StatesByIndex.contains(state->ScannerIdx));
         NeedAckStates.emplace(state->ScannerIdx, state);
+        AffectedShards.emplace(state->TabletId);
     }
 
     ui32 AllocateGeneration(TShardState::TPtr state);
+    ui32 GetCostRequestsCount() const {
+        return CostRequestsByScanId.size();
+    }
     ui32 GetScansCount() const;
     ui32 GetShardsCount() const {
         return Shards.size();

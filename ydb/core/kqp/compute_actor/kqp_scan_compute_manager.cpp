@@ -86,4 +86,44 @@ ui32 TInFlightShards::GetScansCount() const {
     return result;
 }
 
+void TInFlightShards::ClearAll() {
+    CostRequestsByScanId.clear();
+    CostRequestsByShardId.clear();
+    Shards.clear();
+    AllocatedGenerations.clear();
+    StatesByIndex.clear();
+    NeedAckStates.clear();
+}
+
+bool TInFlightShards::ProcessCostReply(TEvKqpCompute::TEvCostData::TPtr ev, const TShardCostsState::TReadData*& readData, TSmallVec<TSerializedTableRange>& result) {
+    auto it = CostRequestsByScanId.find(ev->Get()->GetScanId());
+    Y_VERIFY(it != CostRequestsByScanId.end(), "incorrect generation from cost data event: %u", ev->Get()->GetScanId());
+    readData = &it->second->GetReadData();
+    if (!ev->Get()->GetTableRanges().ColumnsCount()) {
+        result = TShardCostsState::BuildSerializedTableRanges(*readData);
+    } else {
+        result = ev->Get()->GetSerializedTableRanges(ScanningPolicy.GetShardSplitFactor());
+    }
+    CostRequestsByShardId.erase(it->second->GetShardId());
+    CostRequestsByScanId.erase(it);
+    return true;
+}
+
+TShardCostsState::TPtr TInFlightShards::PrepareCostRequest(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& read) {
+    const ui32 scanId = CostRequestsByScanId.size() + 1;
+    auto costsState = std::make_shared<TShardCostsState>(scanId, &read);
+    Y_VERIFY(CostRequestsByScanId.emplace(scanId, costsState).second);
+    Y_VERIFY(CostRequestsByShardId.emplace(costsState->GetShardId(), costsState).second);
+    return costsState;
+}
+
+TShardCostsState::TPtr TInFlightShards::GetCostsState(const ui64 shardId) const {
+    auto it = CostRequestsByShardId.find(shardId);
+    if (it == CostRequestsByShardId.end()) {
+        return nullptr;
+    } else {
+        return it->second;
+    }
+}
+
 }

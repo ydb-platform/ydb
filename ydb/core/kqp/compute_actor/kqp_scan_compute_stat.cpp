@@ -108,4 +108,12 @@ TString TScanShardsStatistics::GetDurationStats() const {
     return sb;
 }
 
+ui32 TScanShardsStatistics::GetTotalRowsCount() const {
+    ui32 result = 0;
+    for (auto&& i : Statistics) {
+        result += i.second.GetTotalRowsCount();
+    }
+    return result;
+}
+
 }

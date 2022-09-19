@@ -121,7 +121,9 @@ public:
         , ComputeCtx(settings.StatsMode)
         , Snapshot(snapshot)
         , ShardsScanningPolicy(shardsScanningPolicy)
-        , Counters(counters) {
+        , Counters(counters)
+        , InFlightShards(ShardsScanningPolicy)
+    {
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
         YQL_ENSURE(!Meta.GetReads().empty());
         YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
@@ -170,16 +172,17 @@ public:
         ScanData->TaskId = GetTask().GetId();
         ScanData->TableReader = CreateKqpTableReader(*ScanData);
         ShardsScanningPolicy.FillRequestScanFeatures(Meta, MaxInFlight, IsAggregationRequest);
-        if (!Meta.HasOlapProgram() || !ShardsScanningPolicy.IsParallelScanningAvailable()) {
+        if (!Meta.HasOlapProgram() || !ShardsScanningPolicy.IsParallelScanningAvailable() || ShardsScanningPolicy.GetShardSplitFactor() == 0) {
             for (const auto& read : Meta.GetReads()) {
                 auto& state = PendingShards.emplace_back(TShardState(read.GetShardId(), ++ScansCounter));
-                state.Ranges = BuildSerializedTableRanges(read);
+                state.Ranges = TShardCostsState::BuildSerializedTableRanges(read);
             }
             StartTableScan();
             ContinueExecute();
         } else {
+            CA_LOG_D("EVLOGKQP: Costs usage");
             for (const auto& read : Meta.GetReads()) {
-                StartCostsRequest(read);
+                StartCostsRequest(InFlightShards.PrepareCostRequest(read));
             }
         }
         Become(&TKqpScanComputeActor::StateFunc);
@@ -272,20 +275,6 @@ protected:
     }
 
 private:
-    TVector<TSerializedTableRange> BuildSerializedTableRanges(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData) {
-        TVector<TSerializedTableRange> resultLocal;
-        resultLocal.reserve(readData.GetKeyRanges().size());
-        for (const auto& range : readData.GetKeyRanges()) {
-            auto& sr = resultLocal.emplace_back(TSerializedTableRange(range));
-            if (!range.HasTo()) {
-                sr.To = sr.From;
-                sr.FromInclusive = sr.ToInclusive = true;
-            }
-        }
-        Y_VERIFY_DEBUG(!resultLocal.empty());
-        return resultLocal;
-    }
-
     THolder<TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const {
         auto ev = MakeHolder<TEvDataShard::TEvKqpScan>();
         ev->Record.SetLocalPathId(ScanData->TableId.PathId.LocalPathId);
@@ -364,44 +353,17 @@ private:
     }
 
     void StartCostsRequest(TShardCostsState::TPtr state) {
-        TSmallVec<TSerializedTableRange> serializedTableRanges = BuildSerializedTableRanges(state->GetReadData());
+        TSmallVec<TSerializedTableRange> serializedTableRanges = TShardCostsState::BuildSerializedTableRanges(state->GetReadData());
         THolder<TEvDataShard::TEvKqpScan> ev = BuildEvKqpScan(state->GetScanId(), 0, serializedTableRanges);
         ev->Record.SetCostDataOnly(true);
         THolder<TEvPipeCache::TEvForward> evForward = MakeHolder<TEvPipeCache::TEvForward>(ev.Release(), state->GetShardId());
         Send(MakePipePeNodeCacheID(false), evForward.Release(), IEventHandle::FlagTrackDelivery);
     }
 
-    void StartCostsRequest(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& read) {
-        const ui32 scanId = CostRequestsByScanId.size() + 1;
-        auto costsState = std::make_shared<TShardCostsState>(scanId, &read);
-        Y_VERIFY(CostRequestsByScanId.emplace(scanId, costsState).second);
-        Y_VERIFY(CostRequestsByShardId.emplace(costsState->GetShardId(), costsState).second);
-        StartCostsRequest(costsState);
-    }
-
-    bool ReceiveCostRequest(TEvKqpCompute::TEvCostData::TPtr& ev, const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta*& readData,
-        TSmallVec<TSerializedTableRange>& result, const bool splitFactor) {
-        auto it = CostRequestsByScanId.find(ev->Get()->GetScanId());
-        Y_VERIFY(it != CostRequestsByScanId.end(), "incorrect generation from cost data event: %u", ev->Get()->GetScanId());
-        readData = &it->second->GetReadData();
-        if (!ev->Get()->GetTableRanges().ColumnsCount()) {
-            result = BuildSerializedTableRanges(*readData);
-        } else {
-            result = ev->Get()->GetSerializedTableRanges(splitFactor);
-        }
-        if (Meta.GetReverse()) {
-            std::reverse(result.begin(), result.end());
-        }
-        CostRequestsByShardId.erase(it->second->GetShardId());
-        CostRequestsByScanId.erase(it);
-        return true;
-    }
-
     void HandleExecute(TEvKqpCompute::TEvCostData::TPtr& ev) {
         const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta* read = nullptr;
         TSmallVec<TSerializedTableRange> ranges;
-        const double shardSplitFactor = ShardsScanningPolicy.GetShardSplitFactor();
-        ReceiveCostRequest(ev, read, ranges, shardSplitFactor);
+        Y_VERIFY(InFlightShards.ProcessCostReply(ev, read, ranges));
         for (auto&& i : ranges) {
             auto& state = PendingShards.emplace_back(TShardState(read->GetShardId(), ++ScansCounter));
             state.Ranges.emplace_back(i);
@@ -428,7 +390,6 @@ private:
             state->State = EShardState::Running;
             state->ActorId = scanActorId;
             state->ResetRetry();
-            AffectedShards.insert(state->TabletId);
             InFlightShards.NeedAck(state);
             SendScanDataAck(state);
         } else {
@@ -463,6 +424,7 @@ private:
     }
 
     void StopFinally() {
+        CA_LOG_D("EVLOGKQP: Stop finally");
         std::vector<TShardState::TPtr> currentScans;
         for (auto&& i : InFlightShards) {
             for (auto&& s : i.second) {
@@ -472,6 +434,8 @@ private:
         for (auto&& i : currentScans) {
             StopReadChunk(*i);
         }
+        InFlightShards.ClearAll();
+        InFlightShards.Stop();
         PendingShards.clear();
     }
 
@@ -522,7 +486,8 @@ private:
             << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimiter"
             << ", tabletId: " << state->TabletId);
         bool stopFinally = false;
-        if (!IsAggregationRequest && Meta.HasItemsLimit() && Meta.GetItemsLimit() && Stats.TotalReadRows >= Meta.GetItemsLimit()) {
+        CA_LOG_T("EVLOGKQP:" << IsAggregationRequest << "/" << Meta.GetItemsLimit() << "/" << InFlightShards.GetTotalRowsCount() << "/" << rowsCount);
+        if (!IsAggregationRequest && Meta.HasItemsLimit() && Meta.GetItemsLimit() && InFlightShards.GetTotalRowsCount() >= Meta.GetItemsLimit()) {
             StopFinally();
             stopFinally = true;
         } else if (!msg.Finished) {
@@ -539,12 +504,13 @@ private:
         }
         if (stopFinally) {
             ScanData->Finish();
+            InFlightShards.Stop();
             CA_LOG_D("EVLOGKQP(scans_count:" << ScansCounter << ";max_in_flight:" << MaxInFlight << ")"
                 << Endl << InFlightShards.GetDurationStats()
                 << Endl << InFlightShards.StatisticsToString()
             );
             if (ScanData->BasicStats) {
-                ScanData->BasicStats->AffectedShards = AffectedShards.size();
+                ScanData->BasicStats->AffectedShards = InFlightShards.GetAffectedShards().size();
             }
         }
 
@@ -623,9 +589,8 @@ private:
         YQL_ENSURE(ScanData);
         auto& msg = *ev->Get();
 
-        auto it = CostRequestsByShardId.find(msg.TabletId);
-        if (it != CostRequestsByShardId.end()) {
-            RetryCostsRequest(it->second);
+        if (auto costsState = InFlightShards.GetCostsState(msg.TabletId)) {
+            RetryCostsRequest(costsState);
             return;
         }
 
@@ -646,12 +611,12 @@ private:
 
     void HandleExecute(TEvPrivate::TEvRetryShard::TPtr& ev) {
         if (ev->Get()->IsCostsRequest) {
-            auto it = CostRequestsByShardId.find(ev->Get()->TabletId);
-            if (it == CostRequestsByShardId.end()) {
+            auto costsState = InFlightShards.GetCostsState(ev->Get()->TabletId);
+            if (!costsState) {
                 CA_LOG_E("Received retry shard costs for unexpected tablet " << ev->Get()->TabletId);
                 return;
             }
-            StartCostsRequest(it->second);
+            StartCostsRequest(costsState);
         } else {
             const ui32 scannerIdx = InFlightShards.GetIndexByGeneration(ev->Get()->Generation);
             auto state = InFlightShards.GetStateByIndex(scannerIdx);
@@ -873,7 +838,7 @@ private:
             << "average read rows: " << Stats.AverageReadRows() << ", "
             << "average read bytes: " << Stats.AverageReadBytes() << ", ");
 
-        return CostRequestsByScanId.size() + InFlightShards.GetScansCount() + PendingShards.size() + PendingResolveShards.size() > 0;
+        return InFlightShards.GetCostRequestsCount() + InFlightShards.GetScansCount() + PendingShards.size() + PendingResolveShards.size() > 0;
     }
 
     void StartReadShard(TShardState::TPtr state) {
@@ -1148,6 +1113,9 @@ private:
 
     template<class TMessage>
     TShardState::TPtr GetShardState(const TMessage& msg, const TActorId& scanActorId) {
+        if (!InFlightShards.IsActive()) {
+            return nullptr;
+        }
         ui32 generation;
         if constexpr (std::is_same_v<TMessage, NKikimrKqp::TEvScanError>) {
             generation = msg.GetGeneration();
@@ -1202,10 +1170,7 @@ private:
     TInFlightShards InFlightShards;
     ui32 ScansCounter = 0;
 
-    std::set<ui64> AffectedShards;
     std::set<ui32> TrackingNodes;
-    std::map<ui32, TShardCostsState::TPtr> CostRequestsByScanId;
-    std::map<ui64, TShardCostsState::TPtr> CostRequestsByShardId;
     ui32 MaxInFlight = 1024;
     bool IsAggregationRequest = false;
 };

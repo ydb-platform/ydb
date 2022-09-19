@@ -37,6 +37,9 @@ public:
     TChunkStatistics& MutableStatistics(const ui32 scannerIdx) {
         return Statistics[scannerIdx];
     }
+    ui32 GetTotalRowsCount() const {
+        return TotalRowsCount;
+    }
     TString StatisticsToString() const;
 };
 
@@ -56,6 +59,7 @@ public:
     TShardStatistics& MutableStatistics(const ui64 shardId) {
         return Statistics[shardId];
     }
+    ui32 GetTotalRowsCount() const;
     TString StatisticsToString() const;
     TString GetDurationStats() const;
 

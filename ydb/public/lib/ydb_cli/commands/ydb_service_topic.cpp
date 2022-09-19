@@ -158,6 +158,9 @@ namespace NYdb::NConsoleClient {
                      "Couldn't find description for %s metering mode", (TStringBuilder() << mode.second).c_str());
             description << "\n  " << colors.BoldColor() << mode.first << colors.OldColor()
                         << "\n    " << findResult->second;
+            if (mode.second == NTopic::EMeteringMode::RequestUnits) {
+                description << colors.CyanColor() << " (default)" << colors.OldColor();
+            }
         }
         config.Opts->AddLongOption("metering-mode", description.Str())
             .Optional()

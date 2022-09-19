@@ -35,6 +35,7 @@ namespace {
                                         "Every row is a separate binary data on a separate line"},
         { EOutputFormat::ProtoJsonBase64, "Output result protobuf in json format, binary strings are encoded with base64" },
         { EOutputFormat::Csv, "Output in csv format" },
+        { EOutputFormat::Tsv, "Output in tsv format" },
     };
 
     THashMap<EMessagingFormat, TString> MessagingFormatDescriptions = {
@@ -336,7 +337,10 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
         FormatResultSetJson(resultSet, &Cout, EBinaryStringEncoding::Base64);
         break;
     case EOutputFormat::Csv:
-        PrintCsv(resultSet);
+        PrintCsv(resultSet, ",");
+        break;
+    case EOutputFormat::Tsv:
+        PrintCsv(resultSet, "\t");
         break;
     default:
         throw TMisuseException() << "This command doesn't support " << Format << " output format";
@@ -423,14 +427,14 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
     }
 }
 
-void TResultSetPrinter::PrintCsv(const TResultSet& resultSet) {
+void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim) {
     const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         for (ui32 i = 0; i < columns.size(); ++i) {
             Cout << FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode);
             if (i < columns.size() - 1) {
-                Cout << ",";
+                Cout << delim;
             }
         }
         Cout << Endl;

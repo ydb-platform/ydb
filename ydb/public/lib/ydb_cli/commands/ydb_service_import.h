@@ -22,9 +22,9 @@ class TCommandImportFromS3 : public TYdbOperationCommand,
                            public TCommandWithFormat {
 public:
     TCommandImportFromS3();
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
 
 private:
     struct TItemFields {
@@ -46,23 +46,37 @@ public:
     TCommandImportFromFile();
 };
 
-class TCommandImportFromCsv : public TYdbCommand,
-                            public TCommandWithPath {
+class TCommandImportFileBase : public TYdbCommand,
+    public TCommandWithPath, public TCommandWithFormat {
 public:
-    TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file");
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+    TCommandImportFileBase(const TString& cmd, const TString& cmdDescription)
+      : TYdbCommand(cmd, {}, cmdDescription)
+    {}
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
 
 protected:
-    EOutputFormat InputFormat = EOutputFormat::Csv;
-    TString FilePath;
-    TString Delimiter = ",";
+    TString FilePath; // Read from stdin if the file path is empty
+    TString BytesPerRequest;
+    ui64 MaxInFlightRequests = 1;
+};
+
+class TCommandImportFromCsv : public TCommandImportFileBase {
+public:
+    TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file")
+        : TCommandImportFileBase(cmd, cmdDescription)
+    {
+        InputFormat = EOutputFormat::Csv;
+        Delimiter = ",";
+    }
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+protected:
+    TString Delimiter;
     TString NullValue;
     ui32 SkipRows = 0;
     bool Header = false;
-    TString BytesPerRequest;
-    ui64 MaxInFlightRequests = 1;
 };
 
 class TCommandImportFromTsv : public TCommandImportFromCsv {
@@ -73,6 +87,18 @@ public:
         InputFormat = EOutputFormat::Tsv;
         Delimiter = "\t";
     }
+};
+
+class TCommandImportFromJson : public TCommandImportFileBase {
+public:
+    TCommandImportFromJson()
+       : TCommandImportFileBase("json", "Import data from JSON file")
+    {
+        InputFormat = EOutputFormat::JsonUnicode;
+    }
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
 };
 
 }

@@ -130,23 +130,55 @@ TCommandImportFromFile::TCommandImportFromFile()
 {
     AddCommand(std::make_unique<TCommandImportFromCsv>());
     AddCommand(std::make_unique<TCommandImportFromTsv>());
+    AddCommand(std::make_unique<TCommandImportFromJson>());
 }
 
-/// CSV
+/// Import File Shared Config
 
-TCommandImportFromCsv::TCommandImportFromCsv(const TString& cmd, const TString& cmdDescription)
-    : TYdbCommand(cmd, {}, cmdDescription)
-{}
-
-void TCommandImportFromCsv::Config(TConfig& config) {
+void TCommandImportFileBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption('p', "path", "Database path to table")
         .Required().RequiredArgument("STRING").StoreResult(&Path);
-    config.Opts->AddLongOption("input-file", "Path to file to import in a local filesystem")
-        .Required().RequiredArgument("STRING").StoreResult(&FilePath);
+
+    config.Opts->AddLongOption('i', "input-file", 
+            "Path to file to be imported, standard input if empty or not specified")
+        .StoreResult(&FilePath).DefaultValue(FilePath);
+
+    const TImportFileSettings defaults;
+    config.Opts->AddLongOption("batch-bytes",
+            "Use portions of this size in bytes to parse and upload file data")
+        .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
+    config.Opts->AddLongOption("max-in-flight",
+            "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")
+        .DefaultValue(defaults.MaxInFlightRequests_).StoreResult(&MaxInFlightRequests);
+}
+
+void TCommandImportFileBase::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+    AdjustPath(config);
+
+    if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
+        if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) {
+            throw TMisuseException()
+                << "--batch-bytes cannot be larger than "
+                << HumanReadableSize(TImportFileSettings::MaxBytesPerRequest, SF_BYTES);
+        }
+    }
+
+    if (MaxInFlightRequests == 0) {
+        throw TMisuseException()
+            << "--max-in-flight must be greater than zero";
+    }
+}
+
+/// Import CSV
+
+void TCommandImportFromCsv::Config(TConfig& config) {
+    TCommandImportFileBase::Config(config);
+
     config.Opts->AddLongOption("skip-rows",
             "Number of header rows to skip (not including the row of column names, if any)")
         .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(SkipRows);
@@ -160,43 +192,16 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL")
             .RequiredArgument("STRING").StoreResult(&NullValue).DefaultValue(NullValue);
     // TODO: quoting/quote_char
-
-    TImportFileSettings defaults;
-
-    config.Opts->AddLongOption("batch-bytes",
-            "Use portions of this size in bytes to parse and upload file data")
-        .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
-
-    config.Opts->AddLongOption("max-in-flight",
-            "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")
-        .DefaultValue(defaults.MaxInFlightRequests_).StoreResult(&MaxInFlightRequests);
-}
-
-void TCommandImportFromCsv::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-    AdjustPath(config);
 }
 
 int TCommandImportFromCsv::Run(TConfig& config) {
     TImportFileSettings settings;
+    settings.Format(InputFormat);
+    settings.MaxInFlightRequests(MaxInFlightRequests);
+    settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.SkipRows(SkipRows);
     settings.Header(Header);
     settings.NullValue(NullValue);
-
-    if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
-        if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) {
-            throw TMisuseException()
-                << "--batch-bytes cannot be larger than "
-                << HumanReadableSize(TImportFileSettings::MaxBytesPerRequest, SF_BYTES);
-        }
-
-        settings.BytesPerRequest(bytesPerRequest);
-    }
-
-    if (MaxInFlightRequests == 0) {
-        MaxInFlightRequests = 1;
-    }
-    settings.MaxInFlightRequests(MaxInFlightRequests);
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()
@@ -204,6 +209,36 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     } else {
         settings.Delimiter(Delimiter);
     }
+
+    TImportFileClient client(CreateDriver(config));
+    ThrowOnError(client.Import(FilePath, Path, settings));
+
+    return EXIT_SUCCESS;
+}
+
+
+/// Import JSON
+
+void TCommandImportFromJson::Config(TConfig& config) {
+    TCommandImportFileBase::Config(config);
+
+    AddInputFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64
+    });
+}
+
+void TCommandImportFromJson::Parse(TConfig& config) {
+    TCommandImportFileBase::Parse(config);
+
+    ParseFormats();
+}
+
+int TCommandImportFromJson::Run(TConfig& config) {
+    TImportFileSettings settings;
+    settings.Format(InputFormat);
+    settings.MaxInFlightRequests(MaxInFlightRequests);
+    settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
 
     TImportFileClient client(CreateDriver(config));
     ThrowOnError(client.Import(FilePath, Path, settings));

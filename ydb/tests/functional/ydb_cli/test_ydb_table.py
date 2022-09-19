@@ -173,6 +173,12 @@ class TestExecuteQueryWithFormats(BaseTestTableService):
     def test_data_query_json_unicode_array(self):
         return self.execute_data_query('json-unicode-array')
 
+    def test_data_query_csv(self):
+        return self.execute_data_query('csv')
+
+    def test_data_query_tsv(self):
+        return self.execute_data_query('tsv')
+
     # ScanQuery
 
     def test_scan_query_pretty(self):
@@ -190,6 +196,12 @@ class TestExecuteQueryWithFormats(BaseTestTableService):
     def test_scan_query_json_unicode_array(self):
         return self.execute_scan_query('json-unicode-array')
 
+    def test_scan_query_csv(self):
+        return self.execute_scan_query('csv')
+
+    def test_scan_query_tsv(self):
+        return self.execute_scan_query('tsv')
+
     # ReadTable
 
     def test_read_table_pretty(self):
@@ -206,3 +218,9 @@ class TestExecuteQueryWithFormats(BaseTestTableService):
 
     def test_read_table_json_unicode_array(self):
         return self.execute_read_table('json-unicode-array')
+
+    def test_read_table_csv(self):
+        return self.execute_read_table('csv')
+
+    def test_read_table_tsv(self):
+        return self.execute_read_table('tsv')

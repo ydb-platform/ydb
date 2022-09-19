@@ -362,13 +362,14 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         EOutputFormat::JsonBase64
     });
 
-
     AddFormats(config, {
         EOutputFormat::Pretty,
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonUnicodeArray,
         EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array
+        EOutputFormat::JsonBase64Array,
+        EOutputFormat::Csv,
+        EOutputFormat::Tsv
     });
 
     CheckExamples(config);
@@ -699,11 +700,10 @@ void TCommandReadTable::Config(TConfig& config) {
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonUnicodeArray,
         EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array
+        EOutputFormat::JsonBase64Array,
+        EOutputFormat::Csv,
+        EOutputFormat::Tsv
     });
-
-    // TODO: KIKIMR-8675
-    // Add csv format
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");

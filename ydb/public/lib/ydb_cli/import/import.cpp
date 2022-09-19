@@ -8,6 +8,7 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
@@ -23,6 +24,7 @@ namespace NConsoleClient {
 
 namespace {
 
+static inline
 TStatus MakeStatus(EStatus code = EStatus::SUCCESS, const TString& error = {}) {
     NYql::TIssues issues;
     if (error) {
@@ -37,22 +39,32 @@ TImportFileClient::TImportFileClient(const TDriver& driver)
     : OperationClient(std::make_shared<NOperation::TOperationClient>(driver))
     , SchemeClient(std::make_shared<NScheme::TSchemeClient>(driver))
     , TableClient(std::make_shared<NTable::TTableClient>(driver))
-{}
+{
+    UpsertSettings
+        .OperationTimeout(TDuration::Seconds(30))
+        .ClientTimeout(TDuration::Seconds(35));
+    RetrySettings
+        .MaxRetries(10);
+}
 
 TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings) {
-    if (filePath.empty()) {
-        return MakeStatus(EStatus::BAD_REQUEST, "No file specified");
+    if (! filePath.empty()) {
+        const TFsPath dataFile(filePath);
+        if (!dataFile.Exists()) {
+            return MakeStatus(EStatus::BAD_REQUEST,
+                TStringBuilder() << "File does not exist: " << filePath);
+        }
+        if (!dataFile.IsFile()) {
+            return MakeStatus(EStatus::BAD_REQUEST,
+                TStringBuilder() << "Not a file: " << filePath);
+        }
     }
 
-    TFsPath dataFile(filePath);
-    if (!dataFile.Exists()) {
-        return MakeStatus(EStatus::BAD_REQUEST,
-            TStringBuilder() << "File does not exist: " << filePath);
-    }
-
-    if (!dataFile.IsFile()) {
-        return MakeStatus(EStatus::BAD_REQUEST,
-            TStringBuilder() << "Not a file: " << filePath);
+    if (settings.Format_ == EOutputFormat::Tsv) {
+        if (settings.Delimiter_ != "\t") {
+            return MakeStatus(EStatus::BAD_REQUEST,
+                TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
+        }
     }
 
     auto result = NDump::DescribePath(*SchemeClient, dbPath).GetStatus();
@@ -61,12 +73,24 @@ TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath
             TStringBuilder() <<  "Table does not exist: " << dbPath);
     }
 
-    if (settings.Format_ != NTable::EDataFormat::CSV) {
-        return MakeStatus(EStatus::BAD_REQUEST,
-            TStringBuilder() << "Unsupported format");
-    }
+    // If the filename passed is empty, read from stdin, else from the file.
+    std::unique_ptr<TFileInput> fileInput = filePath.empty() ? nullptr 
+        : std::make_unique<TFileInput>(filePath, settings.FileBufferSize_);
+    IInputStream& input = fileInput ? *fileInput : Cin;
 
-    return UpsertCsv(dataFile, dbPath, settings);
+    switch (settings.Format_) {
+        case EOutputFormat::Default:
+        case EOutputFormat::Csv:
+        case EOutputFormat::Tsv:
+            return UpsertCsv(input, dbPath, settings);
+        case EOutputFormat::Json:
+        case EOutputFormat::JsonUnicode:
+        case EOutputFormat::JsonBase64:
+            return UpsertJson(input, dbPath, settings);
+        default: ;
+    }
+    return MakeStatus(EStatus::BAD_REQUEST,
+        TStringBuilder() << "Unsupported format #" << (int) settings.Format_);
 }
 
 namespace {
@@ -85,18 +109,22 @@ TStatus WaitForQueue(std::deque<TAsyncStatus>& inFlightRequests, size_t maxQueue
 
 }
 
-TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbPath,
+inline
+TAsyncStatus TImportFileClient::UpsertCsvBuffer(const TString& dbPath, const TString& buffer) {
+    auto upsert = [this, dbPath, buffer](NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus {
+        return tableClient.BulkUpsert(dbPath, NTable::EDataFormat::CSV, buffer, {}, UpsertSettings)
+            .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
+                NYdb::TStatus status = bulkUpsertResult.GetValueSync();
+                return NThreading::MakeFuture(status);
+            });
+    };
+    return TableClient->RetryOperation(upsert, RetrySettings);
+}
+
+TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
                                      const TImportFileSettings& settings) {
-    TFileInput input(dataFile, settings.FileBufferSize_);
     TString line;
     TString buffer;
-
-    auto upsertSettings = NTable::TBulkUpsertSettings()
-        .OperationTimeout(TDuration::Seconds(30))
-        .ClientTimeout(TDuration::Seconds(35));
-
-    auto retrySettings = NTable::TRetryOperationSettings()
-        .MaxRetries(10);
 
     Ydb::Formats::CsvSettings csvSettings;
     bool special = false;
@@ -128,7 +156,7 @@ TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbP
     if (special) {
         TString formatSettings;
         Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
-        upsertSettings.FormatSettings(formatSettings);
+        UpsertSettings.FormatSettings(formatSettings);
     }
 
     std::deque<TAsyncStatus> inFlightRequests;
@@ -147,31 +175,94 @@ TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbP
                 return status;
             }
 
-            inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer, {}, upsertSettings, retrySettings));
+            inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer));
 
             buffer = headerRow;
         }
     }
 
     if (!buffer.Empty()) {
-        inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer, {}, upsertSettings, retrySettings));
+        inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer));
     }
 
     return WaitForQueue(inFlightRequests, 0);
 }
 
-TAsyncStatus TImportFileClient::UpsertCsvBuffer(const TString& dbPath, const TString& csv, const TString& header,
-                                       const NTable::TBulkUpsertSettings& upsertSettings,
-                                       const NTable::TRetryOperationSettings& retrySettings) {
-    auto upsert = [dbPath, csv, header, upsertSettings](NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus {
-        return tableClient.BulkUpsert(dbPath, NTable::EDataFormat::CSV, csv, header, upsertSettings)
+inline
+TAsyncStatus TImportFileClient::UpsertJsonBuffer(const TString& dbPath, TValueBuilder& builder) {
+    auto upsert = [this, dbPath, rows = builder.Build()]
+            (NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus {
+        NYdb::TValue r = rows;
+        return tableClient.BulkUpsert(dbPath, std::move(r), UpsertSettings)
             .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                 NYdb::TStatus status = bulkUpsertResult.GetValueSync();
                 return NThreading::MakeFuture(status);
             });
     };
+    return TableClient->RetryOperation(upsert, RetrySettings);
+}
 
-    return TableClient->RetryOperation(upsert, retrySettings);
+TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath,
+                                      const TImportFileSettings& settings) {
+    NTable::TCreateSessionResult sessionResult = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
+    if (! sessionResult.IsSuccess())
+        return sessionResult;
+    NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(dbPath).GetValueSync();
+    if (! tableResult.IsSuccess())
+        return tableResult;
+
+    const TType tableType = GetTableType(tableResult.GetTableDescription());
+    const NYdb::EBinaryStringEncoding stringEncoding = 
+        (settings.Format_==EOutputFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
+            NYdb::EBinaryStringEncoding::Unicode;
+
+    std::deque<TAsyncStatus> inFlightRequests;
+
+    size_t currentSize = 0;
+    size_t currentRows = 0;
+    auto currentBatch = std::make_unique<TValueBuilder>();
+    currentBatch->BeginList();
+
+    TString line;
+    while (size_t sz = input.ReadLine(line)) {
+        currentBatch->AddListItem(JsonToYdbValue(line, tableType, stringEncoding));
+        currentSize += line.Size();
+        currentRows += 1;
+
+        if (currentSize >= settings.BytesPerRequest_) {
+            currentBatch->EndList();
+
+            auto status = WaitForQueue(inFlightRequests, settings.MaxInFlightRequests_);
+            if (!status.IsSuccess()) {
+                return status;
+            }
+
+            inFlightRequests.push_back(UpsertJsonBuffer(dbPath, *currentBatch));
+
+            currentBatch = std::make_unique<TValueBuilder>();
+            currentBatch->BeginList();
+            currentSize = 0;
+            currentRows = 0;
+        }
+    }
+
+    if (currentRows > 0) {
+        currentBatch->EndList();
+        inFlightRequests.push_back(UpsertJsonBuffer(dbPath, *currentBatch));
+    }
+
+    return WaitForQueue(inFlightRequests, 0);
+}
+
+TType TImportFileClient::GetTableType(const NTable::TTableDescription& tableDescription) {
+    TTypeBuilder typeBuilder;
+    typeBuilder.BeginStruct();
+    const auto& columns = tableDescription.GetTableColumns();
+    for (auto it = columns.begin(); it!=columns.end(); it++) {
+        typeBuilder.AddMember((*it).Name, (*it).Type);
+    }
+    typeBuilder.EndStruct();
+    return typeBuilder.Build();
 }
 
 }

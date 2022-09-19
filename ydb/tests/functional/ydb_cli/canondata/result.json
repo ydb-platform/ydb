@@ -1,4 +1,13 @@
 {
+    "test_ydb_impex.TestImpex.test_format_csv": {
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_format_json": {
+        "uri": "file://test_ydb_impex.TestImpex.test_format_json/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_format_tsv": {
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv/result.output"
+    },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64/result.output"
     },
@@ -47,6 +56,9 @@
     "test_ydb_scripting.TestScriptingServiceHelp.test_help_ex": {
         "uri": "file://test_ydb_scripting.TestScriptingServiceHelp.test_help_ex/result.output"
     },
+    "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv": {
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv/result.output"
+    },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_base64": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_base64/result.output"
     },
@@ -61,6 +73,12 @@
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_pretty": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_pretty/result.output"
+    },
+    "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_tsv": {
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_tsv/result.output"
+    },
+    "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_csv": {
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_csv/result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_base64": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_base64/result.output"
@@ -77,6 +95,12 @@
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_pretty": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_pretty/result.output"
     },
+    "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_tsv": {
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_tsv/result.output"
+    },
+    "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_csv": {
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_csv/result.output"
+    },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_base64": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_base64/result.output"
     },
@@ -91,6 +115,9 @@
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_pretty": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_pretty/result.output"
+    },
+    "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_tsv": {
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_tsv/result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParams.test_list": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_list/result.output"

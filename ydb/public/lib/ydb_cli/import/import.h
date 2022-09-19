@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/common/formats.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -31,10 +32,12 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     static constexpr ui64 MaxBytesPerRequest = 8_MB;
     static constexpr const char * DefaultDelimiter = ",";
 
-    FLUENT_SETTING_DEFAULT(NTable::EDataFormat, Format, NTable::EDataFormat::CSV);
+    // Allowed values: Csv, Tsv, JsonUnicode, JsonBase64. Default means Csv
+    FLUENT_SETTING_DEFAULT(EOutputFormat, Format, EOutputFormat::Default);
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);
+    // Settings below are for CSV format only
     FLUENT_SETTING_DEFAULT(ui32, SkipRows, 0);
     FLUENT_SETTING_DEFAULT(bool, Header, false);
     FLUENT_SETTING_DEFAULT(TString, Delimiter, DefaultDelimiter);
@@ -44,7 +47,12 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
 class TImportFileClient {
 public:
     explicit TImportFileClient(const TDriver& driver);
+    TImportFileClient(const TImportFileClient&) = delete;
 
+    // Ingest data from the input file to the database table.
+    //   fsPath: path to input file, stdin if empty
+    //   dbPath: full path to the database table, including the database path
+    //   settings: input data format and operational settings
     TStatus Import(const TString& fsPath, const TString& dbPath, const TImportFileSettings& settings = {});
 
 private:
@@ -52,10 +60,15 @@ private:
     std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
     std::shared_ptr<NTable::TTableClient> TableClient;
 
-    TStatus UpsertCsv(const TString& dataFile, const TString& dbPath, const TImportFileSettings& settings);
-    TAsyncStatus UpsertCsvBuffer(const TString& dbPath, const TString& csv, const TString& header,
-                            const NTable::TBulkUpsertSettings& upsertSettings,
-                            const NTable::TRetryOperationSettings& retrySettings);
+    NTable::TBulkUpsertSettings UpsertSettings;
+    NTable::TRetryOperationSettings RetrySettings;
+
+    TStatus UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings);
+    TAsyncStatus UpsertCsvBuffer(const TString& dbPath, const TString& buffer);
+
+    TStatus UpsertJson(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings);
+    TAsyncStatus UpsertJsonBuffer(const TString& dbPath, TValueBuilder& builder);
+    TType GetTableType(const NTable::TTableDescription& tableDescription);
 };
 
 }

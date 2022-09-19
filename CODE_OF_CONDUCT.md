@@ -1,1 +1,1 @@
-We welcome everyone to contribute to our product, see [CONTRIBUTING](CONTRIBUTING).
+We welcome everyone to contribute to our product, see [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -19,4 +19,5 @@ target_link_libraries(restricted-boost-pool INTERFACE
   restricted-boost-integer
   restricted-boost-throw_exception
   restricted-boost-type_traits
+  restricted-boost-winapi
 )

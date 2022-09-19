@@ -335,5 +335,34 @@ public:
     }
 };
 
+class TCompletionSequence : public TCompletionAction {
+    TVector<TCompletionAction*> Actions;
+
+public:
+    TCompletionSequence() = default;
+    TCompletionSequence(const TVector<TCompletionAction*>& actions)
+        : Actions(actions)
+    {}
+
+    TCompletionSequence(TVector<TCompletionAction*>&& actions)
+        : Actions(std::move(actions))
+    {}
+
+    TCompletionSequence& operator=(const TCompletionSequence&) = delete;
+    TCompletionSequence& operator=(TCompletionSequence&&) = delete;
+
+    void Exec(TActorSystem *actorSystem) override {
+        for (TCompletionAction* action : Actions) {
+            action->Exec(actorSystem);
+        }
+    }
+
+    void Release(TActorSystem *actorSystem) override {
+        for (TCompletionAction* action : Actions) {
+            action->Release(actorSystem);
+        }
+    }
+};
+
 } // NPDisk
 } // NKikimr

@@ -101,80 +101,85 @@ TString TPDisk::DynamicStateToString(bool isMultiline) {
     return str.Str();
 }
 
-bool TPDisk::ReadChunk0Format(ui8* formatSectors, const TKey& mainKey) {
+TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk::TMainKey& mainKey) {
     TGuard<TMutex> guard(StateMutex);
-    TPDiskStreamCypher cypher(true); // Format record is always encrypted
-    cypher.SetKey(mainKey);
+
     Format.SectorSize = FormatSectorSize;
+    ui32 mainKeySize = mainKey.size();
 
-    ui32 lastGoodIdx = (ui32)-1;
-    bool isBad[ReplicationFactor];
-    bool isBadPresent = false;
+    for (ui32 k = 0; k < mainKeySize; ++k) {
+        TPDiskStreamCypher cypher(true); // Format record is always encrypted
+        cypher.SetKey(mainKey[k]);
 
-    for (ui32 i = 0; i < ReplicationFactor; ++i) {
-        ui64 sectorOffset = i * FormatSectorSize;
-        ui8* formatSector = formatSectors + sectorOffset;
-        TDataSectorFooter *footer = (TDataSectorFooter*)
-            (formatSector + FormatSectorSize - sizeof(TDataSectorFooter));
+        ui32 lastGoodIdx = (ui32)-1;
+        bool isBad[ReplicationFactor];
+        bool isBadPresent = false;
+        for (ui32 i = 0; i < ReplicationFactor; ++i) {
+            ui64 sectorOffset = i * FormatSectorSize;
+            ui8* formatSector = formatSectors + sectorOffset;
+            TDataSectorFooter *footer = (TDataSectorFooter*)
+                (formatSector + FormatSectorSize - sizeof(TDataSectorFooter));
 
-        cypher.StartMessage(footer->Nonce);
-        alignas(16) TDiskFormat diskFormat;
-        cypher.Encrypt(&diskFormat, formatSector, sizeof(TDiskFormat));
+            cypher.StartMessage(footer->Nonce);
+            alignas(16) TDiskFormat diskFormat;
+            cypher.Encrypt(&diskFormat, formatSector, sizeof(TDiskFormat));
 
-        isBad[i] = !diskFormat.IsHashOk(FormatSectorSize);
-        if (!isBad[i]) {
-            Format.UpgradeFrom(diskFormat);
-            if (Format.IsErasureEncodeUserChunks()) {
-                LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                        << " Read from disk Format has FormatFlagErasureEncodeUserChunks set, "
-                        << " but current version of PDisk can't work with it"
-                        << " Format# " << Format.ToString()
-                        << " Marker# BPD80");
-                Y_FAIL_S("PDiskId# " << PDiskId
-                        << "Unable to run PDisk on disk with FormatFlagErasureEncodeUserChunks set");
-            }
-            if (Format.IsErasureEncodeUserLog()) {
-                LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                        << " Read from disk Format has FormatFlagErasureEncodeUserLog set, "
-                        << " but current version of PDisk can't work with it"
-                        << " Format# " << Format.ToString()
-                        << " Marker# BPD801");
-                Y_FAIL_S("PDiskId# " << PDiskId
-                        << "Unable to run PDisk on disk with FormatFlagErasureEncodeUserLog set");
-            }
-            lastGoodIdx = i;
-            *Mon.TotalSpaceBytes = Format.DiskSize;
-        } else {
-            isBadPresent = true;
-        }
-    }
-
-    if (lastGoodIdx < ReplicationFactor) {
-        ui64 sectorOffset = lastGoodIdx * FormatSectorSize;
-        ui8* formatSector = formatSectors + sectorOffset;
-        if (isBadPresent) {
-            for (ui32 i = 0; i < ReplicationFactor; ++i) {
-                if (isBad[i]) {
-                    TBuffer* buffer = BufferPool->Pop();
-                    Y_VERIFY(FormatSectorSize <= buffer->Size());
-                    memcpy(buffer->Data(), formatSector, FormatSectorSize);
-                    ui64 targetOffset = i * FormatSectorSize;
-                    LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
-                            << " PWriteAsync offset# " << targetOffset
-                            << " to# " << (targetOffset + FormatSectorSize)
-                            << " for format restoration"
-                            << " Marker# BPD46");
-
-                    REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer->Data(), FormatSectorSize);
-                    BlockDevice->PwriteAsync(buffer->Data(), FormatSectorSize, targetOffset, buffer,
-                            TReqId(TReqId::RestoreFormatOnRead, 0), {});
+            isBad[i] = !diskFormat.IsHashOk(FormatSectorSize);
+            if (!isBad[i]) {
+                Format.UpgradeFrom(diskFormat);
+                if (Format.IsErasureEncodeUserChunks()) {
+                    LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
+                            << " Read from disk Format has FormatFlagErasureEncodeUserChunks set, "
+                            << " but current version of PDisk can't work with it"
+                            << " Format# " << Format.ToString()
+                            << " Marker# BPD80");
+                    Y_FAIL_S("PDiskId# " << PDiskId
+                            << "Unable to run PDisk on disk with FormatFlagErasureEncodeUserChunks set");
                 }
+                if (Format.IsErasureEncodeUserLog()) {
+                    LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
+                            << " Read from disk Format has FormatFlagErasureEncodeUserLog set, "
+                            << " but current version of PDisk can't work with it"
+                            << " Format# " << Format.ToString()
+                            << " Marker# BPD801");
+                    Y_FAIL_S("PDiskId# " << PDiskId
+                            << "Unable to run PDisk on disk with FormatFlagErasureEncodeUserLog set");
+                }
+                lastGoodIdx = i;
+                *Mon.TotalSpaceBytes = Format.DiskSize;
+            } else {
+                isBadPresent = true;
             }
-            //BlockDevice->FlushAsync(nullptr);
         }
-        return true;
+        if (lastGoodIdx < ReplicationFactor) {
+            ui64 sectorOffset = lastGoodIdx * FormatSectorSize;
+            ui8* formatSector = formatSectors + sectorOffset;
+            if (k < mainKeySize - 1) { // obsolete key is used
+                return TCheckDiskFormatResult(true, true);
+            } else if (isBadPresent) {
+                for (ui32 i = 0; i < ReplicationFactor; ++i) {
+                    if (isBad[i]) {
+                        TBuffer* buffer = BufferPool->Pop();
+                        Y_VERIFY(FormatSectorSize <= buffer->Size());
+                        memcpy(buffer->Data(), formatSector, FormatSectorSize);
+                        ui64 targetOffset = i * FormatSectorSize;
+                        LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+                                << " PWriteAsync offset# " << targetOffset
+                                << " to# " << (targetOffset + FormatSectorSize)
+                                << " for format restoration"
+                                << " Marker# BPD46");
+
+                        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer->Data(), FormatSectorSize);
+                        BlockDevice->PwriteAsync(buffer->Data(), FormatSectorSize, targetOffset, buffer,
+                                TReqId(TReqId::RestoreFormatOnRead, 0), {});
+                    }
+                }
+                //BlockDevice->FlushAsync(nullptr);
+            }
+            return TCheckDiskFormatResult(true, false);
+        }
     }
-    return false;
+    return TCheckDiskFormatResult(false, false);
 }
 
 bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize) {

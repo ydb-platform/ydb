@@ -29,6 +29,7 @@ public:
     ui64 DiskSize;
     ui64 PDiskGuid;
     ui64 PDiskKey;
+    NPDisk::TMainKey MainKey;
     TActorId PDiskId;
     TActorId KeeperId;
     std::unique_ptr<TActorSystem> ActorSystem;
@@ -57,13 +58,14 @@ public:
             DiskSize = (ui64)ChunkSize * numChunks;
             PDiskGuid = Now().GetValue();
             PDiskKey = 1;
-            FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, PDiskKey, "incrhuge");
+            MainKey = {1};
+            FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.back(), "incrhuge");
         }
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);
         ui64 pDiskCategory = 0;
         TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(Path, PDiskGuid, 1, pDiskCategory);
-        TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), PDiskKey, Counters), TMailboxType::Revolving, 0);
+        TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), MainKey, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.emplace_back(PDiskId, pDiskSetup);
 
         TActorId pdiskActorId;

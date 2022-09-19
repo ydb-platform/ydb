@@ -38,6 +38,7 @@ namespace NKikimr {
         typedef ui32 TStatusFlags;
         typedef ui64 TKey;
         typedef ui64 THash;
+        typedef TStackVec<TKey, 2> TMainKey;
 
         struct TOwnerToken {
             TOwner Owner = 0;

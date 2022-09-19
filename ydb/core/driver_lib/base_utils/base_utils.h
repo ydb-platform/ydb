@@ -14,6 +14,8 @@
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 #include <library/cpp/svnversion/svnversion.h>
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
+
 namespace NKikimr {
 
 struct TCmdFormatConfig {
@@ -22,7 +24,7 @@ struct TCmdFormatConfig {
     NSize::TSize ChunkSize;
     NSize::TSize SectorSize;
     ui64 Guid;
-    ui64 MainKey;
+    NPDisk::TMainKey MainKey;
     TString TextMessage;
 
     TCmdFormatConfig();
@@ -32,7 +34,8 @@ struct TCmdFormatConfig {
 
 struct TCmdFormatInfoConfig {
     TString Path;
-    ui64 MainKey;
+    TVector<NPDisk::TKey> MainKeyTmp; // required for .AppendTo()
+    NPDisk::TMainKey MainKey;
     bool IsVerbose;
 
     TCmdFormatInfoConfig();

@@ -76,6 +76,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
     opts.AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
     opts.AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
+    opts.AddLongOption("pdisk-key-file", "pdisk encryption key config file").OptionalArgument("PATH");
 }
 
 void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResult& res) {

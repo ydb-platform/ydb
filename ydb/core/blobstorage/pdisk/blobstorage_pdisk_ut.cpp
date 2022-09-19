@@ -674,7 +674,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 NKikimrProto::OK);
         round = evInitRes->PDiskParams->OwnerRound + 1;
 
-        testCtx.MainKey += 123;
+        testCtx.MainKey[0] += 123;
         testCtx.UpdateConfigRecreatePDisk(testCtx.GetPDiskConfig());
 
         evInitRes = testCtx.TestResponce<NPDisk::TEvYardInitResult>(
@@ -682,6 +682,94 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 NKikimrProto::CORRUPTED);
         testCtx.TestResponce<NPDisk::TEvCheckSpaceResult>(
                 new NPDisk::TEvCheckSpace(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound),
+                NKikimrProto::CORRUPTED);
+    }
+
+    Y_UNIT_TEST(ChangePDiskKey) {
+        const TString data = PrepareData(4096);
+
+        TActorTestContext testCtx(false);
+        
+        TVDiskMock mock(&testCtx);
+        mock.InitFull();
+
+        mock.ReserveChunk();
+        const ui32 chunk = *mock.Chunks[EChunkState::RESERVED].begin();
+
+        auto readChunk = [&]() {
+            auto evReadRes = testCtx.TestResponce<NPDisk::TEvChunkReadResult>(
+                    new NPDisk::TEvChunkRead(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+                            chunk, 0, data.size(), 0, nullptr),
+                    NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(evReadRes->Data.ToString(), data); 
+        };
+
+        TString dataCopy = data;
+        testCtx.TestResponce<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+            chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0), 
+            NKikimrProto::OK);
+        mock.CommitReservedChunks();
+
+        readChunk();
+
+        testCtx.MainKey.push_back(0xFull);
+        testCtx.RestartPDiskSync();
+        mock.InitFull();
+        readChunk();
+
+        testCtx.MainKey = { 0xFull };
+        testCtx.RestartPDiskSync();
+        mock.InitFull();
+        readChunk();
+
+        testCtx.MainKey = { 0xFull, 0xA };
+        testCtx.RestartPDiskSync();
+        mock.InitFull();
+        readChunk();
+
+        testCtx.MainKey = { 0xFull, 0xA, 0xB, 0xC };
+        testCtx.RestartPDiskSync();
+        mock.InitFull();
+        readChunk();
+
+        testCtx.MainKey = { 0xC };
+        testCtx.RestartPDiskSync();
+        mock.InitFull();
+        readChunk();
+    }
+
+
+    Y_UNIT_TEST(WrongPDiskKey) {
+        const TString data = PrepareData(4096);
+
+        TActorTestContext testCtx(false);
+        
+        TVDiskMock mock(&testCtx);
+        mock.InitFull();
+
+        mock.ReserveChunk();
+        const ui32 chunk = *mock.Chunks[EChunkState::RESERVED].begin();
+
+        TString dataCopy = data;
+        testCtx.TestResponce<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+            chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0), 
+            NKikimrProto::OK);
+        mock.CommitReservedChunks();
+        testCtx.TestResponce<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+        testCtx.TestResponce<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+                        chunk, 0, data.size(), 0, nullptr),
+                NKikimrProto::OK);
+
+        testCtx.MainKey = { 0xABCDEF };
+        testCtx.TestResponce<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
+                NKikimrProto::OK);
+            
+        testCtx.TestResponce<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
                 NKikimrProto::CORRUPTED);
     }
 }

@@ -58,7 +58,7 @@ int MainFormatInfo(const TCommandConfig &cmdConf, int argc, char** argv) {
 }
 
 TCmdFormatInfoConfig::TCmdFormatInfoConfig()
-    : MainKey(0)
+    : MainKey({})
     , IsVerbose(false)
 {}
 
@@ -69,9 +69,9 @@ void TCmdFormatInfoConfig::Parse(int argc, char **argv) {
     opts.AddLongOption('p', "pdisk-path", "path to pdisk to read format info").RequiredArgument("PATH").Required()
         .StoreResult(&Path);
     opts.AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM")
-        .Optional().StoreResult(&MainKey); // TODO: make required
+        .Optional().AppendTo(&MainKeyTmp); // TODO: make required
     opts.AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
-        .Optional().StoreResult(&MainKey); // TODO: remove after migration
+        .Optional().AppendTo(&MainKeyTmp); // TODO: remove after migration
     opts.AddLongOption('v', "verbose", "output detailed information for debugging").Optional().NoArgument()
         .SetFlag(&IsVerbose);
 
@@ -85,6 +85,11 @@ void TCmdFormatInfoConfig::Parse(int argc, char **argv) {
     bool hasKOption = res.FindCharOptParseResult('k');
     if (!hasMainOption && !hasMasterOption && !hasKOption)
         ythrow yexception() << "missing main-key param";
+
+    MainKey = {};
+    for (auto& key : MainKeyTmp) {
+        MainKey.push_back(key);
+    }
 }
 
 }

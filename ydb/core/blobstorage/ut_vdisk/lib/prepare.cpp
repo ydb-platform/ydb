@@ -158,8 +158,9 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
                                            TPDiskCategory(deviceType, 0).GetRaw()));
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
-                    NPDisk::YdbDefaultPDiskSequence, counters), TMailboxType::Revolving, 0);
+                    mainKey, counters), TMailboxType::Revolving, 0);
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(inst.PDiskActorID, pDiskSetup));
     }
 }

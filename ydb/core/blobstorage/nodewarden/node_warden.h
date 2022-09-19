@@ -28,7 +28,7 @@ namespace NKikimr {
         std::unique_ptr<ICacheAccessor> CacheAccessor;
         TEncryptionKey TenantKey;
         TEncryptionKey StaticKey;
-        TEncryptionKey PDiskKey;
+        TVector<TEncryptionKey> PDiskKey;
         bool CachePDisks = false;
         bool CacheVDisks = false;
         bool EnableVDiskCooldownTimeout = false;
@@ -42,15 +42,19 @@ namespace NKikimr {
             , AllDriveModels(new NPDisk::TDriveModelDb)
         {}
 
-        NPDisk::TKey CreatePDiskKey() const {
-             if (PDiskKey) {
-                 const ui8 *key;
-                 ui32 keySize;
-                 PDiskKey.Key.GetKeyBytes(&key, &keySize);
-                 return *(ui64*)key;
-             } else {
-                 return NPDisk::YdbDefaultPDiskSequence;
-             }
+        NPDisk::TMainKey CreatePDiskKey() const {
+            if (PDiskKey.size() > 0) {
+                NPDisk::TMainKey mainKey;
+                for (ui32 i = 0; i < PDiskKey.size(); ++i) {
+                    const ui8 *key;
+                    ui32 keySize;
+                    PDiskKey[i].Key.GetKeyBytes(&key, &keySize);
+                    mainKey.push_back(*(ui64*)key);
+                }
+                return mainKey;
+            } else {
+                return { NPDisk::YdbDefaultPDiskSequence };
+            }
         }
 
         bool IsCacheEnabled() const {
@@ -62,7 +66,7 @@ namespace NKikimr {
 
     bool ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig);
     bool ObtainStaticKey(TEncryptionKey *key);
-    bool ObtainPDiskKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig);
+    bool ObtainPDiskKey(TVector<TEncryptionKey> *key, const NKikimrProto::TKeyConfig& keyConfig);
 
     std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TString& templ, const std::unordered_map<char, TString>& vars);
 

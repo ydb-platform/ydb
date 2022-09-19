@@ -14,20 +14,21 @@ public:
 
     bool IsVerbose;
     bool LockDevice;
-    ui64 MainKey;
+    TVector<NPDisk::TKey> MainKeyTmp; // required for .AppendTo()
+    NPDisk::TMainKey MainKey;
     TString Path;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         IsVerbose = false;
         LockDevice = false;
-        MainKey = 0;
+        MainKeyTmp = {};
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<PATH>", "Disk path");
         config.Opts->AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM")
-            .Optional().StoreResult(&MainKey); // TODO: make required
+            .Optional().AppendTo(&MainKeyTmp); // TODO: make required
         config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
-            .Optional().StoreResult(&MainKey); // TODO: remove after migration
+            .Optional().AppendTo(&MainKeyTmp); // TODO: remove after migration
         config.Opts->AddLongOption('v', "verbose", "output detailed information for debugging").Optional().NoArgument()
             .SetFlag(&IsVerbose);
         config.Opts->AddLongOption('l', "lock", "lock device before reading disk info").Optional().NoArgument()
@@ -43,6 +44,11 @@ public:
         bool hasKOption = config.ParseResult->FindCharOptParseResult('k');
         if (!hasMainOption && !hasMasterOption && !hasKOption)
             ythrow yexception() << "missing main-key param";
+
+        MainKey = {};
+        for (auto& key : MainKeyTmp) {
+            MainKey.push_back(key);
+        }
     }
 
     virtual int Run(TConfig&) override {
@@ -108,13 +114,13 @@ public:
     NSize::TSize ChunkSize;
     NSize::TSize SectorSize;
     ui64 Guid;
-    ui64 MainKey;
+    TVector<NPDisk::TKey> MainKeyTmp;
     TString TextMessage;
     bool IsErasureEncode;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        MainKey = 0;
+        MainKey = {};
         DiskSize = 0;
         ChunkSize = 128 << 20;
         SectorSize = 4 << 10;
@@ -136,9 +142,9 @@ public:
             .StoreResult(&Guid);
         config.Opts->AddLongOption('k', "main-key", "encryption main-key to set while formatting.\n"
             "Make sure you use the same master key when you format your pdisks and when you run kikimr.")
-            .RequiredArgument("NUM").Optional().StoreResult(&MainKey);
+            .RequiredArgument("NUM").Optional().AppendTo(&MainKeyTmp);
         config.Opts->AddLongOption("master-key", "obsolete: user main-key")
-            .RequiredArgument("NUM").Optional().StoreResult(&MainKey);
+            .RequiredArgument("NUM").Optional().AppendTo(&MainKeyTmp);
         config.Opts->AddLongOption('t', "text-message", "text message to store in format sector (up to 4000 characters long)")
             .OptionalArgument("STR").Optional().StoreResult(&TextMessage);
         config.Opts->AddLongOption('e', "erasure-encode", "erasure-encode data to recover from single-sector failures")
@@ -153,6 +159,7 @@ public:
     NPDisk::TKey ChunkKey;
     NPDisk::TKey LogKey;
     NPDisk::TKey SysLogKey;
+    NPDisk::TMainKey MainKey;
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
@@ -165,10 +172,14 @@ public:
         bool hasKOption = config.ParseResult->FindCharOptParseResult('k');
         if (!hasMainOption && !hasMasterOption && !hasKOption)
             ythrow yexception() << "missing main-key param";
+
+        for (auto& key : MainKeyTmp) {
+            MainKey.push_back(key);
+        }
     }
 
     virtual int Run(TConfig&) override {
-        FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey, TextMessage,
+        FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey.back(), TextMessage,
                 IsErasureEncode);
         return 0;
     }

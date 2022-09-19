@@ -687,11 +687,12 @@ struct TEvBlobStorage {
         EvNonrestoredCorruptedBlobNotify,
         EvHugeLockChunks,
         EvHugeStat,
-        EvForwardToSkeleton,
+        EvForwardToSkeleton,                                    // 268 636 300
         EvHugeUnlockChunks,
         EvVDiskStatRequest,
         EvGetLogoBlobRequest,
         EvChunkForget,
+        EvFormatReencryptionFinish,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

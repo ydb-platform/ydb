@@ -87,8 +87,9 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         pDiskConfig->UseT1ha0HashInFooter = runCfg.UseT1ha0Hasher;
 
+        NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
-                    NPDisk::YdbDefaultPDiskSequence, mainCounters), TMailboxType::Revolving, 0);
+                    mainKey, mainCounters), TMailboxType::Revolving, 0);
         setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pDiskId, pDiskSetup));
 
         for (ui32 i = 0; i < runCfg.Instances; ++i) {

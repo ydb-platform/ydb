@@ -129,6 +129,7 @@ class TQueueTestRuntime {
     ui32 ChunkSize;
     ui64 PDiskGuid;
     NPDisk::TKey PDiskKey;
+    NPDisk::TMainKey MainKey;
     TActorId PDiskId;
     std::unique_ptr<TAppData> AppData;
     TVDiskID VDiskId;
@@ -160,7 +161,8 @@ public:
         DiskSize = SectorMap->DeviceSize;
         PDiskGuid = 1;
         PDiskKey = 1;
-        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, PDiskKey, "queue_test",
+        MainKey = {1};
+        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.back(), "queue_test",
                 false, false, SectorMap);
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);
@@ -170,7 +172,7 @@ public:
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->SectorMap = SectorMap;
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
-        TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), PDiskKey, Counters), TMailboxType::Revolving, 0);
+        TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), MainKey, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.emplace_back(PDiskId, pDiskSetup);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

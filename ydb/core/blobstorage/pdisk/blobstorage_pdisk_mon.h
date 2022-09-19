@@ -361,6 +361,7 @@ struct TPDiskMon {
             ErrorNoDeviceWithSuchSerial,
             ErrorDeviceSerialMismatch,
             ErrorFake,
+            BootingReencryptingFormat,
         };
 
         static TString StateToStr(i64 val) {
@@ -402,6 +403,7 @@ struct TPDiskMon {
                 case ErrorNoDeviceWithSuchSerial: return "ErrorNoDeviceWithSuchSerial";
                 case ErrorDeviceSerialMismatch: return "ErrorDeviceSerialMismatch";
                 case ErrorFake: return "ErrorFake";
+                case BootingReencryptingFormat: return "BootingReencryptingFormat";
                 default: return "Unknown";
             }
         }

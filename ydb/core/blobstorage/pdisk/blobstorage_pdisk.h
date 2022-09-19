@@ -16,7 +16,7 @@
 
 namespace NKikimr {
 
-IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey,
+IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
 namespace NPDisk {
@@ -123,7 +123,6 @@ public:
         return str.Str();
     }
 };
-
 
 ////////////////////////////////////////////////////////////////////////////
 // INIT

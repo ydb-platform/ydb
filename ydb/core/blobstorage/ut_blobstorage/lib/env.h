@@ -46,7 +46,7 @@ struct TEnvironmentSetup {
         {}
 
         void Create(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& cfg,
-                const NPDisk::TKey& /*mainKey*/, ui32 poolId, ui32 nodeId) override {
+                const NPDisk::TMainKey& /*mainKey*/, ui32 poolId, ui32 nodeId) override {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {

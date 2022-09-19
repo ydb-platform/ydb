@@ -23,7 +23,7 @@ private:
 
 public:
     TActorId Sender;
-    NPDisk::TKey MainKey = NPDisk::YdbDefaultPDiskSequence;
+    NPDisk::TMainKey MainKey = { NPDisk::YdbDefaultPDiskSequence };
     TTestContext TestCtx{false, /*use sector map*/ true};
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {
@@ -97,7 +97,7 @@ public:
         if (!PDisk && !UsePDiskMock) {
             // To be sure that pdisk actor is in StateOnline
             TestResponce<NPDisk::TEvYardControlResult>(
-                    new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, &MainKey),
+                    new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&MainKey)),
                     NKikimrProto::OK);
 
             const auto evControlRes = TestResponce<NPDisk::TEvYardControlResult>(

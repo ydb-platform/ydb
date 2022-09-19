@@ -196,5 +196,31 @@ struct TEvDeviceError : public TEventLocal<TEvDeviceError, TEvBlobStorage::EvDev
     {}
 };
 
+struct TEvFormatReencryptionFinish : public TEventLocal<TEvFormatReencryptionFinish, TEvBlobStorage::EvFormatReencryptionFinish> {
+    bool Success;
+    TString ErrorReason;
+
+    TEvFormatReencryptionFinish(bool success, TString errorReason)
+        : Success(success)
+        , ErrorReason(errorReason)
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvFormatReencryptionFinish& record) {
+        TStringStream str;
+        str << "{";
+        str << "EvFormatReencryptionFinished ";
+        str << " Success# " << record.Success;
+        if (record.ErrorReason) {
+            str << " ErrorReason# " << record.ErrorReason;
+        }
+        str << "}";
+        return str.Str();
+    }
+};
+
 } // NPDisk
 } // NKikimr

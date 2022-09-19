@@ -89,7 +89,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui64 PDiskGuid;  // set only by constructor
     ui32 PDiskId;    // set only by constructor
     TPDiskCategory PDiskCategory;  // set only by constructor
-    TString HashedMainKey;
+    TStackVec<TString, 2> HashedMainKey;
 
     ui64 StartOwnerRound = 1ull;  // set only by warden
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
@@ -244,7 +244,9 @@ struct TPDiskConfig : public TThrRefBase {
         str << " PDiskGuid# " << PDiskGuid << x;
         str << " PDiskId# " << PDiskId << x;
         str << " PDiskCategory# " << PDiskCategory.ToString() << x;
-        str << " HashedMainKey# " << HashedMainKey << x;
+        for (ui32 i = 0; i < HashedMainKey.size(); ++i) {
+            str << " HashedMainKey[" << i << "]# " << HashedMainKey[i] << x;
+        }
         str << " StartOwnerRound# " << StartOwnerRound << x;
         str << " SectorMap# " << (SectorMap ? "true" : "false") << x;
         str << " EnableSectorEncryption # " << EnableSectorEncryption << x;

@@ -489,14 +489,38 @@ bool NKikimr::ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfi
     }
 }
 
-bool NKikimr::ObtainPDiskKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig) {
-    if (keyConfig.KeysSize()) {
-        auto &record = keyConfig.GetKeys(0);
-        return ObtainKey(key, record);
-    } else {
+bool NKikimr::ObtainPDiskKey(TVector<TEncryptionKey> *keys, const NKikimrProto::TKeyConfig& keyConfig) {
+    ui32 keysSize = keyConfig.KeysSize();
+    if (!keysSize) {
         Cerr << "No Keys in PDiskKeyConfig! Encrypted pdisks will not start" << Endl;
         return false;
     }
+
+    keys->resize(keysSize);
+    for (ui32 i = 0; i < keysSize; ++i) {
+        auto &record = keyConfig.GetKeys(i);
+        if (record.GetId() == "0" && record.GetContainerPath() == "") {
+            // use default pdisk key
+            (*keys)[i].Id = "0";
+            (*keys)[i].Version = record.GetVersion();
+
+            ui8 *keyBytes = 0;
+            ui32 keySize = 0;
+            (*keys)[i].Key.MutableKeyBytes(&keyBytes, &keySize);
+
+            ui64* p = (ui64*)keyBytes;
+            p[0] = NPDisk::YdbDefaultPDiskSequence;
+        } else {
+            if (!ObtainKey(&(*keys)[i], record)) {
+                return false;
+            }
+        } 
+    }
+
+    std::sort(keys->begin(), keys->end(), [&](const TEncryptionKey& l, const TEncryptionKey& r) {
+        return l.Version < r.Version;
+    });
+    return true;
 }
 
 

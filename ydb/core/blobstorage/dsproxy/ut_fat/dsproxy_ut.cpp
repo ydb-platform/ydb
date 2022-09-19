@@ -4227,8 +4227,9 @@ public:
                 pDiskConfig->SectorMap = SectorMapByPath[filePath];
                 pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
 
+                NPDisk::TMainKey mainKeys = { mainKey };
                 TActorSetupCmd pDiskSetup(
-                    CreatePDisk(pDiskConfig.Get(), mainKey, counters),
+                    CreatePDisk(pDiskConfig.Get(), mainKeys, counters),
                     TMailboxType::Revolving, 0);
                 setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pdiskId, pDiskSetup));
 

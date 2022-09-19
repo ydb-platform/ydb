@@ -67,7 +67,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
 
     TString StateErrorReason;
     TIntrusivePtr<TPDiskConfig> Cfg;
-    TKey MainKey;
+    NPDisk::TMainKey MainKey;
     TList<TInitQueueItem> InitQueue;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> PDiskCounters;
     TIntrusivePtr<TPDisk> PDisk;
@@ -195,7 +195,7 @@ public:
         return NKikimrServices::TActivity::PDISK_ACTOR;
     }
 
-    TPDiskActor(const TIntrusivePtr<TPDiskConfig>& cfg, const NPDisk::TKey &mainKey,
+    TPDiskActor(const TIntrusivePtr<TPDiskConfig>& cfg, const NPDisk::TMainKey& mainKey,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Cfg(cfg)
         , MainKey(mainKey)
@@ -203,10 +203,11 @@ public:
                 ->GetSubgroup("pdisk", Sprintf("%09" PRIu32, (ui32)cfg->PDiskId))
                 ->GetSubgroup("media", to_lower(cfg->PDiskCategory.TypeStrShort())))
     {
+        Y_VERIFY(!MainKey.empty());
     }
 
     ~TPDiskActor() {
-        SecureWipeBuffer((ui8*)&MainKey, sizeof(MainKey));
+        SecureWipeBuffer((ui8*)MainKey.data(), sizeof(NPDisk::TKey) * MainKey.size());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -362,7 +363,7 @@ public:
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
-                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey, TString(), false,
+                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
                                     cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap);
                             actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                         } catch (yexception ex) {
@@ -375,7 +376,7 @@ public:
 
             FormattingThread->Start();
         } else {
-            SecureWipeBuffer((ui8*)&MainKey, sizeof(MainKey));
+            SecureWipeBuffer((ui8*)MainKey.data(), sizeof(NPDisk::TKey) * MainKey.size());
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
             *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorPDiskCannotBeInitialised;
@@ -386,11 +387,82 @@ public:
             }
             TStringStream str;
             str << "PDiskId# " << PDisk->PDiskId
-                << " Can not be initialized! " << PDisk->ErrorStr
-                << " Hash(MainKey)# " << Cfg->HashedMainKey;
+                << " Can not be initialized! " << PDisk->ErrorStr;
+            for (ui32 i = 0; i < Cfg->HashedMainKey.size(); ++i) {
+                str << " Hash(NewMainKey[" << i << "])# " << Cfg->HashedMainKey[i];
+            }
             InitError(str.Str());
             str << " Config: " << Cfg->ToString();
             LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+        }
+    }
+
+    void ReencryptDiskFormat(const TDiskFormat& format, const NPDisk::TKey& newMainKey) {
+        IsFormattingNow = true;
+        // Stop PDiskThread but use PDisk object for creation of http pages
+        PDisk->Stop();
+        *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingReencryptingFormat;
+        PDisk->ErrorStr = " Format sectors are encrypted with an old PDisk key, reencryption started";
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId << PDisk->ErrorStr);
+
+        // Is used to pass parameters into formatting thread, because TThread can pass only void*
+        using TCookieType = std::tuple<TDiskFormat, NPDisk::TKey, TIntrusivePtr<TPDiskConfig>, NActors::TActorSystem*, TActorId>;
+        FormattingThread.Reset(new TThread(
+            [] (void *cookie) -> void* {
+                std::unique_ptr<TCookieType> params(static_cast<TCookieType*>(cookie));
+                TDiskFormat format = std::get<0>(*params);
+                NPDisk::TKey mainKey = std::get<1>(*params);
+                TIntrusivePtr<TPDiskConfig> cfg = std::get<2>(*params);
+                const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
+                NActors::TActorSystem* actorSystem = std::get<3>(*params);
+                TActorId pdiskActor = std::get<4>(*params);
+
+                THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(cfg, counters));
+
+                pDisk->Initialize(actorSystem, TActorId());
+
+                if (!pDisk->BlockDevice->IsGood()) {
+                    ythrow yexception() << "Failed to initialize temporal PDisk for format rewriting, info# " << pDisk->BlockDevice->DebugInfo();
+                }
+
+                try {
+                    pDisk->WriteApplyFormatRecord(format, mainKey);
+                    actorSystem->Send(pdiskActor, new TEvFormatReencryptionFinish(true, ""));
+                } catch (yexception ex) {
+                    LOG_ERROR_S(*actorSystem, NKikimrServices::BS_PDISK, "Reencryption error, what#" << ex.what());
+                    actorSystem->Send(pdiskActor, new TEvFormatReencryptionFinish(false, ex.what()));
+                }
+                return nullptr;
+            },
+            new TCookieType(format, newMainKey, PDisk->Cfg, TlsActivationContext->ActorSystem(), SelfId())
+        ));
+        FormattingThread->Start();
+    }
+
+    void InitHandle(TEvFormatReencryptionFinish::TPtr &ev) {
+        FormattingThread->Join();
+        IsFormattingNow = false;
+        if (ev->Get()->Success) {
+            StartPDiskThread();
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK,
+                    "PDiskId# " << PDisk->PDiskId << " format chunks reencryption finished");
+        } else {
+            PDisk.Reset(new TPDisk(Cfg, PDiskCounters));
+            PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
+            Y_VERIFY(PDisk->PDiskThread.Running());
+
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
+            *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
+            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorDiskCannotBeFormated;
+
+            PDisk->ErrorStr = ToString("Format chunks cannot be reencrypted! Reason# ") + ev->Get()->ErrorReason;
+
+            TStringStream str;
+            str << "PDiskId# " << (ui32)PDisk->PDiskId
+                << " Format chunks cannot be reencrypted! Reason# " << ev->Get()->ErrorReason
+                << " Switching to StateError. Config: " << Cfg->ToString();
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+            InitError(str.Str());
         }
     }
 
@@ -398,43 +470,50 @@ public:
         ui8 *formatSectors = ev->Get()->FormatSectors.Get();
         ui32 formatSectorsSize = ev->Get()->FormatSectorsSize;
         NSan::CheckMemIsInitialized(formatSectors, formatSectorsSize);
-        bool isFormatOk = PDisk->ReadChunk0Format(formatSectors, MainKey);
-        if (!isFormatOk) {
+        TCheckDiskFormatResult res = PDisk->ReadChunk0Format(formatSectors, MainKey);
+        if (!res.IsFormatPresent) {
             *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingFormatMagicChecking;
-            PDisk->ErrorStr = "Format is not Ok, now checking for proper magic sector on disk";
+            PDisk->ErrorStr = "Format chunks are not present on disk or corrupted, now checking for proper magic sector on disk";
             CheckMagicSector(formatSectors, formatSectorsSize);
         } else {
-            SecureWipeBuffer((ui8*)&MainKey, sizeof(MainKey));
-            // Format is read OK
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
-                    << " Successfully read format record# " << PDisk->Format.ToString());
-            TString info;
-            if (!PDisk->CheckGuid(&info)) {
-                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
-                *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
-                *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadDueToGuid;
-                PDisk->ErrorStr = TStringBuilder() << "Can't start due to a guid error " << info;
-                TStringStream str;
-                str << "PDiskId# " << PDisk->PDiskId << PDisk->ErrorStr;
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
-                InitError(str.Str());
-            } else if (!PDisk->CheckFormatComplete()) {
-                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
-                *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
-                *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadIncompleteFormat;
-                PDisk->ErrorStr = "Can't start due to incomplete format!";
-                TStringStream str;
-                str << "PDiskId# " << PDisk->PDiskId << " " << PDisk->ErrorStr << " "
-                    << "Please, do not trun off your server or remove your storage device while formatting. "
-                    << "We are sure you did this or something even more creative, like killing the formatter.";
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
-                InitError(str.Str());
+            if (res.IsReencryptionRequired) {
+                // Format reencryption required
+                ReencryptDiskFormat(PDisk->Format, MainKey.back());
+                // We still need main key after restart
+                // SecureWipeBuffer((ui8*)MainKey.data(), sizeof(NPDisk::TKey) * MainKey.size());
             } else {
-                // PDisk GUID is OK and format is complete
-                *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
-                *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
-                PDisk->Format.InitMagic();
-                PDisk->ReadSysLog(SelfId());
+                // Format is read OK
+                SecureWipeBuffer((ui8*)MainKey.data(), sizeof(NPDisk::TKey) * MainKey.size());
+                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
+                        << " Successfully read format record# " << PDisk->Format.ToString());
+                TString info;
+                if (!PDisk->CheckGuid(&info)) {
+                    *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
+                    *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
+                    *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadDueToGuid;
+                    PDisk->ErrorStr = TStringBuilder() << "Can't start due to a guid error " << info;
+                    TStringStream str;
+                    str << "PDiskId# " << PDisk->PDiskId << PDisk->ErrorStr;
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+                    InitError(str.Str());
+                } else if (!PDisk->CheckFormatComplete()) {
+                    *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
+                    *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
+                    *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadIncompleteFormat;
+                    PDisk->ErrorStr = "Can't start due to incomplete format!";
+                    TStringStream str;
+                    str << "PDiskId# " << PDisk->PDiskId << " " << PDisk->ErrorStr << " "
+                        << "Please, do not turn off your server or remove your storage device while formatting. "
+                        << "We are sure you did this or something even more creative, like killing the formatter.";
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+                    InitError(str.Str());
+                } else {
+                    // PDisk GUID is OK and format is complete
+                    *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
+                    *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
+                    PDisk->Format.InitMagic();
+                    PDisk->ReadSysLog(SelfId());
+                }
             }
         }
     }
@@ -638,7 +717,7 @@ public:
         switch (evControl.Action) {
         case TEvYardControl::PDiskStart:
         {
-            auto *mainKey = static_cast<const NPDisk::TKey*>(evControl.Cookie);
+            auto *mainKey = static_cast<const NPDisk::TMainKey*>(evControl.Cookie);
             Y_VERIFY(mainKey);
             MainKey = *mainKey;
             StartPDiskThread();
@@ -879,7 +958,7 @@ public:
         }
 
         MainKey = ev->Get()->MainKey;
-        SecureWipeBuffer((ui8*)&ev->Get()->MainKey, sizeof(ev->Get()->MainKey));
+        SecureWipeBuffer((ui8*)ev->Get()->MainKey.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.size());
         LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                 << " Going to restart PDisk since recieved TEvRestartPDisk");
         PDisk->Stop();
@@ -1084,6 +1163,7 @@ public:
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);
             hFunc(TEvBlobStorage::TEvRestartPDisk, Handle);
+            hFunc(NPDisk::TEvFormatReencryptionFinish, InitHandle);
     )
 
     STRICT_STFUNC(StateOnline,
@@ -1149,13 +1229,13 @@ public:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk Creation
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey,
+IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new NPDisk::TPDiskActor(cfg, mainKey, counters);
 }
 
 void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
-        const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId) {
+        const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) {
     TActorId actorId = ctx.ExecutorThread.RegisterActor(
         CreatePDisk(cfg, mainKey, AppData(ctx)->Counters), TMailboxType::ReadAsFilled, poolId);
     TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);

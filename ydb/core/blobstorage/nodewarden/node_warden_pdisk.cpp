@@ -107,12 +107,15 @@ namespace NKikimr::NStorage {
             pdiskConfig->EnableSectorEncryption = !pdiskConfig->SectorMap;
         }
 
-        NPDisk::TKey pdiskKey = Cfg->CreatePDiskKey();
-        THashCalculator hasher;
+        NPDisk::TMainKey pdiskKey = Cfg->CreatePDiskKey();
         TString keyPrintSalt = "@N2#_lW19)2-31!iifI@n1178349617";
-        hasher.Hash(keyPrintSalt.Detach(), keyPrintSalt.Size());
-        hasher.Hash(&pdiskKey, sizeof(pdiskKey));
-        pdiskConfig->HashedMainKey = TStringBuilder() << Hex(hasher.GetHashResult(), HF_ADDX);
+        pdiskConfig->HashedMainKey.resize(pdiskKey.size());
+        for (ui32 i = 0; i < pdiskKey.size(); ++i) {
+            THashCalculator hasher;
+            hasher.Hash(keyPrintSalt.Detach(), keyPrintSalt.Size());
+            hasher.Hash(&pdiskKey[i], sizeof(pdiskKey[i]));
+            pdiskConfig->HashedMainKey[i] = TStringBuilder() << Hex(hasher.GetHashResult(), HF_ADDX);
+        }
 
         pdiskConfig->Initialize();
 

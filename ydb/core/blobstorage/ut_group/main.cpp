@@ -161,7 +161,7 @@ public:
     };
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    const NPDisk::TKey MainKey = NPDisk::YdbDefaultPDiskSequence;
+    const NPDisk::TMainKey MainKey = { NPDisk::YdbDefaultPDiskSequence };
     const ui32 NodeCount;
     const ui32 GroupId = 0;
     std::vector<TDiskRecord> Disks;

@@ -437,10 +437,10 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvRestartPDisk : TEventLocal<TEvRestartPDisk, EvRestartPDisk> {
         const ui32 PDiskId;
-        NPDisk::TKey MainKey;
+        const NPDisk::TMainKey MainKey;
         TIntrusivePtr<TPDiskConfig> Config;
 
-        TEvRestartPDisk(const ui32& pdiskId, const NPDisk::TKey& mainKey, const TIntrusivePtr<TPDiskConfig>& config)
+        TEvRestartPDisk(const ui32& pdiskId, const NPDisk::TMainKey& mainKey, const TIntrusivePtr<TPDiskConfig>& config)
             : PDiskId(pdiskId)
             , MainKey(mainKey)
             , Config(config)

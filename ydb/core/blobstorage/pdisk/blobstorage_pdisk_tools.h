@@ -46,7 +46,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     const bool isErasureEncodeUserLog = false, const bool trimEntireDevice = false,
     TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);
 
-bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDiskInfo &outInfo,
+bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,
     const bool doLock = false, TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);
 
 

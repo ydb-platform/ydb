@@ -112,7 +112,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
         chunkKey, logKey, sysLogKey, mainKey, textMessage, isErasureEncodeUserLog, trimEntireDevice);
 }
 
-bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDiskInfo &outInfo,
+bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,
         const bool doLock, TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
     auto mon = std::make_unique<TPDiskMon>(counters, 0, nullptr);
@@ -146,72 +146,74 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDis
     blockDevice->PreadSync(formatRaw->Data(), formatSectorsSize, 0,
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
 
-    NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted
-    cypher.SetKey(mainKey);
-    bool isOk = false;
-    alignas(16) NPDisk::TDiskFormat format;
-    for (ui32 recordIdx = 0; recordIdx < NPDisk::ReplicationFactor; ++recordIdx) {
-        ui64 recordSectorOffset = recordIdx * NPDisk::FormatSectorSize;
-        ui8 *formatSector = formatRaw->Data() + recordSectorOffset;
-        NPDisk::TDataSectorFooter *footer = (NPDisk::TDataSectorFooter*)
-            (formatSector + NPDisk::FormatSectorSize - sizeof(NPDisk::TDataSectorFooter));
+    for (auto& key : mainKey) { 
+        NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted
+        cypher.SetKey(key);
+        bool isOk = false;
+        alignas(16) NPDisk::TDiskFormat format;
+        for (ui32 recordIdx = 0; recordIdx < NPDisk::ReplicationFactor; ++recordIdx) {
+            ui64 recordSectorOffset = recordIdx * NPDisk::FormatSectorSize;
+            ui8 *formatSector = formatRaw->Data() + recordSectorOffset;
+            NPDisk::TDataSectorFooter *footer = (NPDisk::TDataSectorFooter*)
+                (formatSector + NPDisk::FormatSectorSize - sizeof(NPDisk::TDataSectorFooter));
 
-        cypher.StartMessage(footer->Nonce);
+            cypher.StartMessage(footer->Nonce);
 
-        alignas(16) NPDisk::TDiskFormatSector formatCandidate;
-        cypher.Encrypt(formatCandidate.Raw, formatSector, NPDisk::FormatSectorSize);
+            alignas(16) NPDisk::TDiskFormatSector formatCandidate;
+            cypher.Encrypt(formatCandidate.Raw, formatSector, NPDisk::FormatSectorSize);
 
-        if (formatCandidate.Format.IsHashOk(NPDisk::FormatSectorSize)) {
-            format.UpgradeFrom(formatCandidate.Format);
-            isOk = true;
-        }
-    }
-
-    if (isOk) {
-        outInfo.Version = format.Version;
-        outInfo.DiskSize = format.DiskSize;
-        outInfo.SectorSizeBytes = format.SectorSize;
-        outInfo.UserAccessibleChunkSizeBytes = format.GetUserAccessibleChunkSize();
-        outInfo.DiskGuid = format.Guid;
-        format.FormatText[sizeof(format.FormatText) - 1] = 0;
-        outInfo.TextMessage = format.FormatText;
-        outInfo.RawChunkSizeBytes = format.ChunkSize;
-        outInfo.SysLogSectorCount = format.SysLogSectorCount;
-        outInfo.SystemChunkCount = format.SystemChunkCount;
-        outInfo.Timestamp = TInstant::MicroSeconds(format.TimestampUs);
-        outInfo.FormatFlags = format.FormatFlagsToString(format.FormatFlags);
-
-        ui32 sysLogSize = format.SectorSize * format.SysLogSectorCount * 3;
-        ui32 formatBytes = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
-        ui32 sysLogOffsetSectors = (formatBytes + format.SectorSize - 1) / format.SectorSize;
-        ui32 sysLogOffset = sysLogOffsetSectors * format.SectorSize;
-
-        NPDisk::TAlignedData sysLogRaw(sysLogSize);
-        NPDisk::TBuffer::TPtr buffer(bufferPool->Pop());
-        const ui32 bufferSize = AlignDown(bufferPool->GetBufferSize(), format.SectorSize);
-        const ui32 sysLogRawParts = (sysLogSize + bufferSize - 1) / bufferSize;
-        for (ui32 i = 0; i < sysLogRawParts; i++) {
-            const ui32 sysLogPartSize = Min(bufferSize, sysLogSize - i * bufferSize);
-            Y_VERIFY(buffer->Size() >= sysLogPartSize);
-            blockDevice->PreadSync(buffer->Data(), sysLogPartSize, sysLogOffset + i * bufferSize,
-                    NPDisk::TReqId(NPDisk::TReqId::ReadSysLogData, 0), {});
-            memcpy(sysLogRaw.Get() + i * bufferSize, buffer->Data(), sysLogPartSize);
+            if (formatCandidate.Format.IsHashOk(NPDisk::FormatSectorSize)) {
+                format.UpgradeFrom(formatCandidate.Format);
+                isOk = true;
+            }
         }
 
-        outInfo.SectorInfo.clear();
-        for (ui32 idx = 0; idx < format.SysLogSectorCount * 3; ++idx) {
-            ui64 logSectorOffset = (ui64)idx * (ui64)format.SectorSize;
-            ui8 *sector = sysLogRaw.Get() + logSectorOffset;
-            NPDisk::TDataSectorFooter *logFooter = (NPDisk::TDataSectorFooter*)
-                (sector + format.SectorSize - sizeof(NPDisk::TDataSectorFooter));
+        if (isOk) {
+            outInfo.Version = format.Version;
+            outInfo.DiskSize = format.DiskSize;
+            outInfo.SectorSizeBytes = format.SectorSize;
+            outInfo.UserAccessibleChunkSizeBytes = format.GetUserAccessibleChunkSize();
+            outInfo.DiskGuid = format.Guid;
+            format.FormatText[sizeof(format.FormatText) - 1] = 0;
+            outInfo.TextMessage = format.FormatText;
+            outInfo.RawChunkSizeBytes = format.ChunkSize;
+            outInfo.SysLogSectorCount = format.SysLogSectorCount;
+            outInfo.SystemChunkCount = format.SystemChunkCount;
+            outInfo.Timestamp = TInstant::MicroSeconds(format.TimestampUs);
+            outInfo.FormatFlags = format.FormatFlagsToString(format.FormatFlags);
 
-            ui64 sectorOffset = sysLogOffset + (ui64)((idx / 3) * 3) * (ui64)format.SectorSize;
-            bool isCrcOk = NPDisk::TPDiskHashCalculator(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING).CheckSectorHash(
-                    sectorOffset, format.MagicSysLogChunk, sector, format.SectorSize, logFooter->Hash);
-            outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->Version, isCrcOk));
+            ui32 sysLogSize = format.SectorSize * format.SysLogSectorCount * 3;
+            ui32 formatBytes = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+            ui32 sysLogOffsetSectors = (formatBytes + format.SectorSize - 1) / format.SectorSize;
+            ui32 sysLogOffset = sysLogOffsetSectors * format.SectorSize;
+
+            NPDisk::TAlignedData sysLogRaw(sysLogSize);
+            NPDisk::TBuffer::TPtr buffer(bufferPool->Pop());
+            const ui32 bufferSize = AlignDown(bufferPool->GetBufferSize(), format.SectorSize);
+            const ui32 sysLogRawParts = (sysLogSize + bufferSize - 1) / bufferSize;
+            for (ui32 i = 0; i < sysLogRawParts; i++) {
+                const ui32 sysLogPartSize = Min(bufferSize, sysLogSize - i * bufferSize);
+                Y_VERIFY(buffer->Size() >= sysLogPartSize);
+                blockDevice->PreadSync(buffer->Data(), sysLogPartSize, sysLogOffset + i * bufferSize,
+                        NPDisk::TReqId(NPDisk::TReqId::ReadSysLogData, 0), {});
+                memcpy(sysLogRaw.Get() + i * bufferSize, buffer->Data(), sysLogPartSize);
+            }
+
+            outInfo.SectorInfo.clear();
+            for (ui32 idx = 0; idx < format.SysLogSectorCount * 3; ++idx) {
+                ui64 logSectorOffset = (ui64)idx * (ui64)format.SectorSize;
+                ui8 *sector = sysLogRaw.Get() + logSectorOffset;
+                NPDisk::TDataSectorFooter *logFooter = (NPDisk::TDataSectorFooter*)
+                    (sector + format.SectorSize - sizeof(NPDisk::TDataSectorFooter));
+
+                ui64 sectorOffset = sysLogOffset + (ui64)((idx / 3) * 3) * (ui64)format.SectorSize;
+                bool isCrcOk = NPDisk::TPDiskHashCalculator(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING).CheckSectorHash(
+                        sectorOffset, format.MagicSysLogChunk, sector, format.SectorSize, logFooter->Hash);
+                outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->Version, isCrcOk));
+            }
+
+            return true;
         }
-
-        return true;
     }
 
     TStringStream str;

@@ -777,6 +777,16 @@ union TDiskFormatSector {
 static_assert(sizeof(TDiskFormat) <= FormatSectorSize, "TDiskFormat size too lagre!");
 
 
+struct TCheckDiskFormatResult {
+    bool IsFormatPresent;
+    bool IsReencryptionRequired;
+
+    TCheckDiskFormatResult(bool isFormatPresent, bool isReencryptionRequired)
+        : IsFormatPresent(isFormatPresent)
+        , IsReencryptionRequired(isReencryptionRequired)
+    {}
+};
+
 } // NPDisk
 } // NKikimr
 

@@ -233,6 +233,7 @@ void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
     ui32 chunkCount = (ui32)(Format.DiskSize / (ui64)Format.ChunkSize);
     Y_VERIFY_DEBUG(ChunkState.size() == 0);
     ChunkState = TVector<TChunkState>(chunkCount);
+    Y_VERIFY(ChunkState.size() >= Format.SystemChunkCount);
     for (ui32 i = 0; i < Format.SystemChunkCount; ++i) {
         ChunkState[i].OwnerId = OwnerSystem;
     }

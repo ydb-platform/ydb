@@ -85,7 +85,7 @@ public:
         Y_VERIFY(ctx.ExecutorThread.ActorSystem);
         Y_VERIFY(PDiskConfig);
         Y_VERIFY(AppData(ctx));
-        std::unique_ptr<IActor> pdiskActor(CreatePDisk(PDiskConfig, 1, Counters->GetSubgroup("subsystem", "pdisk")));
+        std::unique_ptr<IActor> pdiskActor(CreatePDisk(PDiskConfig, {1}, Counters->GetSubgroup("subsystem", "pdisk")));
         const TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(pdiskActor.release(), TMailboxType::Simple,
                 AppData(ctx)->SystemPoolId);
         PDiskServiceId = MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskConfig->PDiskId);

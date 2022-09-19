@@ -534,7 +534,8 @@ YARD_UNIT_TEST(TestDamagedFirstRecordToKeep) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap);
+    const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+    bool isOk = ReadPDiskFormatInfo(dataPath, mainKey, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
 
     ui32 dataSize = info.SystemChunkCount * info.RawChunkSizeBytes;
@@ -880,7 +881,8 @@ YARD_UNIT_TEST(TestFormatInfo) {
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
 
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap);
+    const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+    bool isOk = ReadPDiskFormatInfo(dataPath, mainKey, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     UNIT_ASSERT_VALUES_EQUAL(info.TextMessage, "Info");
 }
@@ -914,7 +916,8 @@ YARD_UNIT_TEST(TestRestartAtNonceJump) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap);
+    const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+    bool isOk = ReadPDiskFormatInfo(dataPath, mainKey, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     // Destroy data in chunks starting at# SystemChunkCount + 1
     ui32 dataSize = 8 * chunkSize;
@@ -943,7 +946,8 @@ YARD_UNIT_TEST(TestRestartAtChunkEnd) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(dataPath, NPDisk::YdbDefaultPDiskSequence, info, false, tc.SectorMap);
+    const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+    bool isOk = ReadPDiskFormatInfo(dataPath, mainKey, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     // Destroy data in chunks starting at# SystemChunkCount + 1
     ui32 dataSize = 8 * chunkSize;

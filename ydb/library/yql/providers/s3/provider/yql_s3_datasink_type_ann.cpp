@@ -141,13 +141,19 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatus HandleOutput(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 3U, 4U, ctx)) {
             return TStatus::Error;
         }
 
-        if (!EnsureFlowType(*input->Child(TS3SinkOutput::idx_Input), ctx)) {
+        const auto source = input->Child(TS3SinkOutput::idx_Input);
+        if (!EnsureNewSeqType<false, false>(*source, ctx)) {
             return TStatus::Error;
+        }
+
+        if (ETypeAnnotationKind::Stream == source->GetTypeAnn()->GetKind()) {
+            output = ctx.ChangeChild(*input, TS3SinkOutput::idx_Input, ctx.NewCallable(source->Pos(), "ToFlow", {input->ChildPtr(TS3SinkOutput::idx_Input)}));
+            return TStatus::Repeat;
         }
 
         if (!EnsureAtom(*input->Child(TS3SinkOutput::idx_Format), ctx)) {
@@ -162,7 +168,6 @@ private:
             return TStatus::Error;
         }
 
-        const auto source = input->Child(TS3SinkOutput::idx_Input);
         const auto itemType = source->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
         if (!EnsureStructType(source->Pos(), *itemType, ctx)) {
             return TStatus::Error;

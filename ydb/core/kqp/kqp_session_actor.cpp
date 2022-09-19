@@ -274,6 +274,10 @@ public:
         QueryState->TxCtx = std::move(txCtx);
         QueryState->TxId = txId;
         QueryState->TxId_Human = txControl.tx_id();
+        if (!CheckTransacionLocks()) {
+            return;
+        }
+
         bool replied = ExecutePhyTx(/*query*/ nullptr, /*tx*/ nullptr, /*commit*/ true);
 
         if (!replied) {

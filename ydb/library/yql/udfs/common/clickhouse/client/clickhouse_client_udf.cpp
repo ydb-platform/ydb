@@ -727,8 +727,8 @@ private:
                 if (const auto status = Stream.Fetch(Input); EFetchStatus::Ok != status)
                     return status;
 
-                auto input = TupleSize ? Input.GetElement(0) : Input;
-                const std::string_view buffer = input.AsStringRef();
+                InputElement = TupleSize ? Input.GetElement(0) : Input;
+                const std::string_view buffer = InputElement.AsStringRef();
                 Buffer = std::make_unique<NDB::ReadBufferFromMemory>(buffer.data(), buffer.size());
                 BlockStream = std::make_unique<NDB::InputStreamFromInputFormat>(NDB::FormatFactory::instance().getInputFormat(Type, *Buffer, NDB::Block(Columns), nullptr, buffer.size(),  Settings));
             }
@@ -781,6 +781,7 @@ private:
     TPlainArrayCache TupleCache;
 
     TUnboxedValue Input;
+    TUnboxedValue InputElement;
     const TString Type;
     const NDB::FormatSettings Settings;
 

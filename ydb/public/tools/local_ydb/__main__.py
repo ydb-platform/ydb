@@ -128,6 +128,10 @@ To update cluster (stop + start):
             '--enable-datastreams', default=False, action='store_true',
             help='Enable datastreams service'
         )
+        sub_parser.add_argument(
+            '--public-http-config-path', default=None,
+            help='The path to public HTTP config'
+        )
 
     arguments = parser.parse_args()
     arguments.ydb_working_dir = cmds.wrap_path(arguments.ydb_working_dir)

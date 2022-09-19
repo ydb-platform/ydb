@@ -29,6 +29,7 @@ class EmptyArguments(object):
         self.auth_config_path = None
         self.debug_logging = []
         self.fixed_ports = False
+        self.public_http_config_path = None
 
 
 def ensure_path_exists(path):
@@ -297,6 +298,7 @@ def deploy(arguments):
         port_allocator=port_allocator,
         use_in_memory_pdisks=use_in_memory_pdisks_flag(),
         yq_config_path=arguments.yq_config_path,
+        public_http_config_path=arguments.public_http_config_path,
         auth_config_path=arguments.auth_config_path,
         **optionals
     )

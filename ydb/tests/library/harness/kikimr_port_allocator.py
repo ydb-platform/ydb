@@ -38,6 +38,10 @@ class KikimrNodePortAllocatorInterface(object):
     def ext_port(self):
         pass
 
+    @abc.abstractproperty
+    def public_http_port(self):
+        pass
+
 
 class KikimrPortAllocatorInterface(object):
     __metaclass__ = abc.ABCMeta
@@ -79,6 +83,7 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__sqs_port = None
         self.__grpc_ssl_port = None
         self.__ext_port = None
+        self.__public_http_port = None
 
     @property
     def mon_port(self):
@@ -122,6 +127,12 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
             self.__ext_port = self.__port_manager.get_port()
         return self.__ext_port
 
+    @property
+    def public_http_port(self):
+        if self.__public_http_port is None:
+            self.__public_http_port = self.__port_manager.get_port()
+        return self.__public_http_port
+
 
 class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
     def __init__(self, port_manager=None):
@@ -150,7 +161,7 @@ class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
 
 class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     def __init__(self, mon_port=8765, grpc_port=2135, mbus_port=2134, ic_port=19001, sqs_port=8771, grpc_ssl_port=2137,
-                 ext_port=2237):
+                 ext_port=2237, public_http_port=8766):
         super(KikimrFixedNodePortAllocator, self).__init__()
         if os.getenv('MON_PORT') is not None:
             self.__mon_port = int(os.getenv('MON_PORT'))
@@ -174,6 +185,10 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
             self.__ext_port = int(os.getenv('GRPC_EXT_PORT'))
         else:
             self.__ext_port = ext_port
+        if os.getenv('PUBLIC_HTTP_PORT') is not None:
+            self.__public_http_port = int(os.getenv('PUBLIC_HTTP_PORT'))
+        else:
+            self.__public_http_port = public_http_port
 
     @property
     def mon_port(self):
@@ -202,6 +217,9 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     @property
     def ext_port(self):
         return self.__ext_port
+
+    def public_http_port(self):
+        return self.__public_http_port
 
 
 class KikimrFixedPortAllocator(KikimrPortAllocatorInterface):

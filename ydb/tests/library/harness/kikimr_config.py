@@ -128,6 +128,8 @@ class KikimrConfigGenerator(object):
             enable_metering=False,
             grpc_tls_data_path=None,
             yq_config_path=None,
+            public_http_config_path=None,
+            public_http_config=None,
             enable_datastreams=False,
             auth_config_path=None,
             disable_mvcc=False,
@@ -270,6 +272,11 @@ class KikimrConfigGenerator(object):
 
         if yq_config_path:
             self.yaml_config["yandex_query_config"] = _load_yaml_config(yq_config_path)
+
+        if public_http_config:
+            self.yaml_config["public_http_config"] = public_http_config
+        elif public_http_config_path:
+            self.yaml_config["public_http_config"] = _load_yaml_config(public_http_config_path)
 
         self.__build()
 

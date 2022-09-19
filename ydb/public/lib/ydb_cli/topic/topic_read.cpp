@@ -1,7 +1,9 @@
 #include "topic_metadata_fields.h"
 #include "topic_read.h"
-#include "topic_util.h"
 #include "topic_write.h"
+
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/generic/set.h>

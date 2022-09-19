@@ -4,7 +4,6 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
-#include <ydb/public/lib/ydb_cli/topic/topic_util.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
 
 #include <util/generic/set.h>
@@ -614,9 +613,6 @@ namespace NYdb::NConsoleClient {
         NTopic::TTopicClient topicClient(*driver);
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
-        TTopicInitializationChecker checker = TTopicInitializationChecker(topicClient);
-        checker.CheckTopicExistence(TopicName, Consumer_);
-
         {
             TTopicReader reader = TTopicReader(std::move(readSession), TTopicReaderSettings(
                                                                            Limit_,
@@ -743,8 +739,6 @@ namespace NYdb::NConsoleClient {
         auto driver =
             std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
-        TTopicInitializationChecker checker = TTopicInitializationChecker(topicClient);
-        checker.CheckTopicExistence(TopicName);
 
         {
             auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));

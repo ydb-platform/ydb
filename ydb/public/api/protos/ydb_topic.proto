@@ -509,6 +509,8 @@ message AddOffsetsToTransactionRequest {
     // Ranges of offsets by topics.
     repeated TopicOffsets topics = 4;
 
+    string consumer = 5;
+
     message TopicOffsets {
         // Topic path.
         string path = 1;

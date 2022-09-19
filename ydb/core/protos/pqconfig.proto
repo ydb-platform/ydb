@@ -739,3 +739,56 @@ message TYdsShardIterator {
     required uint64 CreationTimestampMs = 6;
     optional ETopicKind Kind = 7;
 }
+
+message TPartitionOperation {
+    required uint64 PartitionId = 1;
+    optional uint64 Begin = 2;
+    optional uint64 End = 3;
+    optional string Consumer = 4;
+    required string Path = 5; // topic path
+};
+
+message TKqpTransaction {
+    enum ELocksOp {
+        Unspecified = 0;
+        Validate = 1;
+        Commit = 2;
+        Rollback = 3;
+    }
+
+    repeated TPartitionOperation Operations = 1;
+    required ELocksOp Op = 2;
+    repeated uint64 SendingShards = 3;
+    repeated uint64 ReceivingShards = 4;
+    required bool Immediate = 5;
+    optional fixed64 LockTxId = 6;
+}
+
+message TEvProposeTransaction {
+    required NActorsProto.TActorId Source = 1;
+    required TKqpTransaction TxBody = 2;
+    required uint64 TxId = 3;
+};
+
+message TEvProposeTransactionResult {
+    enum EStatus {
+        PREPARED = 1;
+        COMPLETE = 2;
+        ABORTED = 3;
+        ERROR = 4;
+        LOCKS_BROKEN = 5;
+        CANCELLED = 6;
+        BAD_REQUEST = 7;
+    };
+
+    required uint64 Origin = 1; // Tablet Id
+    required EStatus Status = 2;
+    required uint64 TxId = 3;
+    optional uint64 MinStep = 4;
+    optional uint64 MaxStep = 6;
+    optional uint64 Step = 7;
+};
+
+message TEvCancelTransactionProposal {
+    required uint64 TxId = 1;
+};

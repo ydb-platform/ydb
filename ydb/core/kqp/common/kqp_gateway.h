@@ -12,6 +12,8 @@
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/lwtrace/shuttle.h>
 
+#include <ydb/core/kqp/common/kqp_topic.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -130,6 +132,8 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
+
+        NTopic::TTopicOperations TopicOperations;
     };
 
     struct TExecPhysicalResult : public TGenericResult {

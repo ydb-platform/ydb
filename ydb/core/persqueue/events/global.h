@@ -8,7 +8,6 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
-
 namespace NKikimr {
 
 struct TEvPersQueue {
@@ -43,6 +42,9 @@ struct TEvPersQueue {
         EvGetPartitionIdForWrite,
         EvGetPartitionIdForWriteResponse,
         EvReportPartitionError,
+        EvProposeTransaction,
+        EvProposeTransactionResult,
+        EvCancelTransactionProposal,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -216,6 +218,15 @@ struct TEvPersQueue {
     struct TEvReportPartitionError : public TEventPB<TEvReportPartitionError, NKikimrPQ::TStatusResponse::TErrorMessage, EvReportPartitionError> {
         TEvReportPartitionError()
         {}
+    };
+
+    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+    };
+
+    struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult, NKikimrPQ::TEvProposeTransactionResult, EvProposeTransactionResult> {
+    };
+
+    struct TEvCancelTransactionProposal : public TEventPB<TEvCancelTransactionProposal, NKikimrPQ::TEvCancelTransactionProposal, EvCancelTransactionProposal> {
     };
 
 };

@@ -73,6 +73,11 @@ message TKqlSettings {
     optional bool NewEngine = 6;
 };
 
+message TTopicOperations {
+    optional string Consumer = 1;
+    repeated Ydb.Topic.AddOffsetsToTransactionRequest.TopicOffsets Topics = 2;
+}
+
 message TQueryRequest {
     optional bytes SessionId = 1;
     optional string Query = 2;
@@ -95,7 +100,7 @@ message TQueryRequest {
     reserved 19; // (deprecated) StatsMode
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
     optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;
-    repeated Ydb.Topic.AddOffsetsToTransactionRequest.TopicOffsets Topics = 22;
+    optional TTopicOperations TopicOperations = 22;
 }
 
 message TKqpPathIdProto {

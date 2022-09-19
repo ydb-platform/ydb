@@ -22,6 +22,7 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/persqueue/events/global.h>
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
@@ -196,6 +197,7 @@ private:
                 hFunc(TEvDataShard::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, HandleExecute);
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
+                hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
                 hFunc(TEvDqCompute::TEvChannelData, HandleExecute); // from CA
@@ -212,6 +214,21 @@ private:
             InternalError(e.what());
         }
         ReportEventElapsedTime();
+    }
+
+    void HandlePrepare(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
+
+        LOG_D("Got propose result, topic tablet: " << event.GetOrigin() << ", status: "
+            << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+
+        TShardState *state = TopicTabletStates.FindPtr(event.GetOrigin());
+        YQL_ENSURE(state);
+
+        YQL_ENSURE(event.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::ERROR);
+
+        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_ABORTED);
+        ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issue);
     }
 
     void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
@@ -529,6 +546,10 @@ private:
         auto& affectedSet = *transaction.MutableAffectedSet();
         affectedSet.Reserve(static_cast<int>(ShardStates.size()));
 
+        //
+        // TODO(abcdef): учесть таблетки топиков
+        //
+
         ui64 aggrMinStep = 0;
         ui64 aggrMaxStep = Max<ui64>();
         ui64 totalReadSize = 0;
@@ -564,6 +585,10 @@ private:
                 }
             }
 
+            //
+            // TODO(abcdef): учесть таблетки топиков
+            //
+
             item.SetFlags(affectedFlags);
         }
 
@@ -597,6 +622,7 @@ private:
                 hFunc(TEvDataShard::TEvProposeTransactionResult, HandleExecute);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, HandleExecute);
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandleExecute);
+                hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleExecute);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleExecute);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
@@ -611,6 +637,21 @@ private:
             InternalError(e.what());
         }
         ReportEventElapsedTime();
+    }
+
+    void HandleExecute(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
+
+        LOG_D("Got propose result, topic tablet: " << event.GetOrigin() << ", status: "
+            << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+
+        TShardState *state = TopicTabletStates.FindPtr(event.GetOrigin());
+        YQL_ENSURE(state);
+
+        YQL_ENSURE(event.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::ERROR);
+
+        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_ABORTED);
+        ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issue);
     }
 
     void HandleExecute(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
@@ -932,6 +973,12 @@ private:
                 LOG_D("Datashard " << x.first << " not finished yet: " << ToString(x.second.State));
             }
         }
+        for (auto& x : TopicTabletStates) {
+            if (x.second.State != TShardState::EState::Finished) {
+                ++notFinished;
+                LOG_D("TopicTablet " << x.first << " not finished yet: " << ToString(x.second.State));
+            }
+        }
         if (notFinished == 0 && PendingComputeActors.empty()) {
             Finalize();
             return;
@@ -946,6 +993,11 @@ private:
             for (auto& [shardId, shardState] : ShardStates) {
                 if (shardState.State != TShardState::EState::Finished) {
                     sb << "DS " << shardId << " (" << ToString(shardState.State) << "), ";
+                }
+            }
+            for (auto& [tabletId, tabletState] : TopicTabletStates) {
+                if (tabletState.State != TShardState::EState::Finished) {
+                    sb << "PQ " << tabletId << " (" << ToString(tabletState.State) << "), ";
                 }
             }
             LOG_D(sb);
@@ -1308,7 +1360,7 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
         RequestControls.Reqister(TlsActivationContext->AsActorContext());
 
-        ReadOnlyTx = true;
+        ReadOnlyTx = !Request.TopicOperations.HasOperations();
 
         auto& funcRegistry = *AppData()->FunctionRegistry;
         NMiniKQL::TScopedAlloc alloc(TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
@@ -1507,10 +1559,12 @@ private:
             return;
         }
 
-        auto datashardTxs = BuildDatashardTxs(datashardTasks);
+        TTopicTabletTxs topicTxs;
+        auto datashardTxs = BuildDatashardTxs(datashardTasks, topicTxs);
 
         // Single-shard transactions are always immediate
-        ImmediateTx = datashardTxs.size() <= 1;
+        ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize()) <= 1;
+
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
             case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED:
@@ -1541,6 +1595,7 @@ private:
         if (forceSnapshot) {
             ComputeTasks = std::move(computeTasks);
             DatashardTxs = std::move(datashardTxs);
+            TopicTxs = std::move(topicTxs);
 
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database));
@@ -1558,7 +1613,8 @@ private:
         if (prepareTasksSpan) {
             prepareTasksSpan.End();
         }
-        ContinueExecute(computeTasks, datashardTxs);
+
+        ContinueExecute(computeTasks, datashardTxs, topicTxs);
     }
 
     STATEFN(WaitSnapshotState) {
@@ -1589,15 +1645,21 @@ private:
 
         auto computeTasks = std::move(ComputeTasks);
         auto datashardTxs = std::move(DatashardTxs);
-        ContinueExecute(computeTasks, datashardTxs);
+        auto topicTxs = std::move(TopicTxs);
+
+        ContinueExecute(computeTasks, datashardTxs, topicTxs);
     }
 
-    void ContinueExecute(
-            TVector<NDqProto::TDqTask>& computeTasks,
-            THashMap<ui64, NKikimrTxDataShard::TKqpTransaction>& datashardTxs)
+    using TDatashardTxs = THashMap<ui64, NKikimrTxDataShard::TKqpTransaction>;
+    using TTopicTabletTxs = THashMap<ui64, NKikimrPQ::TKqpTransaction>;
+
+    void ContinueExecute(TVector<NDqProto::TDqTask>& computeTasks,
+                         TDatashardTxs& datashardTxs,
+                         TTopicTabletTxs& topicTxs)
     {
         UseFollowers = Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
-        if (datashardTxs.size() > 1) {
+
+        if (!ImmediateTx) {
             // Followers only allowed for single shard transactions.
             // (legacy behaviour, for compatibility with current execution engine)
             UseFollowers = false;
@@ -1616,7 +1678,7 @@ private:
             //Stats->ComputeStats.reserve(computeTasks.size());
         }
 
-        Execute(computeTasks, datashardTxs);
+        Execute(computeTasks, datashardTxs, topicTxs);
 
         if (ImmediateTx) {
             LOG_T("Immediate tx, become ExecuteState");
@@ -1635,8 +1697,9 @@ private:
         }
     }
 
-    THashMap<ui64, NKikimrTxDataShard::TKqpTransaction> BuildDatashardTxs(const THashMap<ui64, TVector<NDqProto::TDqTask>>& datashardTasks) {
-        THashMap<ui64, NKikimrTxDataShard::TKqpTransaction> datashardTxs;
+    TDatashardTxs BuildDatashardTxs(const THashMap<ui64, TVector<NDqProto::TDqTask>>& datashardTasks,
+                                    TTopicTabletTxs& topicTxs) {
+        TDatashardTxs datashardTxs;
 
         for (auto& [shardId, tasks]: datashardTasks) {
             auto& dsTxs = datashardTxs[shardId];
@@ -1645,8 +1708,11 @@ private:
             }
         }
 
-        if (auto locksMap = ExtractLocks(Request.Locks); !locksMap.empty()) {
+        Request.TopicOperations.BuildTopicTxs(topicTxs);
+
+        if (auto locksMap = ExtractLocks(Request.Locks); !locksMap.empty() || Request.TopicOperations.HasReadOperations()) {
             YQL_ENSURE(Request.ValidateLocks || Request.EraseLocks);
+
             auto locksOp = Request.ValidateLocks && Request.EraseLocks
                 ? NKikimrTxDataShard::TKqpLocks::Commit
                 : (Request.ValidateLocks
@@ -1660,6 +1726,8 @@ private:
                         taskShardIds.insert(shardId);
                     }
                 }
+
+                taskShardIds.merge(Request.TopicOperations.GetReceivingTabletIds());
             }
 
             TSet<ui64> locksSendingShards;
@@ -1671,18 +1739,40 @@ private:
                     tx.MutableLocks()->MutableLocks()->Add()->Swap(&lock);
                 }
 
-                if (!locksList.empty() && Request.ValidateLocks) {
+                if ((!locksList.empty() || Request.TopicOperations.HasReadOperations()) && Request.ValidateLocks) {
                     locksSendingShards.insert(shardId);
                 }
             }
 
+            locksSendingShards.merge(Request.TopicOperations.GetSendingTabletIds());
+
             if (Request.ValidateLocks) {
                 NProtoBuf::RepeatedField<ui64> sendingShards(locksSendingShards.begin(), locksSendingShards.end());
                 NProtoBuf::RepeatedField<ui64> receivingShards(taskShardIds.begin(), taskShardIds.end());
+
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx.MutableLocks()->SetOp(locksOp);
                     shardTx.MutableLocks()->MutableSendingShards()->CopyFrom(sendingShards);
                     shardTx.MutableLocks()->MutableReceivingShards()->CopyFrom(receivingShards);
+                }
+
+                for (auto& [_, tx] : topicTxs) {
+                    switch (locksOp) {
+                    case NKikimrTxDataShard::TKqpLocks::Commit:
+                        tx.SetOp(NKikimrPQ::TKqpTransaction::Commit);
+                        break;
+                    case NKikimrTxDataShard::TKqpLocks::Validate:
+                        tx.SetOp(NKikimrPQ::TKqpTransaction::Validate);
+                        break;
+                    case NKikimrTxDataShard::TKqpLocks::Rollback:
+                        tx.SetOp(NKikimrPQ::TKqpTransaction::Rollback);
+                        break;
+                    default:
+                        break;
+                    }
+
+                    tx.MutableSendingShards()->CopyFrom(sendingShards);
+                    tx.MutableReceivingShards()->CopyFrom(receivingShards);
                 }
             }
         }
@@ -1690,7 +1780,7 @@ private:
         return datashardTxs;
     }
 
-    void Execute(TVector<NDqProto::TDqTask>& computeTasks, THashMap<ui64, NKikimrTxDataShard::TKqpTransaction>& datashardTxs) {
+    void Execute(TVector<NDqProto::TDqTask>& computeTasks, TDatashardTxs& datashardTxs, TTopicTabletTxs& topicTxs) {
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
@@ -1756,6 +1846,8 @@ private:
             ExecuteDatashardTransaction(shardId, shardTx, lockTxId);
         }
 
+        ExecuteTopicTabletTransactions(topicTxs);
+
         if (sendTasksSpan) {
             sendTasksSpan.End();
         }
@@ -1763,6 +1855,7 @@ private:
         LOG_I("Total tasks: " << TasksGraph.GetTasks().size()
             << ", readonly: " << ReadOnlyTx
             << ", datashardTxs: " << datashardTxs.size()
+            << ", topicTxs: " << Request.TopicOperations.GetSize()
             << ", immediate: " << ImmediateTx
             << ", useFollowers: " << UseFollowers);
 
@@ -1773,7 +1866,54 @@ private:
             CollectTaskChannelsUpdates(task, updates);
         }
         PropagateChannelsUpdates(updates);
+
         CheckExecutionComplete();
+    }
+
+    void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {
+        auto lockTxId = Request.AcquireLocksTxId;
+        if (lockTxId.Defined() && *lockTxId == 0) {
+            lockTxId = TxId;
+        }
+
+        for (auto& tx : topicTxs) {
+            auto tabletId = tx.first;
+            auto& transaction = tx.second;
+
+            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransaction>();
+
+            if (lockTxId) {
+                transaction.SetLockTxId(*lockTxId);
+            }
+            transaction.SetImmediate(ImmediateTx);
+
+            ActorIdToProto(SelfId(), ev->Record.MutableSource());
+            ev->Record.MutableTxBody()->Swap(&transaction);
+            ev->Record.SetTxId(TxId);
+
+            auto traceId = ExecuterSpan.GetTraceId();
+            LOG_D("ExecuteTopicTabletTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
+
+            LOG_D("Executing KQP transaction on topic tablet: " << tabletId
+                  << ", lockTxId: " << lockTxId);
+
+            Send(MakePipePeNodeCacheID(UseFollowers),
+                 new TEvPipeCache::TEvForward(ev.release(), tabletId, true),
+                 0,
+                 0,
+                 std::move(traceId));
+
+            TShardState state;
+            state.State =
+                ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
+            state.DatashardState.ConstructInPlace();
+            state.DatashardState->Follower = UseFollowers;
+
+            state.DatashardState->ShardReadLocks = Request.TopicOperations.TabletHasReadOperations(tabletId);
+
+            auto result = TopicTabletStates.emplace(tabletId, std::move(state));
+            YQL_ENSURE(result.second);
+        }        
     }
 
     void Finalize() {
@@ -1929,6 +2069,7 @@ private:
     NTxProxy::TRequestControls RequestControls;
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;
+    THashMap<ui64, TShardState> TopicTabletStates;
     TVector<NKikimrTxDataShard::TLock> Locks;
     TVector<TKqpExecuterTxResult> Results;
     bool ReadOnlyTx = true;
@@ -1948,7 +2089,8 @@ private:
 
     // Temporary storage during snapshot acquisition
     TVector<NDqProto::TDqTask> ComputeTasks;
-    THashMap<ui64, NKikimrTxDataShard::TKqpTransaction> DatashardTxs;
+    TDatashardTxs DatashardTxs;
+    TTopicTabletTxs TopicTxs;
 
     // Lock handle for a newly acquired lock
     TLockHandle LockHandle;

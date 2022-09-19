@@ -2,6 +2,7 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -15,47 +16,107 @@
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
-#include <vector>
-
 namespace NKikimr::NKqp::NTopic {
 
 class TOffsetsRangeIntersectExpection : public yexception {
 };
 
-struct TPartition {
-    void AddRange(const Ydb::Topic::OffsetsRange &range);
-    void SetTabletId(ui64 value);
+class TConsumerOperations {
+public:
+    bool IsValid() const;
 
-    void Merge(const TPartition& rhs);
+    std::pair<ui64, ui64> GetRange() const;
+
+    ui64 GetBegin() const;
+    ui64 GetEnd() const;
+
+    void AddOperation(const TString& consumer, const Ydb::Topic::OffsetsRange& range);
+    void Merge(const TConsumerOperations& rhs);
 
 private:
-    void AddRangeImpl(ui64 begin, ui64 end);
+    void AddOperationImpl(const TString& consumer,
+                          ui64 begin, ui64 end);
 
+    TMaybe<TString> Consumer_;
     TDisjointIntervalTree<ui64> Offsets_;
-    ui64 TabletId_ = Max<ui64>();
 };
 
-struct TTopic {
-    TPartition& AddPartition(ui32 id);
-    TPartition* GetPartition(ui32 id);
+class TTopicPartitionOperations {
+public:
+    bool IsValid() const;
 
-    void Merge(const TTopic& rhs);
+    void AddOperation(const TString& topic, ui32 partition,
+                      const TString& consumer,
+                      const Ydb::Topic::OffsetsRange& range);
+    void AddOperation(const TString& topic, ui32 partition);
 
-    THashMap<ui32, TPartition> Partitions_;
+    void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TKqpTransaction> &txs);
+
+    void Merge(const TTopicPartitionOperations& rhs);
+
+    void SetTabletId(ui64 value);
+    ui64 GetTabletId() const;
+
+    bool HasReadOperations() const;
+    bool HasWriteOperations() const;
+
+private:
+    TMaybe<TString> Topic_;
+    TMaybe<ui32> Partition_;
+    THashMap<TString, TConsumerOperations> Operations_;
+    bool HasWriteOperations_ = false;
+    TMaybe<ui64> TabletId_;
 };
 
-struct TOffsetsInfo {
-    TTopic& AddTopic(const TString &path);
-    TTopic* GetTopic(const TString &path);
+struct TTopicPartition {
+    struct THash {
+        size_t operator()(const TTopicPartition& x) const;
+    };
 
-    void FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate) const;
+    TTopicPartition(TString topic, ui32 partition);
+
+    bool operator==(const TTopicPartition& x) const;
+
+    TString Topic_;
+    ui32 Partition_;
+};
+
+class TTopicOperations {
+public:
+    bool IsValid() const;
+
+    bool HasOperations() const;
+    bool HasReadOperations() const;
+    bool HasWriteOperations() const;
+
+    bool TabletHasReadOperations(ui64 tabletId) const;
+
+    void AddOperation(const TString& topic, ui32 partition,
+                      const TString& consumer,
+                      const Ydb::Topic::OffsetsRange& range);
+    void AddOperation(const TString& topic, ui32 partition);
+
+    void FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
+                                 TMaybe<TString> consumer);
     bool ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results,
                                     Ydb::StatusIds_StatusCode& status,
                                     TString& message);
 
-    void Merge(const TOffsetsInfo& rhs);
+    void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TKqpTransaction> &txs);
 
-    THashMap<TString, TTopic> Topics_;
+    void Merge(const TTopicOperations& rhs);
+
+    TSet<ui64> GetReceivingTabletIds() const;
+    TSet<ui64> GetSendingTabletIds() const;
+
+    size_t GetSize() const;
+
+private:
+    THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
+    bool HasReadOperations_ = false;
+    bool HasWriteOperations_ = false;
+
+    TMaybe<TString> Consumer_;
 };
 
 }

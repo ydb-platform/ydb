@@ -29,9 +29,6 @@ void TAddOffsetsToTransactionActor::Proceed(const NActors::TActorContext& ctx)
         return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
     }
 
-    //
-    // TODO: новый тип запроса. например, QUERY_TYPE_TOPIC
-    //
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);
 
@@ -57,11 +54,8 @@ void TAddOffsetsToTransactionActor::Proceed(const NActors::TActorContext& ctx)
     //
 
     ev->Record.MutableRequest()->MutableTxControl()->CopyFrom(req->tx_control());
-
-    //
-    // скопировать информацию о смещениях
-    //
-    *ev->Record.MutableRequest()->MutableTopics() = req->Gettopics();
+    ev->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(req->consumer());
+    *ev->Record.MutableRequest()->MutableTopicOperations()->MutableTopics() = req->topics();
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 }

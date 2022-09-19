@@ -13,6 +13,7 @@
 #include <ydb/core/base/wilson.h>
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/kqp/executer/kqp_tasks_graph.h>
 #include <ydb/core/kqp/kqp.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>

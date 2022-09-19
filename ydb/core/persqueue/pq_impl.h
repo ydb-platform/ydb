@@ -34,6 +34,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void HandleWakeup(const TActorContext&);
 
+    void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext&);
+
     void InitResponseBuilder(const ui64 responseCookie, const ui32 count, const ui32 counterId);
     void Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext&);

@@ -98,7 +98,7 @@ struct TKqpQueryState {
     TString TxId_Human = "";
     bool Commit = false;
 
-    NTopic::TOffsetsInfo Offsets;
+    NTopic::TTopicOperations TopicOperations;
 };
 
 struct TKqpCleanupCtx {
@@ -424,24 +424,40 @@ public:
             return;
         }
 
-        QueryState->Offsets = NTopic::TOffsetsInfo();
+        YQL_ENSURE(QueryState->Request.HasTopicOperations());
 
-        for (auto& topic : QueryState->Request.topics()) {
-            auto path = CanonizePath(NPersQueue::GetFullTopicPath(ctx, QueryState->Request.GetDatabase(), topic.path()));
-            auto& t = QueryState->Offsets.AddTopic(path);
+        const NKikimrKqp::TTopicOperations& operations = QueryState->Request.GetTopicOperations();
+
+        TMaybe<TString> consumer;
+        if (operations.HasConsumer()) {
+            consumer = operations.GetConsumer();
+        }
+
+        QueryState->TopicOperations = NTopic::TTopicOperations();
+
+        for (auto& topic : operations.GetTopics()) {
+            auto path =
+                CanonizePath(NPersQueue::GetFullTopicPath(ctx, QueryState->Request.GetDatabase(), topic.path()));
 
             for (auto& partition : topic.partitions()) {
-                auto& p = t.AddPartition(partition.partition_id());
+                if (partition.partition_offsets().empty()) {
+                    QueryState->TopicOperations.AddOperation(path, partition.partition_id());
+                } else {
+                    for (auto& range : partition.partition_offsets()) {
+                        YQL_ENSURE(consumer.Defined());
 
-                for (auto& range : partition.partition_offsets()) {
-                    p.AddRange(range);
+                        QueryState->TopicOperations.AddOperation(path, partition.partition_id(),
+                                                                 *consumer,
+                                                                 range);
+                    }
                 }
             }
         }
 
         auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         navigate->DatabaseName = CanonizePath(QueryState->Request.GetDatabase());
-        QueryState->Offsets.FillSchemeCacheNavigate(*navigate);
+        QueryState->TopicOperations.FillSchemeCacheNavigate(*navigate,
+                                                            std::move(consumer));
         navigate->UserToken = new NACLib::TUserToken(QueryState->UserToken);
 
         Become(&TKqpSessionActor::TopicOpsState);
@@ -961,6 +977,23 @@ public:
         return true;
     }
 
+    bool CheckTopicOperations() {
+        auto& txCtx = *QueryState->TxCtx;
+
+        if (txCtx.TopicOperations.IsValid()) {
+            return true;
+        }
+
+        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
+        std::vector<TIssue> issues {
+            YqlIssue({}, TIssuesIds::KIKIMR_BAD_REQUEST, "Incorrect offset ranges in the transaction.")
+        };
+        ReplyQueryError(requestInfo, Ydb::StatusIds::ABORTED, "incorrect offset ranges in the tx",
+                        MessageFromIssues(issues));
+
+        return false;
+    }
+
     void ExecuteOrDefer() {
         if (!(QueryState->PreparedQuery
             && QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()))
@@ -991,7 +1024,7 @@ public:
                 break;
             }
         }
-        if (!CheckTransacionLocks()) {
+        if (!CheckTransacionLocks() || !CheckTopicOperations()) {
             return;
         }
 
@@ -1014,6 +1047,10 @@ public:
         LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " commit: " << commit
                 << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
 
+        if (!CheckTopicOperations()) {
+            return true;
+        }
+
         // TODO Handle timeouts -- request.Timeout, request.CancelAfter
 
         if (tx) {
@@ -1029,7 +1066,8 @@ public:
             request.Transactions.emplace_back(tx, PrepareParameters(*tx));
         } else {
             YQL_ENSURE(commit);
-            if (txCtx.DeferredEffects.Empty() && !txCtx.Locks.HasLocks()) {
+
+            if (txCtx.DeferredEffects.Empty() && !txCtx.Locks.HasLocks() && !txCtx.TopicOperations.HasOperations()) {
                 ReplySuccess();
                 return true;
             }
@@ -1039,6 +1077,7 @@ public:
             for (const auto& effect : txCtx.DeferredEffects) {
                 YQL_ENSURE(!effect.Node);
                 YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
+
                 request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params));
 
                 LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
@@ -1049,9 +1088,11 @@ public:
                 request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
             }
 
-            if (txCtx.Locks.HasLocks()) {
-                request.ValidateLocks = !(txCtx.GetSnapshot().IsValid() && txCtx.DeferredEffects.Empty());
+            if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasReadOperations()) {
+                request.ValidateLocks = !(txCtx.GetSnapshot().IsValid() && txCtx.DeferredEffects.Empty()) ||
+                    txCtx.TopicOperations.HasReadOperations();
                 request.EraseLocks = true;
+
                 LOG_D("TExecPhysicalRequest, tx has locks, ValidateLocks: " << request.ValidateLocks
                         << " EraseLocks: " << request.EraseLocks);
 
@@ -1059,6 +1100,8 @@ public:
                     request.Locks.emplace_back(lock.GetValueRef(txCtx.Locks.LockType));
                 }
             }
+
+            request.TopicOperations = std::move(txCtx.TopicOperations);
         } else if (ShouldAcquireLocks(query)) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
         }
@@ -1069,7 +1112,9 @@ public:
             request.Transactions.size(),
             request.Locks.size(),
             request.AcquireLocksTxId.Defined());
+
         SendToExecuter(std::move(request));
+
         return false;
     }
 
@@ -2081,14 +2126,14 @@ private:
             ythrow TRequestFail(requestInfo, Ydb::StatusIds::SCHEME_ERROR) << message;
         }
 
-        QueryState->Offsets.ProcessSchemeCacheNavigate(response->ResultSet,
-                                                       status,
-                                                       message);
+        QueryState->TopicOperations.ProcessSchemeCacheNavigate(response->ResultSet,
+                                                               status,
+                                                               message);
         if (status != Ydb::StatusIds::SUCCESS) {
             ythrow TRequestFail(requestInfo, status) << message;
         }
 
-        if (!TryMergeTopicOffsets(QueryState->Offsets, message)) {
+        if (!TryMergeTopicOffsets(QueryState->TopicOperations, message)) {
             ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
@@ -2145,10 +2190,10 @@ private:
         return true;
     }
 
-    bool TryMergeTopicOffsets(const NTopic::TOffsetsInfo &offsets, TString& message) {
+    bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message) {
         try {
             YQL_ENSURE(QueryState);
-            QueryState->TxCtx->MergeTopicOffsets(offsets);
+            QueryState->TxCtx->TopicOperations.Merge(operations);
             return true;
         } catch (const NTopic::TOffsetsRangeIntersectExpection &ex) {
             message = ex.what();

@@ -6,78 +6,237 @@
 namespace NKikimr::NKqp::NTopic {
 
 //
-// TPartition
+// TConsumerOperations
 //
-void TPartition::AddRange(const Ydb::Topic::OffsetsRange &range)
+bool TConsumerOperations::IsValid() const
 {
-    AddRangeImpl(range.start(), range.end());
+    return Offsets_.GetNumIntervals() == 1;
 }
 
-void TPartition::SetTabletId(ui64 value)
+std::pair<ui64, ui64> TConsumerOperations::GetRange() const
 {
-    TabletId_ = value;
+    Y_VERIFY(IsValid());
+
+    return {Offsets_.Min(), Offsets_.Max()};
 }
 
-void TPartition::Merge(const TPartition& rhs)
+void TConsumerOperations::AddOperation(const TString& consumer, const Ydb::Topic::OffsetsRange& range)
 {
+    Y_VERIFY(Consumer_.Empty() || Consumer_ == consumer);
+
+    AddOperationImpl(consumer, range.start(), range.end());
+}
+
+void TConsumerOperations::Merge(const TConsumerOperations& rhs)
+{
+    Y_VERIFY(rhs.Consumer_.Defined());
+    Y_VERIFY(Consumer_.Empty() || Consumer_ == rhs.Consumer_);
+
     for (auto& range : rhs.Offsets_) {
-        AddRangeImpl(range.first, range.second);
+        AddOperationImpl(*rhs.Consumer_, range.first, range.second);
     }
 }
 
-void TPartition::AddRangeImpl(ui64 begin, ui64 end)
+void TConsumerOperations::AddOperationImpl(const TString& consumer,
+                                           ui64 begin, ui64 end)
 {
     if (Offsets_.Intersects(begin, end)) {
         ythrow TOffsetsRangeIntersectExpection() << "offset ranges intersect";
+    }
+
+    if (Consumer_.Empty()) {
+        Consumer_ = consumer;
     }
 
     Offsets_.InsertInterval(begin, end);
 }
 
 //
-// TTopic
+// TTopicPartitionOperations
 //
-TPartition& TTopic::AddPartition(ui32 id)
+bool TTopicPartitionOperations::IsValid() const
 {
-    return Partitions_[id];
+    return std::all_of(Operations_.begin(), Operations_.end(),
+                       [](auto& x) { return x.second.IsValid(); });
 }
 
-TPartition* TTopic::GetPartition(ui32 id)
+void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition,
+                                             const TString& consumer,
+                                             const Ydb::Topic::OffsetsRange& range)
 {
-    auto p = Partitions_.find(id);
-    if (p == Partitions_.end()) {
-        return nullptr;
+    Y_VERIFY(Topic_.Empty() || Topic_ == topic);
+    Y_VERIFY(Partition_.Empty() || Partition_ == partition);
+
+    if (Topic_.Empty()) {
+        Topic_ = topic;
+        Partition_ = partition;
     }
-    return &p->second;
+
+    Operations_[consumer].AddOperation(consumer, range);
 }
 
-void TTopic::Merge(const TTopic& rhs)
+void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition)
 {
-    for (auto& [name, partition] : rhs.Partitions_) {
-        Partitions_[name].Merge(partition);
+    Y_VERIFY(Topic_.Empty() || Topic_ == topic);
+    Y_VERIFY(Partition_.Empty() || Partition_ == partition);
+
+    if (Topic_.Empty()) {
+        Topic_ = topic;
+        Partition_ = partition;
     }
+
+    HasWriteOperations_ = true;
+}
+
+void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TKqpTransaction> &txs)
+{
+    Y_VERIFY(TabletId_.Defined());
+    Y_VERIFY(Partition_.Defined());
+
+    auto& tx = txs[*TabletId_];
+
+    for (auto& [consumer, operations] : Operations_) {
+        NKikimrPQ::TPartitionOperation* o = tx.MutableOperations()->Add();
+        o->SetPartitionId(*Partition_);
+        auto [begin, end] = operations.GetRange();
+        o->SetBegin(begin);
+        o->SetEnd(end);
+        o->SetConsumer(consumer);
+        o->SetPath(*Topic_);
+    }
+
+    if (HasWriteOperations_) {
+        NKikimrPQ::TPartitionOperation* o = tx.MutableOperations()->Add();
+        o->SetPartitionId(*Partition_);
+        o->SetPath(*Topic_);
+    }
+}
+
+void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
+{
+    Y_VERIFY(Topic_.Empty() || Topic_ == rhs.Topic_);
+    Y_VERIFY(Partition_.Empty() || Partition_ == rhs.Partition_);
+    Y_VERIFY(TabletId_.Empty() || TabletId_ == rhs.TabletId_);
+
+    if (Topic_.Empty()) {
+        Topic_ = rhs.Topic_;
+        Partition_ = rhs.Partition_;
+        TabletId_ = rhs.TabletId_;
+    }
+
+    for (auto& [key, value] : rhs.Operations_) {
+        Operations_[key].Merge(value);
+    }
+
+    HasWriteOperations_ |= rhs.HasWriteOperations_;
+}
+
+ui64 TTopicPartitionOperations::GetTabletId() const
+{
+    Y_VERIFY(TabletId_.Defined());
+
+    return *TabletId_;
+}
+
+void TTopicPartitionOperations::SetTabletId(ui64 value)
+{
+    Y_VERIFY(TabletId_.Empty());
+
+    TabletId_ = value;
+}
+
+bool TTopicPartitionOperations::HasReadOperations() const
+{
+    return !Operations_.empty();
+}
+
+bool TTopicPartitionOperations::HasWriteOperations() const
+{
+    return HasWriteOperations_;
 }
 
 //
-// TOffsetsInfo
+// TTopicPartition
 //
-TTopic& TOffsetsInfo::AddTopic(const TString &path)
+TTopicPartition::TTopicPartition(TString topic, ui32 partition) :
+    Topic_{std::move(topic)},
+    Partition_{partition}
 {
-    return Topics_[path];
 }
 
-TTopic *TOffsetsInfo::GetTopic(const TString &path)
+bool TTopicPartition::operator==(const TTopicPartition& x) const
 {
-    auto p = Topics_.find(path);
-    if (p == Topics_.end()) {
-        return nullptr;
+    return (Topic_ == x.Topic_) && (Partition_ == x.Partition_);
+}
+
+size_t TTopicPartition::THash::operator()(const TTopicPartition& x) const
+{
+    size_t hash = std::hash<TString>{}(x.Topic_);
+    hash = CombineHashes(hash, std::hash<ui32>{}(x.Partition_));
+    return hash;
+}
+
+//
+// TTopicOperations
+//
+bool TTopicOperations::IsValid() const
+{
+    return std::all_of(Operations_.begin(), Operations_.end(),
+                       [](auto& x) { return x.second.IsValid(); });
+}
+
+bool TTopicOperations::HasOperations() const
+{
+    return HasReadOperations() || HasWriteOperations();
+}
+
+bool TTopicOperations::HasReadOperations() const
+{
+    return HasReadOperations_;
+}
+
+bool TTopicOperations::HasWriteOperations() const
+{
+    return HasWriteOperations_;
+}
+
+bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
+{
+    for (auto& [_, value] : Operations_) {
+        if (value.GetTabletId() == tabletId) {
+            return value.HasReadOperations();
+        }
     }
-    return &p->second;
+    return false;
 }
 
-void TOffsetsInfo::FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate) const
+void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
+                                    const TString& consumer,
+                                    const Ydb::Topic::OffsetsRange& range)
 {
-    for (auto& [topic, _] : Topics_) {
+    TTopicPartition key{topic, partition};
+    Operations_[key].AddOperation(topic, partition,
+                                  consumer,
+                                  range);
+    HasReadOperations_ = true;
+}
+
+void TTopicOperations::AddOperation(const TString& topic, ui32 partition)
+{
+    TTopicPartition key{topic, partition};
+    Operations_[key].AddOperation(topic, partition);
+    HasWriteOperations_ = true;
+}
+
+void TTopicOperations::FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
+                                               TMaybe<TString> consumer)
+{
+    TSet<TString> topics;
+    for (auto& [key, _] : Operations_) {
+        topics.insert(key.Topic_);
+    }
+
+    for (auto& topic : topics) {
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = NKikimr::SplitPath(topic);
         entry.SyncVersion = true;
@@ -86,17 +245,17 @@ void TOffsetsInfo::FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& n
 
         navigate.ResultSet.push_back(std::move(entry));
     }
+
+    Consumer_ = std::move(consumer);
 }
 
-bool TOffsetsInfo::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results,
-                                              Ydb::StatusIds_StatusCode& status,
-                                              TString& message)
+bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results,
+                                                  Ydb::StatusIds_StatusCode& status,
+                                                  TString& message)
 {
-    Y_VERIFY(results.size() == Topics_.size());
-
     if (results.empty()) {
         status = Ydb::StatusIds::BAD_REQUEST;
-        message = "empty request";
+        message = "Request is empty";
         return false;
     }
 
@@ -116,24 +275,42 @@ bool TOffsetsInfo::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNa
             const NKikimrSchemeOp::TPersQueueGroupDescription& description =
                 result.PQGroupInfo->Description;
 
-            TTopic* topic = GetTopic(CanonizePath(result.Path));
+            if (Consumer_) {
+                bool found = false;
 
-            //
-            // TODO: если топика нет, то отправить сообщение с ошибкой SCHEME_ERROR
-            //
-            Y_VERIFY(topic != nullptr);
+                for (auto& consumer : description.GetPQTabletConfig().GetReadRules()) {
+                    if (Consumer_ == consumer) {
+                        found = true;
+                        break;
+                    }
+                }
 
-            for (auto& p : description.GetPartitions()) {
-                if (auto partition = topic->GetPartition(p.GetPartitionId()); partition) {
-                    LOG_D("topic=" << description.GetName()
-                          << ", partition=" << p.GetPartitionId()
-                          << ", tabletId=" << p.GetTabletId());
+                if (!found) {
+                    builder << "Unknown consumer '" << *Consumer_ << "'";
 
-                    partition->SetTabletId(p.GetTabletId());
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    message = std::move(builder);
+
+                    return false;
+                }
+            }
+
+            TString path = CanonizePath(result.Path);
+
+            for (auto& partition : description.GetPartitions()) {
+                TTopicPartition key{path, partition.GetPartitionId()};
+
+                if (auto p = Operations_.find(key); p != Operations_.end()) {
+                    LOG_D("(topic, partition, tablet): "
+                          << "'" << key.Topic_ << "'"
+                          << ", " << partition.GetPartitionId()
+                          << ", " << partition.GetTabletId());
+
+                    p->second.SetTabletId(partition.GetTabletId());
                 }
             }
         } else {
-            builder << "The '" << JoinPath(result.Path) << "' topic is missing";
+            builder << "Topic '" << JoinPath(result.Path) << "' is missing";
 
             status = Ydb::StatusIds::SCHEME_ERROR;
             message = std::move(builder);
@@ -148,11 +325,46 @@ bool TOffsetsInfo::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNa
     return true;
 }
 
-void TOffsetsInfo::Merge(const TOffsetsInfo& rhs)
+void TTopicOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TKqpTransaction> &txs)
 {
-    for (auto& [name, topic] : rhs.Topics_) {
-        Topics_[name].Merge(topic);
+    for (auto& [_, operations] : Operations_) {
+        operations.BuildTopicTxs(txs);
     }
+}
+
+void TTopicOperations::Merge(const TTopicOperations& rhs)
+{
+    for (auto& [key, value] : rhs.Operations_) {
+        Operations_[key].Merge(value);
+    }
+
+    HasReadOperations_ |= rhs.HasReadOperations_;
+    HasWriteOperations_ |= rhs.HasWriteOperations_;
+}
+
+TSet<ui64> TTopicOperations::GetReceivingTabletIds() const
+{
+    TSet<ui64> ids;
+    for (auto& [_, operations] : Operations_) {
+        if (operations.HasWriteOperations()) {
+            ids.insert(operations.GetTabletId());
+        }
+    }
+    return ids;
+}
+
+TSet<ui64> TTopicOperations::GetSendingTabletIds() const
+{
+    TSet<ui64> ids;
+    for (auto& [_, operations] : Operations_) {
+        ids.insert(operations.GetTabletId());
+    }
+    return ids;
+}
+
+size_t TTopicOperations::GetSize() const
+{
+    return Operations_.size();
 }
 
 }

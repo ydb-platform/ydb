@@ -2154,6 +2154,40 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Handle TEvPersQueue::TEvProposeTransaction. topicPath=" << TopicPath);
+
+    NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
+    const NKikimrPQ::TKqpTransaction& txBody = event.GetTxBody();
+
+    for (auto& operation : txBody.GetOperations()) {
+        Y_VERIFY(!operation.HasPath() || (operation.GetPath() == TopicPath));
+
+        bool isWriteOperation = !operation.HasBegin();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "tx=" << event.GetTxId() <<
+                    ", lock_tx_id=" << txBody.GetLockTxId() <<
+                    ", path=" << operation.GetPath() <<
+                    ", partition=" << operation.GetPartitionId() <<
+                    ", consumer=" << operation.GetConsumer() <<
+                    ", begin=" << operation.GetBegin() <<
+                    ", end=" << operation.GetEnd() <<
+                    ", is_write=" << isWriteOperation);
+    }
+
+    auto result = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
+
+    result->Record.SetOrigin(TabletID());
+    result->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::ERROR);
+    result->Record.SetTxId(event.GetTxId());
+    //result->Record.SetMinStep();
+    //result->Record.SetMaxStep();
+    //result->Record.SetStep();
+
+    ctx.Send(ActorIdFromProto(event.GetSource()), result.release());
+}
 
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
@@ -2181,6 +2215,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvError, Handle);
         HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+        HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
         default:
             return false;
     }

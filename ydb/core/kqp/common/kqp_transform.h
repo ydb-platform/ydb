@@ -241,10 +241,6 @@ public:
         ForceNewEngineSettings.ForceNewEngineLevel = level;
     }
 
-    void MergeTopicOffsets(const NTopic::TOffsetsInfo &offsets) {
-        TopicOffsets.Merge(offsets);
-    }
-
 public:
     struct TParamsState : public TThrRefBase {
         TParamValueMap Values;
@@ -265,7 +261,7 @@ public:
     TKqpTxLocks Locks;
 
     TDeferredEffects DeferredEffects;
-    NTopic::TOffsetsInfo TopicOffsets;
+    NTopic::TTopicOperations TopicOperations;
     TIntrusivePtr<TParamsState> ParamsState;
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;

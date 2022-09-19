@@ -41,7 +41,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TUncertaintyResolver::DropBlobs(const std::vector<TLogoBlobID>& blobIds) {
         for (const TLogoBlobID& id : blobIds) {
-            FinishBlob(id, false);
+            FinishBlob(id, EKeyBlobState::WASNT_WRITTEN);
         }
     }
 
@@ -49,31 +49,16 @@ namespace NKikimr::NBlobDepot {
         FinishKey(key, false);
     }
 
-    void TData::TUncertaintyResolver::IssueIndexRestoreGetQuery(TKeys::value_type *keyRecord, TLogoBlobID id) {
-        const auto [it, inserted] = Blobs.try_emplace(id);
-        TBlobContext& blobContext = it->second;
-
-        const bool inserted1 = blobContext.ReferringKeys.insert(keyRecord).second;
-        Y_VERIFY(inserted1);
-
-        const bool inserted2 = keyRecord->second.BlobQueriesInFlight.insert(id).second;
-        Y_VERIFY(inserted2);
-
-        if (inserted) {
-            const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
-            SendToBSProxy(Self->SelfId(), groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true));
-        }
-    }
-
     void TData::TUncertaintyResolver::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
         auto& msg = *ev->Get();
         Y_VERIFY(msg.ResponseSz == 1);
         auto& resp = msg.Responses[0];
-        FinishBlob(resp.Id, resp.Status == NKikimrProto::OK);
+        FinishBlob(resp.Id, resp.Status == NKikimrProto::OK ? EKeyBlobState::CONFIRMED :
+                resp.Status == NKikimrProto::NODATA ? EKeyBlobState::WASNT_WRITTEN :
+                EKeyBlobState::ERROR);
     }
 
-    void TData::TUncertaintyResolver::FinishBlob(TLogoBlobID id, bool success) {
+    void TData::TUncertaintyResolver::FinishBlob(TLogoBlobID id, EKeyBlobState state) {
         const auto blobIt = Blobs.find(id);
         if (blobIt == Blobs.end()) {
             return;
@@ -84,12 +69,9 @@ namespace NKikimr::NBlobDepot {
         for (TKeys::value_type *keyRecord : blobContext.ReferringKeys) {
             auto& [key, keyContext] = *keyRecord;
 
-            const auto blobInFlightIt = keyContext.BlobQueriesInFlight.find(id);
-            Y_VERIFY(blobInFlightIt != keyContext.BlobQueriesInFlight.end());
-            auto blobInFlight = keyContext.BlobQueriesInFlight.extract(blobInFlightIt);
-            if (success) {
-                keyContext.ConfirmedBlobs.insert(std::move(blobInFlight));
-            }
+            const auto blobStateIt = keyContext.BlobState.find(id);
+            Y_VERIFY(blobStateIt != keyContext.BlobState.end());
+            blobStateIt->second = state;
 
             CheckAndFinishKeyIfPossible(keyRecord);
         }
@@ -105,16 +87,40 @@ namespace NKikimr::NBlobDepot {
 
             EnumerateBlobsForValueChain(value->ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
                 auto& [key, keyContext] = *keyRecord;
+                switch (EKeyBlobState& state = keyContext.BlobState[id]) {
+                    case EKeyBlobState::INITIAL: {
+                        // have to additionally query this blob and wait for it
+                        TBlobContext& blobContext = Blobs[id];
+                        const bool inserted = blobContext.ReferringKeys.insert(keyRecord).second;
+                        Y_VERIFY(inserted);
+                        if (blobContext.ReferringKeys.size() == 1) {
+                            const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
+                            SendToBSProxy(Self->SelfId(), groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true));
+                        }
 
-                if (keyContext.ConfirmedBlobs.contains(id)) {
-                    // this blob is in, okay
-                } else if (keyContext.BlobQueriesInFlight.contains(id)) {
-                    // still have to wait for this one
-                    okay = false;
-                } else {
-                    // have to additionally query this blob and wait for it
-                    okay = false;
-                    IssueIndexRestoreGetQuery(keyRecord, id);
+                        okay = false;
+                        state = EKeyBlobState::QUERY_IN_FLIGHT;
+                        break;
+                    }
+
+                    case EKeyBlobState::QUERY_IN_FLIGHT:
+                        // still have to wait for this one
+                        okay = false;
+                        break;
+
+                    case EKeyBlobState::CONFIRMED:
+                        // blob was found and it is ok
+                        break;
+
+                    case EKeyBlobState::WASNT_WRITTEN:
+                        // the blob hasn't been written completely; this may also be a race when it is being written
+                        // right now, but we are asking for the data too early (like in scan request)
+                        break;
+
+                    case EKeyBlobState::ERROR:
+                        // we can't figure out this blob's state
+                        break;
                 }
             });
         } else { // key has been deleted, we have to drop it from the response
@@ -146,14 +152,16 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        for (const TLogoBlobID& id : keyContext.BlobQueriesInFlight) {
-            const auto blobIt = Blobs.find(id);
-            Y_VERIFY(blobIt != Blobs.end());
-            TBlobContext& blobContext = blobIt->second;
-            const size_t numErased = blobContext.ReferringKeys.erase(&*keyIt);
-            Y_VERIFY(numErased == 1);
-            if (blobContext.ReferringKeys.empty()) {
-                Blobs.erase(blobIt);
+        for (const auto& [id, state] : keyContext.BlobState) {
+            if (state == EKeyBlobState::QUERY_IN_FLIGHT) {
+                const auto blobIt = Blobs.find(id);
+                Y_VERIFY(blobIt != Blobs.end());
+                TBlobContext& blobContext = blobIt->second;
+                const size_t numErased = blobContext.ReferringKeys.erase(&*keyIt);
+                Y_VERIFY(numErased == 1);
+                if (blobContext.ReferringKeys.empty()) {
+                    Blobs.erase(blobIt);
+                }
             }
         }
     }

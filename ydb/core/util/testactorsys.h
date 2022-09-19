@@ -203,6 +203,13 @@ public:
         return &AppData;
     }
 
+    template<typename T>
+    void EnumActors(T&& callback) {
+        for (const auto& [actor, _] : ActorName) {
+            callback(actor);
+        }
+    }
+
     void Start() {
         for (auto& [nodeId, info] : PerNodeInfo) {
             SetupNode(nodeId, info);
@@ -458,6 +465,14 @@ public:
     void RegisterService(const TActorId& serviceId, const TActorId& actorId) {
         const ui32 nodeId = actorId.NodeId(); // only at the node with the actor
         GetNode(nodeId)->ActorSystem->RegisterLocalService(serviceId, actorId);
+    }
+
+    bool HasImmediateEvents() const {
+        if (ScheduleQ.empty()) {
+            return false;
+        }
+        const auto& [ts, _] = *ScheduleQ.begin();
+        return ts <= Clock;
     }
 
     template<typename TCallback>

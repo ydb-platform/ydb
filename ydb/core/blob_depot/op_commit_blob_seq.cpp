@@ -140,6 +140,8 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDTxx, "TEvDiscardSpoiledBlobSeq", (Id, GetLogId()), (AgentId, agent.ConnectedNodeId),
             (Msg, ev->Get()->Record));
 
+        // FIXME(alexvru): delete uncertain keys containing this BlobSeqId as they were never written
+
         for (const auto& item : ev->Get()->Record.GetItems()) {
             const auto blobSeqId = TBlobSeqId::FromProto(item);
             if (blobSeqId.Generation == generation) {

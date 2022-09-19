@@ -22,15 +22,20 @@ namespace NKikimr::NBlobDepot {
             {}
         };
 
+        enum class EKeyBlobState {
+            INITIAL, // just created blob, no activity
+            QUERY_IN_FLIGHT, // blob should have BlobContext referring to this key too
+            CONFIRMED, // we got OK for this blob
+            WASNT_WRITTEN, // we got NODATA for this blob, this key needs to be deleted if possible
+            ERROR, // we got ERROR or any other reply for this blob
+        };
+
         struct TKeyContext {
             // requests dependent on this key
             std::vector<TIntrusivePtr<TResolveOnHold>> DependentRequests;
 
-            // blob queries involved
-            std::set<TLogoBlobID> BlobQueriesInFlight;
-
-            // found blobs
-            std::set<TLogoBlobID> ConfirmedBlobs;
+            // blob queries issued and replied
+            std::unordered_map<TLogoBlobID, EKeyBlobState> BlobState;
         };
 
         using TKeys = std::map<TKey, TKeyContext>;
@@ -52,8 +57,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
 
     private:
-        void IssueIndexRestoreGetQuery(TKeys::value_type *keyRecord, TLogoBlobID id);
-        void FinishBlob(TLogoBlobID id, bool success);
+        void FinishBlob(TLogoBlobID id, EKeyBlobState state);
         void CheckAndFinishKeyIfPossible(TKeys::value_type *keyRecord);
         void FinishKey(const TKey& key, bool success);
     };

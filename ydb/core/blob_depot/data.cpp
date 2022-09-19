@@ -366,6 +366,7 @@ namespace NKikimr::NBlobDepot {
             auto& channel = Self->Channels[record.Channel];
 
             TGenStep nextGenStep(*--record.Trash.end());
+            std::set<TLogoBlobID>::iterator trashEndIter = record.Trash.end();
 
             // step we are going to invalidate (including blobs with this one)
             if (TGenStep(record.LeastExpectedBlobId) <= nextGenStep) {
@@ -403,49 +404,56 @@ namespace NKikimr::NBlobDepot {
                 // adjust the barrier to keep it safe now
                 const TLogoBlobID maxId(record.TabletId, record.LeastExpectedBlobId.Generation,
                     record.LeastExpectedBlobId.Step, record.Channel, 0, 0);
-                const auto it = record.Trash.lower_bound(maxId);
-                if (it != record.Trash.begin()) {
-                    nextGenStep = TGenStep(*std::prev(it));
+                trashEndIter = record.Trash.lower_bound(maxId);
+                if (trashEndIter != record.Trash.begin()) {
+                    nextGenStep = TGenStep(*std::prev(trashEndIter));
                 } else {
                     nextGenStep = {};
                 }
             }
 
-            auto keep = std::make_unique<TVector<TLogoBlobID>>();
-            auto doNotKeep = std::make_unique<TVector<TLogoBlobID>>();
+            TVector<TLogoBlobID> keep;
+            TVector<TLogoBlobID> doNotKeep;
+            std::vector<TLogoBlobID> trashInFlight;
 
-            for (auto it = record.Trash.begin(); it != record.Trash.end() && TGenStep(*it) <= record.LastConfirmedGenStep; ++it) {
-                doNotKeep->push_back(*it);
+            for (auto it = record.Trash.begin(); it != trashEndIter; ++it) {
+                if (const TGenStep genStep(*it); genStep <= record.LastConfirmedGenStep) {
+                    doNotKeep.push_back(*it);
+                } else if (nextGenStep < genStep) {
+                    Y_FAIL();
+                }
+                trashInFlight.push_back(*it);
             }
 
             const TLogoBlobID keepFrom(record.TabletId, record.LastConfirmedGenStep.Generation(),
-                record.LastConfirmedGenStep.Step(), record.Channel, 0, 0);
+                record.LastConfirmedGenStep.Step(), record.Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie,
+                TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode);
             for (auto it = record.Used.upper_bound(keepFrom); it != record.Used.end() && TGenStep(*it) <= nextGenStep; ++it) {
-                keep->push_back(*it);
+                Y_VERIFY(record.LastConfirmedGenStep < TGenStep(*it));
+                keep.push_back(*it);
             }
 
-            if (keep->empty()) {
-                keep.reset();
-            }
-            if (doNotKeep->empty()) {
-                doNotKeep.reset();
-            }
             const bool collect = nextGenStep > record.LastConfirmedGenStep;
 
-            if (!keep && !doNotKeep && !collect) {
+            if (trashInFlight.empty()) {
+                Y_VERIFY(keep.empty());
                 continue; // nothing to do here
             }
 
+            auto keep_ = keep ? std::make_unique<TVector<TLogoBlobID>>(std::move(keep)) : nullptr;
+            auto doNotKeep_ = doNotKeep ? std::make_unique<TVector<TLogoBlobID>>(std::move(doNotKeep)) : nullptr;
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(record.TabletId, generation,
                 record.PerGenerationCounter, record.Channel, collect, nextGenStep.Generation(), nextGenStep.Step(),
-                keep.get(), doNotKeep.get(), TInstant::Max(), true);
-            keep.release();
-            doNotKeep.release();
+                keep_.get(), doNotKeep_.get(), TInstant::Max(), true);
+            keep_.release();
+            doNotKeep_.release();
 
             record.CollectGarbageRequestInFlight = true;
             record.PerGenerationCounter += ev->Collect ? ev->PerGenerationCounterStepSize() : 0;
-            record.TrashInFlight.insert(record.TrashInFlight.end(), record.Trash.begin(), record.Trash.end());
+            record.TrashInFlight.swap(trashInFlight);
             record.IssuedGenStep = Max(nextGenStep, record.LastConfirmedGenStep);
+
+            Y_VERIFY(trashInFlight.empty());
 
             record.TIntrusiveListItem<TRecordsPerChannelGroup, TRecordWithTrash>::Unlink();
 
@@ -488,6 +496,7 @@ namespace NKikimr::NBlobDepot {
             ExecuteConfirmGC(record.Channel, record.GroupId, std::exchange(record.TrashInFlight, {}),
                 record.LastConfirmedGenStep);
         } else {
+            record.TrashInFlight.clear();
             record.ClearInFlight(this);
             HandleTrash();
         }
@@ -634,7 +643,6 @@ namespace NKikimr::NBlobDepot {
             self->AccountBlob(id, false);
         }
         LastConfirmedGenStep = IssuedGenStep;
-        EnqueueForCollectionIfPossible(self);
     }
 
     void TData::TRecordsPerChannelGroup::OnLeastExpectedBlobIdChange(TData *self, TBlobSeqId leastExpectedBlobId) {

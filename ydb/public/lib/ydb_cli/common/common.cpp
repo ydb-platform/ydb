@@ -59,7 +59,7 @@ void TProfileConfig::ReadFromFile() {
     InMemory = true;
 }
 
-bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& output) {
+bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& output, bool allowEmpty) {
     TFsPath fsPath(filePath);
     if (!fsPath.Exists()) {
         correctpath(filePath);
@@ -68,7 +68,7 @@ bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& o
     TString content;
     if (fsPath.Exists()) {
         content = Strip(TUnbufferedFileInput(fsPath).ReadAll());
-        if (!content) {
+        if (!content && !allowEmpty) {
             throw yexception() << "Empty " << fileName << " file provided: \"" << filePath << "\".";
         } else {
             output = content;
@@ -78,9 +78,9 @@ bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& o
     return false;
 }
 
-TString ReadFromFile(TString& filePath, const TString& fileName) {
+TString ReadFromFile(TString& filePath, const TString& fileName, bool allowEmpty) {
     TString content;
-    if (ReadFromFileIfExists(filePath, fileName, content)) {
+    if (ReadFromFileIfExists(filePath, fileName, content, allowEmpty)) {
         return content;
     } else {
         throw yexception() << "Can't find " << fileName << " file \"" << filePath << "\".";

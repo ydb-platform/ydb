@@ -386,6 +386,9 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         }
         if (authData["password"]) {
             config.StaticCredentials.Password = authData["password"].as<TString>();
+            if (!config.StaticCredentials.Password) {
+                DoNotAskForPassword = true;
+            }
         }
     } else {
         return false;
@@ -525,7 +528,10 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                 if (IsVerbose()) {
                     Cout << "Using user password from file provided with --password-file option" << Endl;
                 }
-                config.StaticCredentials.Password = ReadFromFile(PasswordFile, "password");
+                config.StaticCredentials.Password = ReadFromFile(PasswordFile, "password", true);
+                if (!config.StaticCredentials.Password) {
+                    DoNotAskForPassword = true;
+                }
             }
         }
         break;

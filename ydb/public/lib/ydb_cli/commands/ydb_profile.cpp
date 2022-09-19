@@ -197,7 +197,7 @@ namespace {
         Cin >> userName;
         Cout << "Please enter password: ";
         TString userPassword = InputPassword();
-        if (userName && userPassword) {
+        if (userName) {
             Cout << "Setting user & password for profile \"" << profileName << "\"" << Endl;
             profile->RemoveValue("authentication");
             YAML::Node authValue;

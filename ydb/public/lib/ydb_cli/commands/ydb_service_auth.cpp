@@ -1,6 +1,7 @@
 #include "ydb_service_auth.h"
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include "ydb_sdk_core_access.h"
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -35,7 +36,10 @@ int TCommandGetToken::Run(TConfig& config) {
     }
 
     if (credentialsProviderFactory) {
-        auto authInfo = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+        auto driver = CreateDriver(config);
+        TDummyClient client(driver);
+
+        auto authInfo = credentialsProviderFactory->CreateProvider(client.GetCoreFacility())->GetAuthInfo();
         if (authInfo) {
             Cout << authInfo << Endl;
             return EXIT_SUCCESS;

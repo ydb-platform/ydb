@@ -17,6 +17,7 @@ target_link_libraries(restricted-boost-parameter INTERFACE
   restricted-boost-config
   restricted-boost-core
   restricted-boost-detail
+  restricted-boost-mp11
   restricted-boost-mpl
   restricted-boost-optional
   restricted-boost-preprocessor

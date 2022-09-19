@@ -160,6 +160,11 @@ public:
         RequestCounters->Counters = Counters;
         RequestCounters->DbCounters = Settings.DbCounters;
         RequestCounters->TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(AppData()->Counters);
+
+        FillSettings.AllResultsBytesLimit = Nothing();
+        FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get().GetRef();
+        FillSettings.Format = IDataProvider::EResultFormat::Custom;
+        FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
     }
 
     void Bootstrap() {
@@ -1187,7 +1192,7 @@ public:
         auto* response = ev->Get()->Record.MutableResponse();
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         LOG_D(SelfId() << " " << requestInfo << " TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
-            << " response: " << response->DebugString());
+            << " response.status: " << response->GetStatus() << " results.size: " << response->GetResult().ResultsSize());
         ExecuterId = TActorId{};
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -1528,7 +1533,8 @@ public:
 
         if (QueryState->PreparedQuery) {
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-            for (auto& rb : phyQuery.GetResultBindings()) {
+            for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+                auto& rb = phyQuery.GetResultBindings(i);
                 auto txIndex = rb.GetTxResultBinding().GetTxIndex();
                 auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
 
@@ -1536,10 +1542,19 @@ public:
                 YQL_ENSURE(txIndex < txResults.size());
                 YQL_ENSURE(resultIndex < txResults[txIndex].size());
 
-                IDataProvider::TFillSettings fillSettings;
-                //TODO: shoud it be taken from PreparedQuery->GetResults().GetRowsLimit() ?
-                fillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get().GetRef();
-                auto* protoRes = KikimrResultToProto(txResults[txIndex][resultIndex], {}, fillSettings, arena.get());
+                std::optional<IDataProvider::TFillSettings> fillSettings;
+                if (QueryState->PreparedQuery->ResultsSize()) {
+                    YQL_ENSURE(phyQuery.ResultBindingsSize() == QueryState->PreparedQuery->ResultsSize(), ""
+                            << phyQuery.ResultBindingsSize() << " != " << QueryState->PreparedQuery->ResultsSize());
+                    const auto& result = QueryState->PreparedQuery->GetResults(i);
+                    if (result.GetRowsLimit()) {
+                        fillSettings = FillSettings;
+                        fillSettings->RowsLimitPerWrite = result.GetRowsLimit();
+                    }
+                }
+
+                auto* protoRes = KikimrResultToProto(txResults[txIndex][resultIndex], {},
+                    fillSettings.value_or(FillSettings), arena.get());
                 response->AddResults()->Swap(protoRes);
             }
         }
@@ -2233,6 +2248,7 @@ private:
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
     TKikimrConfiguration::TPtr Config;
+    IDataProvider::TFillSettings FillSettings;
     TLRUCache<TULID, TIntrusivePtr<TKqpTransactionContext>> ExplicitTransactions;
     std::vector<TIntrusivePtr<TKqpTransactionContext>> TransactionsToBeAborted;
     ui64 EvictedTx = 0;

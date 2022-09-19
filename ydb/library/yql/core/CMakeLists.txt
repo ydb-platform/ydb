@@ -47,6 +47,7 @@ target_link_libraries(library-yql-core PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(library-yql-core PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_aggregate_expander.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_callable_transform.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_csv.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_execution.cpp
@@ -59,7 +60,6 @@ target_sources(library-yql-core PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_holding_file_storage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_join.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_library_compiler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_aggregate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_proposed_by_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_range.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_rewrite_io.cpp

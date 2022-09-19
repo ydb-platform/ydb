@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/common_opt/yql_co.h>
+#include<ydb/library/yql/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_opt_aggregate.h>
 
 namespace NYql {
 namespace {
@@ -120,7 +120,8 @@ TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnot
     }
 
     YQL_CLOG(INFO, ProviderKikimr) << "KiRewriteAggregate";
-    return ExpandAggregate(true, node.Ptr(), ctx, typesCtx);
+    TAggregateExpander aggExpander(true, node.Ptr(), ctx, typesCtx);
+    return aggExpander.ExpandAggregate();
 }
 
 TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,

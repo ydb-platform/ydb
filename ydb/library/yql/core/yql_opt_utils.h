@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/yql_opt_window.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/strbuf.h>
@@ -90,6 +91,9 @@ void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTrai
 void ExtractSessionWindowParams(TPositionHandle pos, const TExprNode::TPtr& sessionTraits, TExprNode::TPtr& sessionKey,
     const TTypeAnnotationNode*& sessionKeyType, const TTypeAnnotationNode*& sessionParamsType, TExprNode::TPtr& sessionSortTraits, TExprNode::TPtr& sessionInit,
     TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
+
+void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTraitsNode, TSortParams& sortParams, TExprContext& ctx);
+void ExtractSessionWindowParams(TPositionHandle pos, TSessionWindowParams& sessionParams, TExprContext& ctx);
 
 TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& rowType, const TExprNode::TPtr& keyColumns, TExprContext& ctx);
 

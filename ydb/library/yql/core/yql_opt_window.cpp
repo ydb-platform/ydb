@@ -3209,6 +3209,14 @@ TExprNode::TPtr ZipWithSessionParamsLambda(TPositionHandle pos, const TExprNode:
 }
 
 TExprNode::TPtr AddSessionParamsMemberLambda(TPositionHandle pos,
+    TStringBuf sessionStartMemberName, const TExprNode::TPtr& partitionKeySelector,
+    const TSessionWindowParams& sessionWindowParams, TExprContext& ctx)
+{
+    return AddSessionParamsMemberLambda(pos, sessionStartMemberName, "", partitionKeySelector,
+        sessionWindowParams.Key, sessionWindowParams.Init, sessionWindowParams.Update, ctx);
+}
+
+TExprNode::TPtr AddSessionParamsMemberLambda(TPositionHandle pos,
     TStringBuf sessionStartMemberName, TStringBuf sessionParamsMemberName,
     const TExprNode::TPtr& partitionKeySelector,
     const TExprNode::TPtr& sessionKeySelector, const TExprNode::TPtr& sessionInit,
@@ -3273,6 +3281,17 @@ TExprNode::TPtr AddSessionParamsMemberLambda(TPositionHandle pos,
             .Seal()
         .Seal()
         .Build();
+}
+
+void TSessionWindowParams::Reset()
+{
+    Traits = {};
+    Key = {};
+    KeyType = nullptr;
+    ParamsType = nullptr;
+    Init = {};
+    Update = {};
+    SortTraits = {};
 }
 
 }

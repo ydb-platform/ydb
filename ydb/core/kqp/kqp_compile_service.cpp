@@ -189,7 +189,7 @@ private:
 
 struct TKqpCompileRequest {
     TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
-        const TString& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters, 
+        const TString& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
         NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {})
         : Sender(sender)
         , Query(std::move(query))
@@ -411,8 +411,8 @@ private:
 
     void Handle(TEvKqp::TEvCompileRequest::TPtr& ev, const TActorContext& ctx) {
         const auto& query = ev->Get()->Query;
-        LWTRACK(KqpCompileServiceHandleRequest, 
-            ev->Get()->Orbit, 
+        LWTRACK(KqpCompileServiceHandleRequest,
+            ev->Get()->Orbit,
             query ? query->UserSid : 0);
 
         try {
@@ -503,13 +503,13 @@ private:
 
         Counters->ReportQueryCacheHit(dbCounters, false);
 
-        LWTRACK(KqpCompileServiceEnqueued, 
-            ev->Get()->Orbit, 
+        LWTRACK(KqpCompileServiceEnqueued,
+            ev->Get()->Orbit,
             ev->Get()->Query ? ev->Get()->Query->UserSid : 0);
-        
+
 
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
-            request.KeepInCache, request.UserToken, request.Deadline, dbCounters, 
+            request.KeepInCache, request.UserToken, request.Deadline, dbCounters,
             std::move(ev->Get()->Orbit), std::move(CompileServiceSpan));
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
@@ -558,8 +558,8 @@ private:
             NWilson::TSpan CompileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
 
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
-                true, request.UserToken, request.Deadline, dbCounters, 
-                ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(), 
+                true, request.UserToken, request.Deadline, dbCounters,
+                ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
                 std::move(CompileServiceSpan));
 
             if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
@@ -733,9 +733,9 @@ private:
         const NKqpProto::TKqpStatsCompile& compileStats, const TActorContext& ctx, NLWTrace::TOrbit orbit, NWilson::TSpan span)
     {
         const auto& query = compileResult->Query;
-        LWTRACK(KqpCompileServiceReply, 
-            orbit, 
-            query ? query->UserSid : 0, 
+        LWTRACK(KqpCompileServiceReply,
+            orbit,
+            query ? query->UserSid : 0,
             compileResult->Issues.ToString());
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Send response"
@@ -754,7 +754,7 @@ private:
         if (span) {
             span.End();
         }
-        
+
         ctx.Send(sender, responseEv.Release());
     }
 

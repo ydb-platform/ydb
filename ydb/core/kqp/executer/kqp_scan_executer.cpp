@@ -406,7 +406,7 @@ private:
 
             auto* resultStructType = static_cast<NKikimr::NMiniKQL::TStructType*>(resultType);
             ui32 resultColsCount = resultStructType->GetMembersCount();
-            
+
             taskMeta.ReadInfo.ResultColumnsTypes.reserve(resultColsCount);
             for (ui32 i = 0; i < resultColsCount; ++i) {
                 auto memberType = resultStructType->GetMemberType(i);

@@ -55,7 +55,7 @@ private:
     TQueryInfoList SubmitSameOrder();
     TQueryInfoList GetRandomCustomerHistory();
     TQueryInfoList GetCustomerHistory();
-    
+
     using TProductsQuantity = std::map<std::string, int64_t>;
     TQueryInfo InsertOrder(const uint64_t orderID, const std::string& customer, const TProductsQuantity& products);
     TQueryInfo ExecuteOrder(const uint64_t orderID);

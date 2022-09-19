@@ -171,7 +171,7 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     if (ProposeTransactionSpan) {
         ProposeTransactionSpan.End();
     }
-    
+
     if (Op) {
         Y_VERIFY(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {

@@ -44,9 +44,9 @@ std::string TStockWorkloadGenerator::GetDDLQueries() const {
         std::string partsNum = std::to_string(Params.MinPartitions);
 
         StockPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " + partsNum + ")";
-        OrdersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " 
+        OrdersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = "
             + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
-        OrderLinesPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " 
+        OrderLinesPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = "
             + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
     }
 
@@ -57,8 +57,8 @@ std::string TStockWorkloadGenerator::GetDDLQueries() const {
         )";
     char buf[sizeof(TablesDdl) + sizeof(OrdersPartitionsDdl) + 8192*3]; // 32*256 for DbPath
 
-    int res = std::sprintf(buf, TablesDdl, 
-        DbPath.c_str(), StockPartitionsDdl.c_str(), 
+    int res = std::sprintf(buf, TablesDdl,
+        DbPath.c_str(), StockPartitionsDdl.c_str(),
         DbPath.c_str(), OrdersPartitionsDdl.c_str(),
         DbPath.c_str(), OrderLinesPartitionsDdl.c_str()
     );
@@ -198,7 +198,7 @@ TQueryInfo TStockWorkloadGenerator::SelectCustomerHistory(const std::string& cus
     std::string query = R"(--!syntax_v1
         DECLARE $cust as Utf8;
         DECLARE $limit as UInt32;
-        select id, customer, created 
+        select id, customer, created
         from orders view ix_cust
         where customer = $cust
         order by customer desc, created desc
@@ -213,7 +213,7 @@ TQueryInfo TStockWorkloadGenerator::SelectCustomerHistory(const std::string& cus
         .AddParam("$limit")
             .Uint32(limit)
             .Build();
-    
+
     return TQueryInfo(query, paramsBuilder.Build());
 }
 

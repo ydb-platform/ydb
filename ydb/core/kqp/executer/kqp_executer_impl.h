@@ -196,7 +196,7 @@ protected:
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
-            
+
             if (ExecuterSpan) {
                 ExecuterSpan.EndError("timeout");
             }
@@ -216,7 +216,7 @@ protected:
 
         if (cancel) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Request timeout exceeded");
-            
+
             if (ExecuterSpan) {
                 ExecuterSpan.EndError("timeout");
             }
@@ -225,7 +225,7 @@ protected:
             CancelAtActor = {};
         } else {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
-            
+
             if (ExecuterSpan) {
                 ExecuterSpan.EndError("timeout");
             }

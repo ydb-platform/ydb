@@ -24,10 +24,15 @@ public:
         Y_VERIFY(TxEvent);
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
+        indexChanges->CachedBlobs = std::move(TxEvent->CachedBlobs);
 
         auto& blobsToIndex = indexChanges->DataToIndex;
         for (size_t i = 0; i < blobsToIndex.size(); ++i) {
             auto& blobId = blobsToIndex[i].BlobId;
+            if (indexChanges->CachedBlobs.count(blobId)) {
+                continue;
+            }
+
             auto res = BlobsToRead.emplace(blobId, i);
             Y_VERIFY(res.second, "Duplicate blob in DataToIndex: %s", blobId.ToStringNew().c_str());
             SendReadRequest(NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));

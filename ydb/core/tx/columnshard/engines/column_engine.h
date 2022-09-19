@@ -133,6 +133,7 @@ public:
     TVector<TColumnRecord> EvictedRecords;
     TVector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
     THashMap<TBlobRange, TString> Blobs;
+    THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
     bool NeedRepeat{false};
 
     bool IsInsert() const { return Type == INSERT; }

@@ -51,15 +51,10 @@ ui64 ExtractTimestamp(const std::shared_ptr<TPredicate>& pkPredicate, const std:
 
 // Although source batches are ordered only by PK (sorting key) resulting pathBatches are ordered by extended key.
 // They have const snapshot columns that do not break sorting inside batch.
-std::shared_ptr<arrow::RecordBatch> AddSpecials(const TIndexInfo& indexInfo, const TInsertedData& inserted,
-                                                const TString& data)
+std::shared_ptr<arrow::RecordBatch> AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+                                                const TIndexInfo& indexInfo, const TInsertedData& inserted)
 {
-    Y_VERIFY(!data.empty(), "Blob data not present");
-
-    auto batch = NArrow::DeserializeBatch(data, indexInfo.ArrowSchema());
-    Y_VERIFY(batch);
-
-    batch = TIndexInfo::AddSpecialColumns(batch, inserted.PlanStep(), inserted.TxId());
+    auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.PlanStep(), inserted.TxId());
     Y_VERIFY(batch);
 
     return NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
@@ -1500,9 +1495,19 @@ TVector<TString> TColumnEngineForLogs::IndexBlobs(const TIndexInfo& indexInfo,
         }
 
         TBlobRange blobRange(inserted.BlobId, 0, inserted.BlobId.BlobSize());
-        auto* blobData = changes->Blobs.FindPtr(blobRange);
-        Y_VERIFY(blobData, "Data for range %s has not been read", blobRange.ToString().c_str());
-        auto batch = AddSpecials(indexInfo, inserted, *blobData);
+
+        std::shared_ptr<arrow::RecordBatch> batch;
+        if (auto it = changes->CachedBlobs.find(inserted.BlobId); it != changes->CachedBlobs.end()) {
+            batch = it->second;
+        } else if (auto* blobData = changes->Blobs.FindPtr(blobRange)) {
+            Y_VERIFY(!blobData->empty(), "Blob data not present");
+            batch = NArrow::DeserializeBatch(*blobData, indexInfo.ArrowSchema());
+        } else {
+            Y_VERIFY(blobData, "Data for range %s has not been read", blobRange.ToString().c_str());
+        }
+        Y_VERIFY(batch);
+
+        batch = AddSpecials(batch, indexInfo, inserted);
         pathBatches[inserted.PathId].push_back(batch);
         Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), indexInfo.GetReplaceKey()));
     }

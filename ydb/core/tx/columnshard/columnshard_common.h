@@ -56,6 +56,7 @@ struct TReadDescription {
 class TBatchCache {
 public:
     using TUnifiedBlobId = NOlap::TUnifiedBlobId;
+    using TInsertedBatch = std::pair<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>>;
 
     static constexpr ui32 MAX_COMMITTED_COUNT = 2 * TLimits::MIN_SMALL_BLOBS_TO_INSERT;
     static constexpr ui32 MAX_INSERTED_COUNT = 2 * TLimits::MIN_SMALL_BLOBS_TO_INSERT;
@@ -102,6 +103,14 @@ public:
         }
     }
 
+    TInsertedBatch GetInserted(TWriteId writeId) const {
+        auto it = Inserted.Find(writeId);
+        if (it != Inserted.End()) {
+            return *it;
+        }
+        return {};
+    }
+
     std::shared_ptr<arrow::RecordBatch> Get(const TUnifiedBlobId& blobId) const {
         auto it = Committed.Find(blobId);
         if (it != Committed.End()) {
@@ -115,7 +124,7 @@ public:
     }
 
 private:
-    TLRUCache<TWriteId, std::pair<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>>> Inserted;
+    mutable TLRUCache<TWriteId, TInsertedBatch> Inserted;
     mutable TLRUCache<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> Committed;
     ui64 InsertedBytes{0};
     ui64 CommittedBytes{0};

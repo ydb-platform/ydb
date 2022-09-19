@@ -619,9 +619,14 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         << " at tablet " << TabletID());
 
     TVector<NOlap::TInsertedData> data;
+    THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> cachedBlobs;
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
+        if (auto inserted = BatchCache.GetInserted(TWriteId(ptr->WriteTxId)); inserted.second) {
+            Y_VERIFY(ptr->BlobId == inserted.first);
+            cachedBlobs.emplace(ptr->BlobId, inserted.second);
+        }
     }
 
     Y_VERIFY(data.size());
@@ -633,7 +638,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
 
     ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
-        Settings.CacheDataAfterIndexing);
+        Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
     return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
 }
 

@@ -413,24 +413,45 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("binding_id", bindingId);
     readQueryBuilder.AddText(
-        "SELECT `" BINDING_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;"
+        "$selected = SELECT `" BINDING_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;\n"
+        "$connection_id = SELECT `" CONNECTION_ID_COLUMN_NAME "` FROM $selected;\n"
+        "SELECT `" BINDING_COLUMN_NAME "` FROM $selected;\n"
+        "SELECT `" VISIBILITY_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
     );
 
     std::shared_ptr<std::pair<YandexQuery::ModifyBindingResult, TAuditDetails<YandexQuery::Binding>>> response = std::make_shared<std::pair<YandexQuery::ModifyBindingResult, TAuditDetails<YandexQuery::Binding>>>();
     auto prepareParams = [=, config=Config](const TVector<TResultSet>& resultSets) {
-        if (resultSets.size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+        if (resultSets.size() != 2) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         YandexQuery::Binding binding;
-        TResultSetParser parser(resultSets.front());
-        if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the id binding or your access rights";
+        {
+            TResultSetParser parser(resultSets.front());
+            if (!parser.TryNextRow()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Binding does not exist or permission denied. Please check the binding id or your access rights";
+            }
+
+            if (!binding.ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
+            }
         }
 
-        if (!binding.ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for binding. Please contact internal support";
+        YandexQuery::Acl::Visibility connectionVisibility = YandexQuery::Acl::VISIBILITY_UNSPECIFIED;
+        {
+            TResultSetParser parser(resultSets.back());
+            if (!parser.TryNextRow()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the connectin id or your access rights";
+            }
+
+            connectionVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
+        }
+
+        const YandexQuery::Acl::Visibility requestBindingVisibility = request.content().acl().visibility();
+        if (requestBindingVisibility == YandexQuery::Acl::SCOPE && connectionVisibility == YandexQuery::Acl::PRIVATE) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
         }
 
         bool hasManageAccess = HasManageAccess(permissions, binding.content().acl().visibility(), binding.meta().created_by(), user);
@@ -451,7 +472,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Binding type cannot be changed. Please specify the same binding type";
         }
 
-        if (content.acl().visibility() == YandexQuery::Acl::SCOPE && request.content().acl().visibility() == YandexQuery::Acl::PRIVATE) {
+        if (binding.content().acl().visibility() == YandexQuery::Acl::SCOPE && requestBindingVisibility == YandexQuery::Acl::PRIVATE) {
             ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new binding with visibility PRIVATE";
         }
 

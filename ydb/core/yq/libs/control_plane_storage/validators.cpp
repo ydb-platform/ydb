@@ -319,7 +319,7 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
         YandexQuery::Acl::Visibility connectionVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
         TString connectionUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
 
-        if (connectionVisibility != bindingVisibility && connectionVisibility != YandexQuery::Acl::SCOPE) {
+        if (bindingVisibility == YandexQuery::Acl::SCOPE && connectionVisibility == YandexQuery::Acl::PRIVATE) {
             ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
         }
 

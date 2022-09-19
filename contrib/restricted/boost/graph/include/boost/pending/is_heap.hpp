@@ -9,53 +9,54 @@
 //=======================================================================
 //
 #if __KCC
-namespace std {
-
-template <class RandomAccessIterator, class Distance>
-bool __is_heap(RandomAccessIterator first, RandomAccessIterator last,
-               Distance*)
+namespace std
 {
-  const Distance n = last - first;
 
-  Distance parent = 0;
-  for (Distance child = 1; child < n; ++child) {
-    if (first[parent] < first[child]) 
-      return false;
-    if ((child & 1) == 0)
-      ++parent;
-  }
-  return true;
+template < class RandomAccessIterator, class Distance >
+bool __is_heap(RandomAccessIterator first, RandomAccessIterator last, Distance*)
+{
+    const Distance n = last - first;
+
+    Distance parent = 0;
+    for (Distance child = 1; child < n; ++child)
+    {
+        if (first[parent] < first[child])
+            return false;
+        if ((child & 1) == 0)
+            ++parent;
+    }
+    return true;
 }
 
-template <class RandomAccessIterator>
+template < class RandomAccessIterator >
 inline bool is_heap(RandomAccessIterator first, RandomAccessIterator last)
 {
-  return __is_heap(first, last, distance_type(first));
+    return __is_heap(first, last, distance_type(first));
 }
 
-
-template <class RandomAccessIterator, class Distance, class StrictWeakOrdering>
+template < class RandomAccessIterator, class Distance,
+    class StrictWeakOrdering >
 bool __is_heap(RandomAccessIterator first, RandomAccessIterator last,
-               StrictWeakOrdering comp,
-               Distance*)
+    StrictWeakOrdering comp, Distance*)
 {
-  const Distance n = last - first;
+    const Distance n = last - first;
 
-  Distance parent = 0;
-  for (Distance child = 1; child < n; ++child) {
-    if (comp(first[parent], first[child]))
-      return false;
-    if ((child & 1) == 0)
-      ++parent;
-  }
-  return true;
+    Distance parent = 0;
+    for (Distance child = 1; child < n; ++child)
+    {
+        if (comp(first[parent], first[child]))
+            return false;
+        if ((child & 1) == 0)
+            ++parent;
+    }
+    return true;
 }
 
-template <class RandomAccessIterator, class StrictWeakOrdering>
+template < class RandomAccessIterator, class StrictWeakOrdering >
 inline bool is_heap(RandomAccessIterator first, RandomAccessIterator last,
-                    StrictWeakOrdering comp)
+    StrictWeakOrdering comp)
 {
-  return __is_heap(first, last, comp, distance_type(first));
+    return __is_heap(first, last, comp, distance_type(first));
 }
 
 }

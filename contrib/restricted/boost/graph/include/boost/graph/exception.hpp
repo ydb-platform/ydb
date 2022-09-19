@@ -13,42 +13,43 @@
 #include <stdexcept>
 #include <string>
 
-namespace boost {
+namespace boost
+{
 
-    struct bad_graph : public std::invalid_argument {
-        bad_graph(const std::string& what_arg)
-            : std::invalid_argument(what_arg) { }
-    };
+struct BOOST_SYMBOL_VISIBLE bad_graph : public std::invalid_argument
+{
+    bad_graph(const std::string& what_arg) : std::invalid_argument(what_arg) {}
+};
 
-    struct not_a_dag : public bad_graph {
-        not_a_dag()
-            : bad_graph("The graph must be a DAG.")
-        { }
-    };
+struct BOOST_SYMBOL_VISIBLE not_a_dag : public bad_graph
+{
+    not_a_dag() : bad_graph("The graph must be a DAG.") {}
+};
 
-    struct negative_edge : public bad_graph {
-        negative_edge()
-            : bad_graph("The graph may not contain an edge with negative weight.")
-        { }
-    };
+struct BOOST_SYMBOL_VISIBLE negative_edge : public bad_graph
+{
+    negative_edge()
+    : bad_graph("The graph may not contain an edge with negative weight.")
+    {
+    }
+};
 
-    struct negative_cycle : public bad_graph {
-        negative_cycle()
-            : bad_graph("The graph may not contain negative cycles.")
-        { }
-    };
+struct BOOST_SYMBOL_VISIBLE negative_cycle : public bad_graph
+{
+    negative_cycle() : bad_graph("The graph may not contain negative cycles.")
+    {
+    }
+};
 
-    struct not_connected : public bad_graph {
-        not_connected()
-            : bad_graph("The graph must be connected.")
-        { }
-    };
+struct BOOST_SYMBOL_VISIBLE not_connected : public bad_graph
+{
+    not_connected() : bad_graph("The graph must be connected.") {}
+};
 
-   struct not_complete : public bad_graph {
-       not_complete()
-           : bad_graph("The graph must be complete.")
-       { }
-   };
+struct BOOST_SYMBOL_VISIBLE not_complete : public bad_graph
+{
+    not_complete() : bad_graph("The graph must be complete.") {}
+};
 
 } // namespace boost
 

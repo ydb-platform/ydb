@@ -12,26 +12,43 @@
 
 #include <boost/mpl/bool.hpp>
 
-namespace boost {
+namespace boost
+{
 
-  //===========================================================================
-  // Selectors for the Directed template parameter of adjacency_list
-  // and adjacency_matrix.
+//===========================================================================
+// Selectors for the Directed template parameter of adjacency_list
+// and adjacency_matrix.
 
-  struct directedS { enum { is_directed = true, is_bidir = false }; 
-    typedef mpl::true_ is_directed_t; 
+struct directedS
+{
+    enum
+    {
+        is_directed = true,
+        is_bidir = false
+    };
+    typedef mpl::true_ is_directed_t;
     typedef mpl::false_ is_bidir_t;
-  };
-  struct undirectedS { 
-    enum { is_directed = false, is_bidir = false }; 
+};
+struct undirectedS
+{
+    enum
+    {
+        is_directed = false,
+        is_bidir = false
+    };
     typedef mpl::false_ is_directed_t;
     typedef mpl::false_ is_bidir_t;
-  };
-  struct bidirectionalS { 
-    enum { is_directed = true, is_bidir = true }; 
+};
+struct bidirectionalS
+{
+    enum
+    {
+        is_directed = true,
+        is_bidir = true
+    };
     typedef mpl::true_ is_directed_t;
     typedef mpl::true_ is_bidir_t;
-  };
+};
 
 } // namespace boost
 

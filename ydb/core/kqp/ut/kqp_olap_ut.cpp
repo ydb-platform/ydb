@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         runtime->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
-        //runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
+        runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
         //runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -519,7 +519,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto planRes = CollectStreamResult(res);
         auto ast = planRes.QueryStats->Getquery_ast();
-//        Cerr << ast << Endl;
+        Cerr << planRes.PlanJson.GetOrElse("NO_PLAN") << Endl;
+        Cerr << ast << Endl;
         for (auto planNode : planNodes) {
             UNIT_ASSERT_C(ast.find(planNode) != std::string::npos,
                 TStringBuilder() << planNode << " was not pushed down. Query: " << query);
@@ -1513,13 +1514,138 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(AggregationAndFilterPushdownOnSameCols) {
+    class TExpectedLimitChecker {
+    private:
+        std::optional<ui32> ExpectedLimit;
+        std::optional<ui32> ExpectedResultCount;
+        ui32 CheckScanData = 0;
+        ui32 CheckScanTask = 0;
+    public:
+        TExpectedLimitChecker& SetExpectedLimit(const ui32 value) {
+            ExpectedLimit = value;
+            ExpectedResultCount = value;
+            return *this;
+        }
+        TExpectedLimitChecker& SetExpectedResultCount(const ui32 value) {
+            ExpectedResultCount = value;
+            return *this;
+        }
+        bool CheckExpectedLimitOnScanData(const ui32 resultCount) {
+            if (!ExpectedResultCount) {
+                return true;
+            }
+            ++CheckScanData;
+            UNIT_ASSERT_LE(resultCount, *ExpectedResultCount);
+            return true;
+        }
+        bool CheckExpectedLimitOnScanTask(const ui32 taskLimit) {
+            if (!ExpectedLimit) {
+                return true;
+            }
+            ++CheckScanTask;
+            UNIT_ASSERT_EQUAL(taskLimit, *ExpectedLimit);
+            return true;
+        }
+        bool CheckFinish() const {
+            if (!ExpectedLimit) {
+                return true;
+            }
+            return CheckScanData && CheckScanTask;
+        }
+    };
+
+    class TExpectedRecordChecker {
+    private:
+        std::optional<ui32> ExpectedColumnsCount;
+        ui32 CheckScanData = 0;
+    public:
+        TExpectedRecordChecker& SetExpectedColumnsCount(const ui32 value) {
+            ExpectedColumnsCount = value;
+            return *this;
+        }
+        bool CheckExpectedOnScanData(const ui32 columnsCount) {
+            if (!ExpectedColumnsCount) {
+                return true;
+            }
+            ++CheckScanData;
+            UNIT_ASSERT_EQUAL(columnsCount, *ExpectedColumnsCount);
+            return true;
+        }
+        bool CheckFinish() const {
+            if (!ExpectedColumnsCount) {
+                return true;
+            }
+            return CheckScanData;
+        }
+    };
+
+    class TAggregationTestCase {
+    private:
+        TString Query;
+        TString ExpectedReply;
+        std::vector<std::string> ExpectedPlanOptions;
+        bool Pushdown = true;
+        TExpectedLimitChecker LimitChecker;
+        TExpectedRecordChecker RecordChecker;
+    public:
+        TString GetFixedQuery() const {
+            TStringBuilder queryFixed;
+            queryFixed << "--!syntax_v1" << Endl;
+            if (Pushdown) {
+                queryFixed << "PRAGMA Kikimr.KqpPushOlapProcess = \"true\";" << Endl;
+            }
+            queryFixed << Query << Endl;
+            Cerr << "REQUEST:\n" << queryFixed << Endl;
+            return queryFixed;
+        }
+        TAggregationTestCase() = default;
+        TExpectedLimitChecker& MutableLimitChecker() {
+            return LimitChecker;
+        }
+        TExpectedRecordChecker& MutableRecordChecker() {
+            return RecordChecker;
+        }
+        bool GetPushdown() const {
+            return Pushdown;
+        }
+        TAggregationTestCase& SetPushdown(const bool value = true) {
+            Pushdown = value;
+            return *this;
+        }
+        bool CheckFinished() const {
+            return LimitChecker.CheckFinish();
+        }
+
+        const TString& GetQuery() const {
+            return Query;
+        }
+        TAggregationTestCase& SetQuery(const TString& value) {
+            Query = value;
+            return *this;
+        }
+        const TString& GetExpectedReply() const {
+            return ExpectedReply;
+        }
+        TAggregationTestCase& SetExpectedReply(const TString& value) {
+            ExpectedReply = value;
+            return *this;
+        }
+        TAggregationTestCase& AddExpectedPlanOptions(const std::string& value) {
+            ExpectedPlanOptions.emplace_back(value);
+            return *this;
+        }
+        const std::vector<std::string>& GetExpectedPlanOptions() const {
+            return ExpectedPlanOptions;
+        }
+    };
+
+    void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
+        EnableDebugLogging(kikimr);
         CreateTestOlapTable(kikimr);
         auto tableClient = kikimr.GetTableClient();
 
@@ -1533,24 +1659,212 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         }
 
-        {
-            TString query = R"(
-                --!syntax_v1
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
+        for (auto&& i : cases) {
+            const TString queryFixed = i.GetFixedQuery();
+            {
+                auto it = tableClient.StreamExecuteScanQuery(queryFixed).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString result = StreamResultToYson(it);
+                if (!i.GetExpectedReply().empty()) {
+                    CompareYson(result, i.GetExpectedReply());
+                }
+            }
+            CheckPlanForAggregatePushdown(queryFixed, tableClient, i.GetExpectedPlanOptions());
+        }
+    }
+
+    void TestAggregationsInternal(const std::vector<TAggregationTestCase>& cases) {
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetNodeCount(2);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+
+        auto runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        EnableDebugLogging(runtime);
+
+        ui32 numShards = 1;
+        ui32 numIterations = 10;
+        CreateTestOlapTable(*server, "olapTable", "olapStore", numShards, numShards);
+        ui32 insertRows = 0;
+        const ui32 iterationPackSize = 2000;
+        for (ui64 i = 0; i < numIterations; ++i) {
+            SendDataViaActorSystem(runtime, "/Root/olapStore/olapTable", 0, 1000000 + i * 1000000, iterationPackSize);
+            insertRows += iterationPackSize;
+        }
+
+        TAggregationTestCase currentTest;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TKqpComputeEvents::EvScanData:
+                {
+                    auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
+                    Y_VERIFY(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_rows() : 0));
+                    Y_VERIFY(currentTest.MutableRecordChecker().CheckExpectedOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_columns() : 0));
+                    break;
+                }
+                case TEvDataShard::EvKqpScan:
+                {
+                    auto* msg = ev->Get<TEvDataShard::TEvKqpScan>();
+                    Y_VERIFY(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanTask(msg->Record.GetItemsLimit()));
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime->SetObserverFunc(captureEvents);
+
+        for (auto&& i : cases) {
+            const TString queryFixed = i.GetFixedQuery();
+            currentTest = i;
+            auto streamSender = runtime->AllocateEdgeActor();
+            SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, queryFixed, false));
+            auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqpCompute::TEvScanData>(streamSender, TDuration::Seconds(10));
+            Y_VERIFY(currentTest.CheckFinished());
+        }
+    }
+
+    void TestAggregations(const std::vector<TAggregationTestCase>& cases) {
+        TestAggregationsBase(cases);
+        TestAggregationsInternal(cases);
+    }
+
+    Y_UNIT_TEST(Aggregation_Composite_GroupByUR_Limit) {
+        //https://st.yandex-team.ru/KIKIMR-15900
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                    SELECT uid, resource_id, count(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY uid, resource_id LIMIT 10
+                )")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .MutableRecordChecker().SetExpectedColumnsCount(3)
+            ;
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_ResultCountAll_FilterL) {
+    //https://st.yandex-team.ru/KIKIMR-15900
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                    SELECT
+                        COUNT(*)
+                    FROM `/Root/olapStore/olapTable`
+                    WHERE level = 2
+                )")
+            .SetExpectedReply("[[4600u;]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedResultCount(1)
+            ;
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_ResultCountL_FilterL) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
                 SELECT
                     COUNT(level)
                 FROM `/Root/olapStore/olapTable`
                 WHERE level = 2
-            )";
-            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            )")
+            .SetExpectedReply("[[4600u;]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedResultCount(1)
+            ;
 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            CompareYson(result, R"([[4600u;]])");
+        TestAggregations({ testCase });
+    }
 
-            // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg", "KqpOlapFilter" });
-        }
+    Y_UNIT_TEST(Aggregation_ResultCountT_FilterL) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    COUNT(timestamp)
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+            )")
+            .SetExpectedReply("[[4600u;]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedResultCount(1)
+            ;
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_ResultTL_FilterL_Limit2) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp, level
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedLimit(2);
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_ResultTL_FilterL_OrderT_Limit2) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp, level
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                ORDER BY timestamp
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedLimit(2);
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_ResultT_FilterL_Limit2) {
+        //https://st.yandex-team.ru/KIKIMR-15900
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedLimit(2);
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_ResultT_FilterL_OrderT_Limit2) {
+        //https://st.yandex-team.ru/KIKIMR-15900
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                ORDER BY timestamp
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedLimit(2);
+
+        TestAggregations({ testCase });
     }
 
     Y_UNIT_TEST(AggregationAndFilterPushdownOnDiffCols) {

@@ -765,7 +765,7 @@ public:
                         break;
                     }
                 }
-            } while (block && (eventInfos.empty() || eventInfos.back().IsSessionClosedEvent()));
+            } while (block && eventInfos.empty());
             ApplyCallbacksToReadyEventsImpl(deferred);
         }
 

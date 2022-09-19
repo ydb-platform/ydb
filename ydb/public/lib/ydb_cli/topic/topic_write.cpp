@@ -83,6 +83,11 @@ namespace NYdb::NConsoleClient {
         if (!initSeqNo.HasValue()) {
             // TODO(shmel1k@): logging
             if (initSeqNo.HasException()) {
+                // NOTE(shmel1k@): SessionClosedEvent is stored in EventsQueue, so we can try to get it.
+                auto event = WriteSession_->GetEvent(true);
+                if (event.Defined()) {
+                    return HandleEvent(*event);
+                }
                 initSeqNo.TryRethrow();
             }
             return EXIT_FAILURE;

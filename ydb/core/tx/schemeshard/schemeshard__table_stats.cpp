@@ -383,29 +383,21 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
     }
 
     {
+        auto path = TPath::Init(pathId, Self);
+        auto checks = path.Check();
+
         constexpr ui64 deltaShards = 2;
-        TPathElement::TPtr path = Self->PathsById.at(pathId);
-        TSubDomainInfo::TPtr domainInfo = Self->ResolveDomainInfo(pathId);
+        checks
+            .PathShardsLimit(deltaShards)
+            .ShardsLimit(deltaShards);
 
-        if (domainInfo->GetShardsInside() + deltaShards > domainInfo->GetSchemeLimits().MaxShards) {
+        if (!checks) {
+            TString reason;
+            checks.GetStatus(&reason);
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "Do not request full stats from datashard"
                              << ", datashard: " << datashardId
-                             << ", reason: shards count has reached maximum value in the domain"
-                             << ", shards limit for domain: " << domainInfo->GetSchemeLimits().MaxShards
-                             << ", shards count inside domain: " << domainInfo->GetShardsInside()
-                             << ", intention to create new shards: " << deltaShards);
-            return true;
-        }
-
-        if (path->GetShardsInside() + deltaShards > domainInfo->GetSchemeLimits().MaxShardsInPath) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Do not request full stats from datashard"
-                             << ", datashard: " << datashardId
-                             << ", reason: shards count has reached maximum value in the path"
-                             << ", shards limit for path: " << domainInfo->GetSchemeLimits().MaxShardsInPath
-                             << ", shards count inside path: " << path->GetShardsInside()
-                             << ", intention to create new shards: " << deltaShards);
+                             << ", reason: " << reason);
             return true;
         }
     }

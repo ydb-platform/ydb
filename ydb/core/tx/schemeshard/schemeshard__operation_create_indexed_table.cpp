@@ -73,14 +73,6 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
                     << " GetShardsInside: " << domainInfo->GetShardsInside()
                     << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
 
-    if (domainInfo->GetShardsInside() + shardsToCreate > domainInfo->GetSchemeLimits().MaxShards) {
-        auto msg = TStringBuilder() << "shards count has reached maximum value in the domain"
-                                    << ", paths limit for domain: " << domainInfo->GetSchemeLimits().MaxShards
-                                    << ", paths count inside domain: " << domainInfo->GetShardsInside()
-                                    << ", intention to create new paths: " << shardsToCreate;
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
-    }
-
     if (indexesCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
                                     << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
@@ -88,18 +80,15 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
-    if (domainInfo->GetPathsInside() + pathToCreate > domainInfo->GetSchemeLimits().MaxPaths) {
-        auto msg = TStringBuilder() << "paths count has reached maximum value in the domain"
-                                    << ", paths limit for domain: " << domainInfo->GetSchemeLimits().MaxPaths
-                                    << ", paths count inside domain: " << domainInfo->GetPathsInside()
-                                    << ", intention to create new paths: " << pathToCreate;
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
-    }
+    auto checks = baseTablePath.Check();
+    checks
+        .PathShardsLimit(baseShards)
+        .PathsLimit(pathToCreate)
+        .ShardsLimit(shardsToCreate);
 
-    if (baseShards > domainInfo->GetSchemeLimits().MaxShardsInPath) {
-        auto msg = TStringBuilder()  << "shards count has reached maximum value in the path"
-                                    << ", shards limit for path: " << domainInfo->GetSchemeLimits().MaxShardsInPath
-                                    << ", intention to create new shards: " << baseShards;
+    if (!checks) {
+        TString msg;
+        checks.GetStatus(&msg);
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 

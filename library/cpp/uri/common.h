@@ -67,8 +67,7 @@ namespace NUri {
             FlagAuth = FlagUser | FlagPass,
             FlagFragment = FlagFrag,
             FlagAction = FlagScheme | FlagHostPort | FlagPath,
-            FlagNoFrag = FlagAction | FlagQuery,
-            FlagFragmentLess = FlagAction | FlagQuery | FlagHashBang,
+            FlagNoFrag = FlagAction | FlagQuery | FlagHashBang,
             FlagUrlFields = FlagUrlMAX - 1,
             FlagAll = FlagUrlFields, // obsolete, for backwards compatibility
             FlagAllFields = FlagAllMAX - 1

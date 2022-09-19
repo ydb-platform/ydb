@@ -37,7 +37,7 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
 bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks);
 
 void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks);
-void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, TDataShard& dataShard, TTransactionContext& txc);
+void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writeVersion, TDataShard& dataShard, TTransactionContext& txc);
 
 void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters);
 

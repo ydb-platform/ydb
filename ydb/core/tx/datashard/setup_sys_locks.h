@@ -14,20 +14,19 @@ struct TSetupSysLocks
     TSetupSysLocks(TDataShard& self, ILocksDb* db)
         : SysLocksTable(self.SysLocksTable())
     {
-        CheckVersion = TRowVersion::Min();
+        CheckVersion = TRowVersion::Max();
         BreakVersion = TRowVersion::Min();
 
         SysLocksTable.SetTxUpdater(this);
         SysLocksTable.SetDb(db);
     }
 
-    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, const TRowVersion& readVersion,
-            TDataShard& self, ILocksDb* db)
+    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, TDataShard& self, ILocksDb* db)
         : SysLocksTable(self.SysLocksTable())
     {
         LockTxId = lockTxId;
         LockNodeId = lockNodeId;
-        CheckVersion = readVersion;
+        CheckVersion = TRowVersion::Max();
         BreakVersion = TRowVersion::Min();
 
         SysLocksTable.SetTxUpdater(this);

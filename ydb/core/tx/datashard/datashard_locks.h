@@ -315,6 +315,7 @@ private:
     bool AddRange(const TRangeKey& range);
     bool AddWriteLock(const TPathId& pathId);
     void SetBroken(TRowVersion at);
+    void OnRemoved();
 
     void PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, ILocksDb* db);
 
@@ -608,7 +609,7 @@ struct TLocksUpdate {
     bool BreakOwn = false;
 
     bool HasLocks() const {
-        return bool(AffectedTables);
+        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks);
     }
 
     void AddRangeLock(const TRangeKey& range, ui64 lockId, ui32 lockNodeId) {

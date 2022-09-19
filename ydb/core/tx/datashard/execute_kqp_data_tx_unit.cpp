@@ -168,7 +168,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         dataTx->SetReadVersion(readVersion);
         dataTx->SetWriteVersion(writeVersion);
 
-        KqpCommitLocks(tabletId, tx, DataShard, txc);
+        KqpCommitLocks(tabletId, tx, writeVersion, DataShard, txc);
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 

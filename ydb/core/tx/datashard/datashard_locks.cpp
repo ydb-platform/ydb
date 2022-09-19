@@ -129,6 +129,15 @@ void TLockInfo::SetBroken(TRowVersion at) {
     }
 }
 
+void TLockInfo::OnRemoved() {
+    if (!IsBroken()) {
+        BreakVersion = TRowVersion::Min();
+        Counter = Max<ui64>();
+        Points.clear();
+        Ranges.clear();
+    }
+}
+
 void TLockInfo::PersistLock(ILocksDb* db) {
     Y_VERIFY(!IsPersistent());
     Y_VERIFY(db, "Cannot persist lock without a db");
@@ -592,6 +601,8 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
             Y_VERIFY(db, "Cannot remove persistent locks without a database");
             txLock->PersistRemoveLock(db);
         }
+
+        txLock->OnRemoved();
     }
 }
 

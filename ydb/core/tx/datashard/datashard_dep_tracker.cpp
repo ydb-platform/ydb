@@ -619,6 +619,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     // First pass, gather all reads/writes expanded with locks, add lock based dependencies
     bool haveReads = false;
     bool haveWrites = false;
+    bool haveWriteLock = false;
     if (haveKeys) {
         size_t keysCount = 0;
         const auto& keysInfo = op->GetKeysInfo();
@@ -701,6 +702,9 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                                 }
                             }
                         }
+                        if (lock->IsWriteLock()) {
+                            haveWriteLock = true;
+                        }
                     }
                 }
             }
@@ -731,7 +735,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     if (op->IsMvccSnapshotRead()) {
         snapshot = op->GetMvccSnapshot();
         snapshotRepeatable = op->IsMvccSnapshotRepeatable();
-    } else if (op->IsImmediate() && (op->IsReadTable() || op->IsDataTx() && !haveWrites && !isGlobalWriter)) {
+    } else if (op->IsImmediate() && (op->IsReadTable() || op->IsDataTx() && !haveWrites && !isGlobalWriter && !haveWriteLock)) {
         snapshot = readVersion;
         op->SetMvccSnapshot(snapshot, /* repeatable */ false);
     }

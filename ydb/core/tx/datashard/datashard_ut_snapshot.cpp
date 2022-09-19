@@ -2129,6 +2129,215 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.InjectClearTasks = false;
         observer.InjectLocks.reset();
     }
+
+    std::unique_ptr<TEvDataShard::TEvRead> PrepareRead(
+            ui64 readId,
+            const TTableId& tableId,
+            const TRowVersion& snapshot,
+            const TVector<ui32>& columns)
+    {
+        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto& record = request->Record;
+        record.SetReadId(readId);
+        record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+        record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+        record.MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
+        record.MutableSnapshot()->SetStep(snapshot.Step);
+        record.MutableSnapshot()->SetTxId(snapshot.TxId);
+        for (ui32 columnId : columns) {
+            record.AddColumns(columnId);
+        }
+        record.SetResultFormat(NKikimrTxDataShard::CELLVEC);
+        return request;
+    }
+
+    void AddReadRange(TEvDataShard::TEvRead& request, ui32 fromKey, ui32 toKey) {
+        TVector<TCell> fromKeyCells = { TCell::Make(fromKey) };
+        TVector<TCell> toKeyCells = { TCell::Make(toKey) };
+        auto fromBuf = TSerializedCellVec::Serialize(fromKeyCells);
+        auto toBuf = TSerializedCellVec::Serialize(toKeyCells);
+        request.Ranges.emplace_back(fromBuf, toBuf, true, true);
+    }
+
+    TString ReadResultRowsString(const TEvDataShard::TEvReadResult& result) {
+        TStringBuilder builder;
+        for (size_t row = 0; row < result.GetRowsCount(); ++row) {
+            auto rowCells = result.GetCells(row);
+            for (size_t i = 0; i < rowCells.size(); ++i) {
+                if (i != 0) {
+                    builder << ' ';
+                }
+                builder << rowCells[i].AsValue<ui32>();
+            }
+            builder << '\n';
+        }
+        return builder;
+    }
+
+    Y_UNIT_TEST(MvccSnapshotReadLockedWrites) {
+        constexpr bool UseNewEngine = true;
+
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Shards(1)
+            .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}));
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (1, 1, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value, value2 FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+        TLockHandle lock2handle(234, runtime.GetActorSystem(0));
+        TLockHandle lock3handle(345, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to key 2 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `Root/table-1` (key, value, value2) VALUES (2, 21, 201)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 2 with tx 234
+        observer.Inject.LockId = 234;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `Root/table-1` (key, value) VALUES (2, 22)
+                )")),
+            "<empty>");
+        auto locks2 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 2 with tx 345
+        observer.Inject.LockId = 345;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `Root/table-1` (key, value) VALUES (2, 23)
+                )")),
+            "<empty>");
+        auto locks3 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Try to read uncommitted rows in tx 123
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            auto request = PrepareRead(1, tableId, snapshot, { 1, 2, 3 });
+            AddReadRange(*request, 1, 3);
+            request->Record.SetLockTxId(123);
+            request->Record.SetLockNodeId(runtime.GetNodeId(0));
+            auto clientId = runtime.ConnectToPipe(shards.at(0), readSender, 0, NKikimr::NTabletPipe::TClientConfig());
+            runtime.SendToPipe(clientId, readSender, request.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto* response = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(
+                ReadResultRowsString(*response),
+                "1 1 1\n"
+                "2 21 201\n");
+        }
+
+        // Commit changes in tx 123
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace().Locks = locks1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `Root/table-1` (key, value) VALUES (0, 0)
+                )")),
+            "<empty>");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        // Try to read uncommitted rows in tx 234
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            auto request = PrepareRead(1, tableId, snapshot, { 1, 2, 3 });
+            AddReadRange(*request, 1, 3);
+            request->Record.SetLockTxId(234);
+            request->Record.SetLockNodeId(runtime.GetNodeId(0));
+            auto clientId = runtime.ConnectToPipe(shards.at(0), readSender, 0, NKikimr::NTabletPipe::TClientConfig());
+            runtime.SendToPipe(clientId, readSender, request.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto* response = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), Ydb::StatusIds::ABORTED);
+        }
+
+        // Try to read uncommitted rows in tx 345
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            auto request = PrepareRead(1, tableId, snapshot, { 1, 2, 3 });
+            AddReadRange(*request, 1, 3);
+            request->Record.SetLockTxId(345);
+            request->Record.SetLockNodeId(runtime.GetNodeId(0));
+            request->Record.SetMaxRowsInResult(1);
+            auto clientId = runtime.ConnectToPipe(shards.at(0), readSender, 0, NKikimr::NTabletPipe::TClientConfig());
+            runtime.SendToPipe(clientId, readSender, request.release());
+            {
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+                auto* response = ev->Get();
+                UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    ReadResultRowsString(*response),
+                    "1 1 1\n");
+            }
+            {
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+                auto* response = ev->Get();
+                UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), Ydb::StatusIds::ABORTED);
+            }
+        }
+    }
 }
 
 } // namespace NKikimr

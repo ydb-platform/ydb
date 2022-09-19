@@ -225,6 +225,7 @@ class TReader {
     const TReadIteratorState& State;
     IBlockBuilder& BlockBuilder;
     const TShortTableInfo& TableInfo;
+    TDataShard* Self;
 
     std::vector<NKikimr::NScheme::TTypeId> ColumnTypes;
 
@@ -236,12 +237,16 @@ class TReader {
 
     ui64 BytesInResult = 0;
 
-    bool InvisibleRowSkipsMet = false;
+    bool HadInvisibleRowSkips_ = false;
+    bool HadInconsistentResult_ = false;
 
     NHPTimer::STime StartTime;
     NHPTimer::STime EndTime;
 
     static const NHPTimer::STime MaxCyclesPerIteration;
+
+    NTable::ITransactionMapPtr TxMap;
+    NTable::ITransactionObserverPtr TxObserver;
 
     enum class EReadStatus {
         Done = 0,
@@ -252,10 +257,12 @@ class TReader {
 public:
     TReader(TReadIteratorState& state,
             IBlockBuilder& blockBuilder,
-            const TShortTableInfo& tableInfo)
+            const TShortTableInfo& tableInfo,
+            TDataShard* self)
         : State(state)
         , BlockBuilder(blockBuilder)
         , TableInfo(tableInfo)
+        , Self(self)
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
     {
         GetTimeFast(&StartTime);
@@ -292,10 +299,10 @@ public:
 
         EReadStatus result;
         if (!reverse) {
-            auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion);
+            auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
             result = Iterate(iter.Get(), true, ctx);
         } else {
-            auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion);
+            auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
             result = Iterate(iter.Get(), true, ctx);
         }
 
@@ -342,9 +349,9 @@ public:
         NTable::TRowState rowState;
         rowState.Init(State.Columns.size());
         NTable::TSelectStats stats;
-        auto ready = txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion);
+        auto ready = txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
         RowsSinceLastCheck += 1 + stats.InvisibleRowSkips;
-        InvisibleRowSkipsMet |= stats.InvisibleRowSkips > 0;
+        HadInvisibleRowSkips_ |= stats.InvisibleRowSkips > 0;
         if (ready == NTable::EReady::Page) {
             return EReadStatus::NeedData;
         }
@@ -505,7 +512,8 @@ public:
     }
 
     ui64 GetRowsRead() const { return RowsRead; }
-    bool HasInvisibleRowSkips() const { return InvisibleRowSkipsMet; }
+    bool HadInvisibleRowSkips() const { return HadInvisibleRowSkips_; }
+    bool HadInconsistentResult() const { return HadInconsistentResult_; }
 
 private:
     bool OutOfQuota() const {
@@ -563,7 +571,7 @@ private:
             BlockBuilder.AddRow(TDbTupleRef(), rowValues);
 
             ++RowsRead;
-            InvisibleRowSkipsMet |= iter->Stats.InvisibleRowSkips > 0;
+            HadInvisibleRowSkips_ |= iter->Stats.InvisibleRowSkips > 0;
             RowsSinceLastCheck += 1 + ResetRowStats(iter->Stats);
             if (ShouldStop()) {
                 return EReadStatus::StoppedByLimit;
@@ -572,7 +580,7 @@ private:
 
         // last iteration to Page or Gone also might have deleted or invisible rows
         RowsSinceLastCheck += ResetRowStats(iter->Stats);
-        InvisibleRowSkipsMet |= iter->Stats.InvisibleRowSkips > 0;
+        HadInvisibleRowSkips_ |= iter->Stats.InvisibleRowSkips > 0;
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
@@ -585,6 +593,81 @@ private:
             LastProcessedKey.clear();
 
         return EReadStatus::Done;
+    }
+
+    const NTable::ITransactionMapPtr& GetReadTxMap() {
+        if (!TxMap &&
+            State.LockId &&
+            !TSysTables::IsSystemTable(State.PathId) &&
+            Self->SysLocksTable().HasWriteLock(State.LockId, State.PathId))
+        {
+            TxMap = new NTable::TSingleTransactionMap(State.LockId, TRowVersion::Min());
+        }
+
+        return TxMap;
+    }
+
+    const NTable::ITransactionObserverPtr& GetReadTxObserver() {
+        if (!TxObserver &&
+            State.LockId &&
+            !TSysTables::IsSystemTable(State.PathId) &&
+            Self->SysLocksTable().HasWriteLocks(State.PathId))
+        {
+            TxObserver = new TReadTxObserver(this);
+        }
+
+        return TxObserver;
+    }
+
+    class TReadTxObserver : public NTable::ITransactionObserver {
+    public:
+        TReadTxObserver(TReader* reader)
+            : Reader(reader)
+        {
+        }
+
+        void OnSkipUncommitted(ui64 txId) override {
+            Reader->AddReadConflict(txId);
+        }
+
+        void OnSkipCommitted(const TRowVersion&) override {
+            // We already use InvisibleRowSkips for these
+        }
+
+        void OnSkipCommitted(const TRowVersion&, ui64) override {
+            // We already use InvisibleRowSkips for these
+        }
+
+        void OnApplyCommitted(const TRowVersion& rowVersion) override {
+            Reader->CheckReadConflict(rowVersion);
+        }
+
+        void OnApplyCommitted(const TRowVersion& rowVersion, ui64) override {
+            Reader->CheckReadConflict(rowVersion);
+        }
+
+    private:
+        TReader* const Reader;
+    };
+
+    void AddReadConflict(ui64 txId) {
+        Y_VERIFY(State.LockId);
+        // We have skipped uncommitted changes in txId, which would affect
+        // the read result when it commits. Add a conflict edge that breaks
+        // our lock when txId is committed.
+        Self->SysLocksTable().AddReadConflict(txId, State.LockId, State.LockNodeId);
+    }
+
+    void CheckReadConflict(const TRowVersion& rowVersion) {
+        if (rowVersion > State.ReadVersion) {
+            // We have applied changes from a version above our snapshot
+            // Normally these changes are skipped (since we are reading from
+            // snapshot), but if we previously written changes for a key,
+            // modified by transactions after our snapshot, we would hit this
+            // code path. We have to break our own lock and make sure we won't
+            // reply with inconsistent results.
+            HadInconsistentResult_ = true;
+        }
     }
 };
 
@@ -756,6 +839,12 @@ public:
             }
         }
 
+        state.LockId = state.Request->Record.GetLockTxId();
+        state.LockNodeId = state.Request->Record.GetLockNodeId();
+
+        TDataShardLocksDb locksDb(*Self, txc);
+        TSetupSysLocks guard(state.LockId, state.LockNodeId, *Self, &locksDb);
+
         if (!Read(txc, ctx, state))
             return EExecutionStatus::Restart;
 
@@ -793,10 +882,16 @@ public:
 
         bool hadWrites = false;
 
-        if (Request->Record.HasLockTxId()) {
+        if (state.LockId) {
             // note that we set locks only when first read finish transaction,
             // i.e. we have read something without page faults
-            hadWrites |= AcquireLock(txc, ctx, state);
+            AcquireLock(state, ctx);
+
+            // Make sure we wait for commit (e.g. persisted lock added a write range)
+            hadWrites |= locksDb.HasChanges();
+
+            // We remember acquired lock for faster checking
+            state.Lock = guard.Lock;
         }
 
         if (!Self->IsFollower()) {
@@ -1026,13 +1121,16 @@ public:
         if (!Result) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " TReadOperation::Execute() finished without Result, aborting");
-            Self->DeleteReadIterator(it);
-
             Result.reset(new TEvDataShard::TEvReadResult());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Iterator aborted");
             Result->Record.SetReadId(readId.ReadId);
             Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
+            Self->DeleteReadIterator(it);
             return;
+        }
+
+        if (!Result->Record.HasStatus() && Reader && Reader->HadInconsistentResult()) {
+            SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Read conflict with concurrent transaction");
         }
 
         // error happened and status set
@@ -1073,6 +1171,12 @@ public:
             << " after executionsCount# " << ExecuteCount);
 
         SendResult(ctx);
+
+        it = Self->ReadIterators.find(readId);
+        if (it == Self->ReadIterators.end()) {
+            // We sent an error and delete iterator
+            return;
+        }
 
         Y_VERIFY(it->second);
 
@@ -1188,7 +1292,7 @@ private:
 
         Y_ASSERT(Result);
 
-        Reader.reset(new TReader(state, *BlockBuilder, TableInfo));
+        Reader.reset(new TReader(state, *BlockBuilder, TableInfo, Self));
         return Reader->Read(txc, ctx);
     }
 
@@ -1273,17 +1377,10 @@ private:
         ValidationInfo.Loaded = true;
     }
 
-    bool AcquireLock(TTransactionContext& txc, const TActorContext& ctx, TReadIteratorState& state) {
+    void AcquireLock(TReadIteratorState& state, const TActorContext& ctx) {
         auto& sysLocks = Self->SysLocksTable();
 
-        const auto lockTxId = state.Request->Record.GetLockTxId();
-        const auto lockNodeId = state.Request->Record.GetLockNodeId();
         TTableId tableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion);
-
-        state.LockTxId = lockTxId;
-
-        TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guard(lockTxId, lockNodeId, state.ReadVersion, *Self, &locksDb);
 
         if (!state.Request->Keys.empty()) {
             for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
@@ -1295,21 +1392,21 @@ private:
                         true,
                         key.GetCells(),
                         true);
-                    sysLocks.SetLock(tableId, lockRange, lockTxId, lockNodeId);
+                    sysLocks.SetLock(tableId, lockRange, state.LockId, state.LockNodeId);
                 } else {
-                    sysLocks.SetLock(tableId, key.GetCells(), lockTxId, lockNodeId);
+                    sysLocks.SetLock(tableId, key.GetCells(), state.LockId, state.LockNodeId);
                 }
             }
         } else {
             // no keys, so we must have ranges (has been checked initially)
             for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
                 auto range = state.Request->Ranges[i].ToTableRange();
-                sysLocks.SetLock(tableId, range, lockTxId, lockNodeId);
+                sysLocks.SetLock(tableId, range, state.LockId, state.LockNodeId);
             }
         }
 
-        if (Reader->HasInvisibleRowSkips()) {
-            sysLocks.BreakSetLocks(lockTxId, lockNodeId);
+        if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
+            sysLocks.BreakSetLocks(state.LockId, state.LockNodeId);
         }
 
         auto locks = sysLocks.ApplyLocks();
@@ -1333,9 +1430,6 @@ private:
                 << " Acquired lock# " << lock.LockId << ", counter# " << lock.Counter
                 << " for " << state.PathId);
         }
-
-        state.Lock = guard.Lock; // will be nullptr if broken
-        return locksDb.HasChanges();
     }
 };
 
@@ -1589,7 +1683,10 @@ public:
             << " ReadContinue: reader# " << Ev->Get()->Reader << ", readId# " << Ev->Get()->ReadId
             << ", FirstUnprocessedQuery# " << state.FirstUnprocessedQuery);
 
-        Reader.reset(new TReader(state, *BlockBuilder, TableInfo));
+        TDataShardLocksDb locksDb(*Self, txc);
+        TSetupSysLocks guard(state.LockId, state.LockNodeId, *Self, &locksDb);
+
+        Reader.reset(new TReader(state, *BlockBuilder, TableInfo, Self));
         if (Reader->Read(txc, ctx)) {
             SendResult(txc, ctx);
             return true;
@@ -1602,6 +1699,8 @@ public:
     }
 
     void SendResult(TTransactionContext& txc, const TActorContext& ctx) {
+        Y_UNUSED(txc);
+
         const auto* request = Ev->Get();
         TReadIteratorId readId(request->Reader, request->ReadId);
         auto it = Self->ReadIterators.find(readId);
@@ -1612,12 +1711,12 @@ public:
         if (!Result) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " TTxReadContinue::Execute() finished without Result, aborting");
-            Self->DeleteReadIterator(it);
 
             Result.reset(new TEvDataShard::TEvReadResult());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Iterator aborted");
             Result->Record.SetReadId(readId.ReadId);
             Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
+            Self->DeleteReadIterator(it);
             return;
         }
 
@@ -1633,12 +1732,14 @@ public:
             return;
         }
 
+        Y_ASSERT(Reader);
+        Y_ASSERT(BlockBuilder);
+
         if (state.Lock) {
-            bool isBroken = state.Lock->IsBroken(state.ReadVersion);
-            if (!isBroken && Reader->HasInvisibleRowSkips()) {
-                auto& sysLocks = Self->SysLocksTable();
-                TDataShardLocksDb locksDb(*Self, txc);
-                TSetupSysLocks guard(*Self, &locksDb);
+            auto& sysLocks = Self->SysLocksTable();
+
+            bool isBroken = state.Lock->IsBroken();
+            if (!isBroken && (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult())) {
                 sysLocks.BreakLock(state.Lock->GetLockId());
                 sysLocks.ApplyLocks();
                 Y_VERIFY(state.Lock->IsBroken());
@@ -1657,12 +1758,23 @@ public:
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                     << " TTxReadContinue::Execute() found broken lock# " << state.Lock->GetLockId());
 
+                // A broken write lock means we are reading inconsistent results and must abort
+                if (state.Lock->IsWriteLock()) {
+                    SetStatusError(record, Ydb::StatusIds::ABORTED, "Read conflict with concurrent transaction");
+                    record.SetSeqNo(state.SeqNo + 1);
+                    record.SetReadId(readId.ReadId);
+                    Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
+                    Self->DeleteReadIterator(it);
+                    return;
+                }
+
                 state.Lock = nullptr;
+            } else {
+                // Lock valid, apply conflict changes
+                auto locks = sysLocks.ApplyLocks();
+                Y_VERIFY(locks.empty(), "ApplyLocks acquired unexpected locks");
             }
         }
-
-        Y_ASSERT(Reader);
-        Y_ASSERT(BlockBuilder);
 
         Reader->FillResult(*Result);
         Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);

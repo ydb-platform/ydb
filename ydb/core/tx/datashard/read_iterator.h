@@ -157,7 +157,8 @@ public:
     std::vector<NTable::TTag> Columns;
     TRowVersion ReadVersion = TRowVersion::Max();
     bool IsHeadRead = false;
-    ui64 LockTxId = 0;
+    ui64 LockId = 0;
+    ui32 LockNodeId = 0;
     TLockInfo::TPtr Lock;
 
     // note that will be always overwritten by values from request

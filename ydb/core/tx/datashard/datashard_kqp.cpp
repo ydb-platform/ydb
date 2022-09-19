@@ -673,7 +673,7 @@ void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     }
 }
 
-void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, TDataShard& dataShard, TTransactionContext& txc) {
+void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writeVersion, TDataShard& dataShard, TTransactionContext& txc) {
     auto& kqpTx = tx->GetDataTx()->GetKqpTransaction();
 
     if (!kqpTx.HasLocks()) {
@@ -704,7 +704,7 @@ void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, TDataShard& dataShard, 
             }
 
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLocks: commit txId# " << txId << " in localTid# " << localTid);
-            txc.DB.CommitTx(localTid, txId);
+            txc.DB.CommitTx(localTid, txId, writeVersion);
         }
     } else {
         KqpEraseLocks(origin, tx, sysLocks);

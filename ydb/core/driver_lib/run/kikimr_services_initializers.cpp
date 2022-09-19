@@ -90,6 +90,8 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 
+#include <ydb/core/public_http/http_service.h>
+
 #include <ydb/core/quoter/quoter_service.h>
 
 #include <ydb/core/scheme/scheme_type_registry.h>
@@ -2341,6 +2343,10 @@ void TYandexQueryInitializer::InitializeServices(TActorSystemSetup* setup, const
                 serviceActorId,
                 TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
     };
+
+    if (Config.HasPublicHttpConfig()) {
+        NKikimr::NPublicHttp::Initialize(setup->LocalServices, *appData, Config.GetPublicHttpConfig());
+    }
 
     NYq::Init(
         protoConfig,

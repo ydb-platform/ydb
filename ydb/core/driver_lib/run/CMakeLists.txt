@@ -73,6 +73,7 @@ target_link_libraries(run PUBLIC
   ydb-core-node_whiteboard
   ydb-core-persqueue
   ydb-core-protos
+  ydb-core-public_http
   ydb-core-quoter
   ydb-core-scheme
   ydb-core-scheme_types

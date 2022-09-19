@@ -77,6 +77,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
     opts.AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
     opts.AddLongOption("pdisk-key-file", "pdisk encryption key config file").OptionalArgument("PATH");
+    opts.AddLongOption("public-http-file", "Public HTTP config file").OptionalArgument("PATH");
 }
 
 void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResult& res) {
@@ -211,6 +212,10 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
 
     if (res.Has("yq-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("yq-file"), Config.AppConfig.MutableYandexQueryConfig()));
+    }
+
+    if (res.Has("public-http-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("public-http-file"), Config.AppConfig.MutablePublicHttpConfig()));
     }
 }
 

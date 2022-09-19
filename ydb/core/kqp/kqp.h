@@ -16,12 +16,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-enum class ETableReadType {
-    Other = 0,
-    Scan = 1,
-    FullScan = 2,
-};
-
 const TStringBuf DefaultKikimrPublicClusterName = "db";
 
 inline NActors::TActorId MakeKqpProxyID(ui32 nodeId) {
@@ -180,30 +174,27 @@ struct TKqpCompileResult {
     using TConstPtr = std::shared_ptr<const TKqpCompileResult>;
 
     TKqpCompileResult(const TString& uid, TKqpQueryId&& query, const Ydb::StatusIds::StatusCode& status,
-        const NYql::TIssues& issues, ETableReadType maxReadType)
+        const NYql::TIssues& issues)
         : Status(status)
         , Issues(issues)
         , Query(std::move(query))
-        , Uid(uid)
-        , MaxReadType(maxReadType) {}
+        , Uid(uid) {}
 
-    TKqpCompileResult(const TString& uid, const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues,
-        ETableReadType maxReadType)
+    TKqpCompileResult(const TString& uid, const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues)
         : Status(status)
         , Issues(issues)
-        , Uid(uid)
-        , MaxReadType(maxReadType) {}
+        , Uid(uid) {}
 
     static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, TKqpQueryId&& query,
-        const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues, ETableReadType maxReadType)
+        const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues)
     {
-        return std::make_shared<TKqpCompileResult>(uid, std::move(query), status, issues, maxReadType);
+        return std::make_shared<TKqpCompileResult>(uid, std::move(query), status, issues);
     }
 
     static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, const Ydb::StatusIds::StatusCode& status,
-        const NYql::TIssues& issues, ETableReadType maxReadType)
+        const NYql::TIssues& issues)
     {
-        return std::make_shared<TKqpCompileResult>(uid, status, issues, maxReadType);
+        return std::make_shared<TKqpCompileResult>(uid, status, issues);
     }
 
     Ydb::StatusIds::StatusCode Status;
@@ -211,8 +202,6 @@ struct TKqpCompileResult {
 
     TMaybe<TKqpQueryId> Query;
     TString Uid;
-
-    ETableReadType MaxReadType;
 
     TPreparedQueryConstPtr PreparedQuery;
     TPreparedQueryConstPtr PreparedQueryNewEngine;

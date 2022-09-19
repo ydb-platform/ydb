@@ -5,6 +5,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 
+
 namespace NKikimr::NKqp {
 
 struct TSessionShutdownState {
@@ -80,6 +81,12 @@ inline TIntrusivePtr<NYql::TKikimrConfiguration> CreateConfig(const TKqpSettings
     cfg->FreezeDefaults();
     return cfg;
 }
+
+enum ETableReadType {
+    Other = 0,
+    Scan = 1,
+    FullScan = 2,
+};
 
 inline ETableReadType ExtractMostHeavyReadType(const TString& queryPlan) {
     ETableReadType maxReadType = ETableReadType::Other;

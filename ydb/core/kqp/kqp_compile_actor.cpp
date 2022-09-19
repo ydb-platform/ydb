@@ -1,8 +1,6 @@
 #include "kqp_impl.h"
 #include "kqp_metadata_loader.h"
 
-#include "kqp_worker_common.h"
-
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/wilson.h>
@@ -232,7 +230,7 @@ private:
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues, const TActorContext& ctx) {
-        Reply(TKqpCompileResult::Make(Uid, std::move(Query), status, issues, ETableReadType::Other), ctx);
+        Reply(TKqpCompileResult::Make(Uid, std::move(Query), status, issues), ctx);
     }
 
     void InternalError(const TString message, const TActorContext &ctx) {
@@ -275,9 +273,7 @@ private:
             AddMessageToReplayLog(kqpResult.QueryPlan);
         }
 
-        ETableReadType maxReadType = ExtractMostHeavyReadType(kqpResult.QueryPlan);
-
-        KqpCompileResult = TKqpCompileResult::Make(Uid, std::move(Query), status, kqpResult.Issues(), maxReadType);
+        KqpCompileResult = TKqpCompileResult::Make(Uid, std::move(Query), status, kqpResult.Issues());
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);

@@ -41,10 +41,10 @@ public:
         , DbCounters(dbCounters)
         , Orbit{std::move(orbit)}
         , CompileRequestSpan(TWilsonKqp::CompileRequest, std::move(traceId), "CompileRequest") {}
-
+    
     void Bootstrap(const TActorContext& ctx) {
-        LWTRACK(KqpCompileRequestBootstrap,
-            Orbit,
+        LWTRACK(KqpCompileRequestBootstrap, 
+            Orbit, 
             Query ? Query->UserSid : 0);
 
         TimeoutTimerId = CreateLongTimer(ctx, Deadline - TInstant::Now(),
@@ -62,10 +62,10 @@ public:
 
     void Handle(TEvKqp::TEvCompileResponse::TPtr& ev, const TActorContext &ctx) {
         const auto& query = ev->Get()->CompileResult->Query;
-        LWTRACK(KqpCompileRequestHandleServiceReply,
-            ev->Get()->Orbit,
+        LWTRACK(KqpCompileRequestHandleServiceReply, 
+            ev->Get()->Orbit, 
             query ? query->UserSid : 0);
-
+        
         auto compileResult = ev->Get()->CompileResult;
         const auto& stats = ev->Get()->Stats;
 
@@ -81,7 +81,7 @@ public:
         }
 
         if (!NavigateTables(*compileResult->PreparedQuery, compileResult->Query->Database, ctx)) {
-
+            
             if (CompileRequestSpan) {
                 CompileRequestSpan.End();
             }
@@ -313,12 +313,12 @@ private:
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues, const TActorContext& ctx) {
-        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(TKqpCompileResult::Make({}, status, issues, ETableReadType::Other), std::move(Orbit));
+        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(TKqpCompileResult::Make({}, status, issues), std::move(Orbit));
 
         if (CompileRequestSpan) {
             CompileRequestSpan.EndError(issues.ToOneLineString());
         }
-
+        
         ctx.Send(Owner, responseEv.Release());
         Die(ctx);
     }
@@ -341,17 +341,17 @@ private:
 
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TString& userToken, const TMaybe<TString>& uid,
-    TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit,
+    TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit, 
     NWilson::TTraceId traceId)
 {
     return new TKqpCompileRequestActor(
-        owner,
-        userToken,
-        uid,
-        std::move(query),
-        keepInCache,
-        deadline,
-        dbCounters,
+        owner, 
+        userToken, 
+        uid, 
+        std::move(query), 
+        keepInCache, 
+        deadline, 
+        dbCounters, 
         std::move(orbit),
         std::move(traceId));
 }

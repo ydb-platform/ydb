@@ -96,7 +96,6 @@ NKikimrConfig::TTableServiceConfig MakeKqpResourceManagerConfig() {
     config.MutableResourceManager()->SetComputeActorsCount(100);
     config.MutableResourceManager()->SetChannelBufferSize(10);
     config.MutableResourceManager()->SetMinChannelBufferSize(10);
-    config.MutableResourceManager()->SetScanBufferSize(50);
     config.MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000);
     config.MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(10'000);
     config.MutableResourceManager()->SetQueryMemoryLimit(30'000);
@@ -293,7 +292,6 @@ void KqpNode::CommonCase() {
 
         auto& memoryLimits = CompFactory->Task2Actor.begin()->second.MemoryLimits;
         UNIT_ASSERT_VALUES_EQUAL(10, memoryLimits.ChannelBufferSize);
-        UNIT_ASSERT_VALUES_EQUAL(50, memoryLimits.ScanBufferSize);
         UNIT_ASSERT_VALUES_EQUAL(1'000, memoryLimits.MkqlLightProgramMemoryLimit);
         UNIT_ASSERT_VALUES_EQUAL(10'000, memoryLimits.MkqlHeavyProgramMemoryLimit);
 
@@ -486,7 +484,6 @@ void KqpNode::NotEnoughMemory_Extra() {
 
         auto& memoryLimits = CompFactory->Task2Actor.begin()->second.MemoryLimits;
         UNIT_ASSERT_VALUES_EQUAL(10, memoryLimits.ChannelBufferSize);
-        UNIT_ASSERT_VALUES_EQUAL(50, memoryLimits.ScanBufferSize);
         UNIT_ASSERT_VALUES_EQUAL(1'000, memoryLimits.MkqlLightProgramMemoryLimit);
         UNIT_ASSERT_VALUES_EQUAL(10'000, memoryLimits.MkqlHeavyProgramMemoryLimit);
 

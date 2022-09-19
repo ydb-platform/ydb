@@ -20,7 +20,6 @@ NKikimrConfig::TAppConfig AppCfg() {
     auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
     rm->SetChannelBufferSize(100);
     rm->SetMinChannelBufferSize(100);
-    rm->SetScanBufferSize(1 << 20);
     rm->SetMkqlLightProgramMemoryLimit(100 << 20);
     rm->SetMkqlHeavyProgramMemoryLimit(100 << 20);
 
@@ -85,9 +84,9 @@ Y_UNIT_TEST(SelfJoin) {
     ])", StreamResultToYson(it));
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-    UNIT_ASSERT_VALUES_EQUAL(18, counters.SpillingWriteBlobs->Val());
-    UNIT_ASSERT_VALUES_EQUAL(18, counters.SpillingReadBlobs->Val());
-    UNIT_ASSERT(0 == counters.SpillingStoredBlobs->Val() || 18 == counters.SpillingStoredBlobs->Val());
+    UNIT_ASSERT_VALUES_EQUAL(14, counters.SpillingWriteBlobs->Val());
+    UNIT_ASSERT_VALUES_EQUAL(14, counters.SpillingReadBlobs->Val());
+    UNIT_ASSERT(0 == counters.SpillingStoredBlobs->Val() || 14 == counters.SpillingStoredBlobs->Val());
 }
 
 } // suite

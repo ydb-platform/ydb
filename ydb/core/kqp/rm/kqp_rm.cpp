@@ -712,7 +712,6 @@ private:
 #define FORCE_VALUE(name) if (!config.Has ## name ()) config.Set ## name(config.Get ## name());
         FORCE_VALUE(ComputeActorsCount)
         FORCE_VALUE(ChannelBufferSize)
-        FORCE_VALUE(ScanBufferSize)
         FORCE_VALUE(MkqlLightProgramMemoryLimit)
         FORCE_VALUE(MkqlHeavyProgramMemoryLimit)
         FORCE_VALUE(QueryMemoryLimit)
@@ -720,8 +719,6 @@ private:
         FORCE_VALUE(EnableInstantMkqlMemoryAlloc);
         FORCE_VALUE(MaxTotalChannelBuffersSize);
         FORCE_VALUE(MinChannelBufferSize);
-        FORCE_VALUE(MaxTotalScanBuffersSize);
-        FORCE_VALUE(MinScanBufferSize);
 #undef FORCE_VALUE
 
         LOG_I("Updated table service config: " << config.DebugString());

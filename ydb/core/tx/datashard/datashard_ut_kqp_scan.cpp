@@ -55,7 +55,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
         rm->SetChannelBufferSize(100);
         rm->SetMinChannelBufferSize(100);
-        rm->SetScanBufferSize(100);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -251,7 +250,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
         rm->SetChannelBufferSize(100);
         rm->SetMinChannelBufferSize(100);
-        rm->SetScanBufferSize(100);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -385,7 +383,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
         rm->SetChannelBufferSize(100);
         rm->SetMinChannelBufferSize(100);
-        rm->SetScanBufferSize(100);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -505,7 +502,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
         rm->SetChannelBufferSize(100);
         rm->SetMinChannelBufferSize(100);
-        rm->SetScanBufferSize(100);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

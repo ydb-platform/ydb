@@ -127,7 +127,7 @@ public:
             }
 
             SysViewActorId = Register(scanActor.Release());
-            Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(MemoryLimits.ScanBufferSize));
+            Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(MemoryLimits.ChannelBufferSize));
         }
 
         ContinueExecute();
@@ -159,7 +159,7 @@ public:
 
 protected:
     ui64 CalcMkqlMemoryLimit() override {
-        return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ScanBufferSize;
+        return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ChannelBufferSize;
     }
 
 public:
@@ -221,7 +221,7 @@ private:
         Y_VERIFY_DEBUG(SysViewActorId == ActorIdFromProto(msg.GetScanActorId()));
 
         CA_LOG_D("Got sysview scan initial event, scan actor: " << SysViewActorId << ", scanId: 0");
-        Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(GetMemoryLimits().ScanBufferSize));
+        Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(GetMemoryLimits().ChannelBufferSize));
         return;
     }
 
@@ -272,8 +272,8 @@ private:
             }
         }
 
-        ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
-            ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
+        ui64 freeSpace = GetMemoryLimits().ChannelBufferSize > ScanData->GetStoredBytes()
+            ? GetMemoryLimits().ChannelBufferSize - ScanData->GetStoredBytes()
             : 0;
 
         if (freeSpace > 0) {

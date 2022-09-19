@@ -53,7 +53,6 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity, bool useSessionAct
     NKikimrConfig::TAppConfig appCfg;
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(limit);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(limit);
-    appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetScanBufferSize(limit);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(200ul << 20);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(20ul << 30);
 

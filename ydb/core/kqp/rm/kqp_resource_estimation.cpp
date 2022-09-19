@@ -5,29 +5,18 @@ namespace NKikimr::NKqp {
 using namespace NYql::NDqProto;
 using namespace NKikimrConfig;
 
-TTaskResourceEstimation EstimateTaskResources(const TDqTask& task, int nScans, ui32 dsOnNodeCount,
+TTaskResourceEstimation EstimateTaskResources(const TDqTask& task,
     const TTableServiceConfig::TResourceManager& config)
 {
     TTaskResourceEstimation ret;
-    EstimateTaskResources(task, nScans, dsOnNodeCount, config, ret);
+    EstimateTaskResources(task, config, ret);
     return ret;
 }
 
-void EstimateTaskResources(const TDqTask& task, int nScans, ui32 dsOnNodeCount,
-    const TTableServiceConfig::TResourceManager& config, TTaskResourceEstimation& ret)
+void EstimateTaskResources(const TDqTask& task, const TTableServiceConfig::TResourceManager& config,
+    TTaskResourceEstimation& ret)
 {
     ret.TaskId = task.GetId();
-
-    if (nScans > 0) {
-        ret.ScanBuffersCount = nScans;
-        ret.ScanBufferMemoryLimit = config.GetScanBufferSize();
-
-        if (dsOnNodeCount && ret.ScanBufferMemoryLimit * dsOnNodeCount > config.GetMaxTotalScanBuffersSize()) {
-            ret.ScanBufferMemoryLimit = std::max(config.GetMinScanBufferSize(),
-                                                 config.GetMaxTotalScanBuffersSize() / dsOnNodeCount);
-        }
-    }
-
     for (const auto& input : task.GetInputs()) {
         ret.ChannelBuffersCount += input.ChannelsSize();
     }
@@ -50,18 +39,17 @@ void EstimateTaskResources(const TDqTask& task, int nScans, ui32 dsOnNodeCount,
         ret.MkqlProgramMemoryLimit = config.GetMkqlLightProgramMemoryLimit();
     }
 
-    ret.TotalMemoryLimit = ret.ScanBuffersCount * ret.ScanBufferMemoryLimit
-        + ret.ChannelBuffersCount * ret.ChannelBufferMemoryLimit
+    ret.TotalMemoryLimit = ret.ChannelBuffersCount * ret.ChannelBufferMemoryLimit
         + ret.MkqlProgramMemoryLimit;
 }
 
-TVector<TTaskResourceEstimation> EstimateTasksResources(const TVector<NYql::NDqProto::TDqTask>& tasks, int nScans,
-    ui32 dsOnNodeCount, const TTableServiceConfig::TResourceManager& config)
+TVector<TTaskResourceEstimation> EstimateTasksResources(const TVector<NYql::NDqProto::TDqTask>& tasks,
+    const TTableServiceConfig::TResourceManager& config)
 {
     TVector<TTaskResourceEstimation> ret;
     ret.resize(tasks.size());
     for (ui64 i = 0; i < tasks.size(); ++i) {
-        EstimateTaskResources(tasks[i], nScans, dsOnNodeCount, config, ret[i]);
+        EstimateTaskResources(tasks[i], config, ret[i]);
     }
     return ret;
 }

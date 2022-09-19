@@ -271,7 +271,7 @@ public:
 
 protected:
     ui64 CalcMkqlMemoryLimit() override {
-        return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ScanBufferSize;
+        return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ChannelBufferSize;
     }
 
 private:
@@ -1029,9 +1029,9 @@ private:
 
 private:
     ui64 CalculateFreeSpace() const {
-        return GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
-            ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
-            : 0ul;
+        return GetMemoryLimits().ChannelBufferSize > ScanData->GetStoredBytes()
+                ? GetMemoryLimits().ChannelBufferSize - ScanData->GetStoredBytes()
+                : 0ul;
     }
 
     std::any GetSourcesState() override {

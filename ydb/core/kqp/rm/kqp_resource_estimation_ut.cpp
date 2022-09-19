@@ -31,7 +31,7 @@ Y_UNIT_TEST(TestChannelSize) {
     auto* output = task.MutableOutputs()->Add();
     output->MutableChannels()->Add();
 
-    auto est = EstimateTaskResources(task, 0, 0, config);
+    auto est = EstimateTaskResources(task, config);
     UNIT_ASSERT_EQUAL(201, est.ChannelBuffersCount);
     UNIT_ASSERT_EQUAL(est.ChannelBufferMemoryLimit, config.GetChannelBufferSize());
 
@@ -41,43 +41,11 @@ Y_UNIT_TEST(TestChannelSize) {
         input->MutableChannels()->Add();
     }
 
-    est = EstimateTaskResources(task, 0, 0, config);
+    est = EstimateTaskResources(task, config);
     UNIT_ASSERT_EQUAL(301, est.ChannelBuffersCount);
 
     UNIT_ASSERT(est.ChannelBufferMemoryLimit < config.GetChannelBufferSize());
     UNIT_ASSERT(est.ChannelBufferMemoryLimit >= config.GetMinChannelBufferSize());
-}
-
-Y_UNIT_TEST(TestScanBufferSize) {
-    NKikimrConfig::TTableServiceConfig::TResourceManager config;
-    config.SetScanBufferSize(10_MB);
-    config.SetMaxTotalScanBuffersSize(50_MB);
-    config.SetMinScanBufferSize(2_MB);
-    config.SetChannelBufferSize(100);
-    config.SetMinChannelBufferSize(100);
-    config.SetMaxTotalChannelBuffersSize(200_GB);
-    config.SetMkqlLightProgramMemoryLimit(100);
-
-    NYql::NDqProto::TDqTask task;
-
-    for (int i = 1; i <= 5; ++i) {
-        auto est = EstimateTaskResources(task, i, i, config);
-        UNIT_ASSERT_VALUES_EQUAL(10_MB, est.ScanBufferMemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(i, est.ScanBuffersCount);
-    }
-
-    for (int i = 6; i <= 24; ++i) {
-        auto est = EstimateTaskResources(task, i, i, config);
-        UNIT_ASSERT(10_MB >= est.ScanBufferMemoryLimit);
-        UNIT_ASSERT(2_MB < est.ScanBufferMemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(i, est.ScanBuffersCount);
-    }
-
-    for (int i = 25; i <= 30; ++i) {
-        auto est = EstimateTaskResources(task, i, i, config);
-        UNIT_ASSERT_VALUES_EQUAL(2_MB, est.ScanBufferMemoryLimit);
-        UNIT_ASSERT_VALUES_EQUAL(i, est.ScanBuffersCount);
-    }
 }
 
 } // suite KqpResourceEstimation

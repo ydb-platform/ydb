@@ -238,7 +238,6 @@ using TFreeMemoryCallback = std::function<void(const TTxId& txId, ui64 taskId, u
 
 struct TComputeMemoryLimits {
     ui64 ChannelBufferSize = 0;
-    ui64 ScanBufferSize = 0; // TODO: drop it
     ui64 MkqlLightProgramMemoryLimit = 0;
     ui64 MkqlHeavyProgramMemoryLimit = 0;
 

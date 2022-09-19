@@ -105,13 +105,13 @@ void TKqpPlanner::Process(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot
 
     ui64 i = 0;
     for (auto& task : Tasks) {
-        EstimateTaskResources(task, 0, 0, rmConfig, est[i]);
+        EstimateTaskResources(task, rmConfig, est[i]);
         localRunMemoryEst += est[i].TotalMemoryLimit;
         i++;
     }
     if (auto it = ScanTasks.find(SelfId().NodeId()); it != ScanTasks.end()) {
         for (auto& task : it->second) {
-            EstimateTaskResources(task, 0, 0, rmConfig, est[i]);
+            EstimateTaskResources(task, rmConfig, est[i]);
             localRunMemoryEst += est[i].TotalMemoryLimit;
             i++;
         }

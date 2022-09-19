@@ -27,7 +27,6 @@ IActor* CreateComputeActor(
 {
     auto memoryLimits = NDq::TComputeMemoryLimits();
     memoryLimits.ChannelBufferSize = 1000000;
-    memoryLimits.ScanBufferSize = 16_MB;
     // light == heavy since we allow extra allocation
     memoryLimits.MkqlLightProgramMemoryLimit = options.MkqlInitialMemoryLimit;
     memoryLimits.MkqlHeavyProgramMemoryLimit = options.MkqlInitialMemoryLimit;

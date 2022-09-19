@@ -23,7 +23,6 @@ NKikimrConfig::TAppConfig AppCfg() {
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_MB);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(1_MB);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMaxTotalChannelBuffersSize(100_GB);
-    appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetScanBufferSize(1_MB);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1_MB);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(1_MB);
     return appCfg;

@@ -1335,7 +1335,6 @@ private:
         settings.UseSpilling = false;
 
         TComputeMemoryLimits limits;
-        limits.ScanBufferSize = 50_MB; // for system views only
         limits.ChannelBufferSize = 50_MB;
         limits.MkqlLightProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(500_MB, Request.MkqlMemoryLimit) : 500_MB;
         limits.MkqlHeavyProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(2_GB, Request.MkqlMemoryLimit) : 2_GB;

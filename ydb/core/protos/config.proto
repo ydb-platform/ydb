@@ -1626,6 +1626,7 @@ message TAppConfig {
     optional TSchemeShardConfig SchemeShardConfig = 54;
     optional TTracingConfig TracingConfig = 55;
     optional TFailureInjectionConfig FailureInjectionConfig = 56;
+    optional THttpProxyConfig PublicHttpConfig = 57;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

@@ -2,10 +2,10 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/visitor.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
+#include <arrow/datum.h>
+#include <arrow/visitor.h>
+#include <arrow/compute/registry.h>
+#include <arrow/compute/function.h>
 
 namespace NKikimr::NMiniKQL {
 

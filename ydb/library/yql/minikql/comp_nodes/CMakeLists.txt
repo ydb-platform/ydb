@@ -18,6 +18,7 @@ target_link_libraries(yql-minikql-comp_nodes PUBLIC
   libs-apache-arrow
   ydb-library-binary_json
   library-yql-minikql
+  yql-minikql-arrow
   yql-minikql-invoke_builtins
   library-yql-utils
   yql-minikql-codegen

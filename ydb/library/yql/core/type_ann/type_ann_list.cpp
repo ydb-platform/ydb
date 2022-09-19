@@ -5840,9 +5840,9 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        const TTypeAnnotationNode* timeType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Timestamp));
+        const TTypeAnnotationNode* timeType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Timestamp);
 
-        if (!IsSameAnnotation(*lambdaTimeExtractor->GetTypeAnn(), *timeType)) {
+        if (!IsSameAnnotation(*RemoveOptionalType(lambdaTimeExtractor->GetTypeAnn()), *timeType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaTimeExtractor->Pos()), TStringBuilder()
                 << "Mismatch hopping window time extractor lambda output type, expected: "
                 << *timeType << ", but got: " << *lambdaTimeExtractor->GetTypeAnn()));

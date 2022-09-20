@@ -168,6 +168,10 @@ public:
         return Handle;
     }
 
+    EMethod GetMetthod() const {
+        return Method;
+    }
+
     virtual void Fail(const TIssue& error) = 0;
     virtual void Done(CURLcode result, long httpResponseCode) = 0;
 
@@ -462,6 +466,9 @@ public:
         , AwaitQueueTopSizeLimit(Counters->GetCounter("AwaitQueueTopSizeLimit"))
         , DownloadedBytes(Counters->GetCounter("DownloadedBytes", true))
         , UploadedBytes(Counters->GetCounter("UploadedBytes", true))
+        , GroupForGET(Counters->GetSubgroup("method", "GET"))
+        , GroupForPUT(Counters->GetSubgroup("method", "PUT"))
+        , GroupForPOST(Counters->GetSubgroup("method", "POST"))
     {
         if (httpGatewaysCfg) {
             if (httpGatewaysCfg->HasMaxInFlightCount()) {
@@ -629,8 +636,25 @@ private:
             const std::unique_lock lock(Sync);
             if (const auto it = Allocated.find(handle); Allocated.cend() != it) {
                 easy = std::move(it->second);
-                if (CURLE_OK == result)
+                if (CURLE_OK == result) {
                     curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
+                    TIntrusivePtr<::NMonitoring::TDynamicCounters> group;
+                    switch (easy->GetMetthod()) {
+                        case TEasyCurl::EMethod::GET:
+                        group = GroupForGET->GetSubgroup("code", ToString(httpResponseCode));
+                        break;
+                    case TEasyCurl::EMethod::POST:
+                        group = GroupForPOST->GetSubgroup("code", ToString(httpResponseCode));
+                        break;
+                    case TEasyCurl::EMethod::PUT:
+                        group = GroupForPUT->GetSubgroup("code", ToString(httpResponseCode));
+                        break;
+                    default:
+                        break;
+                    }
+                    if (group)
+                        group->GetNamedCounter("name", "count", true)->Inc();
+                }
 
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
                     AllocatedSize -= buffer->GetSizeLimit();
@@ -783,6 +807,9 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr AwaitQueueTopSizeLimit;
     const ::NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupForGET;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupForPUT;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupForPOST;
 };
 
 std::atomic_size_t THTTPMultiGateway::OutputSize = 0ULL;

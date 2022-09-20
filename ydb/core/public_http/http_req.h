@@ -3,7 +3,6 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/http/http.h>
-//#include <library/cpp/http/server/http.h>
 
 namespace NKikimr::NPublicHttp {
 

@@ -1,18 +1,10 @@
 #include "http_req.h"
 
 #include <library/cpp/actors/http/http_proxy.h>
-//#include <library/cpp/http/misc/parsed_request.h>
-//#include <library/cpp/http/server/response.h>
-
-//#include <ydb/core/grpc_caching/cached_grpc_request_actor.h>
-//#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/http_proxy/http_req.h>
-
-//#include <library/cpp/uri/uri.h>
 
 #include <util/generic/guid.h>
 #include <util/string/ascii.h>
-//#include <util/string/cast.h>
 
 namespace NKikimr::NPublicHttp {
     constexpr TStringBuf AUTHORIZATION_HEADER = "authorization";
@@ -156,8 +148,8 @@ namespace NKikimr::NPublicHttp {
             group = group->GetSubgroup("project", Project);
         }
         group = group->GetSubgroup("path_pattern", PathPattern)->GetSubgroup("method", TString(Request->Method));
-        group->GetSubgroup("code", TString(status))->GetNamedCounter("name", "count", true)->Inc();
-        group->GetSubgroup("code", HttpCodeFamily(status))->GetNamedCounter("name", "count", true)->Inc();
+        group->GetSubgroup("code", TString(status))->GetCounter("count", true)->Inc();
+        group->GetSubgroup("code", HttpCodeFamily(status))->GetCounter("count", true)->Inc();
     }
 
     void THttpRequestContext::ParseHeaders(TStringBuf str) {

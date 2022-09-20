@@ -13,7 +13,6 @@ target_compile_options(restricted-boost-graph PRIVATE
 )
 target_include_directories(restricted-boost-graph PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/graph/include
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/disjoint_sets/include
 )
 target_link_libraries(restricted-boost-graph PUBLIC
   contrib-libs-cxxsupp

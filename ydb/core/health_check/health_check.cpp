@@ -187,7 +187,7 @@ public:
         };
 
         Ydb::Monitoring::StatusFlag::Status OverallStatus = Ydb::Monitoring::StatusFlag::GREY;
-        TList<TIssueRecord> IssueLog;
+        TList<TIssueRecord> IssueRecords;
         Ydb::Monitoring::Location Location;
         int Level = 1;
         TString Type;
@@ -205,14 +205,16 @@ public:
             id << Ydb::Monitoring::StatusFlag_Status_Name(issueLog.status());
             id << '-' << crc16(issueLog.message());
             const Ydb::Monitoring::Location& location(issueLog.location());
-            if (location.storage().node().id()) {
-                id << '-' << location.storage().node().id();
-            } else {
-                if (location.storage().node().host()) {
-                    id << '-' << location.storage().node().host();
-                }
-                if (location.storage().node().port()) {
-                    id << '-' << location.storage().node().port();
+            if (!location.storage().node().empty()) {
+                if (location.storage().node()[0].id()) {
+                    id << '-' << location.storage().node()[0].id();
+                } else {
+                    if (location.storage().node()[0].host()) {
+                        id << '-' << location.storage().node()[0].host();
+                    }
+                    if (location.storage().node()[0].port()) {
+                        id << '-' << location.storage().node()[0].port();
+                    }
                 }
             }
             if (location.storage().pool().group().vdisk().id()) {
@@ -256,7 +258,7 @@ public:
             if (IsErrorStatus(status)) {
                 std::vector<TString> reason;
                 if (includeTags.size() != 0) {
-                    for (const TIssueRecord& record : IssueLog) {
+                    for (const TIssueRecord& record : IssueRecords) {
                         for (const TString& tag : includeTags) {
                             if (record.Tag == tag) {
                                 reason.push_back(record.IssueLog.id());
@@ -267,7 +269,7 @@ public:
                 }
                 std::sort(reason.begin(), reason.end());
                 reason.erase(std::unique(reason.begin(), reason.end()), reason.end());
-                TIssueRecord& issueRecord(*IssueLog.emplace(IssueLog.begin()));
+                TIssueRecord& issueRecord(*IssueRecords.emplace(IssueRecords.begin()));
                 Ydb::Monitoring::IssueLog& issueLog(issueRecord.IssueLog);
                 issueLog.set_status(status);
                 issueLog.set_message(message);
@@ -291,7 +293,7 @@ public:
         }
 
         bool HasTags(std::initializer_list<TString> tags) const {
-            for (const TIssueRecord& record : IssueLog) {
+            for (const TIssueRecord& record : IssueRecords) {
                 for (const TString& tag : tags) {
                     if (record.Tag == tag) {
                         return true;
@@ -308,12 +310,12 @@ public:
         void SetOverallStatus(Ydb::Monitoring::StatusFlag::Status status) {
             OverallStatus = status;
         }
-
+        
         void InheritFrom(TSelfCheckResult& lower) {
             if (lower.GetOverallStatus() >= OverallStatus) {
                 OverallStatus = lower.GetOverallStatus();
             }
-            IssueLog.splice(IssueLog.end(), std::move(lower.IssueLog));
+            IssueRecords.splice(IssueRecords.end(), std::move(lower.IssueRecords));
         }
     };
 
@@ -1554,15 +1556,19 @@ public:
             if (UnavailableStorageNodes.count(pDiskInfo.nodeid()) != 0) {
                 TSelfCheckContext nodeContext(&context, "STORAGE_NODE");
                 nodeContext.Location.mutable_storage()->clear_pool();
-                nodeContext.Location.mutable_storage()->mutable_node()->set_id(pDiskInfo.nodeid());
+                
+                if (context.Location.mutable_storage()->mutable_node()->empty()) {
+                    context.Location.mutable_storage()->mutable_node()->Add();
+                }
+                nodeContext.Location.mutable_storage()->mutable_node(0)->set_id(pDiskInfo.nodeid());
                 const TEvInterconnect::TNodeInfo* nodeInfo = nullptr;
                 auto itNodeInfo = MergedNodeInfo.find(pDiskInfo.nodeid());
                 if (itNodeInfo != MergedNodeInfo.end()) {
                     nodeInfo = itNodeInfo->second;
                 }
                 if (nodeInfo) {
-                    nodeContext.Location.mutable_storage()->mutable_node()->set_host(nodeInfo->Host);
-                    nodeContext.Location.mutable_storage()->mutable_node()->set_port(nodeInfo->Port);
+                    nodeContext.Location.mutable_storage()->mutable_node(0)->set_host(nodeInfo->Host);
+                    nodeContext.Location.mutable_storage()->mutable_node(0)->set_port(nodeInfo->Port);
                 }
                 nodeContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                          TStringBuilder() << "Storage node is not available",
@@ -1660,6 +1666,8 @@ public:
     static const inline TString NONE = "none";
     static const inline TString BLOCK_4_2 = "block-4-2";
     static const inline TString MIRROR_3_DC = "mirror-3-dc";
+    static const int COMPRESS_SIZE_TRIGGER = 10;
+    static const int COMPRESS_GROUP_LIMIT = 10;
 
     static void IncrementFor(TStackVec<std::pair<ui32, int>>& realms, ui32 realm) {
         auto itRealm = FindIf(realms, [realm](const std::pair<ui32, int>& p) -> bool {
@@ -1678,27 +1686,33 @@ public:
         int disksColors[Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE] = {};
         TStackVec<std::pair<ui32, int>> failedRealms;
         int failedDisks = 0;
+
+        if (context.Location.mutable_storage()->mutable_node()->empty()) {
+            context.Location.mutable_storage()->mutable_node()->Add();
+        }
         for (const auto& protoVDiskId : groupInfo.vdiskids()) {
             TString vDiskId = GetVDiskId(protoVDiskId);
             auto itVDisk = MergedVDiskState.find(vDiskId);
             const TEvInterconnect::TNodeInfo* nodeInfo = nullptr;
+
             if (itVDisk != MergedVDiskState.end()) {
                 TNodeId nodeId = itVDisk->second->nodeid();
                 auto itNodeInfo = MergedNodeInfo.find(nodeId);
                 if (itNodeInfo != MergedNodeInfo.end()) {
                     nodeInfo = itNodeInfo->second;
                 }
-                context.Location.mutable_storage()->mutable_node()->set_id(nodeId);
+                context.Location.mutable_storage()->mutable_node(0)->set_id(nodeId);
             } else {
-                context.Location.mutable_storage()->mutable_node()->clear_id();
+                context.Location.mutable_storage()->mutable_node(0)->clear_id();
             }
             if (nodeInfo) {
-                context.Location.mutable_storage()->mutable_node()->set_host(nodeInfo->Host);
-                context.Location.mutable_storage()->mutable_node()->set_port(nodeInfo->Port);
+                context.Location.mutable_storage()->mutable_node(0)->set_host(nodeInfo->Host);
+                context.Location.mutable_storage()->mutable_node(0)->set_port(nodeInfo->Port);
             } else {
-                context.Location.mutable_storage()->mutable_node()->clear_host();
-                context.Location.mutable_storage()->mutable_node()->clear_port();
+                context.Location.mutable_storage()->mutable_node(0)->clear_host();
+                context.Location.mutable_storage()->mutable_node(0)->clear_port();
             }
+
             Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
             FillVDiskStatus(vDiskId, itVDisk != MergedVDiskState.end() ? *itVDisk->second : NKikimrWhiteboard::TVDiskStateInfo(), vDiskStatus, {&context, "VDISK"});
             ++disksColors[vDiskStatus.overall()];
@@ -1713,6 +1727,53 @@ public:
                 break;
             }
         }
+        
+        TList<TSelfCheckContext::TIssueRecord> compress;
+        while (!context.IssueRecords.empty()) {
+            TList<TSelfCheckContext::TIssueRecord> group;
+            group.splice(group.begin(), context.IssueRecords, context.IssueRecords.begin());
+            for (auto it = context.IssueRecords.begin(); it != context.IssueRecords.end(); ) {
+                if (it->IssueLog.Getstatus() == group.begin()->IssueLog.Getstatus() &&
+                    it->IssueLog.Getmessage() == group.begin()->IssueLog.Getmessage() &&
+                    it->IssueLog.Getlevel() == group.begin()->IssueLog.Getlevel() &&
+                    it->Tag == "vdisk-state") {
+                    
+                    auto move = it++;
+                    group.splice(group.begin(), context.IssueRecords, move);
+                } else {
+                    ++it;
+                }
+            }
+
+            if (group.size() >= COMPRESS_SIZE_TRIGGER) {
+                int compressCount = 0;
+                for (auto it = std::next(group.begin(), 1); it != group.end(); ) {
+                    if (compressCount < COMPRESS_GROUP_LIMIT) {
+                        auto nodesA = group.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_node();
+                        auto nodesB = it->IssueLog.mutable_location()->mutable_storage()->mutable_node();
+                        nodesA->Add(nodesB->begin(), nodesB->end());
+                        nodesB->Clear();
+                        
+                        auto reasonA = group.begin()->IssueLog.mutable_reason();
+                        auto reasonB = it->IssueLog.mutable_reason();
+                        reasonA->Add(reasonB->begin(), reasonB->end());
+                        reasonB->Clear();
+
+                        compressCount++;
+                    } else {
+                        it->IssueLog.mutable_location()->mutable_storage()->mutable_node()->Clear();
+                        it->IssueLog.mutable_reason()->Clear();
+                    }
+
+                    it = context.IssueRecords.erase(it);
+                }
+                compress.emplace_back(group.front());
+            } else {
+                compress.splice(compress.end(), group);
+            }
+        }
+
+        context.IssueRecords.splice(context.IssueRecords.begin(), compress);
 
         context.Location.mutable_storage()->clear_node(); // group doesn't have node
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
@@ -1832,7 +1893,7 @@ public:
             }
             databaseStatus.set_overall(context.GetOverallStatus());
             overall = MaxStatus(overall, context.GetOverallStatus());
-            for (auto& issueRecord : context.IssueLog) {
+            for (auto& issueRecord : context.IssueRecords) {
                 std::pair<TString, TString> key{issueRecord.IssueLog.location().database().name(), issueRecord.IssueLog.id()};
                 if (issueIds.emplace(key).second) {
                     result.mutable_issue_log()->Add()->CopyFrom(issueRecord.IssueLog);
@@ -1865,7 +1926,7 @@ public:
                 FillStorage(unknownDatabase, *databaseStatus.mutable_storage(), {&context, "STORAGE"});
                 databaseStatus.set_overall(context.GetOverallStatus());
                 overall = MaxStatus(overall, context.GetOverallStatus());
-                for (auto& issueRecord : context.IssueLog) {
+                for (auto& issueRecord : context.IssueRecords) {
                     std::pair<TString, TString> key{issueRecord.IssueLog.location().database().name(), issueRecord.IssueLog.id()};
                     if (issueIds.emplace(key).second) {
                         result.mutable_issue_log()->Add()->CopyFrom(issueRecord.IssueLog);

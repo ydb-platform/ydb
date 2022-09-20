@@ -11,11 +11,11 @@ using namespace NYdb::NTable;
 namespace {
 
 TKikimrRunner RunnerWithArrowFormatEnabled() {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableArrowFormatAtDatashard(true);
-    featureFlags.SetEnableKqpSessionActor(true);
+    auto settings = TKikimrSettings()
+        .SetEnableArrowFormatAtDatashard(true)
+        .SetEnableKqpSessionActor(true);
 
-    return TKikimrRunner{featureFlags};
+    return TKikimrRunner{settings};
 }
 
 void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {

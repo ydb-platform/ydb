@@ -203,7 +203,7 @@ TExprBase DqPushMembersFilterToStage(TExprBase node, TExprContext& ctx, IOptimiz
 }
 
 TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& flatmap,
-    TExprNode::TListType&& innerConnections, TExprContext& ctx)
+    TExprNode::TListType&& innerConnections, const TParentsMap& parentsMap, TExprContext& ctx)
 {
     TVector<TDqConnection> inputs;
     TNodeOnNodeOwnedMap replaceMap;
@@ -213,6 +213,10 @@ TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& f
     inputs.push_back(flatmap.Input().Cast<TDqConnection>());
     for (auto& cn : innerConnections) {
         if (!TMaybeNode<TDqCnUnionAll>(cn).IsValid() && !TMaybeNode<TDqCnMerge>(cn).IsValid()) {
+            return {};
+        }
+
+        if (!IsSingleConsumerConnection(TDqConnection(cn), parentsMap, false)) {
             return {};
         }
 
@@ -506,7 +510,7 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
 
     TMaybeNode<TDqStage> flatmapStage;
     if (!innerConnections.empty()) {
-        flatmapStage = DqPushFlatMapInnerConnectionsToStageInput(flatmap, std::move(innerConnections), ctx);
+        flatmapStage = DqPushFlatMapInnerConnectionsToStageInput(flatmap, std::move(innerConnections), parentsMap, ctx);
         if (!flatmapStage) {
             return node;
         }

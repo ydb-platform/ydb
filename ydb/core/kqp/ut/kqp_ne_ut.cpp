@@ -3331,7 +3331,9 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(PushFlatmapInnerConnectionsToStageInput) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnablePredicateExtractForDataQueries(false);
+        TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3432,6 +3434,29 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             #;
             [%true];
             [%false]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(MultiUsageInnerConnection) {
+        auto settings = TKikimrSettings()
+            .SetEnablePredicateExtractForDataQueries(false);
+
+        TKikimrRunner kikimr{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            $count1 = SELECT COUNT (*) FROM `/Root/KeyValue`;
+            $count2 = SELECT COUNT(*)
+                FROM `/Root/KeyValue` AS l
+                LEFT JOIN `/Root/EightShard` AS r
+                ON l.Key = r.Key;
+            SELECT * FROM `/Root/TwoShard` WHERE $count1 = $count2;
+
+        )", TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 }
 

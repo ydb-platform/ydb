@@ -9,10 +9,8 @@
 
 namespace NKikimr::NMiniKQL {
 
-bool ConvertInputArrowType(TType* type, bool& isOptional, arrow::ValueDescr& descr) {
-    auto blockType = AS_TYPE(TBlockType, type);
-    descr.shape = blockType->GetShape() == TBlockType::EShape::Scalar ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
-    auto unpacked = UnpackOptional(blockType->GetItemType(), isOptional);
+bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::DataType>& type) {
+    auto unpacked = UnpackOptional(itemType, isOptional);
     if (!unpacked->IsData()) {
         return false;
     }
@@ -24,14 +22,41 @@ bool ConvertInputArrowType(TType* type, bool& isOptional, arrow::ValueDescr& des
 
     switch (*slot) {
     case NUdf::EDataSlot::Bool:
-        descr.type = arrow::boolean();
+        type = arrow::boolean();
+        return true;
+    case NUdf::EDataSlot::Uint8:
+        type = arrow::uint8();
+        return true;
+    case NUdf::EDataSlot::Int8:
+        type = arrow::int8();
+        return true;
+    case NUdf::EDataSlot::Uint16:
+        type = arrow::uint16();
+        return true;
+    case NUdf::EDataSlot::Int16:
+        type = arrow::int16();
+        return true;
+    case NUdf::EDataSlot::Uint32:
+        type = arrow::uint32();
+        return true;
+    case NUdf::EDataSlot::Int32:
+        type = arrow::int32();
+        return true;
+    case NUdf::EDataSlot::Int64:
+        type = arrow::int64();
         return true;
     case NUdf::EDataSlot::Uint64:
-        descr.type = arrow::uint64();
+        type = arrow::uint64();
         return true;
     default:
         return false;
     }
+}
+
+bool ConvertInputArrowType(TType* blockType, bool& isOptional, arrow::ValueDescr& descr) {
+    auto asBlockType = AS_TYPE(TBlockType, blockType);
+    descr.shape = asBlockType->GetShape() == TBlockType::EShape::Scalar ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
+    return ConvertArrowType(asBlockType->GetItemType(), isOptional, descr.type);
 }
 
 class TOutputTypeVisitor : public arrow::TypeVisitor
@@ -43,6 +68,41 @@ public:
 
     arrow::Status Visit(const arrow::BooleanType&) {
         SetDataType(NUdf::EDataSlot::Bool);
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::Int8Type&) {
+        SetDataType(NUdf::EDataSlot::Int8);
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::UInt8Type&) {
+        SetDataType(NUdf::EDataSlot::Uint8);
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::Int16Type&) {
+        SetDataType(NUdf::EDataSlot::Int16);
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::UInt16Type&) {
+        SetDataType(NUdf::EDataSlot::Uint16);
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::Int32Type&) {
+        SetDataType(NUdf::EDataSlot::Int32);
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::UInt32Type&) {
+        SetDataType(NUdf::EDataSlot::Uint32);
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::Int64Type&) {
+        SetDataType(NUdf::EDataSlot::Int64);
         return arrow::Status::OK();
     }
 

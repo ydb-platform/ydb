@@ -4305,6 +4305,7 @@ struct TBlockRules {
 
     static constexpr std::initializer_list<TBlockFuncMap::value_type> FuncsInit = {
         {"+", "add" },
+        {"Not", "invert" },
     };
 
     TBlockRules()

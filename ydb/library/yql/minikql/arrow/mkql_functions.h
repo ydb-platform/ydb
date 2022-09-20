@@ -6,6 +6,7 @@
 namespace NKikimr::NMiniKQL {
 
 bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TType*& outputType, TTypeEnvironment& env);
-bool ConvertInputArrowType(TType* type, bool& isOptional, arrow::ValueDescr& descr);
+bool ConvertInputArrowType(TType* blockType, bool& isOptional, arrow::ValueDescr& descr);
+bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::DataType>& type);
 
 }

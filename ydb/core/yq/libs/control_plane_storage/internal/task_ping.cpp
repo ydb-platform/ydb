@@ -310,7 +310,6 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                 "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
         } else {
-            *counters->GetCounter("RetryCount") = retryLimiter.RetryCount;
             // update pending small
             ttl = TInstant::Now() + backoff;
             writeQueryBuilder.AddTimestamp("now", TInstant::Now());

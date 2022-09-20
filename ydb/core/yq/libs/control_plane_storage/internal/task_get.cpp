@@ -279,8 +279,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             }
             task.RetryCount = taskInternal.RetryLimiter.RetryCount;
 
-            *rootCounters->GetSubgroup("scope", task.Scope)->GetSubgroup("query_id", task.QueryId)->GetCounter("RetryCount") = taskInternal.RetryLimiter.RetryCount;
-
             CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " RetryRate: " << taskInternal.RetryLimiter.RetryRate
                 << " RetryCounter: " << taskInternal.RetryLimiter.RetryCount << " At: " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
                 << (taskInternal.ShouldAbortTask ? " ABORTED" : ""));

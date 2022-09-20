@@ -299,6 +299,7 @@ public:
         LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status));
 
         QueryCounters.SetUptimePublicAndServiceCounter((TInstant::Now() - CreatedAt).Seconds());
+        QueryCounters.Counters->GetCounter("RetryCount", false)->Set(Params.RestartCount);
         LogReceivedParams();
         Pinger = Register(
             CreatePingerActor(

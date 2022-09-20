@@ -4,8 +4,8 @@
 #include "blobstorage_buildslice.h"
 #include "hullop_compactfreshappendix.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_selector.h>
-#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompdelete.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 
 namespace NKikimr {
 

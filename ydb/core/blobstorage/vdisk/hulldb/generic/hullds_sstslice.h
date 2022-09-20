@@ -5,7 +5,7 @@
 #include "hullds_sstvec.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksstmngr.h>
 
-#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompdelete.h>
+#include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 
 namespace NKikimr {
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 
 namespace NKikimr {
 

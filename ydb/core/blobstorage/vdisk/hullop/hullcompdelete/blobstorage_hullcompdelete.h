@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h"
+#include <ydb/core/blobstorage/vdisk/hullop/defs.h>
 
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <library/cpp/monlib/service/pages/templates.h>

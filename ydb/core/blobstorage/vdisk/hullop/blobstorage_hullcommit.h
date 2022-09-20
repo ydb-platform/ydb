@@ -4,7 +4,7 @@
 #include "hullop_entryserialize.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 
 namespace NKikimr {

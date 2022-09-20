@@ -4,7 +4,7 @@
 #include "blobstorage_repl.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 
 namespace NKikimr {
 

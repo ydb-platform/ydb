@@ -2,7 +2,7 @@
 #include "defs.h"
 #include "skeleton_vmultiput_actor.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>

@@ -1,10 +1,10 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/defs.h>
 
 #include <ydb/core/blobstorage/vdisk/hulldb/barriers/hullds_cache_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
-#include "hulldb_bulksst_add.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 
 namespace NKikimr {
 

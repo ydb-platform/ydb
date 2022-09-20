@@ -7,7 +7,7 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/service_yq.h>
-#include <ydb/core/viewer/protos/fq.pb.h>
+#include <ydb/core/public_http/protos/fq.pb.h>
 #include <ydb/core/yq/libs/result_formatter/result_formatter.h>
 
 namespace NKikimr::NPublicHttp {
@@ -53,9 +53,9 @@ void FqConvert(const RepeatedPtrField<T>& src, RepeatedPtrField<U>& dst) {
     }
 }
 
-void FqConvert(const Ydb::Operations::Operation& src, FederatedQueryHttp::Error& dst) {
-    SIMPLE_COPY_FIELD(status);
-    SIMPLE_COPY_MUTABLE_FIELD(issues);
+void FqConvert(const Ydb::Operations::Operation& src, FQHttp::Error& dst) {
+    SIMPLE_COPY_RENAME_FIELD(status, message);
+    SIMPLE_COPY_MUTABLE_RENAME_FIELD(issues, details);
 }
 
 #define FQ_CONVERT_QUERY_CONTENT(srcType, dstType) \
@@ -66,10 +66,10 @@ void FqConvert(const srcType& src, dstType& dst) { \
     SIMPLE_COPY_FIELD(description); \
 }
 
-FQ_CONVERT_QUERY_CONTENT(FederatedQueryHttp::CreateQueryRequest, YandexQuery::QueryContent);
-FQ_CONVERT_QUERY_CONTENT(YandexQuery::QueryContent, FederatedQueryHttp::GetQueryResult);
+FQ_CONVERT_QUERY_CONTENT(FQHttp::CreateQueryRequest, YandexQuery::QueryContent);
+FQ_CONVERT_QUERY_CONTENT(YandexQuery::QueryContent, FQHttp::GetQueryResult);
 
-void FqConvert(const FederatedQueryHttp::CreateQueryRequest& src, YandexQuery::CreateQueryRequest& dst) {
+void FqConvert(const FQHttp::CreateQueryRequest& src, YandexQuery::CreateQueryRequest& dst) {
     FqConvert(src, *dst.mutable_content());
 
     dst.set_execute_mode(YandexQuery::RUN);
@@ -86,43 +86,43 @@ void FqConvert(const FederatedQueryHttp::CreateQueryRequest& src, YandexQuery::C
     content.set_automatic(true);
 }
 
-void FqConvert(const YandexQuery::CreateQueryResult& src, FederatedQueryHttp::CreateQueryResult& dst) {
+void FqConvert(const YandexQuery::CreateQueryResult& src, FQHttp::CreateQueryResult& dst) {
     SIMPLE_COPY_RENAME_FIELD(query_id, id);
 }
 
-void FqConvert(const YandexQuery::CommonMeta& src, FederatedQueryHttp::QueryMeta& dst) {
+void FqConvert(const YandexQuery::CommonMeta& src, FQHttp::QueryMeta& dst) {
     SIMPLE_COPY_MUTABLE_FIELD(created_at);
 }
 
-void FqConvert(const YandexQuery::QueryMeta& src, FederatedQueryHttp::QueryMeta& dst) {
+void FqConvert(const YandexQuery::QueryMeta& src, FQHttp::QueryMeta& dst) {
     SIMPLE_COPY_MUTABLE_FIELD(submitted_at);
     SIMPLE_COPY_MUTABLE_FIELD(finished_at);
     FqConvert(src.common(), dst);
 }
 
-FederatedQueryHttp::GetQueryResult::ComputeStatus RemapQueryStatus(YandexQuery::QueryMeta::ComputeStatus status) {
+FQHttp::GetQueryResult::ComputeStatus RemapQueryStatus(YandexQuery::QueryMeta::ComputeStatus status) {
     switch (status) {
     case YandexQuery::QueryMeta::COMPLETED:
-        return FederatedQueryHttp::GetQueryResult::COMPLETED;
+        return FQHttp::GetQueryResult::COMPLETED;
 
     case YandexQuery::QueryMeta::ABORTED_BY_USER:
         [[fallthrough]];
     case YandexQuery::QueryMeta::ABORTED_BY_SYSTEM:
         [[fallthrough]];
     case YandexQuery::QueryMeta::FAILED:
-        return FederatedQueryHttp::GetQueryResult::FAILED;
+        return FQHttp::GetQueryResult::FAILED;
 
     default:
-        return FederatedQueryHttp::GetQueryResult::RUNNING;
+        return FQHttp::GetQueryResult::RUNNING;
     }
 }
 
-void FqConvert(const YandexQuery::ResultSetMeta& src, FederatedQueryHttp::ResultSetMeta& dst) {
+void FqConvert(const YandexQuery::ResultSetMeta& src, FQHttp::ResultSetMeta& dst) {
     SIMPLE_COPY_FIELD(rows_count);
     SIMPLE_COPY_FIELD(truncated);
 }
 
-void FqConvert(const YandexQuery::Query& src, FederatedQueryHttp::GetQueryResult& dst) {
+void FqConvert(const YandexQuery::Query& src, FQHttp::GetQueryResult& dst) {
     FQ_CONVERT_FIELD(meta);
 
     FqConvert(src.content(), dst);
@@ -137,28 +137,28 @@ void FqConvert(const YandexQuery::Query& src, FederatedQueryHttp::GetQueryResult
     dst.mutable_issues()->MergeFrom(src.transient_issue());
 }
 
-void FqConvert(const FederatedQueryHttp::GetQueryRequest& src, YandexQuery::DescribeQueryRequest& dst) {
+void FqConvert(const FQHttp::GetQueryRequest& src, YandexQuery::DescribeQueryRequest& dst) {
     SIMPLE_COPY_FIELD(query_id);
 }
 
-void FqConvert(const YandexQuery::DescribeQueryResult& src, FederatedQueryHttp::GetQueryResult& dst) {
+void FqConvert(const YandexQuery::DescribeQueryResult& src, FQHttp::GetQueryResult& dst) {
     FqConvert(src.query(), dst);
 }
 
-void FqConvert(const FederatedQueryHttp::GetQueryStatusRequest& src, YandexQuery::GetQueryStatusRequest& dst) {
+void FqConvert(const FQHttp::GetQueryStatusRequest& src, YandexQuery::GetQueryStatusRequest& dst) {
     SIMPLE_COPY_FIELD(query_id);
 }
 
-void FqConvert(const YandexQuery::GetQueryStatusResult& src, FederatedQueryHttp::GetQueryStatusResult& dst) {
+void FqConvert(const YandexQuery::GetQueryStatusResult& src, FQHttp::GetQueryStatusResult& dst) {
     dst.set_status(RemapQueryStatus(src.status()));
 }
 
-void FqConvert(const FederatedQueryHttp::StopQueryRequest& src, YandexQuery::ControlQueryRequest& dst) {
+void FqConvert(const FQHttp::StopQueryRequest& src, YandexQuery::ControlQueryRequest& dst) {
     SIMPLE_COPY_FIELD(query_id);
     dst.set_action(YandexQuery::ABORT);
 }
 
-void FqConvert(const FederatedQueryHttp::GetResultDataRequest& src, YandexQuery::GetResultDataRequest& dst) {
+void FqConvert(const FQHttp::GetResultDataRequest& src, YandexQuery::GetResultDataRequest& dst) {
     SIMPLE_COPY_FIELD(query_id);
     SIMPLE_COPY_FIELD(result_set_index);
     SIMPLE_COPY_FIELD(offset);
@@ -169,7 +169,7 @@ void FqConvert(const FederatedQueryHttp::GetResultDataRequest& src, YandexQuery:
     }
 }
 
-void FqConvert(const YandexQuery::GetResultDataResult& src, FederatedQueryHttp::GetResultDataResult& dst) {
+void FqConvert(const YandexQuery::GetResultDataResult& src, FQHttp::GetResultDataResult& dst) {
     SIMPLE_COPY_MUTABLE_FIELD(result_set);
 }
 
@@ -178,7 +178,7 @@ void FqPackToJson(TStringStream& json, const T& httpResult, const TJsonSettings&
     TProtoToJson::ProtoToJson(json, httpResult, jsonSettings);
 }
 
-void FqPackToJson(TStringStream& json, const FederatedQueryHttp::GetResultDataResult& httpResult, const TJsonSettings&) {
+void FqPackToJson(TStringStream& json, const FQHttp::GetResultDataResult& httpResult, const TJsonSettings&) {
     auto resultSet = NYdb::TResultSet(httpResult.result_set());
     NJson::TJsonValue v;
     NYq::FormatResultSet(v, resultSet, true, true);
@@ -304,7 +304,7 @@ public:
         auto* typedResponse = static_cast<TGrpcProtoResponseType*>(resp);
         if (!typedResponse->operation().result().template Is<TGrpcProtoResultType>()) {
             TStringStream json;
-            auto* httpResult = google::protobuf::Arena::CreateMessage<FederatedQueryHttp::Error>(resp->GetArena());
+            auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());
             FqConvert(typedResponse->operation(), *httpResult);
             FqPackToJson(json, *httpResult, jsonSettings);
 
@@ -337,8 +337,8 @@ public:                                                                         
       :  TBase(request, &NGRpcService::Create##internalAction##RequestOperationCall) {}  \
 }
 
-#define DECLARE_YQ_GRPC_ACTOR(action, internalAction) DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, YandexQuery::internalAction##Request, FederatedQueryHttp::action##Request, YandexQuery::internalAction##Result, FederatedQueryHttp::action##Result, YandexQuery::internalAction##Response)
-#define DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(action, internalAction) DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, YandexQuery::internalAction##Request, FederatedQueryHttp::action##Request, YandexQuery::internalAction##Result, ::google::protobuf::Empty, YandexQuery::internalAction##Response)
+#define DECLARE_YQ_GRPC_ACTOR(action, internalAction) DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, YandexQuery::internalAction##Request, FQHttp::action##Request, YandexQuery::internalAction##Result, FQHttp::action##Result, YandexQuery::internalAction##Response)
+#define DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(action, internalAction) DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, YandexQuery::internalAction##Request, FQHttp::action##Request, YandexQuery::internalAction##Result, ::google::protobuf::Empty, YandexQuery::internalAction##Response)
 
 DECLARE_YQ_GRPC_ACTOR(CreateQuery, CreateQuery);
 DECLARE_YQ_GRPC_ACTOR(GetQuery, DescribeQuery);

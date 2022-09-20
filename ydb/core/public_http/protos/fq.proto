@@ -1,0 +1,105 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package FQHttp;
+
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/protos/yq.proto";
+
+////////////////////////////////////////////////////////////
+
+message Error {
+    Ydb.StatusIds.StatusCode message = 1;
+    repeated Ydb.Issue.IssueMessage details = 2;
+}
+
+message QueryMeta {
+    google.protobuf.Timestamp created_at = 1;
+    google.protobuf.Timestamp submitted_at = 2;
+    google.protobuf.Timestamp finished_at = 3;
+}
+
+message Column {
+    string name = 1;
+    string type = 2;
+}
+
+message ResultSetMeta {
+    int64 rows_count = 1 [(Ydb.value) = ">= 0"];
+    bool truncated = 2;
+}
+
+message CreateQueryRequest {
+    YandexQuery.QueryContent.QueryType type = 1;
+    string name = 2 [(Ydb.length).le = 1024];
+    string text = 3 [(Ydb.length).le = 102400]; // The text of the query itself
+    string description = 4 [(Ydb.length).le = 10240]; // Description of the query, there can be any text
+}
+
+message CreateQueryResult {
+    string id = 1 [(Ydb.length).le = 1024];
+}
+
+message GetQueryRequest {
+    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+}
+
+message GetQueryResult {
+    enum ComputeStatus {
+        COMPUTE_STATUS_UNSPECIFIED = 0;
+        RUNNING = 1;
+        COMPLETED = 2;
+        FAILED = 3;
+    }
+
+    string id = 1;
+    YandexQuery.QueryContent.QueryType type = 2;
+    string name = 3 [(Ydb.length).le = 1024];
+    string description = 4 [(Ydb.length).le = 10240]; // Description of the query, there can be any text
+    ComputeStatus status = 5;
+    string text = 6 [(Ydb.length).le = 102400]; // The text of the query itself
+    QueryMeta meta = 7;
+    repeated Ydb.Issue.IssueMessage issues = 8;
+    repeated ResultSetMeta result_sets = 9;
+}
+
+message GetQueryStatusRequest {
+    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+}
+
+message GetQueryStatusResult {
+    GetQueryResult.ComputeStatus status = 1;
+}
+
+message DeleteQueryRequest {
+    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+}
+
+message DeleteQueryResult {
+}
+
+message StopQueryRequest {
+    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+}
+
+message StopQueryResult {
+}
+
+message GetResultDataRequest {
+    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+    int32 result_set_index = 2 [(Ydb.value) = ">= 0"];
+    int64 offset = 3 [(Ydb.value) = ">= 0"];
+    int64 limit = 4 [(Ydb.value) = "[1; 1000]"];
+}
+
+message RowData {
+    repeated string data = 1;
+}
+
+message GetResultDataResult {
+    Ydb.ResultSet result_set = 1;
+}

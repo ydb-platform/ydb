@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 
 add_library(ydb-core-public_http)
 target_compile_options(ydb-core-public_http PRIVATE
@@ -21,8 +22,8 @@ target_link_libraries(ydb-core-public_http PUBLIC
   ydb-core-http_proxy
   core-grpc_services-local_rpc
   ydb-core-protos
+  core-public_http-protos
   core-viewer-json
-  core-viewer-protos
   yq-libs-result_formatter
   yql-public-issue
 )

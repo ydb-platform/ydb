@@ -155,6 +155,11 @@ TBinaryJsonReader::TBinaryJsonReader(TStringBuf buffer)
         << "does not match current version `" << static_cast<ui64>(CURRENT_VERSION) << "`"
     );
 
+    Y_ENSURE(
+        Header.StringOffset < Buffer.Size(),
+        "StringOffset must be inside buffer"
+    );
+
     // Tree starts right after Header
     TreeStart = sizeof(Header);
 
@@ -193,12 +198,14 @@ const TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
         startOffset = previousEntry.Value;
     }
     const auto entry = ReadPOD<TSEntry>(offset);
-    const auto endOffset = entry.Value - 1;
+    const ui32 endOffset = entry.Value - 1;
+    Y_ENSURE(startOffset <= endOffset && startOffset <= Buffer.Size() && endOffset <= Buffer.Size(), "Incorrect string bounds");
     return TStringBuf(Buffer.Data() + startOffset, endOffset - startOffset);
 }
 
 double TBinaryJsonReader::ReadNumber(ui32 offset) const {
     double result;
+    Y_ENSURE(offset <= Buffer.Size() && offset + sizeof(result) <= Buffer.Size(), "Incorrect number bounds");
     MemCopy(reinterpret_cast<char*>(&result), Buffer.Data() + offset, sizeof(result));
     return result;
 }

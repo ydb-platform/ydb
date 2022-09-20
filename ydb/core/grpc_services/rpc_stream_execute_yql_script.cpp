@@ -205,7 +205,7 @@ private:
         }
     }
 
-    void SendDataQueryResultPart() {
+    void SendDataQueryResultPart(const TActorContext& ctx) {
         ++ResultsReceived_;
         const auto& kqpResult = *DataQueryStreamContext->ResultIterator;
 
@@ -213,7 +213,12 @@ private:
         response.set_status(StatusIds::SUCCESS);
         auto result = response.mutable_result();
 
-        ConvertKqpQueryResultToDbResult(kqpResult, result->mutable_result_set());
+        try {
+            ConvertKqpQueryResultToDbResult(kqpResult, result->mutable_result_set());
+        } catch (std::exception ex) {
+            ReplyFinishStream(ex.what(), ctx);
+        }
+
         result->set_result_set_index(ResultsReceived_ - 1);
 
         TString out;
@@ -240,7 +245,7 @@ private:
 
         DataQueryStreamContext = MakeHolder<TDataQueryStreamContext>(ev);
 
-        SendDataQueryResultPart();
+        SendDataQueryResultPart(ctx);
     }
 
     // From TKqpScanQueryStreamRequestHandler
@@ -308,7 +313,7 @@ private:
             //DataQuery in progress
             if (++DataQueryStreamContext->ResultIterator != DataQueryStreamContext->Handle->Get()->Record.GetResults().end()) {
                 // Send next ResultSet to client
-                return SendDataQueryResultPart();
+                return SendDataQueryResultPart(ctx);
             } else {
                 // Send ack to gateway request handler actor
                 auto resp = MakeHolder<NKqp::TEvKqp::TEvDataQueryStreamPartAck>();

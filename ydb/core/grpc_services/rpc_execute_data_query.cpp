@@ -222,24 +222,31 @@ public:
             const auto& issueMessage = kqpResponse.GetQueryIssues();
 
             auto queryResult = TEvExecuteDataQueryRequest::AllocateResult<Ydb::Table::ExecuteQueryResult>(Request_);
-            ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
-            ConvertQueryStats(kqpResponse, queryResult);
-            if (kqpResponse.HasTxMeta()) {
-                queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());
-            }
-            if (!kqpResponse.GetPreparedQuery().empty()) {
-                auto& queryMeta = *queryResult->mutable_query_meta();
-                Ydb::TOperationId opId;
-                opId.SetKind(TOperationId::PREPARED_QUERY_ID);
-                AddOptionalValue(opId, "id", kqpResponse.GetPreparedQuery());
-                queryMeta.set_id(ProtoToString(opId));
 
-                const auto& queryParameters = kqpResponse.GetQueryParameters();
-                for (const auto& queryParameter: queryParameters) {
-                    Ydb::Type parameterType;
-                    ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType);
-                    queryMeta.mutable_parameters_types()->insert({queryParameter.GetName(), parameterType});
+            try {
+                ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+                ConvertQueryStats(kqpResponse, queryResult);
+                if (kqpResponse.HasTxMeta()) {
+                    queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());
                 }
+                if (!kqpResponse.GetPreparedQuery().empty()) {
+                    auto& queryMeta = *queryResult->mutable_query_meta();
+                    Ydb::TOperationId opId;
+                    opId.SetKind(TOperationId::PREPARED_QUERY_ID);
+                    AddOptionalValue(opId, "id", kqpResponse.GetPreparedQuery());
+                    queryMeta.set_id(ProtoToString(opId));
+
+                    const auto& queryParameters = kqpResponse.GetQueryParameters();
+                    for (const auto& queryParameter: queryParameters) {
+                        Ydb::Type parameterType;
+                        ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType);
+                        queryMeta.mutable_parameters_types()->insert({queryParameter.GetName(), parameterType});
+                    }
+                }
+            } catch (const std::exception& ex) {
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::ExceptionToIssue(ex));
+                return Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
             }
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *queryResult, ctx);

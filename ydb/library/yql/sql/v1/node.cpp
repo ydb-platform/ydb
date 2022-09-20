@@ -293,6 +293,10 @@ const TString* INode::ModuleName() const {
     return nullptr;
 }
 
+bool INode::HasSkip() const {
+    return false;
+}
+
 void INode::VisitTree(const TVisitFunc& func) const {
     TVisitNodeSet visited;
     VisitTree(func, visited);

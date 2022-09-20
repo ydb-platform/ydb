@@ -624,3 +624,7 @@ ids {
   code: YT_FOLDER_INPUT_IS_NOT_A_FOLDER
   severity: S_ERROR
 }
+ids {
+  code: YQL_OFFSET_WITHOUT_SORT
+  severity: S_WARNING
+}

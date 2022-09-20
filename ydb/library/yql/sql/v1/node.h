@@ -169,6 +169,7 @@ namespace NSQLTranslationV1 {
         virtual bool IsSelect() const;
         virtual const TString* FuncName() const;
         virtual const TString* ModuleName() const;
+        virtual bool HasSkip() const;
 
         using TVisitFunc = std::function<bool (const INode&)>;
         using TVisitNodeSet = std::unordered_set<const INode*>;

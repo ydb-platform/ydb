@@ -2697,7 +2697,7 @@ TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISour
 class TSkipTakeNode final: public TAstListNode {
 public:
     TSkipTakeNode(TPosition pos, const TNodePtr& skip, const TNodePtr& take)
-        : TAstListNode(pos)
+        : TAstListNode(pos), IsSkipProvided_(!!skip)
     {
         TNodePtr select(AstNode("select"));
         if (skip) {
@@ -2710,6 +2710,12 @@ public:
     TPtr DoClone() const final {
         return {};
     }
+
+    bool HasSkip() const {
+        return IsSkipProvided_;
+    }
+private:
+    const bool IsSkipProvided_;
 };
 
 TNodePtr BuildSkipTake(TPosition pos, const TNodePtr& skip, const TNodePtr& take) {
@@ -2742,6 +2748,9 @@ public:
             FakeSource = BuildFakeSource(SkipTake->GetPos());
             if (!SkipTake->Init(ctx, FakeSource.Get())) {
                 return false;
+            }
+            if (SkipTake->HasSkip() && EOrderKind::Sort != Source->GetOrderKind()) {
+                ctx.Warning(Source->GetPos(), TIssuesIds::YQL_OFFSET_WITHOUT_SORT) << "LIMIT with OFFSET without ORDER BY may provide different results from run to run";
             }
         }
 

@@ -138,6 +138,7 @@ message TIssuesIds {
         YQL_UNUSED_HINT = 4534;
         YQL_DEPRECATED_POSITIONAL_SCHEMA = 4535;
         YQL_DUPLICATE_DECLARE = 4536;
+        YQL_OFFSET_WITHOUT_SORT = 4537;
 
 // yql parser errors
         YQL_NOT_ALLOWED_IN_DISCOVERY = 4600;

@@ -9,24 +9,36 @@
 
 namespace NYql::NDq {
 
-TString ParseS3ErrorResponse(long httpCode, const TString& response) {
-    TStringBuilder str;
-    str << "HTTP response code: " << httpCode ;
+bool ParseS3ErrorResponse(const TString& response, TString& errorCode, TString& message) {
     try {
         const NXml::TDocument xml(response, NXml::TDocument::String);
         if (const auto& root = xml.Root(); root.Name() == "Error") {
-            const auto& code = root.Node("Code", true).Value<TString>();
-            const auto& message = root.Node("Message", true).Value<TString>();
-            str << ", " << message << ", error code: " << code;
-        } else {
-            str << Endl << response;
+            auto tmpMessage = root.Node("Message", true).Value<TString>();
+            errorCode = root.Node("Code", true).Value<TString>();
+            message = tmpMessage;
+            return true;
         }
     }
     catch (std::exception&) {
-        str << Endl << response;
+        // just suppress any possible errors
+    }
+    return false;
+}
+
+TIssues BuildIssues(long httpCode, const TString& s3ErrorCode, const TString& message) {
+
+    TIssues issues;
+
+    if (httpCode) {
+        issues.AddIssue(TStringBuilder() << "HTTP Code: " << httpCode);
+    }
+    if (s3ErrorCode) {
+        issues.AddIssue(TStringBuilder() << "Object Storage Code: " << s3ErrorCode << ", " << message);
+    } else {
+        issues.AddIssue(message);
     }
 
-    return str;
+    return issues;
 }
 
 }

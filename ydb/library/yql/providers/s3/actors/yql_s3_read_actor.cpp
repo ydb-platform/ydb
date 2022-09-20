@@ -267,7 +267,13 @@ private:
             Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), id));
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         } else {
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, {TIssue(ParseS3ErrorResponse(httpCode, result->Get()->Result.Extract()))}, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            TString errorText = result->Get()->Result.Extract();
+            TString errorCode;
+            TString message;
+            if (!ParseS3ErrorResponse(errorText, errorCode, message)) {
+                message = errorText;
+            }
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, BuildIssues(httpCode, errorCode, message), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         }
     }
 
@@ -506,14 +512,19 @@ private:
             // Finish reading. Add error from server to issues
         } catch (const std::exception& err) {
             exceptIssue.Message = TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what();
-            fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+            fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
 
         WaitFinish();
 
         if (!ErrorText.empty()) {
-            Issues.AddIssues({TIssue(ParseS3ErrorResponse(HttpResponseCode, ErrorText))});
+            TString errorCode;
+            TString message;
+            if (!ParseS3ErrorResponse(ErrorText, errorCode, message)) {
+                message = ErrorText;
+            }
+            Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));
         }
 
         if (exceptIssue.Message) {

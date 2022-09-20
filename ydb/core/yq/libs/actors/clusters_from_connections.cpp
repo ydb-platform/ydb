@@ -81,11 +81,9 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
         auto solomonEndpointForTest = GetEnv("SOLOMON_ENDPOINT");
         auto solomonEndpoint = solomonEndpointForTest ? TString(solomonEndpointForTest) : TString();
         if (solomonEndpoint.empty()) {
-            if (name.StartsWith("pre")) {
+            if (name.StartsWith("__pre")) {
                 solomonEndpoint = "monitoring.api.cloud-preprod.yandex.net";
                 clusterConfig.SetUseSsl(true);
-            } else if (name.StartsWith("so")) {
-                solomonEndpoint = "solomon.yandex.net";
             } else {
                 solomonEndpoint = "monitoring.api.cloud.yandex.net";
                 clusterConfig.SetUseSsl(true);

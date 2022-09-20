@@ -314,6 +314,7 @@ class TClientCommandTenantCreate
                                       decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase),
                                       &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase> {
     TVector<TString> Attributes;
+    bool Shared = false;
     bool Serverless = false;
 
 public:
@@ -329,6 +330,8 @@ public:
             .NoArgument();
         config.Opts->AddLongOption("attr", "Attach attribute name=value to database")
             .RequiredArgument("NAME=VALUE").AppendTo(&Attributes);
+        config.Opts->AddLongOption("shared", "Create a shared database")
+            .NoArgument().StoreTrue(&Shared);
         config.Opts->AddLongOption("serverless", "Create a serverless database (free arg must specify shared database for resources)")
             .NoArgument().StoreTrue(&Serverless);
         config.SetFreeArgsMin(1);
@@ -350,6 +353,13 @@ public:
             (*GRpcRequest.mutable_attributes())[items[0]] = items[1];
         }
 
+        Ydb::Cms::Resources* resources;
+
+        if (Shared) {
+            resources = GRpcRequest.mutable_shared_resources();
+        } else {
+            resources = GRpcRequest.mutable_resources();
+        }
         if (Serverless) {
             const auto& args = config.ParseResult->GetFreeArgs();
             if (args.size() != 1)
@@ -361,7 +371,7 @@ public:
         TVector<std::pair<TString, ui64>> pools;
         ParseStoragePools(config, pools);
         for (auto &pool : pools) {
-            auto &protoPool = *GRpcRequest.mutable_resources()->add_storage_units();
+            auto &protoPool = *resources->add_storage_units();
             protoPool.set_unit_kind(pool.first);
             protoPool.set_count(pool.second);
         }

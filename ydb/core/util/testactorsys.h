@@ -468,29 +468,26 @@ public:
     }
 
     bool HasImmediateEvents() const {
-        if (ScheduleQ.empty()) {
-            return false;
+        for (const auto& [timestamp, items] : ScheduleQ) {
+            if (!items.empty()) {
+                return timestamp == Clock;
+            }
         }
-        const auto& [ts, _] = *ScheduleQ.begin();
-        return ts <= Clock;
+        return false;
     }
 
     template<typename TCallback>
     void Sim(TCallback&& callback, std::function<void(IEventHandle&)> witness = {}) {
-        bool progress = true;
-
         while (callback()) {
-            Y_VERIFY(progress, "test actor system stalled -- no progress made"); // ensure we are doing progress
-
             // obtain event with least time
             std::optional<TScheduleItem> item;
             while (!ScheduleQ.empty()) {
                 const auto it = ScheduleQ.begin();
                 auto& [timestamp, items] = *it;
-                Y_VERIFY(timestamp >= Clock || items.empty());
                 if (items.empty()) {
                     ScheduleQ.erase(it);
                 } else {
+                    Y_VERIFY(Clock <= timestamp);
                     Clock = timestamp;
                     item.emplace(std::move(items.front()));
                     items.pop_front();
@@ -498,8 +495,11 @@ public:
                 }
             }
 
-            progress = item.has_value();
-            if (!item || (item->Cookie && !item->Cookie->Detach())) {
+            if (!item) {
+                Y_FAIL("test actor system stalled -- no progress made"); // ensure we are doing progress
+            }
+
+            if (item->Cookie && !item->Cookie->Detach()) { // item is not relevant anymore
                 continue;
             }
 
@@ -507,7 +507,7 @@ public:
             if (witness) {
                 witness(*event);
             }
-            if (FilterFunction && !FilterFunction(item->NodeId, event)) {
+            if (FilterFunction && !FilterFunction(item->NodeId, event)) { // event is dropped by the filter function
                 continue;
             }
             WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor) {
@@ -608,6 +608,16 @@ public:
             edge->StopWaitingForEvent();
         }
         return res;
+    }
+
+    template<typename TEvent>
+    std::unique_ptr<TEventHandle<TEvent>> WaitForEdgeActorEvent(const TActorId& edgeActorId, bool termOnCapture = true) {
+        auto ev = WaitForEdgeActorEvent({edgeActorId});
+        Y_VERIFY(ev->GetTypeRewrite() == TEvent::EventType, "unexpected Event# 0x%08" PRIx32, ev->GetTypeRewrite());
+        if (termOnCapture) {
+            DestroyActor(edgeActorId);
+        }
+        return std::unique_ptr<TEventHandle<TEvent>>(reinterpret_cast<TEventHandle<TEvent>*>(ev.release()));
     }
 
     void DestroyActor(TActorId actorId) {

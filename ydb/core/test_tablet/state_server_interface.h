@@ -9,7 +9,18 @@ namespace NKikimr::NTestShard {
         return TActorId(0, TStringBuf("StateServerI", 12));
     }
 
-    IActor *CreateStateServerInterfaceActor();
+    struct TTestShardContext : TSimpleRefCount<TTestShardContext> {
+        class TData;
+        std::unique_ptr<TData> Data;
+
+        TTestShardContext();
+        ~TTestShardContext();
+
+        using TPtr = TIntrusivePtr<TTestShardContext>;
+        static TPtr Create();
+    };
+
+    IActor *CreateStateServerInterfaceActor(TTestShardContext::TPtr context);
 
     struct TEvStateServerConnect : TEventLocal<TEvStateServerConnect, TEvTestShard::EvStateServerConnect> {
         const TString Host;

@@ -13,6 +13,7 @@ namespace NKikimr::NTestShard {
     {}
 
     void TLoadActor::Bootstrap(const TActorId& parentId) {
+        STLOG(PRI_DEBUG, TEST_SHARD, TS31, "TLoadActor::Bootstrap", (TabletId, TabletId));
         TabletActorId = parentId;
         Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
             Settings.GetStorageServerPort()));

@@ -4,7 +4,7 @@
 namespace NKikimr::NTestShard {
 
     IActor *CreateTestShard(const TActorId& tablet, TTabletStorageInfo *info) {
-        return new NTestShard::TTestShard(tablet, info);
+        return new TTestShard(tablet, info);
     }
 
 } // NKikimr::NTestShard

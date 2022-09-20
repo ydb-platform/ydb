@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "events.h"
+#include "test_shard_context.h"
 
 namespace NKikimr::NTestShard {
 

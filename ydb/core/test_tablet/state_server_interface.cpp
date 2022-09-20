@@ -2,7 +2,7 @@
 
 namespace NKikimr::NTestShard {
 
-    class TStateServerInterfaceActor : public TActorBootstrapped<TStateServerInterfaceActor> {
+    class TStateServerInterfaceActor : public TActor<TStateServerInterfaceActor> {
         struct TServerContext : TThrRefBase {
             const TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             const TString Host;
@@ -181,14 +181,17 @@ namespace NKikimr::NTestShard {
         std::unordered_map<std::pair<TString, i32>, TServerContext::TPtr> HostMap;
         std::unordered_map<int, TServerContext::TPtr> SocketMap;
 
+        TTestShardContext::TPtr Context;
+
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::STATE_SERVER_INTERFACE_ACTOR;
         }
 
-        void Bootstrap() {
-            Become(&TThis::StateFunc);
-        }
+        TStateServerInterfaceActor(TTestShardContext::TPtr context)
+            : TActor(&TThis::StateFunc)
+            , Context(std::move(context))
+        {}
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvStateServerConnect, Handle);
@@ -200,6 +203,11 @@ namespace NKikimr::NTestShard {
         )
 
         void Handle(TEvStateServerConnect::TPtr ev) {
+            if (Context) {
+                Send(ev->Sender, new TEvStateServerStatus(true));
+                return;
+            }
+
             auto *msg = ev->Get();
             const auto& key = std::make_pair(msg->Host, msg->Port);
             auto& ctx = HostMap[key];
@@ -217,6 +225,10 @@ namespace NKikimr::NTestShard {
         }
 
         void Handle(TEvStateServerDisconnect::TPtr ev) {
+            if (Context) {
+                return;
+            }
+
             const auto it = Servers.find(ev->Sender);
             Y_VERIFY(it != Servers.end());
             const size_t num = it->second->Subscribers.erase(ev->Sender);
@@ -257,6 +269,11 @@ namespace NKikimr::NTestShard {
         }
 
         void Handle(TEvStateServerRequest::TPtr ev) {
+            if (Context) {
+                Context->Data->Action(SelfId(), ev);
+                return;
+            }
+
             const auto it = Servers.find(ev->Sender);
             Y_VERIFY(it != Servers.end());
             it->second->Push(ev);
@@ -264,8 +281,8 @@ namespace NKikimr::NTestShard {
         }
     };
 
-    IActor *CreateStateServerInterfaceActor() {
-        return new TStateServerInterfaceActor();
+    IActor *CreateStateServerInterfaceActor(TTestShardContext::TPtr context) {
+        return new TStateServerInterfaceActor(std::move(context));
     }
 
 } // NKikimr::NTestShard

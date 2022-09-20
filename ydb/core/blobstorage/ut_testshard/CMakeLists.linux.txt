@@ -7,24 +7,26 @@
 
 
 
-add_library(blobstorage-ut_blobstorage-lib)
-target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
+add_executable(ydb-core-blobstorage-ut_testshard)
+target_link_libraries(ydb-core-blobstorage-ut_testshard PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-digest-md5
-  cpp-testing-unittest
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
   ydb-core-base
   ydb-core-blob_depot
   core-blobstorage-backpressure
   blobstorage-dsproxy-mock
   core-blobstorage-nodewarden
-  core-blobstorage-pdisk
   blobstorage-pdisk-mock
   blobstorage-vdisk-common
   ydb-core-mind
   core-mind-bscontroller
   core-mind-hive
   core-sys_view-service
+  ydb-core-test_tablet
   core-tx-scheme_board
   core-tx-tx_allocator
   core-tx-mediator
@@ -32,9 +34,30 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   ydb-core-util
   udf-service-stub
   yql-sql-pg_dummy
+  cpp-testing-unittest
 )
-target_sources(blobstorage-ut_blobstorage-lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_bsc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_pipe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_state.cpp
+target_link_options(ydb-core-blobstorage-ut_testshard PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
+target_sources(ydb-core-blobstorage-ut_testshard PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_testshard/main.cpp
+)
+add_test(
+  NAME
+  ydb-core-blobstorage-ut_testshard
+  COMMAND
+  ydb-core-blobstorage-ut_testshard
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-blobstorage-ut_testshard)

@@ -32,6 +32,7 @@ namespace NKikimr::NTestShard {
         void Complete(const TActorContext& ctx) override {
             ctx.Send(Sender, new TEvControlResponse, 0, Cookie);
             Self->Settings = Cmd;
+            STLOG(PRI_DEBUG, TEST_SHARD, TS30, "TTxInitialize::Complete", (TabletId, Self->TabletID()));
             Self->StartActivities();
         }
     };

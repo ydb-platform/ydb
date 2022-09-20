@@ -1019,7 +1019,7 @@ void TLocalServiceInitializer::InitializeServices(
                        TMailboxType::ReadAsFilled, 0)));
 
     setup->LocalServices.emplace_back(NTestShard::MakeStateServerInterfaceActorId(), TActorSetupCmd(
-        NTestShard::CreateStateServerInterfaceActor(), TMailboxType::ReadAsFilled, 0));
+        NTestShard::CreateStateServerInterfaceActor(nullptr), TMailboxType::ReadAsFilled, 0));
 
     NKesus::AddKesusProbesList();
 }

@@ -45,6 +45,36 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
     return {};
 }
 
+TString GetExtension(const std::string_view& format, const std::string_view& compression) {
+    static const std::unordered_map<std::string_view, std::string_view> formatsMap = {
+        {"csv_with_names"sv, "csv"sv},
+        {"tsv_with_names"sv, "tsv"sv},
+        {"raw"sv, "bin"sv},
+        {"json_list"sv, "json"sv},
+        {"json_each_row"sv, "json"sv},
+        {"parquet"sv, "parquet"sv}
+    };
+
+    static const std::unordered_map<std::string_view, std::string_view> compressionsMap = {
+        {"gzip"sv, "gz"sv},
+        {"zstd"sv, "zst"sv},
+        {"lz4"sv, "lz4"sv},
+        {"bzip2"sv, "bz2"sv},
+        {"brotli"sv, "br"sv},
+        {"xz"sv, "xz"sv}
+    };
+
+    TStringBuilder extension;
+    if (const auto it = formatsMap.find(format); formatsMap.cend() != it) {
+        extension << '.' << it->second;
+    }
+
+    if (const auto it = compressionsMap.find(compression); compressionsMap.cend() != it) {
+        extension << '.' << it->second;
+    }
+    return extension;
+}
+
 class TS3PhysicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
     explicit TS3PhysicalOptProposalTransformer(TS3State::TPtr state)
@@ -67,7 +97,10 @@ public:
         auto sinkSettingsBuilder = Build<TExprList>(ctx, targetNode.Pos());
         if (partBy)
             sinkSettingsBuilder.Add(std::move(partBy));
-        if (auto compression = GetCompression(write.Target().Settings().Ref()))
+
+        auto compression = GetCompression(write.Target().Settings().Ref());
+        const auto& extension = GetExtension(write.Target().Format().Value(), compression ? compression->Tail().Content() : ""sv);
+        if (compression)
             sinkSettingsBuilder.Add(std::move(compression));
 
         if (!FindNode(write.Input().Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
@@ -98,6 +131,7 @@ public:
                                         .Token<TCoSecureParam>()
                                             .Name().Build(token)
                                             .Build()
+                                        .Extension().Value(extension).Build()
                                         .Build()
                                     .Build()
                                 .Build()
@@ -145,6 +179,7 @@ public:
                                         .Token<TCoSecureParam>()
                                             .Name().Build(token)
                                             .Build()
+                                        .Extension().Value(extension).Build()
                                         .Build()
                                     .Build()
                                 .Build()
@@ -177,6 +212,7 @@ public:
                 .Token<TCoSecureParam>()
                     .Name().Build(token)
                     .Build()
+                .Extension().Value(extension).Build()
                 .Build()
             .Done();
 

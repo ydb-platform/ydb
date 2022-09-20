@@ -291,6 +291,7 @@ public:
             sinkDesc.SetUrl(connect.Url);
             sinkDesc.SetToken(settings.Token().Name().StringValue());
             sinkDesc.SetPath(settings.Path().StringValue());
+            sinkDesc.SetExtension(settings.Extension().StringValue());
             for (const auto& key : GetKeys(settings.Settings().Ref()))
                 sinkDesc.MutableKeys()->Add(TString(key->Content()));
 

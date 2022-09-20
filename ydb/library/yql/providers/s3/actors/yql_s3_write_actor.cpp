@@ -371,6 +371,7 @@ public:
         IRandomProvider* randomProvider,
         const TString& url,
         const TString& path,
+        const TString& extension,
         const std::vector<TString>& keys,
         const size_t memoryLimit,
         const size_t maxFileSize,
@@ -387,6 +388,7 @@ public:
         , Callbacks(callbacks)
         , Url(url)
         , Path(path)
+        , Extension(extension)
         , Keys(keys)
         , MemoryLimit(memoryLimit)
         , MaxFileSize(maxFileSize)
@@ -444,7 +446,7 @@ private:
             const auto& key = MakePartitionKey(v);
             const auto ins = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
             if (ins.second || ins.first->second.empty() || ins.first->second.back()->IsFinishing()) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeOutputName(), MaxFileSize, Compression, RetryPolicy);
+                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeOutputName() + Extension, MaxFileSize, Compression, RetryPolicy);
                 ins.first->second.emplace_back(fileWrite.get());
                 RegisterWithSameMailbox(fileWrite.release());
             }
@@ -465,7 +467,7 @@ private:
 
         auto statusCode = result->Get()->StatusCode;
         if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
-            
+
             // add err code analysis here
 
             if (result->Get()->S3ErrorCode == "BucketMaxSizeExceeded") {
@@ -530,6 +532,7 @@ private:
 
     const TString Url;
     const TString Path;
+    const TString Extension;
     const std::vector<TString> Keys;
 
     const size_t MemoryLimit;
@@ -566,6 +569,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         credentialsProviderFactory->CreateProvider(),
         randomProvider, params.GetUrl(),
         params.GetPath(),
+        params.HasExtension() ? params.GetExtension() : "",
         std::vector<TString>(params.GetKeys().cbegin(), params.GetKeys().cend()),
         params.HasMemoryLimit() ? params.GetMemoryLimit() : 1_GB,
         params.HasMaxFileSize() ? params.GetMaxFileSize() : 50_MB,

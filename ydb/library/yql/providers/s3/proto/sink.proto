@@ -11,4 +11,5 @@ message TSink {
     optional string Compression = 5;
     optional uint64 MemoryLimit = 6;
     optional uint64 MaxFileSize = 7;
+    optional string Extension = 8;
 }

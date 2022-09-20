@@ -653,7 +653,7 @@ private:
                         break;
                     }
                     if (group)
-                        group->GetNamedCounter("name", "count", true)->Inc();
+                        group->GetCounter("count", true)->Inc();
                 }
 
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {

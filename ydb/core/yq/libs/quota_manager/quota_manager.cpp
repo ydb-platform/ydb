@@ -104,7 +104,7 @@ TString ToString(const std::vector<ui32>& v) {
     return builder;
 }
 
-TString ToString(const TQuotaMap& quota){
+TString ToString(const TQuotaMap& quota) {
     if (quota.empty()) {
         return "{}";
     }
@@ -120,7 +120,7 @@ TString ToString(const TQuotaMap& quota){
     return builder;
 }
 
-TString ToString(const THashMap<TString, TQuotaCachedUsage>& usageMap){
+TString ToString(const THashMap<TString, TQuotaCachedUsage>& usageMap) {
     if (usageMap.empty()) {
         return "{}";
     }
@@ -193,11 +193,12 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvQuotaService::TQuotaGetRequest, Handle)
+        hFunc(TEvQuotaService::TQuotaGetResponse, Handle) // http monitoring
         hFunc(TEvQuotaService::TQuotaChangeNotification, Handle)
         hFunc(TEvQuotaService::TQuotaUsageResponse, Handle)
         hFunc(TEvQuotaService::TQuotaLimitChangeResponse, Handle)
         hFunc(TEvQuotaService::TQuotaSetRequest, Handle)
-        hFunc(TEvQuotaService::TQuotaSetResponse, Handle)
+        hFunc(TEvQuotaService::TQuotaSetResponse, Handle) // http monitoring
         hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
         hFunc(NActors::TEvInterconnect::TEvNodesInfo, Handle)
         hFunc(TEvQuotaService::TEvQuotaUpdateNotification, Handle)
@@ -706,12 +707,55 @@ private:
         html << "</tr></thead><tbody>";
         html << "<tr><td>Subject Type:</td><td>" << ev->Get()->SubjectType << "</td></tr>";
         html << "<tr><td>Subject ID:</td><td>" << ev->Get()->SubjectId << "</td></tr>";
-        for (auto& limit : ev->Get()->Limits) {
+        for (const auto& limit : ev->Get()->Limits) {
             html << "<tr><td>" << limit.first << "</td><td>" << limit.second << "</td></tr>";
         }
         html << "</tbody></table>";
 
         Send(HttpMonId, new NMon::TEvHttpInfoRes(html.Str()));
+        HttpMonId = NActors::TActorId();
+    }
+
+    void Handle(TEvQuotaService::TQuotaGetResponse::TPtr& ev) {
+
+        TStringStream html;
+        html << "<table class='table simple-table1 table-hover table-condensed'>";
+        html << "<thead><tr>";
+        html << "<th>Quota Get Response</th>";
+        html << "<th></th>";
+        html << "</tr></thead><tbody>";
+        html << "<tr><td>Subject Type:</td><td>" << ev->Get()->SubjectType << "</td></tr>\n";
+        html << "<tr><td>Subject ID:</td><td>" << ev->Get()->SubjectId << "</td></tr>\n";
+        html << "</tbody></table>\n";
+        html << "<br>";
+
+        html << "<table class='table simple-table1 table-hover table-condensed'>";
+        html << "<thead><tr>";
+        html << "<th>Metric Name</th>";
+        html << "<th>Limit Value</th>";
+        html << "<th>Updated At</th>";
+        html << "<th>Usage</th>";
+        html << "</tr></thead><tbody>";
+        for (const auto& [metricName, metricUsageInfo] : ev->Get()->Quotas) {
+            html << "<tr>";
+            html << "<td>" << metricName << "</td>";
+            html << "<td>" << metricUsageInfo.Limit.Value << "</td>";
+            if (metricUsageInfo.Limit.UpdatedAt) {
+                html << "<td>" << metricUsageInfo.Limit.UpdatedAt << "</td>";
+            } else {
+                html << "<td></td>";
+            }
+            if (metricUsageInfo.Usage) {
+                html << "<td>" << metricUsageInfo.Usage->Value << "</td>";
+            } else {
+                html << "<td></td>";
+            }
+            html << "</tr>\n";
+        }
+        html << "</tbody></table>";
+
+        Send(HttpMonId, new NMon::TEvHttpInfoRes(html.Str()));
+        HttpMonId = NActors::TActorId();
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
@@ -734,6 +778,19 @@ private:
 
             HttpMonId = ev->Sender;
             return;
+        } else if (params.Has("get")) {
+            TString subjectId = params.Get("subject_id");
+            TString subjectType = params.Get("subject_type");
+            if (subjectType.empty()) {
+                subjectType = "cloud";
+            }
+
+            auto request = MakeHolder<TEvQuotaService::TQuotaGetRequest>(subjectType, subjectId);
+
+            Send(SelfId(), request.Release());
+
+            HttpMonId = ev->Sender;
+            return;
         }
 
         TStringStream html;
@@ -742,8 +799,30 @@ private:
         html << "<p>Subject Type (defaulted to 'cloud'):<input name='subject_type' type='text'/></p>";
         html << "<p>Quota Name:<input name='metric_name' type='text'/></p>";
         html << "<p>New value:<input name='metric_value' type='number'/></p>";
+        html << "<button name='get' type='submit'><b>Get</b></button>";
         html << "<button name='submit' type='submit'><b>Change</b></button>";
         html << "</form>";
+
+        // Table with known metrics info
+        html << "<br>";
+        html << "<table class='table simple-table1 table-hover table-condensed'>";
+        html << "<thead><tr>";
+        html << "<th>Metric Name</th>";
+        html << "<th>Subject Type</th>";
+        html << "<th>Default Limit</th>";
+        html << "<th>Hard Limit</th>";
+        html << "</tr></thead><tbody>";
+        for (const auto& [subjectType, subjectMetricsInfo] : QuotaInfoMap) {
+            for (const auto& [metricName, quotaInfo] : subjectMetricsInfo) {
+            html << "<tr>";
+            html << "<td>" << metricName << "</td>";
+            html << "<td>" << subjectType << "</td>";
+            html << "<td>" << quotaInfo.DefaultLimit << "</td>";
+            html << "<td>" << quotaInfo.HardLimit << "</td>";
+            html << "</tr>\n";
+            }
+        }
+        html << "</tbody></table>";
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(html.Str()));
     }

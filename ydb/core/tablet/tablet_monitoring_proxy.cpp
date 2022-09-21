@@ -274,7 +274,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
     HTML(str) {
         for (auto di: domains) {
             ui32 domainId = di.first;
-            H3() {
+            TAG(TH3) {
                 str << "Domain \"" << di.second->Name << "\" (id: " << domainId << ")";
             }
             TABLE_SORTABLE_CLASS("table") {

@@ -978,7 +978,7 @@ YARD_UNIT_TEST(TestInitOnOldDisk) {
     TString path = "/place/home/cthulhu/tmp_hdd2";
     ASSERT_YTHROW(NFs::Exists(path), "File " << path << " does not exist.");
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         TPDiskMon mon(counters);
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateSyncBlockDevice(path, 999, mon));
         VERBOSE_COUT("  Performing Pread of " << dataSize);

@@ -17,6 +17,11 @@ namespace NKikimr {
 
 using TSchemaVersion = ui64;
 
+enum class EColumnTypeConstraint {
+    Nullable,
+    NotNull,
+};
+
 // ident for table, must be unique in selected scope
 // for global transactions ownerid is tabletid of owning schemeshard and tableid is counter designated by schemeshard
 // SysViewInfo is not empty for system views attached to corresponding table
@@ -176,6 +181,12 @@ public:
 
     bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const;
     bool IsFullRange(ui32 columnsCount) const;
+
+    bool IsAmbiguous(size_t keyColumnsCount) const noexcept {
+        return IsAmbiguousReason(keyColumnsCount) != nullptr;
+    }
+
+    const char* IsAmbiguousReason(size_t keyColumnsCount) const noexcept;
 };
 
 class TSerializedTableRange {

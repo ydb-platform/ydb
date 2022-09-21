@@ -22,7 +22,7 @@ namespace NKikimr {
 
 class TFaultToleranceTestRuntime {
 public:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
     TVector<std::pair<TVDiskID, TActorId>> VDisks;
     std::unique_ptr<TAppData> AppData;
@@ -30,7 +30,7 @@ public:
     TProgramShouldContinue KikimrShouldContinue;
 
     void Setup(TBlobStorageGroupType groupType, ui32 numFailDomains, ui32 numVDisksPerFailDomain, ui32 numRealms) {
-        Counters = new NMonitoring::TDynamicCounters;
+        Counters = new ::NMonitoring::TDynamicCounters;
 
         TIntrusivePtr<NScheme::TTypeRegistry> typeRegistry(new NScheme::TKikimrTypeRegistry());
         auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());

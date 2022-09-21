@@ -95,8 +95,8 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
         const TDuration ExposePeriod = TDuration::Seconds(10);
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> TagCounters;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> TagCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
         TWakeupQueue& WakeupQueue;
         TQueryDispatcher& QueryDispatcher;
         const ui64 TabletId;
@@ -162,7 +162,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
         TVector<TReqInfo> ScriptedRequests;
 
     public:
-        TTabletWriter(ui64 tag, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+        TTabletWriter(ui64 tag, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                 TWakeupQueue& wakeupQueue, TQueryDispatcher& queryDispatcher, ui64 tabletId, ui32 channel,
                 TMaybe<ui32> generation, ui32 groupId, NKikimrBlobStorage::EPutHandleClass putHandleClass,
                 const TSizeGenerator& writeSizeGen, const TIntervalGenerator& writeIntervalGen,
@@ -761,7 +761,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
     TQueryDispatcher QueryDispatcher;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ScheduleCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ScheduleCounter;
 
     ui32 TestStoppedRecieved = 0;
 
@@ -771,7 +771,7 @@ public:
     }
 
     TLogWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd, const TActorId& parent,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, ui64 tag)
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
         : Tag(tag)
         , Parent(parent)
         , ScheduleCounter(counters->GetSubgroup("subsystem", "scheduler")->GetCounter("ScheduleCounter", true))
@@ -971,7 +971,7 @@ public:
 };
 
 IActor *CreateWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd, const TActorId& parent,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, ui64 tag) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag) {
     return new TLogWriterTestLoadActor(cmd, parent, std::move(counters), tag);
 }
 

@@ -135,7 +135,7 @@ static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
 }
 
 TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-                                 TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+                                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
     : ActorSystem_(system)
     , CredentialsProvider_(credentialsProvider)
     , Counters_(counters)

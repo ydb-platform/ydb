@@ -10,7 +10,6 @@ namespace NKikimr::NSQS {
 class TRetentionActor : public TActorBootstrapped<TRetentionActor> {
 public:
     TRetentionActor(const TQueuePath& queuePath, ui32 tablesFormat, const TActorId& queueLeader);
-    ~TRetentionActor();
 
     void Bootstrap();
 

@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 struct TMessageBusDbOpsCounters : TAtomicRefCount<TMessageBusDbOpsCounters> {
-    TIntrusivePtr<NMonitoring::TDynamicCounters> DbOperationsCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> DbOperationsCounters;
     NMonitoring::THistogramPtr RequestTotalTimeHistogram;
     NMonitoring::THistogramPtr RequestPrepareTimeHistogram;
     NMonitoring::THistogramPtr RequestUpdateTimeHistogram;
@@ -18,7 +18,7 @@ struct TMessageBusDbOpsCounters : TAtomicRefCount<TMessageBusDbOpsCounters> {
     NMonitoring::THistogramPtr RequestBatchTimeHistogram;
     NMonitoring::THistogramPtr RequestQueryTimeHistogram;
 
-    TMessageBusDbOpsCounters(const NMonitoring::TDynamicCounterPtr& counters) {
+    TMessageBusDbOpsCounters(const ::NMonitoring::TDynamicCounterPtr& counters) {
         DbOperationsCounters = GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "db");
 
         RequestTotalTimeHistogram = DbOperationsCounters->GetHistogram("RequestTotalTimeMs",
@@ -41,7 +41,7 @@ struct TMessageBusDbOpsCounters : TAtomicRefCount<TMessageBusDbOpsCounters> {
 class TMessageBusServerProxy : public TActorBootstrapped<TMessageBusServerProxy> {
     TMessageBusServer* const Server;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SchemeCacheCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> SchemeCacheCounters;
 
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
 

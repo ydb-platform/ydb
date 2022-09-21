@@ -94,6 +94,6 @@ namespace NKikimr {
     };
 
     IActor *CreateBlobRecoveryActor(TIntrusivePtr<TVDiskContext> vctx, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            NMonitoring::TDynamicCounterPtr counters);
+            ::NMonitoring::TDynamicCounterPtr counters);
 
 } // NKikimr

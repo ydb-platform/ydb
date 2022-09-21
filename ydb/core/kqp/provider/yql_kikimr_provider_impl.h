@@ -181,7 +181,7 @@ TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePt
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx);
-TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
 TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx);
@@ -271,12 +271,6 @@ const THashSet<TStringBuf>& KikimrCommitModes();
 const TStringBuf& KikimrCommitModeFlush();
 const TStringBuf& KikimrCommitModeRollback();
 const TStringBuf& KikimrCommitModeScheme();
-
-const TYdbOperations& KikimrSchemeOps();
-const TYdbOperations& KikimrDataOps();
-const TYdbOperations& KikimrModifyOps();
-const TYdbOperations& KikimrReadOps();
-const TYdbOperations& KikimrRequireUnmodifiedOps();
 
 const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns();
 bool IsKikimrSystemColumn(const TStringBuf columnName);

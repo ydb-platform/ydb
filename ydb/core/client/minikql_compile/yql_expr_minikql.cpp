@@ -382,6 +382,7 @@ private:
         for (auto& tupleItem : selectTuple.Children()) {
             auto columnName = tupleItem->Content();
             const TTypeAnnotationNode *columnDataType;
+            auto typeConstraint = EColumnTypeConstraint::Nullable;
 
             auto systemColumnType = KikimrSystemColumns().find(columnName);
             if (systemColumnType != KikimrSystemColumns().end()) {
@@ -389,6 +390,7 @@ private:
             } else {
                 auto column = lookup->Columns.FindPtr(columnName);
                 YQL_ENSURE(column);
+                typeConstraint = column->TypeConstraint;
 
                 // Decimal type is transformed into parametrized Decimal(22, 9).
                 if (column->Type == NYql::NProto::TypeIds::Decimal) {
@@ -402,9 +404,12 @@ private:
                         ctx);
                 }
             }
-            auto columnOptType = ctx.MakeType<TOptionalExprType>(columnDataType);
 
-            resultItems.push_back(ctx.MakeType<TItemExprType>(columnName, columnOptType));
+            if (typeConstraint == EColumnTypeConstraint::Nullable) {
+                columnDataType = ctx.MakeType<TOptionalExprType>(columnDataType);
+            }
+
+            resultItems.push_back(ctx.MakeType<TItemExprType>(columnName, columnDataType));
         }
 
         auto selectType = ctx.MakeType<TStructExprType>(resultItems);
@@ -834,11 +839,11 @@ void FillColumnsToRead(IDbSchemeResolver::TTableResult* lookup, TExprNode* selec
         auto columnName = selectTuple->Child(i)->Content();
         const auto& systemColumn = GetSystemColumns().find(columnName);
         if (systemColumn != GetSystemColumns().end()) {
-            columnsToRead.emplace_back(columnName, systemColumn->second.ColumnId, systemColumn->second.TypeId);
+            columnsToRead.emplace_back(columnName, systemColumn->second.ColumnId, systemColumn->second.TypeId, EColumnTypeConstraint::Nullable);
         } else {
             auto column = lookup->Columns.FindPtr(columnName);
             YQL_ENSURE(column);
-            columnsToRead.emplace_back(columnName, column->Column, column->Type);
+            columnsToRead.emplace_back(columnName, column->Column, column->Type, column->TypeConstraint);
         }
     }
 }

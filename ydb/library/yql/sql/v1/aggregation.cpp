@@ -29,6 +29,11 @@ namespace {
     }
 }
 
+static const THashSet<TString> AggApplyFuncs = {
+    "count_traits_factory",
+    "sum_traits_factory"
+};
+
 class TAggregationFactory : public IAggregation {
 public:
     TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode,
@@ -37,6 +42,10 @@ public:
             BuildBind(Pos, aggMode == EAggregateMode::OverWindow ? "window_module" : "aggregate_module", func) : nullptr),
         Multi(multi), ValidateArgs(validateArgs), DynamicFactory(!Factory)
     {
+        if (!func.empty() && AggApplyFuncs.contains(func)) {
+            AggApplyName = func.substr(0, func.size() - 15);
+        }
+
         if (!Factory) {
             FakeSource = BuildFakeSource(pos);
         }
@@ -44,6 +53,10 @@ public:
 
 protected:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
+        if (!ctx.EmitAggApply) {
+            AggApplyName = "";
+        }
+
         if (ValidateArgs || isFactory) {
             ui32 expectedArgs = ValidateArgs && !Factory ? 2 : (isFactory ? 0 : 1);
             if (!Factory && ValidateArgs) {
@@ -79,6 +92,9 @@ protected:
             Name = src->MakeLocalName(Name);
         }
 
+        if (Expr && Expr->IsAsterisk() && AggApplyName == "count") {
+            AggApplyName = "count_all";
+        }
 
         if (!Init(ctx, src)) {
             return false;
@@ -100,6 +116,10 @@ protected:
 
     TNodePtr GetApply(const TNodePtr& type) const override {
         if (!Multi) {
+            if (!DynamicFactory && !AggApplyName.empty()) {
+                return Y("AggApply", Q(AggApplyName), Y("ListItemType", type), BuildLambda(Pos, Y("row"), Y("PersistableRepr", Expr)));
+            }
+
             return Y("Apply", Factory, (DynamicFactory ? Y("ListItemType", type) : type),
               BuildLambda(Pos, Y("row"), Y("PersistableRepr", Expr)));
         }
@@ -183,6 +203,7 @@ protected:
     TNodePtr Expr;
     bool Multi;
     bool ValidateArgs;
+    TString AggApplyName;
     TVector<TNodePtr> Exprs;
 
 private:

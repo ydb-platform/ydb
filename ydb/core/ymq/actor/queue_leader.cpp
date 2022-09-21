@@ -2,7 +2,6 @@
 #include "fifo_cleanup.h"
 #include "executor.h"
 #include "log.h"
-#include "migration.h"
 #include "purge.h"
 #include "retention.h"
 
@@ -10,7 +9,6 @@
 #include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/counters.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/probes.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/quoter.h>
@@ -49,19 +47,15 @@ TQueueLeader::TQueueLeader(TString userName, TString queueName, TString folderId
     , Counters_(std::move(counters))
     , UserCounters_(std::move(userCounters))
 {
-    DebugInfo->QueueLeaders.emplace(TStringBuilder() << TLogQueueName(UserName_, QueueName_), this);
     if (quoterResourcesForUser) {
         QuoterResources_ = new TSqsEvents::TQuoterResourcesForActions(*quoterResourcesForUser);
     }
 }
 
-TQueueLeader::~TQueueLeader() {
-    DebugInfo->QueueLeaders.EraseKeyValue(TStringBuilder() << TLogQueueName(UserName_, QueueName_), this);
-}
-
 void TQueueLeader::Bootstrap() {
     Become(&TQueueLeader::StateInit);
-    Register(new TQueueMigrationActor(UserName_, QueueName_, SelfId(), SchemeCache_, Counters_));
+    QueueAttributesCacheTime_ = TDuration::MilliSeconds(Cfg().GetQueueAttributesCacheTimeMs());
+    RequestConfiguration();
 }
 
 void TQueueLeader::BecomeWorking() {
@@ -114,7 +108,6 @@ STATEFN(TQueueLeader::StateInit) {
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted); // from executor
         hFunc(TEvWakeup, HandleWakeup);
-        hFunc(TSqsEvents::TEvMigrationDone, HandleMigrationDone); // from migration actor
     default:
         LOG_SQS_ERROR("Unknown type of event came to SQS background queue " << TLogQueueName(UserName_, QueueName_) << " leader actor: " << ev->Type << " (" << ev->GetBase()->ToString() << "), sender: " << ev->Sender);
     }
@@ -200,19 +193,6 @@ void TQueueLeader::HandleWakeup(TEvWakeup::TPtr& ev) {
     }
     default:
         Y_FAIL("Unknown wakeup tag: %lu", ev->Get()->Tag);
-    }
-}
-
-void TQueueLeader::HandleMigrationDone(TSqsEvents::TEvMigrationDone::TPtr& ev) {
-    if (ev->Get()->Success) {
-        const auto& cfg = Cfg();
-        QueueAttributesCacheTime_ = TDuration::MilliSeconds(cfg.GetQueueAttributesCacheTimeMs());
-        RequestConfiguration();
-    } else {
-        INC_COUNTER(Counters_, QueueMasterStartProblems);
-        INC_COUNTER(Counters_, QueueLeaderStartProblems);
-        Register(new TQueueMigrationActor(UserName_, QueueName_, SelfId(), SchemeCache_, Counters_, TDuration::MilliSeconds(500)));
-        FailRequestsDuringStartProblems();
     }
 }
 

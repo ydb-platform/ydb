@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-client-minikql_compile)
 target_compile_options(core-client-minikql_compile PRIVATE

@@ -1279,6 +1279,41 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         }
     }
 
+    Y_UNIT_TEST(TestSemaphoreReleaseReacquire) {
+        TTestContext ctx;
+        ctx.Setup();
+        auto proxy = ctx.Runtime->AllocateEdgeActor();
+        ctx.MustRegisterProxy(proxy, 1);
+        ctx.MustAttachSession(proxy, 1, 0, 30000);
+        ctx.MustAttachSession(proxy, 1, 0, 30000);
+
+        for (int i = 0; i < 10; ++i) {
+            // Create and destroy semaphore several times to increment next ids
+            ctx.CreateSemaphore("Sem1", 1);
+            ctx.DeleteSemaphore("Sem1");
+        }
+
+        ctx.CreateSemaphore("Sem1", 1);
+
+        // The first session owns semaphore immediately
+        ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1);
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1);
+
+        // The second session tries to acquire semaphore, but releases immediately
+        ctx.SendAcquireSemaphore(222, proxy, 1, 2, "Sem1", 1, 10000);
+        ctx.ExpectAcquireSemaphorePending(222, proxy, 1);
+        ctx.MustReleaseSemaphore(333, proxy, 1, 2, "Sem1");
+        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1, Ydb::StatusIds::ABORTED);
+
+        // The second session now tries to reacquire semaphore
+        ctx.SendAcquireSemaphore(444, proxy, 1, 2, "Sem1", 1, 10000);
+        ctx.ExpectAcquireSemaphorePending(444, proxy, 1);
+
+        // When the first session releases semaphore it must be acquired by the second session
+        ctx.MustReleaseSemaphore(555, proxy, 1, 1, "Sem1");
+        ctx.ExpectAcquireSemaphoreResult(444, proxy, 1);
+    }
+
     Y_UNIT_TEST(TestSemaphoreSessionFailures) {
         TTestContext ctx;
         ctx.Setup();

@@ -70,6 +70,9 @@ message TPersQueuePartitionRequest {
         optional bytes ExplicitHash = 14;
 
         optional bool ExternalOperation = 15 [ default = false ];
+
+        // Do not reject request when quota exceeded
+        optional bool IgnoreQuotaDeadline = 16 [ default = false ];
     }
 
     message TCmdUpdateWriteTimestamp {

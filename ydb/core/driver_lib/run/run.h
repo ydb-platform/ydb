@@ -36,7 +36,7 @@ protected:
     NYq::IYqSharedResources::TPtr YqSharedResources;
 
     TAutoPtr<TMon> Monitoring;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TIndexMonPage *ActorsMonPage = nullptr;
 
     bool EnabledGrpcService = false;

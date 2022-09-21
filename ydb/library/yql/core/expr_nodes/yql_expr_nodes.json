@@ -419,6 +419,23 @@
             ]
         },
         {
+            "Name": "TCoAggrCountInit",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "AggrCountInit"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoAggrCountUpdate",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "AggrCountUpdate"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"},
+                {"Index": 1, "Name": "State", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoMin",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "Min"}
@@ -438,13 +455,19 @@
             ]
         },
         {
-            "Name": "TCoTake",
+            "Name": "TCoTakeBase",
             "Base": "TCoCountBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"}
+        },
+        {
+            "Name": "TCoTake",
+            "Base": "TCoTakeBase",
             "Match": {"Type": "Callable", "Name": "Take"}
         },
         {
             "Name": "TCoLimit",
-            "Base": "TCoCountBase",
+            "Base": "TCoTakeBase",
             "Match": {"Type": "Callable", "Name": "Limit"}
         },
         {
@@ -598,7 +621,7 @@
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "ColumnName",   "Type": "TExprBase"},
-                {"Index": 1, "Name": "Trait",        "Type": "TCoAggregationTraits"},
+                {"Index": 1, "Name": "Trait",        "Type": "TExprBase"},
                 {"Index": 2, "Name": "DistinctName", "Type": "TCoAtom", "Optional": true}
             ]
         },

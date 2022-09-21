@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 
 add_library(providers-common-metrics)
 target_link_libraries(providers-common-metrics PUBLIC

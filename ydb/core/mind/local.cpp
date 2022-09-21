@@ -15,6 +15,7 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <util/system/info.h>
+#include <util/string/vector.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -115,25 +116,25 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     NKikimrTabletBase::TMetrics ResourceLimit;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
 
-    NMonitoring::TDynamicCounters::TCounterPtr CounterStartAttempts;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterFollowerAttempts;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterRestored;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelLocked;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelSSTimeout;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelRace;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelError;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelBootBSError;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelOutdated;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelBootSSError;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelPoisonPill;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelDemotedBySS;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelBSError;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelInconsistentCommit;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelIsolated;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelDemotedByBS;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterCancelUnknownReason;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterStartAttempts;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterFollowerAttempts;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterRestored;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelLocked;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelSSTimeout;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelRace;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelBootBSError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelOutdated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelBootSSError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelPoisonPill;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelDemotedBySS;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelBSError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelInconsistentCommit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelIsolated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelDemotedByBS;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelUnknownReason;
 
     void Die(const TActorContext &ctx) override {
         if (HivePipeClient) {
@@ -662,8 +663,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
                 usage = static_cast<double>(MemUsage) / MemLimit;
             }
+
+            TVector<TString> poolsToMonitorForUsage = SplitString(AppData()->HiveConfig.GetPoolsToMonitorForUsage(), ",");
+
             for (const auto& poolInfo : info.poolstats()) {
-                usage = std::max(usage, poolInfo.usage());
+                if (Find(poolsToMonitorForUsage, poolInfo.GetName()) != poolsToMonitorForUsage.end()) {
+                    usage = std::max(usage, poolInfo.usage());
+                }
             }
 
             NodeUsage = usage;
@@ -875,7 +881,7 @@ public:
 
     TLocalNodeRegistrar(const TActorId &owner, ui64 hiveId, TVector<TSubDomainKey> servicedDomains,
                         const NKikimrTabletBase::TMetrics &resourceLimit, TIntrusivePtr<TLocalConfig> config,
-                        NMonitoring::TDynamicCounterPtr counters)
+                        ::NMonitoring::TDynamicCounterPtr counters)
         : Owner(owner)
         , HiveId(hiveId)
         , ServicedDomains(std::move(servicedDomains))

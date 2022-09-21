@@ -175,7 +175,7 @@ public:
     const bool UseHugePages;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
-    TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
+    TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
     TString DynamicStateToString(bool isMultiline);
     bool ReadChunk0Format(ui8* formatSectors, const TKey& mainKey); // Called by actor
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize); // Called by actor

@@ -3255,6 +3255,166 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT_VALUES_EQUAL(FromString<i32>(read["limit"].GetString()), 10);
         }
     }
+
+    Y_UNIT_TEST(IdxLookupExtractMembers) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            DECLARE $input AS List<Struct<
+                Key: Uint64,
+                Text: String,
+            >>;
+
+            $to_upsert = (
+                SELECT
+                    i.Key AS Key,
+                FROM AS_TABLE($input) AS i
+                JOIN EightShard AS s
+                USING (Key)
+                WHERE s.Key IS NULL OR s.Text != i.Text
+            );
+
+            $to_delete = (
+                SELECT s.Key AS Key
+                FROM EightShard AS s
+                JOIN AS_TABLE($input) AS i
+                USING (Key)
+            );
+
+            DELETE FROM EightShard ON SELECT Key FROM $to_delete;
+            UPSERT INTO EightShard SELECT * FROM $to_upsert;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(PushFlatmapInnerConnectionsToStageInput) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+            $subquery = SELECT Key FROM `/Root/KeyValue`;
+            $subquery2 = SELECT Amount FROM `/Root/Test`;
+
+            SELECT * FROM `/Root/EightShard`
+            WHERE Key IN $subquery OR Key == 101 OR Key IN $subquery2;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1];[101u];["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(PushPureFlatmapInnerConnectionsToStage) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$rows").BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Name").String("Name1")
+                        .AddMember("Value2").String("Value22")
+                        .AddMember("Data").String("Data1")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            DECLARE $rows AS List<Struct<
+                Name: String,
+                Value2: String,
+                Data: String>>;
+
+            $values =
+                SELECT (Name, Value2) FROM Join2
+                WHERE Key1 = 101;
+
+            SELECT * FROM AS_TABLE($rows)
+            WHERE (Name, Value2) IN COMPACT $values;
+        )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([["Data1";"Name1";"Value22"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(SqlInAsScalar) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$value1").Int32(3).Build()
+            .AddParam("$value2").Uint64(2).Build()
+            .AddParam("$value3").Int32(5).Build()
+            .AddParam("$value4").OptionalInt32(3).Build()
+            .AddParam("$value5").OptionalInt32({}).Build()
+            .AddParam("$value6").OptionalInt64(1).Build()
+            .AddParam("$value7").OptionalInt64(7).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            DECLARE $value1 AS Int32;
+            DECLARE $value2 AS Uint64;
+            DECLARE $value3 AS Int32;
+            DECLARE $value4 AS Int32?;
+            DECLARE $value5 AS Int32?;
+            DECLARE $value6 AS Int64?;
+            DECLARE $value7 AS Int64?;
+
+            $data = SELECT Data FROM EightShard WHERE Text = "Value1";
+
+            SELECT
+                $value1 IN $data,
+                $value2 IN $data,
+                $value3 IN $data,
+                $value4 IN $data,
+                $value5 IN $data,
+                $value6 IN $data,
+                $value7 IN $data;
+        )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[
+            %true;
+            %true;
+            %false;
+            [%true];
+            #;
+            [%true];
+            [%false]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(MultiUsageInnerConnection) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            $count1 = SELECT COUNT (*) FROM `/Root/KeyValue`;
+            $count2 = SELECT COUNT(*)
+                FROM `/Root/KeyValue` AS l
+                LEFT JOIN `/Root/EightShard` AS r
+                ON l.Key = r.Key;
+            SELECT * FROM `/Root/TwoShard` WHERE $count1 = $count2;
+
+        )", TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKikimr::NKqp

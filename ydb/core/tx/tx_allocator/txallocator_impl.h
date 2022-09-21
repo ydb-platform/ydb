@@ -15,10 +15,10 @@ using NTabletFlatExecutor::ITransaction;
 namespace NTxAllocator {
 
 struct TTxAllocatorMonCounters {
-    TIntrusivePtr<NMonitoring::TDynamicCounters> AllocatorCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> AllocatorCounters;
 
-    NMonitoring::TDynamicCounters::TCounterPtr Allocated;
-    NMonitoring::TDynamicCounters::TCounterPtr AllocationsPresence;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Allocated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr AllocationsPresence;
 };
 
 class TTxAllocator : public TActor<TTxAllocator>, public TTabletExecutedFlat {

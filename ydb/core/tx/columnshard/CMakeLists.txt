@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(engines)
+add_subdirectory(ut)
 
 add_library(core-tx-columnshard)
 target_compile_options(core-tx-columnshard PRIVATE

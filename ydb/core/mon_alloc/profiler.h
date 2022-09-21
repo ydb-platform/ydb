@@ -116,7 +116,7 @@ namespace NActors {
     }
 
     IActor* CreateProfilerActor(
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         TString dir,
         std::unique_ptr<IProfilerLogic> profiler = nullptr);
 }

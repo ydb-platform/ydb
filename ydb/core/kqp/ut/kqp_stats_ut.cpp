@@ -58,14 +58,18 @@ Y_UNIT_TEST_TWIN(JoinNoStats, UseSessionActor) {
 }
 
 Y_UNIT_TEST_TWIN(JoinStatsBasic, UseSessionActor) {
-    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    auto settings = TKikimrSettings()
+        .SetEnableKqpSessionActor(UseSessionActor)
+        .SetEnableKqpScanQueryStreamLookup(false);  // TODO: enable stream lookup KIKIMR-14294
+
+    TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
-    TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+    TStreamExecScanQuerySettings querySettings;
+    querySettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
     auto it = db.StreamExecuteScanQuery(R"(
         SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key;
-    )", settings).GetValueSync();
+    )", querySettings).GetValueSync();
 
     auto res = CollectStreamResult(it);
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -349,10 +353,10 @@ Y_UNIT_TEST_TWIN(StatsProfile, UseSessionActor) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    auto node1 = FindPlanNodeByKv(plan, "Node Type", "TableFullScan");
+    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-TableFullScan");
     UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
 
-    auto node2 = FindPlanNodeByKv(plan, "Node Type", "Limit");
+    auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-Limit");
     UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
 }
 

@@ -248,6 +248,99 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         )");
     }
 
+    Y_UNIT_TEST(ShouldOmitNonStrictStorageSettings) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TString scheme;
+        runtime.SetObserverFunc([&scheme](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (!scheme && ev->GetTypeRewrite() == NWrappers::TEvS3Wrapper::EvPutObjectRequest) {
+                const auto* msg = ev->Get<NWrappers::TEvS3Wrapper::TEvPutObjectRequest>();
+                scheme = msg->Body;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const TVector<TString> tables = {R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                StorageConfig {
+                  SysLog {
+                    PreferredPoolKind: "hdd-1"
+                    AllowOtherKinds: true
+                  }
+                  Log {
+                    PreferredPoolKind: "hdd-1"
+                    AllowOtherKinds: true
+                  }
+                  Data {
+                    PreferredPoolKind: "hdd-1"
+                    AllowOtherKinds: true
+                  }
+                }
+              }
+            }
+        )"};
+
+        Run(runtime, env, tables, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        UNIT_ASSERT_NO_DIFF(scheme, R"(columns {
+  name: "key"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+}
+columns {
+  name: "value"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+}
+primary_key: "key"
+storage_settings {
+  store_external_blobs: DISABLED
+}
+column_families {
+  name: "default"
+  compression: COMPRESSION_NONE
+}
+partitioning_settings {
+  partitioning_by_size: DISABLED
+  partitioning_by_load: DISABLED
+  min_partitions_count: 1
+}
+)");
+    }
+
     void CancelShouldSucceed(TDelayFunc delayFunc) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

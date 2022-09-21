@@ -74,7 +74,6 @@ struct TEvSysView {
 
         EvCalculateStorageStatsRequest,
         EvCalculateStorageStatsResponse,
-        EvScheduleCalculateStorageStatsRequest,
 
         EvEnd,
     };

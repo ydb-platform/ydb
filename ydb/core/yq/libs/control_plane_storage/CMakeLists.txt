@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(events)
+add_subdirectory(internal)
+add_subdirectory(proto)
 
 add_library(yq-libs-control_plane_storage)
 target_compile_options(yq-libs-control_plane_storage PRIVATE

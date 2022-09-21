@@ -7,22 +7,22 @@ namespace NKikimr::NBsController {
     class TStoragePoolStat {
         struct TStoragePoolCounters {
             TString Id;
-            NMonitoring::TDynamicCounterPtr Root;
+            ::NMonitoring::TDynamicCounterPtr Root;
             TString Name;
-            NMonitoring::TDynamicCounterPtr Subgroup;
-            NMonitoring::TDynamicCounterPtr FlagsSubgroup;
-            NMonitoring::TDynamicCounters::TCounterPtr NumUnknown;
-            NMonitoring::TDynamicCounters::TCounterPtr NumGreen;
-            NMonitoring::TDynamicCounters::TCounterPtr NumCyan;
-            NMonitoring::TDynamicCounters::TCounterPtr NumLightYellow;
-            NMonitoring::TDynamicCounters::TCounterPtr NumYellow;
-            NMonitoring::TDynamicCounters::TCounterPtr NumLightOrange;
-            NMonitoring::TDynamicCounters::TCounterPtr NumOrange;
-            NMonitoring::TDynamicCounters::TCounterPtr NumRed;
-            NMonitoring::TDynamicCounters::TCounterPtr NumBlack;
-            NMonitoring::TDynamicCounters::TCounterPtr AllocatedSize;
+            ::NMonitoring::TDynamicCounterPtr Subgroup;
+            ::NMonitoring::TDynamicCounterPtr FlagsSubgroup;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumUnknown;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumGreen;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumCyan;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumLightYellow;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumYellow;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumLightOrange;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumOrange;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumRed;
+            ::NMonitoring::TDynamicCounters::TCounterPtr NumBlack;
+            ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedSize;
 
-            TStoragePoolCounters(NMonitoring::TDynamicCounterPtr counters, TString id, TString name, ui64 allocatedSize)
+            TStoragePoolCounters(::NMonitoring::TDynamicCounterPtr counters, TString id, TString name, ui64 allocatedSize)
                 : Id(std::move(id))
                 , Root(std::move(counters))
                 , Name(std::move(name))
@@ -62,7 +62,7 @@ namespace NKikimr::NBsController {
                 *AllocatedSize += allocatedSizeIncrement;
             }
 
-            const NMonitoring::TDynamicCounters::TCounterPtr& GetCounter(TStorageStatusFlags flags) const {
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& GetCounter(TStorageStatusFlags flags) const {
                 if (!flags.Check(NKikimrBlobStorage::StatusIsValid)) {
                     return NumUnknown;
                 } else if (flags.Check(NKikimrBlobStorage::StatusDiskSpaceBlack)) {
@@ -85,11 +85,11 @@ namespace NKikimr::NBsController {
             }
         };
 
-        NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr Counters;
         std::unordered_map<TString, TStoragePoolCounters> Map;
 
     public:
-        TStoragePoolStat(NMonitoring::TDynamicCounterPtr counters)
+        TStoragePoolStat(::NMonitoring::TDynamicCounterPtr counters)
             : Counters(std::move(counters))
         {}
 

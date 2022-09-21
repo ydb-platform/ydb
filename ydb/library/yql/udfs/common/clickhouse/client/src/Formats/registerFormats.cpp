@@ -11,6 +11,7 @@ namespace NDB
 void registerInputFormatProcessorNative(FormatFactory & factory);
 void registerInputFormatProcessorJSONAsString(FormatFactory & factory);
 void registerInputFormatProcessorJSONEachRow(FormatFactory & factory);
+void registerOutputFormatProcessorJSONEachRow(FormatFactory & factory);
 void registerInputFormatProcessorRawBLOB(FormatFactory & factory);
 void registerInputFormatProcessorORC(FormatFactory & factory);
 void registerInputFormatProcessorArrow(FormatFactory & factory);
@@ -29,6 +30,7 @@ void registerFormats()
         registerInputFormatProcessorNative(factory);
         registerInputFormatProcessorJSONAsString(factory);
         registerInputFormatProcessorJSONEachRow(factory);
+        registerOutputFormatProcessorJSONEachRow(factory);
         registerInputFormatProcessorRawBLOB(factory);
         registerInputFormatProcessorORC(factory);
         registerInputFormatProcessorArrow(factory);

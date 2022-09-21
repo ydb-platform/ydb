@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(original)
 
 add_library(contrib-libs-linuxvdso)
 target_link_libraries(contrib-libs-linuxvdso PUBLIC

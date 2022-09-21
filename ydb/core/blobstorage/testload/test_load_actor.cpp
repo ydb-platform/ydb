@@ -46,14 +46,14 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     // HTTP info requests being currently executed
     THashMap<ui32, THttpInfoRequest> InfoRequests;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
     }
 
-    TLoadActor(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
+    TLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : NextRequestId(1)
         , Counters(counters)
     {}
@@ -388,7 +388,7 @@ public:
     )
 };
 
-IActor *CreateTestLoadActor(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters) {
+IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new TLoadActor(counters);
 }
 

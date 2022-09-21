@@ -76,9 +76,9 @@ class TKqpWriterTestLoadActor : public TActorBootstrapped<TKqpWriterTestLoadActo
     std::unordered_map<TString, std::queue<TInstant>> SentTime;
 
     // Monitoring
-    TIntrusivePtr<NMonitoring::TDynamicCounters> LoadCounters;
-    NMonitoring::TDynamicCounters::TCounterPtr Transactions;
-    NMonitoring::TDynamicCounters::TCounterPtr TransactionsBytesWritten;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Transactions;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TransactionsBytesWritten;
     TInstant TestStartTime;
 
     TMap<ui64, TLogWriteCookie> InFlightWrites;
@@ -92,7 +92,7 @@ public:
     }
 
     TKqpWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TKqpLoadStart& cmd,
-            const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
+            const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
         , Rng(Now().GetValue())
@@ -259,7 +259,7 @@ private:
 };
 
 IActor * CreateKqpWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKqpLoadStart& cmd,
-        const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TKqpWriterTestLoadActor(cmd, parent, counters, index, tag);
 }
 

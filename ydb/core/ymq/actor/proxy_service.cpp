@@ -8,7 +8,6 @@
 #include "serviceid.h"
 
 #include <ydb/core/base/counters.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/actor/actor.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/secure_protobuf_printer.h>
@@ -47,14 +46,6 @@ struct TSqsProxyService::TProxyRequestInfo : public TAtomicRefCount<TProxyReques
     TActorId ProxyActorId;
     TSqsEvents::TEvProxySqsRequest::TPtr ProxyRequest;
 };
-
-TSqsProxyService::TSqsProxyService() {
-    DebugInfo->SqsProxyServiceActorPtr = this;
-}
-
-TSqsProxyService::~TSqsProxyService() {
-    DebugInfo->SqsProxyServiceActorPtr = nullptr;
-}
 
 void TSqsProxyService::Bootstrap() {
     LOG_SQS_INFO("Start SQS proxy service actor");

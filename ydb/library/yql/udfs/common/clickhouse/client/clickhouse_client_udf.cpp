@@ -32,8 +32,9 @@
 #include "src/Core/ColumnsWithTypeAndName.h"
 
 #include "src/Formats/FormatFactory.h"
-#include "src/Formats/InputStreamFromInputFormat.h"
 #include "src/Formats/registerFormats.h"
+#include "src/Processors/Formats/InputStreamFromInputFormat.h"
+#include "src/Processors/Formats/OutputStreamToOutputFormat.h"
 
 #include <util/generic/yexception.h>
 #include <util/string/split.h>
@@ -215,11 +216,12 @@ NDB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
     return ret;
 }
 
-void PermuteUuid(const char* src, char* dst, bool forward) {
-    static ui32 Pairs[16] = { 4, 5, 6, 7, 2, 3, 0, 1, 15, 14, 13, 12, 11, 10, 9, 8 };
-    static ui32 InvPairs[16] = { 6, 7, 4, 5, 0, 1, 2, 3, 15, 14, 13, 12, 11, 10, 9, 8 };
+template<bool Forward>
+void PermuteUuid(const char* src, char* dst) {
+    static constexpr ui32 Pairs[16] = { 4, 5, 6, 7, 2, 3, 0, 1, 15, 14, 13, 12, 11, 10, 9, 8 };
+    static constexpr ui32 InvPairs[16] = { 6, 7, 4, 5, 0, 1, 2, 3, 15, 14, 13, 12, 11, 10, 9, 8 };
     for (ui32 i = 0; i < 16; ++i) {
-        dst[forward ? Pairs[i] : InvPairs[i]] = src[i];
+        dst[Forward ? Pairs[i] : InvPairs[i]] = src[i];
     }
 }
 
@@ -320,7 +322,7 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
     }
     else if (slot == EDataSlot::Uuid) {
         char uuid[16];
-        PermuteUuid(ref.data, uuid, false);
+        PermuteUuid<false>(ref.data, uuid);
         return valueBuilder->NewString({ uuid, sizeof(uuid) }).Release();
     }
     else if (slot == EDataSlot::Decimal) {
@@ -357,6 +359,49 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
         }
 
         return ret;
+    }
+}
+
+void ConvertInputValue(const TUnboxedValuePod& value, const NDB::IColumn::MutablePtr& col, const TColumnMeta& meta) {
+    if (meta.IsOptional && !value)
+        return col->insert(NDB::Field());
+
+    switch (*meta.Slot) {
+        case EDataSlot::Utf8:
+        case EDataSlot::Json:
+        case EDataSlot::String:
+            return col->insert(NDB::Field(value.AsStringRef()));
+        case EDataSlot::Bool:
+            return col->insert(NDB::Field(value.Get<bool>()));
+        case EDataSlot::Uint8:
+            return col->insert(NDB::Field(value.Get<ui8>()));
+        case EDataSlot::Uint16:
+        case EDataSlot::Date:
+        case EDataSlot::TzDate:
+            return col->insert(NDB::Field(value.Get<ui16>()));
+        case EDataSlot::Uint32:
+        case EDataSlot::Datetime:
+        case EDataSlot::TzDatetime:
+            return col->insert(NDB::Field(value.Get<ui32>()));
+        case EDataSlot::Uint64:
+        case EDataSlot::Timestamp:
+        case EDataSlot::TzTimestamp:
+            return col->insert(NDB::Field(value.Get<ui64>()));
+        case EDataSlot::Int8:
+            return col->insert(NDB::Field(value.Get<i8>()));
+        case EDataSlot::Int16:
+            return col->insert(NDB::Field(value.Get<i16>()));
+        case EDataSlot::Int32:
+            return col->insert(NDB::Field(value.Get<i32>()));
+        case EDataSlot::Int64:
+            return col->insert(NDB::Field(value.Get<i64>()));
+        case EDataSlot::Uuid: {
+            NDB::UUID uuid;
+            PermuteUuid<true>(value.AsStringRef().Data(), reinterpret_cast<char*>(&uuid));
+            return col->insert(NDB::Field(uuid));
+        }
+        default:
+            UdfTerminate("TODO: Unsupported field type.");
     }
 }
 
@@ -456,14 +501,16 @@ private:
 class TStreamValue : public TBoxedValue {
 public:
     TStreamValue(const std::string& type, const NDB::FormatSettings& settings, const IValueBuilder* valueBuilder, const TUnboxedValue& stream,
-    const std::vector<TColumnMeta> outMeta, const NDB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos, ui32 tzId)
+    const std::vector<TColumnMeta> outMeta, const NDB::ColumnsWithTypeAndName& columns, ui32 tupleSize, const TSourcePosition& pos, ui32 tzId)
         : ValueBuilder(valueBuilder)
         , Stream(stream)
         , OutMeta(outMeta)
         , Columns(columns)
+        , TupleSize(tupleSize)
         , Pos(pos)
         , TzId(tzId)
         , Cache(OutMeta.size())
+        , TupleCache(tupleSize)
         , Type(type)
         , Settings(settings)
     {}
@@ -474,7 +521,8 @@ private:
                 if (const auto status = Stream.Fetch(Input); EFetchStatus::Ok != status)
                     return status;
 
-                const std::string_view buffer = Input.AsStringRef();
+                auto input = TupleSize ? Input.GetElement(0) : Input;
+                const std::string_view buffer = input.AsStringRef();
                 Buffer = std::make_unique<NDB::ReadBufferFromMemory>(buffer.data(), buffer.size());
                 BlockStream = std::make_unique<NDB::InputStreamFromInputFormat>(NDB::FormatFactory::instance().getInputFormat(Type, *Buffer, NDB::Block(Columns), nullptr, buffer.size(),  Settings));
             }
@@ -494,6 +542,16 @@ private:
                 *items++ = ConvertOutputValue(CurrentBlock.getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow);
             }
 
+            if (TupleSize) {
+                TUnboxedValue* tupleItems = nullptr;
+                auto tuple = TupleCache.NewArray(*ValueBuilder, tupleItems);
+                *tupleItems++ = result;
+                for (ui32 i = 1; i < TupleSize; ++i) {
+                    *tupleItems++ = Input.GetElement(i);
+                }
+                result = tuple;
+            }
+
             ++CurrentRow;
             return EFetchStatus::Ok;
         }
@@ -509,10 +567,12 @@ private:
     const TUnboxedValue Stream;
     const std::vector<TColumnMeta> OutMeta;
     const NDB::ColumnsWithTypeAndName Columns;
+    const ui32 TupleSize;
     const TSourcePosition Pos;
     const ui32 TzId;
 
     TPlainArrayCache Cache;
+    TPlainArrayCache TupleCache;
 
     TUnboxedValue Input;
     const TString Type;
@@ -524,10 +584,42 @@ private:
     size_t CurrentRow = 0U;
 };
 
+NDB::FormatSettings GetFormatSettings(const std::string_view& view) {
+    NDB::FormatSettings settings;
+    settings.skip_unknown_fields = true;
+    settings.with_names_use_header = true;
+    if (!view.empty()) {
+        const std::string str(view);
+        const JSON json(str);
+#define SUPPORTED_FLAGS(xx) \
+        xx(skip_unknown_fields) \
+        xx(import_nested_json) \
+        xx(with_names_use_header) \
+        xx(null_as_default) \
+
+#define SET_FLAG(flag) \
+        if (json.has(#flag)) \
+            settings.flag = json[#flag].get<bool>();
+
+        SUPPORTED_FLAGS(SET_FLAG)
+
+#undef SET_FLAG
+#undef SUPPORTED_FLAGS
+    }
+    return settings;
+}
+
 class TParseFormat : public TBoxedValue {
 public:
-    TParseFormat(const std::string_view& type, const std::string_view& settings, const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta, NDB::ColumnsWithTypeAndName&& columns)
-        : Type(type), Settings(GetFormatSettings(settings)), Pos(pos), OutMeta(std::move(outMeta)), Columns(std::move(columns))
+    TParseFormat(const std::string_view& type, const std::string_view& settings,
+                 const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta,
+                 NDB::ColumnsWithTypeAndName&& columns, ui32 tupleSize)
+        : Type(type)
+        , Settings(GetFormatSettings(settings))
+        , Pos(pos)
+        , OutMeta(std::move(outMeta))
+        , Columns(std::move(columns))
+        , TupleSize(tupleSize)
     {}
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
@@ -538,7 +630,7 @@ public:
             }
         }
 
-        return TUnboxedValuePod(new TStreamValue(Type, Settings, valueBuilder, *args, OutMeta, Columns, Pos, tzId));
+        return TUnboxedValuePod(new TStreamValue(Type, Settings, valueBuilder, *args, OutMeta, Columns, TupleSize, Pos, tzId));
     }
     catch (const Poco::Exception& e) {
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
@@ -547,48 +639,26 @@ public:
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
     }
 private:
-    static NDB::FormatSettings GetFormatSettings(const std::string_view& view) {
-        NDB::FormatSettings settings;
-        settings.skip_unknown_fields = true;
-        settings.with_names_use_header = true;
-        if (!view.empty()) {
-            const std::string str(view);
-            const JSON json(str);
-    #define SUPPORTED_FLAGS(xx) \
-            xx(skip_unknown_fields) \
-            xx(import_nested_json) \
-            xx(with_names_use_header) \
-            xx(null_as_default) \
-
-    #define SET_FLAG(flag) \
-            if (json.has(#flag)) \
-                settings.flag = json[#flag].get<bool>();
-
-            SUPPORTED_FLAGS(SET_FLAG)
-
-    #undef SET_FLAG
-    #undef SUPPORTED_FLAGS
-        }
-        return settings;
-    }
-
     const std::string Type;
     const NDB::FormatSettings Settings;
     const TSourcePosition Pos;
     const std::vector<TColumnMeta> OutMeta;
     const NDB::ColumnsWithTypeAndName Columns;
+    const ui32 TupleSize;
 };
 
 class TParseBlocks : public TBoxedValue {
     class TStreamValue : public TBoxedValue {
     public:
-        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::vector<TColumnMeta> outMeta, const TSourcePosition& pos, ui32 tzId)
+        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::vector<TColumnMeta> outMeta, ui32 tupleSize, const TSourcePosition& pos, ui32 tzId)
             : ValueBuilder(valueBuilder)
             , Stream(stream)
             , OutMeta(outMeta)
+            , TupleSize(tupleSize)
             , Pos(pos)
             , TzId(tzId)
             , Cache(OutMeta.size())
+            , TupleCache(tupleSize)
         {}
     private:
         EFetchStatus Fetch(TUnboxedValue& result) final try {
@@ -598,7 +668,8 @@ class TParseBlocks : public TBoxedValue {
                         return status;
                 }
 
-                const auto block = static_cast<NDB::Block*>(Input.GetResource());
+                const auto block = static_cast<NDB::Block*>(TupleSize ? Input.GetElement(0).GetResource() :
+                                                                        Input.GetResource());
 
                 if (CurrentRow >= block->rows()) {
                     CurrentRow = 0;
@@ -610,6 +681,16 @@ class TParseBlocks : public TBoxedValue {
                 result = Cache.NewArray(*ValueBuilder, items);
                 for (ui32 i = 0; i < OutMeta.size(); ++i) {
                     *items++ = ConvertOutputValue(block->getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow);
+                }
+
+                if (TupleSize) {
+                    TUnboxedValue* tupleItems = nullptr;
+                    auto tuple = TupleCache.NewArray(*ValueBuilder, tupleItems);
+                    *tupleItems++ = result;
+                    for (ui32 i = 1; i < TupleSize; ++i) {
+                        *tupleItems++ = Input.GetElement(i);
+                    }
+                    result = tuple;
                 }
 
                 ++CurrentRow;
@@ -626,18 +707,20 @@ class TParseBlocks : public TBoxedValue {
         const IValueBuilder* ValueBuilder;
         const TUnboxedValue Stream;
         const std::vector<TColumnMeta> OutMeta;
+        const ui32 TupleSize;
         const TSourcePosition Pos;
         const ui32 TzId;
 
         TPlainArrayCache Cache;
+        TPlainArrayCache TupleCache;
 
         TUnboxedValue Input;
         size_t CurrentRow = 0U;
     };
 
 public:
-    TParseBlocks(const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta)
-        : Pos(pos), OutMeta(std::move(outMeta))
+    TParseBlocks(const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta, ui32 tupleSize)
+        : Pos(pos), OutMeta(std::move(outMeta)), TupleSize(tupleSize)
     {}
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
@@ -648,7 +731,7 @@ public:
             }
         }
 
-        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, OutMeta, Pos, tzId));
+        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, OutMeta, TupleSize, Pos, tzId));
     }
     catch (const Poco::Exception& e) {
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
@@ -659,6 +742,94 @@ public:
 private:
     const TSourcePosition Pos;
     const std::vector<TColumnMeta> OutMeta;
+    const ui32 TupleSize;
+};
+
+class TSerializeFormat : public TBoxedValue {
+    class TStreamValue : public TBoxedValue {
+    public:
+        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::string& type, const NDB::FormatSettings& settings, const std::vector<TColumnMeta>& inMeta, const NDB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos)
+            : ValueBuilder(valueBuilder)
+            , Stream(stream)
+            , InMeta(inMeta)
+            , Pos(pos)
+            , Buffer(std::make_unique<NDB::WriteBufferFromOwnString>())
+            , BlockStream(std::make_unique<NDB::OutputStreamToOutputFormat>(NDB::FormatFactory::instance().getOutputFormat(type, *Buffer, NDB::Block(columns), nullptr,  {}, settings)))
+            , CurrentBlock(columns)
+        {
+            BlockStream->writePrefix();
+        }
+    private:
+        EFetchStatus Fetch(TUnboxedValue& result) final try {
+            if (IsFinished)
+                return EFetchStatus::Finish;
+
+            auto columns = CurrentBlock.mutateColumns();
+            for (TUnboxedValue row; !IsFinished;) {
+                switch (const auto status = Stream.Fetch(row)) {
+                    case EFetchStatus::Yield:
+                        return EFetchStatus::Yield;
+                    case EFetchStatus::Ok:
+                        for (auto i = 0U; i < columns.size(); ++i)
+                            ConvertInputValue(row.GetElement(i), columns[i], InMeta[i]);
+                        continue;
+                    case EFetchStatus::Finish:
+                        IsFinished = true;
+                        BlockStream->writeSuffix();
+                        BlockStream->flush();
+                        break;
+                }
+            }
+
+            CurrentBlock.setColumns(std::move(columns));
+            BlockStream->write(CurrentBlock);
+            BlockStream->flush();
+            CurrentBlock = CurrentBlock.cloneEmpty();
+
+            result = ValueBuilder->NewString(Buffer->str());
+            Buffer->restart();
+            return EFetchStatus::Ok;
+        }
+        catch (const Poco::Exception& e) {
+            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
+        }
+        catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
+        }
+
+        const IValueBuilder* ValueBuilder;
+        const TUnboxedValue Stream;
+        const std::vector<TColumnMeta> InMeta;
+        const TSourcePosition Pos;
+
+        const std::unique_ptr<NDB::WriteBufferFromOwnString> Buffer;
+        const std::unique_ptr<NDB::IBlockOutputStream> BlockStream;
+
+        NDB::Block CurrentBlock;
+        bool IsFinished = false;
+    };
+
+public:
+    TSerializeFormat(const std::string_view& type, const std::string_view& settings, const TSourcePosition& pos, std::vector<TColumnMeta>&& inMeta, NDB::ColumnsWithTypeAndName&& columns)
+        : Type(type), Settings(GetFormatSettings(settings)), Pos(pos), InMeta(std::move(inMeta)), Columns(std::move(columns))
+    {}
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
+        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, Type, Settings, InMeta, Columns, Pos));
+    }
+    catch (const Poco::Exception& e) {
+        UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
+    }
+    catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
+    }
+private:
+    const std::string Type;
+    const NDB::FormatSettings Settings;
+
+    const TSourcePosition Pos;
+    const std::vector<TColumnMeta> InMeta;
+    const NDB::ColumnsWithTypeAndName Columns;
 };
 
 struct TCHInitializer {
@@ -799,7 +970,7 @@ public:
     TClickHouseClientModule() = default;
 
     static const TStringRef& Name() {
-        static const auto name = TStringRef::Of("ClickHouseClient");
+        static constexpr auto name = TStringRef::Of("ClickHouseClient");
         return name;
     }
 
@@ -810,6 +981,7 @@ public:
         sink.Add(TStringRef::Of("ParseFormat"))->SetTypeAwareness();
         sink.Add(TStringRef::Of("ParseBlocks"))->SetTypeAwareness();
         sink.Add(TStringRef::Of("ParseFromYdb"))->SetTypeAwareness();
+        sink.Add(TStringRef::Of("SerializeFormat"))->SetTypeAwareness();
     }
 
     void BuildFunctionTypeInfo(
@@ -820,7 +992,6 @@ public:
                         IFunctionTypeInfoBuilder& builder) const final try {
         LazyInitContext();
         auto argBuilder = builder.Args();
-
         if (name == "ToYqlType") {
             argBuilder->Add<TUtf8>();
             argBuilder->Add<TUtf8>();
@@ -852,14 +1023,32 @@ public:
                 return builder.SetError(sb);
             }
 
+            ui32 tupleSize = 0;
+            TType* inputItemType = builder.Resource("ClickHouseClient.Block");
+
             const auto resultType = userTypeInspector.GetElementType(2);
+            auto structType = TStructTypeInspector(*typeHelper, resultType);
+            if (!structType) {
+                if (const auto tupleType = TTupleTypeInspector(*typeHelper, resultType)) {
+                    tupleSize = tupleType.GetElementsCount();
+                    if (tupleSize > 0) {
+                        structType = TStructTypeInspector(*typeHelper, tupleType.GetElementType(0));
+                        auto tupleBuilder = builder.Tuple(tupleSize);
+                        tupleBuilder->Add(inputItemType);
+                        for (ui32 i = 1; i < tupleSize; ++i) {
+                            tupleBuilder->Add(tupleType.GetElementType(i));
+                        }
+                        inputItemType = tupleBuilder->Build();
+                    }
+                }
+            }
 
             builder.UserType(userType);
-            builder.Args()->Add(builder.Stream()->Item(builder.Resource("ClickHouseClient.Block"))).Add<TOptional<TUtf8>>().Done();
+            builder.Args()->Add(builder.Stream()->Item(inputItemType)).Add<TOptional<TUtf8>>().Done();
             builder.OptionalArgs(1U);
             builder.Returns(builder.Stream()->Item(resultType));
 
-            if (const auto structType = TStructTypeInspector(*typeHelper, resultType)) {
+            if (structType) {
                 std::vector<TColumnMeta> outMeta(structType.GetMembersCount());
                 for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
                     if (auto& meta = outMeta[i]; !GetDataType(*typeHelper, structType.GetMemberType(i), meta)) {
@@ -871,7 +1060,7 @@ public:
                 }
 
                 if (!(flags & TFlags::TypesOnly)) {
-                    builder.Implementation(new TParseBlocks(builder.GetSourcePosition(), std::move(outMeta)));
+                    builder.Implementation(new TParseBlocks(builder.GetSourcePosition(), std::move(outMeta), tupleSize));
                 }
                 return;
             } else {
@@ -898,14 +1087,32 @@ public:
                 return builder.SetError(sb);
             }
 
+            ui32 tupleSize = 0;
+            TType* inputItemType = builder.Primitive(GetDataTypeInfo(EDataSlot::String).TypeId);
+
             const auto resultType = userTypeInspector.GetElementType(2);
+            auto structType = TStructTypeInspector(*typeHelper, resultType);
+            if (!structType) {
+                if (const auto tupleType = TTupleTypeInspector(*typeHelper, resultType)) {
+                    tupleSize = tupleType.GetElementsCount();
+                    if (tupleSize > 0) {
+                        structType = TStructTypeInspector(*typeHelper, tupleType.GetElementType(0));
+                        auto tupleBuilder = builder.Tuple(tupleSize);
+                        tupleBuilder->Add(inputItemType);
+                        for (ui32 i = 1; i < tupleSize; ++i) {
+                            tupleBuilder->Add(tupleType.GetElementType(i));
+                        }
+                        inputItemType = tupleBuilder->Build();
+                    }
+                }
+            }
 
             builder.UserType(userType);
-            builder.Args()->Add(builder.Stream()->Item<char*>()).Add<TOptional<TUtf8>>().Done();
+            builder.Args()->Add(builder.Stream()->Item(inputItemType)).Add<TOptional<TUtf8>>().Done();
             builder.OptionalArgs(1U);
             builder.Returns(builder.Stream()->Item(resultType));
 
-            if (const auto structType = TStructTypeInspector(*typeHelper, resultType)) {
+            if (structType) {
                 std::vector<TColumnMeta> outMeta(structType.GetMembersCount());
                 NDB::ColumnsWithTypeAndName columns(structType.GetMembersCount());
                 for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
@@ -924,13 +1131,70 @@ public:
                 if (!(flags & TFlags::TypesOnly)) {
                     const std::string_view& typeCfg = typeConfig;
                     const auto jsonFrom = typeCfg.find('{');
-                    builder.Implementation(new TParseFormat(typeCfg.substr(0U, jsonFrom), std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom),  builder.GetSourcePosition(), std::move(outMeta), std::move(columns)));
+                    builder.Implementation(new TParseFormat(typeCfg.substr(0U, jsonFrom),
+                                                            std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom),
+                                                            builder.GetSourcePosition(),
+                                                            std::move(outMeta),
+                                                            std::move(columns),
+                                                            tupleSize));
                 }
                 return;
             } else {
                 ::TStringBuilder sb;
                 sb << "Incompatible row type: ";
                 TTypePrinter(*typeHelper, resultType).Out(sb.Out);
+                return builder.SetError(sb);
+            }
+        } else if (name == "SerializeFormat") {
+            const auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+            if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
+                return builder.SetError("Invalid user type.");
+            }
+
+            const auto argsTypeTuple = userTypeInspector.GetElementType(0);
+            const auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
+            if (!argsTypeInspector) {
+                return builder.SetError("Invalid user type - expected tuple.");
+            }
+
+            if (const auto argsCount = argsTypeInspector.GetElementsCount(); argsCount != 1) {
+                ::TStringBuilder sb;
+                sb << "Invalid user type - expected one or two arguments, got: " << argsCount;
+                return builder.SetError(sb);
+            }
+
+            const auto inputType = argsTypeInspector.GetElementType(0);
+
+            builder.UserType(userType);
+            builder.Args()->Add(inputType).Done();
+            builder.Returns(builder.Stream()->Item<char*>());
+
+            if (const auto structType = TStructTypeInspector(*typeHelper, TStreamTypeInspector(*typeHelper, inputType).GetItemType())) {
+                std::vector<TColumnMeta> outMeta(structType.GetMembersCount());
+                NDB::ColumnsWithTypeAndName columns(structType.GetMembersCount());
+                for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
+                    if (auto& meta = outMeta[i]; GetDataType(*typeHelper, structType.GetMemberType(i), meta)) {
+                        auto& colsumn = columns[i];
+                        colsumn.type = MetaToClickHouse(meta);
+                        colsumn.name = structType.GetMemberName(i);
+                    } else {
+                        ::TStringBuilder sb;
+                        sb << "Incompatible column '" << structType.GetMemberName(i) << "' type: ";
+                        TTypePrinter(*typeHelper, structType.GetMemberType(i)).Out(sb.Out);
+                        return builder.SetError(sb);
+                    }
+                }
+
+                if (!(flags & TFlags::TypesOnly)) {
+                    const std::string_view& typeCfg = typeConfig;
+                    const auto jsonFrom = typeCfg.find('{');
+                    builder.Implementation(new TSerializeFormat(typeCfg.substr(0U, jsonFrom), std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom),  builder.GetSourcePosition(), std::move(outMeta), std::move(columns)));
+                }
+                return;
+            } else {
+                ::TStringBuilder sb;
+                sb << "Incompatible row type: ";
+                TTypePrinter(*typeHelper, inputType).Out(sb.Out);
                 return builder.SetError(sb);
             }
         } else if (name == "ParseFromYdb") {
@@ -960,7 +1224,7 @@ public:
                     builder.Implementation(new TParseFromYdb(builder.GetSourcePosition(), std::move(columns)));
                 }
                 return;
-            } else {
+        } else {
                 ::TStringBuilder sb;
                 sb << "Incompatible row type: ";
                 TTypePrinter(*typeHelper, userType).Out(sb.Out);

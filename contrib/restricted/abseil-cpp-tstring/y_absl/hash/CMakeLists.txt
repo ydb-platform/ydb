@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(internal)
 
 add_library(yabseil-cpp-tstring-y_absl-hash)
 target_compile_options(yabseil-cpp-tstring-y_absl-hash PRIVATE

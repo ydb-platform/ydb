@@ -31,7 +31,7 @@ public:
     }
 
     TMemoryTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TMemoryLoadStart& cmd,
-        const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
     {
@@ -131,7 +131,7 @@ public:
 IActor* CreateMemoryTestLoad(
     const NKikimrBlobStorage::TEvTestLoadRequest::TMemoryLoadStart& cmd,
     const TActorId& parent,
-    const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     ui64 index,
     ui64 tag)
 {

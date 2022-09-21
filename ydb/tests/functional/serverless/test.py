@@ -63,6 +63,7 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_f
         def write_some_data(session, path):
             session.transaction().execute(
                 """
+                PRAGMA Kikimr.UseNewEngine="True";
                 UPSERT INTO `{}` (id, value_string, value_num)
                            VALUES (1u, "Ok", 0u),
                                   (2u, "Also_Ok", 0u),
@@ -118,6 +119,7 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
         def write_some_data(session, path):
             session.transaction().execute(
                 """
+                PRAGMA Kikimr.UseNewEngine="True";
                 UPSERT INTO `{}` (id, value_string, value_num)
                            VALUES (1u, "Ok", 0u),
                                   (2u, "Also_Ok", 0u),
@@ -302,6 +304,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         try:
             with (yield async_session()) as session:
                 query = yield session.async_prepare('''\
+                    PRAGMA Kikimr.UseNewEngine="True";
                     DECLARE $key AS Uint64;
                     DECLARE $value AS Utf8;
 
@@ -325,6 +328,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
     def async_erase_key(path, key):
         with (yield async_session()) as session:
             query = yield session.async_prepare('''\
+                PRAGMA Kikimr.UseNewEngine="True";
                 DECLARE $key AS Uint64;
 
                 DELETE FROM `{path}` WHERE id = $key;

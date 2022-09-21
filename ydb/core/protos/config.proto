@@ -608,6 +608,9 @@ message TGRpcConfig {
 
     optional bool SkipSchemeCheck = 24 [default = false];
 
+    repeated string RatelimiterServicesEnabled = 25;
+    repeated string RatelimiterServicesDisabled = 26;
+
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
     optional uint32 KeepAliveIdleTimeoutTriggerSec = 101 [default = 90]; // TCP_KEEPIDLE
@@ -689,8 +692,8 @@ message TFeatureFlags {
     optional bool EnableNotNullColumns = 54 [default = true];
     optional bool EnableTtlOnAsyncIndexedTables = 55 [default = true];
     optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = true];
-    optional bool EnableNodeBrokerSingleDomainMode = 57 [default = false];
-    optional bool EnableKqpSessionActor = 58 [default = true];
+    optional bool EnableNodeBrokerSingleDomainMode = 57 [default = true];
+    optional bool EnableKqpSessionActor = 58 [default = false];
     // Dangerous settings we don't want in the public api unless required
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
@@ -702,6 +705,8 @@ message TFeatureFlags {
     optional bool EnableKqpScanQueryStreamLookup = 66 [default = false];
     optional bool EnableKqpScanQueryMultipleOlapShardsReads = 67 [default = false];
     optional bool EnablePredicateExtractForDataQueries = 68 [default = false];
+    optional bool EnableMoveIndex = 70 [default = false];
+    optional bool EnableNotNullDataColumns = 73 [default = false];
 }
 
 
@@ -1046,7 +1051,7 @@ message TTableServiceConfig {
     }
 
     message TSessionBalancerSettings {
-        optional bool Enabled = 1 [default = true];
+        optional bool Enabled = 1 [default = false];
 
         enum EEnableTier  {
             TIER_DISABLED = 1;
@@ -1093,7 +1098,7 @@ message TTableServiceConfig {
 
         optional uint32 BoardPublishIntervalMs = 10 [default = 1000];
         optional uint32 BoardLookupIntervalMs = 11 [default = 30000];
-        optional EEnableTier EnableTier = 12 [ default = TIER_DISABLED ];
+        optional EEnableTier EnableTier = 12 [ default = TIER_ENABLED_FOR_SESSIONS_WITH_SUPPORT ];
         optional EBalancingStrategy Strategy = 13 [ default = BALANCE_BY_COUNT ];
         optional bool SupportRemoteSessionCreation = 14 [ default = false ];
     }
@@ -1412,6 +1417,7 @@ message THiveConfig {
     optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
     optional bool CheckMoveExpediency = 46 [default = true];
     optional uint64 StoragePoolFreshPeriod = 47 [default = 60000]; // milliseconds
+    optional string PoolsToMonitorForUsage = 48 [default = "System,User,IC"];
 }
 
 message TDataShardConfig {

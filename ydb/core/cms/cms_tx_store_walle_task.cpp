@@ -10,8 +10,7 @@ class TCms::TTxStoreWalleTask : public TTransactionBase<TCms> {
 public:
     TTxStoreWalleTask(TCms *self, const TWalleTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp)
         : TBase(self)
-        , TaskId(task.TaskId)
-        , RequestId(task.RequestId)
+        , Task(task)
         , Request(std::move(req))
         , Response(std::move(resp))
     {
@@ -22,14 +21,30 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStoreWalleTask Execute");
+        
+        for (auto &perm : Task.Permissions) {
+            if (Self->State->Permissions.find(perm) == Self->State->Permissions.end()) {
+
+                Response.Reset(new IEventHandle(Response->Recipient, Response->Sender,
+                               new TEvCms::TEvStoreWalleTaskFailed(Task.TaskId,
+                                                                   TStringBuilder() << "There are no stored permissions for this task. "
+                                                                                    << "Maybe cleanup ran before task been stored. "
+                                                                                    << "Try request again"),
+                               0, Response->Cookie));
+                return true;
+            }
+        }
+
+        Self->State->WalleTasks.emplace(Task.TaskId, Task);
+        Self->State->WalleRequests.emplace(Task.RequestId, Task.TaskId);
 
         NIceDb::TNiceDb db(txc.DB);
-        auto row = db.Table<Schema::WalleTask>().Key(TaskId);
-        row.Update(NIceDb::TUpdate<Schema::WalleTask::RequestID>(RequestId));
+        auto row = db.Table<Schema::WalleTask>().Key(Task.TaskId);
+        row.Update(NIceDb::TUpdate<Schema::WalleTask::RequestID>(Task.RequestId));
 
         Self->AuditLog(ctx, TStringBuilder() << "Store wall-e task"
-            << ": id# " << TaskId
-            << ", requestId# " << RequestId);
+            << ": id# " << Task.TaskId
+            << ", requestId# " << Task.RequestId);
 
         return true;
     }
@@ -41,8 +56,7 @@ public:
     }
 
 private:
-    TString TaskId;
-    TString RequestId;
+    TWalleTaskInfo Task; 
     THolder<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
 };

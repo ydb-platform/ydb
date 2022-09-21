@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(static)
+add_subdirectory(ut)
 
 add_library(topfreq_udf INTERFACE)
 target_link_libraries(topfreq_udf INTERFACE

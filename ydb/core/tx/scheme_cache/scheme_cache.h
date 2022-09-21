@@ -34,10 +34,10 @@ struct TSchemeCacheConfig : public TThrRefBase {
     };
 
     TSchemeCacheConfig() = default;
-    explicit TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters);
+    explicit TSchemeCacheConfig(const TAppData* appData, ::NMonitoring::TDynamicCounterPtr counters);
 
     TVector<TTagEntry> Roots;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
 };
 
 struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
@@ -71,6 +71,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         } else {
             return DomainKey.OwnerId;
         }
+    }
+
+    inline bool IsServerless() const {
+        return DomainKey != ResourcesDomainKey;
     }
 
     TPathId DomainKey;

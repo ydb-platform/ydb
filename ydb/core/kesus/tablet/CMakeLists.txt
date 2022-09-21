@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(quoter_performance_test)
+add_subdirectory(ut)
 
 add_library(core-kesus-tablet)
 target_link_libraries(core-kesus-tablet PUBLIC

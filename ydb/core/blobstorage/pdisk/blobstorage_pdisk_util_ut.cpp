@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
 
     Y_UNIT_TEST(Light) {
         TLight l;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> c(new NMonitoring::TDynamicCounters());
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
         l.Initialize(c, "l");
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
 
     Y_UNIT_TEST(LightOverflow) {
         TLight l;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> c(new NMonitoring::TDynamicCounters());
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
         l.Initialize(c, "l");
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
@@ -473,7 +473,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(SectorMap) {
         TIntrusivePtr<TSectorMap> sectorMap(new TSectorMap(1024*1024));
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults("SectorMap:123", *mon,
@@ -489,7 +489,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(FormatSectorMap) {
         TIntrusivePtr<TSectorMap> sectorMap(new TSectorMap(1024*1024*1024));
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
 
         NPDisk::TKey chunkKey{};
         NPDisk::TKey logKey{};

@@ -83,6 +83,7 @@ public:
     struct TNodesInfo {
         THolder<TEvInterconnect::TEvNodesInfo> NodesInfoReply;
         THashMap<ui32, TString> HostNames;
+        THashMap<TString, ui32> MinNodeIdByHost;
 
         explicit TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply);
     };
@@ -147,6 +148,7 @@ protected:
     THashMap<TActorId, THolder<TPerTopicInfo>> Children;
     size_t ChildrenAnswered = 0;
     std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> TopicsDescription;
+    TVector<NPersQueue::TTopicConverterPtr> TopicsConverters;
 
     // Nodes info
     const bool ListNodes;

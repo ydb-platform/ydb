@@ -9,7 +9,7 @@ namespace NSysView {
 class TExtCountersUpdaterActor
     : public TActorBootstrapped<TExtCountersUpdaterActor>
 {
-    using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+    using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     const TExtCountersConfig Config;
 

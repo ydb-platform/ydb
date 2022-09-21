@@ -56,6 +56,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"AnsiCurrentRow", &TContext::AnsiCurrentRow},
     {"EmitStartsWith", &TContext::EmitStartsWith},
     {"EnforceAnsiOrderByLimitInUnionAll", &TContext::EnforceAnsiOrderByLimitInUnionAll},
+    {"EmitAggApply", &TContext::EmitAggApply},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -137,6 +138,21 @@ TString TContext::MakeName(const TString& name) {
     str << name << iter->second;
     ++iter->second;
     return str;
+}
+
+void TContext::PushCurrentBlocks(TBlocks* blocks) {
+    YQL_ENSURE(blocks);
+    CurrentBlocks.push_back(blocks);
+}
+
+void TContext::PopCurrentBlocks() {
+    YQL_ENSURE(!CurrentBlocks.empty());
+    CurrentBlocks.pop_back();
+}
+
+TBlocks& TContext::GetCurrentBlocks() const {
+    YQL_ENSURE(!CurrentBlocks.empty());
+    return *CurrentBlocks.back();
 }
 
 IOutputStream& TContext::Error(NYql::TIssueCode code) {

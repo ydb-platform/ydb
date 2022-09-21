@@ -14,8 +14,10 @@ namespace NKikimr::NGRpcProxy {
         TString CloudId;
         TString DbId;
         TString FolderId;
+        NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
         NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
         NPersQueue::TTopicConverterPtr FullConverter;
+        TMaybe<TString> CdcStreamPath;
 
         TVector<ui32> Groups;
         TMap<ui64, ui64> Partitions;
@@ -33,6 +35,7 @@ namespace NKikimr::NGRpcProxy {
         TString CloudId;
         TString DbId;
         TString FolderId;
+        NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     };
 
     using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;

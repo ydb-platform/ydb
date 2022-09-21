@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 
 add_library(cpp-histogram-adaptive)
 target_link_libraries(cpp-histogram-adaptive PUBLIC

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-kesus-proxy)
 target_link_libraries(core-kesus-proxy PUBLIC

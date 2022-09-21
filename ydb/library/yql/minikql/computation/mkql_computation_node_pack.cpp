@@ -406,7 +406,7 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
             return MakeString(NUdf::TStringRef(ptr, 16));
         }
         case NUdf::EDataSlot::Decimal: {
-            const auto des = NYql::NDecimal::Deserialize(buf.data());
+            const auto des = NYql::NDecimal::Deserialize(buf.data(), buf.size());
             MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
             buf.Skip(des.second);
             return NUdf::TUnboxedValuePod(des.first);

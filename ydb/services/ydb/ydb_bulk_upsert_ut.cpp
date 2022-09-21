@@ -230,11 +230,24 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
         TString tableName = "/Root/TestNotNullColumns";
 
-        {
+        {  /* create table with disabled not null data column */
             auto tableBuilder = client.GetTableBuilder();
             tableBuilder
                     .AddNonNullableColumn("Key", EPrimitiveType::Uint64)
                     .AddNonNullableColumn("Value", EPrimitiveType::Uint64)
+                .SetPrimaryKeyColumns({"Key"});
+            auto result = session.CreateTable(tableName, tableBuilder.Build()).ExtractValueSync();
+
+            Cerr << result.GetIssues().ToString() << Endl;
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        }
+
+        {  /* create table with not null primary key column */
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                    .AddNonNullableColumn("Key", EPrimitiveType::Uint64)
+                    .AddNullableColumn("Value", EPrimitiveType::Uint64)
                 .SetPrimaryKeyColumns({"Key"});
             auto result = session.CreateTable(tableName, tableBuilder.Build()).ExtractValueSync();
 
@@ -274,21 +287,6 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
         }
 
-        {  /* missing not null value column */
-            TValueBuilder rows;
-            rows.BeginList();
-            rows.AddListItem()
-                .BeginStruct()
-                    .AddMember("Key").Uint64(2)
-                .EndStruct();
-            rows.EndList();
-
-            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync();
-            Cerr << res.GetIssues().ToString();
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Missing not null columns: Value");
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
-        }
-
         {  /* set null to not null primary key column */
             TValueBuilder rows;
             rows.BeginList();
@@ -296,22 +294,6 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                 .BeginStruct()
                     .AddMember("Key").EmptyOptional(EPrimitiveType::Uint64)
                     .AddMember("Value").Uint64(20)
-                .EndStruct();
-            rows.EndList();
-
-            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync();
-            Cerr << res.GetIssues().ToString();
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Received NULL value for not null column");
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
-        }
-
-        {  /* set null to not null value column */
-            TValueBuilder rows;
-            rows.BeginList();
-            rows.AddListItem()
-                .BeginStruct()
-                    .AddMember("Key").Uint64(2)
-                    .AddMember("Value").EmptyOptional(EPrimitiveType::Uint64)
                 .EndStruct();
             rows.EndList();
 

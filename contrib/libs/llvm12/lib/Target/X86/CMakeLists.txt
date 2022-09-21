@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(AsmParser)
+add_subdirectory(Disassembler)
+add_subdirectory(MCTargetDesc)
+add_subdirectory(TargetInfo)
 
 add_library(lib-Target-X86)
 target_compile_options(lib-Target-X86 PRIVATE

@@ -119,7 +119,7 @@ public:
 
         // Heavy operations inside. We cannot run them in tablet event handler.
         TString strError;
-        std::shared_ptr<arrow::RecordBatch> batch;
+        std::shared_ptr<arrow::RecordBatch>& batch = WriteEv->WrittenBatch;
         {
             TCpuGuard guard(ResourceUsage);
             batch = IndexInfo.PrepareForInsert(srcData, meta, strError);

@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(base)
+add_subdirectory(counters)
+add_subdirectory(local_rpc)
+add_subdirectory(ut)
 
 add_library(ydb-core-grpc_services)
 target_compile_options(ydb-core-grpc_services PRIVATE
@@ -114,7 +118,6 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_stream_execute_yql_script.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_whoami.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_yq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/table_profiles.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/table_settings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_analytics_internal.cpp
 )

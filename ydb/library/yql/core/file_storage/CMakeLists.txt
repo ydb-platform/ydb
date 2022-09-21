@@ -6,6 +6,11 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(defs)
+add_subdirectory(download)
+add_subdirectory(http_download)
+add_subdirectory(proto)
+add_subdirectory(ut)
 
 add_library(yql-core-file_storage)
 target_link_libraries(yql-core-file_storage PUBLIC

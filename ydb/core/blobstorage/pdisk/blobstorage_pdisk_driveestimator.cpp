@@ -231,7 +231,7 @@ void TDriveEstimator::EstimateGlueingDeadline(ui32 outGlueingDeadline[TDriveMode
 
 TDriveEstimator::TDriveEstimator(const TString filename)
     : Filename(filename)
-    , Counters(new NMonitoring::TDynamicCounters())
+    , Counters(new ::NMonitoring::TDynamicCounters())
     , PDiskMon(Counters, 0, nullptr)
     , ActorSystemCreator(new TActorSystemCreator)
     , ActorSystem(ActorSystemCreator->GetActorSystem())

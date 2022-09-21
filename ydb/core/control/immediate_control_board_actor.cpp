@@ -36,8 +36,8 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
     TIntrusivePtr<TControlBoard> Board;
     TVector<TLogRecord> HistoryLog;
 
-    NMonitoring::TDynamicCounters::TCounterPtr HasChanged;
-    NMonitoring::TDynamicCounters::TCounterPtr ChangedCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr HasChanged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ChangedCount;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -45,10 +45,10 @@ public:
     }
 
     TImmediateControlActor(TIntrusivePtr<TControlBoard> board,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Board(board)
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils");
         HasChanged = IcbGroup->GetCounter("Icb/HasChangedContol");
         ChangedCount = IcbGroup->GetCounter("Icb/ChangedControlsCount");
     }
@@ -129,7 +129,7 @@ private:
 };
 
 NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters) {
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new NKikimr::TImmediateControlActor(board, counters);
 }
 };

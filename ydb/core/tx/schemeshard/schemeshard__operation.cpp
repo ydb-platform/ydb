@@ -1,8 +1,11 @@
 #include "schemeshard__operation.h"
+#include "schemeshard__operation_part.h"
 
 #include "schemeshard__operation_side_effects.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_db_changes.h"
+
+#include "schemeshard_audit_log_fragment.h"
 
 #include "schemeshard_impl.h"
 
@@ -68,6 +71,33 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
     return recordForPrint;
 }
 
+TString GetAuditLogEntry(const TTxId& txId, const THolder<TProposeResponse>& response, TOperationContext& context) {
+    auto auditLog = TStringBuilder();
+
+    auditLog << "txId: " << txId;
+    for (const auto& frag: context.AuditLogFragments) {
+        auditLog << ", ";
+        auditLog << frag.ToString();
+    }
+
+    auto fragPath = TPath::Resolve(context.AuditLogFragments.front().GetAnyPath(), context.SS);
+    if (!fragPath.IsResolved()) {
+        fragPath.RiseUntilFirstResolvedParent();
+    }
+    if (!fragPath.IsEmpty()) {
+        auditLog << ", database: " << fragPath.GetDomainPathString();
+    }
+
+    auditLog << ", subject: " << context.GetSubject();
+
+    auditLog << ", status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus());
+    if (response->Record.HasReason()) {
+        auditLog << ", reason: " << response->Record.GetReason();
+    }
+
+    return auditLog;
+}
+
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
     THolder<TProposeResponse> response = nullptr;
 
@@ -85,7 +115,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     }
 
     TOperation::TPtr operation = new TOperation(txId);
-    Operations[operation->GetTxId()] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
+    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
 
     if (record.GetUserToken()) {
          NACLibProto::TUserToken tokenPb;
@@ -100,12 +130,18 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     }
 
     for (const auto& transaction: record.GetTransaction()) {
+        context.AddAuditLogFragment(transaction);
+    }
+
+    for (const auto& transaction: record.GetTransaction()) {
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
                 quotaResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(quotaResult.Status, quotaResult.Reason);
-            Operations.erase(operation->GetTxId());
+            Operations.erase(txId);
+
+            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
             return std::move(response);
         }
     }
@@ -126,16 +162,20 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
                 splitResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(splitResult.Status, splitResult.Reason);
-            Operations.erase(operation->GetTxId());
+            Operations.erase(txId);
+
+            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
             return std::move(response);
         }
 
         transactions.insert(transactions.end(), splitResult.Transactions.begin(), splitResult.Transactions.end());
     }
 
+    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
+    context.ClearAuditLogFragments();
+
     //for all tx in transactions
     for (const auto& transaction: transactions) {
-        const TOperationId pathOpId = TOperationId(txId, operation->Parts.size());
         TVector<ISubOperationBase::TPtr> parts = operation->ConstructParts(transaction, context);
 
         if (parts.size() > 1) {
@@ -143,15 +183,17 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             context.IsAllowedPrivateTables = true;
         }
 
-        const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
+        context.AddAuditLogFragment(transaction);
 
         for (auto& part: parts) {
+            const TOperationId pathOpId = operation->NextPartId();
+
             response = part->Propose(owner, context);
             Y_VERIFY(response);
 
             LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "IgniteOperation"
-                             << ", opId: " << pathOpId
+                             << ", opId: " << operation->NextPartId()
                              << ", propose status:" << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                              << ", reason: " << response->Record.GetReason()
                              << ", at schemeshard: " << selfId);
@@ -199,12 +241,15 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
                 context.MemChanges.UnDo(context.SS);
                 context.OnComplete.ApplyOnExecute(context.SS, context.GetTxc(), context.Ctx);
-                Operations.erase(operation->GetTxId());
+                Operations.erase(txId);
+
+                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
                 return std::move(response);
             }
         }
     }
 
+    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
     return std::move(response);
 }
 
@@ -1121,7 +1166,7 @@ TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction
     switch (opType) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         if (tx.GetCreateTable().HasCopyFromTable()) {
-            return {CreateCopyTable(NextPartId(), tx, context)}; // Copy indexes table as well as common table
+            return CreateCopyTable(NextPartId(), tx, context); // Copy indexes table as well as common table
         }
         return {ConstructPart(opType, tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:

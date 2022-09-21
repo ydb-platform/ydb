@@ -867,6 +867,7 @@ message TS3Settings {
     optional string ProxyHost = 9;
     optional uint32 ProxyPort = 10;
     optional EScheme ProxyScheme = 11;
+    optional string Region = 12;
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

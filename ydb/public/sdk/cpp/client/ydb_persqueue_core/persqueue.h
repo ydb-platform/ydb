@@ -357,19 +357,19 @@ struct TWriterCounters : public TThrRefBase {
     using TSelf = TWriterCounters;
     using TPtr = TIntrusivePtr<TSelf>;
 
-    explicit TWriterCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
+    explicit TWriterCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
-    NMonitoring::TDynamicCounters::TCounterPtr Errors;
-    NMonitoring::TDynamicCounters::TCounterPtr CurrentSessionLifetimeMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CurrentSessionLifetimeMs;
 
-    NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
-    NMonitoring::TDynamicCounters::TCounterPtr MessagesWritten;
-    NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenCompressed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesWritten;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenCompressed;
 
-    NMonitoring::TDynamicCounters::TCounterPtr BytesInflightUncompressed;
-    NMonitoring::TDynamicCounters::TCounterPtr BytesInflightCompressed;
-    NMonitoring::TDynamicCounters::TCounterPtr BytesInflightTotal;
-    NMonitoring::TDynamicCounters::TCounterPtr MessagesInflight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightUncompressed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightCompressed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightTotal;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesInflight;
 
     //! Histograms reporting % usage of memory limit in time.
     //! Provides a histogram looking like: 10% : 100ms, 20%: 300ms, ... 50%: 200ms, ... 100%: 50ms
@@ -378,11 +378,11 @@ struct TWriterCounters : public TThrRefBase {
     //! mean that writer is close to overflow (or being overflown) for major periods of time
     //! 3 histograms stand for:
     //! Total memory usage:
-    NMonitoring::THistogramPtr TotalBytesInflightUsageByTime;
+    ::NMonitoring::THistogramPtr TotalBytesInflightUsageByTime;
     //! Memory usage by messages waiting for comression:
-    NMonitoring::THistogramPtr UncompressedBytesInflightUsageByTime;
+    ::NMonitoring::THistogramPtr UncompressedBytesInflightUsageByTime;
     //! Memory usage by compressed messages pending for write:
-    NMonitoring::THistogramPtr CompressedBytesInflightUsageByTime;
+    ::NMonitoring::THistogramPtr CompressedBytesInflightUsageByTime;
 };
 
 struct TReaderCounters : public TThrRefBase {
@@ -390,19 +390,19 @@ struct TReaderCounters : public TThrRefBase {
     using TPtr = TIntrusivePtr<TSelf>;
 
     TReaderCounters() = default;
-    explicit TReaderCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
+    explicit TReaderCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
-    NMonitoring::TDynamicCounters::TCounterPtr Errors;
-    NMonitoring::TDynamicCounters::TCounterPtr CurrentSessionLifetimeMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CurrentSessionLifetimeMs;
 
-    NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
-    NMonitoring::TDynamicCounters::TCounterPtr MessagesRead;
-    NMonitoring::TDynamicCounters::TCounterPtr BytesReadCompressed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesRead;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesReadCompressed;
 
-    NMonitoring::TDynamicCounters::TCounterPtr BytesInflightUncompressed;
-    NMonitoring::TDynamicCounters::TCounterPtr BytesInflightCompressed;
-    NMonitoring::TDynamicCounters::TCounterPtr BytesInflightTotal;
-    NMonitoring::TDynamicCounters::TCounterPtr MessagesInflight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightUncompressed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightCompressed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightTotal;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesInflight;
 
     //! Histograms reporting % usage of memory limit in time.
     //! Provides a histogram looking like: 10% : 100ms, 20%: 300ms, ... 50%: 200ms, ... 100%: 50ms
@@ -411,11 +411,11 @@ struct TReaderCounters : public TThrRefBase {
     //! mean that read session is close to overflow (or being overflown) for major periods of time.
     //!
     //! Total memory usage.
-    NMonitoring::THistogramPtr TotalBytesInflightUsageByTime;
+    ::NMonitoring::THistogramPtr TotalBytesInflightUsageByTime;
     //! Memory usage by messages waiting that are ready to be received by user.
-    NMonitoring::THistogramPtr UncompressedBytesInflightUsageByTime;
+    ::NMonitoring::THistogramPtr UncompressedBytesInflightUsageByTime;
     //! Memory usage by compressed messages pending for decompression.
-    NMonitoring::THistogramPtr CompressedBytesInflightUsageByTime;
+    ::NMonitoring::THistogramPtr CompressedBytesInflightUsageByTime;
 };
 
 //! Partition stream.
@@ -948,8 +948,11 @@ private:
     bool Started = false;
     TAdaptiveLock StartLock;
 };
+
 IExecutor::TPtr CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool); // Thread pool is expected to have been started.
 IExecutor::TPtr CreateThreadPoolExecutor(size_t threads);
+
+IExecutor::TPtr CreateSyncExecutor();
 
 //! Events for write session.
 struct TWriteSessionEvent {

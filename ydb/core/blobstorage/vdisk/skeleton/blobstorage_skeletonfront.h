@@ -39,6 +39,6 @@ namespace NKikimr {
     struct TVDiskConfig;
     IActor* CreateVDiskSkeletonFront(const TIntrusivePtr<TVDiskConfig> &cfg,
                                      const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                     const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters);
+                                     const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters);
 
 } // NKikimr

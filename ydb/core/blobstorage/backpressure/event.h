@@ -51,8 +51,8 @@ public:
     {}
 
     template<typename TPtr>
-    TEventHolder(TPtr& ev, const NMonitoring::TDynamicCounters::TCounterPtr& serItems,
-            const NMonitoring::TDynamicCounters::TCounterPtr& serBytes, const TBSProxyContextPtr& bspctx,
+    TEventHolder(TPtr& ev, const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes, const TBSProxyContextPtr& bspctx,
             ui32 interconnectChannel, bool local)
         : Type(ev->GetTypeRewrite())
         , Sender(ev->Sender)
@@ -121,8 +121,8 @@ public:
     }
 
     IEventBase *MakeErrorReply(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            const NMonitoring::TDynamicCounters::TCounterPtr& deserItems,
-            const NMonitoring::TDynamicCounters::TCounterPtr& deserBytes);
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& deserItems,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& deserBytes);
 
     ui32 GetType() const {
         return Type;

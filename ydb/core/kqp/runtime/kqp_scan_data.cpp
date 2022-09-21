@@ -249,12 +249,14 @@ std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& val
 }
 
 TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTableRange& range,
-    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys)
+    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys,
+    const TSmallVec<TColumn>& resultColumns)
     : TableId(tableId)
     , Range(range)
     , SkipNullKeys(skipNullKeys)
     , Columns(columns)
     , SystemColumns(systemColumns)
+    , ResultColumns(resultColumns)
 {}
 
 TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
@@ -277,6 +279,23 @@ TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTrans
             Columns.emplace_back(std::move(c));
         } else {
             SystemColumns.emplace_back(std::move(c));
+        }
+    }
+
+    if (meta.GetResultColumns().empty()) {
+        ResultColumns = Columns;
+    } else {
+        ResultColumns.reserve(meta.GetResultColumns().size());
+        for (const auto& resColumn : meta.GetResultColumns()) {
+            NMiniKQL::TKqpScanComputeContext::TColumn c;
+            c.Tag = resColumn.GetId();
+            c.Type = resColumn.GetType();
+
+            if (!IsSystemColumn(c.Tag)) {
+                ResultColumns.emplace_back(std::move(c));
+            } else {
+                SystemColumns.emplace_back(std::move(c));
+            }
         }
     }
 
@@ -307,13 +326,13 @@ ui64 TKqpScanComputeContext::TScanData::AddRows(const TVector<TOwnedCellVec>& ba
 
         // Convert row into an UnboxedValue
         NUdf::TUnboxedValue* rowItems = nullptr;
-        rows.emplace_back(holderFactory.CreateDirectArrayHolder(Columns.size() + SystemColumns.size(), rowItems));
-        for (ui32 i = 0; i < Columns.size(); ++i) {
-            rowItems[i] = GetCellValue(row[i], Columns[i].Type);
+        rows.emplace_back(holderFactory.CreateDirectArrayHolder(ResultColumns.size() + SystemColumns.size(), rowItems));
+        for (ui32 i = 0; i < ResultColumns.size(); ++i) {
+            rowItems[i] = GetCellValue(row[i], ResultColumns[i].Type);
         }
-        FillSystemColumns(&rowItems[Columns.size()], shardId, SystemColumns);
+        FillSystemColumns(&rowItems[ResultColumns.size()], shardId, SystemColumns);
 
-        stats.AddStatistics(GetRowSize(rowItems, Columns, SystemColumns));
+        stats.AddStatistics(GetRowSize(rowItems, ResultColumns, SystemColumns));
     }
     RowBatches.emplace(RowBatch{std::move(rows), shardId});
 
@@ -337,7 +356,7 @@ ui64 TKqpScanComputeContext::TScanData::AddRows(const arrow::RecordBatch& batch,
     TBytesStatistics stats;
     TUnboxedValueVector rows;
 
-    if (Columns.empty() && SystemColumns.empty()) {
+    if (ResultColumns.empty() && SystemColumns.empty()) {
         rows.resize(batch.num_rows(), holderFactory.GetEmptyContainer());
     } else {
         TVector<NUdf::TUnboxedValue*> editAccessors(batch.num_rows());
@@ -345,27 +364,27 @@ ui64 TKqpScanComputeContext::TScanData::AddRows(const arrow::RecordBatch& batch,
 
         for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
             rows.emplace_back(holderFactory.CreateDirectArrayHolder(
-                Columns.size() + SystemColumns.size(),
+                ResultColumns.size() + SystemColumns.size(),
                 editAccessors[rowIndex])
             );
         }
 
-        for (size_t columnIndex = 0; columnIndex < Columns.size(); ++columnIndex) {
+        for (size_t columnIndex = 0; columnIndex < ResultColumns.size(); ++columnIndex) {
             stats.AddStatistics(
-                WriteColumnValuesFromArrow(editAccessors, batch, columnIndex, Columns[columnIndex].Type)
+                WriteColumnValuesFromArrow(editAccessors, batch, columnIndex, ResultColumns[columnIndex].Type)
             );
         }
 
         if (!SystemColumns.empty()) {
             for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
-                FillSystemColumns(&editAccessors[rowIndex][Columns.size()], shardId, SystemColumns);
+                FillSystemColumns(&editAccessors[rowIndex][ResultColumns.size()], shardId, SystemColumns);
             }
 
             stats.AllocatedBytes += batch.num_rows() * SystemColumns.size() * sizeof(NUdf::TUnboxedValue);
         }
     }
 
-    if (Columns.empty()) {
+    if (ResultColumns.empty()) {
         stats.AddStatistics({sizeof(ui64) * batch.num_rows(), sizeof(ui64) * batch.num_rows()});
     }
 
@@ -384,7 +403,7 @@ NUdf::TUnboxedValue TKqpScanComputeContext::TScanData::TakeRow() {
     YQL_ENSURE(!RowBatches.empty());
     auto& batch = RowBatches.front();
     auto row = std::move(batch.Batch[batch.CurrentRow++]);
-    auto rowStats = GetRowSize(row.GetElements(), Columns, SystemColumns);
+    auto rowStats = GetRowSize(row.GetElements(), ResultColumns, SystemColumns);
 
     StoredBytes -= rowStats.AllocatedBytes;
     if (batch.CurrentRow == batch.Batch.size()) {
@@ -392,23 +411,6 @@ NUdf::TUnboxedValue TKqpScanComputeContext::TScanData::TakeRow() {
     }
     YQL_ENSURE(RowBatches.empty() == (StoredBytes == 0), "StoredBytes miscalculated!");
     return row;
-}
-
-void TKqpScanComputeContext::AddTableScan(ui32, const TTableId& tableId, const TTableRange& range,
-    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys)
-{
-    auto scanData = TKqpScanComputeContext::TScanData(tableId, range, columns, systemColumns, skipNullKeys);
-
-    if (Y_UNLIKELY(StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC)) {
-        scanData.BasicStats = std::make_unique<TScanData::TBasicStats>();
-    }
-
-    if (Y_UNLIKELY(StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE)) {
-        scanData.ProfileStats = std::make_unique<TScanData::TProfileStats>();
-    }
-
-    auto result = Scans.emplace(0, std::move(scanData));
-    Y_ENSURE(result.second);
 }
 
 void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
@@ -470,7 +472,7 @@ public:
         }
 
         auto row = ScanData.TakeRow();
-        for (ui32 i = 0; i < ScanData.GetColumns().size() + ScanData.GetSystemColumns().size(); ++i) {
+        for (ui32 i = 0; i < ScanData.GetResultColumns().size() + ScanData.GetSystemColumns().size(); ++i) {
             if (result[i]) {
                 *result[i] = std::move(row.GetElement(i));
             }

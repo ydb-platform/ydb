@@ -31,6 +31,8 @@ NNodes::TExprBase DqPushOrderedLMapToStage(NNodes::TExprBase node, TExprContext&
 NNodes::TExprBase DqPushLMapToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
+NNodes::TExprBase DqBuildPureFlatmapStage(NNodes::TExprBase node, TExprContext& ctx);
+
 NNodes::TExprBase DqBuildFlatmapStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
@@ -95,6 +97,9 @@ NNodes::TExprBase DqBuildPrecompute(NNodes::TExprBase node, TExprContext& ctx);
 NYql::NNodes::TExprBase DqBuildHasItems(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     NYql::IOptimizationContext& optCtx);
 
+NNodes::TExprBase DqBuildSqlIn(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage);
+
 NYql::NNodes::TExprBase DqBuildScalarPrecompute(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     NYql::IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage);
 
@@ -105,5 +110,8 @@ NYql::NNodes::TExprBase DqPropagatePrecomuteTake(NYql::NNodes::TExprBase node, N
 
 NYql::NNodes::TExprBase DqPropagatePrecomuteFlatmap(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     NYql::IOptimizationContext& optCtx, const NYql::TParentsMap& parentsMap, bool allowStageMultiUsage);
+
+TVector<NYql::NNodes::TCoArgument> PrepareArgumentsReplacement(const NYql::NNodes::TExprBase& node, const TVector<NYql::NNodes::TDqConnection>& newInputs,
+    NYql::TExprContext& ctx, NYql::TNodeOnNodeOwnedMap& replaceMap);
 
 } // namespace NYql::NDq

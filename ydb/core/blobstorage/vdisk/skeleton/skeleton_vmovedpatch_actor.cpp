@@ -23,7 +23,7 @@ namespace NKikimr {
             std::unique_ptr<TEvBlobStorage::TEvPatch::TDiff[]> Diffs;
 
             TActorIDPtr SkeletonFrontIDPtr;
-            NMonitoring::TDynamicCounters::TCounterPtr MovedPatchResMsgsPtr;
+            ::NMonitoring::TDynamicCounters::TCounterPtr MovedPatchResMsgsPtr;
 
             TEvBlobStorage::TEvVMovedPatch::TPtr Event;
             TActorId LeaderId;
@@ -39,7 +39,7 @@ namespace NKikimr {
 
         public:
             TVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMovedPatch::TPtr &ev,
-                    TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr movedPatchResMsgsPtr,
+                    TActorIDPtr skeletonFrontIDPtr, ::NMonitoring::TDynamicCounters::TCounterPtr movedPatchResMsgsPtr,
                     ui64 incarnationGuid, const TVDiskContextPtr &vCtx)
                 : TActorBootstrapped()
                 , SkeletonFrontIDPtr(skeletonFrontIDPtr)
@@ -198,7 +198,7 @@ namespace NKikimr {
 
     IActor* CreateSkeletonVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus,
             TEvBlobStorage::TEvVMovedPatch::TPtr &ev, TActorIDPtr skeletonFrontIDPtr,
-            NMonitoring::TDynamicCounters::TCounterPtr counterPtr, ui64 incarnationGuid,
+            ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr, ui64 incarnationGuid,
             const TVDiskContextPtr &vCtx)
     {
         return new NPrivate::TVMovedPatchActor(leaderId, oosStatus, ev, skeletonFrontIDPtr,

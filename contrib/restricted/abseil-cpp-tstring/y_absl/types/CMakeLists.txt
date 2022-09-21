@@ -6,5 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(bad_optional_access)
+add_subdirectory(bad_variant_access)
+add_subdirectory(internal)
 
 add_library(abseil-cpp-tstring-y_absl-types INTERFACE)

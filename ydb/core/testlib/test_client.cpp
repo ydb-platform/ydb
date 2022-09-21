@@ -30,6 +30,7 @@
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/persqueue_v1/grpc_pq_write.h>
+#include <ydb/services/monitoring/grpc_service.h>
 #include <ydb/services/yq/grpc_service.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
@@ -260,7 +261,7 @@ namespace Tests {
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
 
-        GRpcServerRootCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = GRpcServerRootCounters;
 
         auto& appData = Runtime->GetAppData();
@@ -305,24 +306,25 @@ namespace Tests {
         future.Subscribe(startCb);
 
         GRpcServer->AddService(grpcService);
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbExportService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbImportService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbSchemeService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbTableService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbScriptingService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::V1::TGRpcTopicService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbExportService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbImportService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbSchemeService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbTableService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbScriptingService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::V1::TGRpcTopicService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbExperimentalService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbS3InternalService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbExperimentalService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbS3InternalService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxyId, true));
         if (Settings->EnableYq) {
             GRpcServer->AddService(new NGRpcService::TGRpcYandexQueryService(system, counters, grpcRequestProxyId));
             GRpcServer->AddService(new NGRpcService::TGRpcYqPrivateTaskService(system, counters, grpcRequestProxyId));
@@ -334,8 +336,8 @@ namespace Tests {
                 GRpcServer->AddService(service);
             }
         }
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxyId, true));
         GRpcServer->Start();
     }
 
@@ -669,7 +671,7 @@ namespace Tests {
         {
             if (Settings->PQConfig.GetEnabled() == true) {
                 IActor *pqMetaCache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
-                        new NMonitoring::TDynamicCounters(), TDuration::Seconds(1)
+                        new ::NMonitoring::TDynamicCounters(), TDuration::Seconds(1)
                 );
 
                 TActorId pqMetaCacheId = Runtime->Register(pqMetaCache, nodeIdx);
@@ -807,7 +809,7 @@ namespace Tests {
             };
 
             const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             YqSharedResources = NYq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
             NYq::Init(
                 protoConfig,
@@ -1347,7 +1349,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::CreateTableWithUniformShardedIndex(const TString& parent,
         const NKikimrSchemeOp::TTableDescription &table, const TString& indexName, const TVector<TString> indexColumns,
-        const TVector<TString> dataColumns, TDuration timeout)
+        NKikimrSchemeOp::EIndexType type, const TVector<TString> dataColumns, TDuration timeout)
     {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1367,7 +1369,7 @@ namespace Tests {
                 indexDesc->AddDataColumnNames(c);
             }
 
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+            indexDesc->SetType(type);
             indexDesc->MutableIndexImplTableDescription()->SetUniformPartitionsCount(16);
         }
 

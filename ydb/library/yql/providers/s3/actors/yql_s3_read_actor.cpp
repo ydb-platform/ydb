@@ -15,7 +15,7 @@
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/ColumnsWithTypeAndName.h>
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatFactory.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/InputStreamFromInputFormat.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/InputStreamFromInputFormat.h>
 #endif
 
 #include "yql_s3_read_actor.h"
@@ -68,7 +68,7 @@ struct TEvPrivate {
 
     // Events
     struct TEvReadResult : public TEventLocal<TEvReadResult, EvReadResult> {
-        TEvReadResult(IHTTPGateway::TContent&& result, size_t pathInd = 0U): Result(std::move(result)), PathIndex(pathInd) {}
+        TEvReadResult(IHTTPGateway::TContent&& result, size_t pathInd): Result(std::move(result)), PathIndex(pathInd) {}
         IHTTPGateway::TContent Result;
         const size_t PathIndex;
     };
@@ -81,7 +81,7 @@ struct TEvPrivate {
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {};
 
     struct TEvReadError : public TEventLocal<TEvReadError, EvReadError> {
-        TEvReadError(TIssues&& error, size_t pathInd = 0U) : Error(std::move(error)), PathIndex(pathInd) {}
+        TEvReadError(TIssues&& error, size_t pathInd = std::numeric_limits<size_t>::max()) : Error(std::move(error)), PathIndex(pathInd) {}
         const TIssues Error;
         const size_t PathIndex;
     };
@@ -97,8 +97,9 @@ struct TEvPrivate {
     };
 
     struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
-        explicit TEvNextBlock(NDB::Block& block) { Block.swap(block); }
+        TEvNextBlock(NDB::Block& block, size_t pathInd) : PathIndex(pathInd) { Block.swap(block); }
         NDB::Block Block;
+        const size_t PathIndex;
     };
 };
 
@@ -147,18 +148,24 @@ class TS3ReadActor : public TActorBootstrapped<TS3ReadActor>, public IDqComputeA
 public:
     TS3ReadActor(ui64 inputIndex,
         IHTTPGateway::TPtr gateway,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const TString& url,
         const TString& token,
         TPathList&& paths,
+        bool addPathIndex,
+        ui64 startPathIndex,
         const NActors::TActorId& computeActorId,
         const std::shared_ptr<NS3::TRetryConfig>& retryConfig
     )   : Gateway(std::move(gateway))
+        , HolderFactory(holderFactory)
         , InputIndex(inputIndex)
         , ComputeActorId(computeActorId)
         , ActorSystem(TActivationContext::ActorSystem())
         , Url(url)
         , Headers(MakeHeader(token))
         , Paths(std::move(paths))
+        , AddPathIndex(addPathIndex)
+        , StartPathIndex(startPathIndex)
         , RetryConfig(retryConfig)
     {}
 
@@ -169,7 +176,7 @@ public:
             const TPath& path = Paths[pathInd];
             Gateway->Download(Url + std::get<TString>(path),
                 Headers, std::get<size_t>(path),
-                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd));
+                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd + StartPathIndex));
         };
     }
 
@@ -205,8 +212,18 @@ private:
         if (!Blocks.empty()) {
             buffer.reserve(buffer.size() + Blocks.size());
             do {
-                const auto size = Blocks.front().size();
-                buffer.emplace_back(NKikimr::NMiniKQL::MakeString(std::string_view(Blocks.front())));
+                auto& content = std::get<IHTTPGateway::TContent>(Blocks.front());
+                const auto size = content.size();
+                auto value = NKikimr::NMiniKQL::MakeString(std::string_view(content));
+                if (AddPathIndex) {
+                    NUdf::TUnboxedValue* tupleItems = nullptr;
+                    auto tuple = ContainerCache.NewArray(HolderFactory, 2, tupleItems);
+                    *tupleItems++ = value;
+                    *tupleItems++ = NUdf::TUnboxedValuePod(std::get<ui64>(Blocks.front()));
+                    value = tuple;
+                }
+
+                buffer.emplace_back(std::move(value));
                 Blocks.pop();
                 total += size;
                 freeSpace -= size;
@@ -215,6 +232,7 @@ private:
 
         if (Blocks.empty() && IsDoneCounter == Paths.size()) {
             finished = true;
+            ContainerCache.Clear();
         }
 
         return total;
@@ -223,7 +241,7 @@ private:
 
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         ++IsDoneCounter;
-        Blocks.emplace(std::move(result->Get()->Result));
+        Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), result->Get()->PathIndex));
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -258,6 +276,8 @@ private:
     size_t IsDoneCounter = 0U;
 
     const IHTTPGateway::TPtr Gateway;
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    NKikimr::NMiniKQL::TPlainContainerCache ContainerCache;
 
     const ui64 InputIndex;
     const NActors::TActorId ComputeActorId;
@@ -267,8 +287,10 @@ private:
     const TString Url;
     const IHTTPGateway::THeaders Headers;
     const TPathList Paths;
+    const bool AddPathIndex;
+    const ui64 StartPathIndex;
 
-    std::queue<IHTTPGateway::TContent> Blocks;
+    std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
 
     std::vector<TRetryParams> RetriesPerPath;
     const std::shared_ptr<NS3::TRetryConfig> RetryConfig;
@@ -303,8 +325,8 @@ private:
         TString Value;
     };
 public:
-    TS3ReadCoroImpl(ui64 inputIndex, const NActors::TActorId& sourceActorId, const NActors::TActorId& computeActorId, const TReadSpec::TPtr& readSpec)
-        : TActorCoroImpl(256_KB), InputIndex(inputIndex), ReadSpec(readSpec), SourceActorId(sourceActorId), ComputeActorId(computeActorId)
+    TS3ReadCoroImpl(ui64 inputIndex, const NActors::TActorId& sourceActorId, const NActors::TActorId& computeActorId, const TReadSpec::TPtr& readSpec, size_t pathIndex)
+        : TActorCoroImpl(256_KB), InputIndex(inputIndex), ReadSpec(readSpec), SourceActorId(sourceActorId), ComputeActorId(computeActorId), PathIndex(pathIndex)
     {}
 
     bool Next(TString& value) {
@@ -335,7 +357,7 @@ private:
         NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
 
         while (auto block = stream.read())
-            Send(SourceActorId, new TEvPrivate::TEvNextBlock(block));
+            Send(SourceActorId, new TEvPrivate::TEvNextBlock(block, PathIndex));
 
         Send(SourceActorId, new TEvPrivate::TEvReadFinished);
     } catch (const std::exception& err) {
@@ -352,6 +374,7 @@ private:
     const TString Format, RowType, Compression;
     const NActors::TActorId SourceActorId;
     const NActors::TActorId ComputeActorId;
+    const size_t PathIndex;
     bool Finished = false;
 };
 
@@ -428,18 +451,24 @@ public:
     TS3StreamReadActor(
         ui64 inputIndex,
         IHTTPGateway::TPtr gateway,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const TString& url,
         const TString& token,
         TPathList&& paths,
+        bool addPathIndex,
+        ui64 startPathIndex,
         const TReadSpec::TPtr& readSpec,
         const NActors::TActorId& computeActorId,
         const std::shared_ptr<NS3::TRetryConfig>& retryConfig
     )   : Gateway(std::move(gateway))
+        , HolderFactory(holderFactory)
         , InputIndex(inputIndex)
         , ComputeActorId(computeActorId)
         , Url(url)
         , Headers(MakeHeader(token))
         , Paths(std::move(paths))
+        , AddPathIndex(addPathIndex)
+        , StartPathIndex(startPathIndex)
         , ReadSpec(readSpec)
         , RetryConfig(retryConfig)
         , Count(Paths.size())
@@ -447,8 +476,9 @@ public:
 
     void Bootstrap() {
         Become(&TS3StreamReadActor::StateFunc);
-        for (const auto& path : Paths) {
-            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, SelfId(), ComputeActorId, ReadSpec);
+        for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
+            const TPath& path = Paths[pathInd];
+            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, SelfId(), ComputeActorId, ReadSpec, pathInd + StartPathIndex);
             RegisterWithSameMailbox(MakeHolder<TS3ReadCoroActor>(std::move(impl), Gateway, Url, Headers, std::get<TString>(path), std::get<std::size_t>(path), RetryConfig).Release());
         }
     }
@@ -481,14 +511,28 @@ private:
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& output, bool& finished, i64 free) final {
         i64 total = 0LL;
         if (!Blocks.empty()) do {
-            const i64 s = Blocks.front().bytes();
+            auto& block = std::get<NDB::Block>(Blocks.front());
+            const i64 s = block.bytes();
+
+            auto value = NUdf::TUnboxedValuePod(new TBoxedBlock(block));
+            if (AddPathIndex) {
+                NUdf::TUnboxedValue* tupleItems = nullptr;
+                auto tuple = ContainerCache.NewArray(HolderFactory, 2, tupleItems);
+                *tupleItems++ = value;
+                *tupleItems++ = NUdf::TUnboxedValuePod(std::get<ui64>(Blocks.front()));
+                value = tuple;
+            }
+
             free -= s;
             total += s;
-            output.emplace_back(NUdf::TUnboxedValuePod(new TBoxedBlock(Blocks.front())));
+            output.emplace_back(std::move(value));
             Blocks.pop_front();
-        } while (!Blocks.empty() && free > 0LL && Blocks.front().bytes() <= size_t(free));
+        } while (!Blocks.empty() && free > 0LL && std::get<NDB::Block>(Blocks.front()).bytes() <= size_t(free));
 
         finished = Blocks.empty() && !Count;
+        if (finished) {
+            ContainerCache.Clear();
+        }
         return total;
     }
 
@@ -513,7 +557,10 @@ private:
 
     void HandleNextBlock(TEvPrivate::TEvNextBlock::TPtr& next) {
         Blocks.emplace_back();
-        Blocks.back().swap(next->Get()->Block);
+        auto& block = std::get<NDB::Block>(Blocks.back());
+        auto& pathInd = std::get<size_t>(Blocks.back());
+        block.swap(next->Get()->Block);
+        pathInd = next->Get()->PathIndex;
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -523,6 +570,8 @@ private:
     }
 
     const IHTTPGateway::TPtr Gateway;
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    NKikimr::NMiniKQL::TPlainContainerCache ContainerCache;
 
     const ui64 InputIndex;
     const NActors::TActorId ComputeActorId;
@@ -531,9 +580,11 @@ private:
     const TString Url;
     const IHTTPGateway::THeaders Headers;
     const TPathList Paths;
+    const bool AddPathIndex;
+    const ui64 StartPathIndex;
     const TReadSpec::TPtr ReadSpec;
     const std::shared_ptr<NS3::TRetryConfig> RetryConfig;
-    std::deque<NDB::Block> Blocks;
+    std::deque<std::tuple<NDB::Block, size_t>> Blocks;
     ui32 Count;
 };
 
@@ -607,7 +658,7 @@ using namespace NKikimr::NMiniKQL;
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TTypeEnvironment& typeEnv,
-    const IFunctionRegistry& functionRegistry,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     IHTTPGateway::TPtr gateway,
     NS3::TSource&& params,
     ui64 inputIndex,
@@ -617,27 +668,39 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
 {
+    const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
     std::unordered_map<TString, size_t> map(params.GetPath().size());
     for (auto i = 0; i < params.GetPath().size(); ++i)
         map.emplace(params.GetPath().Get(i).GetPath(), params.GetPath().Get(i).GetSize());
 
     TPathList paths;
-    paths.reserve(map.size());
+    ui64 startPathIndex = 0;
     if (const auto taskParamsIt = taskParams.find(S3ProviderName); taskParamsIt != taskParams.cend()) {
         NS3::TRange range;
         TStringInput input(taskParamsIt->second);
         range.Load(&input);
+        startPathIndex = range.GetStartPathIndex();
         for (auto i = 0; i < range.GetPath().size(); ++i) {
             const auto& path = range.GetPath().Get(i);
-            paths.emplace_back(path, map[path]);
+            auto it = map.find(path);
+            YQL_ENSURE(it != map.end());
+            paths.emplace_back(path, it->second);
         }
-    } else
-        while (auto item = map.extract(map.cbegin()))
-            paths.emplace_back(std::move(item.key()), std::move(item.mapped()));
+    } else {
+        for (auto i = 0; i < params.GetPath().size(); ++i) {
+            paths.emplace_back(params.GetPath().Get(i).GetPath(), params.GetPath().Get(i).GetSize());
+        }
+    }
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+
+    const auto& settings = params.GetSettings();
+    bool addPathIndex = false;
+    if (auto it = settings.find("addPathIndex"); it != settings.cend()) {
+        addPathIndex = FromString<bool>(it->second);
+    }
 
     if (params.HasFormat() && params.HasRowType()) {
         const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
@@ -653,7 +716,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         }
         readSpec->Format = params.GetFormat();
 
-        const auto& settings = params.GetSettings();
         if (const auto it = settings.find("compression"); settings.cend() != it)
             readSpec->Compression = it->second;
 
@@ -674,10 +736,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
 
-        const auto actor = new TS3StreamReadActor(inputIndex, std::move(gateway), params.GetUrl(), authToken, std::move(paths), readSpec, computeActorId, retryConfig);
+        const auto actor = new TS3StreamReadActor(inputIndex, std::move(gateway), holderFactory, params.GetUrl(), authToken,
+                                                  std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId, retryConfig);
         return {actor, actor};
     } else {
-        const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), params.GetUrl(), authToken, std::move(paths), computeActorId, retryConfig);
+        const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), holderFactory, params.GetUrl(), authToken,
+                                            std::move(paths), addPathIndex, startPathIndex, computeActorId, retryConfig);
         return {actor, actor};
     }
 }

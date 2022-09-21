@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
+add_subdirectory(ut_perf)
+add_subdirectory(ut_rope)
 
 add_library(ydb-core-erasure)
 target_link_libraries(ydb-core-erasure PUBLIC

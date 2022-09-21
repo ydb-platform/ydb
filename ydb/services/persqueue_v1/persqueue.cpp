@@ -17,58 +17,44 @@ namespace V1 {
 static const ui32 PersQueueWriteSessionsMaxCount = 1000000;
 static const ui32 PersQueueReadSessionsMaxCount = 100000;
 
-TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache,const NActors::TActorId& grpcRequestProxy)
-    : ActorSystem(system)
-    , Counters(counters)
+TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache,const NActors::TActorId& grpcRequestProxy, bool rlAllowed)
+    : TGrpcServiceBase<Ydb::PersQueue::V1::PersQueueService>(system, counters, grpcRequestProxy, rlAllowed)
     , SchemeCache(schemeCache)
-    , GRpcRequestProxy(grpcRequestProxy)
 { }
 
 void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
-    CQ = cq;
+    CQ_ = cq;
     InitNewSchemeCacheActor();
 
-    if (ActorSystem->AppData<TAppData>()->PQConfig.GetEnabled()) {
+    if (ActorSystem_->AppData<TAppData>()->PQConfig.GetEnabled()) {
 
-        IActor* writeSvc = NGRpcProxy::V1::CreatePQWriteService(SchemeCache, Counters, PersQueueWriteSessionsMaxCount);
-        TActorId actorId = ActorSystem->Register(writeSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-        ActorSystem->RegisterLocalService(NGRpcProxy::V1::GetPQWriteServiceActorID(), actorId);
+        IActor* writeSvc = NGRpcProxy::V1::CreatePQWriteService(SchemeCache, Counters_, PersQueueWriteSessionsMaxCount);
+        TActorId actorId = ActorSystem_->Register(writeSvc, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
+        ActorSystem_->RegisterLocalService(NGRpcProxy::V1::GetPQWriteServiceActorID(), actorId);
 
-        IActor* readSvc = NGRpcProxy::V1::CreatePQReadService(SchemeCache, NewSchemeCache, Counters, PersQueueReadSessionsMaxCount);
-        actorId = ActorSystem->Register(readSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-        ActorSystem->RegisterLocalService(NGRpcProxy::V1::GetPQReadServiceActorID(), actorId);
+        IActor* readSvc = NGRpcProxy::V1::CreatePQReadService(SchemeCache, NewSchemeCache, Counters_, PersQueueReadSessionsMaxCount);
+        actorId = ActorSystem_->Register(readSvc, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
+        ActorSystem_->RegisterLocalService(NGRpcProxy::V1::GetPQReadServiceActorID(), actorId);
 
-        IActor* schemaSvc = NGRpcProxy::V1::CreatePQSchemaService(SchemeCache, Counters);
-        actorId = ActorSystem->Register(schemaSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-        ActorSystem->RegisterLocalService(NGRpcProxy::V1::GetPQSchemaServiceActorID(), actorId);
+        IActor* schemaSvc = NGRpcProxy::V1::CreatePQSchemaService(SchemeCache, Counters_);
+        actorId = ActorSystem_->Register(schemaSvc, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
+        ActorSystem_->RegisterLocalService(NGRpcProxy::V1::GetPQSchemaServiceActorID(), actorId);
 
         SetupIncomingRequests(std::move(logger));
     }
 }
 
-void TGRpcPersQueueService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-    Limiter = limiter;
-}
-
-bool TGRpcPersQueueService::IncRequest() {
-    return Limiter->Inc();
-}
-
-void TGRpcPersQueueService::DecRequest() {
-    Limiter->Dec();
-}
-
 void TGRpcPersQueueService::InitNewSchemeCacheActor() {
-    auto appData = ActorSystem->AppData<TAppData>();
-    auto cacheCounters = GetServiceCounters(Counters, "pqproxy|schemecache");
+    auto appData = ActorSystem_->AppData<TAppData>();
+    auto cacheCounters = GetServiceCounters(Counters_, "pqproxy|schemecache");
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
-    NewSchemeCache = ActorSystem->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
-        TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+    NewSchemeCache = ActorSystem_->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
+        TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
 }
 
 void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 
-    auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
+    auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 
     {
         using TBiRequest = Ydb::PersQueue::V1::StreamingWriteClientMessage;
@@ -82,11 +68,11 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                     NKikimrServices::GRPC_SERVER>;
 
 
-        TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestStreamingWrite,
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ_, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestStreamingWrite,
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-                        ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQWriteRequest(context));
+                        ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamPQWriteRequest(context));
                     },
-                    *ActorSystem, "PersQueueService/CreateWriteSession", getCounterBlock("persistent_queue", "WriteSession", true, true), nullptr
+                    *ActorSystem_, "PersQueueService/CreateWriteSession", getCounterBlock("persistent_queue", "WriteSession", true, true), nullptr
                 );
     }
 
@@ -102,11 +88,11 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                     NKikimrServices::GRPC_SERVER>;
 
 
-        TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestMigrationStreamingRead,
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ_, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestMigrationStreamingRead,
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-                        ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest(context));
+                        ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest(context));
                     },
-                    *ActorSystem, "PersQueueService/CreateMigrationReadSession", getCounterBlock("persistent_queue", "MigrationReadSession", true, true), nullptr
+                    *ActorSystem_, "PersQueueService/CreateMigrationReadSession", getCounterBlock("persistent_queue", "MigrationReadSession", true, true), nullptr
                 );
     }
 
@@ -114,35 +100,35 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, SVC, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::PersQueue::V1::IN, Ydb::PersQueue::V1::OUT, NGRpcService::V1::TGRpcPersQueueService>>(this, this->GetService(), CQ, \
+    MakeIntrusive<TGRpcRequest<Ydb::PersQueue::V1::IN, Ydb::PersQueue::V1::OUT, NGRpcService::V1::TGRpcPersQueueService>>(this, this->GetService(), CQ_, \
         [this](NGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::PersQueue::V1::SVC::AsyncService::Request ## NAME, \
         "PersQueueService/"#NAME, logger, getCounterBlock("persistent_queue", #NAME))->Run();
 
     ADD_REQUEST(GetReadSessionsInfo, PersQueueService, ReadInfoRequest, ReadInfoResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQReadInfoRequest(ctx));
+            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQReadInfoRequest(ctx));
         })
 
     ADD_REQUEST(DropTopic, PersQueueService, DropTopicRequest, DropTopicResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQDropTopicRequest(ctx));
+            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQDropTopicRequest(ctx));
         })
 
     ADD_REQUEST(CreateTopic, PersQueueService, CreateTopicRequest, CreateTopicResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQCreateTopicRequest(ctx));
+            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQCreateTopicRequest(ctx));
         })
     ADD_REQUEST(AlterTopic, PersQueueService, AlterTopicRequest, AlterTopicResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQAlterTopicRequest(ctx));
+            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQAlterTopicRequest(ctx));
         })
     ADD_REQUEST(DescribeTopic, PersQueueService, DescribeTopicRequest, DescribeTopicResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQDescribeTopicRequest(ctx));
+            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQDescribeTopicRequest(ctx));
         })
     ADD_REQUEST(AddReadRule, PersQueueService, AddReadRuleRequest, AddReadRuleResponse, {
-        ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQAddReadRuleRequest(ctx));
+        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQAddReadRuleRequest(ctx));
     })
     ADD_REQUEST(RemoveReadRule, PersQueueService, RemoveReadRuleRequest, RemoveReadRuleResponse, {
-        ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQRemoveReadRuleRequest(ctx));
+        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQRemoveReadRuleRequest(ctx));
     })
 
 #undef ADD_REQUEST

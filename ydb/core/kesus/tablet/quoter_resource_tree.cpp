@@ -206,7 +206,7 @@ public:
 
     void DeactivateIfFull(TInstant now);
 
-    void SetResourceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> resourceCounters) override;
+    void SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) override;
 
     void SetLimitCounter();
 
@@ -287,7 +287,7 @@ public:
                 ClientId);
         Active = true;
         GetResource()->AddActiveChild(this, queue, now);
-        const NMonitoring::TDynamicCounters::TCounterPtr& activeSessions = GetResource()->GetCounters().ActiveSessions;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& activeSessions = GetResource()->GetCounters().ActiveSessions;
         if (activeSessions) {
             activeSessions->Inc();
         }
@@ -302,7 +302,7 @@ public:
         Active = false;
         AmountRequested = 0.0;
         GetResource()->RemoveActiveChild(this);
-        const NMonitoring::TDynamicCounters::TCounterPtr& activeSessions = GetResource()->GetCounters().ActiveSessions;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& activeSessions = GetResource()->GetCounters().ActiveSessions;
         if (activeSessions) {
             activeSessions->Dec();
         }
@@ -517,7 +517,7 @@ void TQuoterResourceTree::CalcParameters() {
     }
 }
 
-void TQuoterResourceTree::SetResourceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> resourceCounters) {
+void TQuoterResourceTree::SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) {
     Counters.SetResourceCounters(std::move(resourceCounters));
 }
 
@@ -534,7 +534,7 @@ void TQuoterResourceTree::StopActiveTime(TInstant now) {
     StartActiveTime = TInstant::Zero();
 }
 
-void TQuoterResourceTree::TCounters::SetResourceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> resourceCounters) {
+void TQuoterResourceTree::TCounters::SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) {
     ResourceCounters = std::move(resourceCounters);
     if (ResourceCounters) {
         Allocated = ResourceCounters->GetCounter(ALLOCATED_COUNTER_NAME, true);
@@ -929,7 +929,7 @@ THolder<TQuoterSession> THierarhicalDRRQuoterResourceTree::DoCreateSession(const
     return MakeHolder<THierarhicalDRRQuoterSession>(clientId, this);
 }
 
-void THierarhicalDRRQuoterResourceTree::SetResourceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> resourceCounters) {
+void THierarhicalDRRQuoterResourceTree::SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) {
     TQuoterResourceTree::SetResourceCounters(std::move(resourceCounters));
     if (RateAccounting) {
         RateAccounting->SetResourceCounters(Counters.ResourceCounters);
@@ -1163,7 +1163,7 @@ void TQuoterResources::SetResourceCounters(TQuoterResourceTree* res) {
     );
 }
 
-void TQuoterResources::SetQuoterCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> quoterCounters) {
+void TQuoterResources::SetQuoterCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> quoterCounters) {
     Counters.QuoterCounters = std::move(quoterCounters);
 
     ReinitResourceCounters();

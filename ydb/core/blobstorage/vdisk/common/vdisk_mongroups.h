@@ -9,28 +9,28 @@ namespace NKikimr {
 
         class TBase {
         public:
-            TBase(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+            TBase(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
                   const TString& name,
                   const TString& value)
                 : DerivedCounters(counters)
                 , GroupCounters(DerivedCounters->GetSubgroup(name, value))
             {}
 
-            TIntrusivePtr<NMonitoring::TDynamicCounters> GetGroup() const { return GroupCounters; }
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGroup() const { return GroupCounters; }
 
         protected:
-            TIntrusivePtr<NMonitoring::TDynamicCounters> DerivedCounters;
-            TIntrusivePtr<NMonitoring::TDynamicCounters> GroupCounters;
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> DerivedCounters;
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupCounters;
         };
 
 
 #define COUNTER_DEF(name)                                                                   \
 protected:                                                                                  \
-    NMonitoring::TDynamicCounters::TCounterPtr name##_;                                     \
+    ::NMonitoring::TDynamicCounters::TCounterPtr name##_;                                     \
 public:                                                                                     \
     NMonitoring::TDeprecatedCounter &name() { return *name##_; }                            \
     const NMonitoring::TDeprecatedCounter &name() const { return *name##_; }                \
-    const NMonitoring::TDynamicCounters::TCounterPtr &name##Ptr() const { return name##_; }
+    const ::NMonitoring::TDynamicCounters::TCounterPtr &name##Ptr() const { return name##_; }
 
 #define COUNTER_INIT(name, derivative)                                                      \
     name##_ = GroupCounters->GetCounter(#name, derivative)
@@ -40,7 +40,7 @@ public:                                                                         
         NMonitoring::TCountableBase::EVisibility::Private)
 
 #define GROUP_CONSTRUCTOR(name)                                                             \
-    name(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,                      \
+    name(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,                      \
          const TString& name,                                                               \
          const TString& value)                                                              \
     : TBase(counters, name, value)
@@ -339,8 +339,8 @@ public:                                                                         
         // TVDiskStateGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TVDiskStateGroup: public TBase {
-            std::array<NMonitoring::TDynamicCounters::TCounterPtr, NKikimrWhiteboard::EVDiskState_MAX + 1> VDiskStates;
-            NMonitoring::TDynamicCounters::TCounterPtr CurrentState;
+            std::array<::NMonitoring::TDynamicCounters::TCounterPtr, NKikimrWhiteboard::EVDiskState_MAX + 1> VDiskStates;
+            ::NMonitoring::TDynamicCounters::TCounterPtr CurrentState;
 
         public:
             GROUP_CONSTRUCTOR(TVDiskStateGroup)
@@ -397,7 +397,7 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmAllLevelsStat {
         public:
-            TIntrusivePtr<NMonitoring::TDynamicCounters> Group;
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             // per-level information
             TLsmLevelGroup Level0;
             TLsmLevelGroup Level1to8;
@@ -405,7 +405,7 @@ public:                                                                         
             TLsmLevelGroup Level17;
             TLsmLevelGroup Level18;
 
-            TLsmAllLevelsStat(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
+            TLsmAllLevelsStat(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "levels"))
                 , Level0(Group, "level", "0")
                 , Level1to8(Group, "level", "1..8")

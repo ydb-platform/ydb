@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(main)
 
 add_library(cpp-testing-benchmark)
 target_link_libraries(cpp-testing-benchmark PUBLIC

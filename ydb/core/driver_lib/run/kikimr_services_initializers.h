@@ -168,7 +168,7 @@ public:
 };
 
 class TRestartsCountPublisher : public IKikimrServicesInitializer {
-    static void PublishRestartsCount(const NMonitoring::TDynamicCounters::TCounterPtr& counter,
+    static void PublishRestartsCount(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
                                      const TString& restartsCountFile);
 
 public:

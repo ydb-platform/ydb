@@ -19,6 +19,20 @@ static NProtoBuf::Timestamp MillisecToProtoTimeStamp(ui64 ms) {
     return timestamp;
 }
 
+template <typename TStoragePoolHolder>
+using TAddStoragePoolFunc = Ydb::Table::StoragePool* (TStoragePoolHolder::*)();
+
+template <typename TStoragePoolHolder>
+static void FillStoragePool(TStoragePoolHolder* out, TAddStoragePoolFunc<TStoragePoolHolder> func,
+        const NKikimrSchemeOp::TStorageSettings& in)
+{
+    if (in.GetAllowOtherKinds()) {
+        return;
+    }
+
+    std::invoke(func, out)->set_media(in.GetPreferredPoolKind());
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
@@ -41,21 +55,29 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
         auto newColumn = out.add_columns();
         newColumn->set_name(column.GetName());
-        auto& item = *newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+
+        Ydb::Type* columnType = nullptr;
+        if (column.GetNotNull()) {
+            columnType = newColumn->mutable_type();
+        } else {
+            columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+        }
+
+        Y_ENSURE(columnType);
         if (protoType == NYql::NProto::TypeIds::Decimal) {
-            auto typeParams = item.mutable_decimal_type();
+            auto typeParams = columnType->mutable_decimal_type();
             // TODO: Change TEvDescribeSchemeResult to return decimal params
             typeParams->set_precision(22);
             typeParams->set_scale(9);
         } else {
-            NMiniKQL::ExportPrimitiveTypeToProto(protoType, item);
+            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }
 
         if (columnIdToKeyPos.count(column.GetId())) {
             size_t keyPos = columnIdToKeyPos[column.GetId()];
             auto tupleElement = splitKeyType.MutableTuple()->MutableElement(keyPos);
             tupleElement->SetKind(NKikimrMiniKQL::ETypeKind::Optional);
-            ConvertYdbTypeToMiniKQLType(item, *tupleElement->MutableOptional()->MutableItem());
+            ConvertYdbTypeToMiniKQLType(*columnType, *tupleElement->MutableOptional()->MutableItem());
         }
 
         if (column.HasFamilyName()) {
@@ -469,14 +491,16 @@ void FillStorageSettingsImpl(TYdbProto& out,
             settings->set_store_external_blobs(Ydb::FeatureFlag::DISABLED);
 
             if (family.HasStorageConfig()) {
+                using StorageSettings = Ydb::Table::StorageSettings;
+
                 if (family.GetStorageConfig().HasSysLog()) {
-                    settings->mutable_tablet_commit_log0()->set_media(family.GetStorageConfig().GetSysLog().GetPreferredPoolKind());
+                    FillStoragePool(settings, &StorageSettings::mutable_tablet_commit_log0, family.GetStorageConfig().GetSysLog());
                 }
                 if (family.GetStorageConfig().HasLog()) {
-                    settings->mutable_tablet_commit_log1()->set_media(family.GetStorageConfig().GetLog().GetPreferredPoolKind());
+                    FillStoragePool(settings, &StorageSettings::mutable_tablet_commit_log1, family.GetStorageConfig().GetLog());
                 }
                 if (family.GetStorageConfig().HasExternal()) {
-                    settings->mutable_external()->set_media(family.GetStorageConfig().GetExternal().GetPreferredPoolKind());
+                    FillStoragePool(settings, &StorageSettings::mutable_external, family.GetStorageConfig().GetExternal());
                 }
 
                 const ui32 externalThreshold = family.GetStorageConfig().GetExternalThreshold();
@@ -545,7 +569,7 @@ void FillColumnFamiliesImpl(TYdbProto& out,
         }
 
         if (family.HasStorageConfig() && family.GetStorageConfig().HasData()) {
-            r->mutable_data()->set_media(family.GetStorageConfig().GetData().GetPreferredPoolKind());
+            FillStoragePool(r, &Ydb::Table::ColumnFamily::mutable_data, family.GetStorageConfig().GetData());
         }
 
         if (family.HasColumnCodec()) {
@@ -760,7 +784,8 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 }
 
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
-        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
+        const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
+        Ydb::StatusIds::StatusCode& status, TString& error)
 {
     auto& tableDesc = *out.MutableCreateTable();
 
@@ -769,6 +794,10 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     tableDesc.MutableKeyColumnNames()->CopyFrom(in.primary_key());
+
+    if (!profiles.ApplyTableProfile(in.profile(), tableDesc, status, error)) {
+        return false;
+    }
 
     TColumnFamilyManager families(tableDesc.MutablePartitionConfig());
     if (in.has_storage_settings() && !families.ApplyStorageSettings(in.storage_settings(), &status, &error)) {

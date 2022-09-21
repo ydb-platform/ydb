@@ -175,7 +175,7 @@ namespace NKikimr {
 
         void UpdateVPatchCtx() {
             if (!VPatchCtx) {
-                TIntrusivePtr<NMonitoring::TDynamicCounters> patchGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "patch");
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> patchGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "patch");
                 VPatchCtx = MakeIntrusive<TVPatchCtx>();
                 NBackpressure::TQueueClientId patchQueueClientId(NBackpressure::EQueueClientType::VPatch,
                             VCtx->Top->GetOrderNumber(VCtx->ShortSelfVDisk));

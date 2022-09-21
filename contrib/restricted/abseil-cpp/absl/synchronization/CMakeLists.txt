@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(internal)
 
 add_library(abseil-cpp-absl-synchronization)
 target_compile_options(abseil-cpp-absl-synchronization PRIVATE

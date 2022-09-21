@@ -155,8 +155,10 @@ enum EServiceKikimr {
     GRPC_PROXY_NO_CONNECT_ACCESS = 417;
     READ_TABLE_API = 414; // deprecated, use RPC_REQUEST
     RPC_REQUEST = 416;
+
     // KEY VALUE section
     KEYVALUE = 420;
+    KEYVALUE_GC = 421;
 
     WILSON = 430;
 
@@ -896,5 +898,8 @@ message TActivity {
         BLOB_DEPOT_ACTOR = 570;
         BLOB_DEPOT_AGENT = 571;
         KQP_STREAM_LOOKUP_ACTOR = 572;
+        BS_STORAGE_STATS_ACTOR = 573;
+        DS_LOAD_ACTOR = 574;
+        PQ_META_CACHE = 575;
     };
 };

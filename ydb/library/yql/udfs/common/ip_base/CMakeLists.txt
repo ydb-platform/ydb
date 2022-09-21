@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(lib)
 
 add_library(ip_udf INTERFACE)
 target_link_libraries(ip_udf INTERFACE

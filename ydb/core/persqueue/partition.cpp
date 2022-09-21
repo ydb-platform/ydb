@@ -511,7 +511,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , WriteBufferIsFullCounter(nullptr)
     , WriteTimestamp(ctx.Now())
     , WriteLagMs(TDuration::Minutes(1), 100)
-{
+    , LastUsedStorageMeterTimestamp(ctx.Now()) {
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
     } else {
@@ -1000,11 +1000,29 @@ void TPartition::HandleOnWrite(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActo
 }
 
 
+ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
+    auto duration = ctx.Now() - LastUsedStorageMeterTimestamp;
+    LastUsedStorageMeterTimestamp = ctx.Now();
+    ui64 size = BodySize + Head.PackedSize;
+    if (DataKeysBody.size() > 0) {
+        size -= DataKeysBody.front().Size;
+    } else {
+        size = 0;
+    }
+    return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
+}
+
+
 void TPartition::HandleWakeup(const TActorContext& ctx) {
     FilterDeadlinedWrites(ctx);
 
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, Counters));
+
+    ui64 usedStorage = GetUsedStorage(ctx);
+    if (usedStorage > 0) {
+        ctx.Send(Tablet, new TEvPQ::TEvMetering(EMeteringJson::UsedStorageV1, usedStorage));
+    }
 
     ReportLabeledCounters(ctx);
 
@@ -2275,7 +2293,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     //make readinfo class
     TReadAnswer answer(info.FormAnswer(
         ctx, *ev->Get(), EndOffset, Partition, &UsersInfoStorage.GetOrCreate(info.User, ctx),
-        info.Destination, GetSizeLag(info.Offset)
+        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
     ));
 
     if (HasError(*ev->Get())) {
@@ -2348,8 +2366,11 @@ TReadAnswer TReadInfo::FormAnswer(
     const ui32 partition,
     TUserInfo* userInfo,
     const ui64 cookie,
-    const ui64 sizeLag
+    const ui64 sizeLag,
+    const TActorId& tablet,
+    const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
 ) {
+    Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
     THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(cookie);
     NKikimrClient::TResponse& res = answer->Response;
@@ -2415,7 +2436,8 @@ TReadAnswer TReadInfo::FormAnswer(
             LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, "Not full answer here!");
             ui64 answerSize = answer->Response.ByteSize();
             if (userInfo && Destination != 0) {
-                userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC);
+                userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
+                        tablet);
             }
             readResult->SetSizeLag(sizeLag - size);
             return {answerSize, std::move(answer)};
@@ -2514,7 +2536,9 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_VERIFY(Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, Offset);
     ui64 answerSize = answer->Response.ByteSize();
     if (userInfo && Destination != 0) {
-        userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC);
+        userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
+                        tablet);
+
     }
     readResult->SetSizeLag(sizeLag - size);
     return {answerSize, std::move(answer)};
@@ -2531,7 +2555,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     auto res = Subscriber.OnTimeout(ev);
     if (!res)
         return;
-    TReadAnswer answer(res->FormAnswer(ctx, res->Offset, Partition, nullptr, res->Destination, 0));
+    TReadAnswer answer(res->FormAnswer(ctx, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode()));
     ctx.Send(Tablet, answer.Event.Release());
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, " waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);
@@ -2774,6 +2798,10 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
 void TPartition::OnReadRequestFinished(TReadInfo&& info, ui64 answerSize) {
     auto userInfo = UsersInfoStorage.GetIfExists(info.User);
     Y_VERIFY(userInfo);
+
+    if (Config.GetMeteringMode() == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
+        return;
+    }
 
     if (userInfo->ReadSpeedLimiter) {
         Send(
@@ -4698,16 +4726,23 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx)
     if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now())
         return;
 
+    std::deque<TMessage> newRequests;
     for (auto& w : Requests) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
         if (w.IsWrite()) {
             const auto& msg = w.GetWrite().Msg;
+            if (msg.IgnoreQuotaDeadline) {
+                newRequests.emplace_back(std::move(w));
+                continue;
+            }
+
             Counters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
             WriteInflightSize -= msg.Data.size();
         }
+
+        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
     }
-    Requests.clear();
+    Requests = std::move(newRequests);
     QuotaDeadline = TInstant::Zero();
 
     UpdateWriteBufferIsFullState(ctx.Now());
@@ -4791,7 +4826,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
         TReadAnswer answer(info.FormAnswer(
             ctx, EndOffset, Partition, &UsersInfoStorage.GetOrCreate(info.User, ctx),
-            info.Destination, GetSizeLag(info.Offset)
+            info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
         ));
         const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
         if (info.IsSubscription) {
@@ -4855,6 +4890,9 @@ void TPartition::Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& c
 
 size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request)
 {
+    if (Config.GetMeteringMode() == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
+        return 0;
+    }
     if (AppData()->PQConfig.GetQuotingConfig().GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
         return WriteNewSize;
     } else {
@@ -4920,33 +4958,24 @@ void TPartition::CalcTopicWriteQuotaParams()
         Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
 
         // ToDo[migration] - double check
-        TString topicPath = Config.GetTopicPath();
-        if (topicPath.empty()) {
-            topicPath = Config.GetTopicName();
-        }
-        Y_VERIFY(!topicPath.empty());
-        TFsPath fsPath(topicPath);
-        if (fsPath.IsSubpathOf(pqConfig.GetRoot())) {
-            topicPath = fsPath.RelativePath(TFsPath(pqConfig.GetRoot())).GetPath();
-        }
+        auto topicPath = TopicConverter->GetFederationPath();
+
         // ToDo[migration] - separate quoter paths?
-        TVector<TString> topicParts = {WRITE_QUOTA_ROOT_PATH};
-        auto split = SplitPath(topicPath); // account/folder/topic // account is first element
-        if (split.size() < 2) {
+        auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
+        if (topicParts.size() < 2) {
             LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
                        "tablet " << TabletID << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
             return;
         }
-        topicParts.insert(topicParts.end(), split.begin(), split.end());
-        //const TString account = topicParts[0];
         topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic
 
         TopicWriteQuotaResourcePath = JoinPath(topicParts);
         TopicWriteQuoterPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << TopicConverter->GetAccount();
+
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
-                   "topicWriteQuutaResourcePath " << TopicWriteQuotaResourcePath
-                   << " topicWriteQuoterPath '" << TopicWriteQuoterPath
-                   << " account " << TopicConverter->GetAccount()
+                   "topicWriteQuutaResourcePath '" << TopicWriteQuotaResourcePath
+                   << "' topicWriteQuoterPath '" << TopicWriteQuoterPath
+                   << "' account " << TopicConverter->GetAccount()
        );
     }
 }

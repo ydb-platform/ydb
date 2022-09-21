@@ -234,6 +234,58 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST_NEW_ENGINE(TooBigKey) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = TParamsBuilder()
+            .AddParam("$group").Uint32(1000).Build()
+            .AddParam("$name").String(TString(2_MB, 'n')).Build()
+            .AddParam("$amount").Uint64(20).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $group AS Uint32;
+            DECLARE $name AS Bytes;
+            DECLARE $amount AS Uint64;
+
+            UPSERT INTO Test (Group, Name, Amount) VALUES ($group, $name, $amount);
+        )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+            [] (const NYql::TIssue& issue) {
+                return issue.Message.Contains("exceeds limit");
+        }));
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TooBigColumn) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = TParamsBuilder()
+            .AddParam("$key").Uint64(1000).Build()
+            .AddParam("$value").String(TString(20_MB, 'n')).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $key AS Uint64;
+            DECLARE $value AS Bytes;
+
+            UPSERT INTO KeyValue (Key, Value) VALUES ($key, $value);
+        )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+            [] (const NYql::TIssue& issue) {
+                return issue.Message.Contains("larger than the allowed threshold");
+        }));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(AffectedShardsLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
@@ -434,6 +486,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::TIMEOUT);
     }
+
+
 }
 
 } // namespace NKqp

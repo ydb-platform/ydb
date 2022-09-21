@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(grpc)
+add_subdirectory(grpc++)
+add_subdirectory(src)
+add_subdirectory(third_party)
 
 add_library(contrib-libs-grpc INTERFACE)
 target_link_libraries(contrib-libs-grpc INTERFACE

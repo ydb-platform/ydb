@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(impl)
+add_subdirectory(ut)
 
 add_library(cpp-client-ydb_persqueue_core)
 target_link_libraries(cpp-client-ydb_persqueue_core PUBLIC
@@ -16,6 +18,9 @@ target_link_libraries(cpp-client-ydb_persqueue_core PUBLIC
   client-ydb_persqueue_core-impl
   cpp-client-ydb_proto
   cpp-client-ydb_driver
+  api-grpc
+  api-grpc-draft
+  api-protos
 )
 target_sources(cpp-client-ydb_persqueue_core PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/proto_accessor.cpp

@@ -120,8 +120,6 @@ public:
     IEngineFlatHost* Host = nullptr;
 };
 
-TSmallVec<NTable::TTag> ExtractTags(const TSmallVec<TKqpComputeContextBase::TColumn>& columns);
-
 IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx);
 IComputationNode* WrapKqpLookupTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,

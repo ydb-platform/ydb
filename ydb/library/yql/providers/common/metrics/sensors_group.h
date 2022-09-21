@@ -13,7 +13,7 @@ namespace NSensorComponent {
 } // namspace NSensorComponent
 
 
-using TSensorsGroup = NMonitoring::TDynamicCounters;
+using TSensorsGroup = ::NMonitoring::TDynamicCounters;
 using TSensorsGroupPtr = TIntrusivePtr<TSensorsGroup>;
 
 using TSensorCounter = NMonitoring::TCounterForPtr;

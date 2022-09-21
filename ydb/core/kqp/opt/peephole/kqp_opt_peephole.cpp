@@ -37,6 +37,7 @@ public:
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
+        AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
 #undef HNDL
     }
 
@@ -74,6 +75,12 @@ protected:
     TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildWideReadTable(node, ctx);
         DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteLength(node, ctx);
+        DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 };
@@ -131,6 +138,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
     stages.reserve(tx.Stages().Size());
     TNodeOnNodeOwnedMap stagesMap;
     TVector<TKqpParamBinding> bindings(tx.ParamBindings().begin(), tx.ParamBindings().end());
+    THashMap<TString, TKqpParamBinding> nonDetParamBindings;
 
     for (const auto& stage : tx.Stages()) {
         YQL_ENSURE(!optimizedStages.contains(stage.Ref().UniqueId()));
@@ -160,7 +168,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         }
 
         if (allowNonDeterministicFunctions) {
-            status = ReplaceNonDetFunctionsWithParams(newProgram, ctx, &bindings);
+            status = ReplaceNonDetFunctionsWithParams(newProgram, ctx, &nonDetParamBindings);
 
             if (status != TStatus::Ok) {
                 ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()),
@@ -179,6 +187,10 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         stagesMap.emplace(stage.Raw(), newStage.Ptr());
 
         optimizedStages.emplace(stage.Ref().UniqueId());
+    }
+
+    for (const auto& [_, binding] : nonDetParamBindings) {
+        bindings.emplace_back(std::move(binding));
     }
 
     return Build<TKqpPhysicalTx>(ctx, tx.Pos())
@@ -325,7 +337,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(TAutoPtr<NYql::IGrap
     return new TKqpTxsPeepholeTransformer(std::move(typeAnnTransformer), typesCtx, config);
 }
 
-TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& ctx, TVector<TKqpParamBinding>* paramBindings) {
+TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& ctx, THashMap<TString, TKqpParamBinding>* paramBindings) {
     static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
         "RandomNumber",
         "Random",
@@ -352,7 +364,7 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
                     .Type(ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
                     .Done();
 
-                if (paramBindings) {
+                if (paramBindings && !paramBindings->contains(paramName)) {
                     auto binding = Build<TKqpTxInternalBinding>(ctx, node->Pos())
                         .Type(ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
                         .Kind().Build(callable.CallableName())
@@ -363,9 +375,8 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
                         .Binding(binding)
                         .Done();
 
-                    paramBindings->emplace_back(std::move(paramBinding));
+                    paramBindings->insert({paramName, std::move(paramBinding)});
                 }
-
                 return param.Ptr();
             }
         }

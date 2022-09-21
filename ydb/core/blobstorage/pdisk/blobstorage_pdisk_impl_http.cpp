@@ -11,7 +11,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
 #define RED_TEXT(str, text) THtmlLightSignalRenderer(NKikimrWhiteboard::EFlag::Red, text).Output(str)
 #define YELLOW_TEXT(str, text) THtmlLightSignalRenderer(NKikimrWhiteboard::EFlag::Yellow, text).Output(str)
     HTML(str) {
-        H4() {str << "Current state";}
+        TAG(TH4) {str << "Current state";}
         TABLE_CLASS ("table") {
             TABLEHEAD() {
                 TABLER() {
@@ -78,7 +78,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                 }
             }
         }
-        H4() {str << "State description"; }
+        TAG(TH4) {str << "State description"; }
         if (Cfg->SectorMap) {
             PARA() {str << "Note - this is SectorMap device<br>"; }
         }
@@ -86,7 +86,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
             PARA() {str << "Note - PDisk sector enctyption is disabled<br>"; }
         }
         PARA() {str << httpInfo.ErrorStr; }
-        H4() {str << "Uptime"; }
+        TAG(TH4) {str << "Uptime"; }
         PARA() {
             TDuration uptime = TInstant::Now() - CreationTime;
             if (uptime.Days() > 0) {
@@ -95,7 +95,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
             str << Sprintf("%02lu:%02lu:%02lu", uptime.Hours() % 24, uptime.Minutes() % 60, uptime.Seconds() % 60);
         }
         // Restart button
-        H4() {str << "Restart"; }
+        TAG(TH4) {str << "Restart"; }
         DIV() {
             str << R"___(
                 <script>
@@ -141,29 +141,29 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
             }
         }
         if (Cfg->SectorMap) {
-            H4() {str << "SectorMap"; }
+            TAG(TH4) {str << "SectorMap"; }
             PRE() {str << Cfg->SectorMap->ToString();}
         }
-        H4() {str << "Config"; }
+        TAG(TH4) {str << "Config"; }
         PRE() {str << Cfg->ToString(true);}
         if (Mon.PDiskBriefState->Val() != TPDiskMon::TPDisk::Booting) {
-            H4() {str << "Drive Data"; }
+            TAG(TH4) {str << "Drive Data"; }
             PRE() {str << DriveData.ToString(true);}
-            H4() {str << "Fair Scheduler"; }
+            TAG(TH4) {str << "Fair Scheduler"; }
             PRE() {str << httpInfo.FairSchedulerStr;}
-            H4() {str << "Format info"; }
+            TAG(TH4) {str << "Format info"; }
             PRE() {str << Format.ToString(true);}
-            H4() {str << "Drive model"; }
+            TAG(TH4) {str << "Drive model"; }
             PRE() {str << DriveModel.ToString(true);}
-            H4() {str << "Sys log record"; }
+            TAG(TH4) {str << "Sys log record"; }
             PRE() {str << SysLogRecord.ToString(true);}
-            H4() {str << "Logged NONCEs"; }
+            TAG(TH4) {str << "Logged NONCEs"; }
             PRE() {str << LoggedNonces.ToString(true);}
-            H4() {str << "Dynamic state"; }
+            TAG(TH4) {str << "Dynamic state"; }
             PRE() {str << DynamicStateToString(true);}
-            H4() {str << "Last Nonce Jump Log Page Header"; }
+            TAG(TH4) {str << "Last Nonce Jump Log Page Header"; }
             PRE() {str << LastNonceJumpLogPageHeader2.ToString(true);}
-            H4() {str << "VDisk statuses"; }
+            TAG(TH4) {str << "VDisk statuses"; }
             PRE() {
                 for (const TOwnerData& data : OwnerData) {
                     if (data.VDiskId != TVDiskID::InvalidId) {

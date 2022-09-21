@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(runtime_avx2)
+add_subdirectory(runtime_avx512)
+add_subdirectory(runtime_core2)
+add_subdirectory(runtime_corei7)
 
 add_library(contrib-libs-hyperscan)
 target_compile_options(contrib-libs-hyperscan PRIVATE

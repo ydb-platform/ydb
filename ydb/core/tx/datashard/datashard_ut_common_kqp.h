@@ -147,6 +147,64 @@ namespace NKqpHelpers {
         return request;
     }
 
+    inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query) {
+        auto reqSender = runtime.AllocateEdgeActor();
+        auto ev = ExecRequest(runtime, reqSender, MakeSimpleRequest(query));
+        auto& response = ev->Get()->Record.GetRef();
+        if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.GetYdbStatus();
+        }
+        if (response.GetResponse().GetResults().size() == 0) {
+            return "<empty>";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+    }
+
+    inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {
+        auto reqSender = runtime.AllocateEdgeActor();
+        sessionId = CreateSession(runtime, reqSender);
+        auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
+        auto& response = ev->Get()->Record.GetRef();
+        if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.GetYdbStatus();
+        }
+        txId = response.GetResponse().GetTxMeta().id();
+        if (response.GetResponse().GetResults().size() == 0) {
+            return "<empty>";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+    }
+
+    inline TString KqpSimpleContinue(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
+        auto reqSender = runtime.AllocateEdgeActor();
+        auto ev = ExecRequest(runtime, reqSender, MakeContinueRequest(sessionId, txId, query));
+        auto& response = ev->Get()->Record.GetRef();
+        if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.GetYdbStatus();
+        }
+        if (response.GetResponse().GetResults().size() == 0) {
+            return "<empty>";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+    }
+
+    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
+        auto reqSender = runtime.AllocateEdgeActor();
+        auto ev = ExecRequest(runtime, reqSender, MakeCommitRequest(sessionId, txId, query));
+        auto& response = ev->Get()->Record.GetRef();
+        if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.GetYdbStatus();
+        }
+        if (response.GetResponse().GetResults().size() == 0) {
+            return "<empty>";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+    }
+
 } // namespace NKqpHelpers
 } // namespace NDataShard
 } // namespace NKikimr

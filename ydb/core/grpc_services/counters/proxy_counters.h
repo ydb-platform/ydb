@@ -24,11 +24,11 @@ public:
 
 IGRpcProxyCounters::TPtr WrapGRpcProxyDbCounters(IGRpcProxyCounters::TPtr common);
 
-IGRpcProxyCounters::TPtr CreateGRpcProxyCounters(NMonitoring::TDynamicCounterPtr appCounters);
+IGRpcProxyCounters::TPtr CreateGRpcProxyCounters(::NMonitoring::TDynamicCounterPtr appCounters);
 
 TIntrusivePtr<NSysView::IDbCounters> CreateGRpcProxyDbCounters(
-    NMonitoring::TDynamicCounterPtr externalGroup,
-    NMonitoring::TDynamicCounterPtr internalGroup);
+    ::NMonitoring::TDynamicCounterPtr externalGroup,
+    ::NMonitoring::TDynamicCounterPtr internalGroup);
 
 void InitializeGRpcProxyDbCountersRegistry(TActorSystem* actorSystem);
 

@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(pg_dummy)
+add_subdirectory(settings)
+add_subdirectory(v0)
+add_subdirectory(v1)
 
 add_library(library-yql-sql)
 target_link_libraries(library-yql-sql PUBLIC

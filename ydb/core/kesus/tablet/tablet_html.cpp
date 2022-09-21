@@ -27,7 +27,7 @@ struct TKesusTablet::THtmlRenderer {
 
     void RenderError(IOutputStream& out, const TString& message) {
         HTML(out) {
-            H3() { out << "ERROR: " << message; }
+            TAG(TH3) { out << "ERROR: " << message; }
         }
     }
 
@@ -39,7 +39,7 @@ struct TKesusTablet::THtmlRenderer {
 
     void RenderProxyList(IOutputStream& out) {
         HTML(out) {
-            H3() { out << "Proxies"; }
+            TAG(TH3) { out << "Proxies"; }
 
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -71,13 +71,13 @@ struct TKesusTablet::THtmlRenderer {
         }
 
         HTML(out) {
-            H2() { out << "Kesus proxy " << actorId; }
+            TAG(TH2) { out << "Kesus proxy " << actorId; }
 
             PRE() {
                 out << "Generation: " << proxy->Generation << "\n";
             }
 
-            H3() { out << "Attached sessions"; }
+            TAG(TH3) { out << "Attached sessions"; }
 
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -113,7 +113,7 @@ struct TKesusTablet::THtmlRenderer {
 
     void RenderSessionList(IOutputStream& out) {
         HTML(out) {
-            H3() { out << "Sessions"; }
+            TAG(TH3) { out << "Sessions"; }
 
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -154,7 +154,7 @@ struct TKesusTablet::THtmlRenderer {
         }
 
         HTML(out) {
-            H2() { out << "Kesus session " << sessionId; }
+            TAG(TH2) { out << "Kesus session " << sessionId; }
 
             PRE() {
                 out << "Description: " << session->Description.Quote() << "\n";
@@ -170,7 +170,7 @@ struct TKesusTablet::THtmlRenderer {
                 out << "Last attach seqno: " << session->LastOwnerSeqNo << "\n";
             }
 
-            H3() { out << "Owned semaphores"; }
+            TAG(TH3) { out << "Owned semaphores"; }
 
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -194,7 +194,7 @@ struct TKesusTablet::THtmlRenderer {
                 }
             }
 
-            H3() { out << "Waiting semaphores"; }
+            TAG(TH3) { out << "Waiting semaphores"; }
 
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -242,7 +242,7 @@ struct TKesusTablet::THtmlRenderer {
 
     void RenderSemaphoreList(IOutputStream& out) {
         HTML(out) {
-            H3() { out << "Semaphores"; }
+            TAG(TH3) { out << "Semaphores"; }
 
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -280,7 +280,7 @@ struct TKesusTablet::THtmlRenderer {
         }
 
         HTML(out) {
-            H2() { out << "Kesus semaphore " << EscapeC(name); }
+            TAG(TH2) { out << "Kesus semaphore " << EscapeC(name); }
 
             PRE() {
                 out << "Data: " << semaphore->Data.Quote() << "\n";
@@ -289,7 +289,7 @@ struct TKesusTablet::THtmlRenderer {
                 out << "Ephemeral: " << (semaphore->Ephemeral ? "true" : "false") << "\n";
             }
 
-            H3() { out << "Owner sessions"; }
+            TAG(TH3) { out << "Owner sessions"; }
 
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -310,7 +310,7 @@ struct TKesusTablet::THtmlRenderer {
                 }
             }
 
-            H3() { out << "Waiting sessions"; }
+            TAG(TH3) { out << "Waiting sessions"; }
 
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -376,7 +376,7 @@ struct TKesusTablet::THtmlRenderer {
 
     void RenderQuoterResources(IOutputStream& out) {
         HTML(out) {
-            H3() { out << "Quoter resources"; }
+            TAG(TH3) { out << "Quoter resources"; }
 
             std::vector<const TQuoterResourceTree*> resources;
             resources.reserve(Self->QuoterResources.GetAllResources().size());
@@ -391,7 +391,7 @@ struct TKesusTablet::THtmlRenderer {
     void RenderQuoterResourceDetails(IOutputStream& out, const TString& path) {
         if (const TQuoterResourceTree* resource = Self->QuoterResources.FindPath(path)) {
             HTML(out) {
-                H2() { out << "Kesus quoter resource " << EscapeC(path); }
+                TAG(TH2) { out << "Kesus quoter resource " << EscapeC(path); }
 
                 PRE() {
                     if (resource->GetParent()) {
@@ -403,12 +403,12 @@ struct TKesusTablet::THtmlRenderer {
                     out << "Props:" << props << "\n";
                 }
 
-                H3() { out << "Children resources"; }
+                TAG(TH3) { out << "Children resources"; }
 
                 std::vector<const TQuoterResourceTree*> resources(resource->GetChildren().begin(), resource->GetChildren().end());
                 RenderQuoterResourceTable(out, resources);
 
-                H3() { out << "Sessions"; }
+                TAG(TH3) { out << "Sessions"; }
                 RenderQuoterResourceSessions(out, resource);
             }
         } else {
@@ -465,7 +465,7 @@ bool TKesusTablet::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
         } else if (params.Has("quoter_resource")) {
             renderer.RenderQuoterResourceDetails(out, params.Get("quoter_resource"));
         } else {
-            H2() { out << "Kesus " << EscapeC(KesusPath); }
+            TAG(TH2) { out << "Kesus " << EscapeC(KesusPath); }
             renderer.RenderProxyList(out);
             renderer.RenderSessionList(out);
             renderer.RenderSemaphoreList(out);

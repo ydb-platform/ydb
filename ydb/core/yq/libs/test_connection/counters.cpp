@@ -6,7 +6,7 @@ TTestConnectionRequestCounters::TTestConnectionRequestCounters(const TString& na
     : Name(name)
 {}
 
-void TTestConnectionRequestCounters::Register(const NMonitoring::TDynamicCounterPtr& counters) {
+void TTestConnectionRequestCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
     auto requestCounters = counters->GetSubgroup("request", Name);
     InFly = requestCounters->GetCounter("InFly", false);
     Ok = requestCounters->GetCounter("Ok", true);

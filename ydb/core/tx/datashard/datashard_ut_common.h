@@ -556,6 +556,10 @@ ui64 AsyncMergeTable(
         const TString& path,
         const TVector<ui64>& sourceTabletIds);
 
+ui64 AsyncMoveTable(Tests::TServer::TPtr server,
+        const TString& srcTable,
+        const TString& dstTable);
+
 ui64 AsyncAlterAddExtraColumn(
         Tests::TServer::TPtr server,
         const TString& workingDir,

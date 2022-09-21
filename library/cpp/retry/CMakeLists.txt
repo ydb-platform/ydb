@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 
 add_library(library-cpp-retry)
 target_link_libraries(library-cpp-retry PUBLIC

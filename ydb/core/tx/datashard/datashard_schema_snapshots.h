@@ -32,6 +32,7 @@ public:
     bool AddSnapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot);
     const TSchemaSnapshot* FindSnapshot(const TSchemaSnapshotKey& key) const;
     void RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key);
+    void RenameSnapshots(NTable::TDatabase& db, const TPathId& prevTableId, const TPathId& newTableId);
 
     bool AcquireReference(const TSchemaSnapshotKey& key);
     bool ReleaseReference(const TSchemaSnapshotKey& key);

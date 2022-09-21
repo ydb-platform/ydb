@@ -258,7 +258,6 @@ public:
     {
         TEraseCachingState eraseCache(this);
 
-        bool isHead = true;
         for (Ready = EReady::Data; Ready == EReady::Data; ) {
             if (Stage == EStage::Seek) {
                 Ready = Start();
@@ -269,32 +268,31 @@ public:
                 Ready = Turn();
             } else if (Stage == EStage::Snap) {
                 if (mode != ENext::Uncommitted) {
-                    ui64 skipsBefore = Stats.InvisibleRowSkips;
                     Ready = Snap();
-                    isHead = skipsBefore == Stats.InvisibleRowSkips;
+                    if (ErasedKeysCache && mode == ENext::Data &&
+                        (Stats.InvisibleRowSkips != SnapInvisibleRowSkips || Stage != EStage::Fill))
+                    {
+                        // Interrupt range when key is not at a head version, or skipped entirely
+                        eraseCache.Flush();
+                    }
                 } else {
                     Y_VERIFY_DEBUG(Active != Inactive);
                     Stage = EStage::Fill;
-                    isHead = false;
                 }
             } else if ((Ready = Apply()) != EReady::Data) {
 
-            } else if (mode == ENext::All || mode == ENext::Uncommitted || State.GetRowState() != ERowOp::Erase) {
+            } else if (mode != ENext::Data || State.GetRowState() != ERowOp::Erase) {
                 break;
             } else {
                 ++Stats.DeletedRowSkips; /* skip internal technical row states w/o data */
-                if (ErasedKeysCache) {
-                    if (isHead) {
-                        eraseCache.OnEraseKey(GetKey().Cells(), GetRowVersion());
-                    } else {
-                        eraseCache.Flush();
-                        isHead = true;
-                    }
+                if (ErasedKeysCache && Stats.InvisibleRowSkips == SnapInvisibleRowSkips) {
+                    // Try to cache erases that are at a head version
+                    eraseCache.OnEraseKey(GetKey().Cells(), GetRowVersion());
                 }
             }
         }
 
-        if (ErasedKeysCache && mode != ENext::All) {
+        if (ErasedKeysCache && mode == ENext::Data) {
             eraseCache.Flush();
         }
 
@@ -348,9 +346,11 @@ private:
     TOwnedCellVec StopKey;
     bool StopKeyInclusive = true;
 
+    using TIteratorIndex = ui32;
+
     struct TIteratorId {
         EType Type;
-        ui16 Index;
+        TIteratorIndex Index;
         TEpoch Epoch;
     };
 
@@ -382,19 +382,10 @@ private:
         const TArrayRef<const NScheme::TTypeIdOrder> Types;
     };
 
-    /**
-     * Adjust epoch into a modified range
-     *
-     * This frees epoch=-inf and epoch=+inf for special stop keys. Note that this
-     * would convert +inf into +inf, which should be safe, since epoch=+inf is
-     * normally used as an invalid epoch marker.
-     */
-    static TEpoch AdjustEpoch(TEpoch epoch) {
-        if (epoch == TEpoch::Max()) {
-            return TEpoch::Max(); // invalid epoch
-        } else {
-            return ++epoch;
-        }
+    static TIteratorIndex IteratorIndexFromSize(size_t size) {
+        TIteratorIndex index = size;
+        Y_VERIFY(index == size, "Iterator index overflow");
+        return index;
     }
 
     void Clear() {
@@ -415,6 +406,7 @@ private:
     TIterators Iterators;
     TForwardIter Active;
     TForwardIter Inactive;
+    ui64 SnapInvisibleRowSkips = 0;
     ui64 DeltaTxId = 0;
     TRowVersion DeltaVersion;
     bool Delta = false;
@@ -496,7 +488,7 @@ template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 {
     if (it && it->IsValid()) {
-        TIteratorId itId = { EType::Mem, ui16(MemIters.size()), AdjustEpoch(it->MemTable->Epoch) };
+        TIteratorId itId = { EType::Mem, IteratorIndexFromSize(MemIters.size()), it->MemTable->Epoch };
 
         MemIters.PushBack(it);
         TDbTupleRef key = MemIters.back()->GetKey();
@@ -507,7 +499,7 @@ inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIt> it)
 {
-    TIteratorId itId = { EType::Run, ui16(RunIters.size()), AdjustEpoch(it->Epoch()) };
+    TIteratorId itId = { EType::Run, IteratorIndexFromSize(RunIters.size()), it->Epoch() };
 
     bool ready = it->IsValid();
 
@@ -532,7 +524,7 @@ inline void TTableItBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
     StopKey = TOwnedCellVec::Make(key);
     StopKeyInclusive = false;
 
-    TIteratorId itId = { EType::Stop, Max<ui16>(), TEpoch::Max() };
+    TIteratorId itId = { EType::Stop, Max<TIteratorIndex>(), TEpoch::Max() };
 
     AddReadyIterator(StopKey, itId);
 }
@@ -549,7 +541,7 @@ inline void TTableItBase<TIteratorOps>::StopAfter(TArrayRef<const TCell> key)
     StopKey = TOwnedCellVec::Make(key);
     StopKeyInclusive = true;
 
-    TIteratorId itId = { EType::Stop, Max<ui16>(), TEpoch::Min() };
+    TIteratorId itId = { EType::Stop, Max<TIteratorIndex>(), TEpoch::Min() };
 
     AddReadyIterator(StopKey, itId);
 }
@@ -584,6 +576,7 @@ inline EReady TTableItBase<TIteratorOps>::Start() noexcept
     }
 
     Stage = EStage::Snap;
+    SnapInvisibleRowSkips = Stats.InvisibleRowSkips;
     Inactive = Iterators.end();
     return EReady::Data;
 }
@@ -628,7 +621,7 @@ inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
                     case EReady::Data:
                         Active->Key = it.GetKey().Cells();
                         Y_VERIFY_DEBUG(Active->Key.size() == Scheme->Keys->Types.size());
-                        Active->IteratorId.Epoch = AdjustEpoch(it.Epoch());
+                        Active->IteratorId.Epoch = it.Epoch();
                         std::push_heap(Iterators.begin(), ++Active, Comparator);
                         break;
 
@@ -1012,7 +1005,7 @@ inline bool TTableItBase<TIteratorOps>::SeekInternal(TArrayRef<const TCell> key,
                     case EReady::Data:
                         Active->Key = it.GetKey().Cells();
                         Y_VERIFY_DEBUG(Active->Key.size() == Scheme->Keys->Types.size());
-                        Active->IteratorId.Epoch = AdjustEpoch(it.Epoch());
+                        Active->IteratorId.Epoch = it.Epoch();
                         std::push_heap(Iterators.begin(), ++Active, Comparator);
                         break;
 

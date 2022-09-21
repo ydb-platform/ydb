@@ -5,9 +5,9 @@ static const TVector<float> Percentiles4 = {0.5f, 0.9f, 0.95f, 1.0f};
 
 namespace NKikimr {
 
-TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& percentileCounters,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& overviewCounters,
+TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& percentileCounters,
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& overviewCounters,
         const TIntrusivePtr<TBlobStorageGroupInfo>& info,
         const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
         bool constructLimited)
@@ -113,7 +113,7 @@ void TBlobStorageGroupProxyMon::BecomeFull() {
 
         PutResponseTime.Initialize(ResponseGroup, "event", "put", "Response in millisec", Percentiles4);
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> putTabletLogGroup =
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> putTabletLogGroup =
             ResponseGroup->GetSubgroup("event", "putTabletLog");
 
         PutTabletLogResponseTime.Initialize(ResponseGroup, "event", "putTabletLogAll", "ms", Percentiles1);

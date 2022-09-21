@@ -116,9 +116,9 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
     ui64 DeletedChunksCount = 0;
 
     // Monitoring
-    TIntrusivePtr<NMonitoring::TDynamicCounters> LoadCounters;
-    NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
-    NMonitoring::TDynamicCounters::TCounterPtr LogEntriesWritten;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LogEntriesWritten;
     NMonitoring::TPercentileTrackerLg<6, 5, 15> ResponseTimes;
     NMonitoring::TPercentileTrackerLg<6, 5, 15> LogResponseTimes;
 
@@ -132,7 +132,7 @@ public:
     }
 
     TPDiskWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd, const TActorId& parent,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
@@ -191,10 +191,10 @@ public:
         ResponseTimes.Initialize(LoadCounters, "subsystem", "LoadActorWriteDuration", "Time in microseconds", percentiles);
         LogResponseTimes.Initialize(LoadCounters, "subsystem", "LoadActorLogWriteDuration", "Time in microseconds", percentiles);
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> pDiskCounters = GetServiceCounters(counters, "pdisks")->
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> pDiskCounters = GetServiceCounters(counters, "pdisks")->
              GetSubgroup("pdisk", Sprintf("%09" PRIu32, PDiskId));
         PDiskBytesWritten = pDiskCounters->GetSubgroup("subsystem", "device")->GetCounter("DeviceBytesWritten", true);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> percentilesGroup;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> percentilesGroup;
         percentilesGroup = pDiskCounters-> GetSubgroup("subsystem", "deviceWriteDuration")->GetSubgroup("sensor", "Time in microsec");
         for (double percentile : {0.1, 0.5, 0.9, 0.99, 0.999,  1.0}) {
             DevicePercentiles.emplace(percentile, percentilesGroup->GetNamedCounter("percentile",
@@ -639,7 +639,7 @@ public:
 };
 
 IActor *CreatePDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd,
-        const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TPDiskWriterTestLoadActor(cmd, parent, counters, index, tag);
 }
 

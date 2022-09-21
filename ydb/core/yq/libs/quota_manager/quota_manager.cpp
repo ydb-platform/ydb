@@ -48,7 +48,7 @@ public:
     TQuotaManagementService(
         const NConfig::TQuotasManagerConfig& config,
         /* const NYq::TYqSharedResources::TPtr& yqSharedResources, */
-        const NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
         std::vector<TQuotaDescription> quotaDescriptions)
         : Config(config)
         , ServiceCounters(counters->GetSubgroup("subsystem", "QuotaService"))
@@ -186,7 +186,7 @@ private:
     }
 
     NConfig::TQuotasManagerConfig Config;
-    const NMonitoring::TDynamicCounterPtr ServiceCounters;
+    const ::NMonitoring::TDynamicCounterPtr ServiceCounters;
     THashMap<TString /* SubjectType */, THashMap<TString /* MetricName */, TQuotaInfo>> QuotaInfoMap;
     THashMap<TString /* SubjectType */, THashMap<TString /* SubjectId */, TQuotaCache>> QuotaCacheMap;
     TDuration UsageRefreshPeriod;
@@ -195,7 +195,7 @@ private:
 NActors::IActor* CreateQuotaServiceActor(
     const NConfig::TQuotasManagerConfig& config,
     /* const NYq::TYqSharedResources::TPtr& yqSharedResources, */
-    const NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     std::vector<TQuotaDescription> quotaDesc) {
         return new TQuotaManagementService(config, /* yqSharedResources, */ counters, quotaDesc);
 }

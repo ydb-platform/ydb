@@ -163,7 +163,7 @@ TReadSessionEvent::TDataReceivedEvent::TMessage::TMessage(const TString& data,
 }
 
 void TReadSessionEvent::TDataReceivedEvent::TMessage::Commit() {
-    static_cast<TPartitionStreamImpl*>(PartitionStream.Get())->Commit(Information.Offset, Information.Offset + 1);
+    static_cast<TPartitionStreamImpl<true>*>(PartitionStream.Get())->Commit(Information.Offset, Information.Offset + 1);
 }
 
 ui64 TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::GetBlocksCount() const {
@@ -233,7 +233,7 @@ TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::TCompressedMessage(EC
 {}
 
 void TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::Commit() {
-    static_cast<TPartitionStreamImpl*>(PartitionStream.Get())->Commit(
+    static_cast<TPartitionStreamImpl<true>*>(PartitionStream.Get())->Commit(
         Information.front().Offset,
         Information.back().Offset + 1
     );

@@ -56,7 +56,7 @@ void Init(
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& iyqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
-    const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig, const NMonitoring::TDynamicCounterPtr& counters)>& auditServiceFactory,
+    const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig, const ::NMonitoring::TDynamicCounterPtr& counters)>& auditServiceFactory,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     ui32 icPort,
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories
@@ -291,7 +291,7 @@ void Init(
 IYqSharedResources::TPtr CreateYqSharedResources(
     const NYq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
     return CreateYqSharedResourcesImpl(config, credentialsProviderFactory, counters);
 }

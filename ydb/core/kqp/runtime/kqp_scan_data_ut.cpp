@@ -85,54 +85,78 @@ struct TDataRow {
     }
 };
 
-std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TDataRow>& rows) {
+std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TDataRow>& rows, std::shared_ptr<arrow::Schema>&& resultSchema) {
     TString err;
     std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder = nullptr;
     std::shared_ptr<arrow::RecordBatch> batch;
-    auto result = arrow::RecordBatchBuilder::Make(rows.front().MakeArrowSchema(), arrow::default_memory_pool(), &batchBuilder);
+    auto result = arrow::RecordBatchBuilder::Make(resultSchema, arrow::default_memory_pool(), &batchBuilder);
     UNIT_ASSERT(result.ok());
 
     for (const TDataRow& row : rows) {
-        auto result0 = batchBuilder->GetFieldAs<arrow::BooleanBuilder   >(0 )->Append(row.Bool   );
-        UNIT_ASSERT(result.ok());
-        auto result1 = batchBuilder->GetFieldAs<arrow::Int8Builder      >(1 )->Append(row.Int8   );
-        UNIT_ASSERT(result.ok());
-        auto result2 = batchBuilder->GetFieldAs<arrow::Int16Builder     >(2 )->Append(row.Int16  );
-        UNIT_ASSERT(result.ok());
-        auto result3 = batchBuilder->GetFieldAs<arrow::Int32Builder     >(3 )->Append(row.Int32  );
-        UNIT_ASSERT(result.ok());
-        auto result4 = batchBuilder->GetFieldAs<arrow::Int64Builder     >(4 )->Append(row.Int64  );
-        UNIT_ASSERT(result.ok());
-        auto result5 = batchBuilder->GetFieldAs<arrow::UInt8Builder     >(5 )->Append(row.UInt8  );
-        UNIT_ASSERT(result.ok());
-        auto result6 = batchBuilder->GetFieldAs<arrow::UInt16Builder    >(6 )->Append(row.UInt16 );
-        UNIT_ASSERT(result.ok());
-        auto result7 = batchBuilder->GetFieldAs<arrow::UInt32Builder    >(7 )->Append(row.UInt32 );
-        UNIT_ASSERT(result.ok());
-        auto result8 = batchBuilder->GetFieldAs<arrow::UInt64Builder    >(8 )->Append(row.UInt64 );
-        UNIT_ASSERT(result.ok());
-        auto result9 = batchBuilder->GetFieldAs<arrow::FloatBuilder     >(9 )->Append(row.Float32);
-        UNIT_ASSERT(result.ok());
-        auto result10 = batchBuilder->GetFieldAs<arrow::DoubleBuilder    >(10)->Append(row.Float64);
-        UNIT_ASSERT(result.ok());
-        auto result11 = batchBuilder->GetFieldAs<arrow::StringBuilder    >(11)->Append(row.String.data(), row.String.size());
-        UNIT_ASSERT(result.ok());
-        auto result12 = batchBuilder->GetFieldAs<arrow::StringBuilder    >(12)->Append(row.Utf8.data(), row.Utf8.size());
-        UNIT_ASSERT(result.ok());
-        auto result13 = batchBuilder->GetFieldAs<arrow::BinaryBuilder    >(13)->Append(row.Json.data(), row.Json.size());
-        UNIT_ASSERT(result.ok());
-        auto result14 = batchBuilder->GetFieldAs<arrow::BinaryBuilder    >(14)->Append(row.Yson.data(), row.Yson.size());
-        UNIT_ASSERT(result.ok());
-        auto result15 = batchBuilder->GetFieldAs<arrow::Date32Builder    >(15)->Append(row.Date);
-        UNIT_ASSERT(result.ok());
-        auto result16 = batchBuilder->GetFieldAs<arrow::TimestampBuilder >(16)->Append(row.Datetime);
-        UNIT_ASSERT(result.ok());
-        auto result17 = batchBuilder->GetFieldAs<arrow::TimestampBuilder >(17)->Append(row.Timestamp);
-        UNIT_ASSERT(result.ok());
-        auto result18 = batchBuilder->GetFieldAs<arrow::DurationBuilder  >(18)->Append(row.Interval);
-        UNIT_ASSERT(result.ok());
-        auto result19 = batchBuilder->GetFieldAs<arrow::Decimal128Builder>(19)->Append(reinterpret_cast<const char*>(&row.Decimal));
-        UNIT_ASSERT(result.ok());
+        int colIndex = 0;
+        for (auto colName : resultSchema->field_names()) {
+            if (colName == "bool") {
+                auto result = batchBuilder->GetFieldAs<arrow::BooleanBuilder>(colIndex++)->Append(row.Bool);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "i8") {
+                auto result = batchBuilder->GetFieldAs<arrow::Int8Builder>(colIndex++)->Append(row.Int8);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "i16") {
+                auto result = batchBuilder->GetFieldAs<arrow::Int16Builder>(colIndex++)->Append(row.Int16);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "i32") {
+                auto result = batchBuilder->GetFieldAs<arrow::Int32Builder>(colIndex++)->Append(row.Int32);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "i64") {
+                auto result = batchBuilder->GetFieldAs<arrow::Int64Builder>(colIndex++)->Append(row.Int64);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "ui8") {
+                auto result = batchBuilder->GetFieldAs<arrow::UInt8Builder>(colIndex++)->Append(row.UInt8);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "ui16") {
+                auto result = batchBuilder->GetFieldAs<arrow::UInt16Builder>(colIndex++)->Append(row.UInt16);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "ui32") {
+                auto result = batchBuilder->GetFieldAs<arrow::UInt32Builder>(colIndex++)->Append(row.UInt32);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "ui64") {
+                auto result = batchBuilder->GetFieldAs<arrow::UInt64Builder>(colIndex++)->Append(row.UInt64);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "f32") {
+                auto result = batchBuilder->GetFieldAs<arrow::FloatBuilder>(colIndex++)->Append(row.Float32);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "f64") {
+                auto result = batchBuilder->GetFieldAs<arrow::DoubleBuilder>(colIndex++)->Append(row.Float64);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "string") {
+                auto result = batchBuilder->GetFieldAs<arrow::StringBuilder>(colIndex++)->Append(row.String.data(), row.String.size());
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "utf8") {
+                auto result = batchBuilder->GetFieldAs<arrow::StringBuilder>(colIndex++)->Append(row.Utf8.data(), row.Utf8.size());
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "json") {
+                auto result = batchBuilder->GetFieldAs<arrow::BinaryBuilder>(colIndex++)->Append(row.Json.data(), row.Json.size());
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "yson") {
+                auto result = batchBuilder->GetFieldAs<arrow::BinaryBuilder>(colIndex++)->Append(row.Yson.data(), row.Yson.size());
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "date") {
+                auto result = batchBuilder->GetFieldAs<arrow::Date32Builder>(colIndex++)->Append(row.Date);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "datetime") {
+                auto result = batchBuilder->GetFieldAs<arrow::TimestampBuilder>(colIndex++)->Append(row.Datetime);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "ts") {
+                auto result = batchBuilder->GetFieldAs<arrow::TimestampBuilder>(colIndex++)->Append(row.Timestamp);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "ival") {
+                auto result = batchBuilder->GetFieldAs<arrow::DurationBuilder>(colIndex++)->Append(row.Interval);
+                UNIT_ASSERT(result.ok());
+            } else if (colName == "dec") {
+                auto result = batchBuilder->GetFieldAs<arrow::Decimal128Builder>(colIndex++)->Append(reinterpret_cast<const char*>(&row.Decimal));
+                UNIT_ASSERT(result.ok());
+            }
+        }
     }
 
     auto resultFlush = batchBuilder->Flush(&batch);
@@ -217,12 +241,12 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
     Y_UNIT_TEST(ArrowToUnboxedValueConverter) {
         TVector<TDataRow> rows = TestRows();
-        std::shared_ptr<arrow::RecordBatch> batch = VectorToBatch(rows);
+        std::shared_ptr<arrow::RecordBatch> batch = VectorToBatch(rows, rows.front().MakeArrowSchema());
         NKikimr::NMiniKQL::TScopedAlloc alloc;
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
 
-        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, {});
+        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, {}, rows.front().Columns());
 
         scanData.AddRows(*batch, {}, factory);
 
@@ -259,12 +283,39 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         scanData.Clear();
     }
 
+    Y_UNIT_TEST(DifferentNumberOfInputAndResultColumns) {
+        TVector<TDataRow> rows = TestRows();
+        std::vector<std::shared_ptr<arrow::Field>> fields = { arrow::field("i8", arrow::int8()) };
+        std::shared_ptr<arrow::RecordBatch> batch = VectorToBatch(rows, std::make_shared<arrow::Schema>(fields));
+        NKikimr::NMiniKQL::TScopedAlloc alloc;
+        TMemoryUsageInfo memInfo("");
+        THolderFactory factory(alloc.Ref(), memInfo);
+
+        TSmallVec<TKqpComputeContextBase::TColumn> resultCols;
+        auto resCol = TKqpComputeContextBase::TColumn {
+            .Type = NTypeIds::Int8
+        };
+        resultCols.push_back(resCol);
+        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, {}, resultCols);
+
+        scanData.AddRows(*batch, {}, factory);
+
+        for (auto& row: rows) {
+            auto result_row = scanData.TakeRow();
+            UNIT_ASSERT_EQUAL(result_row.GetElement(0).Get<i8>(), row.Int8);
+        }
+
+        UNIT_ASSERT(scanData.IsEmpty());
+
+        scanData.Clear();
+    }
+
     Y_UNIT_TEST(EmptyColumns) {
         NKikimr::NMiniKQL::TScopedAlloc alloc;
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
 
-        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {});
+        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {}, {});
         TVector<TOwnedCellVec> emptyBatch(1000);
         auto bytes = scanData.AddRows(emptyBatch, {}, factory);
         UNIT_ASSERT(bytes > 0);
@@ -279,13 +330,13 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
     }
 
     Y_UNIT_TEST(EmptyColumnsAndNonEmptyArrowBatch) {
-NKikimr::NMiniKQL::TScopedAlloc alloc;
+        NKikimr::NMiniKQL::TScopedAlloc alloc;
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
-        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {});
+        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {}, {});
 
         TVector<TDataRow> rows = TestRows();
-        std::shared_ptr<arrow::RecordBatch> anotherEmptyBatch = VectorToBatch(rows);
+        std::shared_ptr<arrow::RecordBatch> anotherEmptyBatch = VectorToBatch(rows, rows.front().MakeArrowSchema());
 
         auto bytes = scanData.AddRows(*anotherEmptyBatch, {}, factory);
         UNIT_ASSERT(bytes > 0);

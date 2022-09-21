@@ -37,6 +37,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   cpp-client-ydb_extension
   cpp-client-ydb_operation
   cpp-client-ydb_scheme
+  cpp-client-ydb_monitoring
 )
 target_link_options(ydb-services-ydb-ut PRIVATE
   -Wl,-no_deduplicate
@@ -61,6 +62,7 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/json_udf.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/re2_udf.cpp
 )

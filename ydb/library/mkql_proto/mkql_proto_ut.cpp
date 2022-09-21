@@ -183,6 +183,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         "}\n");
     }
 
+    Y_UNIT_TEST(TestExportEmptyTupleType) {
+        TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
+            TVector<TRuntimeNode> items;
+            auto pgmReturn = pgmBuilder.NewTuple(items);
+            return pgmReturn;
+        },
+        "Kind: Tuple\n");
+
+        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
+            TVector<TRuntimeNode> items;
+            auto pgmReturn = pgmBuilder.NewTuple(items);
+            return pgmReturn;
+        },
+        "tuple_type {\n"
+        "}\n");
+    }
+    
     Y_UNIT_TEST(TestExportStructType) {
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
             std::vector<std::pair<std::string_view, TRuntimeNode>> items;
@@ -211,6 +228,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         "      }\n"
         "    }\n"
         "  }\n"
+        "}\n");
+    }
+
+    Y_UNIT_TEST(TestExportEmptyStructType) {
+        TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
+            auto pgmReturn = pgmBuilder.NewStruct(items);
+            return pgmReturn;
+        },
+        "Kind: Struct\n");
+
+        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
+            auto pgmReturn = pgmBuilder.NewStruct(items);
+            return pgmReturn;
+        },
+        "struct_type {\n"
         "}\n");
     }
 

@@ -169,7 +169,7 @@ void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedV
 }
 
 void RunTestMultipleRequestsFromCompletionAction() {
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
     THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
     const ui32 dataSize = 4 << 10;
     const ui64 generations = 8;
@@ -207,7 +207,7 @@ void RunTestMultipleRequestsFromCompletionAction() {
 }
 
 void RunTestDestructionWithMultipleFlushesFromCompletionAction() {
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
     THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
     const ui32 dataSize = 4 << 10;
     const i32 generations = 8;
@@ -232,7 +232,7 @@ void RunTestDestructionWithMultipleFlushesFromCompletionAction() {
 }
 
 void RunWriteTestWithSectorMap(NPDisk::NSectorMap::EDiskMode diskMode, ui32 diskSize, ui32 bufferSize, bool sequential = true) {
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
     THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
 
     TActorSystemCreator creator;
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
     }
 
     Y_UNIT_TEST(TestDeviceWithSubmitGetThread) {
-        const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         const ui32 fileSize = 4 << 20;
         const ui32 dataSize = 4 << 10;
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
 
     /*
     Y_UNIT_TEST(TestRabbitCompletionAction) {
-        const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         const ui32 dataSize = 4 << 10;
         const i32 generations = 8;

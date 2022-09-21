@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(pcre16)
+add_subdirectory(pcre32)
 
 add_library(contrib-libs-pcre)
 target_compile_options(contrib-libs-pcre PUBLIC

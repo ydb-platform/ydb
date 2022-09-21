@@ -583,7 +583,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvExperimentalStreamQueryRequest, PreHandle);
         HFunc(TEvStreamPQWriteRequest, PreHandle);
         HFunc(TEvStreamPQMigrationReadRequest, PreHandle);
-//        HFunc(TEvStreamTopicWriteRequest, PreHandle);
+        HFunc(TEvStreamTopicWriteRequest, PreHandle);
         HFunc(TEvStreamTopicReadRequest, PreHandle);
         HFunc(TEvPQReadInfoRequest, PreHandle);
         HFunc(TEvPQDropTopicRequest, PreHandle);

@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut_utils)
+add_subdirectory(with_offset_ranges_mode_ut)
 
 add_executable(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut)
 target_compile_options(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE
@@ -44,7 +46,6 @@ target_sources(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/compress_executor_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/compression_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/retry_policy_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils.cpp
 )
 add_test(
   NAME

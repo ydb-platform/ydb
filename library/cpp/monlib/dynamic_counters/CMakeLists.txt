@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(percentile)
 
 add_library(cpp-monlib-dynamic_counters)
 target_link_libraries(cpp-monlib-dynamic_counters PUBLIC

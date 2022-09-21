@@ -1034,6 +1034,11 @@ TExprNode::TPtr ApplyWithCastStructForFirstArg(const TExprNode::TPtr& node, cons
 
 }
 
+void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTraitsNode, TSortParams& sortParams, TExprContext& ctx)
+{
+    ExtractSortKeyAndOrder(pos, sortTraitsNode, sortParams.Key, sortParams.Order, ctx);
+}
+
 void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTraitsNode, TExprNode::TPtr& sortKey, TExprNode::TPtr& sortOrder, TExprContext& ctx) {
     if (sortTraitsNode->IsCallable("SortTraits")) {
         TCoSortTraits sortTraits(sortTraitsNode);
@@ -1045,6 +1050,13 @@ void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTrai
         YQL_ENSURE(sortTraitsNode->IsCallable("Void"));
         sortOrder = sortKey = ctx.NewCallable(pos, "Void", {});
     }
+}
+
+void ExtractSessionWindowParams(TPositionHandle pos, TSessionWindowParams& sessionParams, TExprContext& ctx)
+{
+    ExtractSessionWindowParams(pos, sessionParams.Traits, sessionParams.Key,
+        sessionParams.KeyType, sessionParams.ParamsType, sessionParams.SortTraits, sessionParams.Init,
+        sessionParams.Update, ctx);
 }
 
 void ExtractSessionWindowParams(TPositionHandle pos, const TExprNode::TPtr& sessionTraits, TExprNode::TPtr& sessionKey,

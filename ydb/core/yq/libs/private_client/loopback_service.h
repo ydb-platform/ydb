@@ -7,6 +7,6 @@
 namespace NYq {
 
 NActors::IActor* CreateLoopbackServiceActor(
-    const NMonitoring::TDynamicCounterPtr& counters);
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } /* NYq */

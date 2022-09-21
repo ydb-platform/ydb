@@ -472,6 +472,7 @@ private:
         entry.Path = SplitPath(Settings.TablePath);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.ShowPrivatePath = true;
+        entry.SyncVersion = true;
 
         TXLOG_D("Sending TEvNagivateKeySet for table '" << Settings.TablePath << "'");
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
@@ -577,8 +578,8 @@ private:
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, ctx);
         }
 
-        const bool fromInclusive = Settings.KeyRange.GetFromInclusive();
-        const bool toInclusive = Settings.KeyRange.GetToInclusive();
+        bool fromInclusive = Settings.KeyRange.GetFromInclusive();
+        bool toInclusive = Settings.KeyRange.GetToInclusive();
         const EParseRangeKeyExp fromExpand = (
             Settings.KeyRange.HasFrom()
                 ? (fromInclusive ? EParseRangeKeyExp::TO_NULL : EParseRangeKeyExp::NONE)
@@ -598,6 +599,16 @@ private:
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::KEY_PARSE_ERROR, "Failed to parse key ranges"));
 
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, ctx);
+        }
+
+        if (KeyFromValues.GetCells().size() < keyTypes.size() && !Settings.KeyRange.HasFromInclusive()) {
+            // Default: non-inclusive for incomplete From, except when From is empty
+            fromInclusive = KeyFromValues.GetCells().size() == 0;
+        }
+
+        if (KeyToValues.GetCells().size() < keyTypes.size() && !Settings.KeyRange.HasToInclusive()) {
+            // Default: inclusive for incomplete To
+            toInclusive = true;
         }
 
         TTableRange range(
@@ -1426,6 +1437,14 @@ private:
 
         auto& txRange = *tx.MutableRange();
         state.Ranges.front().Serialize(txRange);
+
+        // Normalize range's From/ToInclusive
+        if (txRange.GetFrom().empty() && !txRange.GetFromInclusive()) {
+            txRange.SetFromInclusive(true);
+        }
+        if (txRange.GetTo().empty() && !txRange.GetToInclusive()) {
+            txRange.SetToInclusive(true);
+        }
 
         if (Settings.ReadVersion.IsMax()) {
             // Use snapshot that we have created

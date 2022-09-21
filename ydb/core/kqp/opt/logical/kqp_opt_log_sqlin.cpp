@@ -42,6 +42,31 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
     }
 
     auto readMatch = MatchRead<TKqlReadTableBase>(flatMap.Input());
+
+    //TODO: remove this branch KIKIMR-15255
+    if (!readMatch) {
+        if (auto readRangesMatch = MatchRead<TKqlReadTableRangesBase>(flatMap.Input())) {
+            auto read = readRangesMatch->Read.Cast<TKqlReadTableRangesBase>();
+            if (TCoVoid::Match(read.Ranges().Raw())) {
+                readMatch = readRangesMatch;
+                auto key = Build<TKqlKeyInc>(ctx, read.Pos()).Done();
+                readMatch->Read =
+                    Build<TKqlReadTable>(ctx, read.Pos())
+                        .Settings(read.Settings())
+                        .Table(read.Table())
+                        .Columns(read.Columns())
+                        .Range<TKqlKeyRange>()
+                            .From(key)
+                            .To(key)
+                            .Build()
+                        .Done();
+            } else {
+                return node;
+            }
+        } else {
+            return node;
+        }
+    }
     if (!readMatch) {
         return node;
     }

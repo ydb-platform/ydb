@@ -21,7 +21,7 @@ public:
     void Register(NMonitoring::IMonPage *page) override;
     NMonitoring::TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title) override;
     NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields) override;
-    NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) override;
+    NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) override;
     void OutputIndexPage(IOutputStream& out) override;
     NMonitoring::IMonPage* FindPage(const TString& relPath) override;
 

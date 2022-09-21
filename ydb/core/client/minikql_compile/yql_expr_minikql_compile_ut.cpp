@@ -72,8 +72,8 @@ namespace {
         table.Table.ColumnNames = { "key", "value" };
         table.TableId.Reset(new TTableId(1, 2));
         table.KeyColumnCount = 1;
-        table.Columns.insert(std::make_pair("key", TColumn{ 34, 0, NUdf::TDataType<ui32>::Id, 0 }));
-        table.Columns.insert(std::make_pair("value", TColumn{ 56, -1, NUdf::TDataType<char*>::Id, (ui32)EInplaceUpdateMode::Min }));
+        table.Columns.insert(std::make_pair("key", TColumn{ 34, 0, NUdf::TDataType<ui32>::Id, 0, EColumnTypeConstraint::Nullable }));
+        table.Columns.insert(std::make_pair("value", TColumn{ 56, -1, NUdf::TDataType<char*>::Id, (ui32)EInplaceUpdateMode::Min, EColumnTypeConstraint::Nullable }));
         services.DbSchemeResolver.AddTable(table);
 
         IDbSchemeResolver::TTableResult table2(IDbSchemeResolver::TTableResult::Ok);
@@ -81,8 +81,8 @@ namespace {
         table2.Table.ColumnNames = { "key", "value" };
         table2.TableId.Reset(new TTableId(10, 20));
         table2.KeyColumnCount = 1;
-        table2.Columns.insert(std::make_pair("key", TColumn{ 340, 0, NUdf::TDataType<ui32>::Id, 0 }));
-        table2.Columns.insert(std::make_pair("value", TColumn{ 560, -1, NUdf::TDataType<char*>::Id, (ui32)EInplaceUpdateMode::Min }));
+        table2.Columns.insert(std::make_pair("key", TColumn{ 340, 0, NUdf::TDataType<ui32>::Id, 0, EColumnTypeConstraint::Nullable }));
+        table2.Columns.insert(std::make_pair("value", TColumn{ 560, -1, NUdf::TDataType<char*>::Id, (ui32)EInplaceUpdateMode::Min, EColumnTypeConstraint::Nullable }));
         services.DbSchemeResolver.AddTable(table2);
     }
 }
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
     Y_UNIT_TEST(SelectRange) {
         auto programText = R"___(
 (
-(let range '('IncFrom 'ExcTo '('key (Uint32 '23) (Void))))
+(let range '('IncFrom 'IncTo '('key (Uint32 '23) (Void))))
 (let select '('value))
 (let options '('('ItemsLimit (Uint64 '2)) '('BytesLimit (Uint64 '1000))))
 (let pgmReturn (AsList
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
     Y_UNIT_TEST(Extract) {
         auto programText = R"___(
 (
-(let range '('IncFrom 'ExcTo '('key (Uint32 '23) (Void))))
+(let range '('IncFrom 'IncTo '('key (Uint32 '23) (Void))))
 (let select '('key 'value))
 (let options '('('ItemsLimit (Uint64 '2))))
 (let tupleList (AsList '((Uint32 '1) (Uint32 '2)) '((Uint32 '3) (Uint32 '4))))

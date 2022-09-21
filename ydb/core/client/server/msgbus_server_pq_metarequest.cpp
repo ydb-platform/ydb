@@ -69,7 +69,7 @@ void TPersQueueGetTopicMetadataTopicWorker::Answer(const TActorContext& ctx, ERe
         SetErrorCode(topicInfo, SchemeEntry);
         if (SchemeEntry.PQGroupInfo != nullptr) {
             const auto& desc = SchemeEntry.PQGroupInfo->Description;
-            topicInfo->SetTopic(desc.GetName());
+            topicInfo->SetTopic(Name);
             topicInfo->MutableConfig()->CopyFrom(desc.GetPQTabletConfig());
             topicInfo->MutableConfig()->SetVersion(desc.GetAlterVersion());
             topicInfo->SetNumPartitions(desc.PartitionsSize());
@@ -95,7 +95,7 @@ THolder<IActor> TPersQueueGetPartitionOffsetsProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
     return MakeHolder<TPersQueueGetPartitionOffsetsTopicWorker>(
-            SelfId(), topicEntry, name, PartitionsToRequest[topicEntry.PQGroupInfo->Description.GetName()], RequestProto
+            SelfId(), topicEntry, name, PartitionsToRequest[name], RequestProto
     );
 }
 
@@ -208,7 +208,7 @@ THolder<IActor> TPersQueueGetPartitionStatusProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
     return MakeHolder<TPersQueueGetPartitionStatusTopicWorker>(
-            SelfId(), topicEntry, name, PartitionsToRequest[topicEntry.PQGroupInfo->Description.GetName()], RequestProto
+            SelfId(), topicEntry, name, PartitionsToRequest[name], RequestProto
     );
 }
 
@@ -329,7 +329,7 @@ THolder<IActor> TPersQueueGetPartitionLocationsProcessor::CreateTopicSubactor(
     Y_VERIFY(NodesInfo.get() != nullptr);
     return MakeHolder<TPersQueueGetPartitionLocationsTopicWorker>(
             SelfId(), topicEntry, name,
-            PartitionsToRequest[topicEntry.PQGroupInfo->Description.GetName()], RequestProto, NodesInfo
+            PartitionsToRequest[name], RequestProto, NodesInfo
     );
 }
 
@@ -416,8 +416,17 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
                 const auto hostName = NodesInfo->HostNames.find(nodeId);
                 if (hostName != NodesInfo->HostNames.end()) {
                     location.SetHost(hostName->second);
-                    location.SetHostId(nodeId);
                     location.SetErrorCode(NPersQueue::NErrorCode::OK);
+                    if (nodeId < 1000) {
+                        location.SetHostId(nodeId);
+                    } else {
+                        auto minIter = NodesInfo->MinNodeIdByHost.find(hostName->second);
+                        if (minIter.IsEnd()) {
+                            location.SetHostId(nodeId);
+                        } else {
+                            location.SetHostId(minIter->second);
+                        }
+                    }
                 } else {
                     statusInitializing = true;
                 }

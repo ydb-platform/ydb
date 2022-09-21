@@ -758,7 +758,7 @@ ui64 TCompactionLogic::GetBackingSize(ui64 ownerTabletId) const {
 void TCompactionLogic::OutputHtml(IOutputStream &out, const NTable::TScheme &scheme, const TCgiParameters& cgi) {
     HTML(out) {
         for (const auto &xtable : State->Tables) {
-            H4() {out << scheme.GetTableInfo(xtable.first)->Name;}
+            TAG(TH4) {out << scheme.GetTableInfo(xtable.first)->Name;}
 
             DIV_CLASS("row") { out
                 << "InMem Size: " << xtable.second.InMem.EstimatedSize

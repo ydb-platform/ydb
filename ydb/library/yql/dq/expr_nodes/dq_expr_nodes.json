@@ -245,6 +245,15 @@
             {"Index": 1, "Name": "TransformName", "Type": "TExprBase"},
             {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
         ]
+    },
+    {
+        "Name": "TDqPhyLength",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "DqPhyLength"},
+        "Children": [
+            {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+            {"Index": 1, "Name": "Name", "Type": "TCoAtom"}
+        ]
     }
     ]
 }

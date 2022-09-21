@@ -109,7 +109,7 @@ struct TPDiskFailureInjectionTest {
     ui64 PDiskGuid;
     bool ErasureEncode = false;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     TProgramShouldContinue KikimrShouldContinue;
     std::unique_ptr<NKikimr::TAppData> AppData;
@@ -166,7 +166,7 @@ struct TPDiskFailureInjectionTest {
         using namespace NActors;
 
         // create counters
-        Counters = new NMonitoring::TDynamicCounters;
+        Counters = new ::NMonitoring::TDynamicCounters;
 
         // initialize app data with pool ids and registries
         AppData.reset(new NKikimr::TAppData(0u, 1u, 2u, 3u, {}, nullptr, nullptr, nullptr, &KikimrShouldContinue));

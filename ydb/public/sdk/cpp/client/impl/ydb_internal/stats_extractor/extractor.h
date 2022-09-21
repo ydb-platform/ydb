@@ -17,7 +17,7 @@ public:
     : Client_(client)
     { }
 
-    virtual void SetMetricRegistry(NMonitoring::IMetricRegistry* sensorsRegistry) override {
+    virtual void SetMetricRegistry(::NMonitoring::IMetricRegistry* sensorsRegistry) override {
         auto strong = Client_.lock();
         if (strong) {
             strong->StartStatCollecting(sensorsRegistry);

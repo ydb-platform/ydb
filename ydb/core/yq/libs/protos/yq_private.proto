@@ -77,12 +77,21 @@ message GetTaskResult {
         google.protobuf.Timestamp deadline = 24;
         YandexQuery.StreamingDisposition disposition = 25;
         uint64 result_limit = 26;
+
+        YandexQuery.Limits limits = 27;
+        string rate_limiter = 28; // Kesus path // If empty, rate limiting is off.
     }
     repeated Task tasks = 1;
 }
 
 message GetTaskResponse {
     Ydb.Operations.Operation operation = 1; // GetTaskResult
+}
+
+message RateLimiterResources {
+    string rate_limiter = 1; // Kesus path
+    string resource_path = 2;
+    bool delete_resource = 3; // Delete resource when query is finished. Otherwise create
 }
 
 message PingTaskRequest {
@@ -107,6 +116,7 @@ message PingTaskRequest {
     YandexQuery.StateLoadMode state_load_mode = 18;
     YandexQuery.StreamingDisposition disposition = 19;
     Ydb.Operations.OperationParams operation_params = 15;
+    RateLimiterResources rate_limiter_resources = 22;
     string scope = 100;
     string tenant = 104;
     google.protobuf.Timestamp started_at = 101;

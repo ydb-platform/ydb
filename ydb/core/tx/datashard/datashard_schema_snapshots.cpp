@@ -30,7 +30,6 @@ bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
         return false;
     }
 
-    const auto& tables = Self->GetUserTables();
     while (!rowset.EndOfSet()) {
         const ui64 oid = rowset.GetValue<Schema::SchemaSnapshots::PathOwnerId>();
         const ui64 tid = rowset.GetValue<Schema::SchemaSnapshots::LocalPathId>();
@@ -43,13 +42,10 @@ bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
         const bool ok = ParseFromStringNoSizeLimit(desc, schema);
         Y_VERIFY(ok);
 
-        auto it = tables.find(tid);
-        Y_VERIFY_S(it != tables.end(), "Cannot find table: " << tid);
-
         const auto res = Snapshots.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(oid, tid, version),
-            std::forward_as_tuple(new TUserTable(it->second->LocalTid, desc, 0), step, txId)
+            std::forward_as_tuple(new TUserTable(0, desc, 0), step, txId)
         );
         Y_VERIFY_S(res.second, "Duplicate schema snapshot: " << res.first->first);
 
@@ -91,6 +87,36 @@ void TSchemaSnapshotManager::RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSn
 
     Snapshots.erase(it);
     PersistRemoveSnapshot(db, key);
+}
+
+void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,
+        const TPathId& prevTableId, const TPathId& newTableId)
+{
+    Y_VERIFY_S(prevTableId < newTableId, "New table id should be greater than previous"
+        << ": prev# " << prevTableId
+        << ", new# " << newTableId);
+
+    NIceDb::TNiceDb nicedb(db);
+    for (auto it = Snapshots.lower_bound(TSchemaSnapshotKey(prevTableId, 1)); it != Snapshots.end();) {
+        const auto& prevKey = it->first;
+        const auto& snapshot = it->second;
+
+        if (TPathId(prevKey.OwnerId, prevKey.PathId) != prevTableId) {
+            break;
+        }
+
+        const TSchemaSnapshotKey newKey(newTableId, prevKey.Version);
+        AddSnapshot(db, newKey, snapshot);
+        PersistRemoveSnapshot(nicedb, prevKey);
+
+        auto refIt = References.find(prevKey);
+        if (refIt != References.end()) {
+            References[newKey] = refIt->second;
+            References.erase(refIt);
+        }
+
+        it = Snapshots.erase(it);
+    }
 }
 
 bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {

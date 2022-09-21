@@ -36,6 +36,8 @@ inline TString GetTransactionModeName(const Ydb::Table::TransactionSettings& set
             return "OnlineReadOnly";
         case Ydb::Table::TransactionSettings::kStaleReadOnly:
             return "StaleReadOnly";
+        case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+            return "SnapshotReadOnly";
         default:
             return "Unknown";
     }

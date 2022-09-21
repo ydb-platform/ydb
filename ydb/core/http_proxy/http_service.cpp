@@ -14,6 +14,7 @@
 
 #include <util/stream/file.h>
 
+
 namespace NKikimr::NHttpProxy {
 
     using namespace NActors;
@@ -21,43 +22,10 @@ namespace NKikimr::NHttpProxy {
     class THttpProxyActor : public NActors::TActorBootstrapped<THttpProxyActor> {
         using TBase = NActors::TActorBootstrapped<THttpProxyActor>;
     public:
-        explicit THttpProxyActor(const THttpProxyConfig& cfg)
-            : Config(cfg.Config)
-        {
-            ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
-            Processors = MakeHolder<THttpRequestProcessors>();
-            Processors->Initialize();
-            if (cfg.UseSDK) {
-                auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
-                                          .SetGRpcKeepAlivePermitWithoutCalls(true)
-                                          .SetGRpcKeepAliveTimeout(TDuration::Seconds(90))
-                                          .SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
-                if (Config.GetCaCert()) {
-                    config.UseSecureConnection(TFileInput(Config.GetCaCert()).ReadAll());
-                }
-                Driver = MakeHolder<NYdb::TDriver>(std::move(config));
-            }
-        }
+        explicit THttpProxyActor(const THttpProxyConfig& cfg);
 
-        void Bootstrap(const TActorContext& ctx) {
-            TBase::Become(&THttpProxyActor::StateWork);
-            const auto& config = Config.GetHttpConfig();
-            THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> ev = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(config.GetPort());
-            ev->Secure = config.GetSecure();
-            ev->CertificateFile = config.GetCert();
-            ev->PrivateKeyFile = config.GetKey();
-
-            ctx.Send(new NActors::IEventHandle(MakeHttpServerServiceID(), TActorId(),
-                                ev.Release(), 0, true));
-            ctx.Send(MakeHttpServerServiceID(), new NHttp::TEvHttpProxy::TEvRegisterHandler("/", MakeHttpProxyID()));
-        }
-
-        TStringBuilder LogPrefix() const {
-            return TStringBuilder() << "proxy service:";
-        }
-
-        void Initialize();
-
+        void Bootstrap(const TActorContext& ctx);
+        TStringBuilder LogPrefix() const;
 
     private:
         STFUNC(StateWork) {
@@ -74,32 +42,41 @@ namespace NKikimr::NHttpProxy {
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
     };
 
-    void THttpRequestContext::SendBadRequest(NYdb::EStatus status, const TString& errorText,
-                                             const TActorContext& ctx) {
-        NJson::TJsonValue value;
-        value.SetType(NJson::JSON_MAP);
-        value["message"] = errorText;
-        value["__type"] = StatusToErrorType(status);
-
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "reply with status: " << status << " message: " << errorText);
-        auto res = Request->CreateResponse(
-                TStringBuilder() << (int)StatusToHttpCode(status),
-                StatusToErrorType(status),
-                strByMime(MIME_JSON),
-                NJson::WriteJson(value, false)
-            );
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));
+    THttpProxyActor::THttpProxyActor(const THttpProxyConfig& cfg)
+        : Config(cfg.Config)
+    {
+        ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
+        Processors = MakeHolder<THttpRequestProcessors>();
+        Processors->Initialize();
+        if (cfg.UseSDK) {
+            auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
+                .SetGRpcKeepAlivePermitWithoutCalls(true)
+                .SetGRpcKeepAliveTimeout(TDuration::Seconds(90))
+                .SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+            if (Config.GetCaCert()) {
+                config.UseSecureConnection(TFileInput(Config.GetCaCert()).ReadAll());
+            }
+            Driver = MakeHolder<NYdb::TDriver>(std::move(config));
+        }
     }
 
-    void THttpRequestContext::DoReply(const TActorContext& ctx) {
-        if (ResponseData.Status == NYdb::EStatus::SUCCESS) {
-            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "reply ok");
-            auto res = Request->CreateResponseOK(NJson::WriteJson(ResponseData.ResponseBody, false),
-                                                 strByMime(MIME_JSON));
-            ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));
-        } else {
-            SendBadRequest(ResponseData.Status, ResponseData.ErrorText, ctx);
-        }
+    TStringBuilder THttpProxyActor::LogPrefix() const {
+        return TStringBuilder() << "proxy service:";
+    }
+
+    void THttpProxyActor::Bootstrap(const TActorContext& ctx) {
+        TBase::Become(&THttpProxyActor::StateWork);
+        const auto& config = Config.GetHttpConfig();
+        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> ev =
+            MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(config.GetPort());
+        ev->Secure = config.GetSecure();
+        ev->CertificateFile = config.GetCert();
+        ev->PrivateKeyFile = config.GetKey();
+
+        ctx.Send(new NActors::IEventHandle(MakeHttpServerServiceID(), TActorId(),
+                                           ev.Release(), 0, true));
+        ctx.Send(MakeHttpServerServiceID(),
+                 new NHttp::TEvHttpProxy::TEvRegisterHandler("/", MakeHttpProxyID()));
     }
 
     void THttpProxyActor::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev,
@@ -110,44 +87,42 @@ namespace NKikimr::NHttpProxy {
             return;
         }
 
-        THttpRequestContext context(Config, ServiceAccountCredentialsProvider);
-        context.Request = ev->Get()->Request;
-        context.Sender = ev->Sender;
+        THttpRequestContext context(Config,
+                                    ev->Get()->Request,
+                                    ev->Sender,
+                                    Driver.Get(),
+                                    ServiceAccountCredentialsProvider);
+
         context.ParseHeaders(context.Request->Headers);
 
-        char address[INET6_ADDRSTRLEN];
-        if (inet_ntop(AF_INET6, &(context.Request->Address), address, INET6_ADDRSTRLEN) != nullptr) {
-            context.SourceAddress = address;
+        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
+                      " incoming request from [" << context.SourceAddress << "]" <<
+                      " request [" << context.MethodName << "]" <<
+                      " url [" << context.Request->URL << "]" <<
+                      " database [" << context.DatabaseName << "]" <<
+                      " requestId: " << context.RequestId);
+
+        const auto requestBody = context.RequestData.Parse(context.ContentType, context.Request->Body);
+        if (requestBody) {
+            context.RequestData.Body = requestBody.value();
         } else {
-            context.SourceAddress = "unknown";
-        }
-
-        context.Driver = Driver.Get();
-        context.DatabaseName = context.Request->URL;
-
-        if (context.DatabaseName == "/") {
-           context.DatabaseName = "";
-        }
-
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, " incoming request from [" << context.SourceAddress << "] request [" << context.MethodName << "] url [" << context.Request->URL
-                                                   << "] database [" << context.DatabaseName << "] requestId: " << context.RequestId);
-
-        if (!NJson::ReadJsonTree(context.Request->Body, &context.RequestBody)) {
-            context.SendBadRequest(NYdb::EStatus::BAD_REQUEST, "Couldn't parse json from http request body", ctx);
+            context.SendBadRequest(NYdb::EStatus::BAD_REQUEST, "Can not parse request body", ctx);
             return;
         }
+
         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature;
         if (context.IamToken.empty()) {
             try {
-                TString fullRequest = TString(context.Request->Method) + " "
-                                             + context.Request->URL + " " + context.Request->Protocol
-                                             + "/" + context.Request->Version + "\r\n"
-                                             + context.Request->Headers
-                                             + context.Request->Content;
+                const TString fullRequest = TString(context.Request->Method) + " "
+                    + context.Request->URL + " " + context.Request->Protocol
+                    + "/" + context.Request->Version + "\r\n"
+                    + context.Request->Headers
+                    + context.Request->Content;
                 signature = MakeHolder<NKikimr::NSQS::TAwsRequestSignV4>(fullRequest);
 
             } catch(NKikimr::NSQS::TSQSException& e) {
-                context.SendBadRequest(NYdb::EStatus::BAD_REQUEST, TStringBuilder() << "Malformed signature: " << e.what(), ctx);
+                context.SendBadRequest(NYdb::EStatus::BAD_REQUEST,
+                                       TStringBuilder() << "Malformed signature: " << e.what(), ctx);
                 return;
             }
         }
@@ -155,9 +130,8 @@ namespace NKikimr::NHttpProxy {
         Processors->Execute(context.MethodName, std::move(context), std::move(signature), ctx);
     }
 
-
     NActors::IActor* CreateHttpProxy(const THttpProxyConfig& config) {
         return new THttpProxyActor(config);
     }
 
-}
+} // namespace NKikimr::NHttpProxy

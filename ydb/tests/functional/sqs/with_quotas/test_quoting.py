@@ -8,7 +8,7 @@ from hamcrest import assert_that, raises, greater_than, contains_string, equal_t
 
 from ydb.tests.library.sqs.requests_client import SqsSendMessageParams
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 from ydb import issues as ydb_issues
 
@@ -31,9 +31,9 @@ class TestSqsQuotingWithKesus(KikimrSqsTestBase):
         self._sqs_api.delete_user(self._username)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_properly_creates_and_deletes_queue(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_properly_creates_and_deletes_queue(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         self._sqs_api.delete_queue(created_queue_url)
 
@@ -91,9 +91,9 @@ class TestSqsQuotingWithLocalRateLimiter(KikimrSqsTestBase):
         self._sqs_api.delete_user(self._username)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_does_actions_with_queue(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_does_actions_with_queue(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
         self._create_queue_send_x_messages_read_y_messages(self.queue_name,
                                                            send_count=1,
                                                            read_count=1,
@@ -115,7 +115,9 @@ class TestSqsQuotingWithLocalRateLimiter(KikimrSqsTestBase):
                 throttling_times += 1
         return throttling_times
 
-    def test_send_message_rate(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_send_message_rate(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         self._create_queue_and_assert(self.queue_name)
 
         counters = self._get_sqs_counters()
@@ -144,7 +146,9 @@ class TestSqsQuotingWithLocalRateLimiter(KikimrSqsTestBase):
             throttling_counter_value = self._get_counter_value(counters, throttling_counter_labels, 0)
             assert_that(throttling_counter_value - prev_throttling_counter_value, equal_to(throttling_times))
 
-    def test_create_queue_rate(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_queue_rate(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_urls = []
 
         def call_create_queue(i):
@@ -168,7 +172,9 @@ class TestSqsQuotingWithLocalRateLimiter(KikimrSqsTestBase):
             len(delete_queue_batch_result['DeleteQueueBatchResultEntry']), equal_to(6)  # no errors, all items are results
         )
 
-    def test_other_requests_rate(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_other_requests_rate(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         self._create_queue_and_assert(self.queue_name)
 
         def call(i):

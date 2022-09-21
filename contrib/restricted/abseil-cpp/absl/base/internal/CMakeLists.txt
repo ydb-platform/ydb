@@ -1,0 +1,14 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(low_level_alloc)
+add_subdirectory(raw_logging)
+add_subdirectory(scoped_set_env)
+add_subdirectory(spinlock_wait)
+add_subdirectory(strerror)
+add_subdirectory(throw_delegate)

@@ -348,6 +348,8 @@ message StreamReadMessage {
             // Compressed client message body.
             bytes data = 5;
             // Uncompressed size of client message body.
+            // sent as is from WriteRequest, without check on server side. May be empty (for writes from old client) or wrong (if bug in writer).
+            // Use it for optimization purposes only, don't trust it.
             int64 uncompressed_size = 6;
 
             // Filled if message_group_id was set on message write.
@@ -557,6 +559,16 @@ message AlterPartitioningSettings {
     optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
 }
 
+// Metering mode specifies the method used to determine consumption of resources by the topic.
+// This settings will have an effect only in a serverless database.
+enum MeteringMode {
+    // Use default
+    METERING_MODE_UNSPECIFIED = 0;
+    // Metering based on resource reservation
+    METERING_MODE_RESERVED_CAPACITY = 1;
+    // Metering based on actual consumption. Default.
+    METERING_MODE_REQUEST_UNITS = 2;
+}
 
 // Create topic request sent from client to server.
 message CreateTopicRequest {
@@ -593,6 +605,9 @@ message CreateTopicRequest {
 
     // List of consumers for this topic.
     repeated Consumer consumers = 11 [(Ydb.size).le = 3000];
+
+    // Metering mode for the topic in a serverless database.
+    MeteringMode metering_mode = 12;
 }
 
 // Create topic response sent from server to client.
@@ -660,6 +675,9 @@ message DescribeTopicResult {
     // List of consumers for this topic.
     repeated Consumer consumers = 11;
 
+    // Metering settings.
+    MeteringMode metering_mode = 12;
+
     message PartitionInfo {
         // Partition identifier.
         int64 partition_id = 1;
@@ -706,10 +724,13 @@ message AlterTopicRequest {
 
     // Add consumers.
     repeated Consumer add_consumers = 11 [(Ydb.size).le = 3000];
-    // Remove consumers (by its names)
+    // Remove consumers (by their names)
     repeated string drop_consumers = 12 [(Ydb.size).le = 3000];
     // Alter consumers
     repeated AlterConsumer alter_consumers = 13 [(Ydb.size).le = 3000];
+
+    // Set metering mode for topic in serverless database.
+    MeteringMode set_metering_mode = 14;
 }
 
 // Update topic response sent from server to client.

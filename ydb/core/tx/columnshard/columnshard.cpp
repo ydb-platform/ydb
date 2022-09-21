@@ -243,6 +243,7 @@ ui64 TColumnShard::MemoryUsage() const {
     if (PrimaryIndex) {
         memory += PrimaryIndex->MemoryUsage();
     }
+    memory += BatchCache.Bytes();
     return memory;
 }
 

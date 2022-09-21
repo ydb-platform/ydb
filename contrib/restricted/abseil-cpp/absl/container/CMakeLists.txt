@@ -6,5 +6,6 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(internal)
 
 add_library(abseil-cpp-absl-container INTERFACE)

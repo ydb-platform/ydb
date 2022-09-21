@@ -325,8 +325,13 @@ TString SerializeToJson(const TBinaryJson& binaryJson) {
 
 TString SerializeToJson(TStringBuf binaryJson) {
     auto reader = TBinaryJsonReader::Make(binaryJson);
+
+    TJsonWriterConfig config;
+    config.DoubleNDigits = 16;
+    config.FloatNDigits = 8;
+
     TStringStream output;
-    TJsonWriter writer(&output, /* formatOutput */ false);
+    TJsonWriter writer(&output, config);
     ReadContainerToJson(reader->GetRootCursor(), writer);
     writer.Flush();
     return output.Str();

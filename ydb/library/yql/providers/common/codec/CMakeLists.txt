@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(providers-common-codec)
 target_compile_options(providers-common-codec PRIVATE

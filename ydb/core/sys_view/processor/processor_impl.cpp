@@ -13,11 +13,11 @@ TSysViewProcessor::TSysViewProcessor(const TActorId& tablet, TTabletStorageInfo*
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 1 : 60))
     , CollectInterval(TotalInterval / 2)
-    , ExternalGroup(new NMonitoring::TDynamicCounters)
+    , ExternalGroup(new ::NMonitoring::TDynamicCounters)
 {
-    InternalGroups["kqp_serverless"] = new NMonitoring::TDynamicCounters;
-    InternalGroups["tablets_serverless"] = new NMonitoring::TDynamicCounters;
-    InternalGroups["grpc_serverless"] = new NMonitoring::TDynamicCounters;
+    InternalGroups["kqp_serverless"] = new ::NMonitoring::TDynamicCounters;
+    InternalGroups["tablets_serverless"] = new ::NMonitoring::TDynamicCounters;
+    InternalGroups["grpc_serverless"] = new ::NMonitoring::TDynamicCounters;
 }
 
 void TSysViewProcessor::OnDetach(const TActorContext& ctx) {

@@ -61,7 +61,7 @@ namespace NKikimr {
         const ui64 OrderId;
 
         TEvDelLogoBlobDataSyncLogResult(ui64 orderId, const TInstant &now,
-                NMonitoring::TDynamicCounters::TCounterPtr counterPtr, NVDiskMon::TLtcHistoPtr histoPtr,
+                ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr, NVDiskMon::TLtcHistoPtr histoPtr,
                 NWilson::TTraceId traceId)
             : TEvVResultBase(now, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, counterPtr,
                 histoPtr, std::move(traceId))

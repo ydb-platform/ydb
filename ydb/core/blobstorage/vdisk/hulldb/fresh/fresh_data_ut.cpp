@@ -305,7 +305,7 @@ namespace NKikimr {
 
 
         struct TCreateAppendixCtx {
-            NMonitoring::TDynamicCounters DynCounters;
+            ::NMonitoring::TDynamicCounters DynCounters;
             TMemoryConsumer MemConsumer;
             TMemRecLogoBlob MemRec;
 

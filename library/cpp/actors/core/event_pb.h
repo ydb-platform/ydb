@@ -121,11 +121,7 @@ namespace NActors {
         bool Finished = false;
     };
 
-#ifdef ACTORLIB_HUGE_PB_SIZE
     static const size_t EventMaxByteSize = 140 << 20; // (140MB)
-#else
-    static const size_t EventMaxByteSize = 67108000;
-#endif
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
     class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {

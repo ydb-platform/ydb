@@ -14,7 +14,7 @@ namespace NKikimr {
     }
 
     IActor *CreateBlobRecoveryActor(TIntrusivePtr<TVDiskContext> vctx, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            NMonitoring::TDynamicCounterPtr counters) {
+            ::NMonitoring::TDynamicCounterPtr counters) {
         return new TBlobRecoveryActor(std::move(vctx), std::move(info), std::move(counters));
     }
 

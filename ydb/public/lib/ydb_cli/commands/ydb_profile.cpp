@@ -420,12 +420,18 @@ void TCommandDeleteProfile::Config(TConfig& config) {
 
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<name>", "Profile name (case sensitive)");
+
+    config.Opts->AddLongOption('f', "force", "Ignore nonexistent profiles, never prompt")
+        .StoreTrue(&Force);
 }
 
 void TCommandDeleteProfile::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     if (config.ParseResult->GetFreeArgCount()) {
         ProfileName = config.ParseResult->GetFreeArgs()[0];
+    }
+    if (Force && !ProfileName) {
+        throw TMisuseException() << "Profile name was not specified while using --force option.";
     }
 }
 
@@ -435,6 +441,9 @@ int TCommandDeleteProfile::Run(TConfig& config) {
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
         if (find(profileNames.begin(), profileNames.end(), ProfileName) == profileNames.end()) {
+            if (Force) {
+                return EXIT_SUCCESS;
+            }
             Cerr << "No existing profile \"" << ProfileName << "\". "
                 << "Run \"ydb config profile list\" without arguments to see existing profiles" << Endl;
             return EXIT_FAILURE;
@@ -470,18 +479,21 @@ int TCommandDeleteProfile::Run(TConfig& config) {
             return EXIT_FAILURE;
         }
     }
-
-    Cout << "Profile \"" << ProfileName << "\" will be permanently removed. Continue? (y/n): ";
-    if (AskYesOrNo()) {
-        if (profileManager->RemoveProfile(ProfileName)) {
-            Cout << "Profile \"" << ProfileName << "\" was removed." << Endl;
-        } else {
-            Cerr << "Profile \"" << ProfileName << "\" was not removed." << Endl;
-            return EXIT_FAILURE;
-        }
+    if (Force) {
+        profileManager->RemoveProfile(ProfileName);
     } else {
-        Cout << "Nothing is done." << Endl;
-        return EXIT_SUCCESS;
+        Cout << "Profile \"" << ProfileName << "\" will be permanently removed. Continue? (y/n): ";
+        if (AskYesOrNo()) {
+            if (profileManager->RemoveProfile(ProfileName)) {
+                Cout << "Profile \"" << ProfileName << "\" was removed." << Endl;
+            } else {
+                Cerr << "Profile \"" << ProfileName << "\" was not removed." << Endl;
+                return EXIT_FAILURE;
+            }
+        } else {
+            Cout << "Nothing is done." << Endl;
+            return EXIT_SUCCESS;
+        }
     }
 
     return EXIT_SUCCESS;

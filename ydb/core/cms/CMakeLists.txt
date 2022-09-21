@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(console)
+add_subdirectory(ut)
+add_subdirectory(ut_sentinel)
 
 add_library(ydb-core-cms)
 target_link_libraries(ydb-core-cms PUBLIC
@@ -49,6 +52,7 @@ target_sources(ydb-core-cms PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_update_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_update_downtimes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/downtime.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/erasure_checkers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/http.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/info_collector.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/logger.cpp

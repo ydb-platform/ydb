@@ -17,12 +17,12 @@ namespace NKikimr {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct TRequestMonItem {
-    NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequests;
-    NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
     NMonitoring::THistogramPtr ResponseTime;
 
-    void Init(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NPDisk::EDeviceType type) {
+    void Init(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NPDisk::EDeviceType type) {
         RequestBytes = counters->GetCounter("requestBytes", true);
         GeneratedSubrequests = counters->GetCounter("generatedSubrequests", true);
         GeneratedSubrequestBytes = counters->GetCounter("generatedSubrequestBytes", true);
@@ -163,13 +163,13 @@ public:
         return RequestMon[(ui32)handleClass][sizeClassIdx];
     }
 
-    TStoragePoolCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, const TString &storagePoolName,
+    TStoragePoolCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters, const TString &storagePoolName,
             NPDisk::EDeviceType type) {
         StoragePoolName = storagePoolName;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> poolGroup = counters->GetSubgroup("storagePool", storagePoolName);
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> poolGroup = counters->GetSubgroup("storagePool", storagePoolName);
         for (ui32 handleClass = 0; handleClass < (ui32)HcCount; ++handleClass) {
             TString handleClassName = GetHandleClassName((EHandleClass)handleClass);
-            TIntrusivePtr<NMonitoring::TDynamicCounters> hcGroup = poolGroup->GetSubgroup("handleClass", handleClassName);
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> hcGroup = poolGroup->GetSubgroup("handleClass", handleClassName);
             if (IsReducedHandleClass((EHandleClass)handleClass)) {
                 for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxReducedSizeClassBucketIdx; ++sizeClassIdx) {
                     TString sizeClassName = ReducedSizeClassName(sizeClassIdx);
@@ -188,12 +188,12 @@ public:
 
 class TDsProxyPerPoolCounters : public TThrRefBase {
 protected:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TMap<TString, TIntrusivePtr<TStoragePoolCounters>> StoragePoolCounters;
 
 public:
-    TDsProxyPerPoolCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-      TIntrusivePtr<NMonitoring::TDynamicCounters> group = GetServiceCounters(counters, "dsproxynode");
+    TDsProxyPerPoolCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
+      TIntrusivePtr<::NMonitoring::TDynamicCounters> group = GetServiceCounters(counters, "dsproxynode");
       Counters = group->GetSubgroup("subsystem", "request");
     };
 

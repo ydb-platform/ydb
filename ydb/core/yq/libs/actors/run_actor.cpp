@@ -1631,7 +1631,7 @@ private:
     NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
     ::NYql::NCommon::TServiceCounters QueryCounters;
-    const NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
     bool EnableCheckpointCoordinator = false;
     Yq::Private::PingTaskRequest QueryStateUpdateRequest;
 

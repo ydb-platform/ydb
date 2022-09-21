@@ -35,6 +35,10 @@ inline Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp
         Y_FAIL("Unknown scheme");
     }
 
+    if (settings.HasRegion()) {
+        config.region = settings.GetRegion();
+    }
+
     if (settings.HasVerifySSL()) {
         config.verifySSL = settings.GetVerifySSL();
     }

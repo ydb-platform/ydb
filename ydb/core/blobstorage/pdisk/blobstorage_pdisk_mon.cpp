@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 pDiskId,
+TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pDiskId,
         TPDiskConfig *cfg)
     : Counters(counters)
     , PDiskId(pDiskId)
@@ -218,7 +218,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     CompletionThreadCPU = PDiskGroup->GetCounter("CompletionThreadCPU", true);
 }
 
-NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {
+::NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {
     return SchedulerGroup->GetCounter("SchedulerBusyPeriod_" + owner + "_" + queue, true);
 }
 

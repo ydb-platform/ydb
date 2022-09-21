@@ -17,7 +17,7 @@
 namespace NKikimr {
 
 IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey,
-    const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
 namespace NPDisk {
 

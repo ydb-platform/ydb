@@ -16,7 +16,7 @@ namespace NKikimr {
 class TActorSystemCreator {
     std::unique_ptr<TAppData> AppData;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     std::unique_ptr<NActors::TActorSystem> ActorSystem;
 
@@ -50,7 +50,7 @@ public:
             NKikimrServices::EServiceKikimr_MAX,
             NKikimrServices::EServiceKikimr_Name
         );
-        Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(logSettings, NActors::CreateNullBackend(),
                 GetServiceCounters(Counters, "utils"));
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 2);

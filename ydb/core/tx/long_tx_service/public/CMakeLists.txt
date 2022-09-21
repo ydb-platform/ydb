@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(tx-long_tx_service-public)
 target_compile_options(tx-long_tx_service-public PRIVATE

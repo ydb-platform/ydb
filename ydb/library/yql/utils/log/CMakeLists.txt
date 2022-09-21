@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(yql-utils-log)
 target_link_libraries(yql-utils-log PUBLIC

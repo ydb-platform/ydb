@@ -38,7 +38,7 @@ NActors::TActorId MakeQuotaServiceActorId();
 NActors::IActor* CreateQuotaServiceActor(
     const NConfig::TQuotasManagerConfig& config,
     /* const NYq::TYqSharedResources::TPtr& yqSharedResources, */
-    const NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     std::vector<TQuotaDescription> quotaDesc);
 
 } /* NYq */

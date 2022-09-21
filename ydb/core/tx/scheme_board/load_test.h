@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NSchemeBoard {
 
 struct TTestConfig {
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
 
     ui64 Dirs;
     ui64 ObjectsPerDir;
@@ -18,7 +18,7 @@ struct TTestConfig {
     // creations/deletions
     ui32 InFlightChanges;
 
-    explicit TTestConfig(NMonitoring::TDynamicCounterPtr counters)
+    explicit TTestConfig(::NMonitoring::TDynamicCounterPtr counters)
         : Counters(counters)
         , Dirs(10)
         , ObjectsPerDir(10000)

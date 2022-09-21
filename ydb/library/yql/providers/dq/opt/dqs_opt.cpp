@@ -58,6 +58,7 @@ namespace NYql::NDqs {
                     PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx);
                     PERFORM_RULE(DqPeepholeDropUnusedInputs, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteLength, node, ctx);
                     return inputExpr;
                 }, ctx, optSettings);
         });

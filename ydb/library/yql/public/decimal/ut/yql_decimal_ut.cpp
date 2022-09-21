@@ -22,9 +22,11 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
         char buff[sizeof(TInt128)];
         const auto s = Serialize(v, buff);
         UNIT_ASSERT_VALUES_EQUAL(s, expectedSize);
-        const auto& des = Deserialize(buff);
+        const auto& des = Deserialize(buff, expectedSize);
         UNIT_ASSERT_VALUES_EQUAL(des.second, expectedSize);
         UNIT_ASSERT(des.first == v);
+        const auto& e = Deserialize(buff, expectedSize - 1);
+        UNIT_ASSERT(e.first == Err());
     }
 
     template<ui8 Precision, ui8 Scale>

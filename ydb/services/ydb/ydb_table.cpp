@@ -7,30 +7,6 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-TGRpcYdbTableService::TGRpcYdbTableService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
-    : ActorSystem_(system)
-    , Counters_(counters)
-    , GRpcRequestProxyId_(id)
-{ }
-
-void TGRpcYdbTableService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
-    CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
-}
-
-void TGRpcYdbTableService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcYdbTableService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcYdbTableService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
 void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST_LIMIT
@@ -48,9 +24,9 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
                     new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>        \
-                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::LIMIT_TYPE, nullptr}));                \
+                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));      \
             }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                    \
-            #NAME, logger, getCounterBlock("scheme", #NAME))->Run();
+            #NAME, logger, getCounterBlock("table", #NAME))->Run();
 
 #define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE) \
     MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>                          \
@@ -59,9 +35,9 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
                     new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                            \
-                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::LIMIT_TYPE, nullptr}));                \
+                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));      \
             }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                    \
-            #NAME, logger, getCounterBlock("scheme", #NAME))->Run();
+            #NAME, logger, getCounterBlock("table", #NAME))->Run();
 
     ADD_REQUEST_LIMIT(CreateSession, DoCreateSessionRequest, Rps)
     ADD_REQUEST_LIMIT(KeepAlive, DoKeepAliveRequest, Rps)

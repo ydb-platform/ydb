@@ -18,7 +18,6 @@
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/ymq/base/acl.h>
 #include <ydb/core/ymq/base/counters.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/security.h>
 
@@ -46,11 +45,6 @@ public:
         , SourceSqsRequest_(sourceSqsRequest)
     {
         Y_VERIFY(RequestId_);
-        DebugInfo->ActionActors.emplace(RequestId_, this);
-    }
-
-    ~TActionActor() {
-        DebugInfo->ActionActors.EraseKeyValue(RequestId_, this);
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -763,8 +757,8 @@ protected:
     TMaybe<ui32> TablesFormat_;
     TInstant StartTs_;
     TInstant FinishTs_;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them
-    TIntrusivePtr<NMonitoring::TDynamicCounters> YmqRootCounters_; // Raw counters interface. Is is not prefered to use them
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> YmqRootCounters_; // Raw counters interface. Is is not prefered to use them
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;

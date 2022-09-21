@@ -297,7 +297,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     static void Header(IOutputStream& str, const T& title, const U& subTitile) {
         HTML(str) {
             DIV_CLASS("page-header") {
-                H3() {
+                TAG(TH3) {
                     str << title;
                     if (subTitile) {
                         SMALL() { str << " " << subTitile; }

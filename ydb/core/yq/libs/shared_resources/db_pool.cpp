@@ -30,7 +30,7 @@ class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
 public:
     TDbPoolActor(
         const NYdb::NTable::TTableClient& tableClient,
-        const NMonitoring::TDynamicCounterPtr& counters)
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : TActor(&TThis::WorkingState)
         , TableClient(tableClient)
         , QueueSize(counters->GetSubgroup("subcomponent", "DbPool")->GetHistogram("InFlight",  NMonitoring::ExponentialHistogram(10, 2, 10)))
@@ -193,14 +193,14 @@ private:
     TInstant RequestInProgressTimestamp = TInstant::Now();
     std::shared_ptr<int> State = std::make_shared<int>();
     const NMonitoring::THistogramPtr QueueSize;
-    const NMonitoring::TDynamicCounters::TCounterPtr TotalInFlight;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr TotalInFlight;
     const NMonitoring::THistogramPtr RequestsTime;
 };
 
 TDbPool::TDbPool(
     ui32 sessionsCount,
     const NYdb::NTable::TTableClient& tableClient,
-    const NMonitoring::TDynamicCounterPtr& counters, 
+    const ::NMonitoring::TDynamicCounterPtr& counters, 
     const TString& tablePathPrefix)
 {
     TablePathPrefix = tablePathPrefix;
@@ -246,7 +246,7 @@ TDbPoolMap::TDbPoolMap(
     const NYq::NConfig::TDbPoolConfig& config,
     NYdb::TDriver driver,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , Driver(driver)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -259,7 +259,7 @@ TDbPoolHolder::TDbPoolHolder(
     const NYq::NConfig::TDbPoolConfig& config,
     const NYdb::TDriver& driver,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : Driver(driver)
     , Pools(new TDbPoolMap(config, Driver, credentialsProviderFactory, counters))
 { }

@@ -13,6 +13,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
 
+#include <ydb/core/util/ulid.h>
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
@@ -84,7 +86,8 @@ struct TKqpQueryState {
 
     NLWTrace::TOrbit Orbit;
 
-    TString TxId; // User tx
+    TULID TxId; // User tx
+    TString TxId_Human = "";
     bool Commit = false;
 };
 
@@ -148,6 +151,11 @@ public:
         RequestCounters->Counters = Counters;
         RequestCounters->DbCounters = Settings.DbCounters;
         RequestCounters->TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(AppData()->Counters);
+
+        FillSettings.AllResultsBytesLimit = Nothing();
+        FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get().GetRef();
+        FillSettings.Format = IDataProvider::EResultFormat::Custom;
+        FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
     }
 
     void Bootstrap() {
@@ -197,7 +205,7 @@ public:
         Cleanup();
     }
 
-    TIntrusivePtr<TKqpTransactionContext> FindTransaction(const TString& id) {
+    TIntrusivePtr<TKqpTransactionContext> FindTransaction(const TULID& id) {
         auto it = ExplicitTransactions.Find(id);
         if (it != ExplicitTransactions.End()) {
             auto& value = it.Value();
@@ -208,7 +216,7 @@ public:
         return {};
     }
 
-    void RemoveTransaction(const TString& txId) {
+    void RemoveTransaction(const TULID& txId) {
         auto it = ExplicitTransactions.FindWithoutPromote(txId);
         if (it != ExplicitTransactions.End()) {
             ExplicitTransactions.Erase(it);
@@ -221,17 +229,16 @@ public:
                 "Can't perform ROLLBACK_TX: TxControl isn't set in TQueryRequest");
         const auto& txControl = queryRequest.GetTxControl();
         QueryState->Commit = txControl.commit_tx();
-        const auto& txId = txControl.tx_id();
+        TULID txId;
+        txId.ParseString(txControl.tx_id());
         auto txCtx = FindTransaction(txId);
         if (!txCtx) {
             std::vector<TIssue> issues{YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND,
-                TStringBuilder() << "Transaction not found: " << QueryState->TxId)};
+                TStringBuilder() << "Transaction not found: " << txControl.tx_id())};
             ReplyQueryError(requestInfo, Ydb::StatusIds::NOT_FOUND, "", MessageFromIssues(issues));
         } else {
-            QueryState->TxCtx = txCtx;
             txCtx->Invalidate();
-            TransactionsToBeAborted.emplace_back(txCtx);
-            RemoveTransaction(txId);
+            InvalidateExplicitTransaction(txCtx, txId);
 
             ReplySuccess();
         }
@@ -248,18 +255,24 @@ public:
 
         QueryState->Commit = txControl.commit_tx();
 
-        const auto& txId = txControl.tx_id();
+        TULID txId;
+        txId.ParseString(txControl.tx_id());
         auto txCtx = FindTransaction(txId);
         LOG_D("queryRequest TxControl: " << txControl.DebugString() << " txCtx: " << (void*)txCtx.Get());
         if (!txCtx) {
             std::vector<TIssue> issues{YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND,
-                TStringBuilder() << "Transaction not found: " << QueryState->TxId)};
+                TStringBuilder() << "Transaction not found: " << txControl.tx_id())};
             auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
             ReplyQueryError(requestInfo, Ydb::StatusIds::NOT_FOUND, "", MessageFromIssues(issues));
             return;
         }
         QueryState->TxCtx = std::move(txCtx);
         QueryState->TxId = txId;
+        QueryState->TxId_Human = txControl.tx_id();
+        if (!CheckTransacionLocks()) {
+            return;
+        }
+
         bool replied = ExecutePhyTx(/*query*/ nullptr, /*tx*/ nullptr, /*commit*/ true);
 
         if (!replied) {
@@ -558,6 +571,13 @@ public:
                 txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
                 txCtx->Readonly = true;
                 break;
+
+            case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+                // TODO: (KIKIMR-3374) Use separate isolation mode to avoid optimistic locks.
+                txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                txCtx->Readonly = true;
+                break;
+
             case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
                 YQL_ENSURE(false, "tx_mode not set, settings: " << settings);
                 break;
@@ -592,7 +612,8 @@ public:
     }
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
-        QueryState->TxId = CreateGuidAsString();
+        QueryState->TxId = UlidGen.Next();
+        QueryState->TxId_Human = QueryState->TxId.ToString();
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false);
         SetIsolationLevel(settings);
         CreateNewTx();
@@ -603,14 +624,11 @@ public:
     }
 
     std::pair<bool, TIssues> ApplyTableOperations(TKqpTransactionContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
-        TVector<NKqpProto::TKqpTableOp> operations(query.GetTableOps().begin(), query.GetTableOps().end());
-        TVector<NKqpProto::TKqpTableInfo> tableInfos(query.GetTableInfos().begin(), query.GetTableInfos().end());
-
         auto isolationLevel = *txCtx->EffectiveIsolationLevel;
         bool strictDml = Config->StrictDml.Get(Settings.Cluster).GetOrElse(false);
 
         TExprContext ctx;
-        bool success = txCtx->ApplyTableOperations(operations, tableInfos, isolationLevel, strictDml, EKikimrQueryType::Dml, ctx);
+        bool success = txCtx->ApplyTableOperations(query.GetTableOps(), query.GetTableInfos(), isolationLevel, strictDml, EKikimrQueryType::Dml, ctx);
         return {success, ctx.IssueManager.GetIssues()};
     }
 
@@ -626,16 +644,18 @@ public:
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
                 case Ydb::Table::TransactionControl::kTxId: {
-                    TString txId = txControl.tx_id();
+                    TULID txId;
+                    txId.ParseString(txControl.tx_id());
                     auto it = ExplicitTransactions.Find(txId);
                     if (it == ExplicitTransactions.End()) {
                         std::vector<TIssue> issues{YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND,
-                            TStringBuilder() << "Transaction not found: " << QueryState->TxId)};
+                            TStringBuilder() << "Transaction not found: " << txControl.tx_id())};
                         ReplyQueryError(requestInfo, Ydb::StatusIds::NOT_FOUND, "", MessageFromIssues(issues));
                         return false;
                     }
                     QueryState->TxCtx = *it;
                     QueryState->TxId = txId;
+                    QueryState->TxId_Human = txControl.tx_id();
                     break;
                 }
                 case Ydb::Table::TransactionControl::kBeginTx: {
@@ -879,15 +899,15 @@ public:
     }
 
     void ExecuteOrDefer() {
-        auto& txCtx = *QueryState->TxCtx;
-
-        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-        if (!CheckTransacionLocks()) {
+        if (!(QueryState->PreparedQuery
+            && QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()))
+        {
+            ReplySuccess();
             return;
         }
-
-        const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        YQL_ENSURE(QueryState->CurrentTx < phyQuery.TransactionsSize());
+        auto& txCtx = *QueryState->TxCtx;
+        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
+        const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
         auto tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
                 &phyQuery.GetTransactions(QueryState->CurrentTx));
@@ -906,6 +926,9 @@ public:
                 tx = nullptr;
                 break;
             }
+        }
+        if (!CheckTransacionLocks()) {
+            return;
         }
 
         bool commit = QueryState->Commit && QueryState->CurrentTx == phyQuery.TransactionsSize() - 1;
@@ -926,10 +949,6 @@ public:
             : PreparePhysicalRequest(QueryState.get());
         LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " commit: " << commit
                 << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
-
-        if (!CheckTransacionLocks()) {
-            return true;
-        }
 
         // TODO Handle timeouts -- request.Timeout, request.CancelAfter
 
@@ -1037,11 +1056,18 @@ public:
         return true;
     }
 
+    void InvalidateQuery() {
+        auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
+            QueryState->CompileResult->Uid, Settings.DbCounters);
+
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
+    }
+
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         auto* response = ev->Get()->Record.MutableResponse();
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         LOG_D(SelfId() << " " << requestInfo << " TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
-            << " response: " << response->DebugString());
+            << " response.status: " << response->GetStatus() << " results.size: " << response->GetResult().ResultsSize());
         ExecuterId = TActorId{};
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -1049,20 +1075,33 @@ public:
             LOG_I(SelfId() << " " << requestInfo << " TEvTxResponse has non-success status, CurrentTx: "
                     << QueryState->CurrentTx << " response->DebugString(): " << response->DebugString());
 
-            auto& txCtx = QueryState->TxCtx;
-            txCtx->Invalidate();
-            TransactionsToBeAborted.emplace_back(txCtx);
-            RemoveTransaction(QueryState->TxId);
+            QueryState->TxCtx->Invalidate();
 
+            auto status = response->GetStatus();
             TIssues issues;
-            issues.AddIssue(YqlIssue({}, TIssuesIds::CORE_EXEC, "Execution"));
-            TIssues subIssues;
-            IssuesFromMessage(response->GetIssues(), subIssues);
-            for (auto& i : subIssues) {
-                issues.back().AddSubIssue(MakeIntrusive<TIssue>(i));
+            IssuesFromMessage(response->GetIssues(), issues);
+
+            // Invalidate query cache on scheme/internal errors
+            switch (status) {
+                case Ydb::StatusIds::SCHEME_ERROR:
+                case Ydb::StatusIds::INTERNAL_ERROR:
+                    InvalidateQuery();
+                    issues.AddIssue(YqlIssue(TPosition(), TIssuesIds::KIKIMR_QUERY_INVALIDATED,
+                        TStringBuilder() << "Query invalidated on scheme/internal error."));
+
+                    // SCHEME_ERROR during execution is a soft (retriable) error, we abort query execution,
+                    // invalidate query cache, and return ABORTED as retriable status.
+                    if (status == Ydb::StatusIds::SCHEME_ERROR) {
+                        status = Ydb::StatusIds::ABORTED;
+                    }
+
+                    break;
+
+                default:
+                    break;
             }
 
-            ReplyQueryError(requestInfo, GetYdbStatus(issues), "", MessageFromIssues(issues));
+            ReplyQueryError(requestInfo, status, "", MessageFromIssues(issues));
             return;
         }
 
@@ -1085,13 +1124,7 @@ public:
             exec->Swap(txResult.MutableStats());
         }
 
-        if (QueryState->PreparedQuery &&
-            QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize())
-        {
             ExecuteOrDefer();
-        } else {
-            ReplySuccess();
-        }
     }
 
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
@@ -1243,13 +1276,22 @@ public:
         }
     }
 
+    template<class TEvRecord>
+    void AddTrailingInfo(TEvRecord& record) {
+        if (ShutdownState) {
+            LOG_D("Session ["  << SessionId  << "] is closing, set trailing metadata to request session shutdown");
+            record.SetWorkerIsClosing(true);
+        }
+    }
+
     void FillTxInfo(NKikimrKqp::TQueryResponse* response) {
         YQL_ENSURE(QueryState);
         if (QueryState->Commit) {
             RemoveTransaction(QueryState->TxId);
-            QueryState->TxId = "";
+            QueryState->TxId = CreateEmptyULID();
+            QueryState->TxId_Human = "";
         }
-        response->MutableTxMeta()->set_id(QueryState->TxId);
+        response->MutableTxMeta()->set_id(QueryState->TxId_Human);
 
         if (QueryState->TxCtx) {
             auto txInfo = QueryState->TxCtx->GetInfo();
@@ -1366,7 +1408,8 @@ public:
 
         if (QueryState->PreparedQuery) {
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-            for (auto& rb : phyQuery.GetResultBindings()) {
+            for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+                auto& rb = phyQuery.GetResultBindings(i);
                 auto txIndex = rb.GetTxResultBinding().GetTxIndex();
                 auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
 
@@ -1374,10 +1417,19 @@ public:
                 YQL_ENSURE(txIndex < txResults.size());
                 YQL_ENSURE(resultIndex < txResults[txIndex].size());
 
-                IDataProvider::TFillSettings fillSettings;
-                //TODO: shoud it be taken from PreparedQuery->GetResults().GetRowsLimit() ?
-                fillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get().GetRef();
-                auto* protoRes = KikimrResultToProto(txResults[txIndex][resultIndex], {}, fillSettings, arena.get());
+                std::optional<IDataProvider::TFillSettings> fillSettings;
+                if (QueryState->PreparedQuery->ResultsSize()) {
+                    YQL_ENSURE(phyQuery.ResultBindingsSize() == QueryState->PreparedQuery->ResultsSize(), ""
+                            << phyQuery.ResultBindingsSize() << " != " << QueryState->PreparedQuery->ResultsSize());
+                    const auto& result = QueryState->PreparedQuery->GetResults(i);
+                    if (result.GetRowsLimit()) {
+                        fillSettings = FillSettings;
+                        fillSettings->RowsLimitPerWrite = result.GetRowsLimit();
+                    }
+                }
+
+                auto* protoRes = KikimrResultToProto(txResults[txIndex][resultIndex], {},
+                    fillSettings.value_or(FillSettings), arena.get());
                 response->AddResults()->Swap(protoRes);
             }
         }
@@ -1396,23 +1448,25 @@ public:
         FillCompileStatus(compileResult, QueryResponse->Record);
 
         auto& queryRequest = QueryState->Request;
-        TString txId = "";
+        TULID txId = CreateEmptyULID();
+        TString txId_Human = "";
         if (queryRequest.HasTxControl()) {
             auto& txControl = queryRequest.GetTxControl();
 
             if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
-                txId = txControl.tx_id();
+                txId.ParseString(txControl.tx_id());
+                txId_Human = txControl.tx_id();
             }
         }
 
-        LOG_W("ReplyQueryCompileError, status" << compileResult->Status << " remove tx with tx_id: " << txId);
+        LOG_W("ReplyQueryCompileError, status" << compileResult->Status << " remove tx with tx_id: " << txId_Human);
         auto txCtx = FindTransaction(txId);
         if (txCtx) {
             txCtx->Invalidate();
-            TransactionsToBeAborted.emplace_back(txCtx);
-            RemoveTransaction(txId);
+            InvalidateExplicitTransaction(txCtx, txId);
         }
-        txId = "";
+        txId = CreateEmptyULID();
+        txId_Human = "";
 
         auto* record = &QueryResponse->Record.GetRef();
         FillTxInfo(record->MutableResponse());
@@ -1428,7 +1482,7 @@ public:
 
         auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
 
-        //AddTrailingInfo(response->Record);
+        AddTrailingInfo(response->Record);
         Send(sender, response.Release(), 0, proxyRequestId);
     }
 
@@ -1465,6 +1519,8 @@ public:
         auto& record = QueryResponse->Record.GetRef();
         auto& response = *record.MutableResponse();
         const auto& status = record.GetYdbStatus();
+
+        AddTrailingInfo(record);
 
         if (QueryState->KeepSession) {
             response.SetSessionId(SessionId);
@@ -1636,8 +1692,17 @@ public:
         Cleanup(true);
     }
 
+    void InvalidateExplicitTransaction(TIntrusivePtr<TKqpTransactionContext> txCtx, const TULID& txId) {
+        TransactionsToBeAborted.emplace_back(std::move(txCtx));
+        RemoveTransaction(txId);
+    }
+
     void Cleanup(bool isFinal = false) {
         isFinal = isFinal || !QueryState->KeepSession;
+
+        if (QueryState && QueryState->TxCtx && QueryState->TxCtx->IsInvalidated()) {
+            InvalidateExplicitTransaction(QueryState->TxCtx, QueryState->TxId);
+        }
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
@@ -1898,6 +1963,14 @@ private:
     }
 
 private:
+
+    TULID CreateEmptyULID() {
+        TULID next;
+        memset(next.Data, 0, sizeof(next.Data));
+        return next;
+    }
+
+private:
     TActorId Owner;
     TString SessionId;
 
@@ -1914,7 +1987,8 @@ private:
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
     TKikimrConfiguration::TPtr Config;
-    TLRUCache<TString, TIntrusivePtr<TKqpTransactionContext>> ExplicitTransactions;
+    IDataProvider::TFillSettings FillSettings;
+    TLRUCache<TULID, TIntrusivePtr<TKqpTransactionContext>> ExplicitTransactions;
     std::vector<TIntrusivePtr<TKqpTransactionContext>> TransactionsToBeAborted;
     ui64 EvictedTx = 0;
     std::unique_ptr<TEvKqp::TEvQueryResponse> QueryResponse;
@@ -1922,6 +1996,8 @@ private:
     TActorId IdleTimerActorId;
     ui32 IdleTimerId = 0;
     std::optional<TSessionShutdownState> ShutdownState;
+
+    TULIDGenerator UlidGen;
 };
 
 } // namespace

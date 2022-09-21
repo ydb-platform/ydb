@@ -26,7 +26,7 @@ private:
 
 class IEventsWriterFactory {
 public:
-    virtual IEventsWriterWrapper::TPtr CreateEventsWriter(const NKikimrConfig::TSqsConfig& config,  const NMonitoring::TDynamicCounterPtr& counters) const = 0;
+    virtual IEventsWriterWrapper::TPtr CreateEventsWriter(const NKikimrConfig::TSqsConfig& config,  const ::NMonitoring::TDynamicCounterPtr& counters) const = 0;
     virtual ~IEventsWriterFactory()
     {}
 };

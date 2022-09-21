@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(login)
 
 add_library(client-ydb_types-credentials)
 target_link_libraries(client-ydb_types-credentials PUBLIC

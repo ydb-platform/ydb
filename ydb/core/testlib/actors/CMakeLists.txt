@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-testlib-actors)
 target_link_libraries(core-testlib-actors PUBLIC

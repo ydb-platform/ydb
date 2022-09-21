@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
+add_subdirectory(ut_bscontroller)
+add_subdirectory(ut_selfheal)
 
 add_library(core-mind-bscontroller)
 target_link_libraries(core-mind-bscontroller PUBLIC

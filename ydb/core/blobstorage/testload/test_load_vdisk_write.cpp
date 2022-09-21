@@ -108,7 +108,7 @@ namespace NKikimr {
 
             void CreateQueueBackpressure(const TActorContext& ctx) {
                 using namespace NBackpressure;
-                auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+                auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 
                 NKikimrBlobStorage::EVDiskQueueId queueId = NKikimrBlobStorage::Unknown;
                 switch (PutHandleClass) {

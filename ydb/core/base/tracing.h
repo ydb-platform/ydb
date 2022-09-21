@@ -204,7 +204,7 @@ public:
     virtual ITrace* GetTrace(ui64 tabletID, TTraceID& traceID) = 0;
 };
 
-ITraceCollection* CreateTraceCollection(TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
+ITraceCollection* CreateTraceCollection(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = nullptr);
 
 }
 }

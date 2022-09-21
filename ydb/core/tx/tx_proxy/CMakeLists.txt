@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut_base_tenant)
+add_subdirectory(ut_encrypted_storage)
+add_subdirectory(ut_ext_tenant)
+add_subdirectory(ut_storage_tenant)
 
 add_library(core-tx-tx_proxy)
 target_compile_options(core-tx-tx_proxy PRIVATE

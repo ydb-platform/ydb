@@ -9,6 +9,8 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimrSSA;
 
+using EAggFunctionType = TProgram::TAggregateAssignment::EAggregateFunction;
+
 constexpr ui32 OLAP_PROGRAM_VERSION = 1;
 
 namespace {
@@ -56,6 +58,14 @@ public:
         return Program.AddCommand()->MutableFilter();
     }
 
+    TProgram::TGroupBy* CreateGroupBy() {
+        return Program.AddCommand()->MutableGroupBy();
+    }
+
+    TProgram::TProjection* CreateProjection() {
+        return Program.AddCommand()->MutableProjection();
+    }
+
     void AddParameterName(const TString& name) {
         ReadProto.AddOlapProgramParameterNames(name);
     }
@@ -67,7 +77,14 @@ public:
         ReadProto.SetOlapProgram(programBytes);
     }
 
+    EAggFunctionType GetAggFuncType(const std::string& funcName) const {
+        YQL_ENSURE(AggFuncTypesMap.find(funcName) != AggFuncTypesMap.end());
+        return AggFuncTypesMap.at(funcName);
+    }
+
 private:
+    static std::unordered_map<std::string, EAggFunctionType> AggFuncTypesMap;
+
     TCoArgument Row;
     TMap<TString, ui32> ReadColumns;
     ui32 MaxColumnId;
@@ -75,6 +92,10 @@ private:
     NKqpProto::TKqpPhyOpReadOlapRanges& ReadProto;
 };
 
+std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
+    { "count", TProgram::TAggregateAssignment::AGG_COUNT },
+    { "some", TProgram::TAggregateAssignment::AGG_SOME },
+};
 
 TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx);
@@ -149,7 +170,7 @@ ui32 ConvertParameterToColumn(const TCoParameter& parameter, TKqpOlapCompileCont
 ui32 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ctx)
 {
     auto columnId = GetOrCreateColumnId(cast.Value(), ctx);
-    
+
     TProgram::TAssignment* ssaValue = ctx.CreateAssignCmd();
 
     auto newCast = ssaValue->MutableFunction();
@@ -348,15 +369,58 @@ void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx
     filter->MutablePredicate()->SetId(condition->GetColumn().GetId());
 }
 
+void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) {
+    auto* groupBy = ctx.CreateGroupBy();
+    auto* projection = ctx.CreateProjection();
+
+    for (auto keyCol : aggNode.KeyColumns()) {
+        auto aggKeyCol = groupBy->AddKeyColumns();
+        auto keyColName = keyCol.StringValue();
+        auto aggKeyColId = GetOrCreateColumnId(keyCol, ctx);
+        aggKeyCol->SetId(aggKeyColId);
+        aggKeyCol->SetName(keyColName);
+
+        auto* projCol = projection->AddColumns();
+        projCol->SetId(aggKeyColId);
+        projCol->SetName(keyColName);
+    }
+
+    for (auto aggIt : aggNode.Aggregates()) {
+        auto aggKqp = aggIt.Cast<TKqpOlapAggOperation>();
+        std::string aggColName = aggKqp.Name().StringValue().c_str();
+
+        auto* agg = groupBy->AddAggregates();
+        auto aggColId = ctx.NewColumnId();
+        auto* aggCol = agg->MutableColumn();
+        aggCol->SetId(aggColId);
+        aggCol->SetName(aggColName.c_str());
+        auto* projCol = projection->AddColumns();
+        projCol->SetId(aggColId);
+        projCol->SetName(aggColName.c_str());
+
+        auto* aggFunc = agg->MutableFunction();
+        aggFunc->SetId(ctx.GetAggFuncType(aggKqp.Type().StringValue().c_str()));
+
+        if (aggKqp.Column() != "*") {
+            aggFunc->AddArguments()->SetId(GetOrCreateColumnId(aggKqp.Column(), ctx));
+        }
+    }
+}
+
 void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
     if (operation.Raw() == ctx.GetRowExpr()) {
         return;
     }
 
-    if (auto maybeFilter = operation.Maybe<TKqpOlapFilter>()) {
-        CompileOlapProgramImpl(maybeFilter.Cast().Input(), ctx);
-        CompileFilter(maybeFilter.Cast(), ctx);
-        return;
+    if (auto maybeOlapOperation = operation.Maybe<TKqpOlapOperationBase>()) {
+        CompileOlapProgramImpl(maybeOlapOperation.Cast().Input(), ctx);
+        if (auto maybeFilter = operation.Maybe<TKqpOlapFilter>()) {
+            CompileFilter(maybeFilter.Cast(), ctx);
+            return;
+        } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
+            CompileAggregates(maybeAgg.Cast(), ctx);
+            return;
+        }
     }
 
     YQL_ENSURE(operation.Maybe<TCallable>(), "Unexpected OLAP operation node type: " << operation.Ref().Type());

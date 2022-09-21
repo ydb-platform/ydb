@@ -18,7 +18,7 @@ TAutoPtr<TLogBackend> TLogBackendFactory::CreateLogBackendFromLogConfig(const TK
 
 TAutoPtr<TLogBackend> TLogBackendFactory::CreateLogBackend(
         const TKikimrRunConfig& runConfig,
-        NMonitoring::TDynamicCounterPtr counters) {
+        ::NMonitoring::TDynamicCounterPtr counters) {
     Y_UNUSED(counters);
     TAutoPtr<TLogBackend> logBackend = CreateLogBackendFromLogConfig(runConfig);
     if (logBackend) {

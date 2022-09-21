@@ -42,6 +42,7 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     pqConfig.SetTopicsAreFirstClassCitizen(false);
     pqConfig.SetRoot("/Root/PQ");
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+    pqConfig.MutableQuotingConfig()->SetQuotersDirectoryPath("/Root/PersQueue/System/Quoters");
 
     for (int i = 0; i < 12; ++i) {
         auto profile = pqConfig.AddChannelProfiles();
@@ -130,8 +131,8 @@ struct TRequestCreatePQ {
         auto config = req->MutableConfig();
         if (CacheSize)
             config->SetCacheSize(CacheSize);
-        config->SetTopicName(Topic);
-        config->SetTopicPath(TString("/Root/PQ/") + Topic);
+        //config->SetTopicName(Topic);
+        //config->SetTopicPath(TString("/Root/PQ/") + Topic);
         config->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
         config->MutablePartitionConfig()->SetSourceIdLifetimeSeconds(SourceIdLifetime);
         config->MutablePartitionConfig()->SetSourceIdMaxCounts(SourceIdMaxCount);
@@ -158,7 +159,7 @@ struct TRequestCreatePQ {
             config->AddReadFromTimestampsMs(0);
             config->AddConsumerFormatVersions(0);
             config->AddReadRuleVersions(0);
-            config->AddConsumerCodecs()->AddIds(0);
+            config->AddConsumerCodecs();
         }
 //        if (!ReadRules.empty()) {
 //            config->SetRequireAuthRead(true);
@@ -211,12 +212,12 @@ struct TRequestAlterPQ {
 
         if (CacheSize) {
             auto* config = req->MutableConfig();
-            config->SetTopicName(Topic);
+//            config->SetTopicName(Topic);
             config->SetCacheSize(CacheSize);
         }
         if (FillPartitionConfig) {
             auto* config = req->MutableConfig();
-            config->SetTopicName(Topic);
+//            config->SetTopicName(Topic);
             config->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
             if (MirrorFrom) {
                 config->MutablePartitionConfig()->MutableMirrorFrom()->CopyFrom(MirrorFrom.value());
@@ -750,7 +751,7 @@ public:
         UNIT_ASSERT(resp.TopicInfoSize() == 1);
         const auto& topicInfo = resp.GetTopicInfo(0);
         UNIT_ASSERT(topicInfo.GetTopic() == name);
-        UNIT_ASSERT(topicInfo.GetConfig().GetTopicName() == name);
+        //UNIT_ASSERT(topicInfo.GetConfig().GetTopicName() == name);
         if (cacheSize) {
             UNIT_ASSERT(topicInfo.GetConfig().HasCacheSize());
             ui64 actualSize = topicInfo.GetConfig().GetCacheSize();

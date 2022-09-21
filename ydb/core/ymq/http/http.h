@@ -147,8 +147,8 @@ public:
 
     void Initialize(
             NActors::TActorSystem* as,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> sqsCounters,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters,
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> sqsCounters,
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters,
             ui32 poolId);
 
     void Start();

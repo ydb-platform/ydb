@@ -45,12 +45,23 @@ struct TContext {
         : ColumnResolver(columnResolver)
     {}
 
-    std::string GetName(ui32 columnId) const {
+    std::string GetName(const NKikimrSSA::TProgram::TColumn& column) const {
+        ui32 columnId = column.GetId();
         TString name = ColumnResolver.GetColumnName(columnId, false);
         if (name.Empty()) {
-            name = ToString(columnId);
+            return GenerateName(column);
         } else {
             Sources[columnId] = name;
+        }
+        return std::string(name.data(), name.size());
+    }
+
+    std::string GenerateName(const NKikimrSSA::TProgram::TColumn& column) const {
+        TString name;
+        if (column.HasName()) {
+            name = column.GetName();
+        } else {
+            name = ToString(column.GetId());
         }
         return std::string(name.data(), name.size());
     }
@@ -64,8 +75,7 @@ NArrow::TAssign MakeFunction(const TContext& info, const std::string& name,
 
     std::vector<std::string> arguments;
     for (auto& col : func.GetArguments()) {
-        ui32 columnId = col.GetId();
-        arguments.push_back(info.GetName(columnId));
+        arguments.push_back(info.GetName(col));
     }
 
     switch (func.GetId()) {
@@ -177,11 +187,11 @@ NArrow::TAggregateAssign MakeAggregate(const TContext& info, const std::string& 
     using TAggregateAssign = NArrow::TAggregateAssign;
 
     if (func.ArgumentsSize() == 1) {
-        std::string argument = info.GetName(func.GetArguments()[0].GetId());
+        std::string argument = info.GetName(func.GetArguments()[0]);
 
         switch (func.GetId()) {
-            case TId::AGG_ANY:
-                return TAggregateAssign(name, EAggregate::Any, std::move(argument));
+            case TId::AGG_SOME:
+                return TAggregateAssign(name, EAggregate::Some, std::move(argument));
             case TId::AGG_COUNT:
                 return TAggregateAssign(name, EAggregate::Count, std::move(argument));
             case TId::AGG_MIN:
@@ -190,12 +200,16 @@ NArrow::TAggregateAssign MakeAggregate(const TContext& info, const std::string& 
                 return TAggregateAssign(name, EAggregate::Max, std::move(argument));
             case TId::AGG_SUM:
                 return TAggregateAssign(name, EAggregate::Sum, std::move(argument));
+#if 0 // TODO
             case TId::AGG_AVG:
                 return TAggregateAssign(name, EAggregate::Avg, std::move(argument));
-
+#endif
             case TId::AGG_UNSPECIFIED:
                 break;
         }
+    } else if (func.ArgumentsSize() == 0 && func.GetId() == TId::AGG_COUNT) {
+        // COUNT(*) case
+        return TAggregateAssign(name, EAggregate::Count, {});
     }
     return TAggregateAssign(name, EAggregate::Unspecified, {});
 }
@@ -229,8 +243,7 @@ bool ExtractAssign(const TContext& info, NArrow::TProgramStep& step, const NKiki
 {
     using TId = NKikimrSSA::TProgram::TAssignment;
 
-    ui32 columnId = assign.GetColumn().GetId();
-    std::string columnName = info.GetName(columnId);
+    std::string columnName = info.GetName(assign.GetColumn());
 
     switch (assign.GetExpressionCase()) {
         case TId::kFunction:
@@ -269,11 +282,12 @@ bool ExtractAssign(const TContext& info, NArrow::TProgramStep& step, const NKiki
 }
 
 bool ExtractFilter(const TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TFilter& filter) {
-    ui32 columnId = filter.GetPredicate().GetId();
-    if (!columnId) {
+    auto& column = filter.GetPredicate();
+    if (!column.HasId() && !column.HasName()) {
         return false;
     }
-    step.Filters.push_back(info.GetName(columnId));
+    // NOTE: Name maskes Id for column. If column assigned with name it's accessible only by name.
+    step.Filters.push_back(info.GetName(column));
     return true;
 }
 
@@ -281,7 +295,8 @@ bool ExtractProjection(const TContext& info, NArrow::TProgramStep& step,
                        const NKikimrSSA::TProgram::TProjection& projection) {
     step.Projection.reserve(projection.ColumnsSize());
     for (auto& col : projection.GetColumns()) {
-        step.Projection.push_back(info.GetName(col.GetId()));
+        // NOTE: Name maskes Id for column. If column assigned with name it's accessible only by name.
+        step.Projection.push_back(info.GetName(col));
     }
     return true;
 }
@@ -290,22 +305,18 @@ bool ExtractGroupBy(const TContext& info, NArrow::TProgramStep& step, const NKik
     if (!groupBy.AggregatesSize()) {
         return false;
     }
-#if 1 // TODO
-    if (groupBy.KeyColumnsSize()) {
-        return false;
-    }
-#endif
 
     // It adds implicit projection with aggregates and keys. Remove non aggregated columns.
     step.Projection.reserve(groupBy.KeyColumnsSize() + groupBy.AggregatesSize());
     for (auto& col : groupBy.GetKeyColumns()) {
-        step.Projection.push_back(info.GetName(col.GetId()));
+        step.Projection.push_back(info.GetName(col));
     }
 
     step.GroupBy.reserve(groupBy.AggregatesSize());
+    step.GroupByKeys.reserve(groupBy.KeyColumnsSize());
     for (auto& agg : groupBy.GetAggregates()) {
         auto& resColumn = agg.GetColumn();
-        TString columnName = ToString(resColumn.GetId());
+        TString columnName = info.GenerateName(resColumn);
 
         auto func = MakeAggregate(info, columnName, agg.GetFunction());
         if (!func.IsOk()) {
@@ -313,6 +324,9 @@ bool ExtractGroupBy(const TContext& info, NArrow::TProgramStep& step, const NKik
         }
         step.GroupBy.push_back(std::move(func));
         step.Projection.push_back(columnName);
+    }
+    for (auto& key : groupBy.GetKeyColumns()) {
+        step.GroupByKeys.push_back(info.GetName(key));
     }
 
     return true;
@@ -373,50 +387,51 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
         TPredicate(EOperation::Less, rightBorder, NArrow::MakeArrowSchema(rightColumns), toInclusive));
 }
 
-bool TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program)
+std::shared_ptr<NArrow::TSsaProgramSteps> TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program)
 {
     using TId = NKikimrSSA::TProgram::TCommand;
 
+    auto programSteps = std::make_shared<NArrow::TSsaProgramSteps>();
     TContext info(columnResolver);
     auto step = std::make_shared<NArrow::TProgramStep>();
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign:
                 if (!ExtractAssign(info, *step, cmd.GetAssign(), ProgramParameters)) {
-                    return false;
+                    return nullptr;
                 }
                 break;
             case TId::kFilter:
                 if (!ExtractFilter(info, *step, cmd.GetFilter())) {
-                    return false;
+                    return nullptr;
                 }
                 break;
             case TId::kProjection:
                 if (!ExtractProjection(info, *step, cmd.GetProjection())) {
-                    return false;
+                    return nullptr;
                 }
-                Program.push_back(step);
+                programSteps->Program.push_back(step);
                 step = std::make_shared<NArrow::TProgramStep>();
                 break;
             case TId::kGroupBy:
                 if (!ExtractGroupBy(info, *step, cmd.GetGroupBy())) {
-                    return false;
+                    return nullptr;
                 }
-                Program.push_back(step);
+                programSteps->Program.push_back(step);
                 step = std::make_shared<NArrow::TProgramStep>();
                 break;
             case TId::LINE_NOT_SET:
-                return false;
+                return nullptr;
         }
     }
 
     // final step without final projection
     if (!step->Empty()) {
-        Program.push_back(step);
+        programSteps->Program.push_back(step);
     }
 
-    ProgramSourceColumns = std::move(info.Sources);
-    return true;
+    programSteps->ProgramSourceColumns = std::move(info.Sources);
+    return programSteps;
 }
 
 }

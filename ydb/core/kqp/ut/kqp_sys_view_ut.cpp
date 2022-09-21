@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         auto it = client.StreamExecuteScanQuery(R"(
             PRAGMA Kikimr.OptEnablePredicateExtract = "true";
             SELECT OwnerId, PartIdx, Path, PathId
-            FROM `/Root/.sys/partition_stats` 
+            FROM `/Root/.sys/partition_stats`
             WHERE
             OwnerId = 72057594046644480ul
             AND PathId = 5u
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
             PRAGMA Kikimr.OptEnablePredicateExtract = "true";
             SELECT OwnerId, PartIdx, Path, PathId
-            FROM `/Root/.sys/partition_stats` 
+            FROM `/Root/.sys/partition_stats`
             WHERE
             OwnerId = 72057594046644480ul
             AND PathId = 5u
@@ -464,7 +464,8 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto streamPart = it.ReadNext().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SCHEME_ERROR);
+        // TODO: Should be UNAUTHORIZED
+        UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::ABORTED);
         driver.Stop(true);
     }
 

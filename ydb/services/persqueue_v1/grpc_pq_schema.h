@@ -18,11 +18,11 @@ inline TActorId GetPQSchemaServiceActorID() {
     return TActorId(0, "PQSchmSvc");
 }
 
-IActor* CreatePQSchemaService(const NActors::TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+IActor* CreatePQSchemaService(const NActors::TActorId& schemeCache, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
 class TPQSchemaService : public NActors::TActorBootstrapped<TPQSchemaService> {
 public:
-    TPQSchemaService(const NActors::TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+    TPQSchemaService(const NActors::TActorId& schemeCache, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -62,7 +62,7 @@ private:
 
     NActors::TActorId SchemeCache;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     TVector<TString> Clusters;
     TString LocalCluster;

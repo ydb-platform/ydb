@@ -79,7 +79,8 @@ public:
     const TString& GetReason() const;
     const TString& GetOriginalTopic() const;
     TTopicConverterPtr UpgradeToFullConverter(const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
-                                              const TString& ydbDatabaseRootOverride);
+                                              const TString& ydbDatabaseRootOverride,
+                                              const TMaybe<TString>& clientsideNameOverride = {});
 
     TString GetPrintableString() const;
 
@@ -115,6 +116,18 @@ public:
     void SetPrimaryPath(const TString& path) {
         OriginalPath = PrimaryPath;
         PrimaryPath = path;
+    }
+
+    void RestorePrimaryPath() {
+        Y_VERIFY(!OriginalPath.empty());
+        PrimaryPath = OriginalPath;
+        OriginalPath.clear();
+    }
+
+    // Only for control plane
+    const TString& GetFullModernName() const {
+        Y_VERIFY(!FullModernName.empty());
+        return FullModernName;
     }
 
 protected:
@@ -172,7 +185,8 @@ protected:
                         const TString& pqPrefix,
                         //const TVector<TString>& rootDatabases,
                         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
-                        const TString& ydbDatabaseRootOverride);
+                        const TString& ydbDatabaseRootOverride,
+                        const TMaybe<TString>& clientsideNameOverride = {});
 public:
 
     static TTopicConverterPtr ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig);
@@ -381,6 +395,7 @@ public:
 };
 
 TString NormalizeFullPath(const TString& fullPath);
+TString StripLeadSlash(const TString& path);
 
 
 } // namespace NPersQueue

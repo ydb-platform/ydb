@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(mounts)
 
 add_library(yql-core-services)
 target_compile_options(yql-core-services PRIVATE

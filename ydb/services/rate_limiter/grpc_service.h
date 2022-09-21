@@ -10,7 +10,7 @@ class TRateLimiterGRpcService
     : public NGrpc::TGrpcServiceBase<Ydb::RateLimiter::V1::RateLimiterService>
 {
 public:
-    TRateLimiterGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId);
+    TRateLimiterGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId);
     ~TRateLimiterGRpcService();
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
@@ -24,7 +24,7 @@ private:
 
 private:
     NActors::TActorSystem* ActorSystem = nullptr;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     NActors::TActorId GRpcRequestProxyId;
 
     grpc::ServerCompletionQueue* CQ = nullptr;

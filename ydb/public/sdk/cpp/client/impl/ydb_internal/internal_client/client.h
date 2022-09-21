@@ -29,8 +29,8 @@ public:
     virtual void DeleteChannels(const std::vector<TStringType>& endpoints) = 0;
 #endif
     virtual TBalancingSettings GetBalancingSettings() const = 0;
-    virtual bool StartStatCollecting(NMonitoring::IMetricRegistry* sensorsRegistry) = 0;
-    virtual NMonitoring::TMetricRegistry* GetMetricRegistry() = 0;
+    virtual bool StartStatCollecting(::NMonitoring::IMetricRegistry* sensorsRegistry) = 0;
+    virtual ::NMonitoring::TMetricRegistry* GetMetricRegistry() = 0;
     virtual const TLog& GetLog() const = 0;
 };
 

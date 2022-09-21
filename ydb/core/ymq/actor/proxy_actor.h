@@ -7,7 +7,6 @@
 #include "serviceid.h"
 
 #include <ydb/core/ymq/base/counters.h>
-#include <ydb/core/ymq/base/debug_info.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -42,12 +41,7 @@ public:
         , Cb_(std::move(cb))
     {
         Y_VERIFY(RequestId_);
-        DebugInfo->ProxyActors.emplace(RequestId_, this);
         RetrieveUserAndQueueParameters();
-    }
-
-    ~TProxyActor() {
-        DebugInfo->ProxyActors.EraseKeyValue(RequestId_, this);
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

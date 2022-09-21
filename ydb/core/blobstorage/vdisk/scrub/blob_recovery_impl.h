@@ -8,12 +8,12 @@ namespace NKikimr {
     class TBlobRecoveryActor : public TActorBootstrapped<TBlobRecoveryActor> {
         const TIntrusivePtr<TVDiskContext> VCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
-        const NMonitoring::TDynamicCounterPtr Counters;
+        const ::NMonitoring::TDynamicCounterPtr Counters;
         const TString LogPrefix;
 
     public:
         TBlobRecoveryActor(TIntrusivePtr<TVDiskContext> vctx, TIntrusivePtr<TBlobStorageGroupInfo> info,
-                NMonitoring::TDynamicCounterPtr counters)
+                ::NMonitoring::TDynamicCounterPtr counters)
             : VCtx(std::move(vctx))
             , Info(std::move(info))
             , Counters(counters)

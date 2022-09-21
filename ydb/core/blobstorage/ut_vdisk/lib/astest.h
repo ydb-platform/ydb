@@ -32,7 +32,7 @@ public:
 
 private:
     TProgramShouldContinue KikimrShouldContinue;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     std::unique_ptr<NActors::TMon> Monitoring;
     std::unique_ptr<NKikimr::TAppData> AppData;
     std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext;
@@ -45,7 +45,7 @@ public:
 
 inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     using namespace NActors;
-    Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
+    Counters = TIntrusivePtr<::NMonitoring::TDynamicCounters>(new ::NMonitoring::TDynamicCounters());
     TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
     TPortManager pm;
     nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));

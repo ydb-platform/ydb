@@ -49,7 +49,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
                 PRAGMA kikimr.UseNewEngine = "true";
                 SELECT * FROM `/Root/TwoShard`;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            // TODO: Should be UNAUTHORIZED
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
         }
         {
             auto result = session.ExecuteDataQuery(R"(
@@ -57,7 +58,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
                 UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
                     (10u, "One", -10);
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            // TODO: Should be UNAUTHORIZED
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
         }
 
         driver.Stop(true);

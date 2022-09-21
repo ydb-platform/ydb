@@ -8,30 +8,6 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-TGRpcYdbScriptingService::TGRpcYdbScriptingService(NActors::TActorSystem *system,
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
-    : ActorSystem_(system)
-    , Counters_(counters)
-    , GRpcRequestProxyId_(id) {}
-
-void TGRpcYdbScriptingService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
-    CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
-}
-
-void TGRpcYdbScriptingService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcYdbScriptingService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcYdbScriptingService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
 void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     using Ydb::Scripting::ExecuteYqlRequest;
     using Ydb::Scripting::ExecuteYqlResponse;
@@ -55,19 +31,19 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(ExecuteYql, ExecuteYqlRequest, ExecuteYqlResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestOperationCall<ExecuteYqlRequest, ExecuteYqlResponse>
-                (ctx, &DoExecuteYqlScript, TRequestAuxSettings{TRateLimiterMode::Ru, nullptr}));
+                (ctx, &DoExecuteYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Ru), nullptr}));
     })
 
     ADD_REQUEST(StreamExecuteYql, ExecuteYqlRequest, ExecuteYqlPartialResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestNoOperationCall<ExecuteYqlRequest, ExecuteYqlPartialResponse>
-                (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));
+                (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
     })
 
     ADD_REQUEST(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestOperationCall<ExplainYqlRequest, ExplainYqlResponse>
-                (ctx, &DoExplainYqlScript, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));
+                (ctx, &DoExplainYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
     })
 #undef ADD_REQUEST
 }

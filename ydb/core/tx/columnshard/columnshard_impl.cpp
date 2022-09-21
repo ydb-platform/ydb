@@ -511,16 +511,34 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
     const TActorContext& ctx = TActivationContext::ActorContextFor(SelfId());
     SendPeriodicStats();
 
-    if (auto event = SetupIndexation()) {
-        ctx.Send(IndexingActor, event.release());
-    }
-
     if (insertOnly) {
+        if (auto event = SetupIndexation()) {
+            ctx.Send(IndexingActor, event.release());
+        }
         return;
     }
 
-    if (auto event = SetupCompaction()) {
-        ctx.Send(CompactionActor, event.release());
+    // Preventing conflicts between indexing and compaction leads to election between them.
+    // Indexing vs compaction probability depends on index and insert table overload status.
+    // Prefer compaction: 25% by default; 50% if IndexOverloaded(); 6.25% if InsertTableOverloaded().
+    ui32 mask = IndexOverloaded() ? 0x1 : 0x3;
+    if (InsertTableOverloaded()) {
+        mask = 0x0F;
+    }
+    bool preferIndexing = (++BackgroundActivation) & mask;
+
+    if (preferIndexing) {
+        if (auto evIdx = SetupIndexation()) {
+            ctx.Send(IndexingActor, evIdx.release());
+        } else if (auto event = SetupCompaction()) {
+            ctx.Send(CompactionActor, event.release());
+        }
+    } else {
+        if (auto event = SetupCompaction()) {
+            ctx.Send(CompactionActor, event.release());
+        } else if (auto evIdx = SetupIndexation()) {
+            ctx.Send(IndexingActor, evIdx.release());
+        }
     }
 
     if (auto event = SetupCleanup()) {
@@ -539,8 +557,8 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
 }
 
 std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
-    if (ActiveIndexing) {
-        LOG_S_DEBUG("Indexing already in progress at tablet " << TabletID());
+    if (ActiveIndexingOrCompaction) {
+        LOG_S_DEBUG("Indexing/compaction already in progress at tablet " << TabletID());
         return {};
     }
     if (!PrimaryIndex) {
@@ -585,19 +603,30 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     }
 
     if (bytesToIndex < (ui64)Limits.MinInsertBytes && blobs < TLimits::MIN_SMALL_BLOBS_TO_INSERT) {
-        LOG_S_DEBUG("Indexing not started: less data (" << bytesToIndex << " bytes in " << blobs << " blobs, ignored "
-            << ignored << ") then MIN_BYTES_TO_INSERT / MIN_SMALL_BLOBS_TO_INSERT at tablet " << TabletID());
-        return {};
+        LOG_S_DEBUG("Few data for indexation (" << bytesToIndex << " bytes in " << blobs << " blobs, ignored "
+            << ignored << ") at tablet " << TabletID());
+
+        // Force small indexations simetimes to keep BatchCache smaller
+        if (!bytesToIndex || SkippedIndexations < TSettings::MAX_INDEXATIONS_TO_SKIP) {
+            ++SkippedIndexations;
+            return {};
+        }
     }
+    SkippedIndexations = 0;
 
     LOG_S_DEBUG("Prepare indexing " << bytesToIndex << " bytes in " << dataToIndex.size() << " batches of committed "
         << size << " bytes in " << blobs << " blobs ignored " << ignored
         << " at tablet " << TabletID());
 
     TVector<NOlap::TInsertedData> data;
+    THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> cachedBlobs;
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
+        if (auto inserted = BatchCache.GetInserted(TWriteId(ptr->WriteTxId)); inserted.second) {
+            Y_VERIFY(ptr->BlobId == inserted.first);
+            cachedBlobs.emplace(ptr->BlobId, inserted.second);
+        }
     }
 
     Y_VERIFY(data.size());
@@ -607,15 +636,15 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         return {};
     }
 
-    ActiveIndexing = true;
+    ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
-        Settings.CacheDataAfterIndexing);
+        Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
     return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
 }
 
 std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
-    if (ActiveCompaction) {
-        LOG_S_DEBUG("Compaction already in progress at tablet " << TabletID());
+    if (ActiveIndexingOrCompaction) {
+        LOG_S_DEBUG("Compaction/indexing already in progress at tablet " << TabletID());
         return {};
     }
     if (!PrimaryIndex) {
@@ -645,7 +674,7 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
         return {};
     }
 
-    ActiveCompaction = true;
+    ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
         Settings.CacheDataAfterCompaction);
     return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager);

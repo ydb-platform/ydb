@@ -30,6 +30,8 @@ service DataStreamsService {
     rpc DecreaseStreamRetentionPeriod(DecreaseStreamRetentionPeriodRequest) returns (DecreaseStreamRetentionPeriodResponse);
     rpc IncreaseStreamRetentionPeriod(IncreaseStreamRetentionPeriodRequest) returns (IncreaseStreamRetentionPeriodResponse);
     rpc UpdateShardCount(UpdateShardCountRequest) returns (UpdateShardCountResponse);
+    rpc UpdateStreamMode(UpdateStreamModeRequest) returns (UpdateStreamModeResponse);
+
     // stream consumer methods
     rpc RegisterStreamConsumer(RegisterStreamConsumerRequest) returns (RegisterStreamConsumerResponse);
     rpc DeregisterStreamConsumer(DeregisterStreamConsumerRequest) returns (DeregisterStreamConsumerResponse);

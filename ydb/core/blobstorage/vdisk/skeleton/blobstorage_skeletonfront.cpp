@@ -150,12 +150,12 @@ namespace NKikimr {
             const TString Name;
 
         private:
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCount;
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCost;
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightBytes;
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedCount;
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedBytes;
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontCostProcessed;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCount;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCost;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightBytes;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedCount;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedBytes;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontCostProcessed;
 
             bool CanSendToSkeleton(ui64 cost) const {
                 bool inFlightCond = InFlightCount < MaxInFlightCount;
@@ -170,7 +170,7 @@ namespace NKikimr {
                     const TString &name,
                     ui64 maxInFlightCount,
                     ui64 maxInFlightCost,
-                    TIntrusivePtr<NMonitoring::TDynamicCounters> skeletonFrontGroup)
+                    TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup)
                 : Queue(new TQueueType())
                 , InFlightCount(0)
                 , InFlightCost(0)
@@ -399,9 +399,9 @@ namespace NKikimr {
             std::unique_ptr<TMyQueueBackpressure> QueueBackpressure;
             NKikimrBlobStorage::EVDiskQueueId ExtQueueId;
             TString Name;
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDeadline;
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontOverflow;
-            NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontIncorrectMsgId;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDeadline;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontOverflow;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontIncorrectMsgId;
 
 
             void NotifyOtherClients(const TActorContext &ctx, const TFeedback &feedback) {
@@ -422,7 +422,7 @@ namespace NKikimr {
 
         public:
             TExtQueueClass(NKikimrBlobStorage::EVDiskQueueId extQueueId, const TString &name, ui64 totalCost,
-                           bool checkMsgId, TIntrusivePtr<NMonitoring::TDynamicCounters> skeletonFrontGroup,
+                           bool checkMsgId, TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup,
                            const TIntrusivePtr<TVDiskConfig>& config)
                 : QueueBackpressure()
                 , ExtQueueId(extQueueId)
@@ -588,9 +588,9 @@ namespace NKikimr {
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         TVDiskID SelfVDiskId;
         TActorId SkeletonId;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskCounters;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> SkeletonFrontGroup;
-        NMonitoring::TDynamicCounters::TCounterPtr AccessDeniedMessages;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> SkeletonFrontGroup;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AccessDeniedMessages;
         std::unique_ptr<TIntQueueClass> IntQueueAsyncGets;
         std::unique_ptr<TIntQueueClass> IntQueueFastGets;
         std::unique_ptr<TIntQueueClass> IntQueueDiscover;
@@ -1801,10 +1801,10 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_SKELETON_FRONT;
         }
 
-        static TIntrusivePtr<NMonitoring::TDynamicCounters> CreateVDiskCounters(
+        static TIntrusivePtr<::NMonitoring::TDynamicCounters> CreateVDiskCounters(
                 TIntrusivePtr<TVDiskConfig> cfg,
                 TIntrusivePtr<TBlobStorageGroupInfo> info,
-                TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
 
             // create 'vdisks' service counters
             auto vdiskCounters = GetServiceCounters(counters, "vdisks");
@@ -1832,7 +1832,7 @@ namespace NKikimr {
         }
 
         TSkeletonFront(TIntrusivePtr<TVDiskConfig> cfg, TIntrusivePtr<TBlobStorageGroupInfo> info,
-                       const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
+                       const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
             : TActorBootstrapped<TSkeletonFront>()
             , VCtx()
             , Config(cfg)
@@ -1901,7 +1901,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateVDiskSkeletonFront(const TIntrusivePtr<TVDiskConfig> &cfg,
                                      const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                     const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters) {
+                                     const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
         return new TSkeletonFront(cfg, info, counters);
     }
 

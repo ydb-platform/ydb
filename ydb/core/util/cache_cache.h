@@ -9,7 +9,7 @@
 namespace NKikimr {
 
 struct TCacheCacheConfig : public TAtomicRefCount<TCacheCacheConfig> {
-    using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+    using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     enum ECacheGeneration {
         CacheGenNone,

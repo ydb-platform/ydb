@@ -620,7 +620,7 @@ namespace NKikimr::NPersQueueTests {
                 auto* rr = addRuleRequest.mutable_read_rule();
                 rr->set_consumer_name("goodUser");
                 rr->set_version(0);
-                rr->set_important(true);
+                rr->set_important(false);
                 rr->set_supported_format(TopicSettings::FORMAT_BASE);
                 rr->add_supported_codecs(CODEC_GZIP);
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
@@ -694,7 +694,7 @@ namespace NKikimr::NPersQueueTests {
                 auto* rr = addRuleRequest.mutable_read_rule();
                 rr->set_consumer_name("goodUser");
                 rr->set_version(0);
-                rr->set_important(true);
+                rr->set_important(false);
                 rr->set_supported_format(TopicSettings::FORMAT_BASE);
                 rr->add_supported_codecs(CODEC_GZIP);
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);

@@ -164,7 +164,7 @@ private:
     using TCompilingMap = THashMap<TActorId, TCompileContext::TPtr>;
     TCompilingMap Compiling;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TAlignedPagePoolCounters AllocPoolCounters;
     TActorId SchemeCache;
     THolder<NYql::IDbSchemeResolver> DbSchemeResolver;

@@ -15,6 +15,53 @@ using namespace NNodes;
 
 namespace {
 
+bool ValidateS3Paths(const TExprNode& node, const TStructExprType*& extraColumnsType, TExprContext& ctx) {
+    if (!EnsureTupleMinSize(node, 1, ctx)) {
+        return false;
+    }
+
+    extraColumnsType = nullptr;
+    for (auto& path : node.ChildrenList()) {
+        if (!EnsureTupleSize(*path, 3, ctx)) {
+            return false;
+        }
+
+        if (!EnsureAtom(*path->Child(TS3Path::idx_Path), ctx) || !EnsureAtom(*path->Child(TS3Path::idx_Size), ctx))
+        {
+            return false;
+        }
+
+        if (path->Child(TS3Path::idx_Path)->Content().empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(path->Child(TS3Path::idx_Path)->Pos()), "Expected non-empty path"));
+            return false;
+        }
+
+        ui64 size = 0;
+        auto sizeStr = path->Child(TS3Path::idx_Size)->Content();
+        if (!TryFromString(sizeStr, size)) {
+            ctx.AddError(TIssue(ctx.GetPosition(path->Child(TS3Path::idx_Size)->Pos()),
+                TStringBuilder() << "Expected number as S3 object size, got: '" << sizeStr << "'"));
+            return false;
+        }
+
+        auto extraColumns = path->Child(TS3Path::idx_ExtraColumns);
+        if (!EnsureStructType(*extraColumns, ctx) || !EnsurePersistable(*extraColumns, ctx)) {
+            return false;
+        }
+
+        const TStructExprType* current = extraColumns->GetTypeAnn()->Cast<TStructExprType>();
+        if (!extraColumnsType) {
+            extraColumnsType = current;
+        } else if (!IsSameAnnotation(*current, *extraColumnsType)) {
+            ctx.AddError(TIssue(ctx.GetPosition(path->Pos()), TStringBuilder() << "Extra columns type mismatch: got "
+                << *(const TTypeAnnotationNode*)current << ", expecting "
+                << *(const TTypeAnnotationNode*)extraColumnsType));
+            return false;
+        }
+    }
+    return true;
+}
+
 
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
@@ -35,7 +82,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(*input->Child(TS3SourceSettings::idx_Paths), ctx)) {
+        const TStructExprType* extraColumnsType = nullptr;
+        if (!ValidateS3Paths(*input->Child(TS3SourceSettings::idx_Paths), extraColumnsType, ctx)) {
             return TStatus::Error;
         }
 
@@ -44,7 +92,12 @@ public:
             return TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
+        const TTypeAnnotationNode* itemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+        if (extraColumnsType->GetSize()) {
+            itemType = ctx.MakeType<TTupleExprType>(
+                TTypeAnnotationNode::TListType{ itemType, ctx.MakeType<TDataExprType>(EDataSlot::Uint64) });
+        }
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
         return TStatus::Ok;
     }
 
@@ -53,7 +106,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(*input->Child(TS3ParseSettings::idx_Paths), ctx)) {
+        const TStructExprType* extraColumnsType = nullptr;
+        if (!ValidateS3Paths(*input->Child(TS3SourceSettings::idx_Paths), extraColumnsType, ctx)) {
             return TStatus::Error;
         }
 
@@ -62,20 +116,32 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx)) {
+        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
+            !NCommon::ValidateFormat(input->Child(TS3ParseSettings::idx_Format)->Content(), ctx))
+        {
             return TStatus::Error;
         }
 
-        const auto type = input->Child(TS3ParseSettings::idx_RowType)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (!EnsureStructType(input->Child(TS3ParseSettings::idx_RowType)->Pos(), *type, ctx)) {
-            return IGraphTransformer::TStatus::Error;
+        const auto& rowTypeNode = *input->Child(TS3ParseSettings::idx_RowType);
+        if (!EnsureType(rowTypeNode, ctx)) {
+            return TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* rowType = rowTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureStructType(rowTypeNode.Pos(), *rowType, ctx)) {
+            return TStatus::Error;
         }
 
         if (input->ChildrenSize() > TS3ParseSettings::idx_Settings && !EnsureTuple(*input->Child(TS3ParseSettings::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TResourceExprType>("ClickHouseClient.Block")));
+        const TTypeAnnotationNode* itemType = ctx.MakeType<TResourceExprType>("ClickHouseClient.Block");
+        if (extraColumnsType->GetSize()) {
+            itemType = ctx.MakeType<TTupleExprType>(
+                TTypeAnnotationNode::TListType{ itemType, ctx.MakeType<TDataExprType>(EDataSlot::Uint64) });
+        }
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
         return TStatus::Ok;
     }
 
@@ -101,10 +167,19 @@ public:
             return TStatus::Error;
         }
 
-        const auto itemType = input->Child(TS3ReadObject::idx_RowType)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        const auto& rowTypeNode = *input->Child(TS3ReadObject::idx_RowType);
+        if (!EnsureType(rowTypeNode, ctx)) {
+            return TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* rowType = rowTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureStructType(rowTypeNode.Pos(), *rowType, ctx)) {
+            return TStatus::Error;
+        }
+
         input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
             input->Child(TS3ReadObject::idx_World)->GetTypeAnn(),
-            ctx.MakeType<TListExprType>(itemType)
+            ctx.MakeType<TListExprType>(rowType)
         }));
 
         if (input->ChildrenSize() > TS3ReadObject::idx_ColumnOrder) {
@@ -113,8 +188,18 @@ public:
                 return TStatus::Error;
             }
             TVector<TString> columnOrder;
+            THashSet<TStringBuf> uniqs;
             columnOrder.reserve(order.ChildrenSize());
-            order.ForEachChild([&columnOrder](const TExprNode& child) { columnOrder.emplace_back(child.Content()); });
+            uniqs.reserve(order.ChildrenSize());
+
+            for (auto& child : order.ChildrenList()) {
+                TStringBuf col = child->Content();
+                if (!uniqs.emplace(col).second) {
+                    ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Duplicate column '" << col << "' in column order list"));
+                    return TStatus::Error;
+                }
+                columnOrder.push_back(ToString(col));
+            }
             return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
         }
 
@@ -143,77 +228,85 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(*input->Child(TS3Object::idx_Paths), ctx)) {
+        const TStructExprType* extraColumnsType = nullptr;
+        if (!ValidateS3Paths(*input->Child(TS3Object::idx_Paths), extraColumnsType, ctx)) {
             return TStatus::Error;
         }
 
-        for (auto& path : input->Child(TS3Object::idx_Paths)->ChildrenList()) {
-            if (!EnsureTupleMinSize(*path, 2, ctx) || !EnsureTupleMaxSize(*path, 3, ctx)) {
-                return TStatus::Error;
-            }
-
-            if (!EnsureAtom(*path->Child(TS3Path::idx_Path), ctx) ||
-                !EnsureAtom(*path->Child(TS3Path::idx_Size), ctx))
-            {
-                return TStatus::Error;
-            }
-
-            if (path->Child(TS3Path::idx_Path)->Content().empty()) {
-                ctx.AddError(TIssue(ctx.GetPosition(path->Child(TS3Path::idx_Path)->Pos()), "Expected non-empty path"));
-                return TStatus::Error;
-            }
-
-            ui64 size = 0;
-            auto sizeStr = path->Child(TS3Path::idx_Size)->Content();
-            if (!TryFromString(sizeStr, size)) {
-                ctx.AddError(TIssue(ctx.GetPosition(path->Child(TS3Path::idx_Size)->Pos()),
-                    TStringBuilder() << "Expected number as S3 object size, got: '" << sizeStr << "'"));
-                return TStatus::Error;
-            }
-
-            if (path->ChildrenSize() > TS3Path::idx_Settings) {
-                auto validator = [](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
-                    Y_UNUSED(name);
-                    auto& value = setting.Tail();
-                    if (!EnsureStructType(value, ctx) || !EnsurePersistable(value, ctx)) {
-                        return false;
-                    }
-                    return true;
-                };
-
-                if (!EnsureValidSettings(*path->Child(TS3Path::idx_Settings), { "externalColumns" },
-                                         RequireSingleValueSettings(validator), ctx))
-                {
-                    return TStatus::Error;
-                }
-            }
-        }
-
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormat(input->Child(TS3Object::idx_Format)->Content(), ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) ||
+            !NCommon::ValidateFormat(input->Child(TS3Object::idx_Format)->Content(), ctx))
+        {
             return TStatus::Error;
         }
 
         if (input->ChildrenSize() > TS3Object::idx_Settings) {
             auto validator = [](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
-                Y_UNUSED(name);
-                auto& value = setting.Tail();
-                TStringBuf compression;
-                if (value.IsAtom()) {
-                    compression = value.Content();
-                } else {
-                    if (!EnsureStringOrUtf8Type(value, ctx)) {
-                        return false;
-                    }
-                    if (!value.IsCallable({"String", "Utf8"})) {
-                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "Expected literal string as compression value"));
-                        return false;
-                    }
-                    compression = value.Head().Content();
+                if ((name == "compression" || name == "projection") && setting.ChildrenSize() != 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                        TStringBuilder() << "Expected single value setting for " << name << ", but got " << setting.ChildrenSize() - 1));
+                    return false;
                 }
-                return NCommon::ValidateCompression(compression, ctx);
+
+                bool havePartitionedBy = false;
+                if (name == "compression") {
+                    auto& value = setting.Tail();
+                    TStringBuf compression;
+                    if (value.IsAtom()) {
+                        compression = value.Content();
+                    } else {
+                        if (!EnsureStringOrUtf8Type(value, ctx)) {
+                            return false;
+                        }
+                        if (!value.IsCallable({"String", "Utf8"})) {
+                            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "Expected literal string as compression value"));
+                            return false;
+                        }
+                        compression = value.Head().Content();
+                    }
+                    return NCommon::ValidateCompression(compression, ctx);
+                }
+                if (name == "partitionedby") {
+                    havePartitionedBy = true;
+                    if (setting.ChildrenSize() < 2) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected at least one column in partitioned_by setting"));
+                        return false;
+                    }
+
+                    THashSet<TStringBuf> uniqs;
+                    for (size_t i = 1; i < setting.ChildrenSize(); ++i) {
+                        const auto& column = setting.Child(i);
+                        if (!EnsureAtom(*column, ctx)) {
+                            return false;
+                        }
+                        if (!uniqs.emplace(column->Content()).second) {
+                            ctx.AddError(TIssue(ctx.GetPosition(column->Pos()),
+                                TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
+                YQL_ENSURE(name == "projection");
+                if (!EnsureAtom(setting.Tail(), ctx)) {
+                    return false;
+                }
+
+                if (setting.Tail().Content().empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expecting non-empty projection setting"));
+                    return false;
+                }
+
+                if (!havePartitionedBy) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Missing partitioned_by setting for projection"));
+                    return false;
+                }
+
+                return true;
             };
-            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), { "compression" },
-                                     RequireSingleValueSettings(validator), ctx))
+            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
+                                     { "compression", "partitionedby", "projection" }, validator, ctx))
             {
                 return TStatus::Error;
             }

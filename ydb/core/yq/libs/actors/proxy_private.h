@@ -26,7 +26,7 @@ NActors::IActor* CreateYqlAnalyticsPrivateProxy(
     const NConfig::TPrivateProxyConfig& privateProxyConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
-    NMonitoring::TDynamicCounterPtr counters,
+    ::NMonitoring::TDynamicCounterPtr counters,
     const NConfig::TTokenAccessorConfig& tockenAccessorConfig
 );
 
@@ -34,7 +34,7 @@ NActors::IActor* CreatePingTaskRequestActor(
     const NActors::TActorId& sender,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TAutoPtr<TEvents::TEvPingTaskRequest> ev,
-    NMonitoring::TDynamicCounterPtr counters
+    ::NMonitoring::TDynamicCounterPtr counters
 );
 
 NActors::IActor* CreateGetTaskRequestActor(
@@ -42,21 +42,21 @@ NActors::IActor* CreateGetTaskRequestActor(
     const NConfig::TTokenAccessorConfig& tockenAccessorConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TAutoPtr<TEvents::TEvGetTaskRequest> ev,
-    NMonitoring::TDynamicCounterPtr counters
+    ::NMonitoring::TDynamicCounterPtr counters
 );
 
 NActors::IActor* CreateWriteTaskResultRequestActor(
     const NActors::TActorId& sender,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TAutoPtr<TEvents::TEvWriteTaskResultRequest> ev,
-    NMonitoring::TDynamicCounterPtr counters
+    ::NMonitoring::TDynamicCounterPtr counters
 );
 
 NActors::IActor* CreateNodesHealthCheckActor(
     const NActors::TActorId& sender,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TAutoPtr<TEvents::TEvNodesHealthCheckRequest> ev,
-    NMonitoring::TDynamicCounterPtr counters
+    ::NMonitoring::TDynamicCounterPtr counters
 );
 
 } /* NYq */

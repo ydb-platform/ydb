@@ -69,12 +69,13 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
 
     Ydb::PersQueue::V1::DescribeTopicResult result;
 
-    auto settings = result.mutable_settings();
     Ydb::Scheme::Entry *selfEntry = result.mutable_self();
-    const auto& selfInfo = response.Self->Info;
-    selfEntry->set_name(path + "/" + selfInfo.GetName());
-    selfEntry->set_type(static_cast<Ydb::Scheme::Entry::Type>(selfInfo.GetPathType()));
-    ConvertDirectoryEntry(selfInfo, selfEntry, true);
+    ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
+    if (const auto& name = GetCdcStreamName()) {
+        selfEntry->set_name(*name);
+    }
+
+    auto settings = result.mutable_settings();
     if (response.PQGroupInfo) {
         const auto &pqDescr = response.PQGroupInfo->Description;
         settings->set_partitions_count(pqDescr.GetTotalGroupCount());
@@ -114,7 +115,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         settings->set_message_group_seqno_retention_period_ms(partConfig.GetSourceIdLifetimeSeconds() * 1000);
         settings->set_max_partition_message_groups_seqno_stored(partConfig.GetSourceIdMaxCounts());
 
-        if (local) {
+        if (local || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
             settings->set_max_partition_write_speed(partConfig.GetWriteSpeedInBytesPerSecond());
             settings->set_max_partition_write_burst(partConfig.GetBurstSize());
         }
@@ -237,14 +238,13 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
     }
     auto serviceTypes = GetSupportedClientServiceTypes(ctx);
     TString error = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
-    bool hasDuplicates = false;
-    if (error.Empty()) {
-        hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error, ctx);
-    }
-
-    if (!error.Empty()) {
-        return ReplyWithError(hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST,
-                              hasDuplicates ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+    auto status = error.empty() ? CheckConfig(*pqConfig, serviceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS)
+                                : Ydb::StatusIds::BAD_REQUEST;
+    if (status != Ydb::StatusIds::SUCCESS) {
+        return ReplyWithError(status,
+                              status == Ydb::StatusIds::ALREADY_EXISTS ? Ydb::PersQueue::ErrorCode::OK
+                                                                       : Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+                              error, ctx);
     }
 }
 
@@ -365,8 +365,10 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
 
     {
         TString error;
+
         auto status = FillProposeRequestImpl(name, *GetProtoRequest(), modifyScheme, ctx, error,
                                              workingDir, proposal.Record.GetDatabaseName(), LocalCluster);
+
         if (!error.empty()) {
             Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
             return ReplyWithResult(status, ctx);
@@ -426,7 +428,8 @@ void TAlterTopicActor::ModifyPersqueueConfig(
     Y_UNUSED(selfInfo);
     TString error;
     Y_UNUSED(selfInfo);
-    auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, ctx, error);
+
+    auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, ctx, error, GetCdcStreamName().Defined());
     if (!error.empty()) {
         Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
         return ReplyWithResult(status, ctx);
@@ -459,10 +462,11 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
     Ydb::Topic::DescribeTopicResult result;
 
     Ydb::Scheme::Entry *selfEntry = result.mutable_self();
-    const auto& selfInfo = response.Self->Info;
-    selfEntry->set_name(path + "/" + selfInfo.GetName());
-    selfEntry->set_type(Ydb::Scheme::Entry::TOPIC);
-    ConvertDirectoryEntry(selfInfo, selfEntry, true);
+    ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
+    if (const auto& name = GetCdcStreamName()) {
+        selfEntry->set_name(*name);
+    }
+
     if (response.PQGroupInfo) {
         const auto &pqDescr = response.PQGroupInfo->Description;
         result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());
@@ -504,7 +508,9 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         (*result.mutable_attributes())["_message_group_seqno_retention_period_ms"] = TStringBuilder() << (partConfig.GetSourceIdLifetimeSeconds() * 1000);
         (*result.mutable_attributes())["__max_partition_message_groups_seqno_stored"] = TStringBuilder() << partConfig.GetSourceIdMaxCounts();
 
-        if (local) {
+        const auto& pqConfig = AppData(ctx)->PQConfig;
+
+        if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
             result.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());
             result.set_partition_write_burst_bytes(partConfig.GetBurstSize());
         }
@@ -513,7 +519,19 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             result.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec)(codec + 1));
         }
 
-        const auto& pqConfig = AppData(ctx)->PQConfig;
+        if (pqConfig.GetBillingMeteringConfig().GetEnabled()) {
+            switch (config.GetMeteringMode()) {
+                case NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY:
+                    result.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
+                    break;
+                case NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS:
+                    result.set_metering_mode(Ydb::Topic::METERING_MODE_REQUEST_UNITS);
+                    break;
+                default:
+                    break;
+            }
+        }
+
         for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
             auto rr = result.add_consumers();
             auto consumerName = NPersQueue::ConvertOldConsumerName(config.GetReadRules(i), ctx);

@@ -1823,7 +1823,7 @@ private:
         TExprContext& ctx)
     {
         // TODO: Use empty tx context
-        TIntrusivePtr<IKikimrTransactionContext> tempTxCtx = MakeIntrusive<TKqpTransactionContext>(true);
+        TIntrusivePtr<TKikimrTransactionContextBase> tempTxCtx = MakeIntrusive<TKqpTransactionContext>(true);
         IKikimrQueryExecutor::TExecuteSettings execSettings;
         execSettings.UseNewEngine = settings.UseNewEngine;
         SetupDataQueryAstTransformer(execSettings, tempTxCtx);
@@ -2167,7 +2167,7 @@ private:
             SessionCtx, FillSettings, ExecuteCtx, nullptr, sqlVersion);
     }
 
-    void SetupSession(TIntrusivePtr<IKikimrTransactionContext> txCtx) {
+    void SetupSession(TIntrusivePtr<TKikimrTransactionContextBase> txCtx) {
         ExprCtx->Reset();
         ExprCtx->Step.Done(TExprStep::ExprEval); // KIKIMR-8067
 
@@ -2183,7 +2183,7 @@ private:
         }
     }
 
-    void SetupYqlTransformer(TIntrusivePtr<IKikimrTransactionContext> txCtx) {
+    void SetupYqlTransformer(TIntrusivePtr<TKikimrTransactionContextBase> txCtx) {
         SetupSession(txCtx);
 
         YqlTransformer->Rewind();
@@ -2193,7 +2193,7 @@ private:
     }
 
     void SetupDataQueryAstTransformer(const IKikimrQueryExecutor::TExecuteSettings& settings,
-        TIntrusivePtr<IKikimrTransactionContext> txCtx = {})
+        TIntrusivePtr<TKikimrTransactionContextBase> txCtx = {})
     {
         SetupSession(txCtx);
 
@@ -2203,7 +2203,7 @@ private:
     }
 
     void SetupExecutePreparedTransformer(const IKikimrQueryExecutor::TExecuteSettings& settings,
-        TIntrusivePtr<IKikimrTransactionContext> txCtx)
+        TIntrusivePtr<TKikimrTransactionContextBase> txCtx)
     {
         SetupSession(txCtx);
 

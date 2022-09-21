@@ -681,7 +681,7 @@ public:
 
         IOutputStream& __stream(str);
 
-        H4() {
+        TAG(TH4) {
             str << "Garbage hints";
         }
         TABLE_SORTABLE_CLASS("hints-table") {
@@ -713,7 +713,7 @@ public:
 
         IOutputStream& __stream(str);
 
-        H4() {
+        TAG(TH4) {
             str << "Cleaning history";
         }
         TABLE_SORTABLE_CLASS("cr-table") {

@@ -21,7 +21,7 @@ struct TEvSharedPageCache {
 };
 
 struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters> {
-    using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+    using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     const TCounterPtr ActivePages;
     const TCounterPtr ActiveBytes;
@@ -36,7 +36,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr LoadInFlyPages;
     const TCounterPtr LoadInFlyBytes;
 
-    explicit TSharedPageCacheCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters> &group);
+    explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group);
 };
 
 struct TSharedPageCacheConfig final : public TAtomicRefCount<TSharedPageCacheConfig> {

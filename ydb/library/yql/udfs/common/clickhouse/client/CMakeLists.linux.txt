@@ -221,6 +221,7 @@ target_sources(clickhouse_client_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/IO/WriteBufferFromFileDescriptor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/IO/WriteBufferFromFileDescriptorDiscardOnFailure.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/IO/WriteBufferFromPocoSocket.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/IO/WriteBufferValidUTF8.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Compression/CompressionCodecLZ4.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Compression/CompressionCodecMultiple.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Compression/CompressionCodecNone.cpp
@@ -436,6 +437,7 @@ target_sources(clickhouse_client_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/CSVRowInputFormat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/JSONAsStringRowInputFormat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/JSONEachRowRowInputFormat.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/JSONEachRowRowOutputFormat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/ORCBlockInputFormat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/ParquetBlockInputFormat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/RawBLOBRowInputFormat.cpp

@@ -90,7 +90,7 @@ Y_UNIT_TEST(ResolveTableError) {
                 auto event = ev.Get()->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
                 event->Request->ErrorCount = 1;
                 auto& entries = event->Request->ResultSet;
-                entries[0].Status = NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown;
+                entries[0].Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
             }
         }
         return TTestActorRuntime::EEventAction::PROCESS;
@@ -108,8 +108,7 @@ Y_UNIT_TEST(ResolveTableError) {
 
     TIssues issues;
     IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-    UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-        "Failed to resolve table `Root/table-1`: PathErrorUnknown."), record.GetResponse().DebugString());
+    UNIT_ASSERT(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE));
 }
 
 Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
@@ -199,8 +198,8 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
 
     if (UseNewEngine) {
         test(TEvProposeTransactionResult::ERROR,
-             Ydb::StatusIds::SCHEME_ERROR,
-             NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+             Ydb::StatusIds::ABORTED,
+             NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
              "blah-blah-blah",
              [](NKikimrTxDataShard::TEvProposeTransactionResult& x) {
                  auto* error = x.MutableError()->Add();

@@ -2,7 +2,9 @@
 #include "yql_s3_list.h"
 
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/url_builder.h>
 
@@ -37,6 +39,11 @@ bool operator<(const TListRequest& a, const TListRequest& b) {
 
 using TPendingRequests = TMap<TListRequest, NThreading::TFuture<IS3Lister::TListResult>>;
 
+struct TGeneratedColumnsConfig {
+    TVector<TString> Columns;
+    TExprNode::TPtr SchemaTypeNode;
+};
+
 class TS3IODiscoveryTransformer : public TGraphTransformerBase {
 public:
     TS3IODiscoveryTransformer(TS3State::TPtr state, IHTTPGateway::TPtr gateway)
@@ -62,26 +69,13 @@ public:
         TVector<NThreading::TFuture<IS3Lister::TListResult>> futures;
         for (auto& r : reads) {
             const TS3Read read(std::move(r));
-            std::unordered_set<std::string_view> paths;
-            const auto& object = read.Arg(2).Ref();
-            YQL_ENSURE(object.IsCallable("MrTableConcat"));
-            object.ForEachChild([&paths](const TExprNode& child){ paths.emplace(child.Head().Tail().Head().Content()); });
-            const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
-            const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
-            const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
-
-            TListRequest req;
-            req.Token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-            req.Url = connect.Url;
-            for (const auto& path : paths) {
-                req.Pattern = path;
-                RequestsByNode_[read.Raw()].push_back(req);
-
-                if (PendingRequests_.find(req) == PendingRequests_.end()) {
-                    auto future = Lister_->List(req.Token, req.Url, req.Pattern);
-                    PendingRequests_[req] = future;
-                    futures.push_back(std::move(future));
+            try {
+                if (!LaunchListsForNode(read, futures, ctx)) {
+                    return TStatus::Error;
                 }
+            } catch (const std::exception& ex) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Error while doing S3 discovery: " << ex.what()));
+                return TStatus::Error;
             }
         }
 
@@ -140,11 +134,37 @@ public:
                     return TStatus::Error;
                 }
                 for (auto& entry : listEntries) {
+                    TExprNodeList extraColumnsAsStructArgs;
+                    if (auto confIt = GenColumnsByNode_.find(node); confIt != GenColumnsByNode_.end()) {
+                        const TGeneratedColumnsConfig& config = confIt->second;
+                        YQL_ENSURE(config.Columns.size() <= entry.MatchedGlobs.size());
+                        YQL_ENSURE(config.SchemaTypeNode);
+
+                        for (size_t i = 0; i < config.Columns.size(); ++i) {
+                            auto& col = config.Columns[i];
+                            extraColumnsAsStructArgs.push_back(
+                                ctx.Builder(object.Pos())
+                                    .List()
+                                        .Atom(0, col)
+                                        .Callable(1, "Data")
+                                            .Callable(0, "StructMemberType")
+                                                .Add(0, config.SchemaTypeNode)
+                                                .Atom(1, col)
+                                            .Seal()
+                                            .Atom(1, entry.MatchedGlobs[i])
+                                        .Seal()
+                                    .Seal()
+                                    .Build()
+                            );
+                        }
+                    }
+
                     pathNodes.emplace_back(
                         ctx.Builder(object.Pos())
                             .List()
                                 .Atom(0, entry.Path)
                                 .Atom(1, ToString(entry.Size), TNodeFlags::Default)
+                                .Add(2, ctx.NewCallable(object.Pos(), "AsStruct", std::move(extraColumnsAsStructArgs)))
                             .Seal()
                             .Build()
                     );
@@ -196,11 +216,133 @@ public:
         return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
     }
 private:
+    bool LaunchListsForNode(const TS3Read& read, TVector<NThreading::TFuture<IS3Lister::TListResult>>& futures, TExprContext& ctx) {
+        const auto& settings = *read.Ref().Child(4);
+
+        // schema is required
+        auto schema = GetSetting(settings, "userschema");
+        if (!schema) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Missing schema - please use WITH SCHEMA when reading from S3"));
+            return false;
+        }
+        if (!EnsureTupleMinSize(*schema, 2, ctx)) {
+            return false;
+        }
+
+        TVector<TString> partitionedBy;
+        if (auto partitionedBySetting = GetSetting(settings, "partitionedby")) {
+            if (!EnsureTupleMinSize(*partitionedBySetting, 2, ctx)) {
+                return false;
+            }
+
+            THashSet<TStringBuf> uniqs;
+            for (size_t i = 1; i < partitionedBySetting->ChildrenSize(); ++i) {
+                const auto& column = partitionedBySetting->Child(i);
+                if (!EnsureAtom(*column, ctx)) {
+                    return false;
+                }
+                if (!uniqs.emplace(column->Content()).second) {
+                    ctx.AddError(TIssue(ctx.GetPosition(column->Pos()), TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
+                    return false;
+                }
+                partitionedBy.push_back(ToString(column->Content()));
+
+            }
+        }
+
+        TString projection;
+        if (auto projectionSetting = GetSetting(settings, "projection")) {
+            if (!EnsureTupleSize(*projectionSetting, 2, ctx)) {
+                return false;
+            }
+
+            if (!EnsureAtom(projectionSetting->Tail(), ctx)) {
+                return false;
+            }
+
+            if (projectionSetting->Tail().Content().empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(projectionSetting->Pos()), "Expecting non-empty projection setting"));
+                return false;
+            }
+
+            if (partitionedBy.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(projectionSetting->Pos()), "Missing partitioned_by setting for projection"));
+                return false;
+            }
+            projection = projectionSetting->Tail().Content();
+        }
+
+        TVector<TString> paths;
+        const auto& object = read.Arg(2).Ref();
+        YQL_ENSURE(object.IsCallable("MrTableConcat"));
+        object.ForEachChild([&paths](const TExprNode& child){ paths.push_back(ToString(child.Head().Tail().Head().Content())); });
+
+        const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
+        const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
+        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
+
+        const TString url = connect.Url;
+        const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+
+        TString generatedPattern;
+        if (!partitionedBy.empty()) {
+            TGeneratedColumnsConfig config;
+            if (!BuildGeneratedPattern(projection, partitionedBy, schema->ChildPtr(1), config, generatedPattern)) {
+                return false;
+            }
+            GenColumnsByNode_[read.Raw()] = config;
+        }
+
+        for (const auto& path : paths) {
+            TListRequest req;
+            req.Token = tokenStr;
+            req.Url = url;
+
+            if (partitionedBy.empty()) {
+                // treat paths as regular wildcard patterns
+                req.Pattern = path;
+            } else {
+                if (IS3Lister::HasWildcards(path)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));
+                    return false;
+                }
+                req.Pattern = path + generatedPattern;
+            }
+
+            RequestsByNode_[read.Raw()].push_back(req);
+            if (PendingRequests_.find(req) == PendingRequests_.end()) {
+                auto future = Lister_->List(req.Token, req.Url, req.Pattern);
+                PendingRequests_[req] = future;
+                futures.push_back(std::move(future));
+            }
+        }
+
+        return true;
+    }
+
+    static bool BuildGeneratedPattern(const TString& projection, const TVector<TString>& partitionedBy,
+        const TExprNode::TPtr& schemaTypeNode, TGeneratedColumnsConfig& config, TString& generatedPattern)
+    {
+        if (!projection.empty()) {
+            ythrow yexception() << "Projection settings are not supported yet";
+        }
+
+        generatedPattern.clear();
+        config.Columns = partitionedBy;
+        config.SchemaTypeNode = schemaTypeNode;
+        for (auto& col : partitionedBy) {
+            generatedPattern += "/" + col + "=*";
+        }
+        generatedPattern += "/*";
+        return true;
+    }
+
     const TS3State::TPtr State_;
     const IS3Lister::TPtr Lister_;
 
     TPendingRequests PendingRequests_;
     TNodeMap<TVector<TListRequest>> RequestsByNode_;
+    TNodeMap<TGeneratedColumnsConfig> GenColumnsByNode_;
     NThreading::TFuture<void> AllFuture_;
 };
 

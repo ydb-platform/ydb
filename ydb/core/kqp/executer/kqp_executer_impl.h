@@ -476,7 +476,7 @@ protected:
             }
 
             case NKqpProto::TKqpPhyValue::kParamValue: {
-                itemsLimitParamName = protoItemsLimit.GetParamElementValue().GetParamName();
+                itemsLimitParamName = protoItemsLimit.GetParamValue().GetParamName();
                 if (!itemsLimitParamName) {
                     return;
                 }

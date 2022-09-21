@@ -97,20 +97,20 @@ struct TEvPqNewMetaCache {
     struct TEvDescribeAllTopicsResponse : public TEventLocal<TEvDescribeAllTopicsResponse, EvDescribeAllTopicsResponse> {
         bool Success = true;
         TString Path;
-        TVector<NPersQueue::TDiscoveryConverterPtr> Topics;
+        TVector<NPersQueue::TTopicConverterPtr> Topics;
         std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
 
         explicit TEvDescribeAllTopicsResponse() {}
 
-        TEvDescribeAllTopicsResponse(const TString& path, TVector<NPersQueue::TDiscoveryConverterPtr>&& topics,
-                                     NSchemeCache::TSchemeCacheNavigate* result)
+        TEvDescribeAllTopicsResponse(const TString& path, TVector<NPersQueue::TTopicConverterPtr>&& topics,
+                                     const std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result)
             : Path(path)
             , Topics(std::move(topics))
             , Result(result)
         {}
     };
 };
-IActor* CreatePQMetaCache(const NMonitoring::TDynamicCounterPtr& counters,
+IActor* CreatePQMetaCache(const ::NMonitoring::TDynamicCounterPtr& counters,
                           const TDuration& versionCheckInterval = TDuration::Seconds(1));
 
 IActor* CreatePQMetaCache(const NActors::TActorId& schemeBoardCacheId,

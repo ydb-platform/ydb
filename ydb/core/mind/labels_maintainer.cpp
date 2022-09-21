@@ -244,8 +244,8 @@ private:
                 auto oldGroup = root->GetSubgroup("counters", svc);
                 if (!subSvc.empty())
                     oldGroup = oldGroup->GetSubgroup("subsystem", subSvc);
-                TIntrusivePtr<NMonitoring::TDynamicCounters> serviceGroup = new NMonitoring::TDynamicCounters;
-                TIntrusivePtr<NMonitoring::TDynamicCounters> curGroup = serviceGroup;
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> serviceGroup = new ::NMonitoring::TDynamicCounters;
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> curGroup = serviceGroup;
 
                 const auto* actualLabels = &labels;
 

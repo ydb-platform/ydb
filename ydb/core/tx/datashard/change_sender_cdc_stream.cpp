@@ -93,6 +93,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             cmd.SetSeqNo(record.GetSeqNo());
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
             cmd.SetCreateTimeMS(createdAt.MilliSeconds());
+            cmd.SetIgnoreQuotaDeadline(true);
 
             NKikimrPQClient::TDataChunk data;
             data.SetCodec(0 /* CODEC_RAW */);

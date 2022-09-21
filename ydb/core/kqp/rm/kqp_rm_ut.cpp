@@ -109,7 +109,7 @@ public:
         auto now = Now();
         Runtime->UpdateCurrentTime(now);
 
-        Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 
         auto resourceBrokerConfig = MakeResourceBrokerTestConfig();
         auto broker = CreateResourceBrokerActor(resourceBrokerConfig, Counters);
@@ -176,7 +176,7 @@ public:
 
 private:
     THolder<TTestBasicRuntime> Runtime;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     // TIntrusivePtr<TKqpCounters> KqpCounters;
     TActorId ResourceBrokerActorId;
     TActorId ResourceManagerActorId;

@@ -313,7 +313,7 @@ public:
         , SessionCtx(sessionCtx)
         , IntentDeterminationTransformer(CreateKiSinkIntentDeterminationTransformer(sessionCtx))
         , TypeAnnotationTransformer(CreateKiSinkTypeAnnotationTransformer(gateway, sessionCtx))
-        , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx))
+        , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
         , PlanInfoTransformer(CreateKiSinkPlanInfoTransformer(queryExecutor))

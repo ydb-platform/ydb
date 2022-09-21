@@ -195,7 +195,7 @@ public:
             AddTabletLookupForm(str);
             str << "<br>";
 
-            H3() {
+            TAG(TH3) {
                 str << "All tablets that have traces";
                 if (NodeId) {
                     str << " on Node " << NodeId << ":";
@@ -209,7 +209,7 @@ public:
                     auto& nodeTablets = nodeTabletsPair.second->Response.Get()->Record;
                     size_t tabletIDsSize = nodeTablets.TabletIDsSize();
                     if (!NodeId) {
-                        H4() {
+                        TAG(TH4) {
                             str << "Node " << nodeId;
                             if (!tabletIDsSize) {
                                 str << " - no tablets with traces found";
@@ -240,7 +240,7 @@ public:
                                 << "</font>";
                         }
                     } else {
-                        H4() {
+                        TAG(TH4) {
                             str << "<font color=\"red\">Node " << nodeId << ": "
                                 << TReplyStatus::StatusDescription(nodeTabletsPair.second->Status)
                                 << "</font>";
@@ -369,7 +369,7 @@ public:
         HTML(str) {
             NTracing::NHttp::OutputStaticPart(str);
             str << "<br>";
-            H3() {
+            TAG(TH3) {
                 str << "Traces for Tablet " << "<a href=\"tablet?iTabletID=" << TabletId << "\">"
                     << TabletId << "</a>" << ":";
             }
@@ -379,7 +379,7 @@ public:
                     auto& nodeTabletTraces = nodeTabletTracesPair.second->Response.Get()->Record;
                     size_t traceIDsSize = nodeTabletTraces.TraceIDsSize();
                     if (traceIDsSize) {
-                        H4() {
+                        TAG(TH4) {
                             str << "Node " << nodeId << ":";
                         }
                         // Sorting traces by Id
@@ -412,7 +412,7 @@ public:
             size_t emptyNodes = nodesWithNoTraces.size();
             if (emptyNodes) {
                 str << "<br>";
-                H4() {
+                TAG(TH4) {
                     str << "No traces found on " << emptyNodes << " node" << (emptyNodes == 1 ? ":" : "s:");
                 }
                 DIV_CLASS("row") {
@@ -431,7 +431,7 @@ public:
                 size_t failedNodes = failNodesPair.second.size();
                 if (failedNodes) {
                     str << "<br>";
-                    H4() {
+                    TAG(TH4) {
                         str << "<font color=\"red\">"
                             << TReplyStatus::StatusDescription(failNodesPair.first)
                             << "</font> on " << failedNodes
@@ -515,7 +515,7 @@ public:
         try {
             HTML(str) {
                 NTracing::NHttp::OutputStaticPart(str);
-                H4() {
+                TAG(TH4) {
                     str << "Trace " << TraceInfo.TraceId << "<br>at Tablet "
                         << "<a href=\"tablet?iTabletID=" << TraceInfo.TabletId << "\">" << TraceInfo.TabletId << "</a>"
                         << " on Node " << TraceInfo.NodeId << ":";
@@ -633,7 +633,7 @@ void RenderTabletPage(NMon::TEvHttpInfo::TPtr ev, const TActorContext &ctx, ui64
     TStringStream str;
     HTML(str) {
         NTracing::NHttp::OutputStaticPart(str);
-        H3() {
+        TAG(TH3) {
             str << "TabletID: " << tabletId;
         }
         DIV_CLASS("row") {

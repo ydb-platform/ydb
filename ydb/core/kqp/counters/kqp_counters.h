@@ -98,36 +98,36 @@ protected:
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
     void ReportRecompileRequestGet();
-    NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
+    ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
 protected:
-    NMonitoring::TDynamicCounterPtr Counters;
-    NMonitoring::TDynamicCounterPtr KqpGroup;
-    NMonitoring::TDynamicCounterPtr YdbGroup;
-    NMonitoring::TDynamicCounterPtr QueryReplayGroup;
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr KqpGroup;
+    ::NMonitoring::TDynamicCounterPtr YdbGroup;
+    ::NMonitoring::TDynamicCounterPtr QueryReplayGroup;
 
     // Requests
-    THashMap<NKikimrKqp::EQueryAction, NMonitoring::TDynamicCounters::TCounterPtr> QueryActionRequests;
-    NMonitoring::TDynamicCounters::TCounterPtr OtherQueryRequests;
-    NMonitoring::TDynamicCounters::TCounterPtr CloseSessionRequests;
-    NMonitoring::TDynamicCounters::TCounterPtr CreateSessionRequests;
-    NMonitoring::TDynamicCounters::TCounterPtr PingSessionRequests;
+    THashMap<NKikimrKqp::EQueryAction, ::NMonitoring::TDynamicCounters::TCounterPtr> QueryActionRequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OtherQueryRequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CloseSessionRequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CreateSessionRequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PingSessionRequests;
 
-    NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr YdbRequestBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueryBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr ParametersBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr YdbParametersBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr YdbRequestBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ParametersBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr YdbParametersBytes;
 
-    NMonitoring::TDynamicCounters::TCounterPtr SqlV0Translations;
-    NMonitoring::TDynamicCounters::TCounterPtr SqlV1Translations;
-    NMonitoring::TDynamicCounters::TCounterPtr SqlUnknownTranslations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SqlV0Translations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SqlV1Translations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SqlUnknownTranslations;
 
-    THashMap<NKikimrKqp::EQueryType, NMonitoring::TDynamicCounters::TCounterPtr> QueryTypes;
-    NMonitoring::TDynamicCounters::TCounterPtr OtherQueryTypes;
+    THashMap<NKikimrKqp::EQueryType, ::NMonitoring::TDynamicCounters::TCounterPtr> QueryTypes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OtherQueryTypes;
 
-    NMonitoring::TDynamicCounters::TCounterPtr QueriesWithRangeScan;
-    NMonitoring::TDynamicCounters::TCounterPtr QueriesWithFullScan;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueriesWithRangeScan;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueriesWithFullScan;
     NMonitoring::THistogramPtr QueryAffectedShardsCount;
     NMonitoring::THistogramPtr QueryReadSetsCount;
     NMonitoring::THistogramPtr QueryReadBytes;
@@ -140,69 +140,69 @@ protected:
     NMonitoring::THistogramPtr YdbQueryExecuteLatency;
 
     // Responses
-    NMonitoring::TDynamicCounters::TCounterPtr OtherResponses;
-    NMonitoring::TDynamicCounters::TCounterPtr YdbResponsesLocksInvalidated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OtherResponses;
+    ::NMonitoring::TDynamicCounters::TCounterPtr YdbResponsesLocksInvalidated;
 
-    THashMap<Ydb::StatusIds::StatusCode, NMonitoring::TDynamicCounters::TCounterPtr> YdbResponses;
-    NMonitoring::TDynamicCounters::TCounterPtr OtherYdbResponses;
+    THashMap<Ydb::StatusIds::StatusCode, ::NMonitoring::TDynamicCounters::TCounterPtr> YdbResponses;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OtherYdbResponses;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr YdbResponseBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueryResultsBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr YdbResponseBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryResultsBytes;
 
-    THashMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> IssueCounters;
+    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> IssueCounters;
 
     // Workers
     NMonitoring::THistogramPtr WorkerLifeSpan;
     NMonitoring::THistogramPtr QueriesPerWorker;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkersCreated;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedIdle;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedError;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedRequest;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveWorkers;
-    NMonitoring::TDynamicCounters::TCounterPtr SessionGracefulShutdownHit;
-    NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerShutdowns;
-    NMonitoring::TDynamicCounters::TCounterPtr ProxyForwardedRequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WorkersCreated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedIdle;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedRequest;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveWorkers;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionGracefulShutdownHit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerShutdowns;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ProxyForwardedRequests;
 
     NMonitoring::THistogramPtr WorkerCleanupLatency;
 
     // Workers and SessionActors
-    NMonitoring::TDynamicCounters::TCounterPtr YdbSessionsClosedIdle;
-    NMonitoring::TDynamicCounters::TCounterPtr YdbSessionsActiveCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr YdbSessionsClosedIdle;
+    ::NMonitoring::TDynamicCounters::TCounterPtr YdbSessionsActiveCount;
 
     // SessionActors
     NMonitoring::THistogramPtr SessionActorLifeSpan;
     NMonitoring::THistogramPtr QueriesPerSessionActor;
 
-    NMonitoring::TDynamicCounters::TCounterPtr SessionActorsCreated;
-    NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedIdle;
-    //NMonitoring::TDynamicCounters::TCounterPtr YdbSessionActorsClosedIdle;
-    NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedError;
-    NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedRequest;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveSessionActors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionActorsCreated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedIdle;
+    //::NMonitoring::TDynamicCounters::TCounterPtr YdbSessionActorsClosedIdle;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedRequest;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveSessionActors;
     NMonitoring::THistogramPtr SessionActorCleanupLatency;
 
     // Transactions
-    NMonitoring::TDynamicCounters::TCounterPtr TxCreated;
-    NMonitoring::TDynamicCounters::TCounterPtr TxAborted;
-    NMonitoring::TDynamicCounters::TCounterPtr TxCommited;
-    NMonitoring::TDynamicCounters::TCounterPtr TxEvicted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TxCreated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TxAborted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TxCommited;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TxEvicted;
     NMonitoring::THistogramPtr TxActivePerSession;
     NMonitoring::THistogramPtr TxAbortedPerSession;
     THashMap<TKqpTransactionInfo::EKind, TYdbTxByKindCounters> YdbTxByKind;
 
     // Compile service
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheHits;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheMisses;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsCompile;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsGet;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsInvalidate;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsRejected;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsTimeout;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsRecompile;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileTotal;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileActive;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheHits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheMisses;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsCompile;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsInvalidate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsRejected;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsTimeout;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsRecompile;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileTotal;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileActive;
     NMonitoring::THistogramPtr CompileCpuTime;
     NMonitoring::THistogramPtr YdbCompileDuration;
 };
@@ -216,8 +216,8 @@ public:
     TKqpDbCounters();
 
     // created in SVP, exposed
-    explicit TKqpDbCounters(const NMonitoring::TDynamicCounterPtr& externalGroup,
-        const NMonitoring::TDynamicCounterPtr& internalGroup);
+    explicit TKqpDbCounters(const ::NMonitoring::TDynamicCounterPtr& externalGroup,
+        const ::NMonitoring::TDynamicCounterPtr& internalGroup);
 
     void ToProto(NKikimr::NSysView::TDbServiceCounters& counters) override;
     void FromProto(NKikimr::NSysView::TDbServiceCounters& counters) override;
@@ -261,7 +261,7 @@ private:
         THashMap<TKqpTransactionInfo::EKind, TTxByKindCounters>& txCounters);
 
 public:
-    explicit TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx = nullptr);
+    explicit TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx = nullptr);
 
     void ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters);
     void ReportSessionGracefulShutdownHit(TKqpDbCountersPtr dbCounters);
@@ -329,10 +329,10 @@ public:
     void ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuration duration, TDuration cpuTime);
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
 
-    const NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
-    NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
+    ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
-    NMonitoring::TDynamicCounters::TCounterPtr GetQueryTypeCounter(NKikimrKqp::EQueryType queryType);
+    ::NMonitoring::TDynamicCounters::TCounterPtr GetQueryTypeCounter(NKikimrKqp::EQueryType queryType);
 
     TKqpDbCountersPtr GetDbCounters(const TString& database);
     void RemoveDbCounters(const TString& database);
@@ -342,42 +342,42 @@ public:
     THashMap<TKqpTransactionInfo::EKind, TTxByKindCounters> TxByKind;
 
     // Compile service
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheSize;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
-    NMonitoring::TDynamicCounters::TCounterPtr ForceNewEngineCompileErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ForceNewEngineCompileErrors;
 
     // Resource Manager
-    NMonitoring::TDynamicCounters::TCounterPtr RmComputeActors;
-    NMonitoring::TDynamicCounters::TCounterPtr RmMemory;
-    NMonitoring::TDynamicCounters::TCounterPtr RmExternalMemory;
-    NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
-    NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
-    NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
-    NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmComputeActors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmMemory;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmExternalMemory;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
 
     // Spilling counters
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingReadBlobs;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingStoredBlobs;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingTotalSpaceUsed;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingReadBlobs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingStoredBlobs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTotalSpaceUsed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
 
     // Scan queries counters
-    NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardDisconnect;
-    NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardResolve;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardDisconnect;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardResolve;
     NMonitoring::THistogramPtr ScanQueryRateLimitLatency;
 
     // NewEngine vs OldEngine
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> NewEngineForcedQueryLatencies;
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> NewEngineCompatibleQueryLatencies;
-    NMonitoring::TDynamicCounters::TCounterPtr NewEngineForcedComputeCpuTime;
-    NMonitoring::TDynamicCounters::TCounterPtr NewEngineForcedQueryCount;
-    NMonitoring::TDynamicCounters::TCounterPtr NewEngineCompatibleComputeCpuTime;
-    NMonitoring::TDynamicCounters::TCounterPtr NewEngineCompatibleQueryCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NewEngineForcedComputeCpuTime;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NewEngineForcedQueryCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NewEngineCompatibleComputeCpuTime;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NewEngineCompatibleQueryCount;
 
     // NewEngine tx duration
     NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;

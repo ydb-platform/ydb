@@ -12,6 +12,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 class TSchemeShard;
+struct TPathElement;
 
 class TPath {
 private:
@@ -120,6 +121,7 @@ public:
     TPath FirstResoledParent() const;
     TPath& RiseUntilExisted();
     TPath FirstExistedParent() const;
+    TString GetDomainPathString() const;
     TSubDomainInfo::TPtr DomainInfo() const;
     TPathId GetPathIdForDomain() const;
     TPathId GetDomainKey() const;

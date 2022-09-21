@@ -456,6 +456,7 @@ public:
         newTabletConfig = tabletConfig;
 
         TPersQueueGroupInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
+
         if (!alterData) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;

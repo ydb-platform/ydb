@@ -11,7 +11,7 @@ namespace NYql::NDq {
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     IHTTPGateway::TPtr gateway,
     NS3::TSource&& params,
     ui64 inputIndex,

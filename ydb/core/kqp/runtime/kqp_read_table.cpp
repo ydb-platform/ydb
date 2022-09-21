@@ -70,69 +70,44 @@ void BuildKeyTupleCells(const TTupleType* tupleType, const TUnboxedValue& tupleV
 }
 
 void ParseReadColumns(const TType* readType, const TRuntimeNode& tagsNode,
-    TSmallVec<TKqpComputeContextBase::TColumn>& columns, TSmallVec<TKqpComputeContextBase::TColumn>& systemColumns)
+    TSmallVec<NTable::TTag>& columns, TSmallVec<NTable::TTag>& systemColumns)
 {
-    MKQL_ENSURE_S(readType);
+    MKQL_ENSURE_S(readType);		
     MKQL_ENSURE_S(readType->GetKind() == TType::EKind::Flow);
 
     auto tags = AS_VALUE(TStructLiteral, tagsNode);
     MKQL_ENSURE_S(tags);
 
-    auto itemType = AS_TYPE(TFlowType, readType)->GetItemType();
-    MKQL_ENSURE_S(itemType->GetKind() == TType::EKind::Struct);
 
-    auto structType = AS_TYPE(TStructType, itemType);
-    MKQL_ENSURE_S(tags->GetValuesCount() == structType->GetMembersCount());
+    columns.reserve(tags->GetValuesCount());
 
-    columns.reserve(structType->GetMembersCount());
-
-    for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-        auto memberType = structType->GetMemberType(i);
-        if (memberType->GetKind() == TType::EKind::Optional) {
-            memberType = AS_TYPE(TOptionalType, memberType)->GetItemType();
-        }
-        MKQL_ENSURE_S(memberType->GetKind() == TType::EKind::Data);
+    for (ui32 i = 0; i < tags->GetValuesCount(); ++i) {
         NTable::TTag columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();
         if (IsSystemColumn(columnId)) {
-            systemColumns.push_back({columnId, AS_TYPE(TDataType, memberType)->GetSchemeType()});
+            systemColumns.push_back(columnId);
         } else {
-            columns.push_back({columnId, AS_TYPE(TDataType, memberType)->GetSchemeType()});
+            columns.push_back(columnId);
         }
     }
 }
 
-void ParseWideReadColumns(const TCallable& callable, const TRuntimeNode& tagsNode,
-    TSmallVec<TKqpComputeContextBase::TColumn>& columns, TSmallVec<TKqpComputeContextBase::TColumn>& systemColumns)
+void ParseWideReadColumns(const TRuntimeNode& tagsNode,
+    TSmallVec<NTable::TTag>& columns, TSmallVec<NTable::TTag>& systemColumns)
 {
     auto tags = AS_VALUE(TStructLiteral, tagsNode);
     MKQL_ENSURE_S(tags);
 
-    TType* returnType = callable.GetType()->GetReturnType();
-    MKQL_ENSURE_S(returnType->GetKind() == TType::EKind::Flow);
+    columns.reserve(tags->GetValuesCount());
 
-    auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType();
-    MKQL_ENSURE_S(itemType->GetKind() == TType::EKind::Tuple);
+    for (ui32 i = 0; i < tags->GetValuesCount(); ++i) {
 
-    auto tupleType = AS_TYPE(TTupleType, itemType);
-    MKQL_ENSURE_S(tags->GetValuesCount() == tupleType->GetElementsCount());
 
-    columns.reserve(tupleType->GetElementsCount());
-
-    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-        auto memberType = tupleType->GetElementType(i);
-
-        if (memberType->GetKind() == TType::EKind::Optional) {
-            memberType = AS_TYPE(TOptionalType, memberType)->GetItemType();
-        }
-
-        MKQL_ENSURE_S(memberType->GetKind() == TType::EKind::Data);
-
-        NTable::TTag columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();
+        NTable::TTag columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();;
 
         if (IsSystemColumn(columnId)) {
-            systemColumns.push_back({columnId, AS_TYPE(TDataType, memberType)->GetSchemeType()});
-        } else {
-            columns.push_back({columnId, AS_TYPE(TDataType, memberType)->GetSchemeType()});
+            systemColumns.push_back(columnId);
+        } else if (columnId != TKeyDesc::EColumnIdInvalid) {
+            columns.push_back(columnId);
         }
     }
 }
@@ -161,7 +136,7 @@ TParseReadTableResult ParseWideReadTable(TCallable& callable) {
     MKQL_ENSURE_S(result.ToTuple);
     result.ToInclusive = AS_VALUE(TDataLiteral, range->GetValue(3))->AsValue().Get<bool>();
 
-    ParseWideReadColumns(callable, tagsNode, result.Columns, result.SystemColumns);
+    ParseWideReadColumns(tagsNode, result.Columns, result.SystemColumns);
 
     auto skipNullKeys = AS_VALUE(TListLiteral, callable.GetInput(3));
     result.SkipNullKeys.reserve(skipNullKeys->GetItemsCount());
@@ -210,7 +185,7 @@ TParseReadTableRangesResult ParseWideReadTableRanges(TCallable& callable) {
     MKQL_ENSURE_S(result.Ranges);
     MKQL_ENSURE_S(result.Ranges->GetValuesCount() == 1);
 
-    ParseWideReadColumns(callable, tagsNode, result.Columns, result.SystemColumns);
+    ParseWideReadColumns(tagsNode, result.Columns, result.SystemColumns);
 
     auto limitNode = limit.GetNode();
 

@@ -6,6 +6,13 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(barriers)
+add_subdirectory(base)
+add_subdirectory(compstrat)
+add_subdirectory(fresh)
+add_subdirectory(generic)
+add_subdirectory(test)
+add_subdirectory(ut)
 
 add_library(blobstorage-vdisk-hulldb)
 target_link_libraries(blobstorage-vdisk-hulldb PUBLIC

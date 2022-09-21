@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(lib)
 
 add_executable(ydb-core-blobstorage-ut_vdisk)
 target_compile_options(ydb-core-blobstorage-ut_vdisk PRIVATE

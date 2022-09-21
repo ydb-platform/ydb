@@ -84,6 +84,12 @@ public:
 
                     TBlobGroupSelector dsGroupSelector(Self->Info());
                     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+
+                    // CacheInserted -> CacheCommitted
+                    for (auto& writeId : meta.WriteIds) {
+                        Self->BatchCache.Commit(writeId);
+                    }
+
                     auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds);
                     Self->IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
                     Self->IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);

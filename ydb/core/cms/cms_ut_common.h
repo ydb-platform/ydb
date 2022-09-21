@@ -69,11 +69,13 @@ public:
 struct TTestEnvOpts {
     ui32 NodeCount;
     ui32 VDisks;
-
     ui32 NToSelect;
     ui32 NRings;
     ui32 RingSize;
+    ui32 DataCenterCount;
     TNodeTenantsMap Tenants;
+    bool UseMirror3dcErasure;
+
 
     TTestEnvOpts() = default;
 
@@ -84,8 +86,10 @@ struct TTestEnvOpts {
             , VDisks(vdisks)
             , NToSelect(1)
             , NRings(1)
-            , RingSize(3)
-            , Tenants(tenants) 
+            , RingSize(nodeCount)
+            , DataCenterCount(1)
+            , Tenants(tenants)
+            , UseMirror3dcErasure(false)
     {
     }
 };
@@ -115,7 +119,8 @@ public:
                    ui32 tenantRatioLimit,
                    ui32 clusterLimit,
                    ui32 clusterRatioLimit);
-    
+
+    void EnableSysNodeChecking(); 
     TIntrusiveConstPtr<NKikimr::TStateStorageInfo> GetStateStorageInfo();
 
     NKikimrCms::TClusterState
@@ -269,6 +274,8 @@ public:
     {
         return CheckRequest(user, id, dry, NKikimrCms::MODE_MAX_AVAILABILITY, res, count);
     }
+
+    void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req);
 
     template<typename... Ts>
     void CheckWalleCreateTask(const TString &id,

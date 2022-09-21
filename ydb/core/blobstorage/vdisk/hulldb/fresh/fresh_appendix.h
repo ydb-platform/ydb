@@ -83,7 +83,7 @@ namespace NKikimr {
             return sizeof(TRecord) * SortedRecs.size();
         }
 
-        NMonitoring::TDynamicCounters::TCounterPtr GetCounter() const {
+        ::NMonitoring::TDynamicCounters::TCounterPtr GetCounter() const {
             return MemConsumed.GetCounter();
         }
 

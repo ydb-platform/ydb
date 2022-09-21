@@ -357,6 +357,40 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         CompareYson(R"([["Some text";"Some bytes"]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST_NEW_ENGINE(JsonNumberPrecision) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT
+                JsonDocument("-0.5"),
+                JsonDocument("0.5"),
+                JsonDocument("-16777216"),
+                JsonDocument("16777216"),
+                JsonDocument("-9007199254740992"),
+                JsonDocument("9007199254740992"),
+                JsonDocument("-9223372036854775808"),
+                JsonDocument("9223372036854775807"),
+                JsonDocument("18446744073709551615");
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+
+        CompareYson(R"([[
+            "-0.5";
+            "0.5";
+            "-16777216";
+            "16777216";
+            "-9007199254740992";
+            "9007199254740992";
+            "-9.223372036854776e+18";
+            "9.223372036854776e+18";
+            "1.844674407370955e+19"]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKqp

@@ -67,4 +67,7 @@ NYql::NNodes::TExprBase KqpApplyExtractMembersToReadTableRanges(NYql::NNodes::TE
 NYql::NNodes::TExprBase KqpApplyExtractMembersToLookupTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
 
+NYql::NNodes::TExprBase KqpTopSortOverExtend(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const NYql::TParentsMap& parents);
+
 } // namespace NKikimr::NKqp::NOpt

@@ -21,12 +21,12 @@ namespace V1 {
 
 
 IActor* CreatePQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
+                            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
 class TPQReadService : public NActors::TActorBootstrapped<TPQReadService> {
 public:
     TPQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                   TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
+                   TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
     ~TPQReadService()
     {}
@@ -70,7 +70,7 @@ private:
 
     THashMap<ui64, TActorId> Sessions;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     ui32 MaxSessions;
     TVector<TString> Clusters;

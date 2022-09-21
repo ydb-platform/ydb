@@ -10,6 +10,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
@@ -218,15 +219,17 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     static constexpr ui32 IssuesSizeLimit = 2 * 1024;
 
     ui64 Id;
+    TMaybe<ui32> ItemIdx;
     TEvPrivate::TEvImportSchemeReady::TPtr SchemeResult = nullptr;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
     TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr NotifyResult = nullptr;
 
-    explicit TTxProgress(TSelf* self, ui64 id)
+    explicit TTxProgress(TSelf* self, ui64 id, const TMaybe<ui32>& itemIdx)
         : TXxport::TTxBase(self)
         , Id(id)
+        , ItemIdx(itemIdx)
     {
     }
 
@@ -552,18 +555,37 @@ private:
         TImportInfo::TPtr importInfo = Self->Imports.at(Id);
 
         LOG_D("TImport::TTxProgress: Resume"
-            << ": id# " << Id);
+            << ": id# " << Id
+            << ", itemIdx# " << ItemIdx);
+
+        if (ItemIdx) {
+            Resume(importInfo, *ItemIdx, txc, ctx);
+        } else {
+            for (ui32 itemIdx : xrange(importInfo->Items.size())) {
+                Resume(importInfo, itemIdx, txc, ctx);
+            }
+        }
+    }
+
+    void Resume(TImportInfo::TPtr importInfo, ui32 itemIdx, TTransactionContext& txc, const TActorContext& ctx) {
+        Y_VERIFY(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+
+        LOG_D("TImport::TTxProgress: Resume"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx));
 
         NIceDb::TNiceDb db(txc.DB);
 
         switch (importInfo->State) {
-        case EState::Waiting:
-            for (ui32 itemIdx : xrange(importInfo->Items.size())) {
-                const auto& item = importInfo->Items.at(itemIdx);
-
+            case EState::Waiting: {
                 switch (item.State) {
                 case EState::GetScheme:
-                    GetScheme(importInfo, itemIdx, ctx);
+                    if (!Self->TableProfilesLoaded) {
+                        Self->WaitForTableProfiles(Id, itemIdx);
+                    } else {
+                        GetScheme(importInfo, itemIdx, ctx);
+                    }
                     break;
 
                 case EState::CreateTable:
@@ -582,9 +604,7 @@ private:
             }
             break;
 
-        case EState::Cancellation:
-            for (ui32 itemIdx : xrange(importInfo->Items.size())) {
-                auto& item = importInfo->Items.at(itemIdx);
+            case EState::Cancellation: {
                 TTxId txId = InvalidTxId;
 
                 switch (item.State) {
@@ -707,8 +727,12 @@ private:
 
             switch (item.State) {
             case EState::CreateTable:
-                CreateTable(importInfo, i, txId);
-                itemIdx = i;
+                if (!Self->TableProfilesLoaded) {
+                    Self->WaitForTableProfiles(id, i);
+                } else {
+                    CreateTable(importInfo, i, txId);
+                    itemIdx = i;
+                }
                 break;
 
             case EState::Transferring:
@@ -974,8 +998,8 @@ ITransaction* TSchemeShard::CreateTxCreateImport(TEvImport::TEvCreateImportReque
     return new TImport::TTxCreate(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(ui64 id) {
-    return new TImport::TTxProgress(this, id);
+ITransaction* TSchemeShard::CreateTxProgressImport(ui64 id, const TMaybe<ui32>& itemIdx) {
+    return new TImport::TTxProgress(this, id, itemIdx);
 }
 
 ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev) {

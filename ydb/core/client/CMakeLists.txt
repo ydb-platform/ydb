@@ -6,6 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(metadata)
+add_subdirectory(minikql_compile)
+add_subdirectory(minikql_result_lib)
+add_subdirectory(scheme_cache_lib)
+add_subdirectory(server)
+add_subdirectory(ut)
 
 add_library(ydb-core-client INTERFACE)
 target_link_libraries(ydb-core-client INTERFACE

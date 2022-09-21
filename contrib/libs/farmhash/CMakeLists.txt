@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(arch)
 
 add_library(contrib-libs-farmhash)
 target_compile_options(contrib-libs-farmhash PRIVATE

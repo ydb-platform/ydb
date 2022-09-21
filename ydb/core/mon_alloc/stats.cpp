@@ -14,8 +14,8 @@
 #include <util/datetime/base.h>
 
 namespace NKikimr {
-    using TDynamicCountersPtr = TIntrusivePtr<NMonitoring::TDynamicCounters>;
-    using TDynamicCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+    using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;
+    using TDynamicCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     namespace {
         class TLfAllocStats: public IAllocStats {

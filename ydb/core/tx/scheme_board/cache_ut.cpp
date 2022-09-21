@@ -26,7 +26,7 @@ public:
         TTestWithSchemeshard::SetUp();
 
         TIntrusivePtr<TConfig> config = new TConfig();
-        config->Counters = new NMonitoring::TDynamicCounters;
+        config->Counters = new ::NMonitoring::TDynamicCounters;
         config->Roots.push_back(TConfig::TTagEntry(0, TTestTxConfig::SchemeShard, "Root"));
         SchemeCache = Context->Register(CreateSchemeBoardSchemeCache(config.Get()));
         Context->EnableScheduleForActor(SchemeCache, true);

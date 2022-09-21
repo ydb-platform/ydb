@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 
 namespace NKikimr {
-TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes)
+TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes)
         : Group(GetServiceCounters(counters, "dsproxynode"))
 {
     TVector<float> percentiles4;
@@ -188,7 +188,7 @@ void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type
 
     if (!IsCountersPresentedForIdx[idx]) {
         IsCountersPresentedForIdx[idx] = true;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> subGroup =
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> subGroup =
             Group->GetSubgroup("media", to_lower(NPDisk::DeviceTypeStr(type, true)));
 
         auto getNamedHisto = [&subGroup, &type] (const TString& name) {

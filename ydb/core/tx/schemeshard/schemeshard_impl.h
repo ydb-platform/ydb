@@ -44,6 +44,7 @@
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/core/ydb_convert/table_profiles.h>
 
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
@@ -136,6 +137,10 @@ public:
 
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
 
+    TTableProfiles TableProfiles;
+    bool TableProfilesLoaded = false;
+    THashSet<std::pair<ui64, ui32>> TableProfilesWaiters;
+
     TControlWrapper AllowConditionalEraseOperations;
     TControlWrapper AllowServerlessStorageBilling;
     TControlWrapper DisablePublicationsOfDropping;
@@ -172,6 +177,7 @@ public:
 
     TVector<TString> RootPathElements;
 
+    ui64 MaxIncompatibleChange = 0;
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
@@ -243,6 +249,7 @@ public:
     THashSet<TShardIdx> ShardsWithLoaned;   // shards have parts loaned to another shards
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
+    bool EnableMoveIndex = false;
 
     TShardDeleter ShardDeleter;
 
@@ -395,6 +402,8 @@ public:
 
     void StartStopCompactionQueues();
 
+    void WaitForTableProfiles(ui64 importId, ui32 itemIdx);
+
     bool ApplyStorageConfig(const TStoragePools& storagePools,
                             const NKikimrSchemeOp::TStorageConfig& storageConfig,
                             TChannelsBindings& channelsBinding,
@@ -466,6 +475,7 @@ public:
     ui64 GetAliveChildren(TPathElement::TPtr pathEl, const std::optional<TPathElement::EPathType>& type = std::nullopt) const;
 
     const TTableInfo* GetMainTableForIndex(TPathId indexTableId) const;
+    bool IsBackupTable(TPathId pathId) const;
 
     TPathId ResolvePathIdForDomain(TPathId pathId) const;
     TPathId ResolvePathIdForDomain(TPathElement::TPtr pathEl) const;
@@ -527,6 +537,9 @@ public:
 
     void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
     void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
+
+    // incompatible changes
+    void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);
 
     // path
     void PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -933,6 +946,7 @@ public:
 
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx);
 
+    void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
@@ -1060,7 +1074,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxForgetImport(TEvImport::TEvForgetImportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxListImports(TEvImport::TEvListImportsRequest::TPtr& ev);
 
-    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(ui64 id);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(ui64 id, const TMaybe<ui32>& itemIdx = Nothing());
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);

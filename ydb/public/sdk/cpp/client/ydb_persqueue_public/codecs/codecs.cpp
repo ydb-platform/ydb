@@ -25,6 +25,21 @@ IInputStream* CreateDecompressorStream(TInputStreamVariant& inputStreamStorage, 
     }
 }
 
+IInputStream* CreateDecompressorStream(TInputStreamVariant& inputStreamStorage, Ydb::Topic::Codec codec, IInputStream* origin) {
+    switch (codec) {
+    case Ydb::Topic::CODEC_GZIP:
+        return &inputStreamStorage.emplace<TZLibDecompress>(origin);
+    case Ydb::Topic::CODEC_LZOP:
+        throw yexception() << "LZO codec is disabled";
+    case Ydb::Topic::CODEC_ZSTD:
+        return &inputStreamStorage.emplace<TZstdDecompress>(origin);
+    default:
+    //case Ydb::Topic::CODEC_RAW:
+    //case Ydb::Topic::CODEC_UNSPECIFIED:
+        throw yexception() << "unsupported codec value : " << ui64(codec);
+    }
+}
+
 TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data) {
     TMemoryInput input(data.data().data(), data.data().size());
     TString result;
@@ -34,6 +49,14 @@ TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage
     return result;
 }
 
+TString Decompress(const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& data, Ydb::Topic::Codec codec) {
+    TMemoryInput input(data.data().data(), data.data().size());
+    TString result;
+    TStringOutput resultOutput(result);
+    TInputStreamVariant inputStreamStorage;
+    TransferData(CreateDecompressorStream(inputStreamStorage, codec, &input), &resultOutput);
+    return result;
+}
 
 class TZLibToStringCompressor: private TEmbedPolicy<TBufferOutput>, public TZLibCompress {
 public:

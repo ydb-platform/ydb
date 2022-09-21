@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(proto)
 
 add_library(cpp-protobuf-util)
 target_link_libraries(cpp-protobuf-util PUBLIC

@@ -11,37 +11,46 @@ class QueueType(Enum):
     FIFO = 2
 
 
-def get_prefix_path(root, queue_type=None):
-    subdir = ('.{}/'.format(queue_type.name)) if queue_type else ''
+def get_prefix_path(root, queue_type=None, common_table=True):
+    subdir = ('.{}/'.format(queue_type.name)) if queue_type and common_table else ''
     return '{}/{}'.format(root, subdir)
 
 
-def get_table_path(root, table_name, queue_type=None):
-    return '{}/{}'.format(get_prefix_path(root, queue_type), table_name)
+def get_table_path(root, table_name, queue_type=None, common_table=True):
+    return '{}/{}'.format(get_prefix_path(root, queue_type, common_table), table_name)
 
 
-def _create_table(root, session, table_name, columns, keys_count, queue_type=None):
-    table_path = get_table_path(root, table_name, queue_type)
+def _create_table(root, session, table_name, columns, keys_count, common_table=True, queue_type=None):
+    table_path = get_table_path(root, table_name, queue_type, common_table)
     keys = [name for name, _ in columns[:keys_count]]
     columns = [ydb.Column(name, ydb.OptionalType(column_type)) for name, column_type in columns]
-    ydb.retry_operation_sync(lambda: session.create_table(
-        table_path,
-        ydb.TableDescription()
-            .with_primary_keys(*keys)
-            .with_columns(*columns)
-            .with_profile(
-                ydb.TableProfile()
-                .with_partitioning_policy(
-                    ydb.PartitioningPolicy()
-                    .with_auto_partitioning(
-                        ydb.AutoPartitioningPolicy.AUTO_SPLIT
-                    )
+
+    if queue_type and common_table:
+        ydb.retry_operation_sync(lambda: session.create_table(
+            table_path,
+            ydb.TableDescription()
+                .with_primary_keys(*keys)
+                .with_columns(*columns)
+                .with_uniform_partitions(10)
+                .with_partitioning_settings(
+                    ydb.PartitioningSettings()
+                        .with_min_partitions_count(10)
+                        .with_partitioning_by_size(ydb.FeatureFlag.ENABLED)
+                        .with_partitioning_by_load(ydb.FeatureFlag.ENABLED)
                 )
-            )
-    ))
+        ))
+    else:
+        ydb.retry_operation_sync(lambda: session.create_table(
+            table_path,
+            ydb.TableDescription()
+                .with_primary_keys(*keys)
+                .with_columns(*columns)
+        ))
 
 
-def get_table_keys_for_queue(with_shard=False):
+def get_table_keys_for_queue(common_table, with_shard=False):
+    if not common_table:
+        return []
     if with_shard:
         columns = [
             ('QueueIdNumberAndShardHash', ydb.PrimitiveType.Uint64),
@@ -113,8 +122,30 @@ def create_settings_table(root, session):
     _create_table(root, session, '.Settings', columns, keys_count=2)
 
 
-def create_attibutes_table(root, session, queue_type):
-    queue_keys = get_table_keys_for_queue()
+def create_removed_queues_table(root, session):
+    columns = [
+        ('RemoveTimestamp', ydb.PrimitiveType.Uint64),
+        ('QueueIdNumber', ydb.PrimitiveType.Uint64),
+        ('Account', ydb.PrimitiveType.Utf8),
+        ('QueueName', ydb.PrimitiveType.Utf8),
+        ('FifoQueue', ydb.PrimitiveType.Bool),
+        ('Shards', ydb.PrimitiveType.Uint32),
+        ('CustomQueueName', ydb.PrimitiveType.Utf8),
+        ('FolderId', ydb.PrimitiveType.Utf8),
+        ('TablesFormat', ydb.PrimitiveType.Uint32),
+        ('StartProcessTimestamp', ydb.PrimitiveType.Uint64),
+        ('NodeProcess', ydb.PrimitiveType.Uint32),
+    ]
+    _create_table(root, session, '.RemovedQueues', columns, keys_count=2)
+
+
+def create_attibutes_table(root, session, queue_type, common_table=True):
+    queue_keys = []
+    if common_table:
+        queue_keys = get_table_keys_for_queue(common_table)
+    else:
+        queue_keys.append(('State', ydb.PrimitiveType.Uint64))
+
     columns = queue_keys + [
         ('ContentBasedDeduplication', ydb.PrimitiveType.Bool),
         ('DelaySeconds', ydb.PrimitiveType.Uint64),
@@ -128,16 +159,20 @@ def create_attibutes_table(root, session, queue_type):
         ('MaxReceiveCount', ydb.PrimitiveType.Uint64),
         ('ShowDetailedCountersDeadline', ydb.PrimitiveType.Uint64),
     ]
-    _create_table(root, session, 'Attributes', columns, len(queue_keys), queue_type)
+    _create_table(root, session, 'Attributes', columns, len(queue_keys), common_table, queue_type)
 
 
-def create_state_table(root, session, queue_type):
-    queue_keys = columns = [
-        ('QueueIdNumberHash', ydb.PrimitiveType.Uint64),
-        ('QueueIdNumber', ydb.PrimitiveType.Uint64),
-    ]
-    if queue_type == QueueType.STD:
-        queue_keys.append(('Shard', ydb.PrimitiveType.Uint32))
+def create_state_table(root, session, queue_type, common_table=True):
+    queue_keys = []
+    if common_table:
+        queue_keys = [
+            ('QueueIdNumberHash', ydb.PrimitiveType.Uint64),
+            ('QueueIdNumber', ydb.PrimitiveType.Uint64),
+        ]
+        if queue_type == QueueType.STD:
+            queue_keys.append(('Shard', ydb.PrimitiveType.Uint32))
+    else:
+        queue_keys.append(('State', ydb.PrimitiveType.Uint64))
 
     columns = queue_keys + [
         ('CleanupTimestamp', ydb.PrimitiveType.Uint64),
@@ -151,12 +186,12 @@ def create_state_table(root, session, queue_type):
         ('CleanupVersion', ydb.PrimitiveType.Uint64),
         ('InflyVersion', ydb.PrimitiveType.Uint64),
     ]
-    _create_table(root, session, 'State', columns, len(queue_keys), queue_type)
+    _create_table(root, session, 'State', columns, len(queue_keys), common_table, queue_type)
 
 
-def create_infly_table(root, session):
+def create_infly_table(root, session, common_table=True):
     queue_type = QueueType.STD
-    queue_keys = get_table_keys_for_queue(with_shard=(queue_type == QueueType.STD))
+    queue_keys = get_table_keys_for_queue(common_table, with_shard=(queue_type == QueueType.STD))
     columns = queue_keys + [
         ('Offset', ydb.PrimitiveType.Uint64),
         ('RandomId', ydb.PrimitiveType.Uint64),
@@ -168,12 +203,12 @@ def create_infly_table(root, session):
         ('VisibilityDeadline', ydb.PrimitiveType.Uint64),
         ('DelayDeadline', ydb.PrimitiveType.Uint64),
     ]
-    _create_table(root, session, 'Infly', columns, len(queue_keys) + 1, queue_type)
+    _create_table(root, session, 'Infly', columns, len(queue_keys) + 1, common_table, queue_type)
 
 
-def create_message_data_table(root, session):
+def create_message_data_table(root, session, common_table=True):
     queue_type = QueueType.STD
-    queue_keys = get_table_keys_for_queue(with_shard=(queue_type == QueueType.STD))
+    queue_keys = get_table_keys_for_queue(common_table, with_shard=(queue_type == QueueType.STD))
     columns = queue_keys + [
         ('RandomId', ydb.PrimitiveType.Uint64),
         ('Offset', ydb.PrimitiveType.Uint64),
@@ -182,11 +217,11 @@ def create_message_data_table(root, session):
         ('MessageId', ydb.PrimitiveType.String),
         ('SenderId', ydb.PrimitiveType.String),
     ]
-    _create_table(root, session, 'MessageData', columns, len(queue_keys) + 2, queue_type)
+    _create_table(root, session, 'MessageData', columns, len(queue_keys) + 2, common_table, queue_type)
 
 
-def create_message_table(root, session, queue_type):
-    queue_keys = get_table_keys_for_queue(with_shard=(queue_type == QueueType.STD))
+def create_message_table(root, session, queue_type, common_table=True):
+    queue_keys = get_table_keys_for_queue(common_table, with_shard=(queue_type == QueueType.STD))
     columns = queue_keys + [
         ('Offset', ydb.PrimitiveType.Uint64),
         ('RandomId', ydb.PrimitiveType.Uint64),
@@ -205,11 +240,11 @@ def create_message_table(root, session, queue_type):
             ('FirstReceiveTimestamp', ydb.PrimitiveType.Uint64),
             ('SentTimestamp', ydb.PrimitiveType.Uint64),
         ]
-    _create_table(root, session, 'Messages', columns, len(queue_keys) + 1, queue_type)
+    _create_table(root, session, 'Messages', columns, len(queue_keys) + 1, common_table, queue_type)
 
 
-def create_sent_timestamp_idx_table(root, session, queue_type):
-    queue_keys = get_table_keys_for_queue(with_shard=(queue_type == QueueType.STD))
+def create_sent_timestamp_idx_table(root, session, queue_type, common_table=True):
+    queue_keys = get_table_keys_for_queue(common_table, with_shard=(queue_type == QueueType.STD))
     columns = queue_keys + [
         ('SentTimestamp', ydb.PrimitiveType.Uint64),
         ('Offset', ydb.PrimitiveType.Uint64),
@@ -218,12 +253,12 @@ def create_sent_timestamp_idx_table(root, session, queue_type):
     ]
     if queue_type == QueueType.FIFO:
         columns.append(('GroupId', ydb.PrimitiveType.String))
-    _create_table(root, session, 'SentTimestampIdx', columns, len(queue_keys) + 2, queue_type)
+    _create_table(root, session, 'SentTimestampIdx', columns, len(queue_keys) + 2, common_table, queue_type)
 
 
-def create_data_table(root, session):
+def create_data_table(root, session, common_table=True):
     queue_type = QueueType.FIFO
-    queue_keys = get_table_keys_for_queue()
+    queue_keys = get_table_keys_for_queue(common_table)
     columns = queue_keys + [
         ("RandomId", ydb.PrimitiveType.Uint64),
         ("Offset", ydb.PrimitiveType.Uint64),
@@ -233,24 +268,24 @@ def create_data_table(root, session):
         ("Data", ydb.PrimitiveType.String),
         ("MessageId", ydb.PrimitiveType.String),
     ]
-    _create_table(root, session, 'Data', columns, len(queue_keys) + 2, queue_type)
+    _create_table(root, session, 'Data', columns, len(queue_keys) + 2, common_table, queue_type)
 
 
-def create_deduplication_table(root, session):
+def create_deduplication_table(root, session, common_table=True):
     queue_type = QueueType.FIFO
-    queue_keys = get_table_keys_for_queue()
+    queue_keys = get_table_keys_for_queue(common_table)
     columns = queue_keys + [
         ("DedupId", ydb.PrimitiveType.String),
         ("Deadline", ydb.PrimitiveType.Uint64),
         ("Offset", ydb.PrimitiveType.Uint64),
         ("MessageId", ydb.PrimitiveType.String),
     ]
-    _create_table(root, session, 'Deduplication', columns, len(queue_keys) + 1, queue_type)
+    _create_table(root, session, 'Deduplication', columns, len(queue_keys) + 1, common_table, queue_type)
 
 
-def create_groups_table(root, session):
+def create_groups_table(root, session, common_table=True):
     queue_type = QueueType.FIFO
-    queue_keys = get_table_keys_for_queue()
+    queue_keys = get_table_keys_for_queue(common_table)
     columns = queue_keys + [
         ("GroupId", ydb.PrimitiveType.String),
         ("VisibilityDeadline", ydb.PrimitiveType.Uint64),
@@ -260,17 +295,17 @@ def create_groups_table(root, session):
         ("ReceiveAttemptId", ydb.PrimitiveType.Utf8),
         ("LockTimestamp", ydb.PrimitiveType.Uint64),
     ]
-    _create_table(root, session, 'Groups', columns, len(queue_keys) + 1, queue_type)
+    _create_table(root, session, 'Groups', columns, len(queue_keys) + 1, common_table, queue_type)
 
 
-def create_reads_table(root, session):
+def create_reads_table(root, session, common_table=True):
     queue_type = QueueType.FIFO
-    queue_keys = get_table_keys_for_queue()
+    queue_keys = get_table_keys_for_queue(common_table)
     columns = queue_keys + [
         ("ReceiveAttemptId", ydb.PrimitiveType.Utf8),
         ("Deadline", ydb.PrimitiveType.Uint64),
     ]
-    _create_table(root, session, 'Reads', columns, len(queue_keys) + 1, queue_type)
+    _create_table(root, session, 'Reads', columns, len(queue_keys) + 1, common_table, queue_type)
 
 
 def create_all_tables(root, driver, session):
@@ -278,6 +313,7 @@ def create_all_tables(root, driver, session):
     create_queues_table(root, session)
     create_events_table(root, session)
     create_settings_table(root, session)
+    create_removed_queues_table(root, session)
 
     for queue_type in [QueueType.STD, QueueType.FIFO]:
         create_sent_timestamp_idx_table(root, session, queue_type)
@@ -294,3 +330,24 @@ def create_all_tables(root, driver, session):
     create_groups_table(root, session)
     create_deduplication_table(root, session)
     create_data_table(root, session)
+
+
+def create_queue_tables(path, if_fifo, driver, session, shards=None):
+    queue_type = QueueType.FIFO if if_fifo else QueueType.STD
+    create_state_table(path, session, queue_type, common_table=False)
+    create_attibutes_table(path, session, queue_type, common_table=False)
+
+    if queue_type == QueueType.STD:
+        for shard in range(shards):
+            shard_path = f'{path}/{shard}'
+            create_infly_table(shard_path, session, common_table=False)
+            create_message_data_table(shard_path, session, common_table=False)
+            create_sent_timestamp_idx_table(shard_path, session, queue_type, common_table=False)
+            create_message_table(shard_path, session, queue_type, common_table=False)
+    else:
+        create_reads_table(path, session, common_table=False)
+        create_groups_table(path, session, common_table=False)
+        create_deduplication_table(path, session, common_table=False)
+        create_data_table(path, session, common_table=False)
+        create_sent_timestamp_idx_table(path, session, queue_type, common_table=False)
+        create_message_table(path, session, queue_type, common_table=False)

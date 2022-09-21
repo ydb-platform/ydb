@@ -109,6 +109,11 @@ struct TTaskMeta {
         TString Name;
     };
 
+    struct TColumnWrite {
+        TColumn Column;
+        ui32 MaxValueSizeBytes = 0;
+    };
+
     struct TShardReadInfo {
         TShardKeyRanges Ranges;
         TVector<TColumn> Columns;
@@ -125,10 +130,27 @@ struct TTaskMeta {
         bool Reverse = false;
         bool Sorted = false;
         TKqpOlapProgram OlapProgram;
+        TVector<NUdf::TDataTypeId> ResultColumnsTypes;
     };
 
     struct TWriteInfo {
+        ui64 UpdateOps = 0;
+        ui64 EraseOps = 0;
+
         TShardKeyRanges Ranges;
+        THashMap<ui32, TColumnWrite> ColumnWrites;
+
+        void AddUpdateOp() {
+            ++UpdateOps;
+        }
+
+        void AddEraseOp() {
+            ++EraseOps;
+        }
+
+        bool IsPureEraseOp() const {
+            return (EraseOps > 0) && (UpdateOps == 0);
+        }
     };
 
     TReadInfo ReadInfo;

@@ -298,10 +298,10 @@ static_assert(AbsDiffLessThanCounter(HttpUserCountersDescriptor.SizeOfCounters()
                                      sizeof(NKikimrConfig::TSqsConfig*) +
                                      sizeof(TIntrusivePtr<THttpUserCounters>), sizeof(THttpUserCounters)));
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetSqsServiceCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot, const TString& subgroup) {
+TIntrusivePtr<::NMonitoring::TDynamicCounters> GetSqsServiceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& countersRoot, const TString& subgroup) {
     return GetServiceCounters(countersRoot, "sqs")->GetSubgroup("subsystem", subgroup);
 }
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetYmqPublicCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot) {
+TIntrusivePtr<::NMonitoring::TDynamicCounters> GetYmqPublicCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& countersRoot) {
     // Remove subgroup and don't have subsystem (is this correct - ?)
     return GetServiceCounters(countersRoot, "ymq_public");
 }
@@ -349,13 +349,13 @@ std::pair<TIntrusivePtrCntrCouple, TIntrusivePtrCntrCouple> GetUserAndQueueCount
     return { std::move(userCounters), std::move(queueCounters) };
 }
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetAggregatedCountersFromSqsCoreCounters(
+TIntrusivePtr<::NMonitoring::TDynamicCounters> GetAggregatedCountersFromSqsCoreCounters(
         const TIntrusivePtrCntrCouple& rootCounters, const NKikimrConfig::TSqsConfig& cfg
 ) {
     return GetAggregatedCountersFromUserCounters(GetUserCounters(rootCounters, TOTAL_COUNTER_LABEL), cfg);
 }
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetAggregatedCountersFromUserCounters(
+TIntrusivePtr<::NMonitoring::TDynamicCounters> GetAggregatedCountersFromUserCounters(
         const TIntrusivePtrCntrCouple& userCounters, const NKikimrConfig::TSqsConfig& cfg
 ) {
     if (cfg.GetYandexCloudMode()) {
@@ -406,7 +406,7 @@ ELaziness Lazy(const NKikimrConfig::TSqsConfig& cfg) {
 #define INIT_HISTOGRAM_COUNTER(rootCounters, variable, expiring, buckets, lazy) \
     INIT_HISTOGRAM_COUNTER_WITH_NAME(rootCounters, variable, Y_STRINGIZE(variable), expiring, buckets, lazy)
 
-void TActionCounters::Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, EAction action, ELifetime lifetime) {
+void TActionCounters::Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, EAction action, ELifetime lifetime) {
     const ELaziness laziness = IsActionForMessage(action) ? Lazy(cfg) : ELaziness::OnDemand;
     const EAction nonBatch = GetNonBatchAction(action);
     INIT_COUNTER_WITH_NAME(rootCounters, Success, TStringBuilder() << nonBatch << "_Success", lifetime, EValueType::Derivative, laziness);
@@ -421,7 +421,7 @@ void TActionCounters::Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusiv
 }
 
 void TYmqActionCounters::Init(
-        const NKikimrConfig::TSqsConfig&, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
+        const NKikimrConfig::TSqsConfig&, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters,
         EAction action, const TString& labelName, const TString& namePrefix, ELifetime lifetime
 ) {
     const auto& methodName = ActionToCloudConvMethod(action);
@@ -450,7 +450,7 @@ void TQueryTypeCounters::SetAggregatedParent(TQueryTypeCounters* parent) {
     QueryTypeCountersDescriptor.SetAggregatedParent(this, parent);
 }
 
-void TTransactionCounters::Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
+void TTransactionCounters::Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters,
         std::shared_ptr<TAlignedPagePoolCounters> poolCounters, bool forQueue) {
     AllocPoolCounters = std::move(poolCounters);
 
@@ -482,7 +482,7 @@ void TTransactionCounters::SetAggregatedParent(const TIntrusivePtr<TTransactionC
     }
 }
 
-void TAPIStatusesCounters::Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& root) {
+void TAPIStatusesCounters::Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& root) {
     auto statusesByType = root->GetSubgroup(DEFAULT_COUNTER_NAME, "StatusesByType");
     for (const TString& errorCode : TErrorClass::GetAvailableErrorCodes()) {
         ErrorToCounter[errorCode].Init(statusesByType, ELifetime::Persistent, EValueType::Derivative, STATUS_CODE, errorCode, ELaziness::OnDemand);
@@ -523,7 +523,7 @@ TFolderCounters::TFolderCounters(const TUserCounters* userCounters, const TStrin
     if (insertCounters) {
         FolderCounters = GetFolderCounters(UserCounters, folderId);
     } else {
-        FolderCounters = {new NMonitoring::TDynamicCounters(), new NMonitoring::TDynamicCounters()};
+        FolderCounters = {new ::NMonitoring::TDynamicCounters(), new ::NMonitoring::TDynamicCounters()};
     }
     //InitCounters();
 }
@@ -578,7 +578,7 @@ TQueueCounters::TQueueCounters(const NKikimrConfig::TSqsConfig& cfg,
     if (insertCounters) {
         QueueCounters = GetQueueCounters(FolderCounters.Defined() ? FolderCounters : UserCounters, queueName);
     } else {
-        QueueCounters = {new NMonitoring::TDynamicCounters(), new NMonitoring::TDynamicCounters()};
+        QueueCounters = {new ::NMonitoring::TDynamicCounters(), new ::NMonitoring::TDynamicCounters()};
     }
     InitCounters();
 }
@@ -712,7 +712,7 @@ void TQueueCounters::InitCounters(bool forLeaderNode) {
     DetailedCounters.Init(QueueCounters.SqsCounters, AllocPoolCounters, forLeaderNode);
 }
 
-void TQueueCounters::TDetailedCounters::Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& queueCounters,
+void TQueueCounters::TDetailedCounters::Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& queueCounters,
         const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, bool forLeaderNode) {
     if (!GetConfiguration_Duration) {
         INIT_HISTOGRAM_COUNTER(queueCounters, GetConfiguration_Duration, ELifetime::Expiring, DurationBucketsMs, ELaziness::OnDemand);
@@ -922,7 +922,7 @@ void THttpUserCounters::SetAggregatedParent(const TIntrusivePtr<THttpUserCounter
     }
 }
 
-void THttpActionCounters::Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, EAction action) {
+void THttpActionCounters::Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, EAction action) {
     Cfg = &cfg;
     Requests.Init(rootCounters, ELifetime::Persistent, EValueType::Derivative, TStringBuilder() << action << "Request", Lazy(*Cfg));
 }
@@ -970,7 +970,7 @@ void TCloudAuthCounters::IncCounter(const NCloudAuth::EActionType actionType, co
     ++*CloudAuthCounters[actionType][credentialType][grpcStatus];
 }
 
-void TCloudAuthCounters::InitCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> cloudAuthCounters) {
+void TCloudAuthCounters::InitCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> cloudAuthCounters) {
     for (size_t actionType = 0; actionType < NCloudAuth::EActionType::ActionTypesCount; ++actionType) {
         const auto actionTypeStr = ToString(static_cast<NCloudAuth::EActionType>(actionType));
         const auto actionCounters = cloudAuthCounters->GetSubgroup("action_type", actionTypeStr);
@@ -995,6 +995,14 @@ void TMeteringCounters::InitCounters(const TVector<TString>& classifierLabels) {
         INIT_COUNTER_WITH_NAME(SqsMeteringCounters, ClassifierRequestsResults[label], TStringBuilder() << classifierRequestsLabel << label, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
         INIT_COUNTER_WITH_NAME(SqsMeteringCounters, IdleClassifierRequestsResults[label], TStringBuilder() << idleClassifierRequestsLabel << label, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
     }
+}
+
+void TMonitoringCounters::InitCounters() {
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesLagSec, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesLagCount, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesDone, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesRows, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesErrors, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
 }
 
 } // namespace NKikimr::NSQS

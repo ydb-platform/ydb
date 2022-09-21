@@ -6,6 +6,15 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
+add_subdirectory(nodes)
+add_subdirectory(partition_stats)
+add_subdirectory(processor)
+add_subdirectory(query_stats)
+add_subdirectory(service)
+add_subdirectory(storage)
+add_subdirectory(tablets)
+add_subdirectory(ut_kqp)
 
 add_library(ydb-core-sys_view)
 target_compile_options(ydb-core-sys_view PRIVATE

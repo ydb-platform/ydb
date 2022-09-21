@@ -60,7 +60,7 @@ struct TRunActorParams { // TODO2 : Change name
         bool automatic,
         const TString& queryName,
         const TInstant& deadline,
-        const NMonitoring::TDynamicCounterPtr& clientCounters,
+        const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         TInstant createdAt,
         const TString& tenantName,
         uint64_t resultBytesLimit
@@ -112,7 +112,7 @@ struct TRunActorParams { // TODO2 : Change name
     TString QueryName;
     TInstant Deadline;
 
-    const NMonitoring::TDynamicCounterPtr ClientCounters;
+    const ::NMonitoring::TDynamicCounterPtr ClientCounters;
     const TInstant CreatedAt;
     const TString TenantName;
     uint64_t ResultBytesLimit;

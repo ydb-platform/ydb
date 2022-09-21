@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(static)
+add_subdirectory(test)
 
 add_library(library-schlab-mon)
 target_link_libraries(library-schlab-mon PUBLIC

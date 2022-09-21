@@ -5,7 +5,7 @@ from hamcrest import assert_that, not_none
 
 from ydb.tests.library.common.types import Erasure
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 
 class TestSqsRecompilesRequestsForOtherQueue(KikimrSqsTestBase):
@@ -18,9 +18,9 @@ class TestSqsRecompilesRequestsForOtherQueue(KikimrSqsTestBase):
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_recompiles_queries(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_recompiles_queries(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
 
         def send(node_index):

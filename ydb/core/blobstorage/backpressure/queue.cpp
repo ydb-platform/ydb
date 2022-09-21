@@ -2,7 +2,7 @@
 
 namespace NKikimr::NBsQueue {
 
-TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
+TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
         const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, ui32 interconnectChannel,
         const TBlobStorageGroupType& gType, NMonitoring::TCountableBase::EVisibility visibility)
     : Queues(bspctx)

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(pages)
 
 add_library(cpp-monlib-service)
 target_link_libraries(cpp-monlib-service PUBLIC

@@ -1,4 +1,4 @@
-#include "ut_utils.h"
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
 
 namespace NYdb::NPersQueue::NTests {
 
@@ -102,4 +102,3 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
     }
 }
 };
-

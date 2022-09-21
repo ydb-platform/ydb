@@ -5,9 +5,9 @@ using namespace NKikimr;
 
 Y_UNIT_TEST_SUITE(TTrackable) {
     Y_UNIT_TEST(TVector) {
-        NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
+        ::NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons(cntr);
-        NMonitoring::TDynamicCounters::TCounterPtr cntr2(new NMonitoring::TCounterForPtr);
+        ::NMonitoring::TDynamicCounters::TCounterPtr cntr2(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons2(cntr2);
         {
             TTrackableVector<ui32> v{TMemoryConsumer(cons)};
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TTrackable) {
     }
 
     Y_UNIT_TEST(TList) {
-        NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
+        ::NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons(cntr);
         TTrackableList<ui32> list{TMemoryConsumer(cons)};
         list.push_back(1);
@@ -45,12 +45,12 @@ Y_UNIT_TEST_SUITE(TTrackable) {
     }
 
     Y_UNIT_TEST(TString) {
-        NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
+        ::NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons(cntr);
     }
 
     Y_UNIT_TEST(TBuffer) {
-        NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
+        ::NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons(cntr);
     }
 }

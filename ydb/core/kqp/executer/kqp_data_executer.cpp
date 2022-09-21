@@ -461,7 +461,7 @@ private:
                     if (er.GetKind() == NKikimrTxDataShard::TError::PROGRAM_ERROR) {
                         auto issue = YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED);
                         issue.AddSubIssue(new TIssue(TStringBuilder() << "Data shard error: [PROGRAM_ERROR] " << er.GetReason()));
-                        return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issue);
+                        return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);
                     }
                 }
                 auto issue = YqlIssue({}, TIssuesIds::DEFAULT_ERROR, "Error executing transaction (ExecError): Execution failed");
@@ -471,11 +471,14 @@ private:
             case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR: {
                 Counters->TxProxyMon->TxResultError->Inc();
                 for (auto& er : result.GetError()) {
-                    if (er.GetKind() == NKikimrTxDataShard::TError::SCHEME_CHANGED) {
-                        return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
-                    }
-                    if (er.GetKind() == NKikimrTxDataShard::TError::SCHEME_ERROR) {
-                        return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, er.GetReason()));
+                    switch (er.GetKind()) {
+                        case NKikimrTxDataShard::TError::SCHEME_CHANGED:
+                        case NKikimrTxDataShard::TError::SCHEME_ERROR:
+                            return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({},
+                                TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
+
+                        default:
+                            break;
                     }
                 }
                 auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
@@ -1053,6 +1056,13 @@ private:
                                 } else {
                                     task.Meta.Writes->Ranges.MergeWritePoints(TShardKeyRanges(read.Ranges), keyTypes);
                                 }
+
+                                if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
+                                    task.Meta.Writes->AddEraseOp();
+                                } else {
+                                    task.Meta.Writes->AddUpdateOp();
+                                }
+
                             }
 
                             ShardsWithEffects.insert(task.Meta.ShardId);
@@ -1074,6 +1084,23 @@ private:
                                 task.Meta.Writes->Ranges = std::move(*shardInfo.KeyWriteRanges);
                             } else {
                                 task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes);
+                            }
+
+                            if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
+                                task.Meta.Writes->AddEraseOp();
+                            } else {
+                                task.Meta.Writes->AddUpdateOp();
+                            }
+
+                            for (const auto& [name, info] : shardInfo.ColumnWrites) {
+                                auto& column = table.Columns.at(name);
+
+                                auto& taskColumnWrite = task.Meta.Writes->ColumnWrites[column.Id];
+                                taskColumnWrite.Column.Id = column.Id;
+                                taskColumnWrite.Column.Type = column.Type;
+                                taskColumnWrite.Column.Name = name;
+                                taskColumnWrite.MaxValueSizeBytes = std::max(taskColumnWrite.MaxValueSizeBytes,
+                                    info.MaxValueSizeBytes);
                             }
 
                             ShardsWithEffects.insert(shardId);
@@ -1369,6 +1396,20 @@ private:
                 if (task.Meta.Writes) {
                     auto* protoWrites = protoTaskMeta.MutableWrites();
                     task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());
+                    if (task.Meta.Writes->IsPureEraseOp()) {
+                        protoWrites->SetIsPureEraseOp(true);
+                    }
+
+                    for (const auto& [_, columnWrite] : task.Meta.Writes->ColumnWrites) {
+                        auto& protoColumnWrite = *protoWrites->AddColumns();
+
+                        auto& protoColumn = *protoColumnWrite.MutableColumn();
+                        protoColumn.SetId(columnWrite.Column.Id);
+                        protoColumn.SetType(columnWrite.Column.Type);
+                        protoColumn.SetName(columnWrite.Column.Name);
+
+                        protoColumnWrite.SetMaxValueSizeBytes(columnWrite.MaxValueSizeBytes);
+                    }
                 }
 
                 taskDesc.MutableMeta()->PackFrom(protoTaskMeta);

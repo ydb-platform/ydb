@@ -25,7 +25,7 @@ namespace NConsole {
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTabletExecutedFlat;
-using NMonitoring::TDynamicCounterPtr;
+using ::NMonitoring::TDynamicCounterPtr;
 
 class TConfigsManager;
 class TTenantsManager;

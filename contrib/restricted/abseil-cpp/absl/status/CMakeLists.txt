@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(statusor)
 
 add_library(abseil-cpp-absl-status)
 target_compile_options(abseil-cpp-absl-status PRIVATE

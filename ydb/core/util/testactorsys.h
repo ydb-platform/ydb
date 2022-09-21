@@ -169,7 +169,7 @@ public:
         , LoggerSettings_(MakeIntrusive<NLog::TSettings>(TActorId(0, "logger"), NKikimrServices::LOGGER, defaultPrio))
         , InterconnectMock(0, Max<ui64>(), this) // burst capacity (bytes), bytes per second
     {
-        AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        AppData.Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         AppData.DomainsInfo = MakeIntrusive<TDomainsInfo>();
         LoggerSettings_->Append(
             NActorsServices::EServiceCommon_MIN,

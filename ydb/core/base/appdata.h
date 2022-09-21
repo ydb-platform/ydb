@@ -113,7 +113,7 @@ struct TAppData {
     ui64 CompilerSchemeCacheTables;
 
     NActors::TMon* Mon;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TBusNgMonPage* BusMonPage;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
@@ -162,6 +162,9 @@ struct TAppData {
 
     // Used to disable object deletion in schemeshard for cleanup tests
     bool DisableSchemeShardCleanupOnDropForTest = false;
+    
+    // Used to disable checking nodes with sys tablets only in cms
+    bool  DisableCheckingSysNodesCms = false;
 
     TKikimrScopeId LocalScopeId;
 

@@ -14,6 +14,7 @@ target_compile_options(ydb-core-formats-ut PRIVATE
 )
 target_include_directories(ydb-core-formats-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
 target_link_libraries(ydb-core-formats-ut PUBLIC
   contrib-libs-cxxsupp

@@ -354,8 +354,8 @@ private:
     TString FolderId;
     TString DatabaseId;
 
-    NMonitoring::TDynamicCounterPtr ExternalGroup;
-    std::unordered_map<TString, NMonitoring::TDynamicCounterPtr> InternalGroups;
+    ::NMonitoring::TDynamicCounterPtr ExternalGroup;
+    std::unordered_map<TString, ::NMonitoring::TDynamicCounterPtr> InternalGroups;
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,
         NKikimr::NSysView::TDbServiceCounters>;

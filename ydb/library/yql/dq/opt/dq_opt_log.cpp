@@ -2,8 +2,8 @@
 
 #include "dq_opt.h"
 
+#include <ydb/library/yql/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_aggregate.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
@@ -13,12 +13,13 @@ using namespace NYql::NNodes;
 
 namespace NYql::NDq {
 
-TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx) {
+TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (!node.Maybe<TCoAggregate>()) {
         return node;
     }
 
-    auto result = ExpandAggregate(true, node.Ptr(), ctx);
+    TAggregateExpander aggExpander(true, node.Ptr(), ctx, typesCtx);
+    auto result = aggExpander.ExpandAggregate();
     YQL_ENSURE(result);
 
     return TExprBase(result);

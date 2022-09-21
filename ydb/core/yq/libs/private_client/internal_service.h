@@ -20,6 +20,6 @@ NActors::IActor* CreateInternalServiceActor(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NYq::NConfig::TPrivateApiConfig& privateApiConfig,
-    const NMonitoring::TDynamicCounterPtr& counters);
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } /* NYq */

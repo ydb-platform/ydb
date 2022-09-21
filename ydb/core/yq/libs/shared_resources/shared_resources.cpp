@@ -29,7 +29,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     explicit TYqSharedResourcesImpl(
         const NYq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const NMonitoring::TDynamicCounterPtr& counters)
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : TYqSharedResources(NYdb::TDriver(GetYdbDriverConfig(config.GetCommon().GetYdbDriverConfig())))
     {
         CreateDbPoolHolder(config.GetDbPool(), credentialsProviderFactory, counters);
@@ -64,7 +64,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     void CreateDbPoolHolder(
         const NYq::NConfig::TDbPoolConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const NMonitoring::TDynamicCounterPtr& counters) {
+        const ::NMonitoring::TDynamicCounterPtr& counters) {
         DbPoolHolder = MakeIntrusive<NYq::TDbPoolHolder>(config, CoreYdbDriver, credentialsProviderFactory, counters);
     }
 };
@@ -74,7 +74,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
 TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
         const NYq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const NMonitoring::TDynamicCounterPtr& counters) {
+        const ::NMonitoring::TDynamicCounterPtr& counters) {
     return MakeIntrusive<TYqSharedResourcesImpl>(config, credentialsProviderFactory, counters);
 }
 

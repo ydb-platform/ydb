@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(yql-public-decimal)
 target_link_libraries(yql-public-decimal PUBLIC

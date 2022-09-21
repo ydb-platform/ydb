@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(lib)
+add_subdirectory(setup)
 
 add_library(library-cpp-balloc)
 target_compile_options(library-cpp-balloc PRIVATE

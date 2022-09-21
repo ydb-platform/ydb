@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-sys_view-partition_stats)
 target_compile_options(core-sys_view-partition_stats PRIVATE

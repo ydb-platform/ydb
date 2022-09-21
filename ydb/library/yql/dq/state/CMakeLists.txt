@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(yql-dq-state)
 target_link_libraries(yql-dq-state PUBLIC

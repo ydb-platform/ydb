@@ -6,6 +6,11 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(address_classification)
+add_subdirectory(bscontroller)
+add_subdirectory(hive)
+add_subdirectory(ut)
+add_subdirectory(ut_fat)
 
 add_library(ydb-core-mind)
 target_link_libraries(ydb-core-mind PUBLIC

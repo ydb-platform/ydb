@@ -6,6 +6,14 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(actor_log)
+add_subdirectory(actors)
+add_subdirectory(backtrace)
+add_subdirectory(failure_injector)
+add_subdirectory(fetch)
+add_subdirectory(log)
+add_subdirectory(threading)
+add_subdirectory(ut)
 
 add_library(library-yql-utils)
 target_link_libraries(library-yql-utils PUBLIC

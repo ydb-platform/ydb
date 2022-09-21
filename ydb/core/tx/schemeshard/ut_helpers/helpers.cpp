@@ -21,6 +21,19 @@
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
 
+    void SetConfig(
+    TTestActorRuntime &runtime,
+    ui64 schemeShard,
+    THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request)
+    {
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SendToPipe(schemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+    }
+
     template <typename TEvResponse, typename TEvRequest, typename TStatus>
     static ui32 ReliableProposeImpl(
         NActors::TTestActorRuntime& runtime, const TActorId& proposer,
@@ -2006,7 +2019,8 @@ namespace NSchemeShardUT_Private {
                         keyIdx = ki;
                     }
                 }
-                table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, c.GetTypeId(), 0}));
+                table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, c.GetTypeId(), 0,
+                    EColumnTypeConstraint::Nullable}));
             }
             dbSchemeResolver.AddTable(table);
         };

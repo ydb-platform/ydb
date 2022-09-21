@@ -190,6 +190,46 @@ bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
     return !FindNode(node.Ptr(), predicate);
 }
 
+bool IsDqSelfContainedExpr(const TExprBase& node) {
+    bool selfContained = true;
+    TNodeSet knownArguments;
+
+    VisitExpr(node.Ptr(),
+        [&selfContained, &knownArguments] (const TExprNode::TPtr& node) {
+            if (!selfContained) {
+                return false;
+            }
+
+            if (auto maybeLambda = TMaybeNode<TCoLambda>(node)) {
+                for (const auto& arg : maybeLambda.Cast().Args()) {
+                    YQL_ENSURE(knownArguments.emplace(arg.Raw()).second);
+                }
+            }
+
+            if (node->IsArgument()) {
+                if (!knownArguments.contains(node.Get())) {
+                    selfContained = false;
+                    return false;
+                }
+            }
+
+            return true;
+        },
+        [&knownArguments] (const TExprNode::TPtr& node) {
+            if (auto maybeLambda = TMaybeNode<TCoLambda>(node)) {
+                for (const auto& arg : maybeLambda.Cast().Args()) {
+                    auto it = knownArguments.find(arg.Raw());
+                    YQL_ENSURE(it != knownArguments.end());
+                    knownArguments.erase(it);
+                }
+            }
+
+            return true;
+        });
+
+    return selfContained;
+}
+
 bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {
     return !!FindNode(node.Ptr(), [ptr = stage.Raw()](const TExprNode::TPtr& exprNode) {
         return exprNode.Get() == ptr;

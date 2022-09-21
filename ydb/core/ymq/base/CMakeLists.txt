@@ -7,6 +7,7 @@
 
 
 find_package(OpenSSL REQUIRED)
+add_subdirectory(ut)
 
 add_library(core-ymq-base)
 target_link_libraries(core-ymq-base PUBLIC
@@ -33,12 +34,12 @@ target_sources(core-ymq-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/acl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/action.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/debug_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/dlq_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/probes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_attributes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_id.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/run_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/secure_protobuf_printer.cpp
 )
 generate_enum_serilization(core-ymq-base

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(blobstorage-vdisk-skeleton)
 target_link_libraries(blobstorage-vdisk-skeleton PUBLIC

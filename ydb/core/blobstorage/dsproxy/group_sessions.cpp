@@ -41,7 +41,7 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
         auto& stateVDisk = GroupQueues->FailDomains[vdisk.FailDomainOrderNumber].VDisks[vd.VDisk];
         const ui32 targetNodeId = info->GetActorId(vdisk.OrderNumber).NodeId();
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = GetServiceCounters(AppData()->Counters, "dsproxy_queue");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = GetServiceCounters(AppData()->Counters, "dsproxy_queue");
 
         for (NKikimrBlobStorage::EVDiskQueueId queueId : VDiskQueues) {
             ui32 interconnectChannel = 0;

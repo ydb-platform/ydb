@@ -7,6 +7,8 @@
 
 
 find_package(Python3 REQUIRED)
+add_subdirectory(mkql)
+add_subdirectory(ut)
 
 add_library(core-kqp-provider)
 target_compile_options(core-kqp-provider PRIVATE

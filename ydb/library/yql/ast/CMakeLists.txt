@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(serialize)
+add_subdirectory(ut)
 
 add_library(library-yql-ast)
 target_link_libraries(library-yql-ast PUBLIC

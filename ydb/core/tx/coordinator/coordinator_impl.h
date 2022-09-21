@@ -435,24 +435,24 @@ public:
 
 private:
     struct TCoordinatorMonCounters {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Coordinator;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> Coordinator;
 
-        NMonitoring::TDynamicCounters::TCounterPtr TxIn;
-        NMonitoring::TDynamicCounters::TCounterPtr TxPlanned;
-        NMonitoring::TDynamicCounters::TCounterPtr TxDeclined;
-        NMonitoring::TDynamicCounters::TCounterPtr TxInFly;
-        NMonitoring::TDynamicCounters::TCounterPtr StepsUncommited;
-        NMonitoring::TDynamicCounters::TCounterPtr StepsInFly;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TxIn;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TxPlanned;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TxDeclined;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TxInFly;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StepsUncommited;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StepsInFly;
 
-        NMonitoring::TDynamicCounters::TCounterPtr PlanTxCalls;
-        NMonitoring::TDynamicCounters::TCounterPtr PlanTxOutdated;
-        NMonitoring::TDynamicCounters::TCounterPtr PlanTxAccepted;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PlanTxCalls;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PlanTxOutdated;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PlanTxAccepted;
 
-        NMonitoring::TDynamicCounters::TCounterPtr StepConsideredTx;
-        NMonitoring::TDynamicCounters::TCounterPtr StepOutdatedTx;
-        NMonitoring::TDynamicCounters::TCounterPtr StepPlannedDeclinedTx;
-        NMonitoring::TDynamicCounters::TCounterPtr StepPlannedTx;
-        NMonitoring::TDynamicCounters::TCounterPtr StepDeclinedNoSpaceTx;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StepConsideredTx;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StepOutdatedTx;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StepPlannedDeclinedTx;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StepPlannedTx;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StepDeclinedNoSpaceTx;
 
         NMonitoring::THistogramPtr TxFromReceiveToPlan;
         NMonitoring::THistogramPtr TxPlanLatency;

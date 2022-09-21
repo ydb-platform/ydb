@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(agent)
 
 add_library(ydb-core-blob_depot)
 target_link_libraries(ydb-core-blob_depot PUBLIC

@@ -256,10 +256,12 @@ namespace NKikimr {
                     str << "<input type=\"hidden\" name=\"type\" value=\"query\">";
                     str << "<input type=\"hidden\" name=\"dbname\" value=\"" << dbnameParam << "\">";
 
+                    str << "<p>Input key format: " << placeholder << " in decimal</p>";
+
                     DIV_CLASS("control-group") {
                         LABEL_CLASS_FOR("control-label", "inputFrom") {str << "From (" << itemName << ")";}
                         DIV_CLASS("controls") {
-                            str << "<input type=\"text\" id=\"inputFrom\" "
+                            str << "<input size=64 type=\"text\" id=\"inputFrom\" "
                             "placeholder=\"" << placeholder << "\" name=\"from\">";
                         }
                     }
@@ -267,7 +269,7 @@ namespace NKikimr {
                     DIV_CLASS("control-group") {
                         LABEL_CLASS_FOR("control-label", "inputTo") {str << "To (" << itemName << ")";}
                         DIV_CLASS("controls") {
-                            str << "<input type=\"text\" id=\"inputTo\" "
+                            str << "<input size=64 type=\"text\" id=\"inputTo\" "
                             "placeholder=\"" << placeholder << "\" name=\"to\">";
                         }
                     }
@@ -283,7 +285,7 @@ namespace NKikimr {
                                 str << "<input type=\"checkbox\" name=\"Internals\" checked>Show Internals</input>";
                             }
                             str << "<button type=\"submit\" name=\"submit\" class=\"btn btn-default\">Submit</button>";
-                            str << "<strong>or</strong>";
+                            str << "<strong> or </strong>";
                             str << "<button type=\"submit\" name=\"all\" class=\"btn btn-default\">Browse DB</button>";
                         }
                     }
@@ -313,8 +315,7 @@ namespace NKikimr {
         friend class TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor>;
 
         void OutputForm(const TActorContext &ctx, const TString &dbnameParam) {
-            TString html = BuildForm(dbnameParam, "LogoBlob",
-                                    "[tablet:gen:step:channel:cookie:hashtype:part:hash]", true);
+            TString html = BuildForm(dbnameParam, "LogoBlob", "[tablet:gen:step:channel:cookie:blobsize:partid]", true);
             Finish(ctx, new NMon::TEvHttpInfoRes(html));
         }
 
@@ -377,15 +378,15 @@ namespace NKikimr {
                     }
 
                     req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
-                            NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 15);
+                            NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 1000);
                 }
             } else if (allButton) {
                 // browse database
                 IsRangeQuery = true;
-                From = TLogoBlobID(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
-                To = TLogoBlobID(0, 0, 0, 0, 0, 0, 1);
+                From = Min<TLogoBlobID>();
+                To = Max<TLogoBlobID>();
                 req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
-                        NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 15);
+                        NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 1000);
             } else
                 Y_FAIL("Unknown button");
 
@@ -529,7 +530,7 @@ namespace NKikimr {
             TString formParam = cgi.Get("form");
             TString fromParam = cgi.Get("from");
             TString toParam = cgi.Get("to");
-            bool showInternals = cgi.Has("Internals");
+            ShowInternals = cgi.Has("Internals");
             bool submitButton = cgi.Has("submit");
             bool allButton = cgi.Has("all");
 
@@ -538,7 +539,7 @@ namespace NKikimr {
                 return;
             }
 
-            ui32 maxResults = 15;
+            ui32 maxResults = 1000;
             std::unique_ptr<TEvBlobStorage::TEvVGetBarrier> req;
             if (submitButton) {
                 // check that 'from' field is not empty
@@ -558,7 +559,7 @@ namespace NKikimr {
                 if (toParam.empty()) {
                     // exact query
                     IsRangeQuery = false;
-                    req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, From, &maxResults, showInternals);
+                    req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, From, &maxResults, ShowInternals);
                     ctx.Send(SkeletonFrontID, req.release());
                 } else {
                     // range query
@@ -571,7 +572,7 @@ namespace NKikimr {
                         return;
                     }
 
-                    req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, To, &maxResults, showInternals);
+                    req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, To, &maxResults, ShowInternals);
                     ctx.Send(SkeletonFrontID, req.release());
                 }
             } else if (allButton) {
@@ -579,7 +580,7 @@ namespace NKikimr {
                 IsRangeQuery = true;
                 From = TKeyBarrier::First();
                 To = TKeyBarrier::Inf();
-                req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, To, &maxResults, showInternals);
+                req = std::make_unique<TEvBlobStorage::TEvVGetBarrier>(SelfVDiskId, From, To, &maxResults, ShowInternals);
                 ctx.Send(SkeletonFrontID, req.release());
             }
 
@@ -595,10 +596,8 @@ namespace NKikimr {
             TIngressCachePtr ingressCache = TIngressCache::Create(Top, SelfVDiskId);
             HTML(str) {
                 DIV_CLASS("well well-small") {
-                    str << "TabletId: " << k.GetTabletId() << "<br>";
-                    str << "Channel: " << k.GetChannel() << "<br>";
-                    str << "RecordGeneration: " << k.GetRecordGeneration() << "<br>";
-                    str << "PerGenerationCounter" << k.GetPerGenerationCounter() << "<br>";
+                    TKeyBarrier key(k);
+                    str << "Key: " << key.ToString() << "<br>";
                     str << "CollectGen: " << v.GetCollectGen() << "<br>";
                     str << "CollectStep: " << v.GetCollectStep() << "<br>";
                     if (v.HasIngress()) {
@@ -624,6 +623,10 @@ namespace NKikimr {
             HTML(str) {
                 DIV_CLASS("row") {
                     STRONG() {
+                        str << "From: " << From.ToString() << "<br>";
+                        if (IsRangeQuery)
+                            str << "To: " << To.ToString() << "<br>";
+                        str << "ShowInternals: " << (ShowInternals ? "true" : "false") << "<br>";
                         str << "Status: " << NKikimrProto::EReplyStatus_Name(rec.GetStatus()) << "<br>";
                         str << "VDisk: " << vdisk.ToString() << "<br>";
                         str << "Result size: " << size << "<br>";

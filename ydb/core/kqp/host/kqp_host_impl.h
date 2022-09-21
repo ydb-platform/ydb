@@ -229,7 +229,7 @@ template<typename TResult, bool copyIssues = true>
 class TKqpAsyncExecuteResultBase : public TKqpAsyncResultBase<TResult, copyIssues> {
 public:
     TKqpAsyncExecuteResultBase(const NYql::TExprNode::TPtr& exprRoot, NYql::TExprContext& exprCtx,
-        NYql::IGraphTransformer& transformer, TIntrusivePtr<NYql::IKikimrTransactionContext> txCtx)
+        NYql::IGraphTransformer& transformer, TIntrusivePtr<NYql::TKikimrTransactionContextBase> txCtx)
         : TKqpAsyncResultBase<TResult, copyIssues>(exprRoot, exprCtx, transformer,
             [txCtx](const auto& status) {
                 if (txCtx) {

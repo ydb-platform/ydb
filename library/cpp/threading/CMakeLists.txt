@@ -1,0 +1,18 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(atomic)
+add_subdirectory(chunk_queue)
+add_subdirectory(equeue)
+add_subdirectory(future)
+add_subdirectory(light_rw_lock)
+add_subdirectory(local_executor)
+add_subdirectory(poor_man_openmp)
+add_subdirectory(queue)
+add_subdirectory(skip_list)
+add_subdirectory(task_scheduler)

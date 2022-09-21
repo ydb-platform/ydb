@@ -764,7 +764,7 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
     return page.Get();
 }
 
-NMonitoring::IMonPage* TAsyncHttpMon::RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+NMonitoring::IMonPage* TAsyncHttpMon::RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     TDynamicCountersPage* page = new TDynamicCountersPage(path, title, counters);
         page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
         Register(page);

@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(stacktrace)
+add_subdirectory(symbolize)
 
 add_library(yabseil-cpp-tstring-y_absl-debugging)
 target_compile_options(yabseil-cpp-tstring-y_absl-debugging PRIVATE

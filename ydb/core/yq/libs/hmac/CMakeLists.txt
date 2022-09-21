@@ -7,6 +7,7 @@
 
 
 find_package(OpenSSL REQUIRED)
+add_subdirectory(ut)
 
 add_library(yq-libs-hmac)
 target_link_libraries(yq-libs-hmac PUBLIC

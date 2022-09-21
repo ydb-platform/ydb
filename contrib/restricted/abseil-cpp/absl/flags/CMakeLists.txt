@@ -6,6 +6,13 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(commandlineflag)
+add_subdirectory(internal)
+add_subdirectory(marshalling)
+add_subdirectory(parse)
+add_subdirectory(reflection)
+add_subdirectory(usage)
+add_subdirectory(usage_config)
 
 add_library(abseil-cpp-absl-flags)
 target_compile_options(abseil-cpp-absl-flags PRIVATE

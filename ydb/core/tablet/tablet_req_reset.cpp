@@ -48,14 +48,20 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
     }
 
     void Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->Status == NKikimrProto::RACE) {
-            ++Generation;
-            ctx.Register(CreateTabletReqBlockBlobStorage(ctx.SelfID, TabletStorageInfo.Get(), Generation, false));
-            return;
+        switch (ev->Get()->Status) {
+            case NKikimrProto::OK:
+                break;
+
+            case NKikimrProto::RACE:
+            case NKikimrProto::ALREADY:
+                ++Generation;
+                ctx.Register(CreateTabletReqBlockBlobStorage(ctx.SelfID, TabletStorageInfo.Get(), Generation, false));
+                return;
+
+            default:
+                return ReplyAndDie(ev->Get()->Status, ctx);
         }
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            return ReplyAndDie(ev->Get()->Status, ctx);
-        }
+
         TTablet::ExternalWriteZeroEntry(TabletStorageInfo.Get(), Generation + 1, SelfId());
         Become(&TTabletReqReset::StateWriteZeroEntry);
     }

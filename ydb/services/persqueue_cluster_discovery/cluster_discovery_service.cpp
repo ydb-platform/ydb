@@ -25,7 +25,7 @@ inline auto& Ctx() {
 
 class TClusterDiscoveryServiceActor: public TActorBootstrapped<TClusterDiscoveryServiceActor> {
 public:
-    TClusterDiscoveryServiceActor(TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+    TClusterDiscoveryServiceActor(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : RawCounters(counters)
         , Counters(BuildCounters())
     {
@@ -290,11 +290,11 @@ private:
     size_t NetClassifierUpdatesCount = 0;
     size_t ClustersListUpdatesCount = 0;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> RawCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> RawCounters;
     TClusterDiscoveryCounters::TPtr Counters;
 };
 
-NActors::IActor* CreateClusterDiscoveryService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+NActors::IActor* CreateClusterDiscoveryService(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TClusterDiscoveryServiceActor(counters);
 }
 

@@ -11,7 +11,7 @@ namespace NMsgBusProxy {
 
 class IMessageBusHttpServer : public NMonitoring::IMonPage {
 public:
-    IMessageBusHttpServer(const TString& path, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+    IMessageBusHttpServer(const TString& path, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : NMonitoring::IMonPage(path)
         , Counters(counters)
     {}
@@ -19,17 +19,17 @@ public:
     virtual void Shutdown() = 0;
 
     // counters
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> HttpGroup;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestsActive;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr InboundSize;
-    NMonitoring::TDynamicCounters::TCounterPtr OutboundSize;
-    NMonitoring::TDynamicCounters::TCounterPtr Status200;
-    NMonitoring::TDynamicCounters::TCounterPtr Status400;
-    NMonitoring::TDynamicCounters::TCounterPtr Status500;
-    NMonitoring::TDynamicCounters::TCounterPtr Status503;
-    NMonitoring::TDynamicCounters::TCounterPtr Status504;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> HttpGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestsActive;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InboundSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutboundSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Status200;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Status400;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Status500;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Status503;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Status504;
     NMonitoring::THistogramPtr RequestTotalTimeHistogram;
     NMonitoring::THistogramPtr RequestPrepareTimeHistogram;
 };

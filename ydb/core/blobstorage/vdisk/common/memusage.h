@@ -12,10 +12,10 @@
 namespace NKikimr {
 
     class TMemoryConsumer {
-        NMonitoring::TDynamicCounters::TCounterPtr Counter;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
 
     public:
-        TMemoryConsumer(NMonitoring::TDynamicCounters::TCounterPtr counter)
+        TMemoryConsumer(::NMonitoring::TDynamicCounters::TCounterPtr counter)
             : Counter(std::move(counter))
         {}
 
@@ -34,14 +34,14 @@ namespace NKikimr {
             *Counter += static_cast<i64>(bytes);
         }
 
-        NMonitoring::TDynamicCounters::TCounterPtr GetCounter() const {
+        ::NMonitoring::TDynamicCounters::TCounterPtr GetCounter() const {
             return Counter;
         }
     };
 
     class TMemoryConsumerWithDropOnDestroy : protected TMemoryConsumer {
     public:
-        TMemoryConsumerWithDropOnDestroy(NMonitoring::TDynamicCounters::TCounterPtr counter)
+        TMemoryConsumerWithDropOnDestroy(::NMonitoring::TDynamicCounters::TCounterPtr counter)
             : TMemoryConsumer(counter)
         {}
         TMemoryConsumerWithDropOnDestroy(const TMemoryConsumer &other)

@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(internal)
+add_subdirectory(log_severity)
 
 add_library(abseil-cpp-absl-base)
 target_compile_options(abseil-cpp-absl-base PRIVATE

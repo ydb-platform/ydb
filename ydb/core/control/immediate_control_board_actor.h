@@ -15,6 +15,6 @@ inline NActors::TActorId MakeIcbId(ui32 node) {
 
 class TImmediateControlActor;
 
-NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board, const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters);
+NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board, const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters);
 
 }

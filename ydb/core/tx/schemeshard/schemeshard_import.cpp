@@ -196,5 +196,12 @@ void TSchemeShard::ResumeImports(const TVector<ui64>& ids, const TActorContext& 
     }
 }
 
+void TSchemeShard::WaitForTableProfiles(ui64 importId, ui32 itemIdx) {
+    LOG_N("Wait for table profiles"
+        << ": id# " << importId
+        << ", itemIdx# " << itemIdx);
+    TableProfilesWaiters.insert(std::make_pair(importId, itemIdx));
+}
+
 } // NSchemeShard
 } // NKikimr

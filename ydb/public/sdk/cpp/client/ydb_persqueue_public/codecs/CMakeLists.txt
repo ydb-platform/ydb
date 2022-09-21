@@ -14,6 +14,7 @@ target_link_libraries(client-ydb_persqueue_public-codecs PUBLIC
   cpp-streams-zstd
   public-issue-protos
   api-grpc-draft
+  api-grpc
   api-protos
 )
 target_sources(client-ydb_persqueue_public-codecs PRIVATE

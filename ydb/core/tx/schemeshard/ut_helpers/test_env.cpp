@@ -503,8 +503,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableNotNullColumns(opts.EnableNotNullColumns_);
     app.SetEnableOlapSchemaOperations(opts.EnableOlapSchemaOperations_);
     app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);
+    app.SetEnablePqBilling(opts.EnablePqBilling_);
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
+    app.SetEnableMoveIndex(opts.EnableMoveIndex_);
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
@@ -1012,5 +1014,7 @@ NSchemeShardUT_Private::TTestEnvOptions NSchemeShardUT_Private::TTestWithReboots
             .EnablePipeRetries(false)
             .EnableAsyncIndexes(true)
             .EnableNotNullColumns(true)
-            .EnableProtoSourceIdInfo(true);
+            .EnableProtoSourceIdInfo(true)
+            .DisableStatsBatching(true)
+            .EnableMoveIndex(true);
 }

@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(mock)
+add_subdirectory(ut)
+add_subdirectory(ut_fat)
 
 add_library(core-blobstorage-dsproxy)
 target_link_libraries(core-blobstorage-dsproxy PUBLIC

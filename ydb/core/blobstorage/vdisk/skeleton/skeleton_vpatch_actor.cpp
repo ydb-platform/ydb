@@ -90,8 +90,8 @@ namespace NKikimr::NPrivate {
         TActorId Sender;
         ui64 Cookie;
         TActorIDPtr SkeletonFrontIDPtr;
-        NMonitoring::TDynamicCounters::TCounterPtr VPatchFoundPartsMsgsPtr;
-        NMonitoring::TDynamicCounters::TCounterPtr VPatchResMsgsPtr;
+        ::NMonitoring::TDynamicCounters::TCounterPtr VPatchFoundPartsMsgsPtr;
+        ::NMonitoring::TDynamicCounters::TCounterPtr VPatchResMsgsPtr;
         const TIntrusivePtr<TVPatchCtx> VPatchCtx;
         TString VDiskLogPrefix;
 
@@ -119,8 +119,8 @@ namespace NKikimr::NPrivate {
     public:
         TSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType &gType,
                 TEvBlobStorage::TEvVPatchStart::TPtr &ev, TInstant now, TActorIDPtr skeletonFrontIDPtr,
-                const NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
-                const NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
+                const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
+                const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
                 const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid)
             : TActorBootstrapped()
             , Sender(ev->Sender)
@@ -672,8 +672,8 @@ namespace NKikimr {
 
     IActor* CreateSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType &gType,
             TEvBlobStorage::TEvVPatchStart::TPtr &ev, TInstant now, TActorIDPtr skeletonFrontIDPtr,
-            const NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
-            const NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
             const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid)
     {
         return new NPrivate::TSkeletonVPatchActor(leaderId, gType, ev, now, skeletonFrontIDPtr,

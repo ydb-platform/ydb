@@ -36,6 +36,8 @@ public:
     FEATURE_FLAG_SETTER(EnableChangefeeds)
     FEATURE_FLAG_SETTER(EnableKqpSessionActor)
     FEATURE_FLAG_SETTER(EnableKqpScanQueryStreamLookup)
+    FEATURE_FLAG_SETTER(EnableMoveIndex)
+    FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

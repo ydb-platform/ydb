@@ -351,7 +351,7 @@ private:
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::STREAMS_CONTROL_PLANE_SERVICE, NLog::PRI_DEBUG);
 
-        auto controlPlaneProxy = CreateControlPlaneProxyActor(Config, MakeIntrusive<NMonitoring::TDynamicCounters>(), false);
+        auto controlPlaneProxy = CreateControlPlaneProxyActor(Config, MakeIntrusive<::NMonitoring::TDynamicCounters>(), false);
         runtime->AddLocalService(
             ControlPlaneProxyActorId(),
             TActorSetupCmd(controlPlaneProxy, TMailboxType::Simple, 0));

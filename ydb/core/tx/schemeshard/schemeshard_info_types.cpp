@@ -1557,44 +1557,6 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     return shardsToMerge.size() > 1;
 }
 
-bool TTableInfo::CheckFastSplitForPartition(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const {
-    // Don't split/merge backup tables
-    if (IsBackup)
-        return false;
-
-    // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(shardIdx))
-        return false;
-
-    if (!Shard2PartitionIdx.contains(shardIdx))
-        return false;
-
-    const ui64 MIN_ROWS_FOR_FAST_SPLIT = 1000;
-    ui64 sizeThreshold = splitSettings.FastSplitSizeThreshold;
-    ui64 rowCountThreshold = splitSettings.FastSplitRowCountThreshold;
-    float cpuUsageThreshold = 0.01 * splitSettings.FastSplitCpuPercentageThreshold;
-
-    const auto& partitionConfig = PartitionConfig();
-
-    if (partitionConfig.GetPartitioningPolicy().HasFastSplitSettings()) {
-        const auto& settings = partitionConfig.GetPartitioningPolicy().GetFastSplitSettings();
-        sizeThreshold = settings.GetSizeThreshold();
-        rowCountThreshold = settings.GetRowCountThreshold();
-        cpuUsageThreshold = 0.01 * settings.GetCpuPercentageThreshold();
-    }
-
-    const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx);
-    if ((dataSize < sizeThreshold && rowCount < rowCountThreshold) ||
-         rowCount < MIN_ROWS_FOR_FAST_SPLIT ||
-         stats.InFlightTxCount == 0 ||
-         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
-    {
-        return false;
-    }
-
-    return true;
-}
-
 bool TTableInfo::CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const {
     // Don't split/merge backup tables
     if (IsBackup)

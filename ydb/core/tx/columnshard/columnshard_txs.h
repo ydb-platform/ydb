@@ -34,6 +34,7 @@ struct TEvPrivate {
         NKikimrProto::EReplyStatus PutStatus = NKikimrProto::UNKNOWN;
         NOlap::TIndexInfo IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
+        THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
         TVector<TString> Blobs;
         bool GranuleCompaction{false};
         TBlobBatch BlobBatch;
@@ -44,9 +45,11 @@ struct TEvPrivate {
 
         TEvWriteIndex(const NOlap::TIndexInfo& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
-            bool cacheData)
+            bool cacheData,
+            THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>>&& cachedBlobs = {})
             : IndexInfo(indexInfo)
             , IndexChanges(indexChanges)
+            , CachedBlobs(std::move(cachedBlobs))
             , CacheData(cacheData)
         {}
     };
@@ -253,6 +256,7 @@ protected:
                                     const TReadDescription& readDescription,
                                     const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                     const std::unique_ptr<NOlap::IColumnEngine>& index,
+                                    const TBatchCache& batchCache,
                                     TString& error) const;
 
 protected:

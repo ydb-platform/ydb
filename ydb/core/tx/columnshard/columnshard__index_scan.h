@@ -53,6 +53,16 @@ public:
             GranuleBlobs[granule].insert(blobId);
         }
 
+        // Add cached batches without read
+        for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
+            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
+            Y_VERIFY(!cmt.empty());
+
+            const NOlap::TCommittedBlob& cmtBlob = cmt.key();
+            ui32 batchNo = cmt.mapped();
+            IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.PlanStep, cmtBlob.TxId);
+        }
+
         // Read all committed blobs
         for (const auto& cmtBlob : ReadMetadata->CommittedBlobs) {
             auto& blobId = cmtBlob.BlobId;

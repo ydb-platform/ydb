@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-services-cms)
 target_link_libraries(ydb-services-cms PUBLIC

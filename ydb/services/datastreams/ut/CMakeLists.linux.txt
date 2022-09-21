@@ -26,6 +26,7 @@ target_link_libraries(ydb-services-datastreams-ut PUBLIC
   cpp-grpc-client
   library-cpp-svnversion
   ydb-core-testlib
+  cpp-client-ydb_topic
 )
 target_link_options(ydb-services-datastreams-ut PRIVATE
   -ldl

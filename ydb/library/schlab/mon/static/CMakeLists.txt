@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(css)
+add_subdirectory(js)
 
 add_library(schlab-mon-static INTERFACE)
 target_link_libraries(schlab-mon-static INTERFACE

@@ -12,7 +12,7 @@ namespace NYql {
 
 namespace NYql::NDq {
 
-NNodes::TExprBase DqRewriteAggregate(NNodes::TExprBase node, TExprContext& ctx);
+NNodes::TExprBase DqRewriteAggregate(NNodes::TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
 
 NNodes::TExprBase DqRewriteTakeSortToTopSort(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parents);
 

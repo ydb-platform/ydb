@@ -5,7 +5,7 @@ namespace NYq {
 TRequestCounters::TRequestCounters(const TString& name)
     : Name(name) {}
 
-void TRequestCounters::Register(const NMonitoring::TDynamicCounterPtr& counters) {
+void TRequestCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
     auto requestCounters = counters->GetSubgroup("request", Name);
     InFly = requestCounters->GetCounter("InFly", false);
     Ok = requestCounters->GetCounter("Ok", true);
@@ -22,7 +22,7 @@ NMonitoring::IHistogramCollectorPtr TRequestCounters::GetLatencyHistogramBuckets
 }
 
 
-TFinalStatusCounters::TFinalStatusCounters(const NMonitoring::TDynamicCounterPtr& counters) {
+TFinalStatusCounters::TFinalStatusCounters(const ::NMonitoring::TDynamicCounterPtr& counters) {
     auto subgroup = counters->GetSubgroup("subcomponent", "FinalStatus");
     Completed = subgroup->GetCounter("COMPLETED", true);
     AbortedBySystem = subgroup->GetCounter("ABORTED_BY_SYSTEM", true);

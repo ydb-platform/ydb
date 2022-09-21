@@ -23,7 +23,7 @@ size_t FilterTest(std::vector<std::shared_ptr<arrow::Array>> args, EOperation fr
     ps->Assignes = {TAssign("res1", frst, {"x", "y"}), TAssign("res2", scnd, {"res1", "z"})};
     ps->Filters = {"res2"};
     ps->Projection = {"res1", "res2"};
-    ApplyProgram(rBatch, {ps}, GetCustomExecContext());
+    UNIT_ASSERT(ApplyProgram(rBatch, {ps}, GetCustomExecContext()).ok());
     UNIT_ASSERT(rBatch->ValidateFull().ok());
     UNIT_ASSERT(rBatch->num_columns() == 2);
     return rBatch->num_rows();
@@ -39,7 +39,7 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
     ps->Assignes = {TAssign("res1", frst, {"x"}), TAssign("res2", scnd, {"res1", "z"})};
     ps->Filters = {"res2"};
     ps->Projection = {"res1", "res2"};
-    ApplyProgram(rBatch, {ps}, GetCustomExecContext());
+    UNIT_ASSERT(ApplyProgram(rBatch, {ps}, GetCustomExecContext()).ok());
     UNIT_ASSERT(rBatch->ValidateFull().ok());
     UNIT_ASSERT(rBatch->num_columns() == 2);
     return rBatch->num_rows();
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(ProgramStepTest) {
         ps->Assignes = {TAssign("y", 56), TAssign("res", EOperation::Add, {"x", "y"})};
         ps->Filters = {"filter"};
         ps->Projection = {"res", "filter"};
-        ApplyProgram(rBatch, {ps}, GetCustomExecContext());
+        UNIT_ASSERT(ApplyProgram(rBatch, {ps}, GetCustomExecContext()).ok());
         UNIT_ASSERT(rBatch->ValidateFull().ok());
         UNIT_ASSERT(rBatch->num_columns() == 2);
         UNIT_ASSERT(rBatch->num_rows() == 2);
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(ProgramStepTest) {
         ps->Assignes = {TAssign("y", 56), TAssign("res", EOperation::Add, {"x", "y"})};
         ps->Filters = {};
         ps->Projection = {"res", "filter"};
-        ApplyProgram(rBatch, {ps}, GetCustomExecContext());
+        UNIT_ASSERT(ApplyProgram(rBatch, {ps}, GetCustomExecContext()).ok());
         UNIT_ASSERT(rBatch->ValidateFull().ok());
         UNIT_ASSERT(rBatch->num_columns() == 2);
         UNIT_ASSERT(rBatch->num_rows() == 4);

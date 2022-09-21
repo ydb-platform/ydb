@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(interface)
 
 add_library(providers-dq-worker_manager)
 target_compile_options(providers-dq-worker_manager PRIVATE

@@ -1166,6 +1166,14 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
         auto &range = *tx.MutableRange();
         ReadTableRequest->KeySpace.GetSpace().Serialize(range);
 
+        // Normalize range's From/ToInclusive
+        if (range.GetFrom().empty() && !range.GetFromInclusive()) {
+            range.SetFromInclusive(true);
+        }
+        if (range.GetTo().empty() && !range.GetToInclusive()) {
+            range.SetToInclusive(true);
+        }
+
         if (!ReadTableRequest->Snapshot.IsMax()) {
             tx.SetSnapshotStep(ReadTableRequest->Snapshot.Step);
             tx.SetSnapshotTxId(ReadTableRequest->Snapshot.TxId);
@@ -1559,6 +1567,13 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx);
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
         return Die(ctx);
+    }
+
+    if (!ReadTableRequest->FromValues.GetCells() && !ReadTableRequest->Range.HasFromInclusive()) {
+        fromInclusive = true; // default to inclusive -inf
+    }
+    if (!ReadTableRequest->ToValues.GetCells() && !ReadTableRequest->Range.HasToInclusive()) {
+        toInclusive = true; // default to inclusive +inf
     }
 
     TTableRange range(ReadTableRequest->FromValues.GetCells(),

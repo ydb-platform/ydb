@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(actors)
+add_subdirectory(ut)
 
 add_library(ydb-services-persqueue_v1)
 target_link_libraries(ydb-services-persqueue_v1 PUBLIC
@@ -26,6 +28,7 @@ target_link_libraries(ydb-services-persqueue_v1 PUBLIC
   library-persqueue-obfuscate
   library-persqueue-tests
   library-persqueue-topic_parser
+  api-grpc
   api-grpc-draft
   api-protos
   services-lib-actors

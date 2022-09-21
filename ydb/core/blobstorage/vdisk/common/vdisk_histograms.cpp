@@ -4,7 +4,7 @@ namespace NKikimr {
     namespace NVDiskMon {
 
         THistograms::THistograms(
-                const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+                const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
                 NPDisk::EDeviceType type)
         {
             for (const auto& item : {

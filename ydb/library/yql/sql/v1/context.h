@@ -89,7 +89,10 @@ namespace NSQLTranslationV1 {
 
         const NYql::TPosition& Pos() const;
 
-        void ClearBlockScope();
+        void PushCurrentBlocks(TBlocks* blocks);
+        void PopCurrentBlocks();
+        TBlocks& GetCurrentBlocks() const;
+
         TString MakeName(const TString& name);
 
         IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
@@ -207,6 +210,7 @@ namespace NSQLTranslationV1 {
         EColumnRefState ColumnReferenceState = EColumnRefState::Deny;
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
         TString NoColumnErrorContext = "in current scope";
+        TVector<TBlocks*> CurrentBlocks;
 
     public:
         THashMap<TString, TNodePtr> Variables;
@@ -272,6 +276,7 @@ namespace NSQLTranslationV1 {
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
         bool EmitStartsWith = true;
+        bool EmitAggApply = false;
     };
 
     class TColumnRefScope {

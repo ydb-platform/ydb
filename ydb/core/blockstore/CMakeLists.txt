@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(core)
 
 add_library(ydb-core-blockstore INTERFACE)
 target_link_libraries(ydb-core-blockstore INTERFACE

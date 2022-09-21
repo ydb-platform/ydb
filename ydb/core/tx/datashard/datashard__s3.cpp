@@ -62,6 +62,7 @@ public:
 
         TVector<TRawTypeValue> key;
         TVector<TRawTypeValue> endKey;
+        bool endKeyInclusive = true;
 
         // TODO: check prefix column count against key column count
         const TSerializedCellVec prefixColumns(Ev->Get()->Record.GetSerializedKeyPrefix());
@@ -113,6 +114,10 @@ public:
         const TString pathEndPrefix = NextPrefix(pathPrefix);
         if (pathEndPrefix) {
             endKey.emplace_back(pathEndPrefix.data(), pathEndPrefix.size(), NScheme::NTypeIds::Utf8);
+            while (endKey.size() < tableInfo.KeyColumnTypes.size()) {
+                endKey.emplace_back();
+            }
+            endKeyInclusive = false;
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: start at key ("
@@ -135,7 +140,7 @@ public:
         keyRange.MinKey = key;
         keyRange.MinInclusive = suffixColumns.GetCells().empty();
         keyRange.MaxKey = endKey;
-        keyRange.MaxInclusive = false;
+        keyRange.MaxInclusive = endKeyInclusive;
 
         if (LastPath) {
             // Don't include the last key in case of restart

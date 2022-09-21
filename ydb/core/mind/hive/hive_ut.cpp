@@ -3337,35 +3337,34 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendKillLocal(runtime, 4);
         SendKillLocal(runtime, 5);
 
-        WaitForBootQueue(runtime, hiveTablet);
-
-        //TDispatchOptions options;
-        //runtime.DispatchEvents(options, TDuration::MilliSeconds(1000));
-
         {
             int leaders = 0;
             int tablets = 0;
-            {
-                THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
-                request->Record.SetReturnFollowers(true);
-                runtime.SendToPipe(hiveTablet, senderA, request.Release());
-                TAutoPtr<IEventHandle> handle;
-                TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
-                for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
-                    if (tablet.GetFollowerID() == 0) {
-                        leaders++;
+            int iterations = 100;
+            while (--iterations > 0) {
+                leaders = 0;
+                tablets = 0;
+                {
+                    THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+                    request->Record.SetReturnFollowers(true);
+                    runtime.SendToPipe(hiveTablet, senderA, request.Release());
+                    TAutoPtr<IEventHandle> handle;
+                    TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+                    for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                        if (tablet.GetFollowerID() == 0) {
+                            leaders++;
+                        }
+                        tablets++;
+                        Ctest << "tablet " << tablet.GetTabletID() << "." << tablet.GetFollowerID() << " on node " << tablet.GetNodeID() << Endl;
                     }
-                    tablets++;
-                    Ctest << "tablet " << tablet.GetTabletID() << "." << tablet.GetFollowerID() << " on node " << tablet.GetNodeID() << Endl;
                 }
+                if (leaders == 1 && tablets == 2) {
+                    break;
+                }
+                runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
             }
             UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
             UNIT_ASSERT_VALUES_EQUAL(tablets, 2);
-            // if (tablets != 2) {
-            //     TDispatchOptions options;
-            //     runtime.DispatchEvents(options, TDuration::MilliSeconds(1000));
-            //     UNIT_ASSERT(false);
-            // }
         }
     }
 

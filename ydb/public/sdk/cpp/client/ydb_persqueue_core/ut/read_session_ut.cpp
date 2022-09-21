@@ -1,4 +1,4 @@
-#include "ut_utils.h"
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
@@ -450,7 +450,7 @@ public:
     using IReadSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
     using TMockProcessorFactory = ::TMockProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
 
-    struct TMockErrorHandler : public IErrorHandler {
+    struct TMockErrorHandler : public IErrorHandler<true> {
         MOCK_METHOD(void, AbortSession, (TSessionClosedEvent&& closeEvent), (override));
     };
 
@@ -482,9 +482,9 @@ public:
     TReadSessionImplTestSetup();
     ~TReadSessionImplTestSetup() noexcept(false); // Performs extra validation and UNIT_ASSERTs
 
-    TSingleClusterReadSessionImpl* GetSession();
+    TSingleClusterReadSessionImpl<true>* GetSession();
 
-    std::shared_ptr<TReadSessionEventsQueue> GetEventsQueue();
+    std::shared_ptr<TReadSessionEventsQueue<true>> GetEventsQueue();
     ::IExecutor::TPtr GetDefaultExecutor();
 
     void SuccessfulInit(bool flag = true);
@@ -498,14 +498,14 @@ public:
     TReadSessionSettings Settings;
     TString ClusterName = "cluster";
     TLog Log = CreateLogBackend("cerr");
-    std::shared_ptr<TReadSessionEventsQueue> EventsQueue;
+    std::shared_ptr<TReadSessionEventsQueue<true>> EventsQueue;
     TIntrusivePtr<testing::StrictMock<TMockErrorHandler>> MockErrorHandler = MakeIntrusive<testing::StrictMock<TMockErrorHandler>>();
     std::shared_ptr<TFakeContext> FakeContext = std::make_shared<TFakeContext>();
     std::shared_ptr<TMockProcessorFactory> MockProcessorFactory = std::make_shared<TMockProcessorFactory>();
     TIntrusivePtr<TMockReadSessionProcessor> MockProcessor = MakeIntrusive<TMockReadSessionProcessor>();
     ui64 PartitionIdStart = 1;
     ui64 PartitionIdStep = 1;
-    TSingleClusterReadSessionImpl::TPtr Session;
+    typename TSingleClusterReadSessionImpl<true>::TPtr Session;
     std::shared_ptr<TThreadPool> ThreadPool;
     ::IExecutor::TPtr DefaultExecutor;
 };
@@ -579,7 +579,7 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
         .AppendTopics({"TestTopic"})
         .ConsumerName("TestConsumer")
         .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
-        .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>()));
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
 
@@ -609,7 +609,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     return DefaultExecutor;
 }
 
-TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
+TSingleClusterReadSessionImpl<true>* TReadSessionImplTestSetup::GetSession() {
     if (!Session) {
         if (!Settings.DecompressionExecutor_) {
             Settings.DecompressionExecutor(GetDefaultExecutor());
@@ -617,7 +617,7 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
         if (!Settings.EventHandlers_.HandlersExecutor_) {
             Settings.EventHandlers_.HandlersExecutor(GetDefaultExecutor());
         }
-        Session = std::make_shared<TSingleClusterReadSessionImpl>(
+        Session = std::make_shared<TSingleClusterReadSessionImpl<true>>(
             Settings,
             "db",
             "sessionid",
@@ -632,9 +632,9 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
     return Session.get();
 }
 
-std::shared_ptr<TReadSessionEventsQueue> TReadSessionImplTestSetup::GetEventsQueue() {
+std::shared_ptr<TReadSessionEventsQueue<true>> TReadSessionImplTestSetup::GetEventsQueue() {
     if (!EventsQueue) {
-        EventsQueue = std::make_shared<TReadSessionEventsQueue>(Settings, std::weak_ptr<IUserRetrievedEventCallback>());
+        EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings, std::weak_ptr<IUserRetrievedEventCallback<true>>());
     }
     return EventsQueue;
 }
@@ -1180,13 +1180,14 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                    .CompressMessage(i, TStringBuilder() << "message" << i)); // Callback will be called.
         }
 
-        for (ui64 i = 1; i <= 2; ++i) {
+        for (ui64 i = 1; i <= 2; ) {
             TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             auto& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages()[0].GetData(), TStringBuilder() << "message" << i);
+            for (ui32 j = 0; j < dataEvent.GetMessages().size(); ++j, ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages()[j].GetData(), TStringBuilder() << "message" << i);
+            }
         }
 
         setup.AssertNoEvents();
@@ -1588,13 +1589,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 }
             }));
 
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ) {
             TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
             Cerr << "got data event: " << dataEvent.DebugString() << "\n";
             dataEvent.Commit();
+
+            i += dataEvent.GetMessagesCount();
         }
 
         UNIT_ASSERT(has1);
@@ -1661,11 +1664,13 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         auto calledPromise = NThreading::NewPromise<void>();
         int time = 0;
         setup.Settings.EventHandlers_.DataReceivedHandler([&](TReadSessionEvent::TDataReceivedEvent& event) {
-            ++time;
-            UNIT_ASSERT_VALUES_EQUAL(event.GetMessages().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetData(), TStringBuilder() << "message" << time);
-            if (time == 2) {
-                calledPromise.SetValue();
+            for (ui32 i = 0; i < event.GetMessages().size(); ++i) {
+                ++time;
+                UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[i].GetData(), TStringBuilder() << "message" << time);
+
+                if (time == 2) {
+                    calledPromise.SetValue();
+                }
             }
         });
         setup.SuccessfulInit();
@@ -1678,6 +1683,13 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                .PartitionData(2)
                                                .Batch("src_id")
                                                .CompressMessage(2, "message2"));
+
+        //
+        // when the PartitionStreamClosed arrives the raw messages are deleted
+        // we give time to process the messages
+        //
+        Sleep(TDuration::Seconds(2));
+
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
                                                .ForcefulReleasePartitionStream());
         TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
@@ -1843,5 +1855,84 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(SimpleDataHandlersWithGracefulReleaseWithCommit) {
         SimpleDataHandlersImpl(true, true);
+    }
+
+    Y_UNIT_TEST(LOGBROKER_7702) {
+        using namespace NYdb::NPersQueue;
+
+        using TServiceEvent =
+            typename TAReadSessionEvent<true>::TPartitionStreamStatusEvent;
+
+#define UNIT_ASSERT_CONTROL_EVENT() \
+        { \
+            using TExpectedEvent = typename TAReadSessionEvent<true>::TPartitionStreamStatusEvent; \
+\
+            size_t maxByteSize = std::numeric_limits<size_t>::max();\
+            auto event = sessionQueue.GetEventImpl(&maxByteSize);\
+\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent()));\
+        }
+
+#define UNIT_ASSERT_DATA_EVENT(count) \
+        { \
+            using TExpectedEvent = typename TAReadSessionEvent<true>::TDataReceivedEvent; \
+\
+            size_t maxByteSize = std::numeric_limits<size_t>::max(); \
+            auto event = sessionQueue.GetEventImpl(&maxByteSize); \
+\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent())); \
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event.GetEvent()).GetMessagesCount(), count); \
+        }
+
+        TAReadSessionSettings<true> settings;
+        std::shared_ptr<TSingleClusterReadSessionImpl<true>> session;
+        TReadSessionEventsQueue<true> sessionQueue{settings, session};
+
+        auto stream = MakeIntrusive<TPartitionStreamImpl<true>>(1ull,
+                                                                "",
+                                                                "",
+                                                                1ull,
+                                                                1ull,
+                                                                1ull,
+                                                                0ull,
+                                                                session,
+                                                                nullptr);
+
+        TPartitionData<true> message;
+        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch =
+            message.mutable_batches()->Add();
+        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_MessageData* messageData =
+            batch->mutable_message_data()->Add();
+        *messageData->mutable_data() = "*";
+
+        auto data = std::make_shared<TDataDecompressionInfo<true>>(std::move(message),
+                                                                   session,
+                                                                   false,
+                                                                   0);
+
+        std::atomic<bool> ready = true;
+
+        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
+        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
+        stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
+        stream->InsertDataEvent(0, 0, data, ready);
+
+        TDeferredActions<true> actions;
+
+        stream->SignalReadyEvents(&sessionQueue,
+                                  actions);
+
+        UNIT_ASSERT_DATA_EVENT(1);
+        UNIT_ASSERT_CONTROL_EVENT();
+        UNIT_ASSERT_DATA_EVENT(2);
+        UNIT_ASSERT_CONTROL_EVENT();
+        UNIT_ASSERT_CONTROL_EVENT();
+        UNIT_ASSERT_DATA_EVENT(1);
+
+#undef UNIT_ASSERT_CONTROL_EVENT
+#undef UNIT_ASSERT_DATA_EVENT
     }
 }

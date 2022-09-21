@@ -1,4 +1,4 @@
-#include "ut_utils.h"
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
 
 namespace NYdb::NPersQueue::NTests {
 
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(Compression) {
         rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_GZIP);
         rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_ZSTD);
         rr->set_version(1);
-        
+
         Ydb::PersQueue::V1::AlterTopicResponse response;
         grpc::ClientContext rcontext;
         auto status = stub->AlterTopic(&rcontext, request, &response);
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(Compression) {
                         ++totalReceived;
                     }
                 }
-                Cerr << Endl << "totalReceived: " << totalReceived << " wait: " << messages.size() << Endl << Endl; 
+                Cerr << Endl << "totalReceived: " << totalReceived << " wait: " << messages.size() << Endl << Endl;
                 if (totalReceived == messages.size())
                     checkedPromise.SetValue();
             }
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(Compression) {
         checkedPromise.GetFuture().GetValueSync();
     }
 
-    void WriteWithOneCodec(TPersQueueYdbSdkTestSetup& setup, ECodec codec) {        
+    void WriteWithOneCodec(TPersQueueYdbSdkTestSetup& setup, ECodec codec) {
         AlterTopic(setup); // add zstd support
 
         auto messages = GetTestMessages();
@@ -123,17 +123,17 @@ Y_UNIT_TEST_SUITE(Compression) {
 
     Y_UNIT_TEST(WriteRAW) {
         TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
-        WriteWithOneCodec(setup, ECodec::RAW);  
+        WriteWithOneCodec(setup, ECodec::RAW);
     }
 
     Y_UNIT_TEST(WriteGZIP) {
         TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
-        WriteWithOneCodec(setup, ECodec::GZIP);  
+        WriteWithOneCodec(setup, ECodec::GZIP);
     }
 
     Y_UNIT_TEST(WriteZSTD) {
         TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
-        WriteWithOneCodec(setup, ECodec::ZSTD);  
+        WriteWithOneCodec(setup, ECodec::ZSTD);
     }
 
     Y_UNIT_TEST(WriteWithMixedCodecs) {

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(draft)
 
 add_library(api-grpc)
 set_property(TARGET api-grpc PROPERTY
@@ -31,6 +32,7 @@ target_proto_messages(api-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_scheme_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_scripting_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_table_v1.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_topic_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/yq_v1.proto
 )
 target_proto_addincls(api-grpc

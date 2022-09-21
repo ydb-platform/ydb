@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(civil_time)
+add_subdirectory(time_zone)
 
 add_library(abseil-cpp-absl-time)
 target_compile_options(abseil-cpp-absl-time PRIVATE

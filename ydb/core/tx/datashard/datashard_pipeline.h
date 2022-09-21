@@ -382,8 +382,8 @@ private:
                 return a.Step < b.Step || (a.Step == b.Step && a.TxId < b.TxId);
             }
 
-            friend constexpr bool operator<(const TItem& a, const TRowVersion& b) {
-                return a.Step < b.Step || (a.Step == b.Step && a.TxId < b.TxId);
+            friend constexpr bool operator<=(const TItem& a, const TRowVersion& b) {
+                return a.Step < b.Step || (a.Step == b.Step && a.TxId <= b.TxId);
             }
         };
 
@@ -394,7 +394,9 @@ private:
             auto res = ItemsSet.emplace(version);
             if (!res.second)
                 res.first->Counter += 1;
-            TxIdMap.emplace(txId, res.first);
+            auto res2 = TxIdMap.emplace(txId, res.first);
+            Y_VERIFY_S(res2.second, "Unexpected duplicate immediate tx " << txId
+                    << " committing at " << version);
         }
 
         inline void Add(TRowVersion version) {
@@ -417,7 +419,7 @@ private:
         }
 
         inline bool HasOpsBelow(TRowVersion upperBound) const {
-            return bool(ItemsSet) && *ItemsSet.begin() < upperBound;
+            return bool(ItemsSet) && *ItemsSet.begin() <= upperBound;
         }
 
     private:

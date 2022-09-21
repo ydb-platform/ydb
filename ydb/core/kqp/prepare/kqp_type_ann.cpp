@@ -841,6 +841,85 @@ TStatus AnnotateOlapFilterExists(const TExprNode::TPtr& node, TExprContext& ctx)
     return TStatus::Ok;
 }
 
+TStatus AnnotateOlapAgg(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* input = node->Child(TKqpOlapAgg::idx_Input);
+
+    const TTypeAnnotationNode* itemType;
+    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &itemType)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto structType = itemType->Cast<TStructExprType>();
+
+    if (!EnsureTuple(*node->Child(TKqpOlapAgg::idx_Aggregates), ctx)) {
+        return TStatus::Error;
+    }
+
+    TVector<const TItemExprType*> aggTypes;
+    for (auto agg : node->Child(TKqpOlapAgg::idx_Aggregates)->ChildrenList()) {
+        auto aggName = agg->Child(TKqpOlapAggOperation::idx_Name);
+        auto opType = agg->Child(TKqpOlapAggOperation::idx_Type);
+        auto colName = agg->Child(TKqpOlapAggOperation::idx_Column);
+        if (!EnsureAtom(*opType, ctx)) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Expected operation type in OLAP aggregation, got: " << opType->Content()
+            ));
+            return TStatus::Error;
+        }
+        if (!EnsureAtom(*colName, ctx)) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Expected column name in OLAP aggregation, got: " << colName->Content()
+            ));
+            return TStatus::Error;
+        }
+        if (!EnsureAtom(*aggName, ctx)) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Expected aggregate column generated name in OLAP aggregation, got: " << aggName->Content()
+            ));
+            return TStatus::Error;
+        }
+        if (opType->Content() == "count") {
+            aggTypes.push_back(ctx.MakeType<TItemExprType>(aggName->Content(), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+        } else if (opType->Content() == "some") {
+            aggTypes.push_back(ctx.MakeType<TItemExprType>(aggName->Content(), structType->FindItemType(colName->Content())));
+        } else {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Unsupported operation type in OLAP aggregation, got: " << opType->Content()
+            ));
+            return TStatus::Error;
+        }
+    }
+
+    if (!EnsureTuple(*node->Child(TKqpOlapAgg::idx_KeyColumns), ctx)) {
+        return TStatus::Error;
+    }
+    for (auto keyCol : node->Child(TKqpOlapAgg::idx_KeyColumns)->ChildrenList()) {
+        if (!EnsureAtom(*keyCol, ctx)) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Expected column name in OLAP key columns, got: " << keyCol->Content()
+            ));
+            return TStatus::Error;
+        }
+        aggTypes.push_back(ctx.MakeType<TItemExprType>(keyCol->Content(), structType->FindItemType(keyCol->Content())));
+    }
+
+    node->SetTypeAnn(MakeSequenceType(input->GetTypeAnn()->GetKind(), *ctx.MakeType<TStructExprType>(aggTypes), ctx));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateKqpTxInternalBinding(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -1152,6 +1231,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapFilterExists::Match(input.Get())) {
                 return AnnotateOlapFilterExists(input, ctx);
+            }
+
+            if (TKqpOlapAgg::Match(input.Get())) {
+                return AnnotateOlapAgg(input, ctx);
             }
 
             if (TKqpCnMapShard::Match(input.Get()) || TKqpCnShuffleShard::Match(input.Get())) {

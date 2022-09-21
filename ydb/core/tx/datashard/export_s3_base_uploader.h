@@ -317,8 +317,20 @@ protected:
         return false;
     }
 
+    static bool ShouldRetry(const Aws::S3::S3Error& error) {
+        if (error.ShouldRetry()) {
+            return true;
+        }
+
+        if ("TooManyRequests" == error.GetExceptionName()) {
+            return true;
+        }
+
+        return false;
+    }
+
     void RetryOrFinish(const S3Error& error) {
-        if (Attempt++ < Retries && error.ShouldRetry()) {
+        if (Attempt++ < Retries && ShouldRetry(error)) {
             Delay = Min(Delay * Attempt, TDuration::Minutes(10));
             const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
 

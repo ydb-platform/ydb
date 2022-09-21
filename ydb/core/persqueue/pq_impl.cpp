@@ -243,7 +243,8 @@ private:
 };
 
 
-TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, const NKikimrClient::TPersQueueRequest& request, const TActorContext&ctx)
+TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, const NKikimrClient::TPersQueueRequest& request,
+                         const TActorContext& ctx)
 {
     return ctx.Register(new TReadProxy(sender, tablet, request));
 }
@@ -495,9 +496,9 @@ private:
         for (auto& r: Results) mx = Max<ui32>(mx, r.second.size());
 
         HTML(str) {
-            H2() {str << "PersQueue Tablet";}
-            H3() {str << "Topic: " << TopicName;}
-            H4() {str << "inflight: " << Inflight;}
+            TAG(TH2) {str << "PersQueue Tablet";}
+            TAG(TH3) {str << "Topic: " << TopicName;}
+            TAG(TH4) {str << "inflight: " << Inflight;}
             UL_CLASS("nav nav-tabs") {
                 LI_CLASS("active") {
                     str << "<a href=\"#main\" data-toggle=\"tab\">main</a>";
@@ -530,7 +531,7 @@ private:
                     str << s;
                 }
             }
-            H3() {str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";}
+            TAG(TH3) {str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";}
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
@@ -605,8 +606,6 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 
     // in order to answer only after all parts are ready to work
     Y_VERIFY(ConfigInited && PartitionsInited == Partitions.size());
-
-    MeteringSink.MayFlushForcibly(ctx.Now());
 
     Config = NewConfig;
 
@@ -824,33 +823,57 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
     const auto streamPath = Config.GetTopicPath();
 
     auto& pqConfig = AppData(ctx)->PQConfig;
-    if (pqConfig.HasBillingMeteringConfig() && pqConfig.GetBillingMeteringConfig().GetEnabled()) {
-        TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1, EMeteringJson::ResourcesReservedV1};
-        ui64 storageLimitBytes{Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
-            Config.GetPartitionConfig().GetLifetimeSeconds()};
-
-        if (Config.GetPartitionConfig().HasStorageLimitBytes()) {
-            storageLimitBytes = Config.GetPartitionConfig().GetStorageLimitBytes();
-            whichToFlush = TSet<EMeteringJson>{EMeteringJson::PutEventsV1,
-                                               EMeteringJson::ThroughputV1,
-                                               EMeteringJson::StorageV1};
-        }
-
-        MeteringSink.Create(ctx.Now(), {
-                .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
-                .TabletId       = ToString(TabletID()),
-                .YcCloudId      = Config.GetYcCloudId(),
-                .YcFolderId     = Config.GetYcFolderId(),
-                .YdbDatabaseId  = Config.GetYdbDatabaseId(),
-                .StreamName     = streamName,
-                .ResourceId     = streamPath,
-                .PartitionsSize = Config.PartitionsSize(),
-                .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
-                .ReservedSpace  = storageLimitBytes,
-                .ConsumersThroughput = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
-                                       Config.ReadRulesSize(),
-            }, whichToFlush, std::bind(NMetering::SendMeteringJson, ctx, std::placeholders::_1));
+    if (!pqConfig.GetBillingMeteringConfig().GetEnabled()) {
+        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " disable metering"
+            << ": reason# " << "billing is not enabled in BillingMeteringConfig");
+        return;
     }
+
+    TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1, EMeteringJson::ResourcesReservedV1};
+    ui64 storageLimitBytes{Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
+        Config.GetPartitionConfig().GetLifetimeSeconds()};
+
+    if (Config.GetPartitionConfig().HasStorageLimitBytes()) {
+        storageLimitBytes = Config.GetPartitionConfig().GetStorageLimitBytes();
+        whichToFlush = TSet<EMeteringJson>{EMeteringJson::PutEventsV1,
+                                           EMeteringJson::ThroughputV1,
+                                           EMeteringJson::StorageV1};
+    }
+
+    switch (Config.GetMeteringMode()) {
+    case NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS:
+        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " metering mode METERING_MODE_REQUEST_UNITS");
+        whichToFlush = TSet<EMeteringJson>{EMeteringJson::UsedStorageV1};
+        break;
+
+    default:
+        break;
+    }
+
+    auto countReadRulesWithPricing = [&](const TActorContext& ctx, const auto& config) {
+        ui32 result = 0;
+        for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
+            TString rrServiceType = config.ReadRuleServiceTypesSize() <= i ? "" : config.GetReadRuleServiceTypes(i);
+            if (rrServiceType.empty() || rrServiceType == AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName())
+                ++result;
+        }
+        return result;
+    };
+
+
+    MeteringSink.Create(ctx.Now(), {
+            .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
+            .TabletId       = ToString(TabletID()),
+            .YcCloudId      = Config.GetYcCloudId(),
+            .YcFolderId     = Config.GetYcFolderId(),
+            .YdbDatabaseId  = Config.GetYdbDatabaseId(),
+            .StreamName     = streamName,
+            .ResourceId     = streamPath,
+            .PartitionsSize = Config.PartitionsSize(),
+            .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
+            .ReservedSpace  = storageLimitBytes,
+            .ConsumersCount = countReadRulesWithPricing(ctx, Config),
+        }, whichToFlush, std::bind(NMetering::SendMeteringJson, ctx, std::placeholders::_1));
 }
 
 void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status)
@@ -917,6 +940,11 @@ void TPersQueue::SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters&
     Counters->Simple()[COUNTER_PQ_TABLET_CACHED_ON_READ] = cacheCounters.CachedOnRead;
     Counters->Simple()[COUNTER_PQ_TABLET_CACHED_ON_WRATE] = cacheCounters.CachedOnWrite;
     Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
+}
+
+void TPersQueue::Handle(TEvPQ::TEvMetering::TPtr& ev, const TActorContext&)
+{
+    MeteringSink.IncreaseQuantity(ev->Get()->Type, ev->Get()->Quantity);
 }
 
 
@@ -1492,8 +1520,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
 {
     Y_VERIFY(req.CmdWriteSize());
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
-    MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1,
-                                  req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
+    if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
+        MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1, req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
+    }
 
     TVector <TEvPQ::TEvWrite::TMsg> msgs;
 
@@ -1611,7 +1640,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
                     totalParts, totalSize, createTimestampMs, receiveTimestampMs,
                     disableDeduplication, writeTimestampMs, data, uncompressedSize,
-                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation()
+                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation(),
+                    cmd.GetIgnoreQuotaDeadline()
                 });
                 partNo++;
                 uncompressedSize = 0;
@@ -1630,7 +1660,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 static_cast<ui32>(cmd.HasTotalSize() ? cmd.GetTotalSize() : cmd.GetData().Size()),
                 createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, cmd.GetData(),
                 cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(),
-                cmd.GetExternalOperation()
+                cmd.GetExternalOperation(), cmd.GetIgnoreQuotaDeadline()
             });
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message topic: " << TopicConverter->GetClientsideName() <<
@@ -2134,6 +2164,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
+        HFuncTraced(TEvPQ::TEvMetering, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);
         HFuncTraced(TEvPQ::TEvTabletCacheCounters, Handle);

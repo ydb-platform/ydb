@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(util)
 
 add_library(lib-ydb_cli-dump)
 target_link_libraries(lib-ydb_cli-dump PUBLIC

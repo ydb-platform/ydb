@@ -31,7 +31,6 @@ class TQueueLeader : public TActorBootstrapped<TQueueLeader> {
 
 public:
     TQueueLeader(TString userName, TString queueName, TString folderId, TString rootUrl, TIntrusivePtr<TQueueCounters> counters, TIntrusivePtr<TUserCounters> userCounters, const TActorId& schemeCache, const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser);
-    ~TQueueLeader();
 
     void Bootstrap();
 
@@ -65,7 +64,6 @@ private:
     void HandleQueuePurgedNotification(TSqsEvents::TEvQueuePurgedNotification::TPtr& ev);
     void HandleGetRuntimeQueueAttributesWhileIniting(TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr& ev);
     void HandleGetRuntimeQueueAttributesWhileWorking(TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr& ev);
-    void HandleMigrationDone(TSqsEvents::TEvMigrationDone::TPtr& ev);
     void HandleDeadLetterQueueNotification(TSqsEvents::TEvDeadLetterQueueNotification::TPtr& ev);
 
     void BecomeWorking();

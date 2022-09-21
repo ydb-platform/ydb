@@ -12,6 +12,15 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+void SetEnableMoveIndex(TTestActorRuntime &runtime, TTestEnv&, ui64 schemeShard, bool value) {
+    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+
+    NKikimrConfig::TFeatureFlags features;
+    features.SetEnableMoveIndex(value);
+    *request->Record.MutableConfig()->MutableFeatureFlags() = features;
+    SetConfig(runtime, schemeShard, std::move(request));
+}
+
 Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     Y_UNIT_TEST(Boot) {
         TTestBasicRuntime runtime;
@@ -766,6 +775,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "MovedSync", false, {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+
+        SetEnableMoveIndex(runtime, env, TTestTxConfig::SchemeShard, true);
+
         TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "MovedSync", false);
         env.TestWaitNotification(runtime, txId);
 
@@ -799,7 +813,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true));
+                     .EnableAsyncIndexes(true)
+                     .EnableMoveIndex(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -866,7 +881,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true));
+                     .EnableAsyncIndexes(true)
+                     .EnableMoveIndex(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -933,7 +949,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true));
+                     .EnableAsyncIndexes(true)
+                     .EnableMoveIndex(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

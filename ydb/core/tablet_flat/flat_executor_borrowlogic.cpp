@@ -527,7 +527,7 @@ void TExecutorBorrowLogic::RestoreBorrowedInfo(const TLogoBlobID &blobId, const 
 
 void TExecutorBorrowLogic::OutputHtml(IOutputStream &out) {
     HTML(out) {
-        H4() {out << "Borrowed parts";}
+        TAG(TH4) {out << "Borrowed parts";}
         PRE() {
             for (const auto &xpair : BorrowedInfo) {
                 if (xpair.second.BorrowInfo.FullBorrow) {
@@ -539,7 +539,7 @@ void TExecutorBorrowLogic::OutputHtml(IOutputStream &out) {
             }
         }
 
-        H4() {out << "Loaned parts";}
+        TAG(TH4) {out << "Loaned parts";}
         PRE() {
             for (const auto &xpair : BorrowedInfo) {
                 if (xpair.second.LoanInfo.Lender)

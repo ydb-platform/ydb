@@ -8,7 +8,6 @@
 #include <ydb/core/ymq/actor/events.h>
 #include <ydb/core/ymq/actor/log.h>
 #include <ydb/core/ymq/actor/serviceid.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/secure_protobuf_printer.h>
@@ -123,12 +122,10 @@ THttpRequest::THttpRequest(TAsyncHttpServer* p)
     : Parent_(p)
 {
     Parent_->UpdateConnectionsCountCounter();
-    DebugInfo->UnparsedHttpRequests.emplace(this);
 }
 
 THttpRequest::~THttpRequest() {
     Parent_->UpdateConnectionsCountCounter();
-    DebugInfo->EraseHttpRequest(RequestId_, this);
 }
 
 void THttpRequest::SendResponse(const TSqsHttpResponse& r) {
@@ -957,8 +954,6 @@ void THttpRequest::GenerateRequestId(const TString& sourceReqId) {
     }
 
     RequestId_ = std::move(builder);
-
-    DebugInfo->MoveToParsedHttpRequests(RequestId_, this);
 }
 
 THttpActionCounters* THttpRequest::GetActionCounters() const {
@@ -987,18 +982,15 @@ bool THttpRequest::SetupPing(const TReplyParams& params) {
 TAsyncHttpServer::TAsyncHttpServer(const NKikimrConfig::TSqsConfig& config)
     : THttpServer(this, MakeHttpServerOptions(config))
     , Config(config)
-{
-    DebugInfo->HttpServer = this;
-}
+{}
 
 TAsyncHttpServer::~TAsyncHttpServer() {
     Stop();
-    DebugInfo->HttpServer = nullptr;
 }
 
 void TAsyncHttpServer::Initialize(
-        NActors::TActorSystem* as, TIntrusivePtr<NMonitoring::TDynamicCounters> sqsCounters,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters, ui32 poolId
+        NActors::TActorSystem* as, TIntrusivePtr<::NMonitoring::TDynamicCounters> sqsCounters,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters, ui32 poolId
 ) {
     ActorSystem_ = as;
     HttpCounters_ = new THttpCounters(Config, sqsCounters->GetSubgroup("subsystem", "http"));

@@ -1234,7 +1234,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto part = it.ReadNext().GetValueSync();
 
         UNIT_ASSERT_EQUAL_C(part.GetStatus(), EStatus::PRECONDITION_FAILED, part.GetStatus());
-        UNIT_ASSERT_STRINGS_EQUAL(part.GetIssues().back().GetSubIssues().back()->Message, "Requested too many execution units: 12");
+        part.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(HasIssue(part.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+            [](const NYql::TIssue& issue) {
+                return issue.Message.Contains("Requested too many execution units");
+            }));
 
         part = it.ReadNext().GetValueSync();
         UNIT_ASSERT(part.EOS());
@@ -1680,11 +1684,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(SecondaryIndex, UseSessionActor) {
-        auto settings = TKikimrSettings()
-            .SetEnableKqpSessionActor(UseSessionActor)
-            .SetEnableKqpScanQueryStreamLookup(true);
-
-        TKikimrRunner kikimr(settings);
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1967,11 +1967,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(StreamLookup, UseSessionActor) {
-        auto settings = TKikimrSettings()
-            .SetEnableKqpSessionActor(UseSessionActor)
-            .SetEnableKqpScanQueryStreamLookup(true);
-
-        TKikimrRunner kikimr(settings);
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 
@@ -2000,11 +1996,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(StreamLookupByPkPrefix, UseSessionActor) {
-        auto settings = TKikimrSettings()
-            .SetEnableKqpSessionActor(UseSessionActor)
-            .SetEnableKqpScanQueryStreamLookup(true);
-
-        TKikimrRunner kikimr(settings);
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 
@@ -2142,7 +2134,76 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             PRAGMA kikimr.OptEnablePredicateExtract = "false";
             SELECT Value FROM `/Root/Table` WHERE Key IN AsList(1, 2, 3);
         )");
+    }
 
+    Y_UNIT_TEST_TWIN(LimitOverSecondaryIndexRead, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session);
+
+        TStreamExecScanQuerySettings querySettings;
+        querySettings.Explain(true);
+
+        auto itIndex = db.StreamExecuteScanQuery(R"(
+            SELECT *
+            FROM `/Root/SecondaryComplexKeys` VIEW Index
+            WHERE Fk1 == 1
+            LIMIT 2;
+        )", querySettings).GetValueSync();
+
+        UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+
+        auto res = CollectStreamResult(itIndex);
+        UNIT_ASSERT(res.PlanJson);
+
+        Cerr << *res.PlanJson;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+        auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        UNIT_ASSERT(indexRead.IsDefined());
+        auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
+        UNIT_ASSERT(indexTable.IsDefined());
+        auto limit = FindPlanNodeByKv(indexRead, "Limit", "2");
+        UNIT_ASSERT(limit.IsDefined());
+    }
+
+    Y_UNIT_TEST_TWIN(TopSortOverSecondaryIndexRead, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session);
+
+        TStreamExecScanQuerySettings querySettings;
+        querySettings.Explain(true);
+
+        auto itIndex = db.StreamExecuteScanQuery(R"(
+            SELECT *
+            FROM `/Root/SecondaryComplexKeys` VIEW Index
+            WHERE Fk1 == 1
+            ORDER BY Fk1 LIMIT 2;
+        )", querySettings).GetValueSync();
+
+        UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+
+        auto res = CollectStreamResult(itIndex);
+        UNIT_ASSERT(res.PlanJson);
+
+        Cerr << *res.PlanJson;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+        auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        UNIT_ASSERT(indexRead.IsDefined());
+        auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
+        UNIT_ASSERT(indexTable.IsDefined());
+        auto limit = FindPlanNodeByKv(indexRead, "Limit", "2");
+        UNIT_ASSERT(limit.IsDefined());
     }
 }
 

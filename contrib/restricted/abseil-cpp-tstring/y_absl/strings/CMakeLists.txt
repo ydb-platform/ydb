@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(cord)
+add_subdirectory(internal)
 
 add_library(yabseil-cpp-tstring-y_absl-strings)
 target_compile_options(yabseil-cpp-tstring-y_absl-strings PRIVATE

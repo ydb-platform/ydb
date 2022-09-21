@@ -9,7 +9,7 @@
 namespace NKikimr::NHttpProxy {
 
     struct TMetricsSettings {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
         //TODO: TTL
     };
 

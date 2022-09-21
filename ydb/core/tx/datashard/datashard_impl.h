@@ -1460,6 +1460,7 @@ public:
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
+    void SuspendChangeSender(const TActorContext& ctx);
     const TActorId& GetChangeSender() const { return OutChangeSender; }
     bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records);
 
@@ -2221,6 +2222,7 @@ private:
     THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
     ui64 ChangesQueueBytes = 0;
     TActorId OutChangeSender;
+    bool OutChangeSenderSuspended = false;
 
     // in
     THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id

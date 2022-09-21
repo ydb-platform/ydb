@@ -40,9 +40,11 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableNotNullColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableOlapSchemaOperations, std::nullopt);
         OPTION(std::optional<bool>, EnableProtoSourceIdInfo, std::nullopt);
+        OPTION(std::optional<bool>, EnablePqBilling, std::nullopt);
         OPTION(std::optional<bool>, EnableBackgroundCompaction, std::nullopt);
         OPTION(std::optional<bool>, DisableStatsBatching, std::nullopt);
         OPTION(THashSet<TString>, SystemBackupSIDs, {});
+        OPTION(std::optional<bool>, EnableMoveIndex, std::nullopt);
 
         #undef OPTION
     };

@@ -62,7 +62,7 @@ TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId nextId, const TTx
 
         TString explain;
         if (!NTableIndex::IsCompatibleIndex(baseTableColumns, indexKeys, explain)) {
-            return {CreateReject(nextId,  NKikimrScheme::EStatus::StatusInvalidParameter, explain)};
+            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, explain)};
         }
 
         NTableIndex::TTableColumns impTableColumns = NTableIndex::CalcTableImplDescription(baseTableColumns, indexKeys);

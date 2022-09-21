@@ -153,6 +153,7 @@ grpc_config:
   - "export"
   - "import"
   - "yq"
+  - "keyvalue"
 feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true

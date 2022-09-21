@@ -1,6 +1,8 @@
+#include <ydb/core/metering/metering.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <util/string/printf.h>
 
 using namespace NKikimr;
@@ -141,6 +143,29 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             PartitionPerTablet: 1
             PQTabletConfig: { PartitionConfig { LifetimeSeconds: 3600 } }
         )", {NKikimrScheme::StatusNameConflict});
+    }
+
+    Y_UNIT_TEST(DisableProtoSourceIdInfo) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(false));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
     }
 
     Y_UNIT_TEST(CreateStream) {
@@ -532,6 +557,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         limits.MaxTableCdcStreams = 2;
         SetSchemeshardSchemaLimits(runtime, limits);
 
+        ui32 nStreams = 0;
+
         for (ui32 i = 0; i <= limits.MaxTableCdcStreams; ++i) {
             const auto status = i < limits.MaxTableCdcStreams
                 ? NKikimrScheme::StatusAccepted
@@ -546,6 +573,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                 }
             )", i), {status});
             env.TestWaitNotification(runtime, txId);
+
+            if (status == NKikimrScheme::StatusAccepted) {
+                nStreams++;
+            }
         }
 
         limits.MaxChildrenInDir = limits.MaxTableCdcStreams + 1 + 1 /* for index */;
@@ -554,6 +585,30 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         for (ui32 i = limits.MaxTableCdcStreams; i <= limits.MaxChildrenInDir; ++i) {
             const auto status = i < limits.MaxChildrenInDir
+                ? NKikimrScheme::StatusAccepted
+                : NKikimrScheme::StatusResourceExhausted;
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%u"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+            )", i), {status});
+            env.TestWaitNotification(runtime, txId);
+
+            if (status == NKikimrScheme::StatusAccepted) {
+                nStreams++;
+            }
+        }
+
+        limits = TSchemeLimits();
+        limits.MaxPQPartitions = 3;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        for (ui32 i = nStreams; i <= limits.MaxPQPartitions; ++i) {
+            const auto status = i < limits.MaxPQPartitions
                 ? NKikimrScheme::StatusAccepted
                 : NKikimrScheme::StatusResourceExhausted;
 
@@ -600,6 +655,142 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamName: "Stream"
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    void Metering(bool serverless) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnablePqBilling(serverless));
+        ui64 txId = 100;
+
+        // create shared db
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Shared"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Shared"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            StoragePools {
+              Name: "pool-2"
+              Kind: "pool-kind-2"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // create serverless db
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "Serverless"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: 2
+            }
+        )", TTestTxConfig::SchemeShard));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Serverless"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString dbName;
+        if (serverless) {
+            dbName = "/MyRoot/Serverless";
+        } else {
+            dbName = "/MyRoot/Shared";
+        }
+
+        ui64 schemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, dbName), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&schemeShard)
+        });
+
+        UNIT_ASSERT(schemeShard != 0 && schemeShard != TTestTxConfig::SchemeShard);
+
+        TestCreateTable(runtime, schemeShard, ++txId, dbName, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_NOTICE);
+        TVector<TString> meteringRecords;
+        runtime.SetObserverFunc([&meteringRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            meteringRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestCreateCdcStream(runtime, schemeShard, ++txId, dbName, R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+
+        for (int i = 0; i < 10; ++i) {
+            env.SimulateSleep(runtime, TDuration::Seconds(10));
+        }
+
+        for (const auto& rec : meteringRecords) {
+            Cerr << "GOT METERING: " << rec << "\n";
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(meteringRecords.size(), (serverless ? 3 : 0));
+
+        if (!meteringRecords) {
+            return;
+        }
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(meteringRecords[0], &json, true);
+        auto& map = json.GetMap();
+        UNIT_ASSERT(map.contains("schema"));
+        UNIT_ASSERT(map.contains("resource_id"));
+        UNIT_ASSERT(map.contains("tags"));
+        UNIT_ASSERT(map.find("tags")->second.GetMap().contains("ydb_size"));
+        UNIT_ASSERT_VALUES_EQUAL(map.find("schema")->second.GetString(), "ydb.serverless.v1");
+        UNIT_ASSERT_VALUES_EQUAL(map.find("resource_id")->second.GetString(), Sprintf("%s/Table/Stream/streamImpl", dbName.c_str()));
+        UNIT_ASSERT_VALUES_EQUAL(map.find("tags")->second.GetMap().find("ydb_size")->second.GetInteger(), 0);
+    }
+
+    Y_UNIT_TEST(MeteringServerless) {
+        Metering(true);
+    }
+
+    Y_UNIT_TEST(MeteringDedicated) {
+        Metering(false);
     }
 
 } // TCdcStreamTests

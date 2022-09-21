@@ -28,8 +28,8 @@
 #include <stdio.h>
 
 namespace NActors {
-    using TDynamicCountersPtr = TIntrusivePtr<NMonitoring::TDynamicCounters>;
-    using TDynamicCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+    using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;
+    using TDynamicCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     namespace {
 

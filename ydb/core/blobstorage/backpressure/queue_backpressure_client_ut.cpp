@@ -70,12 +70,12 @@ public:
 class TProxyActor : public TActorBootstrapped<TProxyActor> {
     const TIntrusivePtr<TBlobStorageGroupInfo> Info;
     const TVDiskID VDiskId;
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     const TActorId QueueActorId;
 
 public:
     TProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, const TVDiskID& vdiskId,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
             const TActorId& queueActorId)
         : Info(std::move(info))
         , VDiskId(vdiskId)
@@ -121,7 +121,7 @@ public:
 
 class TQueueTestRuntime {
     TTempDir TempDir;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     std::unique_ptr<TActorSystem> ActorSystem;
     TString Path;
@@ -141,7 +141,7 @@ class TQueueTestRuntime {
 
 public:
     TQueueTestRuntime(TFilterActor::TFilterFunc&& func) {
-        Counters.Reset(new NMonitoring::TDynamicCounters);
+        Counters.Reset(new ::NMonitoring::TDynamicCounters);
 
         auto setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 1;

@@ -9,8 +9,8 @@ namespace NKikimr {
 
 class TSharedQuota : public TThrRefBase {
 public:
-    TSharedQuota(NMonitoring::TDynamicCounters::TCounterPtr usedCounter,
-                 NMonitoring::TDynamicCounters::TCounterPtr sizeCounter,
+    TSharedQuota(::NMonitoring::TDynamicCounters::TCounterPtr usedCounter,
+                 ::NMonitoring::TDynamicCounters::TCounterPtr sizeCounter,
                  ui64 quota = 0)
         : Quota(quota)
         , FreeQuota(Quota)
@@ -68,8 +68,8 @@ public:
 private:
     volatile ui64 Quota;
     volatile i64 FreeQuota;
-    NMonitoring::TDynamicCounters::TCounterPtr UsedCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr SizeCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UsedCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SizeCounter;
 };
 
 using TSharedQuotaPtr = TIntrusivePtr<TSharedQuota>;

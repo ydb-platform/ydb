@@ -145,6 +145,15 @@ namespace NTest {
             return check.To(CurrentStep()), check;
         }
 
+        TCheckIter IterData(ui32 table) noexcept
+        {
+            DoBegin(false), RowSchemeFor(table);
+
+            TCheckIter check{ *Base, { nullptr, 0, true }, table, Scheme, ReadVersion, ENext::Data };
+
+            return check.To(CurrentStep()), check;
+        }
+
         TCheckSelect Select(ui32 table, bool erased = true) noexcept
         {
             DoBegin(false), RowSchemeFor(table);

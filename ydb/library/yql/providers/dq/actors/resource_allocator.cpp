@@ -48,7 +48,7 @@ public:
         ui32 workerCount,
         const TString& traceId,
         const TDqConfiguration::TPtr settings,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TVector<NYql::NDqProto::TDqTask>& tasks,
         const TString& computeActorType)
         : TRichActor<TResourceAllocator>(&TResourceAllocator::Handle)
@@ -320,7 +320,7 @@ private:
     const TDqConfiguration::TPtr Settings;
     int NetworkRetries;
     TDuration Timeout;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TDynamicCounters::TCounterPtr RetryCounter;
 
     TCounters QueryStat;
@@ -336,7 +336,7 @@ NActors::IActor* CreateResourceAllocator(
     ui32 size,
     const TString& traceId,
     const TDqConfiguration::TPtr& settings,
-    const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     const TVector<NYql::NDqProto::TDqTask>& tasks,
     const TString& computeActorType)
 {

@@ -71,7 +71,7 @@ private:
     THashMap<ui64, TActorId> ShardPipes;    // TabletId -> PipeClient for small blob read requests
     THashMap<ui64, THashSet<ui64>> InFlightTabletRequests;  // TabletId -> list to read cookies
 
-    using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+    using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
     const TCounterPtr SizeBytes;
     const TCounterPtr SizeBlobs;
     const TCounterPtr Hits;
@@ -95,7 +95,7 @@ public:
     }
 
 public:
-    explicit TBlobCache(ui64 maxSize, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+    explicit TBlobCache(ui64 maxSize, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : TActorBootstrapped<TBlobCache>()
         , Cache(SIZE_MAX)
         , MaxCacheDataSize(maxSize, 0, 1ull << 40)
@@ -616,7 +616,7 @@ private:
     }
 };
 
-NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TBlobCache(maxBytes, counters);
 }
 

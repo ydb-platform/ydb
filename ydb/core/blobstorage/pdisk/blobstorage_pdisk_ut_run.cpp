@@ -25,7 +25,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
     appData.IoContextFactory = ioContext.get();
 
     THolder<TActorSystem> actorSystem1;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> mainCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> mainCounters;
     THolder<NActors::TMon> monitoring;
 
     TAtomic doneCounter = 0;
@@ -38,7 +38,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
     }
 
     try {
-        mainCounters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
+        mainCounters = TIntrusivePtr<::NMonitoring::TDynamicCounters>(new ::NMonitoring::TDynamicCounters());
 
         testIds.resize(runCfg.Instances);
 
@@ -100,7 +100,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         AtomicSet(doneCounter, 0);
 
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters());
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
         /////////////////////// LOGGER ///////////////////////////////////////////////
         GetServiceCounters(counters, "utils");
 
@@ -167,10 +167,10 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
             doneCount = AtomicGet(doneCounter);
         }
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> pDiskCounters =
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> pDiskCounters =
                 GetServiceCounters(mainCounters, "pdisks")->GetSubgroup(
                         "pdisk", Sprintf("%09" PRIu32, (ui32)pDiskConfig->PDiskId));
-        TIntrusivePtr<NMonitoring::TDynamicCounters> deviceGroup = pDiskCounters->GetSubgroup("subsystem", "device");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> deviceGroup = pDiskCounters->GetSubgroup("subsystem", "device");
 
         TStringStream errorStr;
         errorStr << "test timeout"

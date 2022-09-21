@@ -5357,7 +5357,7 @@ Y_UNIT_TEST(LocksFromAnotherTenants) {
         TString query = Sprintf("UPSERT INTO `Root/%s/table` (Key, Value) SELECT Key, Value FROM `Root/%s/table`;", second_tenant_name.c_str(), first_tenant_name.c_str());
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::CANCELLED,
                             "Status: " << result.GetStatus()
                                        << " Issues: " << result.GetIssues().ToString());
     }

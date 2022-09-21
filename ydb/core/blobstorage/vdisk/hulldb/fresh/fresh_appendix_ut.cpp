@@ -11,7 +11,7 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TFreshAppendixTest) {
 
-        static NMonitoring::TDynamicCounters DynCounters;
+        static ::NMonitoring::TDynamicCounters DynCounters;
 
         std::shared_ptr<TFreshAppendix<int, int>> CreateAppendix(const TVector<int> &v) {
             auto group = DynCounters.GetSubgroup("subsystem", "memhull");

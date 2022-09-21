@@ -8,38 +8,23 @@
 
 #include <util/generic/hash_set.h>
 
+#include <ydb/core/grpc_services/base/base_service.h>
+
+
 namespace NKikimr {
 namespace NKesus {
 
 class TKesusGRpcService
-    : public NGrpc::TGrpcServiceBase<Ydb::Coordination::V1::CoordinationService>
+    : public ::NKikimr::NGRpcService::TGrpcServiceBase<Ydb::Coordination::V1::CoordinationService>
 {
     class TContextBase;
     class TSessionContext;
 
 public:
-    TKesusGRpcService(
-        NActors::TActorSystem* actorSystem,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-        NActors::TActorId id);
-    ~TKesusGRpcService();
-
-    void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
-
-    bool IncRequest();
-    void DecRequest();
+    using ::NKikimr::NGRpcService::TGrpcServiceBase<Ydb::Coordination::V1::CoordinationService>::TGrpcServiceBase;
 
 private:
     void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
-
-private:
-    NActors::TActorSystem* ActorSystem;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    NActors::TActorId GRpcRequestProxyId;
-
-    grpc::ServerCompletionQueue* CQ = nullptr;
-    NGrpc::TGlobalLimiter* Limiter = nullptr;
 };
 
 }

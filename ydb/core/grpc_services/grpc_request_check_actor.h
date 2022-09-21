@@ -145,6 +145,14 @@ public:
                 }
             );
 
+        // Just set RlPath
+        static NRpcService::TRlConfig ruRlManualConfig(
+            "serverless_rt_coordination_node_path",
+            "serverless_rt_base_resource_ru",
+                {
+                    // no actions
+                }
+            );
 
         auto rlMode = Request_->Get()->GetRlMode();
         switch (rlMode) {
@@ -156,6 +164,9 @@ public:
                 break;
             case TRateLimiterMode::RuOnProgress:
                 RlConfig = &ruRlProgressConfig;
+                break;
+            case TRateLimiterMode::RuManual:
+                RlConfig = &ruRlManualConfig;
                 break;
             case TRateLimiterMode::Off:
                 break;

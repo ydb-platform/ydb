@@ -8,7 +8,8 @@ from hamcrest import assert_that, equal_to, not_none, greater_than, less_than_or
 
 from ydb.tests.library.sqs.matchers import ReadResponseMatcher, extract_message_ids
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, VISIBILITY_CHANGE_METHOD_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
+from ydb.tests.library.sqs.test_base import VISIBILITY_CHANGE_METHOD_PARAMS, TABLES_FORMAT_PARAMS
 
 
 class SqsFifoMicroBatchTest(KikimrSqsTestBase):
@@ -18,8 +19,9 @@ class SqsFifoMicroBatchTest(KikimrSqsTestBase):
         config_generator.yaml_config['sqs_config']['group_selection_batch_size'] = 2
         return config_generator
 
-    def test_micro_batch_read(self):
-        self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_micro_batch_read(self, tables_format):
+        self._init_with_params(is_fifo=True, tables_format=tables_format)
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         seq_no = 0
         max_number_of_messages = 3
@@ -85,7 +87,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         }
         assert_that(self._get_counter_value(counters, delete_counter_labels, 0), equal_to(1))
 
-    def test_write_and_read_to_different_groups(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_write_and_read_to_different_groups(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         seq_no = 1
         self._create_queue_and_assert(self.queue_name, is_fifo=True)
         message_ids = []
@@ -104,7 +108,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             sorted(received_message_ids), equal_to(sorted(message_ids))
         )
 
-    def test_can_read_from_different_groups(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_can_read_from_different_groups(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         seq_no = 1
         self._create_queue_and_assert(self.queue_name, is_fifo=True)
         message_ids = []
@@ -134,7 +140,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             self.queue_url, 10, visibility_timeout=1000, matcher=ReadResponseMatcher().with_n_messages(0)
         )
 
-    def test_send_and_read_multiple_messages(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_send_and_read_multiple_messages(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         first_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('0'), seq_no=1, group_id='group'
@@ -148,7 +156,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             matcher=ReadResponseMatcher().with_message_ids([first_message_id, ])
         )
 
-    def test_read_dont_stall(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_read_dont_stall(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         pack_size = 5
         first_pack_ids = self._send_messages(
@@ -176,7 +186,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             matcher=ReadResponseMatcher().with_message_ids(third_pack_ids[:1])
         )
 
-    def test_visibility_timeout_works(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_visibility_timeout_works(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         self._create_queue_send_x_messages_read_y_messages(
             self.queue_name, send_count=5, read_count=1, visibility_timeout=10,
             msg_body_template=self._msg_body_template, is_fifo=True, group_id='1'
@@ -193,7 +205,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             )
         )
 
-    def test_delete_message_works(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_delete_message_works(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         self._create_queue_send_x_messages_read_y_messages(
             self.queue_name, send_count=10, read_count=1, visibility_timeout=1,
             msg_body_template=self._msg_body_template, is_fifo=True
@@ -230,7 +244,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             raises(RuntimeError, pattern='InternalFailure')
         )
 
-    def test_write_read_delete_many_groups(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_write_read_delete_many_groups(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         message_ids = {}
         for i in range(10):
@@ -258,7 +274,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         )
         self._read_messages_and_assert(queue_url, 10, matcher=matcher, visibility_timeout=1000)
 
-    def test_queue_attributes(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_queue_attributes(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         attributes = self._sqs_api.get_queue_attributes(queue_url)
         assert_that(attributes, has_items(
@@ -280,7 +298,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         attributes = self._sqs_api.get_queue_attributes(queue_url)
         assert_that(attributes['VisibilityTimeout'], equal_to('2'))
 
-    def test_validates_group_id(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_validates_group_id(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
         def send_caller(group_id):
@@ -299,7 +319,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         check('')
         check(None)  # without
 
-    def test_validates_deduplication_id(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_validates_deduplication_id(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
         def send_caller(deduplication_id):
@@ -318,7 +340,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         check('')
         check(None)  # without
 
-    def test_validates_receive_attempt_id(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_validates_receive_attempt_id(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
         def receive_caller(receive_request_attempt_id):
@@ -336,7 +360,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         check('§')
 
     @pytest.mark.parametrize('content_based', [True, False], ids=['content_based', 'by_deduplication_id'])
-    def test_deduplication(self, content_based):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_deduplication(self, content_based, tables_format):
+        self._init_with_params(tables_format=tables_format)
         attributes = {}
         if content_based:
             attributes['ContentBasedDeduplication'] = 'true'
@@ -377,7 +403,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         self._read_messages_and_assert(queue_url, 10, visibility_timeout=1000, matcher=ReadResponseMatcher().with_n_messages(2), wait_timeout=3)
 
     @pytest.mark.parametrize('after_crutch_batch', [False, True], ids=['standard_mode', 'after_crutch_batch'])
-    def test_receive_attempt_reloads_same_messages(self, after_crutch_batch):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_receive_attempt_reloads_same_messages(self, after_crutch_batch, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
         groups_selection_batch_size = self.config_generator.yaml_config['sqs_config']['group_selection_batch_size']
@@ -414,7 +442,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         assert_that(len(message_set_1 & message_set_3), equal_to(0))
 
     @pytest.mark.parametrize(**VISIBILITY_CHANGE_METHOD_PARAMS)
-    def test_visibility_change_disables_receive_attempt_id(self, delete_message):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_visibility_change_disables_receive_attempt_id(self, delete_message, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         groups_count = 5
         for group_number in range(groups_count):
@@ -438,7 +468,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             message_set_2 = set([res['MessageId'] for res in read_result_2])
             assert_that(len(message_set_1 & message_set_2), equal_to(0))
 
-    def test_crutch_groups_selection_algorithm_selects_second_group_batch(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_crutch_groups_selection_algorithm_selects_second_group_batch(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         groups_selection_batch_size = self.config_generator.yaml_config['sqs_config']['group_selection_batch_size']
         groups_count = groups_selection_batch_size + 50

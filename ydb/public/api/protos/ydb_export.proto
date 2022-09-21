@@ -111,6 +111,9 @@ message ExportToS3Settings {
     // - zstd.
     // - zstd-N, where N is compression level, e.g. zstd-3.
     string compression = 10;
+
+    // Region to use in requests
+    string region = 11;
 }
 
 message ExportToS3Result {

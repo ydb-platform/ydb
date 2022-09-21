@@ -12,7 +12,7 @@ public:
     TImpl(
         std::shared_ptr<TGRpcConnectionsImpl>&& connections,
         const TCommonClientSettings& settings,
-        const NMonitoring::TDynamicCounterPtr& counters)
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : TClientImplCommon(std::move(connections), settings)
         , Counters(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "ClientMetrics"))
         , PingTaskTime(Counters->GetHistogram("PingTaskMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
@@ -141,7 +141,7 @@ public:
         return future;
     }
 private:
-    const NMonitoring::TDynamicCounterPtr Counters;
+    const ::NMonitoring::TDynamicCounterPtr Counters;
     const NMonitoring::THistogramPtr PingTaskTime;
     const NMonitoring::THistogramPtr GetTaskTime;
     const NMonitoring::THistogramPtr WriteTaskResultTime;
@@ -151,7 +151,7 @@ private:
 TPrivateClient::TPrivateClient(
     const TDriver& driver,
     const TCommonClientSettings& settings,
-    const NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : Impl(new TImpl(CreateInternalInterface(driver), settings, counters))
 {}
 

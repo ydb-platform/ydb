@@ -14,7 +14,7 @@
 namespace NKikimr::NGRpcService {
 
 TGRpcPQClusterDiscoveryService::TGRpcPQClusterDiscoveryService(
-        NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id,
+        NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId id,
         const TMaybe<ui64>& requestsInflightLimit
 )
     : ActorSystem_(system)

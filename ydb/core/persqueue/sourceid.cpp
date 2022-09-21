@@ -320,9 +320,12 @@ void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& 
 void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load) {
     auto it = InMemorySourceIds.find(sourceId);
     if (it != InMemorySourceIds.end()) {
-        Y_VERIFY(!load);
-        const auto res = SourceIdsByOffset.erase(std::make_pair(it->second.Offset, sourceId));
-        Y_VERIFY(res == 1);
+        if (!load || it->second.Offset < sourceIdInfo.Offset) {
+            const auto res = SourceIdsByOffset.erase(std::make_pair(it->second.Offset, sourceId));
+            Y_VERIFY(res == 1);
+        } else {
+            return;
+        }
     }
 
     const auto offset = sourceIdInfo.Offset;

@@ -116,11 +116,13 @@ public:
         struct TNodeTabletStateCount {
             NKikimrTabletBase::TTabletTypes::EType Type;
             ETabletState State;
+            bool Leader;
             int Count = 1;
             TStackVec<TString> Identifiers;
 
             TNodeTabletStateCount(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings) {
                 Type = info.tablettype();
+                Leader = info.followerid() == 0;
                 if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_STOPPED) {
                     State = ETabletState::Stopped;
                 } else if (info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
@@ -135,7 +137,7 @@ public:
             }
 
             bool operator ==(const TNodeTabletStateCount& o) const {
-                return State == o.State && Type == o.Type;
+                return State == o.State && Type == o.Type && Leader == o.Leader;
             }
         };
 
@@ -438,7 +440,7 @@ public:
     TTabletRequestsState TabletRequests;
 
     TDuration Timeout = TDuration::MilliSeconds(10000);
-
+    bool IgnoreServerlessDatabases = true;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     void Bootstrap() {
@@ -460,6 +462,7 @@ public:
             TabletRequests.TabletStates[ConsoleId].Type = TTabletTypes::Console;
             if (FilterDatabase) {
                 if (FilterDatabase != DomainPath) {
+                    IgnoreServerlessDatabases = false; // we don't ignore sl database if it was exactly specified
                     RequestTenantStatus(FilterDatabase);
                 } else {
                     TTenantInfo& tenant = TenantByPath[DomainPath];
@@ -951,9 +954,13 @@ public:
             Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
             operation.result().UnpackTo(&getTenantStatusResult);
             TString path = getTenantStatusResult.path();
-            DatabaseStatusByPath[path] = std::move(getTenantStatusResult);
-            DatabaseState[path];
-            RequestSchemeCacheNavigate(path);
+            if (!getTenantStatusResult.has_serverless_resources() || !IgnoreServerlessDatabases) {
+                DatabaseStatusByPath[path] = std::move(getTenantStatusResult);
+                DatabaseState[path];
+                RequestSchemeCacheNavigate(path);
+            } else {
+                DatabaseState.erase(path);
+            }
         }
         RequestDone("TEvGetTenantStatusResponse");
     }
@@ -1339,7 +1346,11 @@ public:
                             break;
                         case TNodeTabletState::ETabletState::Dead:
                             computeTabletStatus.set_state("DEAD");
-                            tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are dead", "tablet-state");
+                            if (count.Leader) {
+                                tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are dead", "tablet-state");
+                            } else {
+                                tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Followers are dead", "tablet-state");
+                            }
                             break;
                     }
                     computeTabletStatus.set_overall(tabletContext.GetOverallStatus());
@@ -2135,6 +2146,7 @@ public:
                 .RelPath = "status",
                 .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
                 .ActorId = SelfId(),
+                .UseAuth = false,
             });
         }
         Become(&THealthCheckService::StateWork);

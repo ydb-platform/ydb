@@ -189,68 +189,157 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
         TestGetUpdatesFromHttpServer(ConvertToJson(netData), netData, TNetClassifierUpdaterConfig::NETBOX);
     }
 
-    Y_UNIT_TEST(TestFiltrationByNetboxTags) {
-    const TString netboxResponce = "{   \
-        \"count\": 5,                   \
-        \"results\": [                  \
-            {\"prefix\": \"5.45.192.0/18\", \"tags\": [\"asd\", \"zxcv\"]},     \
-            {\"prefix\": \"5.255.192.0/18\", \"tags\": [\"zxcv\", \"asd\"]},    \
-            {\"prefix\": \"37.9.64.0/18\", \"tags\": [\"zxcv\"]},               \
-            {\"prefix\": \"95.108.128.0/17\", \"tags\": [\"asd\"]},             \
-            {\"prefix\": \"172.24.0.0/13\", \"tags\": [\"qwerty\"]}            \
-        ]}";
-
+    void RunNetBoxTest(const TString& netboxResponce, const TVector<TString>& tags, const TVector<std::pair<TString, TString>>& expected) {
         auto addMask = [](NKikimrNetClassifier::TNetData& data, const TString& mask, const TString& label) {
             auto& subnet = *data.AddSubnets();
             subnet.SetMask(mask);
             subnet.SetLabel(label);
         };
+        NKikimrNetClassifier::TNetData data;
+        for (auto& net : expected) {
+            addMask(data, net.first, net.second);
+        }
+        TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, tags);
+    }
+    
+    void RunNetBoxCommonTests(const TString& netboxResponce) {
+        RunNetBoxTest(
+            netboxResponce,
+            {},
+            {
+                {"5.45.192.0/18", "asd"},
+                {"5.255.192.0/18", "zxcv"},
+                {"37.9.64.0/18", "zxcv"},
+                {"95.108.128.0/17", "asd"},
+                {"172.24.0.0/13", "qwerty"}
+            }
+        );
+        RunNetBoxTest(
+            netboxResponce,
+            {"asd2", "asd", "zxcv", "qwerty", "faketag"},
+            {
+                {"5.45.192.0/18", "asd"},
+                {"5.255.192.0/18", "zxcv"},
+                {"37.9.64.0/18", "zxcv"},
+                {"95.108.128.0/17", "asd"},
+                {"172.24.0.0/13", "qwerty"}
+            }
+        );
+        RunNetBoxTest(
+            netboxResponce,
+            {"asd", "zxcv"},
+            {
+                {"5.45.192.0/18", "asd"},
+                {"5.255.192.0/18", "zxcv"},
+                {"37.9.64.0/18", "zxcv"},
+                {"95.108.128.0/17", "asd"}
+            }
+        );
+        RunNetBoxTest(
+            netboxResponce,
+            {"zxcv", "asd"},
+            {
+                {"5.45.192.0/18", "asd"},
+                {"5.255.192.0/18", "zxcv"},
+                {"37.9.64.0/18", "zxcv"},
+                {"95.108.128.0/17", "asd"}
+            }
+        );
+        RunNetBoxTest(
+            netboxResponce,
+            {"qwerty"},
+            {
+                {"172.24.0.0/13", "qwerty"}
+            }
+        );
+    }
 
-        {
-            NKikimrNetClassifier::TNetData data;
-            addMask(data, "5.45.192.0/18", "asd");
-            addMask(data, "5.255.192.0/18", "zxcv");
-            addMask(data, "37.9.64.0/18", "zxcv");
-            addMask(data, "95.108.128.0/17", "asd");
-            addMask(data, "172.24.0.0/13", "qwerty");
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX);
-        }
-        {
-            NKikimrNetClassifier::TNetData data;
-            addMask(data, "5.45.192.0/18", "asd");
-            addMask(data, "5.255.192.0/18", "zxcv");
-            addMask(data, "37.9.64.0/18", "zxcv");
-            addMask(data, "95.108.128.0/17", "asd");
-            addMask(data, "172.24.0.0/13", "qwerty");
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"asd", "zxcv", "qwerty", "faketag"});
-        }
-        {
-            NKikimrNetClassifier::TNetData data;
-            addMask(data, "5.45.192.0/18", "asd");
-            addMask(data, "5.255.192.0/18", "zxcv");
-            addMask(data, "37.9.64.0/18", "zxcv");
-            addMask(data, "95.108.128.0/17", "asd");
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"zxcv", "asd"});
-        }
-        {
-            NKikimrNetClassifier::TNetData data;
-            addMask(data, "5.45.192.0/18", "zxcv");
-            addMask(data, "5.255.192.0/18", "zxcv");
-            addMask(data, "37.9.64.0/18", "zxcv");
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"zxcv"});
-        }
-        {
-            NKikimrNetClassifier::TNetData data;
-            addMask(data, "5.45.192.0/18", "asd");
-            addMask(data, "5.255.192.0/18", "asd");
-            addMask(data, "95.108.128.0/17", "asd");
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"asd"});
-        }
-        {
-            NKikimrNetClassifier::TNetData data;
-            addMask(data, "172.24.0.0/13", "qwerty");
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"qwerty"});
-        }
+    void RunTestWithCastomFields(const TString& netboxResponce) {
+        RunNetBoxCommonTests(netboxResponce);
+        RunNetBoxTest(
+            netboxResponce,
+            {"asd"},
+            {
+                {"5.45.192.0/18", "asd"},
+                {"95.108.128.0/17", "asd"}
+            }
+        );
+        RunNetBoxTest(
+            netboxResponce,
+            {"zxcv"},
+            {
+                {"5.255.192.0/18", "zxcv"},
+                {"37.9.64.0/18", "zxcv"}
+            }
+        );
+    }
+    
+    Y_UNIT_TEST(TestFiltrationByNetboxCustomFieldsAndTags) {
+        const TString netboxResponce = R"__(
+            {
+                "count": 5,
+                "results": [
+                    {"prefix": "5.45.192.0/18", "custom_fields": {"owner": "asd"}, "tags": ["asd", "zxcv"]},
+                    {"prefix": "5.255.192.0/18", "custom_fields": {"owner": "zxcv"}, "tags": ["zxcv", "asd"]},
+                    {"prefix": "37.9.64.0/18", "custom_fields": {"owner": "zxcv"}, "tags": ["zxcv"]},
+                    {"prefix": "95.108.128.0/17", "custom_fields": {"owner": "asd"}, "tags": ["asd"]},
+                    {"prefix": "172.24.0.0/13", "custom_fields": {"owner": "qwerty"}, "tags": ["qwerty"]}
+                ]
+            }
+        )__";
+        RunTestWithCastomFields(netboxResponce);
+    }
+    
+    Y_UNIT_TEST(TestFiltrationByNetboxCustomFieldsOnly) {
+        const TString netboxResponce = R"__(
+            {
+                "count": 5,
+                "results": [
+                    {"prefix": "5.45.192.0/18", "custom_fields": {"owner": "asd"}},
+                    {"prefix": "5.255.192.0/18", "custom_fields": {"owner": "zxcv"}},
+                    {"prefix": "37.9.64.0/18", "custom_fields": {"owner": "zxcv"}},
+                    {"prefix": "95.108.128.0/17", "custom_fields": {"owner": "asd"}},
+                    {"prefix": "172.24.0.0/13", "custom_fields": {"owner": "qwerty"}}
+                ]
+            }
+        )__";
+        
+        RunTestWithCastomFields(netboxResponce);
+    }
+
+    Y_UNIT_TEST(TestFiltrationByNetboxTags) {
+        const TString netboxResponce = R"__(
+            {
+                "count": 5,
+                "results": [
+                    {"prefix": "5.45.192.0/18", "tags": ["asd", "zxcv"]},
+                    {"prefix": "5.255.192.0/18", "tags": ["zxcv", "asd"]},
+                    {"prefix": "37.9.64.0/18", "tags": ["zxcv"]},
+                    {"prefix": "95.108.128.0/17", "tags": ["asd"]},
+                    {"prefix": "172.24.0.0/13", "tags": ["qwerty"]}
+                ]
+            }
+        )__";
+        RunNetBoxCommonTests(netboxResponce);
+
+        RunNetBoxTest(
+            netboxResponce,
+            {"asd"},
+            {
+                {"5.45.192.0/18", "asd"},
+                {"5.255.192.0/18", "asd"},
+                {"95.108.128.0/17", "asd"}
+            }
+        );
+        RunNetBoxTest(
+            netboxResponce,
+            {"zxcv"},
+            {
+                {"5.45.192.0/18", "zxcv"},
+                {"5.255.192.0/18", "zxcv"},
+                {"37.9.64.0/18", "zxcv"}
+            }
+        );
     }
 }
 

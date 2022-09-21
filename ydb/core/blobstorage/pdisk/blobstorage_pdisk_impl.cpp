@@ -21,7 +21,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 // Initialization
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
+TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : PDiskId(cfg->PDiskId)
     , Mon(counters, PDiskId, cfg.Get())
     , DriveModel(cfg->DriveModelSeekTimeNs,
@@ -507,19 +507,14 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
         SysLogRecord.LogHeadChunkPreviousNonce = ChunkState[gapEnd->ChunkIdx].PreviousNonce;
         PrintLogChunksInfo("cut tail log");
         return true;
-
     // Case 2: Chunks to be deleted located in the middle of LogChunksList
     } else if (gapStart && gapEnd) {
         Y_VERIFY(KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE);
         IsLogChunksReleaseInflight = true;
         Mon.SplicedLogChunks->Add(chunksToRelease.size());
-        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(*gapStart, *gapEnd, std::move(chunksToRelease));
-
-        auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq));
-        TReqId reqId(AtomicIncrement(ReqCreator.LastReqId));
-        WriteSysLogRestorePoint(flushAction.Release(), reqId, {});
+        completion->Req = THolder<TRequestBase>(ReqCreator.CreateFromArgs<TReleaseChunks>(*gapStart, *gapEnd, std::move(chunksToRelease)));
         PrintLogChunksInfo("log splice");
-        return false;
+        return true;
     } else {
         TStringStream ss;
         ss << "Impossible situation - we have non empty chunksToRelease vector and cannot release them";
@@ -897,7 +892,7 @@ void TPDisk::SendChunkWriteError(TChunkWrite &chunkWrite, const TString &errorRe
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& error, NKikimrProto::EReplyStatus status) {
-    error << " for owner# " << read->Owner << " can't read chunkIdx# " << read->ChunkIdx;
+    error << " for ownerId# " << read->Owner << " can't read chunkIdx# " << read->ChunkIdx;
     Y_VERIFY(status != NKikimrProto::OK);
     LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, error.Str());
 
@@ -1126,8 +1121,11 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
         OnNonceChange(NonceData, req->ReqId, &req->TraceId);
         // Remember who owns the sector, save chunk Nonce in order to be able to continue writing the chunk
         TChunkState &state = ChunkState[chunkIdx];
-        Y_VERIFY_S(state.OwnerId == OwnerUnallocated || state.OwnerId == OwnerUnallocatedTrimmed,
-                "PDiskId# " << PDiskId << " chunkIdx# " << chunkIdx << " state# " << state.ToString());
+        Y_VERIFY_S(state.OwnerId == OwnerUnallocated
+                || state.OwnerId == OwnerUnallocatedTrimmed
+                || state.CommitState == TChunkState::FREE,
+            "PDiskId# " << PDiskId << " chunkIdx# " << chunkIdx << " desired ownerId# " << req->Owner
+                << " state# " << state.ToString());
         state.Nonce = chunkNonce;
         state.CurrentNonce = chunkNonce;
         LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId << " chunkIdx# " << chunkIdx <<
@@ -1661,7 +1659,7 @@ void TPDisk::ForceDeleteChunk(TChunkIdx chunkIdx) {
     switch (state.CommitState) {
     case TChunkState::DATA_ON_QUARANTINE:
         LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                << " chunkIdx# " << chunkIdx << " owned by owner# "  << state.OwnerId
+                << " chunkIdx# " << chunkIdx << " owned by ownerId# "  << state.OwnerId
                 << " is released from quarantine and marked as free at ForceDeleteChunk");
         [[fallthrough]];
     case TChunkState::DATA_RESERVED:
@@ -1685,6 +1683,7 @@ void TPDisk::ForceDeleteChunk(TChunkIdx chunkIdx) {
     }
 }
 
+// Called before logging anything about the kill
 void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEventSender *completionAction) {
     Y_UNUSED(killOwnerRound);
     {
@@ -1701,18 +1700,38 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                             " Line# %" PRIu32 " --CommitedDataChunks# %" PRIi64 " chunkIdx# %" PRIu32 " Marker# BPD84",
                             (ui32)PDiskId, (ui32)__LINE__, (i64)Mon.CommitedDataChunks->Val(), (ui32)i);
                 }
-                if (state.HasAnyOperationsInProgress()) {
+                if (state.CommitState == TChunkState::DATA_ON_QUARANTINE) {
+                    if (!pushedOwnerIntoQuarantine) {
+                        pushedOwnerIntoQuarantine = true;
+                        QuarantineOwners.push_back(owner);
+                        LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
+                                << " push ownerId# " << owner
+                                << " into quarantine as there is a chunk in DATA_ON_QUARANTINE");
+                    }
+                } else if (state.HasAnyOperationsInProgress()
+                        || state.CommitState == TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS
+                        || state.CommitState == TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS
+                        || state.CommitState == TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE
+                        || state.CommitState == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE) {
                     if (state.CommitState == TChunkState::DATA_RESERVED
                             || state.CommitState == TChunkState::DATA_COMMITTED) {
                         state.CommitState = TChunkState::DATA_ON_QUARANTINE;
+                    } else  if (state.CommitState == TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS) {
+                        state.CommitState = TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS;
+                    } else  if (state.CommitState == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE) {
+                        state.CommitState = TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE;
                     }
-                    QuarantineChunks.push_back(i);
+
+                    if (state.CommitState != TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE
+                            && state.CommitState != TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS) {
+                        QuarantineChunks.push_back(i);
+                    }
 
                     if (!pushedOwnerIntoQuarantine) {
                         pushedOwnerIntoQuarantine = true;
                         QuarantineOwners.push_back(owner);
                         LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                                << " push owner# " << owner << " into quarantine");
+                                << " push ownerId# " << owner << " into quarantine");
                     }
                 } else {
                     ForceDeleteChunk(i);
@@ -1722,7 +1741,7 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         if (!pushedOwnerIntoQuarantine) {
             Keeper.RemoveOwner(owner);
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " removed owner# " << owner << " from chunks Keeper");
+                    << " removed ownerId# " << owner << " from chunks Keeper");
         }
 
         TryTrimChunk(false, 0);
@@ -1945,11 +1964,20 @@ void TPDisk::ClearQuarantineChunks() {
         return;
     }
 
+    bool isKillInFlight = (
+        (Mon.YardSlay.Results->Val() != Mon.YardSlay.Requests->Val())
+        && (Mon.Harakiri.Results->Val() != Mon.Harakiri.Requests->Val()));
+
+    if (isKillInFlight) {
+        return;
+    }
+
     TGuard<TMutex> guard(StateMutex);
     {
         const auto it = std::partition(QuarantineChunks.begin(), QuarantineChunks.end(), [&] (TChunkIdx i) {
             return ChunkState[i].HasAnyOperationsInProgress()
-                || ChunkState[i].CommitState == TChunkState::DATA_COMMITTED_ON_QUARANTINE;
+                || ChunkState[i].CommitState == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE
+                || ChunkState[i].CommitState == TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE;
         });
         for (auto delIt = it; delIt != QuarantineChunks.end(); ++delIt) {
             ForceDeleteChunk(*delIt);
@@ -1965,7 +1993,7 @@ void TPDisk::ClearQuarantineChunks() {
         for (auto delIt = it; delIt != QuarantineOwners.end(); ++delIt) {
             Keeper.RemoveOwner(*delIt);
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " removed owner# " << *delIt << " from chunks Keeper through QuarantineOwners");
+                    << " removed ownerId# " << *delIt << " from chunks Keeper through QuarantineOwners");
         }
         QuarantineOwners.erase(it, QuarantineOwners.end());
         *Mon.QuarantineOwners = QuarantineOwners.size();
@@ -2289,7 +2317,7 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
         return;
     }
 
-    err << " error in TLogWrite for owner# " << logWrite->Owner << " ownerRound# " << logWrite->OwnerRound
+    err << " error in TLogWrite for ownerId# " << logWrite->Owner << " ownerRound# " << logWrite->OwnerRound
         << " lsn# " << logWrite->Lsn;
     LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, err.Str());
 
@@ -2330,7 +2358,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
     NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(request, err);
 
     LOG_TRACE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PreprocessRequest " << TypeName(*request)
-            << " from owner# " << request->Owner << " round# " << request->OwnerRound
+            << " from ownerId# " << request->Owner << " round# " << request->OwnerRound
             << " errStatus# " << errStatus);
 
     switch (request->GetType()) {

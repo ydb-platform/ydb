@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(mon)
+add_subdirectory(protos)
 
 add_library(library-cpp-lwtrace)
 target_link_libraries(library-cpp-lwtrace PUBLIC

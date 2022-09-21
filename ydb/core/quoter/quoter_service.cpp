@@ -364,7 +364,7 @@ TInstant TQuoterService::TimeToGranularity(TInstant rawTime) {
 }
 
 void TQuoterService::Bootstrap() {
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters = GetServiceCounters(AppData()->Counters, QUOTER_SERVICE_COUNTER_SENSOR_NAME);
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = GetServiceCounters(AppData()->Counters, QUOTER_SERVICE_COUNTER_SENSOR_NAME);
 
     Counters.ActiveQuoterProxies = counters->GetCounter("ActiveQuoterProxies", false);
     Counters.ActiveProxyResources = counters->GetCounter("ActiveProxyResources", false);

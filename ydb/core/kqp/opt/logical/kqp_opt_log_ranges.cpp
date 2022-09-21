@@ -116,6 +116,19 @@ TKqlKeyRange BuildKeyRangeExpr(const TKeyRange& keyRange, const TKikimrTableDesc
         .Done();
 }
 
+bool IsPointPrefix(const TKeyRange& range) {
+    size_t prefixLen = 0;
+    for (size_t i = 0; i < range.GetColumnRangesCount(); ++i) {
+        if (range.GetColumnRange(i).IsPoint() && i == prefixLen) {
+            prefixLen += 1;
+        }
+        if (range.GetColumnRange(i).IsDefined() && i >= prefixLen) {
+            return false;
+        }
+    }
+    return prefixLen > 0;
+}
+
 TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoFlatMap>()) {
         return node;
@@ -126,7 +139,35 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         return node;
     }
 
+    bool onlyPointRanges = false;
     auto readMatch = MatchRead<TKqlReadTableBase>(flatmap.Input());
+
+    //TODO: remove this branch KIKIMR-15255, KIKIMR-15321
+    if (!readMatch && kqpCtx.IsDataQuery()) {
+        if (auto readRangesMatch = MatchRead<TKqlReadTableRangesBase>(flatmap.Input())) {
+            auto read = readRangesMatch->Read.Cast<TKqlReadTableRangesBase>();
+            if (TCoVoid::Match(read.Ranges().Raw())) {
+                auto key = Build<TKqlKeyInc>(ctx, read.Pos()).Done();
+                readMatch = readRangesMatch;
+                readMatch->Read =
+                    Build<TKqlReadTable>(ctx, read.Pos())
+                        .Settings(read.Settings())
+                        .Table(read.Table())
+                        .Columns(read.Columns())
+                        .Range<TKqlKeyRange>()
+                            .From(key)
+                            .To(key)
+                            .Build()
+                        .Done();
+                onlyPointRanges = true;
+            } else {
+                return node;
+            }
+        } else {
+            return node;
+        }
+    }
+
     if (!readMatch) {
         return node;
     }
@@ -159,7 +200,9 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
 
     auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name) : mainTableDesc;
 
-    YQL_ENSURE(tableDesc.Metadata->Kind != EKikimrTableKind::Olap);
+    if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap) {
+        return node;
+    }
 
     auto row = flatmap.Lambda().Args().Arg(0);
     auto predicate = TExprBase(flatmap.Lambda().Body().Ref().ChildPtr(0));
@@ -178,6 +221,9 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
 
     for (auto& keyRange : lookup.GetKeyRanges()) {
         bool useLookup = false;
+        if (onlyPointRanges && !IsPointPrefix(keyRange)) {
+            return node;
+        }
         if (keyRange.IsEquiRange()) {
             bool isFullKey = keyRange.GetNumDefined() == tableDesc.Metadata->KeyColumnNames.size();
 

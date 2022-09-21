@@ -34,7 +34,7 @@ public:
         const NConfig::TPrivateProxyConfig& privateProxyConfig,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
-        NMonitoring::TDynamicCounterPtr counters,
+        ::NMonitoring::TDynamicCounterPtr counters,
         const NConfig::TTokenAccessorConfig& tokenAccessorConfig)
         : PrivateProxyConfig(privateProxyConfig)
         , TokenAccessorConfig(tokenAccessorConfig)
@@ -157,7 +157,7 @@ private:
     const NConfig::TTokenAccessorConfig TokenAccessorConfig;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
 };
 
 TActorId MakeYqPrivateProxyId() {
@@ -169,7 +169,7 @@ IActor* CreateYqlAnalyticsPrivateProxy(
     const NConfig::TPrivateProxyConfig& privateProxyConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
-    NMonitoring::TDynamicCounterPtr counters,
+    ::NMonitoring::TDynamicCounterPtr counters,
     const NConfig::TTokenAccessorConfig& tokenAccessorConfig) {
     return new TYqlAnalyticsPrivateProxy(privateProxyConfig, timeProvider, randomProvider, counters, tokenAccessorConfig);
 }

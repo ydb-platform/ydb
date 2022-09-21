@@ -48,19 +48,31 @@ private:
 
 struct THttpResponseData {
     NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
-    NJson::TJsonValue ResponseBody;
+    NJson::TJsonValue Body;
     TString ErrorText;
+
+    TString DumpBody(MimeTypes contentType);
+};
+
+struct THttpRequestData {
+    NJson::TJsonValue Body;
+    std::optional<NJson::TJsonValue> Parse(MimeTypes contentType, const TStringBuf& body);
 };
 
 struct THttpRequestContext {
-    THttpRequestContext( const NKikimrConfig::TServerlessProxyConfig& config,
-                        std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider)
-        : ServiceConfig(config)
-        , ServiceAccountCredentialsProvider(serviceAccountCredentialsProvider)
-    {}
+    THttpRequestContext(const NKikimrConfig::TServerlessProxyConfig& config,
+                        NHttp::THttpIncomingRequestPtr request,
+                        NActors::TActorId sender,
+                        NYdb::TDriver* driver,
+                        std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider);
+    const NKikimrConfig::TServerlessProxyConfig& ServiceConfig;
+    NHttp::THttpIncomingRequestPtr Request;
+    NActors::TActorId Sender;
+    NYdb::TDriver* Driver;
+    std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
 
     THttpResponseData ResponseData;
-    NJson::TJsonValue RequestBody;
+    THttpRequestData RequestData;
     TString ServiceAccountId;
     TString RequestId;
     TString DiscoveryEndpoint;
@@ -72,18 +84,11 @@ struct THttpRequestContext {
     TString SourceAddress;
     TString MethodName;
     TString ApiVersion;
-
-    NHttp::THttpIncomingRequestPtr Request;
-    NActors::TActorId Sender;
-
+    MimeTypes ContentType;
     TString IamToken;
     TString SerializedUserToken;
-    const NKikimrConfig::TServerlessProxyConfig& ServiceConfig;
-    NYdb::TDriver* Driver;
-    std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
 
-    TStringBuilder LogPrefix() const
-    {
+    TStringBuilder LogPrefix() const {
         return TStringBuilder() << "http request [" << MethodName << "] requestId [" << RequestId << "]";
     }
 
@@ -97,7 +102,9 @@ public:
     virtual ~IHttpRequestProcessor() = default;
 
     virtual const TString& Name() const = 0;
-    virtual void Execute(THttpRequestContext&& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) = 0;
+    virtual void Execute(THttpRequestContext&& context,
+                         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
+                         const TActorContext& ctx) = 0;
 };
 
 class THttpRequestProcessors {
@@ -107,7 +114,9 @@ public:
 
 public:
     void Initialize();
-    bool Execute(const TString& name, THttpRequestContext&& params, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx);
+    bool Execute(const TString& name, THttpRequestContext&& params,
+                 THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
+                 const TActorContext& ctx);
 
 private:
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;

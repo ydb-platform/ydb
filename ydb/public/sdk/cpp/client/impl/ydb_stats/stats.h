@@ -138,7 +138,7 @@ public:
 // Sessions count for all clients
 // Every client has 3 TSessionCounter for active, in session pool, in settler sessions
 // TSessionCounters in different clients with same role share one sensor
-class TSessionCounter: public TAtomicPointer<NMonitoring::TIntGauge> {
+class TSessionCounter: public TAtomicPointer<::NMonitoring::TIntGauge> {
 public:
 
     // Call with mutex
@@ -150,7 +150,7 @@ public:
     }
 
     ~TSessionCounter() {
-        NMonitoring::TIntGauge* gauge = this->Get();
+        ::NMonitoring::TIntGauge* gauge = this->Get();
         if (gauge) {
             gauge->Add(-oldValue);
         }
@@ -161,23 +161,23 @@ private:
 };
 
 struct TStatCollector {
-    using TMetricRegistry = NMonitoring::TMetricRegistry;
+    using TMetricRegistry = ::NMonitoring::TMetricRegistry;
 
 public:
 
     struct TEndpointElectorStatCollector {
 
-        TEndpointElectorStatCollector(NMonitoring::TIntGauge* endpointCount = nullptr
-        , NMonitoring::TIntGauge* pessimizationRatio = nullptr
-        , NMonitoring::TIntGauge* activeEndpoints = nullptr)
+        TEndpointElectorStatCollector(::NMonitoring::TIntGauge* endpointCount = nullptr
+        , ::NMonitoring::TIntGauge* pessimizationRatio = nullptr
+        , ::NMonitoring::TIntGauge* activeEndpoints = nullptr)
         : EndpointCount(endpointCount)
         , PessimizationRatio(pessimizationRatio)
         , EndpointActive(activeEndpoints)
         { }
 
-        NMonitoring::TIntGauge* EndpointCount;
-        NMonitoring::TIntGauge* PessimizationRatio;
-        NMonitoring::TIntGauge* EndpointActive;
+        ::NMonitoring::TIntGauge* EndpointCount;
+        ::NMonitoring::TIntGauge* PessimizationRatio;
+        ::NMonitoring::TIntGauge* EndpointActive;
     };
 
     struct TSessionPoolStatCollector {
@@ -187,22 +187,22 @@ public:
             SETTLERPOOL
         };
 
-        TSessionPoolStatCollector(NMonitoring::TIntGauge* activeSessions = nullptr
-        , NMonitoring::TIntGauge* inPoolSessions = nullptr
-        , NMonitoring::TRate* fakeSessions = nullptr)
+        TSessionPoolStatCollector(::NMonitoring::TIntGauge* activeSessions = nullptr
+        , ::NMonitoring::TIntGauge* inPoolSessions = nullptr
+        , ::NMonitoring::TRate* fakeSessions = nullptr)
         : ActiveSessions(activeSessions), InPoolSessions(inPoolSessions), FakeSessions(fakeSessions)
         { }
 
-        NMonitoring::TIntGauge* ActiveSessions;
-        NMonitoring::TIntGauge* InPoolSessions;
-        NMonitoring::TRate* FakeSessions;
+        ::NMonitoring::TIntGauge* ActiveSessions;
+        ::NMonitoring::TIntGauge* InPoolSessions;
+        ::NMonitoring::TRate* FakeSessions;
     };
 
     struct TClientRetryOperationStatCollector {
 
         TClientRetryOperationStatCollector() : MetricRegistry_(), Database_() {}
 
-        TClientRetryOperationStatCollector(NMonitoring::TMetricRegistry* registry, const TStringType& database)
+        TClientRetryOperationStatCollector(::NMonitoring::TMetricRegistry* registry, const TStringType& database)
         : MetricRegistry_(registry), Database_(database)
         { }
 
@@ -223,17 +223,17 @@ public:
         }
 
     private:
-        TAtomicPointer<NMonitoring::TMetricRegistry> MetricRegistry_;
+        TAtomicPointer<::NMonitoring::TMetricRegistry> MetricRegistry_;
         TStringType Database_;
     };
 
     struct TClientStatCollector {
 
-        TClientStatCollector(NMonitoring::TRate* cacheMiss = nullptr
-        , NMonitoring::THistogram* querySize = nullptr
-        , NMonitoring::THistogram* paramsSize = nullptr
-        , NMonitoring::TRate* sessionRemoved = nullptr
-        , NMonitoring::TRate* requestMigrated = nullptr
+        TClientStatCollector(::NMonitoring::TRate* cacheMiss = nullptr
+        , ::NMonitoring::THistogram* querySize = nullptr
+        , ::NMonitoring::THistogram* paramsSize = nullptr
+        , ::NMonitoring::TRate* sessionRemoved = nullptr
+        , ::NMonitoring::TRate* requestMigrated = nullptr
         , TClientRetryOperationStatCollector retryOperationStatCollector = TClientRetryOperationStatCollector())
         : CacheMiss(cacheMiss)
         , QuerySize(querySize)
@@ -243,11 +243,11 @@ public:
         , RetryOperationStatCollector(retryOperationStatCollector)
         { }
 
-        NMonitoring::TRate* CacheMiss;
-        NMonitoring::THistogram* QuerySize;
-        NMonitoring::THistogram* ParamsSize;
-        NMonitoring::TRate* SessionRemovedDueBalancing;
-        NMonitoring::TRate* RequestMigrated;
+        ::NMonitoring::TRate* CacheMiss;
+        ::NMonitoring::THistogram* QuerySize;
+        ::NMonitoring::THistogram* ParamsSize;
+        ::NMonitoring::TRate* SessionRemovedDueBalancing;
+        ::NMonitoring::TRate* RequestMigrated;
         TClientRetryOperationStatCollector RetryOperationStatCollector;
     };
 
@@ -280,13 +280,13 @@ public:
         GRpcInFlight_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,               {"sensor", "Grpc/InFlight"} }));
 
         RequestLatency_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/Latency"} },
-            NMonitoring::ExponentialHistogram(20, 2, 1)));
+            ::NMonitoring::ExponentialHistogram(20, 2, 1)));
         QuerySize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/QuerySize"} },
-            NMonitoring::ExponentialHistogram(20, 2, 32)));
+            ::NMonitoring::ExponentialHistogram(20, 2, 32)));
         ParamsSize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/ParamsSize"} },
-            NMonitoring::ExponentialHistogram(10, 2, 32)));
+            ::NMonitoring::ExponentialHistogram(10, 2, 32)));
         ResultSize_.Set(sensorsRegistry->HistogramRate({ DatabaseLabel_, {"sensor", "Request/ResultSize"} },
-            NMonitoring::ExponentialHistogram(20, 2, 32)));
+            ::NMonitoring::ExponentialHistogram(20, 2, 32)));
     }
 
     void IncDiscoveryDuePessimization() {
@@ -391,27 +391,27 @@ public:
     void DeleteHost(const TStringType& host);
 private:
     const TStringType Database_;
-    const NMonitoring::TLabel DatabaseLabel_;
+    const ::NMonitoring::TLabel DatabaseLabel_;
     TAtomicPointer<TMetricRegistry> MetricRegistryPtr_;
-    TAtomicCounter<NMonitoring::TRate> DiscoveryDuePessimization_;
-    TAtomicCounter<NMonitoring::TRate> DiscoveryDueExpiration_;
-    TAtomicCounter<NMonitoring::TRate> RequestFailDueQueueOverflow_;
-    TAtomicCounter<NMonitoring::TRate> RequestFailDueNoEndpoint_;
-    TAtomicCounter<NMonitoring::TRate> RequestFailDueTransportError_;
-    TAtomicCounter<NMonitoring::TRate> DiscoveryFailDueTransportError_;
-    TAtomicPointer<NMonitoring::TIntGauge> ActiveSessions_;
-    TAtomicPointer<NMonitoring::TIntGauge> InPoolSessions_;
-    TAtomicPointer<NMonitoring::TIntGauge> SettlerSessions_;
-    TAtomicCounter<NMonitoring::TIntGauge> SessionCV_;
-    TAtomicCounter<NMonitoring::TRate> SessionRemovedDueBalancing_;
-    TAtomicCounter<NMonitoring::TRate> RequestMigrated_;
-    TAtomicCounter<NMonitoring::TRate> FakeSessions_;
-    TAtomicCounter<NMonitoring::TRate> CacheMiss_;
-    TAtomicCounter<NMonitoring::TIntGauge> GRpcInFlight_;
-    TAtomicHistogram<NMonitoring::THistogram> RequestLatency_;
-    TAtomicHistogram<NMonitoring::THistogram> QuerySize_;
-    TAtomicHistogram<NMonitoring::THistogram> ParamsSize_;
-    TAtomicHistogram<NMonitoring::THistogram> ResultSize_;
+    TAtomicCounter<::NMonitoring::TRate> DiscoveryDuePessimization_;
+    TAtomicCounter<::NMonitoring::TRate> DiscoveryDueExpiration_;
+    TAtomicCounter<::NMonitoring::TRate> RequestFailDueQueueOverflow_;
+    TAtomicCounter<::NMonitoring::TRate> RequestFailDueNoEndpoint_;
+    TAtomicCounter<::NMonitoring::TRate> RequestFailDueTransportError_;
+    TAtomicCounter<::NMonitoring::TRate> DiscoveryFailDueTransportError_;
+    TAtomicPointer<::NMonitoring::TIntGauge> ActiveSessions_;
+    TAtomicPointer<::NMonitoring::TIntGauge> InPoolSessions_;
+    TAtomicPointer<::NMonitoring::TIntGauge> SettlerSessions_;
+    TAtomicCounter<::NMonitoring::TIntGauge> SessionCV_;
+    TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing_;
+    TAtomicCounter<::NMonitoring::TRate> RequestMigrated_;
+    TAtomicCounter<::NMonitoring::TRate> FakeSessions_;
+    TAtomicCounter<::NMonitoring::TRate> CacheMiss_;
+    TAtomicCounter<::NMonitoring::TIntGauge> GRpcInFlight_;
+    TAtomicHistogram<::NMonitoring::THistogram> RequestLatency_;
+    TAtomicHistogram<::NMonitoring::THistogram> QuerySize_;
+    TAtomicHistogram<::NMonitoring::THistogram> ParamsSize_;
+    TAtomicHistogram<::NMonitoring::THistogram> ResultSize_;
 };
 
 } // namespace NSdkStats

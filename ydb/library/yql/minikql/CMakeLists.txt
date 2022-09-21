@@ -6,6 +6,16 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(arrow)
+add_subdirectory(benchmark)
+add_subdirectory(codegen)
+add_subdirectory(comp_nodes)
+add_subdirectory(computation)
+add_subdirectory(dom)
+add_subdirectory(invoke_builtins)
+add_subdirectory(jsonpath)
+add_subdirectory(perf)
+add_subdirectory(ut)
 
 add_library(library-yql-minikql)
 target_compile_options(library-yql-minikql PRIVATE

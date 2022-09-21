@@ -692,11 +692,16 @@ message OnlineModeSettings {
 message StaleModeSettings {
 }
 
+
+message SnapshotModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
         OnlineModeSettings online_read_only = 2;
         StaleModeSettings stale_read_only = 3;
+        SnapshotModeSettings snapshot_read_only = 4;
     }
 }
 

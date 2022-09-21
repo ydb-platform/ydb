@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(greedy_dict)
 
 add_library(library-cpp-codecs)
 target_link_libraries(library-cpp-codecs PUBLIC

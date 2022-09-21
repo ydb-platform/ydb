@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <util/string/printf.h>
 
@@ -18,16 +19,17 @@ namespace {
 
 NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query) {
     const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
-    return session.ExecuteDataQuery(query, txSettings).ExtractValueSync();
+    return session.ExecuteDataQuery(query, txSettings,
+        TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
 }
 
 NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query, TParams& params) {
     const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
-    return session.ExecuteDataQuery(query, txSettings, params).ExtractValueSync();
+    return session.ExecuteDataQuery(query, txSettings, params,
+        TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
 }
 
-
-void CreateTableWithMultishardIndex(Tests::TClient& client) {
+void CreateTableWithMultishardIndex(Tests::TClient& client, bool async) {
     const TString scheme =  R"(Name: "MultiShardIndexed"
         Columns { Name: "key"    Type: "Uint64" }
         Columns { Name: "fk"    Type: "Uint32" }
@@ -40,8 +42,11 @@ void CreateTableWithMultishardIndex(Tests::TClient& client) {
     NKikimrSchemeOp::TTableDescription desc;
     bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &desc);
     UNIT_ASSERT(parseOk);
+    NKikimrSchemeOp::EIndexType type = async
+        ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync
+        : NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
 
-    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"});
+    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"}, type);
     UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 }
 
@@ -60,7 +65,7 @@ void CreateTableWithMultishardIndexAndDataColumn(Tests::TClient& client) {
     bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &desc);
     UNIT_ASSERT(parseOk);
 
-    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"}, {"value"});
+    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"}, NKikimrSchemeOp::EIndexType::EIndexTypeGlobal, {"value"});
     UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 }
 
@@ -126,7 +131,7 @@ void FillTable(NYdb::NTable::TSession& session) {
 Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST_NEW_ENGINE(SortedRangeReadDesc) {
         TKikimrRunner kikimr(SyntaxV1Settings());
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         FillTable<UseNewEngine>(session);
@@ -144,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
     Y_UNIT_TEST_NEW_ENGINE(SecondaryIndexSelect) {
         TKikimrRunner kikimr(SyntaxV1Settings());
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         FillTable<UseNewEngine>(session);
@@ -297,7 +302,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
     Y_UNIT_TEST(YqWorksFineAfterAlterIndexTableDirectly) {
         TKikimrRunner kikimr(SyntaxV1Settings());
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1045,7 +1050,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         FillTable<UseNewEngine>(session);
 
         AssertSuccessResult(session.ExecuteDataQuery(Q1_(R"(
@@ -1094,6 +1099,133 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             [[3000000000u];[3u];["v3"]];
             [[4294967295u];[4u];["v4"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    template<bool UseNewEngine>
+    void CheckWriteIntoRenamingIndex(bool asyncIndex) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), asyncIndex);
+
+        auto buildParam = [&db](ui64 id) {
+            return db.GetParamsBuilder()
+               .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("key").Uint64(id)
+                        .AddMember("fk").Uint32(id)
+                        .AddMember("value").Utf8("v1")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("key").Uint64(id << 31)
+                        .AddMember("fk").Uint32(id + (1u << 31))
+                        .AddMember("value").Utf8("v2")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+        };
+
+        TMutex SyncMutex;
+        TCondVar SyncCondVar;
+        const size_t rows = 1000;
+        size_t rowsInserted = 0;
+
+        NPar::LocalExecutor().RunAdditionalThreads(2);
+        NPar::LocalExecutor().ExecRange([&](int id) mutable {
+            switch (id) {
+                case 0: {
+                    size_t count = rows;
+                    while (--count) {
+                        const TString q(R"(
+                            DECLARE $rows AS List < Struct<key: Uint64, fk: Uint32, value: Utf8 > >;
+                            UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value)
+                            SELECT key, fk, value FROM AS_TABLE($rows);
+                        )");
+                        auto r = db.RetryOperationSync([=](TSession s) {
+                            auto p = buildParam(count);
+                            auto t = ExecuteDataQuery(s, q, p);
+                            return t;
+                        });
+                        UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+                        rowsInserted += 2;
+                        // Let write 10 rows before the index will be renamed
+                        if (count == (rows - 10)) {
+                            TGuard<TMutex> guard(SyncMutex);
+                            SyncCondVar.Signal();
+                        }
+                    }
+                }
+                break;
+                case 1: {
+                    TGuard<TMutex> guard(SyncMutex);
+                    SyncCondVar.WaitI(SyncMutex);
+                    auto s = db.CreateSession().GetValueSync().GetSession();
+                    auto st = s.ExecuteSchemeQuery(R"(
+                        ALTER TABLE `/Root/MultiShardIndexed` RENAME INDEX index TO index_new;
+                    )").ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(st.GetStatus(), EStatus::SUCCESS, st.GetIssues().ToString());
+                }
+                break;
+                default:
+                    Y_FAIL("Unknown id");
+            }
+        }, 0, 2, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+
+        {
+            TReadTableSettings settings;
+            settings.Ordered(true);
+            auto it = session.ReadTable("/Root/MultiShardIndexed/index_new/indexImplTable", settings).GetValueSync();
+            UNIT_ASSERT(it.IsSuccess());
+
+            int shard = 0;
+            size_t rowsRead = 0;
+            for (;;) {
+                auto tablePart = it.ReadNext().GetValueSync();
+                if (tablePart.EOS()) {
+                    break;
+                }
+
+                UNIT_ASSERT_VALUES_EQUAL(tablePart.IsSuccess(), true);
+                auto resultSet = tablePart.ExtractPart();
+
+                auto rsParser = TResultSetParser(resultSet);
+
+                ui32 startVal = 1;
+                while (rsParser.TryNextRow()) {
+                    auto val = rsParser.GetValue(0);
+                    TValueParser vp(val);
+                    vp.OpenOptional();
+                    if (!vp.IsNull()) {
+                        rowsRead++;
+                        switch (shard) {
+                            case 0:
+                                UNIT_ASSERT_VALUES_EQUAL(vp.GetUint32(), startVal++);
+                                break;
+                            case 1:
+                                UNIT_ASSERT_VALUES_EQUAL(vp.GetUint32(), (startVal++) + (1u << 31));
+                                break;
+                            default:
+                                Y_FAIL("unexpected shard id");
+                        }
+                    }
+                }
+                shard++;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(rowsInserted, rowsRead);
+        }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(WriteIntoRenamingSyncIndex) {
+        CheckWriteIntoRenamingIndex<UseNewEngine>(false);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(WriteIntoRenamingAsyncIndex) {
+        CheckWriteIntoRenamingIndex<UseNewEngine>(true);
     }
 }
 

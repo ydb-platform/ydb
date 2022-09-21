@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(libs)
 
 add_library(contrib-restricted-boost INTERFACE)
 target_include_directories(contrib-restricted-boost INTERFACE

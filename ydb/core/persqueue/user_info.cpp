@@ -160,13 +160,25 @@ TUserInfo& TUsersInfoStorage::Create(
         burst = Config.GetPartitionConfig().GetBurstSize() * 2;
         speed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2;
     }
+
+    TString defaultServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
+    TString userServiceType = "";
+    for (ui32 i = 0; i < Config.ReadRulesSize(); ++i) {
+        if (Config.GetReadRules(i) == user) {
+            userServiceType = Config.ReadRuleServiceTypesSize() > i ? Config.GetReadRuleServiceTypes(i) : "";
+            break;
+        }
+    }
+
+    bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
+
     auto result = UsersInfo.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(user),
         std::forward_as_tuple(
                 ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
                 session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, FolderId,
-                burst, speed
+                meterRead, burst, speed
         )
     );
     Y_VERIFY(result.second);

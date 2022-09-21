@@ -27,6 +27,7 @@ target_sources(kqp-opt-logical PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_indexes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_ranges.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_ranges_predext.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_sort.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_sqlin.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_sqlin_compact.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log.cpp

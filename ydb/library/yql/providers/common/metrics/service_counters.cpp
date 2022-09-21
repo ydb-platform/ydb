@@ -4,8 +4,8 @@ namespace NYql {
 namespace NCommon {
 
 TServiceCounters::TServiceCounters(
-    const NMonitoring::TDynamicCounterPtr& rootCounters,
-    const NMonitoring::TDynamicCounterPtr& publicCounters,
+    const ::NMonitoring::TDynamicCounterPtr& rootCounters,
+    const ::NMonitoring::TDynamicCounterPtr& publicCounters,
     const TString& subsystemName)
     : RootCounters(rootCounters)
     , PublicCounters(publicCounters)
@@ -14,7 +14,7 @@ TServiceCounters::TServiceCounters(
 }
 
 TServiceCounters::TServiceCounters(
-    const NMonitoring::TDynamicCounterPtr& baseCounters,
+    const ::NMonitoring::TDynamicCounterPtr& baseCounters,
     const TString& subsystemName)
     : RootCounters(baseCounters->GetSubgroup("counters", "yq"))
     , PublicCounters(baseCounters->GetSubgroup("counters", "yq_public"))

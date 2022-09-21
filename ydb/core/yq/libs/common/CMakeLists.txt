@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(yq-libs-common)
 target_compile_options(yq-libs-common PRIVATE

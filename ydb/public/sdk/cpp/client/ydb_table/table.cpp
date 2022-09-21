@@ -1376,7 +1376,7 @@ private:
     const ui32 MaxActiveSessions_;
     NSdkStats::TSessionCounter ActiveSessionsCounter_;
     NSdkStats::TSessionCounter InPoolSessionsCounter_;
-    NSdkStats::TAtomicCounter<NMonitoring::TRate> FakeSessionsCounter_;
+    NSdkStats::TAtomicCounter<::NMonitoring::TRate> FakeSessionsCounter_;
 };
 
 static TDuration RandomizeThreshold(TDuration duration) {
@@ -2609,7 +2609,7 @@ private:
 
     static void CollectParams(
         ::google::protobuf::Map<TString, Ydb::TypedValue>* params,
-        NSdkStats::TAtomicHistogram<NMonitoring::THistogram> histgoram)
+        NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram)
     {
 
         if (params && histgoram.IsCollecting()) {
@@ -2623,7 +2623,7 @@ private:
 
     static void CollectParams(
         const ::google::protobuf::Map<TString, Ydb::TypedValue>& params,
-        NSdkStats::TAtomicHistogram<NMonitoring::THistogram> histgoram)
+        NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram)
     {
 
         if (histgoram.IsCollecting()) {
@@ -2635,13 +2635,13 @@ private:
         }
     }
 
-    static void CollectQuerySize(const TString& query, NSdkStats::TAtomicHistogram<NMonitoring::THistogram>& querySizeHistogram) {
+    static void CollectQuerySize(const TString& query, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>& querySizeHistogram) {
         if (querySizeHistogram.IsCollecting()) {
             querySizeHistogram.Record(query.size());
         }
     }
 
-    static void CollectQuerySize(const TDataQuery&, NSdkStats::TAtomicHistogram<NMonitoring::THistogram>&) {}
+    static void CollectQuerySize(const TDataQuery&, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>&) {}
 
     template <typename TQueryType, typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQueryInternal(const TSession& session, const TQueryType& query,
@@ -2751,6 +2751,9 @@ private:
             case TTxSettings::TS_STALE_RO:
                 proto->mutable_stale_read_only();
                 break;
+            case TTxSettings::TS_SNAPSHOT_RO:
+                proto->mutable_snapshot_read_only();
+                break;
             default:
                 throw TContractViolation("Unexpected transaction mode.");
         }
@@ -2788,12 +2791,12 @@ private:
         const TCreateSessionSettings& settings);
 
 public:
-    NSdkStats::TAtomicCounter<NMonitoring::TRate> CacheMissCounter;
+    NSdkStats::TAtomicCounter<::NMonitoring::TRate> CacheMissCounter;
     NSdkStats::TStatCollector::TClientRetryOperationStatCollector RetryOperationStatCollector;
-    NSdkStats::TAtomicHistogram<NMonitoring::THistogram> QuerySizeHistogram;
-    NSdkStats::TAtomicHistogram<NMonitoring::THistogram> ParamsSizeHistogram;
-    NSdkStats::TAtomicCounter<NMonitoring::TRate> SessionRemovedDueBalancing;
-    NSdkStats::TAtomicCounter<NMonitoring::TRate> RequestMigrated;
+    NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram;
+    NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram;
+    NSdkStats::TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing;
+    NSdkStats::TAtomicCounter<::NMonitoring::TRate> RequestMigrated;
 
 private:
     TSessionPoolImpl SessionPool_;

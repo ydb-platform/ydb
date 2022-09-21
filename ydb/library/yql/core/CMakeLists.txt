@@ -6,6 +6,18 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common_opt)
+add_subdirectory(expr_nodes)
+add_subdirectory(expr_nodes_gen)
+add_subdirectory(extract_predicate)
+add_subdirectory(facade)
+add_subdirectory(file_storage)
+add_subdirectory(issue)
+add_subdirectory(peephole_opt)
+add_subdirectory(services)
+add_subdirectory(sql_types)
+add_subdirectory(type_ann)
+add_subdirectory(user_data)
 
 add_library(library-yql-core)
 target_compile_options(library-yql-core PRIVATE
@@ -35,6 +47,7 @@ target_link_libraries(library-yql-core PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(library-yql-core PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_aggregate_expander.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_callable_transform.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_csv.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_execution.cpp
@@ -47,7 +60,6 @@ target_sources(library-yql-core PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_holding_file_storage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_join.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_library_compiler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_aggregate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_proposed_by_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_range.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_rewrite_io.cpp

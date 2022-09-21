@@ -6,6 +6,22 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(balance_coverage)
+add_subdirectory(columnshard)
+add_subdirectory(coordinator)
+add_subdirectory(datashard)
+add_subdirectory(long_tx_service)
+add_subdirectory(mediator)
+add_subdirectory(replication)
+add_subdirectory(scheme_board)
+add_subdirectory(scheme_cache)
+add_subdirectory(schemeshard)
+add_subdirectory(sequenceproxy)
+add_subdirectory(sequenceshard)
+add_subdirectory(time_cast)
+add_subdirectory(tx_allocator)
+add_subdirectory(tx_allocator_client)
+add_subdirectory(tx_proxy)
 
 add_library(ydb-core-tx)
 target_link_libraries(ydb-core-tx PUBLIC

@@ -9,7 +9,7 @@ namespace NKikimr::NGRpcService {
 class TGRpcPQClusterDiscoveryService
    : public NGrpc::TGrpcServiceBase<Ydb::PersQueue::V1::ClusterDiscoveryService> {
 public:
-    TGRpcPQClusterDiscoveryService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TGRpcPQClusterDiscoveryService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                                    NActors::TActorId id, const TMaybe<ui64>& requestsInflightLimit = Nothing());
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
@@ -25,7 +25,7 @@ private:
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_ = nullptr;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
     THolder<NGrpc::TGlobalLimiter> Limiter;
 };

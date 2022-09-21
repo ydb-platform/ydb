@@ -17,7 +17,7 @@ public:
      TReadInfoActor(
              NKikimr::NGRpcService::TEvPQReadInfoRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
              const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-             TIntrusivePtr<NMonitoring::TDynamicCounters> counters
+             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
      );
     ~TReadInfoActor();
 
@@ -62,7 +62,7 @@ private:
 
     TTopicInitInfoMap TopicAndTablets;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     TString ClientId;
     NPersQueue::TTopicsListController TopicsHandler;

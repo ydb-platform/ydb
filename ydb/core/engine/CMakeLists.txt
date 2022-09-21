@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(minikql)
+add_subdirectory(ut)
 
 add_library(ydb-core-engine)
 target_compile_options(ydb-core-engine PRIVATE

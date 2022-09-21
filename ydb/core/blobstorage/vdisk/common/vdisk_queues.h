@@ -48,7 +48,7 @@ namespace NKikimr {
     void CreateQueuesForVDisks(TContainer &cont, const TActorId &parent,
             const TIntrusivePtr<NKikimr::TBlobStorageGroupInfo> &gInfo,
             const TIntrusivePtr<TVDiskContext> &vCtx, const TVDiskContainer &disks,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters> &groupCounters,
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters> &groupCounters,
             const NBackpressure::TQueueClientId &queueClientId, NKikimrBlobStorage::EVDiskQueueId vDiskQueueId,
             const TString &queueName, TInterconnectChannels::EInterconnectChannels interconnectChannel,
             TWrapper wrapper = {})

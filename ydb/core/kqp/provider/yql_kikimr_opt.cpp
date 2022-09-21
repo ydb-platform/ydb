@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/common_opt/yql_co.h>
+#include<ydb/library/yql/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_opt_aggregate.h>
 
 namespace NYql {
 namespace {
@@ -100,7 +100,7 @@ TExprNode::TPtr KiEraseOverSelectRow(TExprBase node, TExprContext& ctx) {
     return node.Ptr();
 }
 
-TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
+TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (!node.Maybe<TCoAggregate>()) {
         return node.Ptr();
     }
@@ -120,7 +120,8 @@ TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
     }
 
     YQL_CLOG(INFO, ProviderKikimr) << "KiRewriteAggregate";
-    return ExpandAggregate(true, node.Ptr(), ctx);
+    TAggregateExpander aggExpander(true, node.Ptr(), ctx, typesCtx);
+    return aggExpander.ExpandAggregate();
 }
 
 TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
@@ -655,8 +656,8 @@ TExprNode::TPtr KiApplyExtractMembersToSelectRange(TExprBase node, TExprContext&
 
 } // namespace
 
-TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx) {
-    return CreateFunctorTransformer([sessionCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output,
+TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types) {
+    return CreateFunctorTransformer([sessionCtx, &types](const TExprNode::TPtr& input, TExprNode::TPtr& output,
         TExprContext& ctx)
     {
         typedef IGraphTransformer::TStatus TStatus;
@@ -666,7 +667,7 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
         GatherParents(*input, parentsMap);
         optCtx.ParentsMap = &parentsMap;
 
-        TStatus status = OptimizeExpr(input, output, [sessionCtx, &optCtx](const TExprNode::TPtr& inputNode, TExprContext& ctx) {
+        TStatus status = OptimizeExpr(input, output, [sessionCtx, &optCtx, &types](const TExprNode::TPtr& inputNode, TExprContext& ctx) {
             auto ret = inputNode;
             TExprBase node(inputNode);
 
@@ -710,7 +711,7 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
                 return ret;
             }
 
-            ret = KiRewriteAggregate(node, ctx);
+            ret = KiRewriteAggregate(node, ctx, types);
             if (ret != inputNode) {
                 return ret;
             }

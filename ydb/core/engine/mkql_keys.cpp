@@ -70,7 +70,6 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
         if (!hasImmediateData) {
             MKQL_ENSURE(!requireStaticKey, "Expected static key components");
             point = false;
-            inclusiveTo = false;
             continue;
         }
 
@@ -93,7 +92,7 @@ void ExtractReadColumns(TStructType* columnsType, TStructLiteral* tags, TVector<
         op.Column = columnId;
         op.Operation = TKeyDesc::EColumnOperation::Read;
         bool isOptional;
-        op.ExpectedType = UnpackOptionalData(AS_TYPE(TOptionalType, columnsType->GetMemberType(i)), isOptional)->GetSchemeType();
+        op.ExpectedType = UnpackOptionalData(columnsType->GetMemberType(i), isOptional)->GetSchemeType();
         MKQL_ENSURE(op.ExpectedType != 0, "Null type is not allowed");
     }
 }

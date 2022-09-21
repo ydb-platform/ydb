@@ -4,6 +4,7 @@
 #include "columnshard__index_scan.h"
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include <ydb/core/formats/ssa_program_optimizer.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -40,6 +41,7 @@ std::shared_ptr<NOlap::TReadMetadata>
 TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescription& read,
                                  const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index,
+                                 const TBatchCache& batchCache,
                                  TString& error) const {
     Y_UNUSED(ctx);
 
@@ -71,13 +73,24 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
         return {};
     }
 
-    if (!out.BlobSchema || !out.ResultSchema) {
+    if (!out.BlobSchema) {
+        error = "Could not get BlobSchema.";
+        return {};
+    }
+
+    if (!out.ResultSchema) {
+        error = "Could not get ResultSchema.";
         return {};
     }
 
     // insert table
 
     out.CommittedBlobs = insertTable->Read(read.PathId, read.PlanStep, read.TxId);
+    for (auto& cmt : out.CommittedBlobs) {
+        if (auto batch = batchCache.Get(cmt.BlobId)) {
+            out.CommittedBatches.emplace(cmt.BlobId, batch);
+        }
+    }
 
     // index
 
@@ -204,10 +217,18 @@ bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapP
         read.ProgramParameters = NArrow::DeserializeBatch(olapProgram.GetParameters(), schema);
     }
 
-    if (!read.AddProgram(columnResolver, program)) {
+
+    auto ssaProgramSteps = read.AddProgram(columnResolver, program);
+    if (!ssaProgramSteps) {
         ErrorDescription = TStringBuilder() << "Wrong olap program";
         return false;
     }
+    if (!ssaProgramSteps->Program.empty() && Self->PrimaryIndex) {
+        ssaProgramSteps->Program = NKikimr::NSsaOptimizer::OptimizeProgram(ssaProgramSteps->Program, Self->PrimaryIndex->GetIndexInfo());
+    }
+
+    read.Program = ssaProgramSteps->Program;
+    read.ProgramSourceColumns = ssaProgramSteps->ProgramSourceColumns;
     return true;
 }
 
@@ -254,7 +275,8 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {
-        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, ErrorDescription);
+        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, Self->BatchCache,
+                                       ErrorDescription);
     }
 
     ui32 status = NKikimrTxColumnShard::EResultStatus::ERROR;

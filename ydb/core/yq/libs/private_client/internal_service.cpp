@@ -29,7 +29,7 @@ public:
         const NYq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
-        const NMonitoring::TDynamicCounterPtr& counters)
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : ServiceCounters(counters->GetSubgroup("subsystem", "InternalService"))
         , EventLatency(ServiceCounters->GetSubgroup("subcomponent", "Latency")->GetHistogram("Latency", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , PrivateClient(
@@ -110,7 +110,7 @@ private:
             });
     }
 
-    const NMonitoring::TDynamicCounterPtr ServiceCounters;
+    const ::NMonitoring::TDynamicCounterPtr ServiceCounters;
     const NMonitoring::THistogramPtr EventLatency;
     TPrivateClient PrivateClient;
 };
@@ -119,7 +119,7 @@ NActors::IActor* CreateInternalServiceActor(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NYq::NConfig::TPrivateApiConfig& privateApiConfig,
-    const NMonitoring::TDynamicCounterPtr& counters) {
+    const ::NMonitoring::TDynamicCounterPtr& counters) {
         return new TInternalService(yqSharedResources, credentialsProviderFactory, privateApiConfig, counters);
 }
 

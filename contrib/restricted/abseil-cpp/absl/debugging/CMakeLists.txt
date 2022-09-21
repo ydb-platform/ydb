@@ -6,6 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(failure_signal_handler)
+add_subdirectory(internal)
+add_subdirectory(leak_check)
+add_subdirectory(leak_check_disable)
+add_subdirectory(stacktrace)
+add_subdirectory(symbolize)
 
 add_library(abseil-cpp-absl-debugging)
 target_compile_options(abseil-cpp-absl-debugging PRIVATE

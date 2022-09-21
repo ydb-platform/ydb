@@ -252,12 +252,12 @@ public:
         const TParseReadTableResult& parseResult, IComputationNode* fromNode, IComputationNode* toNode,
         IComputationNode* itemsLimit)
         : TKqpWideReadTableWrapperBase<IsReverse>(parseResult.TableId, computeCtx, typeEnv,
-            ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys)
+            parseResult.SystemColumns, parseResult.SkipNullKeys)
         , ParseResult(parseResult)
         , FromNode(fromNode)
         , ToNode(toNode)
         , ItemsLimit(itemsLimit)
-        , ColumnTags(ExtractTags(parseResult.Columns))
+        , ColumnTags(parseResult.Columns)
     {
         this->ShardTableStats.NSelectRange++;
         this->TaskTableStats.NSelectRange++;
@@ -315,11 +315,11 @@ public:
     TKqpWideReadTableRangesWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
         const TParseReadTableRangesResult& parseResult, IComputationNode* rangesNode, IComputationNode* itemsLimit)
         : TKqpWideReadTableWrapperBase<IsReverse>(parseResult.TableId, computeCtx, typeEnv,
-            ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys)
+            parseResult.SystemColumns, parseResult.SkipNullKeys)
         , ParseResult(parseResult)
         , RangesNode(rangesNode)
         , ItemsLimit(itemsLimit)
-        , ColumnTags(ExtractTags(parseResult.Columns)) {}
+        , ColumnTags(parseResult.Columns) {}
 
 private:
     EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final {

@@ -14,11 +14,14 @@
 namespace NYql {
 
 NKikimr::NMiniKQL::TRuntimeNode BuildParseCall(
+    TPosition pos,
     NKikimr::NMiniKQL::TRuntimeNode input,
+    TMaybe<NKikimr::NMiniKQL::TRuntimeNode> extraColumnsByPathIndex,
     const std::string_view& format,
     const std::string_view& compression,
     NKikimr::NMiniKQL::TType* inputItemType,
     NKikimr::NMiniKQL::TType* outputItemType,
+    NKikimr::NMiniKQL::TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx);
 
 TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParser(const NYql::NNodes::TDqSourceWideWrap& wrapper, NCommon::TMkqlBuildContext& ctx);

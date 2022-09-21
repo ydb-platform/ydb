@@ -6,6 +6,48 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut_async_index)
+add_subdirectory(ut_backup)
+add_subdirectory(ut_base)
+add_subdirectory(ut_base_reboots)
+add_subdirectory(ut_bsvolume)
+add_subdirectory(ut_bsvolume_reboots)
+add_subdirectory(ut_cdc_stream)
+add_subdirectory(ut_cdc_stream_reboots)
+add_subdirectory(ut_compaction)
+add_subdirectory(ut_export)
+add_subdirectory(ut_export_reboots_s3)
+add_subdirectory(ut_extsubdomain)
+add_subdirectory(ut_extsubdomain_reboots)
+add_subdirectory(ut_filestore_reboots)
+add_subdirectory(ut_helpers)
+add_subdirectory(ut_index_build)
+add_subdirectory(ut_index_build_reboots)
+add_subdirectory(ut_login)
+add_subdirectory(ut_move)
+add_subdirectory(ut_move_reboots)
+add_subdirectory(ut_olap)
+add_subdirectory(ut_olap_reboots)
+add_subdirectory(ut_pq)
+add_subdirectory(ut_pq_reboots)
+add_subdirectory(ut_reboots)
+add_subdirectory(ut_replication)
+add_subdirectory(ut_replication_reboots)
+add_subdirectory(ut_restore)
+add_subdirectory(ut_rtmr)
+add_subdirectory(ut_rtmr_reboots)
+add_subdirectory(ut_ru_calculator)
+add_subdirectory(ut_sequence)
+add_subdirectory(ut_sequence_reboots)
+add_subdirectory(ut_serverless)
+add_subdirectory(ut_split_merge)
+add_subdirectory(ut_split_merge_reboots)
+add_subdirectory(ut_stats)
+add_subdirectory(ut_subdomain)
+add_subdirectory(ut_subdomain_reboots)
+add_subdirectory(ut_ttl)
+add_subdirectory(ut_user_attributes)
+add_subdirectory(ut_user_attributes_reboots)
 
 add_library(core-tx-schemeshard)
 target_compile_options(core-tx-schemeshard PRIVATE
@@ -150,6 +192,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_access_database.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__make_access_database_no_inheritable.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_audit_log_fragment.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_billing_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_domain_links.cpp
@@ -157,6 +200,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_identificators.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_info_types.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_describer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_element.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_ui64id.cpp

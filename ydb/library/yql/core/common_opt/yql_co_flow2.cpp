@@ -50,7 +50,16 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         }
         else {
             auto traits = x.Ref().Child(1);
-            auto structType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            ui32 index;
+            if (traits->IsCallable("AggregationTraits")) {
+                index = 0;
+            } else if (traits->IsCallable("AggApply")) {
+                index = 1;
+            } else {
+                return node.Ptr();
+            }
+
+            auto structType = traits->Child(index)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
             for (const auto& item : structType->GetItems()) {
                 usedFields.insert(item->GetName());
             }
@@ -2392,6 +2401,38 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Add(7, node->Child(7)->IsLambda() ? ctx.DeepCopyLambda(*node->Child(7)) : node->ChildPtr(7))
             .Seal()
             .Build();
+    };
+
+    map["AggApply"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        auto type = node->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (type->GetKind() != ETypeAnnotationKind::Struct) {
+            // usually distinct, type of column is used instead
+            return node;
+        }
+
+        auto structType = type->Cast<TStructExprType>();
+        TSet<TStringBuf> usedFields;
+        auto extractor = node->Child(2);
+        TSet<TStringBuf> lambdaSubset;
+        if (!HaveFieldsSubset(extractor->ChildPtr(1), *extractor->Child(0)->Child(0), lambdaSubset, *optCtx.ParentsMap)) {
+            return node;
+        }
+
+        usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
+        if (usedFields.size() == structType->GetSize()) {
+            return node;
+        }
+
+        TVector<const TItemExprType*> subsetItems;
+        for (const auto& item : structType->GetItems()) {
+            if (usedFields.contains(item->GetName())) {
+                subsetItems.push_back(item);
+            }
+        }
+
+        auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
+        YQL_CLOG(DEBUG, Core) << "FieldSubset for AggApply";
+        return ctx.ChangeChild(*node, 1, ExpandType(node->Pos(), *subsetType, ctx));
     };
 
     map["SessionWindowTraits"] = map["SortTraits"] = map["Lag"] = map["Lead"] = map["RowNumber"] = map["Rank"] = map["DenseRank"] =

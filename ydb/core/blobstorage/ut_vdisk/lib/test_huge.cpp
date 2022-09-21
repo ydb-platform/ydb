@@ -92,7 +92,7 @@ public:
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 struct THugeModuleContext {
     TConfiguration *Conf;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TLsnMngr> LsnMngr;
     TIntrusivePtr<NKikimr::TVDiskConfig> Config;
     TVDiskContextPtr VCtx;
@@ -104,7 +104,7 @@ struct THugeModuleContext {
 
     THugeModuleContext(TConfiguration *conf)
         : Conf(conf)
-        , Counters(new NMonitoring::TDynamicCounters)
+        , Counters(new ::NMonitoring::TDynamicCounters)
     {}
 };
 

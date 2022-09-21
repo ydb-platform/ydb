@@ -842,6 +842,21 @@ TStatus AnnotateDqPhyPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) 
     return TStatus::Ok;
 }
 
+TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+    auto* input = node->Child(TDqPhyLength::idx_Input);
+    auto* aggName = node->Child(TDqPhyLength::idx_Name);
+
+    TVector<const TItemExprType*> aggTypes;
+    if (!EnsureAtom(*aggName, ctx)) {
+        return TStatus::Error;
+    }
+    node->SetTypeAnn(MakeSequenceType(input->GetTypeAnn()->GetKind(), *ctx.MakeType<TDataExprType>(EDataSlot::Uint64), ctx));
+    return TStatus::Ok;
+}
+
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -935,6 +950,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqPhyPrecompute::Match(input.Get())) {
                 return AnnotateDqPhyPrecompute(input, ctx);
+            }
+
+            if (TDqPhyLength::Match(input.Get())) {
+                return AnnotateDqPhyLength(input, ctx);
             }
 
             return coreTransformer->Transform(input, output, ctx);

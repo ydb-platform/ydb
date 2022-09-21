@@ -68,12 +68,14 @@ message TTabletStateInfo {
 
 message TEvTabletStateRequest {
     optional uint64 ChangedSince = 1;
+    optional string GroupBy = 20; // it's either empty or "Type,State" for now
 }
 
 message TEvTabletStateResponse {
     repeated TTabletStateInfo TabletStateInfo = 1;
-    optional uint64 ResponseTime = 2;
-    optional uint32 ResponseDuration = 3; // filled during collect
+    optional uint64 ResponseTime = 2; // ms, filled during processing and merging
+    optional uint64 ResponseDuration = 3; // us, filled during collect
+    optional uint64 ProcessDuration = 4; // us, filled during processing
 }
 
 message TNodeStateInfo {

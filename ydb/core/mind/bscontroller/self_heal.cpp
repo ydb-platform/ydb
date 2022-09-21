@@ -452,7 +452,7 @@ namespace NKikimr::NBsController {
             const TInstant now = TActivationContext::Now();
 
             HTML(out) {
-                H2() {
+                TAG(TH2) {
                     out << "BlobStorage Controller";
                 }
                 DIV_CLASS("panel panel-info") {

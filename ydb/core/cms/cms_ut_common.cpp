@@ -212,14 +212,19 @@ public:
 };
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
-        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {})
+        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false)
 {
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     ui32 numNodes = runtime.GetNodeCount();
     ui32 numNodeGroups = pdisks * vdiskPerPdisk;
     ui32 numGroups;
 
-    if (numNodes >= 8)
+    if (numNodes < 9)
+        useMirror3dcErasure = false;
+
+    if (useMirror3dcErasure)
+        numGroups = numNodes * numNodeGroups / 9;
+    else if (numNodes >= 8)
         numGroups = numNodes * numNodeGroups / 8;
     else
         numGroups = numNodes * numNodeGroups;
@@ -229,7 +234,9 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         auto &group = *config->AddGroup();
         group.SetGroupId(groupId);
         group.SetGroupGeneration(1);
-        if (numNodes >= 8)
+        if (useMirror3dcErasure)
+            group.SetErasureSpecies("mirror-3-dc");
+        else if (numNodes >= 8)
             group.SetErasureSpecies("block-4-2");
         else
             group.SetErasureSpecies("none");
@@ -254,6 +261,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         ui32 groupShift = (nodeIndex / 8) * pdisks * vdiskPerPdisk;
         if (numNodes < 8)
             groupShift = nodeIndex * numNodeGroups;
+        if (useMirror3dcErasure)
+            groupShift = (nodeIndex / 9) * pdisks * vdiskPerPdisk;
 
         for (ui32 pdiskIndex = 0; pdiskIndex < pdisks; ++pdiskIndex) {
             auto pdiskId = nodeId * pdisks + pdiskIndex;
@@ -277,7 +286,11 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             for (ui8 vdiskIndex = 0; vdiskIndex < vdiskPerPdisk; ++vdiskIndex) {
                 ui32 vdiskId = pdiskIndex * vdiskPerPdisk + vdiskIndex;
                 ui32 groupId = groupShift + vdiskId;
-                TVDiskID id = {(ui8)groupId, 1, 0, (ui8)(nodeIndex % 8), (ui8)0};
+                ui32 failRealm = 0;
+                if (useMirror3dcErasure)
+                    failRealm = nodeIndex % 8;
+
+                TVDiskID id = {(ui8)groupId, 1, (ui8)failRealm, (ui8)(nodeIndex % 8), (ui8)0};
 
                 auto &vdisk = node.VDiskStateInfo[id];
                 VDiskIDFromVDiskID(id, vdisk.MutableVDiskId());
@@ -294,6 +307,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdiskConfig.MutableVSlotId()->SetVSlotId(1000 + vdiskIndex);
                 vdiskConfig.SetGroupId(groupId);
                 vdiskConfig.SetGroupGeneration(1);
+                vdiskConfig.SetFailRealmIdx(failRealm);
                 vdiskConfig.SetFailDomainIdx(nodeIndex % 8);
 
                 config->MutableGroup(groupId)->AddVSlotId()
@@ -418,6 +432,7 @@ static void SetupServices(TTestActorRuntime &runtime,
     dnsConfig->MaxStaticNodeId = 1000;
     dnsConfig->MaxDynamicNodeId = 2000;
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
+    runtime.GetAppData().DisableCheckingSysNodesCms = true;
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -436,7 +451,7 @@ static void SetupServices(TTestActorRuntime &runtime,
 } // anonymous namespace
 
 TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options) 
-        : TTestBasicRuntime(options.NodeCount, false)
+        : TTestBasicRuntime(options.NodeCount, options.DataCenterCount, false)
         , CmsId(MakeCmsID(0)) 
 {
     TFakeNodeWhiteboardService::Config.MutableResponse()->SetSuccess(true);
@@ -445,7 +460,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     status.SetSuccess(true);
     auto *config = status.MutableBaseConfig();
 
-    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants);
+    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
 
     // Set observer to pass fake base blobstorage config.
     auto redirectConfigRequest = [](TTestActorRuntimeBase&,
@@ -584,6 +599,10 @@ void TCmsTestEnv::SetLimits(ui32 tenantLimit,
     config.MutableClusterLimits()->SetDisabledNodesLimit(clusterLimit);
     config.MutableClusterLimits()->SetDisabledNodesRatioLimit(clusterRatioLimit);
     SetCmsConfig(config);
+}
+
+void TCmsTestEnv::EnableSysNodeChecking() {
+    GetAppData().DisableCheckingSysNodesCms = false;
 }
 
 NKikimrCms::TClusterState
@@ -744,6 +763,18 @@ TCmsTestEnv::CheckRequest(const TString &user,
     UNIT_ASSERT_VALUES_EQUAL(rec.PermissionsSize(), count);
 
     return rec;
+}
+
+
+void TCmsTestEnv::CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req)
+{ 
+    TString TaskId = req->Task.TaskId;
+    SendToPipe(CmsId, Sender, req, 0, GetPipeConfigWithRetries());
+    
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvStoreWalleTaskFailed>(handle, TDuration::Seconds(30));
+    UNIT_ASSERT(reply);
+    UNIT_ASSERT_VALUES_EQUAL(reply->TaskId, TaskId);
 }
 
 void TCmsTestEnv::CheckWalleCreateTask(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> req,

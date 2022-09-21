@@ -196,7 +196,7 @@ private:
     friend class TActorBootstrapped<TVDiskReplProxyReaderActor>;
 
     void Bootstrap(const TActorContext &ctx) {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         auto groupInfo = TBlobStorageGroupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
         VCtx.Reset(new TVDiskContext(ctx.SelfID, groupInfo.PickTopology(), counters, VDiskInfo.VDiskID,
                 ctx.ExecutorThread.ActorSystem, NPDisk::DEVICE_TYPE_UNKNOWN));

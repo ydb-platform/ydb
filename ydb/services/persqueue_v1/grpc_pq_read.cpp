@@ -23,14 +23,14 @@ using namespace PersQueue::V1;
 
 
 IActor* CreatePQReadService(const TActorId& schemeCache, const TActorId& newSchemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) {
+                             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) {
     return new TPQReadService(schemeCache, newSchemeCache, counters, maxSessions);
 }
 
 
 
 TPQReadService::TPQReadService(const TActorId& schemeCache, const TActorId& newSchemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
+                             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
     : SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , Counters(counters)

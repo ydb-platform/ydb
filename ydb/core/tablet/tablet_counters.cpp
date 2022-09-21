@@ -70,7 +70,7 @@ void TTabletSimpleCounterBase::OutputHtml(IOutputStream &os, const char* name) c
 void TTabletPercentileCounter::OutputHtml(IOutputStream &os, const char* name) const {
     HTML(os) {
         DIV_CLASS("row") {
-            DIV_CLASS("col-md-12") {H4() {os << name;}}
+            DIV_CLASS("col-md-12") {TAG(TH4) {os << name;}}
         }
 
         DIV_CLASS("row") {
@@ -101,7 +101,7 @@ template<typename T>
 void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* sectionName, const char* const* counterNames, const char* counterClass, const TCountersArray<T>& counters) const {
     HTML(os) {
         DIV_CLASS("row") {
-            DIV_CLASS("col-md-12") {H3() {os << sectionName; }}
+            DIV_CLASS("col-md-12") {TAG(TH3) {os << sectionName; }}
         }
         DIV_CLASS("row") {
             for (ui32 i = 0, e = counters.Size(); i < e; ++i) {
@@ -181,7 +181,7 @@ TTabletLabeledCountersBase::operator = (const TTabletLabeledCountersBase& rp) {
 void TTabletLabeledCountersBase::OutputHtml(IOutputStream &os) const {
     HTML(os) {
         DIV_CLASS("row") {
-            DIV_CLASS("col-md-12") {H3() {os << Group; }}
+            DIV_CLASS("col-md-12") {TAG(TH3) {os << Group; }}
 
         }
         DIV_CLASS("row") {

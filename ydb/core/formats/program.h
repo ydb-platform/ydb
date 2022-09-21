@@ -4,6 +4,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/types.h>
 
+#include <ydb/core/scheme_types/scheme_types_defs.h>
+
 namespace NKikimr::NArrow {
 
 enum class EOperation {
@@ -86,16 +88,18 @@ enum class EOperation {
 
 enum class EAggregate {
     Unspecified = 0,
-    Any = 1,
+    Some = 1,
     Count = 2,
     Min = 3,
     Max = 4,
     Sum = 5,
-    Avg = 6,
+    //Avg = 6,
 };
 
 const char * GetFunctionName(EOperation op);
 const char * GetFunctionName(EAggregate op);
+const char * GetHouseFunctionName(EAggregate op);
+inline const char * GetHouseGroupByName() { return "ch.group_by"; }
 EOperation ValidateOperation(EOperation op, ui32 argsSize);
 
 class TAssign {
@@ -200,7 +204,8 @@ public:
         , Operation(op)
         , Arguments({std::move(arg)})
     {
-        if (arg.empty()) {
+        if (arg.empty() && op != EAggregate::Count) {
+            // COUNT(*) doesn't have arguments
             op = EAggregate::Unspecified;
         }
     }
@@ -231,10 +236,11 @@ struct TProgramStep {
     std::vector<TAssign> Assignes;
     std::vector<std::string> Filters; // List of filter columns. Implicit "Filter by (f1 AND f2 AND .. AND fn)"
     std::vector<TAggregateAssign> GroupBy;
+    std::vector<std::string> GroupByKeys; // TODO: it's possible to use them without GROUP BY for DISTINCT
     std::vector<std::string> Projection; // Step's result columns (remove others)
 
     struct TDatumBatch {
-        std::shared_ptr<arrow::Schema> fields;
+        std::shared_ptr<arrow::Schema> schema;
         int64_t rows;
         std::vector<arrow::Datum> datums;
     };
@@ -243,21 +249,32 @@ struct TProgramStep {
         return Assignes.empty() && Filters.empty() && Projection.empty();
     }
 
-    void Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;
+    arrow::Status Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;
 
-    void ApplyAssignes(std::shared_ptr<TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
-    void ApplyAggregates(std::shared_ptr<TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
-    void ApplyFilters(std::shared_ptr<TDatumBatch>& batch) const;
-    void ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
-    void ApplyProjection(std::shared_ptr<TDatumBatch>& batch) const;
+    arrow::Status ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
+    arrow::Status ApplyAggregates(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
+    arrow::Status ApplyFilters(TDatumBatch& batch) const;
+    arrow::Status ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
+    arrow::Status ApplyProjection(TDatumBatch& batch) const;
 };
 
-inline void ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch,
-                         const std::vector<std::shared_ptr<TProgramStep>>& program,
-                         arrow::compute::ExecContext* ctx = nullptr) {
+inline arrow::Status ApplyProgram(
+    std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<std::shared_ptr<TProgramStep>>& program,
+    arrow::compute::ExecContext* ctx = nullptr)
+{
     for (auto& step : program) {
-        step->Apply(batch, ctx);
+        auto status = step->Apply(batch, ctx);
+        if (!status.ok()) {
+            return status;
+        }
     }
+    return arrow::Status::OK();
 }
+
+struct TSsaProgramSteps {
+    std::vector<std::shared_ptr<TProgramStep>> Program;
+    THashMap<ui32, TString> ProgramSourceColumns;
+};
 
 }

@@ -5,4 +5,5 @@ package NYql.NS3;
 
 message TRange {
     repeated string Path = 2;
+    uint64 StartPathIndex = 3;
 }

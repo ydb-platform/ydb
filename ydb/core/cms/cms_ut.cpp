@@ -1075,10 +1075,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {   
         TTestEnvOpts options;
         options.NodeCount = 5;
+        options.DataCenterCount = 5;
         options.VDisks = 0;
         options.NRings = 2;
         options.RingSize = 2;
         options.NToSelect = 2;
+        options.UseMirror3dcErasure = false;
     
         TCmsTestEnv env(options);
         
@@ -1097,6 +1099,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         options.NRings = 2;
         options.RingSize = 2;
         options.NToSelect = 2;
+        options.DataCenterCount = 5;
+        options.UseMirror3dcErasure = false;
     
         TCmsTestEnv env(options);
 
@@ -1115,6 +1119,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         options.NRings = 2;
         options.RingSize = 2;
         options.NToSelect = 2;
+        options.DataCenterCount = 5;
+        options.UseMirror3dcErasure = false;
     
         TCmsTestEnv env(options);
         
@@ -1132,10 +1138,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {   
         TTestEnvOpts options;
         options.NodeCount = 7;
+        options.DataCenterCount = 7;
         options.VDisks = 0;
         options.NRings = 3;
         options.RingSize = 2;
         options.NToSelect = 2;
+        options.UseMirror3dcErasure = false;
     
         TCmsTestEnv env(options);
 
@@ -1155,10 +1163,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TTestEnvOpts options;
         options.NodeCount = 20;
+        options.DataCenterCount = 20;
         options.VDisks = 0;
         options.NRings = 6;
         options.RingSize = 3;
         options.NToSelect = 5;
+        options.UseMirror3dcErasure = false;
     
         TCmsTestEnv env(options);
 
@@ -1224,7 +1234,107 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             }
         }
     }
-}
 
+    Y_UNIT_TEST(WalleCleanupTest)
+    {
+        TCmsTestEnv env(8);
+
+        TAutoPtr<NCms::TEvCms::TEvPermissionRequest> event = new NCms::TEvCms::TEvPermissionRequest;
+        event->Record.SetUser(WALLE_CMS_USER);
+        event->Record.SetPartialPermissionAllowed(true);
+        event->Record.SetDryRun(false);
+        event->Record.SetSchedule(false);
+
+        AddActions(event, MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 600000000, "storage"));
+
+        NKikimrCms::TPermissionResponse res;
+        res = env.CheckPermissionRequest(event, TStatus::ALLOW);
+
+        // Check that permission is stored
+        env.CheckListPermissions(WALLE_CMS_USER, 1);
+
+        // Adbance time to run cleanup
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
+        env.RestartCms();
+        
+        // TODO:: перенести внутрь TCmsTestEnv
+        TAutoPtr<TEvCms::TEvStoreWalleTask> event_store = new TEvCms::TEvStoreWalleTask;
+        event_store->Task.TaskId = "walle-test-task-1";
+        event_store->Task.RequestId = res.GetRequestId();
+
+        for (auto &permission : res.GetPermissions())
+            event_store->Task.Permissions.insert(permission.GetId());
+
+        env.CheckWalleStoreTaskIsFailed(event_store.Release());
+    }
+
+    Y_UNIT_TEST(SysTabletsNode)
+    {
+        TTestEnvOpts opt(16);
+        opt.VDisks = 0;
+
+        TCmsTestEnv env(opt); 
+        
+        env.EnableSysNodeChecking();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(3)].Connected = false;
+        env.RestartCms();
+ 
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+    }
+
+
+    Y_UNIT_TEST(Mirror3dcPermissions) 
+    {
+        TTestEnvOpts options;
+        options.UseMirror3dcErasure = true;
+        options.NodeCount = 18;
+        options.VDisks = 9;
+        options.NRings = 3;
+        options.DataCenterCount = 3;
+        options.RingSize = 2;
+        options.NToSelect = 2;
+
+        TCmsTestEnv env(options);
+
+        // 3dc disabled
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(7)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(4)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+         
+        // 2dc disabled
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(7)].Connected = true;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+        
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(5)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+    }
+}
 } // NCmsTest
 } // NKikimr

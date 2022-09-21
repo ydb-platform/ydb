@@ -190,7 +190,7 @@ private:
         }
     };
 
-    NMonitoring::TDynamicCounterPtr GroupForExport(const TCounters& stat, const TString& counterName, ui64 taskId, TString& name, std::map<TString, TString>& labels) {
+    ::NMonitoring::TDynamicCounterPtr GroupForExport(const TCounters& stat, const TString& counterName, ui64 taskId, TString& name, std::map<TString, TString>& labels) {
         Y_UNUSED(stat);
         TString prefix;
         if (NCommon::ParseCounterName(&prefix, &labels, &name, counterName)) {

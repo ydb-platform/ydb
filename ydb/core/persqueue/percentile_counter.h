@@ -10,7 +10,7 @@ class TMultiCounter {
 public:
     TMultiCounter() = default;
 
-    TMultiCounter(NMonitoring::TDynamicCounterPtr counters,
+    TMultiCounter(::NMonitoring::TDynamicCounterPtr counters,
                   const TVector<NPersQueue::TPQLabelsInfo>& labels,
                   const TVector<std::pair<TString, TString>>& subgroups,
                   const TVector<TString>& counter_names,
@@ -26,13 +26,13 @@ public:
 
 private:
     ui64 Value = 0;
-    TVector<NMonitoring::TDynamicCounters::TCounterPtr> Counters;
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> Counters;
 };
 
 class TPercentileCounter {
 public:
     TPercentileCounter() = default;
-    TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TPercentileCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                        const TVector<NPersQueue::TPQLabelsInfo>& labels,
                        const TVector<std::pair<TString, TString>>& subgroups,
                        const TString& sensor,
@@ -49,7 +49,7 @@ private:
 };
 
 NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TVector<NPersQueue::TPQLabelsInfo> aggr,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TVector<NPersQueue::TPQLabelsInfo> aggr,
         const TString name, ui32 border, TVector<ui32> durations);
 
 }// NPQ

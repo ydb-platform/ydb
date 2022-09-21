@@ -125,7 +125,7 @@ public:
         const TTxId& txId,
         TDqSolomonWriteParams&& writeParams,
         NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-        const NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
         i64 freeSpace)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
@@ -204,7 +204,7 @@ public:
 
 private:
     struct TDqSolomonWriteActorMetrics {
-        explicit TDqSolomonWriteActorMetrics(const NMonitoring::TDynamicCounterPtr& counters) {
+        explicit TDqSolomonWriteActorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters) {
             auto subgroup = counters->GetSubgroup("subsystem", "dq_solomon_write_actor");
             SendingBufferSize = subgroup->GetCounter("SendingBufferSize");
             WindowMinSendingBufferSize = subgroup->GetCounter("WindowMinSendingBufferSize");
@@ -214,12 +214,12 @@ private:
             СonfirmedMetrics = subgroup->GetCounter("СonfirmedMetrics", true);
         }
 
-        NMonitoring::TDynamicCounters::TCounterPtr SendingBufferSize;
-        NMonitoring::TDynamicCounters::TCounterPtr WindowMinSendingBufferSize;
-        NMonitoring::TDynamicCounters::TCounterPtr InflightRequests;
-        NMonitoring::TDynamicCounters::TCounterPtr WindowMinInflightRequests;
-        NMonitoring::TDynamicCounters::TCounterPtr SentMetrics;
-        NMonitoring::TDynamicCounters::TCounterPtr СonfirmedMetrics;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SendingBufferSize;
+        ::NMonitoring::TDynamicCounters::TCounterPtr WindowMinSendingBufferSize;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InflightRequests;
+        ::NMonitoring::TDynamicCounters::TCounterPtr WindowMinInflightRequests;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SentMetrics;
+        ::NMonitoring::TDynamicCounters::TCounterPtr СonfirmedMetrics;
 
     public:
         void ReportSendingBufferSize(size_t size) {
@@ -495,7 +495,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     const TTxId& txId,
     const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-    const NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace)
 {
@@ -526,7 +526,7 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServ
             NYql::NSo::NProto::TDqSolomonShard&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
-            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 
             return CreateDqSolomonWriteActor(
                 std::move(settings),

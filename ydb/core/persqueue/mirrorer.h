@@ -56,7 +56,8 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvInitCredentials, HandleInitCredentials);
-            HFuncTraced(TEvPQ::TEvChangeConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
+            HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
@@ -73,7 +74,7 @@ private:
 
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvPQ::TEvChangeConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -106,7 +107,6 @@ private:
         const NKikimrClient::TPersQueuePartitionResponse& response
     );
     void ScheduleConsumerCreation(const TActorContext& ctx);
-    void RecreateCredentialsProvider(const TActorContext& ctx);
     void StartInit(const TActorContext& ctx);
     void RetryWrite(const TActorContext& ctx);
 
@@ -133,10 +133,11 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
-    void HandleChangeConfig(TEvPQ::TEvChangeConfig::TPtr& ev, const TActorContext& ctx);
+    void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
     void HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx);
+    void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
     void HandleWakeup(const TActorContext& ctx);
     void CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr& ev, const TActorContext& ctx);
@@ -164,7 +165,7 @@ private:
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
     TDuration WriteRetryTimeout = WRITE_RETRY_TIMEOUT_START;
     TInstant WriteRequestTimestamp;
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProvider;
+    NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;
     std::shared_ptr<NYdb::NPersQueue::IReadSession> ReadSession;
     ui64 ReaderGeneration = 0;
     NYdb::NPersQueue::TPartitionStream::TPtr PartitionStream;
@@ -178,6 +179,7 @@ private:
     TTabletCountersBase Counters;
 
     bool WaitNextReaderEventInFlight = false;
+    bool CredentialsRequestInFlight = false;
 
     bool WasSuccessfulRecording = false;
     TInstant LastStateLogTimestamp;

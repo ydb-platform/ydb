@@ -231,6 +231,10 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         ui64 localTid = LocalTableId(key.TableId);
         Y_VERIFY(localTid, "table not exist");
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
+
+        Y_VERIFY_DEBUG(!key.Range.IsAmbiguous(tableInfo->KeyColumns.size()),
+            "%s", key.Range.IsAmbiguousReason(tableInfo->KeyColumns.size()));
+
         TSmallVec<TRawTypeValue> keyFrom;
         TSmallVec<TRawTypeValue> keyTo;
         ConvertKeys(tableInfo, key.Range.From, keyFrom);
@@ -653,6 +657,9 @@ public:
     NUdf::TUnboxedValue GetListIterator() const override {
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(LocalTid);
         auto tableRange = RangeHolder.ToTableRange();
+
+        Y_VERIFY_DEBUG(!tableRange.IsAmbiguous(tableInfo->KeyColumns.size()),
+            "%s", tableRange.IsAmbiguousReason(tableInfo->KeyColumns.size()));
 
         TSmallVec<TRawTypeValue> keyFrom;
         TSmallVec<TRawTypeValue> keyTo;

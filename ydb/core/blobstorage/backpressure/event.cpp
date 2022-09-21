@@ -3,8 +3,8 @@
 namespace NKikimr::NBsQueue {
 
 IEventBase *TEventHolder::MakeErrorReply(NKikimrProto::EReplyStatus status, const TString& errorReason,
-        const NMonitoring::TDynamicCounters::TCounterPtr& deserItems,
-        const NMonitoring::TDynamicCounters::TCounterPtr& deserBytes) {
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& deserItems,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& deserBytes) {
     auto callback = [&](auto *event) -> IEventBase* {
         using T = std::remove_pointer_t<decltype(event)>;
         std::unique_ptr<T> temp;

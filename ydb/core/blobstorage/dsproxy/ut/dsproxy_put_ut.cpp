@@ -38,7 +38,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     TGroupMock group(groupId, erasureSpecies, domainCount, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters());
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
     TIntrusivePtr<TDsProxyNodeMon> nodeMon(new TDsProxyNodeMon(counters, true));
     TIntrusivePtr<TBlobStorageGroupProxyMon> mon(new TBlobStorageGroupProxyMon(counters, counters, counters,
                 group.GetInfo(), nodeMon, false));
@@ -159,7 +159,7 @@ struct TTestPutAllOk {
     TBatchedVec<TLogoBlobID> BlobIds;
     TString Data;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TDsProxyNodeMon> NodeMon;
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
 
@@ -175,7 +175,7 @@ struct TTestPutAllOk {
         , GroupQueues(Group.MakeGroupQueues())
         , BlobIds({TLogoBlobID(743284823, 10, 12345, 0, DataSize, 0), TLogoBlobID(743284823, 9, 12346, 0, DataSize, 0)})
         , Data(AlphaData(DataSize))
-        , Counters(new NMonitoring::TDynamicCounters())
+        , Counters(new ::NMonitoring::TDynamicCounters())
         , NodeMon(new TDsProxyNodeMon(Counters, true))
         , Mon(new TBlobStorageGroupProxyMon(Counters, Counters, Counters, Group.GetInfo(), NodeMon, false))
         , LogCtx(NKikimrServices::BS_PROXY_PUT, false)

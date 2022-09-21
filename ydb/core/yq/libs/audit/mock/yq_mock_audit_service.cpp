@@ -67,7 +67,7 @@ private:
     }
 };
 
-NActors::IActor* CreateMockYqAuditServiceActor(const NConfig::TAuditConfig& config, const NMonitoring::TDynamicCounterPtr& counters) {
+NActors::IActor* CreateMockYqAuditServiceActor(const NConfig::TAuditConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters) {
     Y_UNUSED(config);
     Y_UNUSED(counters);
     return new TYqMockAuditServiceActor();

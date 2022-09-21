@@ -9,7 +9,7 @@ namespace NKikimr {
     {
         const ui64 UpdateDivisionFactor;
         const ui64 WindowUpdateTimeoutNs;
-        TVector<std::pair<float, NMonitoring::TDynamicCounters::TCounterPtr>> Counters;
+        TVector<std::pair<float, ::NMonitoring::TDynamicCounters::TCounterPtr>> Counters;
 
         ui64 CumTimeNs = 0;
         ui64 CumBytes = 0;
@@ -18,13 +18,13 @@ namespace NKikimr {
         TVector<ui64> Histogram;
 
     public:
-        TThroughputMeter(ui64 updateDivisionFactor, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        TThroughputMeter(ui64 updateDivisionFactor, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
                 const TString& group, const TString& subgroup, const TString& name, const TVector<float>& thresholds,
                 const TDuration& windowUpdateTimeout = TDuration::MilliSeconds(10))
             : UpdateDivisionFactor(updateDivisionFactor)
             , WindowUpdateTimeoutNs(windowUpdateTimeout.NanoSeconds())
         {
-            TIntrusivePtr<NMonitoring::TDynamicCounters> histGroup =
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> histGroup =
                 counters->GetSubgroup(group, subgroup)->GetSubgroup("sensor", name);
             for (float threshold : thresholds) {
                 Counters.emplace_back(threshold, histGroup->GetNamedCounter("percentile", Sprintf("%.1f", threshold * 100)));

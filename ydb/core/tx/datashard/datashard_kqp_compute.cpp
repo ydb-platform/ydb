@@ -14,14 +14,6 @@ namespace NMiniKQL {
 using namespace NTable;
 using namespace NUdf;
 
-TSmallVec<TTag> ExtractTags(const TSmallVec<TKqpComputeContextBase::TColumn>& columns) {
-    TSmallVec<TTag> tags;
-    for (const auto& column : columns) {
-        tags.push_back(column.Tag);
-    }
-    return tags;
-}
-
 typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
     const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx);
 
@@ -530,9 +522,13 @@ bool TKqpDatashardComputeContext::ReadRowImpl(const TTableId& tableId, TReadTabl
         stats.SelectRangeRows = 1;
         stats.SelectRangeBytes = rowSize;
 
-        stats.InvisibleRowSkips = std::exchange(iterator.Stats.InvisibleRowSkips, 0);
-        stats.SelectRangeDeletedRowSkips = std::exchange(iterator.Stats.DeletedRowSkips, 0);
+        break;
+    }
 
+    stats.InvisibleRowSkips = std::exchange(iterator.Stats.InvisibleRowSkips, 0);
+    stats.SelectRangeDeletedRowSkips = std::exchange(iterator.Stats.DeletedRowSkips, 0);
+
+    if (iterator.Last() == NTable::EReady::Data) {
         return true;
     }
 
@@ -577,9 +573,13 @@ bool TKqpDatashardComputeContext::ReadRowWideImpl(const TTableId& tableId, TRead
         stats.SelectRangeRows = 1;
         stats.SelectRangeBytes = rowSize;
 
-        stats.InvisibleRowSkips = std::exchange(iterator.Stats.InvisibleRowSkips, 0);
-        stats.SelectRangeDeletedRowSkips = std::exchange(iterator.Stats.DeletedRowSkips, 0);
+        break;
+    }
 
+    stats.InvisibleRowSkips = std::exchange(iterator.Stats.InvisibleRowSkips, 0);
+    stats.SelectRangeDeletedRowSkips = std::exchange(iterator.Stats.DeletedRowSkips, 0);
+
+    if (iterator.Last() == NTable::EReady::Data) {
         return true;
     }
 

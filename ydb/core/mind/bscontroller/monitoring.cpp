@@ -107,7 +107,7 @@ public:
         Self->RenderHeader(out);
 
         HTML(out) {
-            H3() {
+            TAG(TH3) {
                 out << "Operation Log";
             }
             TABLE_CLASS("table") {
@@ -247,7 +247,7 @@ private:
         Self->RenderHeader(out);
 
         HTML(out) {
-            H3() {
+            TAG(TH3) {
                 out << "Operation Log ";
                 if (HasEntry) {
                     out << "(entry " << RowIndex << ")";
@@ -513,10 +513,10 @@ public:
         HTML(s) {
             ui64 offset = Offset;
 
-            H3() {
+            TAG(TH3) {
                 s << "Health events";
             }
-            H3() {
+            TAG(TH3) {
                 s << "Health-related operations since " << Since.ToRfc822StringLocal();
             }
             TABLE_CLASS("table") {
@@ -1167,7 +1167,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
 void TBlobStorageController::RenderGroupDetail(IOutputStream &out, TGroupId groupId) {
     RenderHeader(out);
     HTML(out) {
-        H3() {
+        TAG(TH3) {
             out << "VDisks for group " << groupId;
         }
 
@@ -1194,7 +1194,7 @@ void TBlobStorageController::RenderGroupDetail(IOutputStream &out, TGroupId grou
 void TBlobStorageController::RenderGroupsInStoragePool(IOutputStream &out, const TBoxStoragePoolId& id) {
     RenderHeader(out);
     HTML(out) {
-        H3() {
+        TAG(TH3) {
             TString name;
             if (const auto it = StoragePools.find(id); it != StoragePools.end()) {
                 name = it->second.Name;

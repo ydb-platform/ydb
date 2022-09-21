@@ -42,7 +42,7 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
         return {};
     }
 
-    if (kqpCtx.IsScanQuery() && lookup.GetKeyRanges().size() > 1) {
+    if (lookup.GetKeyRanges().size() > 1) {
         return {}; // optimize trivial cases only
     }
 

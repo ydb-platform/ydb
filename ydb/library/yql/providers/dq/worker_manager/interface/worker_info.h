@@ -89,8 +89,8 @@ public:
 
 private:
     TGlobalResources& Resources;
-    NMonitoring::TDynamicCounters::TCounterPtr Capacity;
-    NMonitoring::TDynamicCounters::TCounterPtr RunningRequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Capacity;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RunningRequests;
 };
 
 struct TWorkerInfo: public TThrRefBase {

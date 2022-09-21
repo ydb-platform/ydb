@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-services-rate_limiter)
 target_link_libraries(ydb-services-rate_limiter PUBLIC

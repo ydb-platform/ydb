@@ -24,12 +24,25 @@ namespace NPqMetaCacheV2 {
 using namespace NSchemeCache;
 
 
-IActor* CreateSchemeCache(const TActorContext& ctx, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+IActor* CreateSchemeCache(const TActorContext& ctx, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     auto appData = AppData(ctx);
     auto cacheCounters = GetServiceCounters(counters, "pqproxy|schemecache");
     auto cacheConfig = MakeIntrusive<TSchemeCacheConfig>(appData, cacheCounters);
     return CreateSchemeBoardSchemeCache(cacheConfig.Get());
 }
+
+void CheckEntrySetHasTopicPath(auto* scNavigate) {
+    for (auto& entry : scNavigate->ResultSet) {
+        if (entry.PQGroupInfo && entry.PQGroupInfo->Description.HasPQTabletConfig()) {
+            if (entry.PQGroupInfo->Description.GetPQTabletConfig().GetTopicPath().empty()) {
+                auto* newGroupInfo = new NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo(*entry.PQGroupInfo);
+                newGroupInfo->Description.MutablePQTabletConfig()->SetTopicPath("/" + NKikimr::JoinPath(entry.Path));
+                entry.PQGroupInfo.Reset(newGroupInfo);
+            }
+        }
+    }
+}
+
 
 class TPersQueueMetaCacheActor : public TActorBootstrapped<TPersQueueMetaCacheActor> {
     using TBase = TActorBootstrapped<TPersQueueMetaCacheActor>;
@@ -37,7 +50,7 @@ public:
     TPersQueueMetaCacheActor(TPersQueueMetaCacheActor&&) = default;
     TPersQueueMetaCacheActor& operator=(TPersQueueMetaCacheActor&&) = default;
 
-    TPersQueueMetaCacheActor(const NMonitoring::TDynamicCounterPtr& counters,
+    TPersQueueMetaCacheActor(const ::NMonitoring::TDynamicCounterPtr& counters,
                              const TDuration& versionCheckInterval)
         : Counters(counters)
         , VersionCheckInterval(versionCheckInterval)
@@ -54,6 +67,11 @@ public:
             , Generation(std::make_shared<TAtomicCounter>())
     {
     }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::PQ_META_CACHE;
+    }
+
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPersQueueMetaCacheActor::StateFunc);
@@ -104,6 +122,7 @@ private:
         Generation->Inc();
         LastTopicKey = {};
         Type = EQueryType::ECheckVersion;
+        //TODO: on start there will be additional delay for VersionCheckInterval
         ctx.Schedule(error ? QueryRetryInterval : VersionCheckInterval, new NActors::TEvents::TEvWakeup());
     }
 
@@ -235,6 +254,7 @@ private:
             CurrentTopicsVersion = NewTopicsVersion;
             FullTopicsCacheOutdated = true;
             FullTopicsCache = nullptr;
+            CurrentTopicsFullConverters.clear();
             while (!ListTopicsWaiters.empty()) {
                 auto& waiter = ListTopicsWaiters.front();
                 ProcessDescribeAllTopics(waiter, ctx);
@@ -318,7 +338,7 @@ private:
             //return true;
             return SecondTryTopics.empty(); //ToDo - second try topics
         }
-        const std::shared_ptr<TSchemeCacheNavigate>& GetResult() {
+        std::shared_ptr<TSchemeCacheNavigate>& GetResult() {
             Y_VERIFY(Result != nullptr);
             return Result;
         };
@@ -381,15 +401,15 @@ private:
         }
         if (FullTopicsCache && !FullTopicsCacheOutdated) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Respond from cache");
-            return SendDescribeAllTopicsResponse(waiter, CurrentTopics, ctx);
+            return SendDescribeAllTopicsResponse(waiter, CurrentTopicsFullConverters, ctx);
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Describe all topics - send request");
         SendSchemeCacheRequest(
                 std::make_shared<TWaiter>(waiter, DbRoot, false, false, CurrentTopics, EWaiterType::DescribeAllTopics),
                 ctx
         );
         FullTopicsCacheOutdated = false;
         FullTopicsCache = nullptr;
+        CurrentTopicsFullConverters.clear();
     }
 
     void SendSchemeCacheRequest(std::shared_ptr<TWaiter> waiter, const TActorContext& ctx) {
@@ -405,6 +425,11 @@ private:
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(reqId);
         auto inserted = DescribeTopicsWaiters.insert(std::make_pair(reqId, waiter)).second;
         Y_VERIFY(inserted);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "send request for "
+                            << (waiter->Type == EWaiterType::DescribeAllTopics ? " all " : "") << waiter->GetTopics().size()
+                            << " topics, got " << DescribeTopicsWaiters.size() << " requests infly");
+
         for (const auto& path : waiter->GetTopics()) {
             auto split = NKikimr::SplitPath(path);
             Y_VERIFY(!split.empty());
@@ -426,8 +451,10 @@ private:
             << ": result# " << result->ToString(*AppData()->TypeRegistry));
         auto waiterIter = DescribeTopicsWaiters.find(result->Instant);
         Y_VERIFY(!waiterIter.IsEnd());
-        auto& waiter = waiterIter->second;
+        auto waiter = waiterIter->second; //copy shared ptr
         auto res = waiter->ApplyResult(result);
+        DescribeTopicsWaiters.erase(waiterIter);
+
         if (!res) {
             // First attempt topics failed
             SendSchemeCacheRequest(waiter, ctx);
@@ -439,44 +466,61 @@ private:
             HaveDescribeAllTopicsInflight = false;
             for (const auto& entry : waiter->Result->ResultSet) {
                 if (!entry.PQGroupInfo) {
-                    continue;
+                    FullTopicsCacheOutdated = true;
+                    break;
                 }
 
                 const auto& desc = entry.PQGroupInfo->Description;
-                if (desc.HasBalancerTabletID() && desc.GetBalancerTabletID() != 0) {
-                    continue;
+                if (!desc.HasBalancerTabletID() || desc.GetBalancerTabletID() == 0) {
+                    FullTopicsCacheOutdated = true;
+                    break;
                 }
-                FullTopicsCacheOutdated = true;
             }
             FullTopicsCache = waiter->GetResult();
+
+            CheckEntrySetHasTopicPath(FullTopicsCache.get());
+            auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
+ 
+            for (auto& entry : FullTopicsCache->ResultSet) {
+                if (!entry.PQGroupInfo) {
+                    CurrentTopicsFullConverters.push_back(nullptr);
+                } else {
+
+                    auto converter = factory.MakeTopicConverter(
+                                                    entry.PQGroupInfo->Description.GetPQTabletConfig()
+                                                );
+                    CurrentTopicsFullConverters.push_back(converter);
+                }
+            }
+
+            Y_VERIFY(CurrentTopicsFullConverters.size() == FullTopicsCache->ResultSet.size());
+ 
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Updated topics cache with " << FullTopicsCache->ResultSet.size());
-            while (DescribeAllTopicsWaiters) {
-                SendDescribeAllTopicsResponse(DescribeAllTopicsWaiters.front()->WaiterId, waiter->Topics, ctx);
+            while (!DescribeAllTopicsWaiters.empty()) {
+                SendDescribeAllTopicsResponse(DescribeAllTopicsWaiters.front()->WaiterId, CurrentTopicsFullConverters, ctx);
                 DescribeAllTopicsWaiters.pop();
             }
         } else {
             auto& navigate = waiter->GetResult();
-            Y_VERIFY(!waiterIter.IsEnd());
 
-            Y_VERIFY(waiterIter->second->Topics.size() == navigate->ResultSet.size());
+            Y_VERIFY(waiter->Topics.size() == navigate->ResultSet.size());
+            CheckEntrySetHasTopicPath(navigate.get());
             auto *response = new TEvPqNewMetaCache::TEvDescribeTopicsResponse{
                     std::move(waiter->Topics), navigate
             };
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Got describe topics SC response");
-
             ctx.Send(waiter->WaiterId, response);
-            DescribeTopicsWaiters.erase(waiterIter);
         }
     }
 
-    void SendDescribeAllTopicsResponse(const TActorId& recipient, TVector<NPersQueue::TDiscoveryConverterPtr> topics,
+    void SendDescribeAllTopicsResponse(const TActorId& recipient, TVector<NPersQueue::TTopicConverterPtr> topics,
                                        const TActorContext& ctx, bool empty = false
     ) {
-        TSchemeCacheNavigate* scResponse;
+        std::shared_ptr<TSchemeCacheNavigate> scResponse;
         if (empty) {
-            scResponse = new TSchemeCacheNavigate();
+            scResponse.reset(new TSchemeCacheNavigate());
         } else {
-            scResponse = new TSchemeCacheNavigate(*FullTopicsCache);
+            scResponse = FullTopicsCache;
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Send describe all topics response with " << scResponse->ResultSet.size() << " topics");
         auto* response = new TEvPqNewMetaCache::TEvDescribeAllTopicsResponse(
@@ -518,7 +562,7 @@ private:
         TString Cluster;
     };
 
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     TString VersionQuery;
     TString TopicsQuery;
 
@@ -528,6 +572,7 @@ private:
     EQueryType Type = EQueryType::ECheckVersion;
     TVector<TTopicKey> NewTopics;
     TVector<NPersQueue::TDiscoveryConverterPtr> CurrentTopics;
+    TVector<NPersQueue::TTopicConverterPtr> CurrentTopicsFullConverters;
     bool EverGotTopics = false;
     TDuration QueryRetryInterval = TDuration::Seconds(2);
     TDuration VersionCheckInterval = TDuration::Seconds(1);
@@ -551,7 +596,7 @@ private:
 
 };
 
-IActor* CreatePQMetaCache(const NMonitoring::TDynamicCounterPtr& counters, const TDuration& versionCheckInterval) {
+IActor* CreatePQMetaCache(const ::NMonitoring::TDynamicCounterPtr& counters, const TDuration& versionCheckInterval) {
     return new TPersQueueMetaCacheActor(counters, versionCheckInterval);
 }
 

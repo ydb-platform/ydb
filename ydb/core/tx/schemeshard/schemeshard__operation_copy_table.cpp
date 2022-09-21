@@ -398,6 +398,9 @@ public:
         const ui32 maxShardsToCreate = srcPath.Shards();
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
+        auto schema = Transaction.GetCreateTable();
+        const bool isBackup = schema.GetIsBackup();
+
         TPath dstPath = parent.Child(name);
         {
             TPath::TChecker checks = dstPath.Check();
@@ -420,11 +423,15 @@ public:
                 checks
                     .IsValidLeafName()
                     .IsTheSameDomain(srcPath)
-                    .PathsLimit()
-                    .DirChildrenLimit()
-                    .ShardsLimit(maxShardsToCreate)
                     .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);
+            }
+
+            if (checks && !isBackup) {
+                checks
+                    .PathsLimit()
+                    .DirChildrenLimit()
+                    .ShardsLimit(maxShardsToCreate);
             }
 
             if (!checks) {
@@ -479,9 +486,7 @@ public:
             }
         }
 
-        auto schema = Transaction.GetCreateTable();
         const bool omitFollowers = schema.GetOmitFollowers();
-        const bool isBackup = schema.GetIsBackup();
 
         PrepareScheme(&schema, name, srcTableInfo, context);
         schema.SetIsBackup(isBackup);
@@ -629,10 +634,10 @@ public:
         const ui32 shardsToCreate = tableInfo->GetPartitions().size();
         Y_VERIFY_S(shardsToCreate <= maxShardsToCreate, "shardsToCreate: " << shardsToCreate << " maxShardsToCreate: " << maxShardsToCreate);
 
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(1, isBackup);
+        dstPath.DomainInfo()->AddInternalShards(txState, isBackup);
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parent.Base()->IncAliveChildren();
+        parent.Base()->IncAliveChildren(1, isBackup);
 
         State = NextState();
         SetState(SelectStateFunc(State));

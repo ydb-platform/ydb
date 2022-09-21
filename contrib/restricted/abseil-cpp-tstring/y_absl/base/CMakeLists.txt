@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(internal)
+add_subdirectory(log_severity)
 
 add_library(yabseil-cpp-tstring-y_absl-base)
 target_compile_options(yabseil-cpp-tstring-y_absl-base PRIVATE

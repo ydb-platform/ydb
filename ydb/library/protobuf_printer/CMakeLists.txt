@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-library-protobuf_printer)
 target_link_libraries(ydb-library-protobuf_printer PUBLIC

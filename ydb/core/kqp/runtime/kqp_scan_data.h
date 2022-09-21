@@ -38,17 +38,15 @@ public:
     public:
         TScanData(TScanData&&) = default; // needed to create TMap<ui32, TScanData> Scans
         TScanData(const TTableId& tableId, const TTableRange& range, const TSmallVec<TColumn>& columns,
-            const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys);
+            const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys,
+            const TSmallVec<TColumn>& resultColumns);
 
         TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode);
 
         ~TScanData() {
-            TString msg = TStringBuilder() << "Buffer in TScanData was not cleared, data is leaking: "
-                    << "Queue of UnboxedValues must be emptied under allocator using Clear method, but has " << RowBatches.size() << " elements!";
-            if (!RowBatches.empty()) {
-                LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, msg);
-            }
-            Y_VERIFY_DEBUG_S(RowBatches.empty(), msg);
+            Y_VERIFY_DEBUG_S(RowBatches.empty(), "Buffer in TScanData was not cleared, data is leaking. "
+                << "Queue of UnboxedValues must be emptied under allocator using Clear() method, but has "
+                << RowBatches.size() << " elements!");
         }
 
         const TSmallVec<TColumn>& GetColumns() const {
@@ -57,6 +55,10 @@ public:
 
         const TSmallVec<TColumn>& GetSystemColumns() const {
             return SystemColumns;
+        }
+
+        const TSmallVec<TColumn>& GetResultColumns() const {
+            return ResultColumns;
         }
 
         ui64 AddRows(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
@@ -123,6 +125,7 @@ public:
 
         TSmallVec<TColumn> Columns;
         TSmallVec<TColumn> SystemColumns;
+        TSmallVec<TColumn> ResultColumns;
         TQueue<RowBatch> RowBatches;
         ui64 StoredBytes = 0;
         bool Finished = false;

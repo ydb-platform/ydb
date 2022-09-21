@@ -99,20 +99,20 @@ struct TCountersCouple {
     }
 };
 
-using TIntrusivePtrCntrCouple = TCountersCouple<TIntrusivePtr<NMonitoring::TDynamicCounters>>;
+using TIntrusivePtrCntrCouple = TCountersCouple<TIntrusivePtr<::NMonitoring::TDynamicCounters>>;
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetSqsServiceCounters(
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot, const TString& subgroup);
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetYmqPublicCounters(
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot);
+TIntrusivePtr<::NMonitoring::TDynamicCounters> GetSqsServiceCounters(
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& countersRoot, const TString& subgroup);
+TIntrusivePtr<::NMonitoring::TDynamicCounters> GetYmqPublicCounters(
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& countersRoot);
 
 TIntrusivePtrCntrCouple GetFolderCounters(const TIntrusivePtrCntrCouple& userCounters, const TString& folderId);
 void RemoveFolderCounters(const TIntrusivePtrCntrCouple& userCounters, const TString& folderId);
 std::pair<TIntrusivePtrCntrCouple, TIntrusivePtrCntrCouple> GetUserAndQueueCounters(
         const TIntrusivePtrCntrCouple& sqsRootCounters, const TQueuePath& queuePath);
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetAggregatedCountersFromSqsCoreCounters(
+TIntrusivePtr<::NMonitoring::TDynamicCounters> GetAggregatedCountersFromSqsCoreCounters(
         const TIntrusivePtrCntrCouple& sqsCoreCounters, const NKikimrConfig::TSqsConfig& cfg);
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetAggregatedCountersFromUserCounters(
+TIntrusivePtr<::NMonitoring::TDynamicCounters> GetAggregatedCountersFromUserCounters(
         const TIntrusivePtrCntrCouple& sqsCoreCounters, const NKikimrConfig::TSqsConfig& cfg);
 
 extern const TString DEFAULT_COUNTER_NAME;
@@ -226,11 +226,11 @@ struct TLazyCachedCounterBase {
         }
     }
 
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const TString& value, ELaziness laziness) {
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const TString& value, ELaziness laziness) {
         Init(rootCounters, lifetime, DEFAULT_COUNTER_NAME, value, laziness);
     }
 
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const TString& name, const TString& value, ELaziness laziness) {
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const TString& name, const TString& value, ELaziness laziness) {
         RootCounters = rootCounters;
         Name = name;
         Value = value;
@@ -291,7 +291,7 @@ protected:
 
 protected:
     TLazyCachedCounterBase* AggregatedParent = nullptr;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> RootCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> RootCounters;
     TString Name;
     TString Value;
     ELifetime Lifetime = ELifetime::Persistent;
@@ -304,11 +304,11 @@ struct TLazyCachedCounter : public NDetails::TLazyCachedCounterBase<NMonitoring:
     TLazyCachedCounter() = default;
     TLazyCachedCounter(const TLazyCachedCounter&) = default;
 
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, EValueType valueType, const TString& value, ELaziness laziness) {
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, EValueType valueType, const TString& value, ELaziness laziness) {
         Init(rootCounters, lifetime, valueType, DEFAULT_COUNTER_NAME, value, laziness);
     }
 
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, EValueType valueType, const TString& name, const TString& value, ELaziness laziness) {
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, EValueType valueType, const TString& name, const TString& value, ELaziness laziness) {
         TLazyCachedCounterBase::Init(rootCounters, lifetime, name, value, ELaziness::OnDemand);
         ValueType = valueType;
         if (laziness == ELaziness::OnStart) {
@@ -338,11 +338,11 @@ struct TLazyCachedHistogram : public NDetails::TLazyCachedCounterBase<NMonitorin
     TLazyCachedHistogram() = default;
     TLazyCachedHistogram(const TLazyCachedHistogram&) = default;
 
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const NMonitoring::TBucketBounds& buckets, const TString& value, ELaziness laziness) {
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const NMonitoring::TBucketBounds& buckets, const TString& value, ELaziness laziness) {
         Init(rootCounters, lifetime, buckets, DEFAULT_COUNTER_NAME, value, laziness);
     }
 
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const NMonitoring::TBucketBounds& buckets, const TString& name, const TString& value, ELaziness laziness) {
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const NMonitoring::TBucketBounds& buckets, const TString& name, const TString& value, ELaziness laziness) {
         Buckets = &buckets;
         TLazyCachedCounterBase::Init(rootCounters, lifetime, name, value, ELaziness::OnDemand);
         if (laziness == ELaziness::OnStart) {
@@ -380,7 +380,7 @@ public:
     TLazyCachedHistogram WorkingDuration; // Special duration except wait time for ReceiveMessage action (== 18 counters). // User metric for cloud console (ReceiveMessage).
 
 public:
-    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
+    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters,
                       EAction action, ELifetime lifetime = ELifetime::Persistent);
 
     virtual void SetAggregatedParent(TActionCounters* parent);
@@ -388,7 +388,7 @@ public:
 };
 
 struct TYmqActionCounters : public TActionCounters {
-    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
+    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters,
               EAction action, const TString& labelName, const TString& namePrefix,
               ELifetime lifetime = ELifetime::Persistent);
 public:
@@ -398,7 +398,7 @@ public:
     }
 
 private:
-    NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounterPtr SubGroup;
 };
 
 // Counters for typed queries (WRITE_MESSAGE_ID, PURGE_QUEUE_ID and etc).
@@ -430,7 +430,7 @@ struct TTransactionCounters : public TAtomicRefCount<TTransactionCounters> {
     void SetAggregatedParent(const TIntrusivePtr<TTransactionCounters>& parent);
 
 public:
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters,
         std::shared_ptr<TAlignedPagePoolCounters> poolCounters, bool forQueue);
 };
 
@@ -440,7 +440,7 @@ public:
     void AddError(const TString& errorCode, size_t count = 1);
     void AddOk(size_t count = 1);
 
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& root);
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& root);
 
     void SetAggregatedParent(TAPIStatusesCounters* parent);
 
@@ -493,8 +493,8 @@ struct TUserCounters : public TAtomicRefCount<TUserCounters> {
     TIntrusivePtrCntrCouple UserCounters; // User tree in core subsystem
 
     TUserCounters(
-            const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& sqsCoreCounters,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& ymqRootCounters,
+            const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& sqsCoreCounters,
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& ymqRootCounters,
             const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, const TString& userName,
             const TIntrusivePtr<TUserCounters>& aggregatedParent,
             bool isAggregatedCounters = false
@@ -630,7 +630,7 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
 
         TLazyCachedHistogram ReceiveMessageImmediate_Duration; // Time for receive message request that was processed with only one attempt (without wait or try many shards). Histogram with buckets for durations (== 18 counters).
 
-        void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& queueCounters,
+        void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& queueCounters,
             const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, bool forLeaderNode);
         void SetAggregatedParent(TDetailedCounters* parent);
     };
@@ -716,7 +716,7 @@ private:
 struct THttpActionCounters {
     TLazyCachedCounter Requests; // Requests count of given type.
 
-    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, EAction action);
+    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& rootCounters, EAction action);
     void SetAggregatedParent(THttpActionCounters* parent);
 
 private:
@@ -731,10 +731,10 @@ struct THttpUserCounters : public TAtomicRefCount<THttpUserCounters> {
 
     // Raw counters interface
     // Don't use counters by name!
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsHttpCounters; // Sqs http subsystem
-    TIntrusivePtr<NMonitoring::TDynamicCounters> UserCounters; // User tree in core subsystem
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsHttpCounters; // Sqs http subsystem
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> UserCounters; // User tree in core subsystem
 
-    THttpUserCounters(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& sqsHttpCounters, const TString& userName)
+    THttpUserCounters(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& sqsHttpCounters, const TString& userName)
         : SqsHttpCounters(sqsHttpCounters)
         , Cfg(&cfg)
     {
@@ -758,9 +758,9 @@ struct THttpCounters : public TAtomicRefCount<THttpCounters> {
 
     // Raw counters interface
     // Don't use counters by name!
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsHttpCounters; // Sqs http subsystem
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsHttpCounters; // Sqs http subsystem
 
-    THttpCounters(const NKikimrConfig::TSqsConfig& cfg, TIntrusivePtr<NMonitoring::TDynamicCounters> sqsHttpCounters)
+    THttpCounters(const NKikimrConfig::TSqsConfig& cfg, TIntrusivePtr<::NMonitoring::TDynamicCounters> sqsHttpCounters)
         : SqsHttpCounters(std::move(sqsHttpCounters))
         , Cfg(&cfg)
     {
@@ -787,7 +787,7 @@ struct TCloudAuthCounters {
     TLazyCachedHistogram AuthorizeDuration; // Histogram with buckets for durations (== 18 counters).
     TLazyCachedHistogram GetFolderIdDuration; // Histogram with buckets for durations (== 18 counters).
 
-    explicit TCloudAuthCounters(const NKikimrConfig::TSqsConfig& cfg, TIntrusivePtr<NMonitoring::TDynamicCounters> cloudAuthCountersRoot)
+    explicit TCloudAuthCounters(const NKikimrConfig::TSqsConfig& cfg, TIntrusivePtr<::NMonitoring::TDynamicCounters> cloudAuthCountersRoot)
         : Cfg(&cfg)
     {
         InitCounters(std::move(cloudAuthCountersRoot));
@@ -798,7 +798,7 @@ struct TCloudAuthCounters {
     static constexpr int GRPC_STATUSES_COUNT = 18;
 
 private:
-    void InitCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> cloudAuthCounters);
+    void InitCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> cloudAuthCounters);
 
 private:
     const NKikimrConfig::TSqsConfig* Cfg = nullptr;
@@ -812,7 +812,7 @@ struct TMeteringCounters : public TAtomicRefCount<TMeteringCounters> {
     THashMap<TString, TLazyCachedCounter> ClassifierRequestsResults;
     THashMap<TString, TLazyCachedCounter> IdleClassifierRequestsResults;
 
-    TMeteringCounters(const NKikimrConfig::TSqsConfig& config, const TIntrusivePtr<NMonitoring::TDynamicCounters>& sqsMeteringCounters, const TVector<TString>& classifierLabels)
+    TMeteringCounters(const NKikimrConfig::TSqsConfig& config, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& sqsMeteringCounters, const TVector<TString>& classifierLabels)
         : SqsMeteringCounters(sqsMeteringCounters)
         , Config(config)
     {
@@ -823,7 +823,31 @@ private:
     void InitCounters(const TVector<TString>& classifierLabels);
 
 private:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsMeteringCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsMeteringCounters;
+    const NKikimrConfig::TSqsConfig& Config;
+};
+
+// Common service monitoring counters
+struct TMonitoringCounters : public TAtomicRefCount<TMonitoringCounters> {
+    TLazyCachedCounter CleanupRemovedQueuesLagSec;
+    TLazyCachedCounter CleanupRemovedQueuesLagCount;
+    
+    TLazyCachedCounter CleanupRemovedQueuesDone;
+    TLazyCachedCounter CleanupRemovedQueuesRows;
+    TLazyCachedCounter CleanupRemovedQueuesErrors;
+
+    TMonitoringCounters(const NKikimrConfig::TSqsConfig& config, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& monitoringCounters)
+        : MonitoringCounters(monitoringCounters)
+        , Config(config)
+    {
+        InitCounters();
+    }
+
+private:
+    void InitCounters();
+
+private:
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> MonitoringCounters;
     const NKikimrConfig::TSqsConfig& Config;
 };
 

@@ -50,7 +50,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
         TStringStream str;
 
         HTML(str) {
-            H3() { str << "State Storage";}
+            TAG(TH3) { str << "State Storage";}
             DIV_CLASS("container") {
                 DIV_CLASS("row") {str << "TabletID: " << TabletID;}
                 DIV_CLASS("row") {str << "Response: " << response;}

@@ -51,7 +51,7 @@ ui64 TTabletTraces::GetCount() const {
     return Traces.size();
 }
 
-TTraceCollection::TTraceCollection(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+TTraceCollection::TTraceCollection(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     if (counters) {
         Reporting = true;
         ReportedSize = counters->GetCounter("totalsize");
@@ -151,7 +151,7 @@ ITrace* TTraceCollection::GetTrace(ui64 tabletID, TTraceID& traceID) {
     return nullptr;
 }
 
-ITraceCollection* CreateTraceCollection(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+ITraceCollection* CreateTraceCollection(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TTraceCollection(counters);
 }
 

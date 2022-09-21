@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(blobstorage-vdisk-anubis_osiris)
 target_link_libraries(blobstorage-vdisk-anubis_osiris PUBLIC

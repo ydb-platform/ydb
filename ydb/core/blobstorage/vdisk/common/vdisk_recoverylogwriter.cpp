@@ -18,15 +18,15 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         ////////////////////////////////////////////////////////////////////////////
         struct TCounters {
             struct TItem {
-                NMonitoring::TDynamicCounters::TCounterPtr Msgs;
-                NMonitoring::TDynamicCounters::TCounterPtr Bytes;
+                ::NMonitoring::TDynamicCounters::TCounterPtr Msgs;
+                ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
 
                 TItem()
                     : Msgs()
                     , Bytes()
                 {}
 
-                TItem(const TString &prefix, const TString& name, TIntrusivePtr<NMonitoring::TDynamicCounters> mon) {
+                TItem(const TString &prefix, const TString& name, TIntrusivePtr<::NMonitoring::TDynamicCounters> mon) {
                     Msgs = mon->GetCounter(prefix + name + "Msgs", true);
                     Bytes = mon->GetCounter(prefix + name + "Bytes", true);
                 }
@@ -39,7 +39,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             TVector<TItem> Counters;
 
-            TCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> mon) {
+            TCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> mon) {
                 auto group = mon->GetSubgroup("subsystem", "logrecs");
                 Counters.reserve(static_cast<size_t>(TLogSignature::Max));
                 TString prefix("Log");
@@ -91,7 +91,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         const NPDisk::TOwnerRound OwnerRound;
         ui64 CurSentLsn = 0;
         TQueueType Queue;
-        NMonitoring::TDynamicCounters::TCounterPtr LsmLogBytesWritten;
+        ::NMonitoring::TDynamicCounters::TCounterPtr LsmLogBytesWritten;
         TCounters Counters;
 
         friend class TActorBootstrapped<TRecoveryLogWriter>;
@@ -208,7 +208,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
         TRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID,
                            NPDisk::TOwner owner, NPDisk::TOwnerRound ownerRound, ui64 startLsn,
-                           TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+                           TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
             : TActorBootstrapped<TRecoveryLogWriter>()
             , YardID(yardID)
             , SkeletonID(skeletonID)
@@ -223,7 +223,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
     IActor* CreateRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID, NPDisk::TOwner owner,
                                     NPDisk::TOwnerRound ownerRound,
-                                    ui64 startLsn, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+                                    ui64 startLsn, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
         return new TRecoveryLogWriter(yardID, skeletonID, owner, ownerRound, startLsn, counters);
     }
 

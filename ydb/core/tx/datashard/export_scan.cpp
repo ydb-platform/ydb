@@ -63,9 +63,9 @@ class TExportScan: private NActors::IActor, public NTable::IScan {
         }
 
     private:
-        NMonitoring::TDynamicCounters::TCounterPtr MonRows;
-        NMonitoring::TDynamicCounters::TCounterPtr MonBytesRead;
-        NMonitoring::TDynamicCounters::TCounterPtr MonBytesSent;
+        ::NMonitoring::TDynamicCounters::TCounterPtr MonRows;
+        ::NMonitoring::TDynamicCounters::TCounterPtr MonBytesRead;
+        ::NMonitoring::TDynamicCounters::TCounterPtr MonBytesSent;
     };
 
     bool IsReady() const {

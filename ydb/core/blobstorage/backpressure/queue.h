@@ -56,8 +56,8 @@ class TBlobStorageQueue {
 
         template<typename TEvent>
         TItem(TAutoPtr<TEventHandle<TEvent>>& event, TInstant deadline,
-                const NMonitoring::TDynamicCounters::TCounterPtr& serItems,
-                const NMonitoring::TDynamicCounters::TCounterPtr& serBytes,
+                const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
+                const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes,
                 const TBSProxyContextPtr& bspctx, ui32 interconnectChannel,
                 bool local, TInstant now)
             : Queue(EItemQueue::NotSet)
@@ -125,30 +125,30 @@ class TBlobStorageQueue {
     const ui32 InterconnectChannel;
 
 public:
-    NMonitoring::TDynamicCounters::TCounterPtr QueueWaitingItems;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueWaitingBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueInFlightItems;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueInFlightBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueInFlightCost;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueWindowSize;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsPut;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsPutBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsProcessed;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsRejected;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsPruned;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsSent;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsUndelivered;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsIncorrectMsgId;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueItemsWatermarkOverflow;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueOverflow;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueSerializedItems;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueSerializedBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedItems;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueWaitingItems;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueWaitingBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueInFlightItems;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueInFlightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueInFlightCost;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueWindowSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsPut;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsPutBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsProcessed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsRejected;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsPruned;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsSent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsUndelivered;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsIncorrectMsgId;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueItemsWatermarkOverflow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueOverflow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueSerializedItems;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueSerializedBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedItems;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
 
 public:
-    TBlobStorageQueue(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
+    TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, ui32 interconnectChannel,
             const TBlobStorageGroupType &gType,
             NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public);

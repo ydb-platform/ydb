@@ -19,6 +19,7 @@ option java_package = "ru.yandex.kikimr.proto";
 message TProgram {
     message TColumn {
         optional uint64 Id = 1;
+        optional string Name = 2;
     }
 
     message TConstant {
@@ -98,12 +99,12 @@ message TProgram {
     message TAggregateAssignment {
         enum EAggregateFunction {
             AGG_UNSPECIFIED = 0;
-            AGG_ANY = 1;
+            AGG_SOME = 1;
             AGG_COUNT = 2;
             AGG_MIN = 3;
             AGG_MAX = 4;
             AGG_SUM = 5;
-            AGG_AVG = 6;
+            //AGG_AVG = 6;
             //AGG_VAR = 7;
             //AGG_COVAR = 8;
             //AGG_STDDEV = 9;

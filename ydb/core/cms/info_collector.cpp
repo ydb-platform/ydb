@@ -211,6 +211,7 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
             Info->AddBSGroup(group);
         }
 
+        Info->ChooseSysNodes();
         MaybeReplyAndDie();
     }
 }

@@ -163,6 +163,9 @@ class KikimrSqsTestBase(object):
         cls.sqs_port = cls.sqs_ports[0]
         cls.server_fqdn = get_fqdn()
 
+    def _before_test_start(self):
+        pass
+
     def setup_method(self, method=None):
         logging.debug('Test started: {}'.format(str(method.__name__)))
         logging.debug("Kikimr logs dir: {}".format(self.cluster.slots[1].cwd if self.slot_count else self.cluster.nodes[1].cwd))
@@ -180,11 +183,18 @@ class KikimrSqsTestBase(object):
         grpc_port = self.cluster.slots[1].grpc_port if self.slot_count else self.cluster.nodes[1].grpc_port
         self._sqs_server_opts = ['-s', 'localhost', '-p', str(grpc_port)]
         test_name = str(method.__name__)[5:]
-        self._username = 'U_' + test_name
-        self.queue_name = 'Q_{}_{}'.format(test_name, str(uuid.uuid1()))
-        max_queue_name_length = 80 - len('.fifo')
-        if len(self.queue_name) > max_queue_name_length:
-            self.queue_name = self.queue_name[:max_queue_name_length]
+
+        def create_unique_name(user=False):
+            max_length = 80 - (0 if user else len('.fifo'))
+            name = '{subject}_{test}_{uid}'.format(
+                subject=('U' if user else 'Q'),
+                test=test_name[:60],
+                uid=uuid.uuid1()
+            )
+            return name[:max_length]
+
+        self._username = create_unique_name(user=True)
+        self.queue_name = create_unique_name()
         self._msg_body_template = self._username + '-{}'
         self._setup_user(self._username)
         self._sqs_apis = []
@@ -220,6 +230,8 @@ class KikimrSqsTestBase(object):
         self.read_result = []
 
         self.seq_no = 0
+
+        self._before_test_start()
 
     def teardown_method(self, method=None):
         self.check_no_queues_table(self._username)
@@ -259,7 +271,7 @@ class KikimrSqsTestBase(object):
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
-            additional_log_configs={'SQS': LogLevels.INFO},
+            additional_log_configs={'SQS': LogLevels.DEBUG},
             enable_sqs=True,
         )
         config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root
@@ -703,50 +715,30 @@ class KikimrSqsTestBase(object):
         if queue_name is None:
             queue_name = self.queue_name
         is_fifo = queue_name.endswith('.fifo')
-
         queue_version = self._get_queue_version_number(self._username, queue_name)
+        tables_format = self.tables_format_per_user.get(self._username, 0)
 
-        if is_fifo:
-            self._check_fifo_queue_is_empty(queue_name, queue_version)
-        else:
-            self._check_std_queue_is_empty(queue_name, queue_version)
+        self.__check_queue_tables_are_empty(queue_name, is_fifo, queue_version, tables_format)
 
-    def _get_table_lines_count(self, table_path):
-        data_result_sets = self._execute_yql_query('SELECT COUNT(*) AS count FROM `{}`;'.format(table_path))
+    def _get_table_lines_count(self, table_path, condition=None):
+        query = 'SELECT COUNT(*) AS count FROM `{}` {};'.format(table_path, condition if condition else '')
+        data_result_sets = self._execute_yql_query(query)
         assert_that(len(data_result_sets), equal_to(1))
         assert_that(len(data_result_sets[0].rows), equal_to(1))
         logging.debug('Received count result for table {}: {}'.format(table_path, data_result_sets[0].rows[0]))
         return data_result_sets[0].rows[0]['count']
 
-    def _check_std_queue_is_empty(self, queue_name, queue_version):
-        shards = self._get_queue_shards_count(self._username, queue_name, queue_version)
-        assert_that(shards, not_(equal_to(0)))
-        for shard in range(shards):
-            self._check_std_queue_shard_is_empty(queue_name, queue_version, shard)
+    def __check_queue_tables_are_empty(self, queue_name, is_fifo, queue_version, tables_format):
+        shards = [None] if is_fifo else range(self._get_queue_shards_count(self._username, queue_name, queue_version))
+        rows_condition = f' WHERE QueueIdNumber = {queue_version}' if tables_format == 1 else None
 
-    def _check_std_queue_shard_is_empty(self, queue_name, queue_version, shard):
-        def get_table_path(table_name):
-            return self._smart_make_table_path(self._username, queue_name, queue_version, shard, table_name)
-
-        def get_lines_count(table_name):
-            return self._get_table_lines_count(get_table_path(table_name))
-
-        assert_that(get_lines_count('Infly'), equal_to(0))
-        assert_that(get_lines_count('MessageData'), equal_to(0))
-        assert_that(get_lines_count('Messages'), equal_to(0))
-        assert_that(get_lines_count('SentTimestampIdx'), equal_to(0))
-
-    def _check_fifo_queue_is_empty(self, queue_name, queue_version):
-        def get_table_path(table_name):
-            return self._smart_make_table_path(self._username, queue_name, queue_version, None, table_name)
-
-        def get_lines_count(table_name):
-            return self._get_table_lines_count(get_table_path(table_name))
-
-        assert_that(get_lines_count('Data'), equal_to(0))
-        assert_that(get_lines_count('Groups'), equal_to(0))
-        assert_that(get_lines_count('Messages'), equal_to(0))
-        assert_that(get_lines_count('SentTimestampIdx'), equal_to(0))
+        table_names = ['Messages', 'SentTimestampIdx']
+        table_names += ['Data', 'Groups'] if is_fifo else ['Infly', 'MessageData']
+        for shard in shards:
+            for table_name in table_names:
+                table_path = self._smart_make_table_path(self._username, queue_name, queue_version, shard, table_name)
+                rows_count = self._get_table_lines_count(table_path, rows_condition)
+                assert_that(rows_count, equal_to(0))
 
     def _break_queue(self, username, queuename, is_fifo):
         version = self._get_queue_version_number(username, queuename)

@@ -83,7 +83,7 @@ struct TPipePeNodeCacheConfig : public TAtomicRefCount<TPipePeNodeCacheConfig>{
     ui64 TabletCacheLimit;
     TDuration PipeRefreshTime;
     NTabletPipe::TClientConfig PipeConfig;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
 
     TPipePeNodeCacheConfig()
         : TabletCacheLimit(500000)

@@ -24,15 +24,15 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
     NKikimrProto::TAuthConfig Config;
     TString DomainName;
 
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsReceived;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsSuccess;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrors;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsRetryable;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsPermanent;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsBuiltin;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsLogin;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsReceived;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsSuccess;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsRetryable;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsPermanent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsBuiltin;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsLogin;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
     NMonitoring::THistogramPtr CounterTicketsBuildTime;
 
     TDuration RefreshPeriod = TDuration::Seconds(1); // how often do we check for ticket freshness/expiration
@@ -572,9 +572,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> rootCounters = AppData(ctx)->Counters;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "auth");
-        NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "TicketParser");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> rootCounters = AppData(ctx)->Counters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "auth");
+        ::NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "TicketParser");
         CounterTicketsReceived = counters->GetCounter("TicketsReceived", true);
         CounterTicketsSuccess = counters->GetCounter("TicketsSuccess", true);
         CounterTicketsErrors = counters->GetCounter("TicketsErrors", true);

@@ -128,7 +128,7 @@ namespace NKikimr {
             const ui32 From = 2;
             const ui32 To = 6;
             const ui32 InsertsThreshold = 1000;
-            NMonitoring::TDynamicCounters DynCounters;
+            ::NMonitoring::TDynamicCounters DynCounters;
             TMemoryConsumer MemConsumer;
             ui64 *LsnCounter = nullptr;
             ui32 Part = 0;

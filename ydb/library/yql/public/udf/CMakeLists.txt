@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(service)
+add_subdirectory(support)
+add_subdirectory(tz)
+add_subdirectory(ut)
 
 add_library(yql-public-udf)
 target_compile_options(yql-public-udf PRIVATE

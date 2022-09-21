@@ -17,6 +17,6 @@ namespace NKikimr::NPQ::NClusterDiscovery {
         return TActorId(0, TStringBuf(x, TActorId::MaxServiceIDLength));
     }
 
-    NActors::IActor* CreateClusterDiscoveryService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+    NActors::IActor* CreateClusterDiscoveryService(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
 } // namespace NKikimr::NPQ::NClusterDiscovery

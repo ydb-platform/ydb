@@ -56,7 +56,7 @@ public:
     TPrivateClient(
         const NYdb::TDriver& driver,
         const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings(),
-        const NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
     TAsyncGetTaskResult GetTask(
         Yq::Private::GetTaskRequest&& request,

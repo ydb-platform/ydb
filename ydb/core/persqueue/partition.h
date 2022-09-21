@@ -214,6 +214,8 @@ private:
     void SetupTopicCounters(const TActorContext& ctx);
     void SetupStreamCounters(const TActorContext& ctx);
 
+    ui64 GetUsedStorage(const TActorContext& ctx);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -660,6 +662,8 @@ private:
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 
     THolder<TMirrorerInfo> Mirrorer;
+
+    TInstant LastUsedStorageMeterTimestamp;
 };
 
 }// NPQ

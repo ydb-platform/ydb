@@ -40,8 +40,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     auto& tableDesc = *modifyScheme.MutableCreateTable();
     tableDesc.SetName(wdAndPath.second);
 
+    Y_VERIFY(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
-    if (!FillTableDescription(modifyScheme, item.Scheme, status, error)) {
+    if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error)) {
         return nullptr;
     }
 

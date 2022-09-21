@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(lexer)
+add_subdirectory(perf)
+add_subdirectory(proto_parser)
 
 add_library(yql-sql-v1)
 target_compile_options(yql-sql-v1 PRIVATE

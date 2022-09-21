@@ -415,6 +415,8 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     BLOG_D("Handle BootTablets");
+    SignalTabletActive(DEPRECATED_CTX);
+    ReadyForConnections = true;
     RequestPoolsInformation();
     for (auto& [id, node] : Nodes) {
         if (node.IsUnknown() && node.Local) {
@@ -439,6 +441,10 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
             if (!tablet.InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
                 DeleteTabletWithoutStorage(&tablet);
             }
+        } else if (tablet.IsLockedToActor()) {
+            // we are wating for a lock
+        } else if (tablet.IsExternalBoot()) {
+            // we are wating for external boot request
         } else if (tablet.IsStopped() && tablet.State == ETabletState::Stopped) {
             ReportStoppedToWhiteboard(tablet);
             BLOG_D("Report tablet " << tablet.ToString() << " as stopped to Whiteboard");
@@ -458,8 +464,6 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
     }
     sideEffects.Complete(DEPRECATED_CTX);
-    SignalTabletActive(DEPRECATED_CTX);
-    ReadyForConnections = true;
     if (AreWeRootHive()) {
         BLOG_D("Root Hive is ready");
     } else {
@@ -2462,12 +2466,18 @@ void THive::RequestFreeSequence() {
         size_t sequenceIndex = Sequencer.NextFreeSequenceIndex();
         size_t sequenceSize = GetRequestSequenceSize();
 
+        if (PendingCreateTablets.size() > sequenceSize) {
+            size_t newSequenceSize = ((PendingCreateTablets.size() / sequenceSize) + 1) * sequenceSize;
+            BLOG_W("Increasing sequence size from " << sequenceSize << " to " << newSequenceSize << " due to PendingCreateTablets.size() == " << PendingCreateTablets.size());
+            sequenceSize = newSequenceSize;
+        }
+
         BLOG_D("Requesting free sequence #" << sequenceIndex << " of " << sequenceSize << " from root hive");
         SendToRootHivePipe(new TEvHive::TEvRequestTabletIdSequence(TabletID(), sequenceIndex, sequenceSize));
         RequestingSequenceNow = true;
         RequestingSequenceIndex = sequenceIndex;
     } else {
-        BLOG_ERROR("We run out of tablet ids");
+        BLOG_ERROR("We ran out of tablet ids");
     }
 }
 

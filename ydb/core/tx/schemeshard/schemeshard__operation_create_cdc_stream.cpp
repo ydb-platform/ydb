@@ -267,8 +267,9 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TNewCdcStream");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TNewCdcStream AbortPropose"
+            << ": opId# " << OperationId);
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
@@ -450,6 +451,10 @@ public:
             return result;
         }
 
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
         context.DbChanges.PersistTxState(OperationId);
 
         Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
@@ -477,8 +482,9 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TNewCdcStreamAtTable");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TNewCdcStreamAtTable AbortPropose"
+            << ": opId# " << OperationId);
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
@@ -592,19 +598,17 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
             << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode()))};
     }
 
-    const auto retentionPeriod = TDuration::Seconds(op.GetRetentionPeriodSeconds());
-    if (retentionPeriod.Seconds() > TSchemeShard::MaxPQLifetimeSeconds) {
-        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-            << "Invalid retention period specified: " << retentionPeriod.Seconds()
-            << ", limit: " << TSchemeShard::MaxPQLifetimeSeconds)};
-    }
-
     const ui64 aliveStreams = context.SS->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeCdcStream);
     if (aliveStreams + 1 > tablePath.DomainInfo()->GetSchemeLimits().MaxTableCdcStreams) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusResourceExhausted, TStringBuilder()
             << "cdc streams count has reached maximum value in the table"
             << ", children limit for dir in domain: " << tablePath.DomainInfo()->GetSchemeLimits().MaxTableCdcStreams
             << ", intention to create new children: " << aliveStreams + 1)};
+    }
+
+    if (!AppData()->PQConfig.GetEnableProtoSourceIdInfo()) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+            << "Changefeeds require proto source id info to be enabled")};
     }
 
     TString errStr;
@@ -650,8 +654,12 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
         auto& pqConfig = *desc.MutablePQTabletConfig();
         pqConfig.SetTopicName(streamName);
         pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
+        pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+
         auto& partitionConfig = *pqConfig.MutablePartitionConfig();
-        partitionConfig.SetLifetimeSeconds(retentionPeriod.Seconds());
+        partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
+        partitionConfig.SetWriteSpeedInBytesPerSecond(1_MB); // TODO: configurable write speed
+        partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
 
         for (const auto& tag : table->KeyColumnIds) {
             Y_VERIFY(table->Columns.contains(tag));

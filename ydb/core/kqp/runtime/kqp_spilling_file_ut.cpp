@@ -31,8 +31,8 @@ void AssertEquals(const TBuffer& lhs, const TBuffer& rhs) {
     UNIT_ASSERT_STRINGS_EQUAL(l, r);
 }
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> Counters() {
-    static auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters() {
+    static auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
     return counters;
 }
 

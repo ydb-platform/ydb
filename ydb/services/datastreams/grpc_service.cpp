@@ -37,36 +37,6 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
 
 namespace NKikimr::NGRpcService {
 
-TGRpcDataStreamsService::TGRpcDataStreamsService(NActors::TActorSystem *system,
-                                 TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-                                 NActors::TActorId id)
-    : ActorSystem_(system)
-    , Counters_(counters)
-    , GRpcRequestProxyId_(id)
-{
-}
-
-void TGRpcDataStreamsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger)
-{
-    CQ_ = cq;
-
-    SetupIncomingRequests(logger);
-}
-
-void TGRpcDataStreamsService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcDataStreamsService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcDataStreamsService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
-
 void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
 {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
@@ -76,47 +46,48 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB, ATTR) \
+#define ADD_REQUEST(NAME, CB, ATTR, LIMIT_TYPE) \
     MakeIntrusive<TGRpcRequest<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response, TGRpcDataStreamsService>> \
-        (this, &Service_, CQ_,                                                                                  \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TGrpcRequestOperationCall<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response>      \
-                        (ctx, CB, TRequestAuxSettings{TRateLimiterMode::Off, ATTR}));                       \
-            }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME,                                  \
+        (this, &Service_, CQ_,                                                                                                      \
+            [this](NGrpc::IRequestContextBase *ctx) {                                                                               \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                    \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
+                    new TGrpcRequestOperationCall<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response>        \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));                              \
+            }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME,                                            \
             #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
 
-    ADD_REQUEST(DescribeStream, DoDataStreamsDescribeStreamRequest, nullptr)
-    ADD_REQUEST(CreateStream, DoDataStreamsCreateStreamRequest, nullptr)
-    ADD_REQUEST(ListStreams, DoDataStreamsListStreamsRequest, nullptr)
-    ADD_REQUEST(DeleteStream, DoDataStreamsDeleteStreamRequest, nullptr)
-    ADD_REQUEST(ListShards, DoDataStreamsListShardsRequest, nullptr)
-    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr)
-    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr)
-    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr)
-    ADD_REQUEST(GetShardIterator, DoDataStreamsGetShardIteratorRequest, nullptr)
-    ADD_REQUEST(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, nullptr)
-    ADD_REQUEST(DescribeLimits, DoDataStreamsDescribeLimitsRequest, nullptr)
-    ADD_REQUEST(DescribeStreamSummary, DoDataStreamsDescribeStreamSummaryRequest, nullptr)
-    ADD_REQUEST(DecreaseStreamRetentionPeriod, DoDataStreamsDecreaseStreamRetentionPeriodRequest, nullptr)
-    ADD_REQUEST(IncreaseStreamRetentionPeriod, DoDataStreamsIncreaseStreamRetentionPeriodRequest, nullptr)
-    ADD_REQUEST(UpdateShardCount, DoDataStreamsUpdateShardCountRequest, nullptr)
-    ADD_REQUEST(RegisterStreamConsumer, DoDataStreamsRegisterStreamConsumerRequest, nullptr)
-    ADD_REQUEST(DeregisterStreamConsumer, DoDataStreamsDeregisterStreamConsumerRequest, nullptr)
-    ADD_REQUEST(DescribeStreamConsumer, DoDataStreamsDescribeStreamConsumerRequest, nullptr)
-    ADD_REQUEST(ListStreamConsumers, DoDataStreamsListStreamConsumersRequest, nullptr)
-    ADD_REQUEST(AddTagsToStream, DoDataStreamsAddTagsToStreamRequest, nullptr)
-    ADD_REQUEST(DisableEnhancedMonitoring, DoDataStreamsDisableEnhancedMonitoringRequest, nullptr)
-    ADD_REQUEST(EnableEnhancedMonitoring, DoDataStreamsEnableEnhancedMonitoringRequest, nullptr)
-    ADD_REQUEST(ListTagsForStream, DoDataStreamsListTagsForStreamRequest, nullptr)
-    ADD_REQUEST(MergeShards, DoDataStreamsMergeShardsRequest, nullptr)
-    ADD_REQUEST(RemoveTagsFromStream, DoDataStreamsRemoveTagsFromStreamRequest, nullptr)
-    ADD_REQUEST(SplitShard, DoDataStreamsSplitShardRequest, nullptr)
-    ADD_REQUEST(StartStreamEncryption, DoDataStreamsStartStreamEncryptionRequest, nullptr)
-    ADD_REQUEST(StopStreamEncryption, DoDataStreamsStopStreamEncryptionRequest, nullptr)
-    ADD_REQUEST(UpdateStream, DoDataStreamsUpdateStreamRequest, nullptr)
-    ADD_REQUEST(SetWriteQuota, DoDataStreamsSetWriteQuotaRequest, nullptr)
+    ADD_REQUEST(DescribeStream, DoDataStreamsDescribeStreamRequest, nullptr, Off)
+    ADD_REQUEST(CreateStream, DoDataStreamsCreateStreamRequest, nullptr, Off)
+    ADD_REQUEST(ListStreams, DoDataStreamsListStreamsRequest, nullptr, Off)
+    ADD_REQUEST(DeleteStream, DoDataStreamsDeleteStreamRequest, nullptr, Off)
+    ADD_REQUEST(ListShards, DoDataStreamsListShardsRequest, nullptr, Off)
+    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr, RuManual)
+    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr, RuManual)
+    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr, RuManual)
+    ADD_REQUEST(GetShardIterator, DoDataStreamsGetShardIteratorRequest, nullptr, Off)
+    ADD_REQUEST(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, nullptr, Off)
+    ADD_REQUEST(DescribeLimits, DoDataStreamsDescribeLimitsRequest, nullptr, Off)
+    ADD_REQUEST(DescribeStreamSummary, DoDataStreamsDescribeStreamSummaryRequest, nullptr, Off)
+    ADD_REQUEST(DecreaseStreamRetentionPeriod, DoDataStreamsDecreaseStreamRetentionPeriodRequest, nullptr, Off)
+    ADD_REQUEST(IncreaseStreamRetentionPeriod, DoDataStreamsIncreaseStreamRetentionPeriodRequest, nullptr, Off)
+    ADD_REQUEST(UpdateShardCount, DoDataStreamsUpdateShardCountRequest, nullptr, Off)
+    ADD_REQUEST(UpdateStreamMode, DoDataStreamsUpdateStreamModeRequest, nullptr, Off)
+    ADD_REQUEST(RegisterStreamConsumer, DoDataStreamsRegisterStreamConsumerRequest, nullptr, Off)
+    ADD_REQUEST(DeregisterStreamConsumer, DoDataStreamsDeregisterStreamConsumerRequest, nullptr, Off)
+    ADD_REQUEST(DescribeStreamConsumer, DoDataStreamsDescribeStreamConsumerRequest, nullptr, Off)
+    ADD_REQUEST(ListStreamConsumers, DoDataStreamsListStreamConsumersRequest, nullptr, Off)
+    ADD_REQUEST(AddTagsToStream, DoDataStreamsAddTagsToStreamRequest, nullptr, Off)
+    ADD_REQUEST(DisableEnhancedMonitoring, DoDataStreamsDisableEnhancedMonitoringRequest, nullptr, Off)
+    ADD_REQUEST(EnableEnhancedMonitoring, DoDataStreamsEnableEnhancedMonitoringRequest, nullptr, Off)
+    ADD_REQUEST(ListTagsForStream, DoDataStreamsListTagsForStreamRequest, nullptr, Off)
+    ADD_REQUEST(MergeShards, DoDataStreamsMergeShardsRequest, nullptr, Off)
+    ADD_REQUEST(RemoveTagsFromStream, DoDataStreamsRemoveTagsFromStreamRequest, nullptr, Off)
+    ADD_REQUEST(SplitShard, DoDataStreamsSplitShardRequest, nullptr, Off)
+    ADD_REQUEST(StartStreamEncryption, DoDataStreamsStartStreamEncryptionRequest, nullptr, Off)
+    ADD_REQUEST(StopStreamEncryption, DoDataStreamsStopStreamEncryptionRequest, nullptr, Off)
+    ADD_REQUEST(UpdateStream, DoDataStreamsUpdateStreamRequest, nullptr, Off)
+    ADD_REQUEST(SetWriteQuota, DoDataStreamsSetWriteQuotaRequest, nullptr, Off)
 
 #undef ADD_REQUEST
 }

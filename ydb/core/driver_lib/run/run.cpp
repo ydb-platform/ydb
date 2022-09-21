@@ -322,7 +322,7 @@ public:
 
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
-    , Counters(MakeIntrusive<NMonitoring::TDynamicCounters>())
+    , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     , PollerThreads(new NInterconnect::TPollerThreads)
 {
 }
@@ -494,64 +494,85 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
     auto fillFn = [&](const NKikimrConfig::TGRpcConfig& grpcConfig, NGrpc::TGRpcServer& server, NGrpc::TServerOptions& opts) {
         const auto& services = grpcConfig.GetServices();
+        const auto& rlServicesEnabled = grpcConfig.GetRatelimiterServicesEnabled();
+        const auto& rlServicesDisabled = grpcConfig.GetRatelimiterServicesDisabled();
 
-        std::unordered_map<TString, bool*> names;
+        class TServiceCfg {
+        public:
+            TServiceCfg(bool enabled)
+                : ServiceEnabled(enabled)
+            { }
+            operator bool() const {
+                return ServiceEnabled;
+            }
+            bool IsRlAllowed() const {
+                return RlAllowed;
+            }
+            void SetRlAllowed(bool allowed) {
+                RlAllowed = allowed;
+            }
+        private:
+            bool ServiceEnabled = false;
+            bool RlAllowed = false;
+        };
 
-        bool hasLegacy = opts.SslData.Empty() && services.empty();
+        std::unordered_map<TString, TServiceCfg*> names;
+
+        TServiceCfg hasLegacy = opts.SslData.Empty() && services.empty();
         names["legacy"] = &hasLegacy;
-        bool hasScripting = services.empty();
+        TServiceCfg hasScripting = services.empty();
         names["scripting"] = &hasScripting;
-        bool hasCms = services.empty();
+        TServiceCfg hasCms = services.empty();
         names["cms"] = &hasCms;
-        bool hasKesus = services.empty();
+        TServiceCfg hasKesus = services.empty();
         names["locking"] = names["kesus"] = &hasKesus;
-        bool hasMonitoring = services.empty();
+        TServiceCfg hasMonitoring = services.empty();
         names["monitoring"] = &hasMonitoring;
-        bool hasDiscovery = services.empty();
+        TServiceCfg hasDiscovery = services.empty();
         names["discovery"] = &hasDiscovery;
-        bool hasLocalDiscovery = false;
+        TServiceCfg hasLocalDiscovery = false;
         names["local_discovery"] = &hasLocalDiscovery;
-        bool hasTableService = services.empty();
+        TServiceCfg hasTableService = services.empty();
         names["table_service"] = &hasTableService;
-        bool hasSchemeService = false;
-        bool hasOperationService = false;
-        bool hasYql = false;
+        TServiceCfg hasSchemeService = false;
+        TServiceCfg hasOperationService = false;
+        TServiceCfg hasYql = false;
         names["yql"] = &hasYql;
-        bool hasYqlInternal = services.empty();
+        TServiceCfg hasYqlInternal = services.empty();
         names["yql_internal"] = &hasYqlInternal;
-        bool hasPQ = services.empty();
+        TServiceCfg hasPQ = services.empty();
         names["pq"] = &hasPQ;
-        bool hasPQv1 = services.empty();
+        TServiceCfg hasPQv1 = services.empty();
         names["pqv1"] = &hasPQv1;
-        bool hasTopic = false;
+        TServiceCfg hasTopic = services.empty();
         names["topic"] = &hasTopic;
-        bool hasPQCD = services.empty();
+        TServiceCfg hasPQCD = services.empty();
         names["pqcd"] = &hasPQCD;
-        bool hasS3Internal = false;
+        TServiceCfg hasS3Internal = false;
         names["s3_internal"] = &hasS3Internal;
-        bool hasExperimental = false;
+        TServiceCfg hasExperimental = false;
         names["experimental"] = &hasExperimental;
-        bool hasClickhouseInternal = services.empty();
+        TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
-        bool hasRateLimiter = false;
+        TServiceCfg hasRateLimiter = false;
         names["rate_limiter"] = &hasRateLimiter;
-        bool hasLongTx = false;
+        TServiceCfg hasLongTx = false;
         names["long_tx"] = &hasLongTx;
-        bool hasExport = services.empty();
+        TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;
-        bool hasImport = services.empty();
+        TServiceCfg hasImport = services.empty();
         names["import"] = &hasImport;
-        bool hasAnalytics = false;
+        TServiceCfg hasAnalytics = false;
         names["analytics"] = &hasAnalytics;
-        bool hasDataStreams = false;
+        TServiceCfg hasDataStreams = false;
         names["datastreams"] = &hasDataStreams;
-        bool hasYandexQuery = false;
+        TServiceCfg hasYandexQuery = false;
         names["yq"] = &hasYandexQuery;
-        bool hasYandexQueryPrivate = false;
+        TServiceCfg hasYandexQueryPrivate = false;
         names["yq_private"] = &hasYandexQueryPrivate;
-        bool hasLogStore = false;
+        TServiceCfg hasLogStore = false;
         names["logstore"] = &hasLogStore;
-        bool hasAuth = services.empty();
+        TServiceCfg hasAuth = services.empty();
         names["auth"] = &hasAuth;
 
         std::unordered_set<TString> enabled;
@@ -595,7 +616,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             hasYqlInternal = true;
         }
 
-        if (hasTableService || hasYqlInternal || hasPQ || hasKesus || hasPQv1 || hasExport || hasImport) {
+        if (hasTableService || hasYqlInternal || hasPQ || hasKesus || hasPQv1 || hasExport || hasImport || hasTopic) {
             hasSchemeService = true;
             hasOperationService = true;
             // backward compatability
@@ -605,6 +626,34 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasExport || hasImport) {
             hasExport = true;
             hasImport = true;
+        }
+
+        // Enable RL for all services if enabled list is empty
+        if (rlServicesEnabled.empty()) {
+            for (auto& [name, cfg] : names) {
+                Y_VERIFY(cfg);
+                cfg->SetRlAllowed(true);
+            }
+        } else {
+            for (const auto& name : rlServicesEnabled) {
+                auto itName = names.find(name);
+                if (itName != names.end()) {
+                    Y_VERIFY(itName->second);
+                    itName->second->SetRlAllowed(true);
+                } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) {
+                    Cerr << "Unknown grpc service \"" << name << "\" rl was not enabled" << Endl;
+                }
+            }
+        }
+
+        for (const auto& name : rlServicesDisabled) {
+            auto itName = names.find(name);
+            if (itName != names.end()) {
+                Y_VERIFY(itName->second);
+                itName->second->SetRlAllowed(false);
+            } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) {
+                Cerr << "Unknown grpc service \"" << name << "\" rl was not disabled" << Endl;
+            }
         }
 
         for (const auto& [name, isEnabled] : names) {
@@ -640,59 +689,70 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasTableService) {
-            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxyId,
+                hasTableService.IsRlAllowed()));
         }
 
         if (hasExperimental) {
             server.AddService(new NGRpcService::TGRpcYdbExperimentalService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId));
+                grpcRequestProxyId, hasExperimental.IsRlAllowed()));
         }
 
         if (hasClickhouseInternal) {
             server.AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(ActorSystem.Get(), Counters,
-                AppData->InFlightLimiterRegistry, grpcRequestProxyId));
+                AppData->InFlightLimiterRegistry, grpcRequestProxyId, hasClickhouseInternal.IsRlAllowed()));
         }
 
         if (hasS3Internal) {
             server.AddService(new NGRpcService::TGRpcYdbS3InternalService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId));
+                grpcRequestProxyId, hasS3Internal.IsRlAllowed()));
         }
 
         if (hasScripting) {
             server.AddService(new NGRpcService::TGRpcYdbScriptingService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId));
+                grpcRequestProxyId, hasScripting.IsRlAllowed()));
         }
 
         if (hasLongTx) {
-            server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasLongTx.IsRlAllowed()));
         }
 
         if (hasSchemeService) {
-            server.AddService(new NGRpcService::TGRpcYdbSchemeService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            // RPC RL enabled
+            // We have no way to disable or enable this service explicitly
+            server.AddService(new NGRpcService::TGRpcYdbSchemeService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, true /*hasSchemeService.IsRlAllowed()*/));
         }
 
         if (hasOperationService) {
-            server.AddService(new NGRpcService::TGRpcOperationService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcOperationService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasOperationService.IsRlAllowed()));
         }
 
         if (hasExport) {
-            server.AddService(new NGRpcService::TGRpcYdbExportService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcYdbExportService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasExport.IsRlAllowed()));
         }
 
         if (hasImport) {
-            server.AddService(new NGRpcService::TGRpcYdbImportService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcYdbImportService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasImport.IsRlAllowed()));
         }
 
         if (hasKesus) {
-            server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasKesus.IsRlAllowed()));
         }
 
         if (hasPQv1) {
-            server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
+            server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
+                grpcRequestProxyId, hasPQv1.IsRlAllowed()));
         }
 
         if (hasPQv1 || hasTopic) {
-            server.AddService(new NGRpcService::V1::TGRpcTopicService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
+            server.AddService(new NGRpcService::V1::TGRpcTopicService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
+                grpcRequestProxyId, hasTopic.IsRlAllowed() || hasPQv1.IsRlAllowed()));
         }
 
         if (hasPQCD) {
@@ -708,15 +768,18 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasCms) {
-            server.AddService(new NGRpcService::TGRpcCmsService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcCmsService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasCms.IsRlAllowed()));
         }
 
         if (hasDiscovery) {
-            server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasDiscovery.IsRlAllowed()));
         }
 
         if (hasLocalDiscovery) {
-            server.AddService(new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters,
+                grpcRequestProxyId));
         }
 
         if (hasRateLimiter) {
@@ -724,15 +787,18 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasMonitoring) {
-            server.AddService(new NGRpcService::TGRpcMonitoringService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcMonitoringService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasMonitoring.IsRlAllowed()));
         }
 
         if (hasAuth) {
-            server.AddService(new NGRpcService::TGRpcAuthService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcAuthService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasAuth.IsRlAllowed()));
         }
 
         if (hasDataStreams) {
-            server.AddService(new NGRpcService::TGRpcDataStreamsService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcDataStreamsService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasDataStreams.IsRlAllowed()));
         }
 
         if (hasYandexQuery) {
@@ -744,7 +810,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasLogStore) {
-            server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasLogStore.IsRlAllowed()));
         }
 
         if (ModuleFactories) {

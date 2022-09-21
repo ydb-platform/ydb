@@ -23,7 +23,7 @@ using namespace NKikimr::NIncrHuge;
 
 class TTestEnv {
 public:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters = new NMonitoring::TDynamicCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters = new ::NMonitoring::TDynamicCounters;
     TString Path;
     ui32 ChunkSize;
     ui64 DiskSize;

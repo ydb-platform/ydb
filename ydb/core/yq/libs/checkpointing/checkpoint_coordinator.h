@@ -28,7 +28,7 @@ public:
                            const TActorId& storageProxy,
                            const TActorId& runActorId,
                            const TCheckpointCoordinatorConfig& settings,
-                           const NMonitoring::TDynamicCounterPtr& counters,
+                           const ::NMonitoring::TDynamicCounterPtr& counters,
                            const NProto::TGraphParams& graphParams,
                            const YandexQuery::StateLoadMode& stateLoadMode,
                            const YandexQuery::StreamingDisposition& streamingDisposition);
@@ -97,7 +97,7 @@ private:
     }
 
     struct TCheckpointCoordinatorMetrics {
-        TCheckpointCoordinatorMetrics(const NMonitoring::TDynamicCounterPtr& counters) {
+        TCheckpointCoordinatorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters) {
             auto subgroup = counters->GetSubgroup("subsystem", "checkpoint_coordinator");
             InProgress = subgroup->GetCounter("InProgress");
             Pending = subgroup->GetCounter("Pending");
@@ -119,21 +119,21 @@ private:
             RestoredStreamingOffsetsFromCheckpoint = subgroup->GetCounter("RestoredStreamingOffsetsFromCheckpoint", true);
         }
 
-        NMonitoring::TDynamicCounters::TCounterPtr InProgress;
-        NMonitoring::TDynamicCounters::TCounterPtr Pending;
-        NMonitoring::TDynamicCounters::TCounterPtr PendingCommit;
-        NMonitoring::TDynamicCounters::TCounterPtr Completed;
-        NMonitoring::TDynamicCounters::TCounterPtr Aborted;
-        NMonitoring::TDynamicCounters::TCounterPtr StorageError;
-        NMonitoring::TDynamicCounters::TCounterPtr FailedToCreate;
-        NMonitoring::TDynamicCounters::TCounterPtr Total;
-        NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointBarrierDeliveryTimeMillis;
-        NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointDurationMillis;
-        NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointSizeBytes;
-        NMonitoring::TDynamicCounters::TCounterPtr SkippedDueToInFlightLimit;
-        NMonitoring::TDynamicCounters::TCounterPtr RestoredFromSavedCheckpoint;
-        NMonitoring::TDynamicCounters::TCounterPtr StartedFromEmptyCheckpoint;
-        NMonitoring::TDynamicCounters::TCounterPtr RestoredStreamingOffsetsFromCheckpoint;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InProgress;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Pending;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PendingCommit;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Completed;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Aborted;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StorageError;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FailedToCreate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Total;
+        ::NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointBarrierDeliveryTimeMillis;
+        ::NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointDurationMillis;
+        ::NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointSizeBytes;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SkippedDueToInFlightLimit;
+        ::NMonitoring::TDynamicCounters::TCounterPtr RestoredFromSavedCheckpoint;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StartedFromEmptyCheckpoint;
+        ::NMonitoring::TDynamicCounters::TCounterPtr RestoredStreamingOffsetsFromCheckpoint;
         NMonitoring::THistogramPtr CheckpointBarrierDeliveryTimeMillis;
         NMonitoring::THistogramPtr CheckpointDurationMillis;
         NMonitoring::THistogramPtr CheckpointSizeBytes;
@@ -177,6 +177,6 @@ private:
     YandexQuery::StreamingDisposition StreamingDisposition;
 };
 
-THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& executerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT, const YandexQuery::StreamingDisposition& streamingDisposition = {});
+THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& executerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const ::NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT, const YandexQuery::StreamingDisposition& streamingDisposition = {});
 
 } // namespace NYq

@@ -641,6 +641,67 @@ private:
         return str;
     }
 
+    void FillConnectionPlanNode(const TDqConnection& connection, TQueryPlanNode& planNode) {
+        planNode.Type = EPlanNodeType::Connection;
+
+        if (connection.Maybe<TDqCnUnionAll>()) {
+            planNode.TypeName = "UnionAll";
+        } else if (connection.Maybe<TDqCnBroadcast>()) {
+            planNode.TypeName = "Broadcast";
+        } else if (connection.Maybe<TDqCnMap>()) {
+            planNode.TypeName = "Map";
+        } else if (auto hashShuffle = connection.Maybe<TDqCnHashShuffle>()) {
+            planNode.TypeName = "HashShuffle";
+            auto& keyColumns = planNode.NodeInfo["KeyColumns"];
+            for (const auto& column : hashShuffle.Cast().KeyColumns()) {
+                keyColumns.AppendValue(TString(column.Value()));
+            }
+        } else if (auto merge = connection.Maybe<TDqCnMerge>()) {
+            planNode.TypeName = "Merge";
+            auto& sortColumns = planNode.NodeInfo["SortColumns"];
+            for (const auto& sortColumn : merge.Cast().SortColumns()) {
+                TStringBuilder sortColumnDesc;
+                sortColumnDesc << sortColumn.Column().Value() << " ("
+                    << sortColumn.SortDirection().Value() << ")";
+
+                sortColumns.AppendValue(sortColumnDesc);
+            }
+        } else if (auto maybeTableLookup = connection.Maybe<TKqpCnStreamLookup>()) {
+            auto tableLookup = maybeTableLookup.Cast();
+
+            TTableRead readInfo;
+            readInfo.Type = ETableReadType::Lookup;
+            planNode.TypeName = "TableLookup";
+            TString table(tableLookup.Table().Path().Value());
+            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
+            planNode.NodeInfo["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+
+            readInfo.Columns.reserve(tableLookup.Columns().Size());
+            auto& columns = planNode.NodeInfo["Columns"];
+            for (const auto& column : tableLookup.Columns()) {
+                columns.AppendValue(column.Value());
+                readInfo.Columns.push_back(TString(column.Value()));
+            }
+
+            const auto lookupKeysType = tableLookup.LookupKeysType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(lookupKeysType);
+            YQL_ENSURE(lookupKeysType->GetKind() == ETypeAnnotationKind::List);
+            const auto lookupKeysItemType = lookupKeysType->Cast<TListExprType>()->GetItemType();
+            YQL_ENSURE(lookupKeysItemType->GetKind() == ETypeAnnotationKind::Struct);
+            const auto& lookupKeyColumnsStruct = lookupKeysItemType->Cast<TStructExprType>()->GetItems();
+            readInfo.LookupBy.reserve(lookupKeyColumnsStruct.size());
+            auto& lookupKeyColumns = planNode.NodeInfo["LookupKeyColumns"];
+            for (const auto keyColumn : lookupKeyColumnsStruct) {
+                lookupKeyColumns.AppendValue(keyColumn->GetName());
+                readInfo.LookupBy.push_back(TString(keyColumn->GetName()));
+            }
+
+            SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
+        } else {
+            planNode.TypeName = connection.Ref().Content();
+        }
+    }
+
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
         if (expr.Maybe<TDqPhyStage>()) {
             auto stageGuid = NDq::TDqStageSettings::Parse(expr.Cast<TDqPhyStage>()).Id;
@@ -684,31 +745,7 @@ private:
                 auto inputCn = input.Cast<TDqConnection>();
 
                 auto& inputPlanNode = AddPlanNode(stagePlanNode);
-                inputPlanNode.Type = EPlanNodeType::Connection;
-
-                if (inputCn.Maybe<TDqCnUnionAll>()) {
-                    inputPlanNode.TypeName = "UnionAll";
-                } else if (inputCn.Maybe<TDqCnBroadcast>()) {
-                    inputPlanNode.TypeName = "Broadcast";
-                } else if (auto hashShuffle = inputCn.Maybe<TDqCnHashShuffle>()) {
-                    inputPlanNode.TypeName = "HashShuffle";
-                    auto& keyColumns = inputPlanNode.NodeInfo["KeyColumns"];
-                    for (const auto& column : hashShuffle.Cast().KeyColumns()) {
-                        keyColumns.AppendValue(TString(column.Value()));
-                    }
-                } else if (auto merge = inputCn.Maybe<TDqCnMerge>()) {
-                    inputPlanNode.TypeName = "Merge";
-                    auto& sortColumns = inputPlanNode.NodeInfo["SortColumns"];
-                    for (const auto& sortColumn : merge.Cast().SortColumns()) {
-                        TStringBuilder sortColumnDesc;
-                        sortColumnDesc << sortColumn.Column().Value() << " ("
-                            << sortColumn.SortDirection().Value() << ")";
-
-                        sortColumns.AppendValue(sortColumnDesc);
-                    }
-                } else {
-                    inputPlanNode.TypeName = inputCn.Ref().Content();
-                }
+                FillConnectionPlanNode(inputCn, inputPlanNode);
 
                 Visit(inputCn.Output().Stage(), inputPlanNode);
             }
@@ -753,7 +790,9 @@ private:
             })).Cast<TCoJoinDict>();
             operatorId = Visit(flatMap, join, planNode);
             node = join.Ptr();
-        } else if (auto maybeCondense = TMaybeNode<TCoCondense1>(node)) {
+        } else if (auto maybeCondense1 = TMaybeNode<TCoCondense1>(node)) {
+            operatorId = Visit(maybeCondense1.Cast(), planNode);
+        } else if (auto maybeCondense = TMaybeNode<TCoCondense>(node)) {
             operatorId = Visit(maybeCondense.Cast(), planNode);
         } else if (auto maybeCombiner = TMaybeNode<TCoCombineCore>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
@@ -797,6 +836,13 @@ private:
     }
 
     ui32 Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
+        TOperator op;
+        op.Properties["Name"] = "Aggregate";
+
+        return AddOperator(planNode, "Aggregate", std::move(op));
+    }
+
+    ui32 Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
 

@@ -269,19 +269,20 @@ namespace {
     NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
             const TString& table = "Table",
             const TReadKeyDesc& keyDesc = {"key", "Utf8", "\"\""},
-            const TVector<TString>& columns = {"key", "value"}) {
+            const TVector<TString>& columns = {"key", "value"},
+            const TString& rangeFlags = "") {
 
         const auto rangeFmt = Sprintf("'%s (%s '%s)", keyDesc.Name.data(), keyDesc.Type.data(), keyDesc.Atom.data());
         const auto columnsFmt = "'" + JoinSeq(" '", columns);
 
         return ReadTableImpl(runtime, tabletId, Sprintf(R"(
             (
-                (let range '( '(%s (Void) )))
+                (let range '(%s '(%s (Void) )))
                 (let columns '(%s) )
                 (let result (SelectRange '__user__%s range columns '()))
                 (return (AsList (SetResult 'Result result) ))
             )
-        )", rangeFmt.data(), columnsFmt.data(), table.data()));
+        )", rangeFlags.c_str(), rangeFmt.data(), columnsFmt.data(), table.data()));
     }
 
     using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
@@ -1592,7 +1593,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         for (ui32 i = 0; i < indexes; ++i) {
             auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1 + i,
-                "indexImplTable", {"value", "Utf8", "\"\""}, {"value", "key"});
+                "indexImplTable", {"value", "Utf8", "\"\""}, {"value", "key"}, "'ExcFrom");
             NKqp::CompareYson(data.Data[0].YsonStr, content);
         }
     }

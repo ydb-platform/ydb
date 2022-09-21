@@ -132,7 +132,6 @@ struct TOperation: TSimpleRefCount<TOperation> {
         Y_VERIFY(Barriers.begin()->first == name);
         Barriers.erase(name);
     }
-private:
     TOperationId NextPartId() { return TOperationId(TxId, TSubTxId(Parts.size())); }
 };
 

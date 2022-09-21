@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(cord)
+add_subdirectory(internal)
 
 add_library(abseil-cpp-absl-strings)
 target_compile_options(abseil-cpp-absl-strings PRIVATE

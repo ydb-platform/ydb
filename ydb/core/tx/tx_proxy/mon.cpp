@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NTxProxy {
 
-TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
+TTxProxyMon::TTxProxyMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
     , TxGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "tx"))
     , DataReqGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "datareq"))

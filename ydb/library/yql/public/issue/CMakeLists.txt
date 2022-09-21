@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
+add_subdirectory(ut)
 
 add_library(yql-public-issue)
 target_link_libraries(yql-public-issue PUBLIC

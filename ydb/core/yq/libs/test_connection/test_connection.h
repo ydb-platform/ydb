@@ -50,7 +50,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,
-        const NMonitoring::TDynamicCounterPtr& counters);
+        const ::NMonitoring::TDynamicCounterPtr& counters);
 
 NActors::IActor* CreateTestDataStreamsConnectionActor(
         const YandexQuery::DataStreams& ds,

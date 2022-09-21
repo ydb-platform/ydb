@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(codecs)
 
 add_library(cpp-client-ydb_persqueue_public INTERFACE)
 target_link_libraries(cpp-client-ydb_persqueue_public INTERFACE

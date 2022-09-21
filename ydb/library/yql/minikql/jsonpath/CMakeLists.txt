@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(benchmark)
 
 add_library(yql-minikql-jsonpath)
 target_compile_options(yql-minikql-jsonpath PRIVATE

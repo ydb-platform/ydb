@@ -9,6 +9,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/ydb_convert/column_families.h>
@@ -412,6 +413,7 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             if (GetOperationMode() == Ydb::Operations::OperationParams::SYNC) {
                 CreateSSOpSubscriber(SchemeshardId, TxId, DatabaseName, TOpType::BuildIndex, std::move(Request_), ctx);
+                Die(ctx);
             } else {
                 auto op = response.GetIndexBuild();
                 Ydb::Operations::Operation operation;

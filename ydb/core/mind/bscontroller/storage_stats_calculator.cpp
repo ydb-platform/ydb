@@ -5,38 +5,48 @@
 #include "impl.h"
 #include "sys_view.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/protos/services.pb.h>
+
 #include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/actor_coroutine.h>
+#include <library/cpp/actors/core/events.h>
+
+#include <util/generic/ptr.h>
+#include <util/system/yassert.h>
 
 #include <memory>
 #include <vector>
 
 namespace NKikimr::NBsController {
 
-class TStorageStatsCalculator : public TActor<TStorageStatsCalculator> {
+/* TStorageStatsCoroCalculatorImpl */
+
+class TStorageStatsCoroCalculatorImpl : public TActorCoroImpl {
+private:
+    enum {
+        EvResume = EventSpaceBegin(TEvents::ES_PRIVATE)
+    };
+
 public:
-    TStorageStatsCalculator()
-        : TActor(&TStorageStatsCalculator::StateWork)
-    {}
-
-    STRICT_STFUNC(StateWork,
-        hFunc(TEvCalculateStorageStatsRequest, Handle);
-        cFunc(TEvents::TSystem::Poison, PassAway);
-    )
-
-    void Handle(TEvCalculateStorageStatsRequest::TPtr& ev) {
-        auto response = std::make_unique<TEvCalculateStorageStatsResponse>();
-        const auto& request = *(ev->Get());
-        response->StorageStats = GenerateStorageStats(request.SystemViewsState, request.HostRecordMap, request.GroupReserveMin, request.GroupReservePart);
-        Send(ev->Sender, response.release());
+    TStorageStatsCoroCalculatorImpl(
+        const TControllerSystemViewsState& systemViewsState,
+        const TBlobStorageController::THostRecordMap& hostRecordMap,
+        ui32 groupReserveMin,
+        ui32 groupReservePart)
+        : TActorCoroImpl(/* stackSize */ 64 * 1024, /* allowUnhandledPoisonPill */ true, /* allowUnhandledDtor */ true)
+        , SystemViewsState(systemViewsState)
+        , HostRecordMap(hostRecordMap)
+        , GroupReserveMin(groupReserveMin)
+        , GroupReservePart(groupReservePart)
+    {
     }
 
-private:
-    std::vector<NKikimrSysView::TStorageStatsEntry> GenerateStorageStats(
-            const TControllerSystemViewsState& systemViewsState,
-            const TBlobStorageController::THostRecordMap& hostRecordMap,
-            ui32 groupReserveMin,
-            ui32 groupReservePart)
-    {
+    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override {
+        Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
+    }
+
+    void Run() override {
         std::vector<NKikimrSysView::TStorageStatsEntry> storageStats;
 
         using TEntityKey = std::tuple<TString, TString>; // PDiskFilter, ErasureSpecies
@@ -59,7 +69,7 @@ private:
             }
         }
 
-        for (const auto& [key, value] : systemViewsState.StoragePools) {
+        for (const auto& [key, value] : SystemViewsState.StoragePools) {
             TEntityKey entityKey(value.GetPDiskFilter(), value.GetErasureSpeciesV2());
             const size_t index = entityMap.try_emplace(entityKey, storageStats.size()).first->second;
             if (index == storageStats.size()) {
@@ -77,7 +87,7 @@ private:
             spToEntity[key] = index;
         }
 
-        for (const auto& [groupId, group] : systemViewsState.Groups) {
+        for (const auto& [groupId, group] : SystemViewsState.Groups) {
             const TBlobStorageController::TBoxStoragePoolId key(group.GetBoxId(), group.GetStoragePoolId());
             if (const auto it = spToEntity.find(key); it != spToEntity.end()) {
                 auto& e = storageStats[it->second];
@@ -87,9 +97,9 @@ private:
             }
         }
 
-        using T = std::decay_t<decltype(systemViewsState.PDisks)>::value_type;
+        using T = std::decay_t<decltype(SystemViewsState.PDisks)>::value_type;
         std::unordered_map<TBlobStorageController::TBoxId, std::vector<const T*>> boxes;
-        for (const auto& kv : systemViewsState.PDisks) {
+        for (const auto& kv : SystemViewsState.PDisks) {
             if (kv.second.HasBoxId()) {
                 boxes[kv.second.GetBoxId()].push_back(&kv);
             }
@@ -110,7 +120,7 @@ private:
                         const auto sharedWithOs = pdisk.HasSharedWithOs() ? MakeMaybe(pdisk.GetSharedWithOs()) : Nothing();
                         const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
                         if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
-                            const TNodeLocation& location = hostRecordMap->GetLocation(pdiskId.NodeId);
+                            const TNodeLocation& location = HostRecordMap->GetLocation(pdiskId.NodeId);
                             const bool ok = mapper.RegisterPDisk({
                                 .PDiskId = pdiskId,
                                 .Location = location,
@@ -140,7 +150,7 @@ private:
                     for (const auto& realm : group) {
                         for (const auto& domain : realm) {
                             for (const auto& pdiskId : domain) {
-                                if (const auto it = systemViewsState.PDisks.find(pdiskId); it != systemViewsState.PDisks.end()) {
+                                if (const auto it = SystemViewsState.PDisks.find(pdiskId); it != SystemViewsState.PDisks.end()) {
                                     const NKikimrSysView::TPDiskInfo& pdisk = it->second;
                                     auto& pm = *pdiskMetrics.emplace(pdiskMetrics.end());
                                     auto& vm = *vdiskMetrics.emplace(vdiskMetrics.end());
@@ -162,14 +172,16 @@ private:
                     groupSizes.push_back(groupInfo.GetAvailableSize());
 
                     group.clear();
+
+                    Yield();
                 }
 
                 std::sort(groupSizes.begin(), groupSizes.end());
 
                 // adjust it according to reserve
                 const ui32 total = groupSizes.size() + entry.GetCurrentGroupsCreated();
-                ui32 reserve = groupReserveMin;
-                while (reserve < groupSizes.size() && (reserve - groupReserveMin) * 1000000 / total < groupReservePart) {
+                ui32 reserve = GroupReserveMin;
+                while (reserve < groupSizes.size() && (reserve - GroupReserveMin) * 1000000 / total < GroupReservePart) {
                     ++reserve;
                 }
                 reserve = Min<ui32>(reserve, groupSizes.size());
@@ -191,12 +203,35 @@ private:
             }
         }
 
-        return storageStats;
+        Send(ParentActorId, new TEvCalculateStorageStatsResponse(std::move(storageStats)));
     }
+
+private:
+    void Yield() {
+        Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
+        WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; });
+    }
+
+private:
+    TControllerSystemViewsState SystemViewsState;
+    TBlobStorageController::THostRecordMap HostRecordMap;
+    ui32 GroupReserveMin = 0;
+    ui32 GroupReservePart = 0;
 };
 
-IActor *CreateStorageStatsCalculator() {
-    return new TStorageStatsCalculator();
+std::unique_ptr<IActor> CreateStorageStatsCoroCalculator(
+    const TControllerSystemViewsState& systemViewsState,
+    const TBlobStorageController::THostRecordMap& hostRecordMap,
+    ui32 groupReserveMin,
+    ui32 groupReservePart)
+{
+    auto coroCalculatorImpl = MakeHolder<TStorageStatsCoroCalculatorImpl>(
+        systemViewsState,
+        hostRecordMap,
+        groupReserveMin,
+        groupReservePart);
+
+    return std::make_unique<TActorCoro>(std::move(coroCalculatorImpl), NKikimrServices::TActivity::BS_STORAGE_STATS_ACTOR);
 }
 
 } // NKikimr::NBsController

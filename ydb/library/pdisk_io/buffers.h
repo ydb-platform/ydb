@@ -114,13 +114,13 @@ public:
 class TBufferPool {
 public:
     struct TPDiskParams {
-        NMonitoring::TDynamicCounters::TCounterPtr FailedAllocations = nullptr;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FailedAllocations = nullptr;
         TActorSystem *ActorSystem = nullptr;
         ui32 PDiskId = 0;
 
         TPDiskParams() = default;
 
-        TPDiskParams(NMonitoring::TDynamicCounters::TCounterPtr failedAllocations, TActorSystem *actorSystem,
+        TPDiskParams(::NMonitoring::TDynamicCounters::TCounterPtr failedAllocations, TActorSystem *actorSystem,
                 ui32 pDiskId)
             : FailedAllocations(failedAllocations)
             , ActorSystem(actorSystem)

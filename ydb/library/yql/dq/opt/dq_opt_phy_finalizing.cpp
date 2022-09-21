@@ -500,9 +500,6 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
                     YQL_CLOG(TRACE, CoreDq) << "DqReplicateStageMultiOutput: already have multiused connection";
                     return false;
                 }
-                if (ptr->IsLambda()) {
-                    return false;
-                }
 
                 TExprBase expr{ptr};
 

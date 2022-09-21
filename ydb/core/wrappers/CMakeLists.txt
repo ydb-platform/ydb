@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
+add_subdirectory(ut_helpers)
 
 add_library(ydb-core-wrappers)
 target_link_libraries(ydb-core-wrappers PUBLIC

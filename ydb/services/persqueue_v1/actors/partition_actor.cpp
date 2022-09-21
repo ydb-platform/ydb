@@ -9,7 +9,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#include <contrib/libs/protobuf_std/src/google/protobuf/util/time_util.h>
+#include <google/protobuf/util/time_util.h>
 
 #include <util/charset/utf8.h>
 
@@ -303,6 +303,13 @@ void SetBatchExtraField(Topic::StreamReadMessage::ReadResponse::Batch* batch, TS
     (*batch->mutable_write_session_meta())[key] = std::move(value);
 }
 
+i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
+    if (proto.HasCodec()) {
+        return proto.GetCodec() + 1;
+    }
+    return 0;
+}
+
 template<typename TReadResponse>
 bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
@@ -326,6 +333,8 @@ bool FillBatchedData(
     bool hasOffset = false;
     bool hasData = false;
 
+    i32 batchCodec = 0; // UNSPECIFIED
+
     typename TReadResponse::Batch* currentBatch = nullptr;
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
         const auto& r = res.GetResult(i);
@@ -348,15 +357,19 @@ bool FillBatchedData(
             sourceId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
         }
 
-        if (!currentBatch
-            || GetBatchWriteTimestampMS(currentBatch) != static_cast<i64>(r.GetWriteTimestampMS())
-            || GetBatchSourceId(currentBatch) != sourceId) {
+        if (!currentBatch || GetBatchWriteTimestampMS(currentBatch) != static_cast<i64>(r.GetWriteTimestampMS()) ||
+            GetBatchSourceId(currentBatch) != sourceId ||
+            (!UseMigrationProtocol && GetDataChunkCodec(proto) != batchCodec)) {
             // If write time and source id are the same, the rest fields will be the same too.
             currentBatch = partitionData->add_batches();
             i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
             Y_VERIFY(write_ts >= 0);
             SetBatchWriteTimestampMS(currentBatch, write_ts);
             SetBatchSourceId(currentBatch, std::move(sourceId));
+            batchCodec = GetDataChunkCodec(proto);
+            if constexpr (!UseMigrationProtocol) {
+                currentBatch->set_codec(batchCodec);
+            }
 
             if (proto.HasMeta()) {
                 const auto& header = proto.GetMeta();
@@ -380,9 +393,12 @@ bool FillBatchedData(
                     SetBatchExtraField(currentBatch, kv.GetKey(), kv.GetValue());
                 }
             }
-            if constexpr (UseMigrationProtocol) {
-                if (proto.HasIp() && IsUtf(proto.GetIp())) {
+
+            if (proto.HasIp() && IsUtf(proto.GetIp())) {
+                if constexpr (UseMigrationProtocol) {
                     currentBatch->set_ip(proto.GetIp());
+                } else {
+                    SetBatchExtraField(currentBatch, "_ip", proto.GetIp());
                 }
             }
         }
@@ -406,7 +422,7 @@ bool FillBatchedData(
             *message->mutable_created_at() =
                 ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(r.GetCreateTimestampMS());
 
-            message->set_message_group_id(r.GetPartitionKey());
+            message->set_message_group_id(GetBatchSourceId(currentBatch));
         }
         hasData = true;
     }

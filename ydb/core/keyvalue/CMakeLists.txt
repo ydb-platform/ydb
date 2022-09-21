@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
+add_subdirectory(ut)
 
 add_library(ydb-core-keyvalue)
 target_link_libraries(ydb-core-keyvalue PUBLIC

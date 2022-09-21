@@ -6,6 +6,13 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(mon)
+add_subdirectory(probes)
+add_subdirectory(protos)
+add_subdirectory(schemu)
+add_subdirectory(schine)
+add_subdirectory(schoot)
+add_subdirectory(ut)
 
 add_library(ydb-library-schlab)
 target_link_libraries(ydb-library-schlab PUBLIC

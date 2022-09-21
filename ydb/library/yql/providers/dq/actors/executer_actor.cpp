@@ -42,7 +42,7 @@ public:
         const NActors::TActorId& printerId,
         const TString& traceId, const TString& username,
         const TDqConfiguration::TPtr& settings,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         TInstant requestStartTime,
         bool createTaskSuspended)
         : TRichActor<TDqExecuter>(&TDqExecuter::Handler)
@@ -457,7 +457,7 @@ private:
     ui64 ResourceId = 0;
     const TString TraceId;
     const TString Username;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TDynamicCounters::TCounterPtr LongWorkersAllocationCounter;
     TDynamicCounters::TCounterPtr ExecutionTimeoutCounter;
 
@@ -484,7 +484,7 @@ NActors::IActor* MakeDqExecuter(
     const NActors::TActorId& printerId,
     const TString& traceId, const TString& username,
     const TDqConfiguration::TPtr& settings,
-    const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     TInstant requestStartTime,
     bool createTaskSuspended
 ) {

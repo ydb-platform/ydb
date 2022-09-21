@@ -452,7 +452,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         factory->GetSharedActorSystem(),
         NKikimrServices::PQ_MIRRORER
     ));
-    
+
     TString logPrefix = TStringBuilder() << MirrorerDescription() << "[reader " << ++ReaderGeneration << "] ";
     log.SetFormatter([logPrefix](ELogPriority, TStringBuf message) -> TString {
         return logPrefix + message;
@@ -520,7 +520,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ReadFeatures.clear();
     WaitNextReaderEventInFlight = false;
     LastReadEventTime = TInstant::Zero();
-    
+
     Become(&TThis::StateInitConsumer);
 
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " schedule consumer creation");
@@ -633,6 +633,11 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
                 << " got stream closed event for partition stream id: "
                 << streamClosed->GetPartitionStream()->GetPartitionStreamId()
                 << " reason: " << streamClosed->GetReason());
+
+        ProcessError(ctx, TStringBuilder() << " read session stream closed event");
+        ScheduleConsumerCreation(ctx);
+        return;
+
     } else if (auto* streamStatus = std::get_if<TPersQueueReadEvent::TPartitionStreamStatusEvent >(&event.GetRef())) {
         if (PartitionStream
             && PartitionStream->GetPartitionStreamId() == streamStatus->GetPartitionStream()->GetPartitionStreamId()

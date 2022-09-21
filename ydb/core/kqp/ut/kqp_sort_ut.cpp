@@ -1205,11 +1205,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
-            $data = SELECT * FROM EightShard WHERE Text = "Value1" ORDER BY Data LIMIT 7;
+            $data = SELECT * FROM EightShard WHERE Text = "Value1" ORDER BY Data, Key LIMIT 7;
 
-            SELECT * FROM $data ORDER BY Data LIMIT 3 OFFSET 0;
-            SELECT * FROM $data ORDER BY Data LIMIT 3 OFFSET 3;
-            SELECT * FROM $data ORDER BY Data LIMIT 3 OFFSET 6;
+            SELECT * FROM $data ORDER BY Data, Key LIMIT 3 OFFSET 0;
+            SELECT * FROM $data ORDER BY Data, Key LIMIT 3 OFFSET 3;
+            SELECT * FROM $data ORDER BY Data, Key LIMIT 3 OFFSET 6;
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 

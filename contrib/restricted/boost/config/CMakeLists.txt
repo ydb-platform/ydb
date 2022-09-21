@@ -8,6 +8,9 @@
 
 
 add_library(restricted-boost-config INTERFACE)
+target_compile_options(restricted-boost-config INTERFACE
+  -DBOOST_ALL_NO_LIB
+)
 target_include_directories(restricted-boost-config INTERFACE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/config/include
 )

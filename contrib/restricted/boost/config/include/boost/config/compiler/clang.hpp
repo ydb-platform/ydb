@@ -57,6 +57,14 @@
 #  define BOOST_HAS_STDINT_H
 #endif
 
+#if (defined(linux) || defined(__linux) || defined(__linux__) || defined(__GNU__) || defined(__GLIBC__)) && !defined(_CRAYC)
+#if (__clang_major__ >= 4) && defined(__has_include)
+#if __has_include(<quadmath.h>)
+#  define BOOST_HAS_FLOAT128
+#endif
+#endif
+#endif
+
 
 #define BOOST_HAS_NRVO
 
@@ -106,12 +114,12 @@
 #  ifndef BOOST_SYMBOL_EXPORT
 #    define BOOST_SYMBOL_EXPORT __attribute__((__visibility__("default")))
 #  endif
-#  ifndef BOOST_SYMBOL_EXPORT
+#  ifndef BOOST_SYMBOL_VISIBLE
+#    define BOOST_SYMBOL_VISIBLE __attribute__((__visibility__("default")))
+#  endif
+#  ifndef BOOST_SYMBOL_IMPORT
 #    define BOOST_SYMBOL_IMPORT
 #  endif
-#endif
-#ifndef BOOST_SYMBOL_VISIBLE
-#  define BOOST_SYMBOL_VISIBLE __attribute__((__visibility__("default")))
 #endif
 
 //
@@ -248,6 +256,11 @@
 
 #if !__has_feature(cxx_override_control)
 #  define BOOST_NO_CXX11_FINAL
+#  define BOOST_NO_CXX11_OVERRIDE
+#endif
+
+#if !__has_feature(cxx_unrestricted_unions)
+#  define BOOST_NO_CXX11_UNRESTRICTED_UNION
 #endif
 
 #if !(__has_feature(__cxx_binary_literals__) || __has_extension(__cxx_binary_literals__))
@@ -300,6 +313,10 @@
 #  define BOOST_NO_CXX17_STRUCTURED_BINDINGS
 #endif
 
+#if !defined(__cpp_if_constexpr) || (__cpp_if_constexpr < 201606)
+#  define BOOST_NO_CXX17_IF_CONSTEXPR
+#endif
+
 // Clang 3.9+ in c++1z
 #if !__has_cpp_attribute(fallthrough) || __cplusplus < 201406L
 #  define BOOST_NO_CXX17_INLINE_VARIABLES
@@ -340,3 +357,5 @@
 // Macro used to identify the Clang compiler.
 #define BOOST_CLANG 1
 
+// BOOST_CLANG_VERSION
+#include <boost/config/compiler/clang_version.hpp>

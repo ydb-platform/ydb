@@ -107,16 +107,10 @@
 #    define BOOST_SYMBOL_EXPORT __attribute__((__dllexport__))
 #    define BOOST_SYMBOL_IMPORT __attribute__((__dllimport__))
 #  else
-#    ifndef BOOST_SYMBOL_EXPORT
-#      define BOOST_SYMBOL_EXPORT __attribute__((__visibility__("default")))
-#    endif
-#    ifndef BOOST_SYMBOL_IMPORT
-#      define BOOST_SYMBOL_IMPORT
-#    endif
+#    define BOOST_SYMBOL_EXPORT __attribute__((__visibility__("default")))
+#    define BOOST_SYMBOL_IMPORT
 #  endif
-#  ifndef BOOST_SYMBOL_VISIBLE
-#    define BOOST_SYMBOL_VISIBLE __attribute__((__visibility__("default")))
-#  endif
+#  define BOOST_SYMBOL_VISIBLE __attribute__((__visibility__("default")))
 #else
 // config/platform/win32.hpp will define BOOST_SYMBOL_EXPORT, etc., unless already defined
 #  define BOOST_SYMBOL_EXPORT
@@ -238,7 +232,6 @@
 // C++0x features in 4.6.n and later
 //
 #if (BOOST_GCC_VERSION < 40600) || !defined(BOOST_GCC_CXX11)
-#define BOOST_NO_CXX11_CONSTEXPR
 #define BOOST_NO_CXX11_DEFAULTED_MOVES
 #define BOOST_NO_CXX11_NOEXCEPT
 #define BOOST_NO_CXX11_NULLPTR
@@ -249,16 +242,19 @@
 // C++0x features in 4.7.n and later
 //
 #if (BOOST_GCC_VERSION < 40700) || !defined(BOOST_GCC_CXX11)
+// Note that while constexpr is partly supported in gcc-4.6 it's a 
+// pre-std version with several bugs:
+#  define BOOST_NO_CXX11_CONSTEXPR
 #  define BOOST_NO_CXX11_FINAL
 #  define BOOST_NO_CXX11_TEMPLATE_ALIASES
 #  define BOOST_NO_CXX11_USER_DEFINED_LITERALS
 #  define BOOST_NO_CXX11_FIXED_LENGTH_VARIADIC_TEMPLATE_EXPANSION_PACKS
+#  define BOOST_NO_CXX11_OVERRIDE
 #endif
 
 // C++0x features in 4.8.n and later
 //
 #if (BOOST_GCC_VERSION < 40800) || !defined(BOOST_GCC_CXX11)
-#  define BOOST_NO_CXX11_ALIGNAS
 #  define BOOST_NO_CXX11_THREAD_LOCAL
 #  define BOOST_NO_CXX11_SFINAE_EXPR
 #endif
@@ -269,6 +265,20 @@
 #  define BOOST_NO_CXX11_DECLTYPE_N3276
 #  define BOOST_NO_CXX11_REF_QUALIFIERS
 #  define BOOST_NO_CXX14_BINARY_LITERALS
+#endif
+
+// C++0x features in 4.9.n and later
+//
+#if (BOOST_GCC_VERSION < 40900) || !defined(BOOST_GCC_CXX11)
+// Although alignas support is added in gcc 4.8, it does not accept
+// dependent constant expressions as an argument until gcc 4.9.
+#  define BOOST_NO_CXX11_ALIGNAS
+#endif
+
+// C++0x features in 5.1 and later
+//
+#if (BOOST_GCC_VERSION < 50100) || !defined(BOOST_GCC_CXX11)
+#  define BOOST_NO_CXX11_UNRESTRICTED_UNION
 #endif
 
 // C++14 features in 4.9.0 and later
@@ -305,14 +315,18 @@
 #if !defined(__cpp_fold_expressions) || (__cpp_fold_expressions < 201603)
 #  define BOOST_NO_CXX17_FOLD_EXPRESSIONS
 #endif
+#if !defined(__cpp_if_constexpr) || (__cpp_if_constexpr < 201606)
+#  define BOOST_NO_CXX17_IF_CONSTEXPR
+#endif
 
 #if __GNUC__ >= 7
 #  define BOOST_FALLTHROUGH __attribute__((fallthrough))
 #endif
 
-#ifdef __MINGW32__
-// Currently (June 2017) thread_local is broken on mingw for all current compiler releases, see
+#if (__GNUC__ < 11) && defined(__MINGW32__) && !defined(__MINGW64__)
+// thread_local was broken on mingw for all 32bit compiler releases prior to 11.x, see
 // https://sourceforge.net/p/mingw-w64/bugs/527/
+// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83562
 // Not setting this causes program termination on thread exit.
 #define BOOST_NO_CXX11_THREAD_LOCAL
 #endif
@@ -328,7 +342,7 @@
 
 //
 // __builtin_unreachable:
-#if BOOST_GCC_VERSION >= 40800
+#if BOOST_GCC_VERSION >= 40500
 #define BOOST_UNREACHABLE_RETURN(x) __builtin_unreachable();
 #endif
 
@@ -349,14 +363,14 @@
 #  error "Compiler not configured - please reconfigure"
 #endif
 //
-// last known and checked version is 7.1:
-#if (BOOST_GCC_VERSION > 70100)
+// last known and checked version is 8.1:
+#if (BOOST_GCC_VERSION > 80100)
 #  if defined(BOOST_ASSERT_CONFIG)
 #     error "Boost.Config is older than your compiler - please check for an updated Boost release."
 #  else
 // we don't emit warnings here anymore since there are no defect macros defined for
 // gcc post 3.4, so any failures are gcc regressions...
-//#     warning "Unknown compiler version - please run the configure tests and report the results"
+//#     warning "boost: Unknown compiler version - please run the configure tests and report the results"
 #  endif
 #endif
 

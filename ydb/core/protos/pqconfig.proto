@@ -168,6 +168,8 @@ message TPQConfig {
         optional string LbUserDatabaseRoot = 5 [default = ""];
     }
     optional TPQDiscoveryConfig PQDiscoveryConfig = 46;
+
+    optional uint32 LegacyApiPort = 50 [default = 2135];
 }
 
 message TChannelProfile {

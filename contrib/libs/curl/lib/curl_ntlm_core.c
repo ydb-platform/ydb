@@ -60,17 +60,17 @@
 
 #if defined(USE_OPENSSL_DES) || defined(USE_WOLFSSL)
 
-#ifdef USE_WOLFSSL
+#if defined(USE_OPENSSL)
+#  include <openssl/des.h>
+#  include <openssl/md5.h>
+#  include <openssl/ssl.h>
+#  include <openssl/rand.h>
+#else
 #  error #include <wolfssl/options.h>
 #  error #include <wolfssl/openssl/des.h>
 #  error #include <wolfssl/openssl/md5.h>
 #  error #include <wolfssl/openssl/ssl.h>
 #  error #include <wolfssl/openssl/rand.h>
-#else
-#  include <openssl/des.h>
-#  include <openssl/md5.h>
-#  include <openssl/ssl.h>
-#  include <openssl/rand.h>
 #endif
 
 #  if (defined(OPENSSL_VERSION_NUMBER) && \

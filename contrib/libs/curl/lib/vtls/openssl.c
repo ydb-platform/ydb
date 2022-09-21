@@ -78,10 +78,6 @@
 #include <openssl/buffer.h>
 #include <openssl/pkcs12.h>
 
-#ifdef USE_AMISSL
-#include "amigaos.h"
-#endif
-
 #if (OPENSSL_VERSION_NUMBER >= 0x0090808fL) && !defined(OPENSSL_NO_OCSP)
 #include <openssl/ocsp.h>
 #endif
@@ -797,9 +793,10 @@ int cert_stuff(struct Curl_easy *data,
         SSL_CTX_use_certificate_chain_file(ctx, cert_file);
       if(cert_use_result != 1) {
         failf(data,
-              "could not load PEM client certificate, " OSSL_PACKAGE
+              "could not load PEM client certificate from %s, " OSSL_PACKAGE
               " error %s, "
               "(no key found, wrong pass phrase, or wrong file format?)",
+              (cert_blob ? "CURLOPT_SSLCERT_BLOB" : cert_file),
               ossl_strerror(ERR_get_error(), error_buffer,
                             sizeof(error_buffer)) );
         return 0;
@@ -817,9 +814,10 @@ int cert_stuff(struct Curl_easy *data,
         SSL_CTX_use_certificate_file(ctx, cert_file, file_type);
       if(cert_use_result != 1) {
         failf(data,
-              "could not load ASN1 client certificate, " OSSL_PACKAGE
+              "could not load ASN1 client certificate from %s, " OSSL_PACKAGE
               " error %s, "
               "(no key found, wrong pass phrase, or wrong file format?)",
+              (cert_blob ? "CURLOPT_SSLCERT_BLOB" : cert_file),
               ossl_strerror(ERR_get_error(), error_buffer,
                             sizeof(error_buffer)) );
         return 0;
@@ -872,8 +870,9 @@ int cert_stuff(struct Curl_easy *data,
           }
 
           if(SSL_CTX_use_certificate(ctx, params.cert) != 1) {
-            failf(data, "unable to set client certificate");
-            X509_free(params.cert);
+            failf(data, "unable to set client certificate [%s]",
+                  ossl_strerror(ERR_get_error(), error_buffer,
+                                sizeof(error_buffer)));
             return 0;
           }
           X509_free(params.cert); /* we don't need the handle any more... */
@@ -996,11 +995,7 @@ int cert_stuff(struct Curl_easy *data,
   fail:
       EVP_PKEY_free(pri);
       X509_free(x509);
-#ifdef USE_AMISSL
-      sk_X509_pop_free(ca, Curl_amiga_X509_free);
-#else
       sk_X509_pop_free(ca, X509_free);
-#endif
       if(!cert_done)
         return 0; /* failure! */
       break;
@@ -4454,7 +4449,13 @@ static size_t ossl_version(char *buffer, size_t size)
                    (LIBRESSL_VERSION_NUMBER>>12)&0xff);
 #endif
 #elif defined(OPENSSL_IS_BORINGSSL)
+#ifdef CURL_BORINGSSL_VERSION
+  return msnprintf(buffer, size, "%s/%s",
+                   OSSL_PACKAGE,
+                   CURL_BORINGSSL_VERSION);
+#else
   return msnprintf(buffer, size, OSSL_PACKAGE);
+#endif
 #elif defined(HAVE_OPENSSL_VERSION) && defined(OPENSSL_VERSION_STRING)
   return msnprintf(buffer, size, "%s/%s",
                    OSSL_PACKAGE, OpenSSL_version(OPENSSL_VERSION_STRING));

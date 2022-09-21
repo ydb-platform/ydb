@@ -245,7 +245,7 @@ void Curl_infof(struct Curl_easy *data, const char *fmt, ...)
   DEBUGASSERT(!strchr(fmt, '\n'));
   if(data && data->set.verbose) {
     va_list ap;
-    size_t len;
+    int len;
     char buffer[MAXINFO + 2];
     va_start(ap, fmt);
     len = mvsnprintf(buffer, MAXINFO, fmt, ap);
@@ -265,7 +265,7 @@ void Curl_failf(struct Curl_easy *data, const char *fmt, ...)
   DEBUGASSERT(!strchr(fmt, '\n'));
   if(data->set.verbose || data->set.errorbuffer) {
     va_list ap;
-    size_t len;
+    int len;
     char error[CURL_ERROR_SIZE + 2];
     va_start(ap, fmt);
     len = mvsnprintf(error, CURL_ERROR_SIZE, fmt, ap);
@@ -496,6 +496,9 @@ static CURLcode pausewrite(struct Curl_easy *data,
       }
     }
     DEBUGASSERT(i < 3);
+    if(i >= 3)
+      /* There are more types to store than what fits: very bad */
+      return CURLE_OUT_OF_MEMORY;
   }
   else
     i = 0;
@@ -583,18 +586,20 @@ static CURLcode chop_write(struct Curl_easy *data,
     len -= chunklen;
   }
 
+#ifndef CURL_DISABLE_HTTP
   /* HTTP header, but not status-line */
   if((conn->handler->protocol & PROTO_FAMILY_HTTP) &&
      (type & CLIENTWRITE_HEADER) && !(type & CLIENTWRITE_STATUS) ) {
-    CURLcode result =
-      Curl_headers_push(data, optr,
-                        type & CLIENTWRITE_CONNECT ? CURLH_CONNECT :
-                        (type & CLIENTWRITE_1XX ? CURLH_1XX :
-                         (type & CLIENTWRITE_TRAILER ? CURLH_TRAILER :
-                          CURLH_HEADER)));
+    unsigned char htype = (unsigned char)
+      (type & CLIENTWRITE_CONNECT ? CURLH_CONNECT :
+       (type & CLIENTWRITE_1XX ? CURLH_1XX :
+        (type & CLIENTWRITE_TRAILER ? CURLH_TRAILER :
+         CURLH_HEADER)));
+    CURLcode result = Curl_headers_push(data, optr, htype);
     if(result)
       return result;
   }
+#endif
 
   if(writeheader) {
     size_t wrote;
@@ -607,8 +612,10 @@ static CURLcode chop_write(struct Curl_easy *data,
       /* here we pass in the HEADER bit only since if this was body as well
          then it was passed already and clearly that didn't trigger the
          pause, so this is saved for later with the HEADER bit only */
-      return pausewrite(data, CLIENTWRITE_HEADER, optr, olen);
-
+      return pausewrite(data, CLIENTWRITE_HEADER |
+                        (type & (CLIENTWRITE_STATUS|CLIENTWRITE_CONNECT|
+                                 CLIENTWRITE_1XX|CLIENTWRITE_TRAILER)),
+                        optr, olen);
     if(wrote != olen) {
       failf(data, "Failed writing header");
       return CURLE_WRITE_ERROR;
@@ -709,16 +716,15 @@ CURLcode Curl_read(struct Curl_easy *data,   /* transfer */
 }
 
 /* return 0 on success */
-int Curl_debug(struct Curl_easy *data, curl_infotype type,
-               char *ptr, size_t size)
+void Curl_debug(struct Curl_easy *data, curl_infotype type,
+                char *ptr, size_t size)
 {
-  int rc = 0;
   if(data->set.verbose) {
     static const char s_infotype[CURLINFO_END][3] = {
       "* ", "< ", "> ", "{ ", "} ", "{ ", "} " };
     if(data->set.fdebug) {
       Curl_set_in_callback(data, true);
-      rc = (*data->set.fdebug)(data, type, ptr, size, data->set.debugdata);
+      (void)(*data->set.fdebug)(data, type, ptr, size, data->set.debugdata);
       Curl_set_in_callback(data, false);
     }
     else {
@@ -734,5 +740,4 @@ int Curl_debug(struct Curl_easy *data, curl_infotype type,
       }
     }
   }
-  return rc;
 }

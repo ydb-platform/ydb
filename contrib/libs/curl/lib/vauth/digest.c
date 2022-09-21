@@ -49,6 +49,15 @@
 #include "curl_memory.h"
 #include "memdebug.h"
 
+#define SESSION_ALGO 1 /* for algos with this bit set */
+
+#define ALGO_MD5 0
+#define ALGO_MD5SESS (ALGO_MD5 | SESSION_ALGO)
+#define ALGO_SHA256 2
+#define ALGO_SHA256SESS (ALGO_SHA256 | SESSION_ALGO)
+#define ALGO_SHA512_256 4
+#define ALGO_SHA512_256SESS (ALGO_SHA512_256 | SESSION_ALGO)
+
 #if !defined(USE_WINDOWS_SSPI)
 #define DIGEST_QOP_VALUE_AUTH             (1 << 0)
 #define DIGEST_QOP_VALUE_AUTH_INT         (1 << 1)
@@ -551,6 +560,9 @@ CURLcode Curl_auth_decode_digest_http_message(const char *chlg,
 
         token = strtok_r(tmp, ",", &tok_buf);
         while(token) {
+          /* Pass additional spaces here */
+          while(*token && ISSPACE(*token))
+            token++;
           if(strcasecompare(token, DIGEST_QOP_VALUE_STRING_AUTH)) {
             foundAuth = TRUE;
           }
@@ -583,17 +595,17 @@ CURLcode Curl_auth_decode_digest_http_message(const char *chlg,
           return CURLE_OUT_OF_MEMORY;
 
         if(strcasecompare(content, "MD5-sess"))
-          digest->algo = CURLDIGESTALGO_MD5SESS;
+          digest->algo = ALGO_MD5SESS;
         else if(strcasecompare(content, "MD5"))
-          digest->algo = CURLDIGESTALGO_MD5;
+          digest->algo = ALGO_MD5;
         else if(strcasecompare(content, "SHA-256"))
-          digest->algo = CURLDIGESTALGO_SHA256;
+          digest->algo = ALGO_SHA256;
         else if(strcasecompare(content, "SHA-256-SESS"))
-          digest->algo = CURLDIGESTALGO_SHA256SESS;
+          digest->algo = ALGO_SHA256SESS;
         else if(strcasecompare(content, "SHA-512-256"))
-          digest->algo = CURLDIGESTALGO_SHA512_256;
+          digest->algo = ALGO_SHA512_256;
         else if(strcasecompare(content, "SHA-512-256-SESS"))
-          digest->algo = CURLDIGESTALGO_SHA512_256SESS;
+          digest->algo = ALGO_SHA512_256SESS;
         else
           return CURLE_BAD_CONTENT_ENCODING;
       }
@@ -626,6 +638,10 @@ CURLcode Curl_auth_decode_digest_http_message(const char *chlg,
 
   /* We got this header without a nonce, that's a bad Digest line! */
   if(!digest->nonce)
+    return CURLE_BAD_CONTENT_ENCODING;
+
+  /* "<algo>-sess" protocol versions require "auth" or "auth-int" qop */
+  if(!digest->qop && (digest->algo & SESSION_ALGO))
     return CURLE_BAD_CONTENT_ENCODING;
 
   return CURLE_OK;
@@ -726,9 +742,7 @@ static CURLcode auth_create_digest_http_message(
   free(hashthis);
   convert_to_ascii(hashbuf, ha1);
 
-  if(digest->algo == CURLDIGESTALGO_MD5SESS ||
-     digest->algo == CURLDIGESTALGO_SHA256SESS ||
-     digest->algo == CURLDIGESTALGO_SHA512_256SESS) {
+  if(digest->algo & SESSION_ALGO) {
     /* nonce and cnonce are OUTSIDE the hash */
     tmp = aprintf("%s:%s:%s", ha1, digest->nonce, digest->cnonce);
     if(!tmp)
@@ -843,10 +857,8 @@ static CURLcode auth_create_digest_http_message(
                        digest->qop,
                        request_digest);
 
-    if(strcasecompare(digest->qop, "auth"))
-      digest->nc++; /* The nc (from RFC) has to be a 8 hex digit number 0
-                       padded which tells to the server how many times you are
-                       using the same nonce in the qop=auth mode */
+    /* Increment nonce-count to use another nc value for the next request */
+    digest->nc++;
   }
   else {
     response = aprintf("username=\"%s\", "
@@ -875,8 +887,9 @@ static CURLcode auth_create_digest_http_message(
       free(response);
       return CURLE_OUT_OF_MEMORY;
     }
-    tmp = aprintf("%s, opaque=\"%s\"", response, digest->opaque);
+    tmp = aprintf("%s, opaque=\"%s\"", response, opaque_quoted);
     free(response);
+    free(opaque_quoted);
     if(!tmp)
       return CURLE_OUT_OF_MEMORY;
 
@@ -938,28 +951,18 @@ CURLcode Curl_auth_create_digest_http_message(struct Curl_easy *data,
                                               struct digestdata *digest,
                                               char **outptr, size_t *outlen)
 {
-  switch(digest->algo) {
-  case CURLDIGESTALGO_MD5:
-  case CURLDIGESTALGO_MD5SESS:
+  if(digest->algo <= ALGO_MD5SESS)
     return auth_create_digest_http_message(data, userp, passwdp,
                                            request, uripath, digest,
                                            outptr, outlen,
                                            auth_digest_md5_to_ascii,
                                            Curl_md5it);
-
-  case CURLDIGESTALGO_SHA256:
-  case CURLDIGESTALGO_SHA256SESS:
-  case CURLDIGESTALGO_SHA512_256:
-  case CURLDIGESTALGO_SHA512_256SESS:
-    return auth_create_digest_http_message(data, userp, passwdp,
-                                           request, uripath, digest,
-                                           outptr, outlen,
-                                           auth_digest_sha256_to_ascii,
-                                           Curl_sha256it);
-
-  default:
-    return CURLE_UNSUPPORTED_PROTOCOL;
-  }
+  DEBUGASSERT(digest->algo <= ALGO_SHA512_256SESS);
+  return auth_create_digest_http_message(data, userp, passwdp,
+                                         request, uripath, digest,
+                                         outptr, outlen,
+                                         auth_digest_sha256_to_ascii,
+                                         Curl_sha256it);
 }
 
 /*
@@ -982,7 +985,7 @@ void Curl_auth_digest_cleanup(struct digestdata *digest)
   Curl_safefree(digest->algorithm);
 
   digest->nc = 0;
-  digest->algo = CURLDIGESTALGO_MD5; /* default algorithm */
+  digest->algo = ALGO_MD5; /* default algorithm */
   digest->stale = FALSE; /* default means normal, not stale */
   digest->userhash = FALSE;
 }

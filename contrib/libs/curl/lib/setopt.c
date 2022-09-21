@@ -148,6 +148,85 @@ static CURLcode setstropt_userpwd(char *option, char **userp, char **passwdp)
 #define C_SSLVERSION_VALUE(x) (x & 0xffff)
 #define C_SSLVERSION_MAX_VALUE(x) (x & 0xffff0000)
 
+static CURLcode protocol2num(char *str, curl_off_t *val)
+{
+  bool found_comma = FALSE;
+  static struct scheme {
+    const char *name;
+    long bit;
+  } const protos[] = {
+    { "dict", CURLPROTO_DICT },
+    { "file", CURLPROTO_FILE },
+    { "ftp", CURLPROTO_FTP },
+    { "ftps", CURLPROTO_FTPS },
+    { "gopher", CURLPROTO_GOPHER },
+    { "gophers", CURLPROTO_GOPHERS },
+    { "http", CURLPROTO_HTTP },
+    { "https", CURLPROTO_HTTPS },
+    { "imap", CURLPROTO_IMAP },
+    { "imaps", CURLPROTO_IMAPS },
+    { "ldap", CURLPROTO_LDAP },
+    { "ldaps", CURLPROTO_LDAPS },
+    { "mqtt", CURLPROTO_MQTT },
+    { "pop3", CURLPROTO_POP3 },
+    { "pop3s", CURLPROTO_POP3S },
+    { "rtmp", CURLPROTO_RTMP },
+    { "rtmpe", CURLPROTO_RTMPE },
+    { "rtmps", CURLPROTO_RTMPS },
+    { "rtmpt", CURLPROTO_RTMPT },
+    { "rtmpte", CURLPROTO_RTMPTE },
+    { "rtmpts", CURLPROTO_RTMPTS },
+    { "rtsp", CURLPROTO_RTSP },
+    { "scp", CURLPROTO_SCP },
+    { "sftp", CURLPROTO_SFTP },
+    { "smb", CURLPROTO_SMB },
+    { "smbs", CURLPROTO_SMBS },
+    { "smtp", CURLPROTO_SMTP },
+    { "smtps", CURLPROTO_SMTPS },
+    { "telnet", CURLPROTO_TELNET },
+    { "tftp", CURLPROTO_TFTP },
+    { NULL, 0 }
+  };
+
+  if(!str)
+    return CURLE_BAD_FUNCTION_ARGUMENT;
+  else if(curl_strequal(str, "all")) {
+    *val = ~0;
+    return CURLE_OK;
+  }
+
+  *val = 0;
+
+  do {
+    size_t tlen;
+    struct scheme const *pp;
+    char *token;
+    token = strchr(str, ',');
+    found_comma = token ? TRUE : FALSE;
+    if(!token)
+      token = strchr(str, '\0');
+    tlen = token - str;
+    if(tlen) {
+      for(pp = protos; pp->name; pp++) {
+        if((strlen(pp->name) == tlen) &&
+           curl_strnequal(str, pp->name, tlen)) {
+          *val |= pp->bit;
+          break;
+        }
+      }
+      if(!(pp->name))
+        /* protocol name didn't match */
+        return CURLE_BAD_FUNCTION_ARGUMENT;
+    }
+    if(found_comma)
+      str = token + 1;
+  } while(found_comma);
+  if(!*val)
+    /* no matching protocol */
+    return CURLE_BAD_FUNCTION_ARGUMENT;
+  return CURLE_OK;
+}
+
 /*
  * Do not make Curl_vsetopt() static: it is called from
  * packages/OS400/ccsidcurl.c.
@@ -157,9 +236,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
   char *argptr;
   CURLcode result = CURLE_OK;
   long arg;
-#ifdef ENABLE_IPV6
   unsigned long uarg;
-#endif
   curl_off_t bigsize;
 
   switch(option) {
@@ -167,7 +244,10 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
     arg = va_arg(param, long);
     if(arg < -1)
       return CURLE_BAD_FUNCTION_ARGUMENT;
-    data->set.dns_cache_timeout = arg;
+    else if(arg > INT_MAX)
+      arg = INT_MAX;
+
+    data->set.dns_cache_timeout = (int)arg;
     break;
   case CURLOPT_DNS_USE_GLOBAL_CACHE:
     /* deprecated */
@@ -314,7 +394,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
      */
     arg = va_arg(param, long);
     if((arg >= 0) && (arg <= (INT_MAX/1000)))
-      data->set.server_response_timeout = arg * 1000;
+      data->set.server_response_timeout = (unsigned int)arg * 1000;
     else
       return CURLE_BAD_FUNCTION_ARGUMENT;
     break;
@@ -344,7 +424,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
     arg = va_arg(param, long);
     if((arg < CURL_NETRC_IGNORED) || (arg >= CURL_NETRC_LAST))
       return CURLE_BAD_FUNCTION_ARGUMENT;
-    data->set.use_netrc = (enum CURL_NETRC_OPTION)arg;
+    data->set.use_netrc = (unsigned char)arg;
     break;
   case CURLOPT_NETRC_FILE:
     /*
@@ -1262,7 +1342,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
        (arg > CURLFTP_CREATE_DIR_RETRY))
       result = CURLE_BAD_FUNCTION_ARGUMENT;
     else
-      data->set.ftp_create_missing_dirs = (int)arg;
+      data->set.ftp_create_missing_dirs = (unsigned char)arg;
     break;
   case CURLOPT_READDATA:
     /*
@@ -1352,12 +1432,12 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
     break;
   case CURLOPT_PORT:
     /*
-     * The port number to use when getting the URL
+     * The port number to use when getting the URL. 0 disables it.
      */
     arg = va_arg(param, long);
     if((arg < 0) || (arg > 65535))
       return CURLE_BAD_FUNCTION_ARGUMENT;
-    data->set.use_port = arg;
+    data->set.use_port = (unsigned short)arg;
     break;
   case CURLOPT_TIMEOUT:
     /*
@@ -1366,16 +1446,16 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
      */
     arg = va_arg(param, long);
     if((arg >= 0) && (arg <= (INT_MAX/1000)))
-      data->set.timeout = arg * 1000;
+      data->set.timeout = (unsigned int)arg * 1000;
     else
       return CURLE_BAD_FUNCTION_ARGUMENT;
     break;
 
   case CURLOPT_TIMEOUT_MS:
-    arg = va_arg(param, long);
-    if(arg < 0)
-      return CURLE_BAD_FUNCTION_ARGUMENT;
-    data->set.timeout = arg;
+    uarg = va_arg(param, unsigned long);
+    if(uarg >= UINT_MAX)
+      uarg = UINT_MAX;
+    data->set.timeout = (unsigned int)uarg;
     break;
 
   case CURLOPT_CONNECTTIMEOUT:
@@ -1384,16 +1464,16 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
      */
     arg = va_arg(param, long);
     if((arg >= 0) && (arg <= (INT_MAX/1000)))
-      data->set.connecttimeout = arg * 1000;
+      data->set.connecttimeout = (unsigned int)arg * 1000;
     else
       return CURLE_BAD_FUNCTION_ARGUMENT;
     break;
 
   case CURLOPT_CONNECTTIMEOUT_MS:
-    arg = va_arg(param, long);
-    if(arg < 0)
-      return CURLE_BAD_FUNCTION_ARGUMENT;
-    data->set.connecttimeout = arg;
+    uarg = va_arg(param, unsigned long);
+    if(uarg >= UINT_MAX)
+      uarg = UINT_MAX;
+    data->set.connecttimeout = (unsigned int)uarg;
     break;
 
 #ifndef CURL_DISABLE_FTP
@@ -1401,10 +1481,10 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
     /*
      * The maximum time for curl to wait for FTP server connect
      */
-    arg = va_arg(param, long);
-    if(arg < 0)
-      return CURLE_BAD_FUNCTION_ARGUMENT;
-    data->set.accepttimeout = arg;
+    uarg = va_arg(param, unsigned long);
+    if(uarg >= UINT_MAX)
+      uarg = UINT_MAX;
+    data->set.accepttimeout = (unsigned int)uarg;
     break;
 #endif
 
@@ -2156,7 +2236,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
     else if(arg < READBUFFER_MIN)
       arg = READBUFFER_MIN;
 
-    data->set.buffer_size = arg;
+    data->set.buffer_size = (int)arg;
     break;
 
   case CURLOPT_UPLOAD_BUFFERSIZE:
@@ -2560,14 +2640,30 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
        transfer, which thus helps the app which takes URLs from users or other
        external inputs and want to restrict what protocol(s) to deal
        with. Defaults to CURLPROTO_ALL. */
-    data->set.allowed_protocols = (unsigned int)va_arg(param, long);
+    data->set.allowed_protocols = (curl_off_t)va_arg(param, long);
     break;
 
   case CURLOPT_REDIR_PROTOCOLS:
     /* set the bitmask for the protocols that libcurl is allowed to follow to,
        as a subset of the CURLOPT_PROTOCOLS ones. That means the protocol needs
        to be set in both bitmasks to be allowed to get redirected to. */
-    data->set.redir_protocols = (unsigned int)va_arg(param, long);
+    data->set.redir_protocols = (curl_off_t)va_arg(param, long);
+    break;
+
+  case CURLOPT_PROTOCOLS_STR:
+    argptr = va_arg(param, char *);
+    result = protocol2num(argptr, &bigsize);
+    if(result)
+      return result;
+    data->set.allowed_protocols = bigsize;
+    break;
+
+  case CURLOPT_REDIR_PROTOCOLS_STR:
+    argptr = va_arg(param, char *);
+    result = protocol2num(argptr, &bigsize);
+    if(result)
+      return result;
+    data->set.redir_protocols = bigsize;
     break;
 
   case CURLOPT_DEFAULT_PROTOCOL:
@@ -2912,10 +3008,10 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
     data->set.suppress_connect_headers = (0 != va_arg(param, long))?TRUE:FALSE;
     break;
   case CURLOPT_HAPPY_EYEBALLS_TIMEOUT_MS:
-    arg = va_arg(param, long);
-    if(arg < 0)
-      return CURLE_BAD_FUNCTION_ARGUMENT;
-    data->set.happy_eyeballs_timeout = arg;
+    uarg = va_arg(param, unsigned long);
+    if(uarg >= UINT_MAX)
+      uarg = UINT_MAX;
+    data->set.happy_eyeballs_timeout = (unsigned int)uarg;
     break;
 #ifndef CURL_DISABLE_SHUFFLE_DNS
   case CURLOPT_DNS_SHUFFLE_ADDRESSES:

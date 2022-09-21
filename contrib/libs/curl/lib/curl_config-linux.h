@@ -142,9 +142,6 @@
 /* Define to 1 if you have the alarm function. */
 #define HAVE_ALARM 1
 
-/* Define to 1 if you have the <alloca.h> header file. */
-#define HAVE_ALLOCA_H 1
-
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
 
@@ -341,9 +338,6 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
-/* Define to 1 if you have the ioctl function. */
-#define HAVE_IOCTL 1
-
 /* Define to 1 if you have the ioctlsocket function. */
 /* #undef HAVE_IOCTLSOCKET */
 
@@ -357,26 +351,14 @@
 /* Define to 1 if you have a working ioctlsocket FIONBIO function. */
 /* #undef HAVE_IOCTLSOCKET_FIONBIO */
 
-/* Define to 1 if you have a working ioctl FIONBIO function. */
-#define HAVE_IOCTL_FIONBIO 1
-
-/* Define to 1 if you have a working ioctl SIOCGIFADDR function. */
-#define HAVE_IOCTL_SIOCGIFADDR 1
-
 /* Define to 1 if you have the <io.h> header file. */
 /* #undef HAVE_IO_H */
 
 /* Define to 1 if you have the lber.h header file. */
 /* #undef HAVE_LBER_H */
 
-/* Define to 1 if you have the ldapssl.h header file. */
-/* #undef HAVE_LDAPSSL_H */
-
 /* Define to 1 if you have the ldap.h header file. */
 /* #undef HAVE_LDAP_H */
-
-/* Define to 1 if you have the `ldap_init_fd' function. */
-/* #undef HAVE_LDAP_INIT_FD */
 
 /* Use LDAPS implementation */
 /* #undef HAVE_LDAP_SSL */
@@ -429,26 +411,14 @@
 /* Define to 1 if you have the <linux/tcp.h> header file. */
 #define HAVE_LINUX_TCP_H 1
 
-/* if your compiler supports LL */
-#define HAVE_LL 1
-
 /* Define to 1 if you have the <locale.h> header file. */
 #define HAVE_LOCALE_H 1
-
-/* Define to 1 if you have a working localtime_r function. */
-#define HAVE_LOCALTIME_R 1
 
 /* Define to 1 if the compiler supports the 'long long' data type. */
 #define HAVE_LONGLONG 1
 
 /* Define to 1 if you have the `mach_absolute_time' function. */
 /* #undef HAVE_MACH_ABSOLUTE_TIME */
-
-/* Define to 1 if you have the malloc.h header file. */
-#define HAVE_MALLOC_H 1
-
-/* Define to 1 if you have the memory.h header file. */
-/* #undef HAVE_MEMORY_H */
 
 /* Define to 1 if you have the memrchr function or macro. */
 #define HAVE_MEMRCHR 1
@@ -527,9 +497,6 @@
 /* if you have the PK11_CreateManagedGenericObject function */
 /* #undef HAVE_PK11_CREATEMANAGEDGENERICOBJECT */
 
-/* Define to 1 if you have a working poll function. */
-#define HAVE_POLL 1
-
 /* If you have a fine poll */
 #define HAVE_POLL_FINE 1
 
@@ -587,12 +554,6 @@
 /* Define to 1 if you have the `setrlimit' function. */
 #define HAVE_SETRLIMIT 1
 
-/* Define to 1 if you have the setsockopt function. */
-#define HAVE_SETSOCKOPT 1
-
-/* Define to 1 if you have a working setsockopt SO_NONBLOCK function. */
-/* #undef HAVE_SETSOCKOPT_SO_NONBLOCK */
-
 /* Define to 1 if you have the sigaction function. */
 #define HAVE_SIGACTION 1
 
@@ -626,6 +587,9 @@
 /* Define to 1 if you have the <ssl.h> header file. */
 /* #undef HAVE_SSL_H */
 
+/* Define to 1 if you have the <stdatomic.h> header file. */
+#define HAVE_STDATOMIC_H 1
+
 /* Define to 1 if you have the <stdbool.h> header file. */
 #define HAVE_STDBOOL_H 1
 
@@ -658,18 +622,6 @@
 
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
-
-/* Define to 1 if you have the strncmpi function. */
-/* #undef HAVE_STRNCMPI */
-
-/* Define to 1 if you have the strnicmp function. */
-/* #undef HAVE_STRNICMP */
-
-/* Define to 1 if you have the <stropts.h> header file. */
-/* #undef HAVE_STROPTS_H */
-
-/* Define to 1 if you have the strstr function. */
-#define HAVE_STRSTR 1
 
 /* Define to 1 if you have the strtok_r function. */
 #define HAVE_STRTOK_R 1
@@ -746,9 +698,6 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
-/* Define to 1 if you have the `usleep' function. */
-#define HAVE_USLEEP 1
-
 /* Define to 1 if you have the `utime' function. */
 #define HAVE_UTIME 1
 
@@ -763,9 +712,6 @@
 
 /* Define to 1 if compiler supports old gcc variadic macro style. */
 #define HAVE_VARIADIC_MACROS_GCC 1
-
-/* Define to 1 if you have the winber.h header file. */
-/* #undef HAVE_WINBER_H */
 
 /* Define to 1 if you have the wincrypt.h header file. */
 /* #undef HAVE_WINCRYPT_H */
@@ -794,9 +740,6 @@
 /* Define this symbol if your OS supports changing the contents of argv */
 #define HAVE_WRITABLE_ARGV 1
 
-/* Define to 1 if you have the writev function. */
-#define HAVE_WRITEV 1
-
 /* Define to 1 if you have the ws2tcpip.h header file. */
 /* #undef HAVE_WS2TCPIP_H */
 
@@ -817,12 +760,6 @@
 
 /* Define to 1 if you need the lber.h header file even with ldap.h */
 /* #undef NEED_LBER_H */
-
-/* Define to 1 if you need the malloc.h header file even with stdlib.h */
-/* #undef NEED_MALLOC_H */
-
-/* Define to 1 if you need the memory.h header file even with stdlib.h */
-/* #undef NEED_MEMORY_H */
 
 /* Define to 1 if _REENTRANT preprocessor symbol must be defined. */
 /* #undef NEED_REENTRANT */
@@ -911,43 +848,35 @@
 /* Define to the function return type for send. */
 #define SEND_TYPE_RETV ssize_t
 
-/* The number of bytes in type curl_off_t */
+/* Size of curl_off_t in number of bytes */
 #define SIZEOF_CURL_OFF_T 8
 
-/* The number of bytes in type int */
+/* Size of int in number of bytes */
 #ifndef SIZEOF_INT
 #error undefined SIZEOF_INT
 #endif
 
-/* The number of bytes in type long */
+/* Size of long in number of bytes */
 #ifndef SIZEOF_LONG
 #error undefined SIZEOF_LONG
 #endif
 
-/* The number of bytes in type long long */
+/* Size of long long in number of bytes */
 /* #undef SIZEOF_LONG_LONG */
 
-/* The number of bytes in type off_t */
+/* Size of off_t in number of bytes */
 #define SIZEOF_OFF_T 8
 
-/* The number of bytes in type short */
-#ifndef SIZEOF_SHORT
-#error undefined SIZEOF_SHORT
-#endif
-
-/* The number of bytes in type size_t */
+/* Size of size_t in number of bytes */
 #define SIZEOF_SIZE_T 8
 
-/* The number of bytes in type time_t */
+/* Size of time_t in number of bytes */
 #define SIZEOF_TIME_T SIZEOF_LONG
 
 /* Define to 1 if all of the C90 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
-
-/* Define to the type of arg 3 for strerror_r. */
-#define STRERROR_R_TYPE_ARG3 size_t
 
 /* if AmiSSL is in use */
 /* #undef USE_AMISSL */
@@ -1005,6 +934,9 @@
 
 /* if ngtcp2_crypto_openssl is in use */
 /* #undef USE_NGTCP2_CRYPTO_OPENSSL */
+
+/* if ngtcp2_crypto_wolfssl is in use */
+/* #undef USE_NGTCP2_CRYPTO_WOLFSSL */
 
 /* if NSS is enabled */
 /* #undef USE_NSS */

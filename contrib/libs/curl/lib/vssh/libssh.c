@@ -96,6 +96,13 @@
 #include "curl_memory.h"
 #include "memdebug.h"
 
+/* in 0.10.0 or later, ignore deprecated warnings */
+#if defined(__GNUC__) &&                        \
+  (LIBSSH_VERSION_MINOR >= 10) ||               \
+  (LIBSSH_VERSION_MAJOR > 0)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 /* A recent macro provided by libssh. Or make our own. */
 #ifndef SSH_STRING_FREE_CHAR
 #define SSH_STRING_FREE_CHAR(x)                 \
@@ -2911,32 +2918,33 @@ static void sftp_quote_stat(struct Curl_easy *data)
     }
     sshc->quote_attrs->flags |= SSH_FILEXFER_ATTR_UIDGID;
   }
-  else if(strncasecompare(cmd, "atime", 5)) {
+  else if(strncasecompare(cmd, "atime", 5) ||
+          strncasecompare(cmd, "mtime", 5)) {
     time_t date = Curl_getdate_capped(sshc->quote_path1);
+    bool fail = FALSE;
     if(date == -1) {
+      failf(data, "incorrect date format for %.*s", 5, cmd);
+      fail = TRUE;
+    }
+#if SIZEOF_TIME_T > 4
+    else if(date > 0xffffffff) {
+      failf(data, "date overflow");
+      fail = TRUE; /* avoid setting a capped time */
+    }
+#endif
+    if(fail) {
       Curl_safefree(sshc->quote_path1);
       Curl_safefree(sshc->quote_path2);
-      failf(data, "Syntax error: incorrect access date format");
       state(data, SSH_SFTP_CLOSE);
       sshc->nextstate = SSH_NO_STATE;
       sshc->actualcode = CURLE_QUOTE_ERROR;
       return;
     }
-    sshc->quote_attrs->atime = (uint32_t)date;
-    sshc->quote_attrs->flags |= SSH_FILEXFER_ATTR_ACMODTIME;
-  }
-  else if(strncasecompare(cmd, "mtime", 5)) {
-    time_t date = Curl_getdate_capped(sshc->quote_path1);
-    if(date == -1) {
-      Curl_safefree(sshc->quote_path1);
-      Curl_safefree(sshc->quote_path2);
-      failf(data, "Syntax error: incorrect modification date format");
-      state(data, SSH_SFTP_CLOSE);
-      sshc->nextstate = SSH_NO_STATE;
-      sshc->actualcode = CURLE_QUOTE_ERROR;
-      return;
-    }
-    sshc->quote_attrs->mtime = (uint32_t)date;
+    if(strncasecompare(cmd, "atime", 5))
+      sshc->quote_attrs->atime = (uint32_t)date;
+    else /* mtime */
+      sshc->quote_attrs->mtime = (uint32_t)date;
+
     sshc->quote_attrs->flags |= SSH_FILEXFER_ATTR_ACMODTIME;
   }
 

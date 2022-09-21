@@ -82,11 +82,12 @@
 #include "altsvc.h"
 #include "hsts.h"
 
+#include "easy_lock.h"
+
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
 #include "curl_memory.h"
 #include "memdebug.h"
-#include "easy_lock.h"
 
 /* true globals -- for curl_global_init() and curl_global_cleanup() */
 static unsigned int  initialized;
@@ -177,7 +178,7 @@ static CURLcode global_init(long flags, bool memoryfuncs)
 #endif
 
 #ifdef __AMIGA__
-  if(!Curl_amiga_init()) {
+  if(Curl_amiga_init()) {
     DEBUGF(fprintf(stderr, "Error: Curl_amiga_init failed\n"));
     goto fail;
   }
@@ -725,7 +726,7 @@ static CURLcode easy_perform(struct Curl_easy *data, bool events)
   else {
     /* this multi handle will only ever have a single easy handled attached
        to it, so make it use minimal hashes */
-    multi = Curl_multi_handle(1, 3);
+    multi = Curl_multi_handle(1, 3, 7);
     if(!multi)
       return CURLE_OUT_OF_MEMORY;
     data->multi_easy = multi;
@@ -1131,6 +1132,16 @@ CURLcode curl_easy_pause(struct Curl_easy *data, int action)
         return result;
     }
   }
+
+#ifdef USE_HYPER
+  if(!(newstate & KEEP_SEND_PAUSE)) {
+    /* need to wake the send body waker */
+    if(data->hyp.send_body_waker) {
+      hyper_waker_wake(data->hyp.send_body_waker);
+      data->hyp.send_body_waker = NULL;
+    }
+  }
+#endif
 
   /* if there's no error and we're not pausing both directions, we want
      to have this handle checked soon */

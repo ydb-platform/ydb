@@ -4,7 +4,7 @@ This page contains a detailed description of the code of a [test app](https://gi
 
 ## Downloading and starting {#download}
 
-The startup script given below uses [git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install). Be sure to install the [YDB Go SDK](../../install.md) first.
+The following execution scenario is based on [git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install). Be sure to install the [YDB Go SDK](../../install.md).
 
 Create a working directory and use it to run from the command line the command to clone the GitHub repository:
 
@@ -16,6 +16,8 @@ Next, from the same working directory, run the command to start the test app. Th
 
 {% include [run_options.md](_includes/run_options.md) %}
 
+
+
 {% include [init.md](../_includes/steps/01_init.md) %}
 
 To work with `YDB` in `Go`, import the `ydb-go-sdk` driver package:
@@ -26,14 +28,14 @@ import (
   "context"
   "path"
 
-  // imports of ydb-go-sdk packages
+  // importing the packages ydb-go-sdk
   "github.com/ydb-platform/ydb-go-sdk/v3"
-  "github.com/ydb-platform/ydb-go-sdk/v3/table" // to work with the table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // to work with the table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // to work with the table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // to work with the table service
-  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // for authentication using environment variables
-  "github.com/ydb-platform/ydb-go-yc" // to work with YDB in Yandex.Cloud
+  "github.com/ydb-platform/ydb-go-sdk/v3/table" // needed to work with the table service
+ "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // needed to work with the table service
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // needed to work with the table service
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // needed to work with the table service
+  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // needed to authenticate using the environment variables
+  "github.com/ydb-platform/ydb-go-yc" // to work with YDB in Yandex Cloud
 )
 ```
 
@@ -45,20 +47,20 @@ ctx := context.Background()
 dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
 // IAM token
 token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
-// creating a DB connection object, which is the input point for YDB services
+// create a connection object called db, it is an entry point for YDB services
 db, err := ydb.Open(ctx,
   dsn,
-//  yc.WithInternalCA(), // using Yandex.Cloud certificates
-  ydb.WithAccessTokenCredentials(token), // token-based authentication
-//  ydb.WithAnonimousCredentials(), // anonymous authentication (for example, in docker ydb)
-//  yc.WithMetadataCredentials(token), // authentication from inside a VM in Yandex.Cloud or a function in Yandex Functions
-//  yc.WithServiceAccountKeyFileCredentials("~/.ydb/sa.json"), // authentication in Yandex.Cloud using a service account file
-//  environ.WithEnvironCredentials(ctx), // authentication using environment variables
+//  yc.WithInternalCA(), // use Yandex Cloud certificates
+  ydb.WithAccessTokenCredentials(token), // authenticate using the token
+//  ydb.WithAnonimousCredentials(), // authenticate anonymously (for example, using docker ydb)
+//  yc.WithMetadataCredentials(token), // authenticate from inside a VM in Yandex Cloud or Yandex Function
+//  yc.WithServiceAccountKeyFileCredentials("~/.ydb/sa.json"), // authenticate in Yandex Cloud using a service account file
+//  environ.WithEnvironCredentials(ctx), // authenticate using environment variables
 )
 if err != nil {
-  // connection error handling
+  // handle a connection error
 }
-// closing the driver at the end of the program is mandatory
+// driver must be closed when done
 defer func() {
   _ = db.Close(ctx)
 }
@@ -67,7 +69,7 @@ defer func() {
 The `db` object is an input point for working with `YDB` services.
 To work with the table service, use the `db.Table()` client.
 The client of the table service provides an `API` for making queries to tables.
-The most popular method is `db.Table().Do(ctx, op)`. It implements background session creation and repeated attempts to perform the `op` user operation where the created session is passed to the user-defined code.
+The most popular method is `db.Table().Do(ctx, op)`. It implements session creation in the background and the repeat attempts to execute the custom `op` operation where the created session is passed to the user's code.
 The session has an exhaustive `API` that lets you perform `DDL`, `DML`, `DQL`, and `TCL` requests.
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
@@ -79,7 +81,7 @@ err = db.Table().Do(
   ctx,
   func(ctx context.Context, s table.Session) (err error) {
     return s.CreateTable(ctx, path.Join(db.Name(), "series"),
-      options.WithColumn("series_id", types.Optional(types.TypeUint64)),
+      options.WithColumn("series_id", types.TypeUint64),  // not null column
       options.WithColumn("title", types.Optional(types.TypeUTF8)),
       options.WithColumn("series_info", types.Optional(types.TypeUTF8)),
       options.WithColumn("release_date", types.Optional(types.TypeDate)),
@@ -89,7 +91,7 @@ err = db.Table().Do(
   },
 )
 if err != nil {
-  // handling the situation when the request failed
+  // handling query execution failure
 }
 ```
 
@@ -111,7 +113,7 @@ err = db.Table().Do(
   }
 )
 if err != nil {
-  // handling the situation when the request failed
+  // handling a situation when a query has failed
 }
 ```
 
@@ -134,9 +136,9 @@ err := db.Table().Do(
   func(ctx context.Context, s table.Session) (err error) {
     var (
       res   result.Result
-      id    *uint64 // pointer - for optional results
-      title *string // pointer - for optional results
-      date  *time.Time // pointer - for optional results
+      id    uint64 // a variable for required results
+      title *string // a pointer for optional results
+      date  *time.Time // a pointer for optional results
     )
     _, res, err = s.Execute(
       ctx,
@@ -153,22 +155,22 @@ err := db.Table().Do(
           series_id = $seriesID;
       `,
       table.NewQueryParameters(
-        table.ValueParam("$seriesID", types.Uint64Value(1)), // substitution in the query condition
+        table.ValueParam("$seriesID", types.Uint64Value(1)), // insert into the query criteria
       ),
     )
     if err != nil {
       return err
     }
     defer func() {
-      _ = res.Close() // making sure the result is closed
+      _ = res.Close() // result must be closed
     }()
     log.Printf("> select_simple_transaction:\n")
     for res.NextResultSet(ctx) {
       for res.NextRow() {
-        // passing column names from the scanning line to ScanNamed,
-        // addresses (and data types) to assign query results to
+        // use ScanNamed to pass column names from the scan string,
+        // addresses (and data types) to be assigned the query results
         err = res.ScanNamed(
-          named.Optional("series_id", &id),
+          named.Required("series_id", id),
           named.Optional("title", &title),
           named.Optional("release_date", &date),
         )
@@ -177,7 +179,7 @@ err := db.Table().Do(
         }
         log.Printf(
           "  > %d %s %s\n",
-          *id, *title, *date,
+          id, *title, *date,
         )
       }
     }
@@ -185,7 +187,7 @@ err := db.Table().Do(
   },
 )
 if err != nil {
-  // handling the query execution error
+  // handle a query execution error
 }
 ```
 
@@ -220,7 +222,7 @@ err = c.Do(
       return err
     }
     defer func() {
-      _ = res.Close() // making sure the result is closed
+      _ = res.Close() // result must be closed
     }()
     var (
       seriesID uint64
@@ -234,10 +236,10 @@ err = c.Do(
         return err
       }
       for res.NextRow() {
-        // named.OptionalOrDefault lets you "deploy" optional
-        // results or use the default value of the go type
+        // named.OptionalOrDefault enables you to "deploy" optional
+        // results or use the default type value in Go
         err = res.ScanNamed(
-          named.OptionalOrDefault("series_id", &seriesID),
+          named.Required("series_id", &seriesID),
           named.OptionalOrDefault("season_id", &seasonID),
           named.OptionalOrDefault("title", &title),
           named.OptionalOrDefault("first_aired", &date),
@@ -252,16 +254,15 @@ err = c.Do(
   },
 )
 if err != nil {
-  // handling the query execution error
+  // handling a query execution error
 }
 ```
+
 
 {% note info %}
 
 Sample code of a test app that uses archived of versions the Go SDK:
-
-- [github.com/yandex-cloud/ydb-go-sdk](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) is available at this [link](../archive/example-go-v1.md),
-- [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) is available at this [link](../archive/example-go-v2.md).
+- [github.com/yandex-cloud/ydb-go-sdk](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) is available via the [link](../archive/example-go-v1.md),
+- [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) is available via the [link](../archive/example-go-v2.md).
 
 {% endnote %}
-

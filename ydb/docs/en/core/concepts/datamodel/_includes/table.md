@@ -143,7 +143,7 @@ Each column group has a unique name within a table. You can set the composition 
 
 A column family may contain any number of columns of its table, including none. Each table column can belong to a single column group (that is, column groups can't overlap). Column groups are set up when creating a table, but can be modified later.
 
-Each table has a `default` column group that includes all the columns that don't belong to any other column group. Primary-key columns are always in the default column group and can't be moved to another group.
+Each table has a `default` column group that includes all the columns that don't belong to any other column group.  Primary-key columns are always in the default column group and can't be moved to another group.
 
 Column groups are assigned attributes that affect data storage:
 

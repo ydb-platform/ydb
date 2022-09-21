@@ -1,6 +1,6 @@
 # App in C# (.NET)
 
-This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-dotnet-examples) that uses the [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) {{ ydb-short-name }}.
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-dotnet-examples) that uses the {{ ydb-short-name }} [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk).
 
 {% include [addition.md](auxilary/addition.md) %}
 
@@ -43,7 +43,7 @@ var response = await tableClient.SessionExec(async session =>
 {
     return await session.ExecuteSchemeQuery(@"
         CREATE TABLE series (
-            series_id Uint64,
+            series_id Uint64 NOT NULL,
             title Utf8,
             series_info Utf8,
             release_date Date,
@@ -75,7 +75,7 @@ response.Status.EnsureSuccess();
 
 {% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
 
-Code snippet for inserting and updating data:
+Code snippet for data insert/update:
 
 ```c#
 var response = await tableClient.SessionExec(async session =>
@@ -147,11 +147,13 @@ The result of query execution (resultset) consists of an organized set of rows. 
 foreach (var row in resultSet.Rows)
 {
     Console.WriteLine($"> Series, " +
-        $"series_id: {(ulong?)row["series_id"]}, " +
+        $"series_id: {(ulong)row["series_id"]}, " +
         $"title: {(string?)row["title"]}, " +
         $"release_date: {(DateTime?)row["release_date"]}");
 }
 ```
+
+
 
 {% include [scan_query.md](steps/08_scan_query.md) %}
 
@@ -175,7 +177,7 @@ public void executeScanQuery()
       foreach (var row in resultSet.Rows)
       {
         Console.WriteLine($"> ScanQuery, " +
-          $"series_id: {(ulong?)row["series_id"]}, " +
+          $"series_id: {(ulong)row["series_id"]}, " +
           $"season_id: {(ulong?)row["season_id"]}, " +
           $"episodes_count: {(ulong)row["episodes_count"]}");
       }
@@ -183,4 +185,3 @@ public void executeScanQuery()
   }
 }
 ```
-

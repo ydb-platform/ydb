@@ -49,7 +49,7 @@ The recommended maximum number of <producer ID, message group ID> pairs is up to
 
 Let's consider a finance application that calculates the balance on a user's account and permits or prohibits debiting the funds.
 
-For such tasks, you can use a message queue. When you top up your account, debit funds, or make a purchase, a message with the account ID, amount, and transaction type is registered in the queue. The application processes incoming messages and calculates the balance.
+For such tasks, you can use a [message queue](https://en.wikipedia.org/wiki/Message_queue). When you top up your account, debit funds, or make a purchase, a message with the account ID, amount, and transaction type is registered in the queue. The application processes incoming messages and calculates the balance.
 
 To accurately calculate the balance, the message processing order is crucial. If a user first tops up their account and then makes a purchase, messages with details about these transactions must be processed by the app in the same order. Otherwise there may be an error in the business logic and the app will reject the purchase as a result of insufficient funds. There are guaranteed delivery order mechanisms, but they cannot ensure a message order within a single queue on an arbitrary data amount.
 
@@ -95,7 +95,7 @@ A message group ID is an arbitrary string up to 2048 characters long. This is us
 
 ## Message sequence numbers {#seqno}
 
-All messages from the same source have a [`sequence number`](#seqno) used for their deduplication. A message sequence number should monotonically increase within a `topic`, `source` pair. If the server receives a message whose sequence number is less than or equal to the maximum number written for the `topic`, `source` pair, the message will be skipped as a duplicate. Some sequence numbers in the sequence may be skipped. Message sequence numbers must be unique within the `topic`, `source` pair.
+All messages from the same source have a [`sequence number`](#seqno) used for their deduplication. A message sequence number should monotonically increase within a `topic`, `source` pair. If the server receives a message whose sequence number is less than or equal to the maximum number written for the `topic`, `source` pair, the message will be skipped as a duplicate.  Some sequence numbers in the sequence may be skipped. Message sequence numbers must be unique within the `topic`, `source` pair.
 
 ### Sample message sequence numbers {#seqno-examples}
 
@@ -104,11 +104,11 @@ All messages from the same source have a [`sequence number`](#seqno) used for th
 | File | Offset of transferred data from the beginning of a file | You can't delete lines from the beginning of a file, since this will lead to skipping some data as duplicates or losing some data. |
 | DB table | Auto-increment record ID |
 
-## Message retention period { #retention-time }
+## Message retention period {#retention-time}
 
 The message retention period is set for each topic. After it expires, messages are automatically deleted. An exception is data that hasn't been read by an [important](#important-consumer) consumer: this data will be stored until it's read.
 
-## Data compression { #message-codec }
+## Data compression {#message-codec}
 
 When transferring data, the producer app indicates that a message can be compressed using one of the supported codecs. The codec name is passed while writing a message, saved along with it, and returned when reading the message. Compression applies to each individual message, no batch message compression is supported. Data is compressed and decompressed on the producer and consumer apps end.
 
@@ -123,15 +123,15 @@ Supported codecs are explicitly listed in each topic. When making an attempt to 
 {% endif %}
 `zstd` | [zstd](https://en.wikipedia.org/wiki/Zstd) compression.
 
-## Consumer { #consumer }
+## Consumer {#consumer}
 
 A consumer is a named entity that reads data from a topic. A consumer contains committed consumer offsets for each topic read on their behalf.
 
-### Consumer offset { #consumer-offset }
+### Consumer offset {#consumer-offset}
 
 A consumer offset is a saved [offset](#offset) of a consumer by each topic partition. It's saved by a consumer after sending commits of the data read. When a new read session is established, messages are delivered to the consumer starting with the saved consumer offset. This lets users avoid saving the consumer offset on their end.
 
-### Important consumer { #important-consumer }
+### Important consumer {#important-consumer}
 
 A consumer may be flagged as "important". This flag indicates that messages in a topic won't be removed until the consumer reads and confirms them. You can set this flag for most critical consumers that need to handle all data even if there's a long idle time.
 

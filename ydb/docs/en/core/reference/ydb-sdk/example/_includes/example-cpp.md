@@ -1,6 +1,6 @@
 # App in C++
 
-This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example) that is available as part of the {{ ydb-short-name }} [C++ SDK](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp).
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example) that is available as part of the {{ ydb-short-name }} [C++SDK](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp).
 
 {% include [init.md](steps/01_init.md) %}
 
@@ -29,7 +29,7 @@ To create tables, use the `CreateTable` method:
 //! Creates sample tables with CrateTable API.
     ThrowOnError(client.RetryOperationSync([path](TSession session) {
         auto seriesDesc = TTableBuilder()
-            .AddNullableColumn("series_id", EPrimitiveType::Uint64)
+            .AddNonNullableColumn("series_id", EPrimitiveType::Uint64)
             .AddNullableColumn("title", EPrimitiveType::Utf8)
             .AddNullableColumn("series_info", EPrimitiveType::Utf8)
             .AddNullableColumn("release_date", EPrimitiveType::Uint64)
@@ -40,7 +40,7 @@ To create tables, use the `CreateTable` method:
     }));
 ```
 
-Use the `describeTable` method to output information about the table structure and make sure that it was properly created.
+Use the `describeTable` method to view details about the table structure and make sure that it was properly created.
 
 ```c++
     TMaybe<TTableDescription> desc;
@@ -61,11 +61,11 @@ Use the `describeTable` method to output information about the table structure a
     }
 ```
 
-The given code snippet outputs the following text to the console at startup:
+The given code snippet prints the following text to the console at startup:
 
 ```bash
 > Describe table: series
-Column, name: series_id, type: Uint64?
+Column, name: series_id, type: Uint64
 Column, name: title, type: Utf8?
 Column, name: series_info, type: Utf8?
 Column, name: release_date, type: Uint64?
@@ -73,7 +73,7 @@ Column, name: release_date, type: Uint64?
 
 {% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
 
-Code snippet for inserting and updating data:
+Code snippet for data insert/update:
 
 ```c++
 //! Shows basic usage of mutating operations.
@@ -132,26 +132,29 @@ static TStatus SelectSimpleTransaction(TSession session, const TString& path,
 
 {% include [steps/05_results_processing.md](steps/05_results_processing.md) %}
 
-The `TResultSetParser` class is used for processing query results.
+The `TResultSetParser` class is used for processing query execution results.
+
 The code snippet below shows how to process query results using the `parser` object:
 
 ```c++
     TResultSetParser parser(*resultSet);
     if (parser.TryNextRow()) {
         Cout << "> SelectSimple:" << Endl << "Series"
-            << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64()
+            << ", Id: " << parser.ColumnParser("series_id").GetUint64()
             << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
             << ", Release date: " << parser.ColumnParser("release_date").GetOptionalString()
             << Endl;
     }
 ```
 
-The given code snippet outputs the following text to the console at startup:
+The given code snippet prints the following text to the console at startup:
 
 ```bash
 > SelectSimple:
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
+
+
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
@@ -198,7 +201,7 @@ static TStatus SelectWithParamsTransaction(TSession session, const TString& path
 }
 ```
 
-The given code snippet outputs the following text to the console at startup:
+The given code snippet prints the following text to the console at startup:
 
 ```bash
 > SelectWithParams:
@@ -262,7 +265,7 @@ static TStatus PreparedSelectTransaction(TSession session, const TString& path,
 }
 ```
 
-The given code snippet outputs the following text to the console at startup:
+The given code snippet prints the following text to the console at startup:
 
 ```bash
 > PreparedSelect:

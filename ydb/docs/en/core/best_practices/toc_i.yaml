@@ -1,7 +1,7 @@
 items:
 - name: Overview
   href: index.md
-- name: Choosing a primary key for maximum performance
+- name: Selecting a primary key for maximum performance
   href: pk_scalability.md
 - name: Schema design
   href: schema_design.md
@@ -13,9 +13,10 @@ items:
   href: secondary_indexes.md
 - name: Change Data Capture
   href: cdc.md
+  when: feature_changefeed
 - name: Paginated output
   href: paging.md
-- name: Loading large data volumes
+- name: Uploading large data volumes
   href: batch_upload.md
 - name: Using timeouts
   href: timeouts.md

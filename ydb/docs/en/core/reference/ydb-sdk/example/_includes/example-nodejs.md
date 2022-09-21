@@ -37,7 +37,7 @@ async function createTables(session: Session, logger: Logger) {
         new TableDescription()
             .withColumn(new Column(
                 'series_id',
-                Types.optional(Types.UINT64),
+                Types.UINT64,  // not null column
             ))
             .withColumn(new Column(
                 'title',
@@ -108,7 +108,7 @@ async function createTables(session: Session, logger: Logger) {
 }
 ```
 
-You can use the `Session.DescribeTable()` method to output information about the table structure and make sure that it was properly created:
+You can use the `Session.DescribeTable()` method to view information about the table structure and make sure that it was properly created:
 
 ```ts
 async function describeTable(session: Session, tableName: string, logger: Logger) {
@@ -125,7 +125,7 @@ await describeTable(session, 'episodes', logger);
 
 {% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
 
-Code snippet for inserting and updating data:
+Code snippet for data insert/update:
 
 ```ts
 async function upsertSimple(session: Session, logger: Logger): Promise<void> {
@@ -161,7 +161,8 @@ WHERE series_id = 1;`;
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
-The code snippet below shows the use of queries prepared with `Session.prepareQuery()` and parameters in the `Session.executeQuery()` method.
+Here's a code sample that shows how to use the `Session.executeQuery()` method with the queries and parameters
+prepared by `Session.prepareQuery()`.
 
 ```ts
 async function selectPrepared(session: Session, data: ThreeIds[], logger: Logger): Promise<void> {
@@ -201,7 +202,7 @@ async function executeScanQueryWithParams(session: Session, logger: Logger): Pro
     const query = `
         ${SYNTAX_V1}        
         DECLARE $value AS Utf8;
-        
+
         SELECT key
         FROM ${TABLE}
         WHERE value = $value;`;
@@ -223,7 +224,7 @@ async function executeScanQueryWithParams(session: Session, logger: Logger): Pro
 
 {% include [transaction-control.md](steps/10_transaction_control.md) %}
 
-Code snippet for `Session.beginTransaction()` and `Session.commitTransaction()` calls for beginning and ending a transaction:
+Here's a code sample that demonstrates how to explicitly use the `Session.beginTransaction()` and `Session.сommitTransaction()` calls to create and terminate a transaction:
 
 ```ts
 async function explicitTcl(session: Session, ids: ThreeIds, logger: Logger) {
@@ -258,4 +259,3 @@ async function explicitTcl(session: Session, ids: ThreeIds, logger: Logger) {
 ```
 
 {% include [error-handling.md](steps/50_error_handling.md) %}
-

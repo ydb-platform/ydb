@@ -4,11 +4,11 @@ This page contains a detailed description of the code of a [test app](https://gi
 
 ## Downloading and starting {#download}
 
-The start scenario given below uses [git](https://git-scm.com/downloads) and [Python3](https://www.python.org/downloads/). Be sure to install the [YDB Python SDK](../../install.md) first.
+The following execution scenario is based on [git](https://git-scm.com/downloads) and [Python3](https://www.python.org/downloads/). Be sure to install the [YDB Python SDK](../../install.md).
 
 Create a working directory and use it to run from the command line the command to clone the GitHub repository and install the necessary Python packages:
 
-``` bash
+```bash
 git clone https://github.com/ydb-platform/ydb-python-sdk.git
 python3 -m pip install iso8601
 ```
@@ -52,7 +52,7 @@ def create_tables(session, path):
     session.create_table(
         os.path.join(path, 'series'),
         ydb.TableDescription()
-        .with_column(ydb.Column('series_id', ydb.OptionalType(ydb.PrimitiveType.Uint64)))
+        .with_column(ydb.Column('series_id', ydb.PrimitiveType.Uint64))  # not null column
         .with_column(ydb.Column('title', ydb.OptionalType(ydb.PrimitiveType.Utf8)))
         .with_column(ydb.Column('series_info', ydb.OptionalType(ydb.PrimitiveType.Utf8)))
         .with_column(ydb.Column('release_date', ydb.OptionalType(ydb.PrimitiveType.Uint64)))
@@ -60,7 +60,7 @@ def create_tables(session, path):
     )
 ```
 
-The absolute path from the root is passed in the path parameter:
+The path parameter accepts the absolute path starting from the root:
 
 ```python
 full_path = os.path.join(database, path)
@@ -76,7 +76,7 @@ def describe_table(session, path, name):
         print("column, name:", column.name, ",", str(column.type.item).strip())
 ```
 
-The given code snippet outputs the following text to the console at startup:
+The given code snippet prints the following text to the console at startup:
 
 ```bash
 > describe table: series
@@ -87,7 +87,7 @@ The given code snippet outputs the following text to the console at startup:
 ```
 {% include [steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
-Code snippet for inserting and updating data:
+Code snippet for data insert/update:
 
 ```python
 def upsert_simple(session, path):
@@ -108,7 +108,7 @@ def upsert_simple(session, path):
 To execute YQL queries, use the `session.transaction().execute()` method.
 The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TxControl` class.
 
-In the code snippet below, the transaction is executed using the `transaction().execute()` method. The transaction execution mode set is `ydb.SerializableReadWrite()`. When all the queries in the transaction are completed, the transaction is automatically committed by explicitly setting the flag: `commit_tx=True`. The query body is described using the YQL syntax and is passed to the `execute` method as a parameter.
+In the code snippet below, the transaction is executed using the `transaction().execute()` method. The transaction execution mode set is `ydb.SerializableReadWrite()`. When all the queries in the transaction are completed, the transaction is automatically committed by explicitly setting the flag `commit_tx=True`. The query body is described using YQL syntax and is passed to the `execute` method as a parameter.
 
 ```python
 def select_simple(session, path):
@@ -173,7 +173,7 @@ def select_prepared(session, path, series_id, season_id, episode_id):
     return result_sets[0]
 ```
 
-The given code snippet outputs the following text to the console at startup:
+The given code snippet prints the following text to the console at startup:
 
 ```bash
 > select_prepared_transaction:

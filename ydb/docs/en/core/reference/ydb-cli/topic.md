@@ -138,7 +138,7 @@ Delete the [previously created](#topic-create) topic:
 {{ ydb-cli }} -p db1 topic drop my-topic
 ```
 
-## Adding a consumer for a topic {#consumer-add}
+## Creating a consumer for a topic {#consumer-add}
 
 You can use the `topic consumer add` subcommand to create a consumer for a [previously created](#topic-create) topic.
 
@@ -230,64 +230,5 @@ Delete the [previously created](#consumer-add) consumer with the `my-consumer` n
 ```bash
 {{ ydb-cli }} -p db1 topic consumer drop \
   --consumer-name my-consumer \
-  my-topic
-```
-
-## Reading data from a topic {#topic-read}
-
-Use the `topic read` subcommand to read messages from a topic.
-
-Before reading, [create a topic](#topic-create) and [add a consumer](#consumer-add).
-
-General format of the command:
-
-```bash
-{{ ydb-cli }} [global options...] topic read [options...] <topic-path>
-```
-
-* `global options`: [Global parameters](commands/global-options.md).
-* `options`: [Parameters of the subcommand](#options).
-* `topic-path`: Topic path.
-
-View a description of the read command from the topic:
-
-```bash
-{{ ydb-cli }} topic read --help
-```
-
-### Parameters of the subcommand {#topic-read}
-
-| Name | Description |
----|---
-| `-c VAL`, `--consumer-name VAL` | Topic consumer name. |
-| `--format STRING` | Result format.<br>Possible values:<ul><li>`pretty`: Result is printed to a pseudo-graphic table.</li><li>`newline-delimited`: The `0x0A` control character is printed at the end of each message.</li><li>`concatenated`: Result is printed without separators.</li></ul> |
-| `-f VAL`, `--file VAL` | Write readable data to the specified file.<br>If the parameter is not specified, messages are printed to `stdout`. |
-| `--idle-timeout VAL` | Maximum waiting time for a new message.<br>If no messages are received during the waiting time, reading stops.<br>The default value is `1s` (1 second). |
-| `--commit VAL` | Sending confirmation for message processing.<br>The default value is `true`.<br>Possible values: `true`, `false`. |
-| `--limit VAL` | The number of messages to be read.<br>The default value is `0` (no limits). |
-| `-w`, `--wait` | Endless wait for the first message.<br>If the parameter is not specified, the first message is waited for for no more than `--idle-timeout`. |
-| `--timestamp VAL` | Time in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format. Consumption starts as soon as the first [message](../../concepts/topic.md#message) is received after the specified time. |
-| `--with-metadata-fields VAL` | A list of [message attributes](../../concepts/topic.md#message) whose values are to be printed.<br>Possible values:<ul><li>`write_time`: The time a message is written to the server in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`meta`: Message metadata.</li><li>`create_time`: The time a message is created by the source in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`seq_no`: Message [sequence number](../../concepts/topic.md#seqno).</li><li>`offset`: [Message sequence number within a partition](../../concepts/topic.md#offset).</li><li>`message_group_id`: [Message group ID](../../concepts/topic.md#producer-id).</li><li>`body`: Message body.</li></ul> |
-| `--transform VAL` | Specify the format of the message body to be converted.<br>The default value is `none`.<br>Possible values:<ul><li>`base64`: Convert to [Base64](https://en.wikipedia.org/wiki/Base64).</li><li>`none`: Do not convert.</li></ul> |
-
-### Examples {#topic-read}
-
-Read all messages from the `my-topic` topic through the `my-consumer` consumer and print each of them on a separate line:
-
-```bash
-{{ ydb-cli }} topic read \
-  --consumer-name my-consumer \
-  --format newline-delimited \
-  my-topic
-```
-
-The following command will read the first 10 messages from the `my-topic` topic through the `my-consumer` consumer and print each of them on a separate line. Before that, the message body will be converted to Base64:
-
-```bash
-{{ ydb-cli }} topic read \
-  --consumer-name my-consumer \
-  --format newline-delimited
-  --limit 10 \
-  --transform base64 \
   my-topic
 ```

@@ -4,7 +4,7 @@ With [Change Data Capture](../concepts/cdc.md) (CDC), you can track changes in t
 
 ## Enabling and disabling CDC {#add-drop}
 
-CDC is represented as a data schema object: a changefeed that can be added to a table or deleted from it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement.
+CDC is represented as a data schema object: a changefeed that can be added to a table or deleted from them using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement.
 
 ## Reading data from a topic {#read}
 
@@ -14,7 +14,7 @@ You can read data using an [SDK](../reference/ydb-sdk) or the [{{ ydb-short-name
 path/to/table/changefeed_name
 ```
 
-> For example, if a table named `table` contains a changefeed named `updates_feed` in the `my` directory, its path looks like this:
+> For example, if a table named `table` contains a changefeed named `updates_feed` in the `my` directory, its path looks as follows:
 >
 > ```text
 > my/table/updates_feed
@@ -50,7 +50,7 @@ As a result, queries may take longer to execute and size limits for stored data 
 
 In real-world use cases, enabling CDC has virtually no impact on the query execution time (whatever the mode), since almost all data required for making records is stored in the cache , while the records themselves are sent to a topic asynchronously. However, record delivery background activity slightly (by 1% to 10%) increases CPU utilization.
 
-In addition, a changefeed is currently stored to a topic which has limited elasticity. This means that if the table partitioning scheme changes significantly, there arises an imbalance between the table partitions and topic partitions. This imbalance may also increase the time it takes to execute queries or lead to additional overheads for storing a changefeed.
+When creating a changefeed for a table, the number of partitions of its storage (topic) is determined based on the current number of table partitions. If the number of source table partitions changes significantly (for example, after uploading a large amount of data or as a result of intensive accesses), an imbalance occurs between the table partitions and the topic partitions. This imbalance can also result in longer execution time for queries to modify data in the table or in unnecessary storage overheads for the changefeed. You can recreate the changefeed to correct the imbalance.
 
 ## Load testing {#workload}
 

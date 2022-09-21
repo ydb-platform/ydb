@@ -15,7 +15,7 @@ Each blob has a 192-bit ID consisting of the following fields (in the order used
 
 Two blobs are considered different if at least one of the first five parameters (TabletId, Channel, Generation, Step, or Cookie) differs in their IDs. So it is impossible to write two blobs that only differ in BlobSize and/or CrcMode.
 
-For debugging purposes, there is string blob ID formatting that has interactions `[TabletId:Generation:Step:Channel:Cookie:BlobSize:PartId]`, for example, `[12345:1:1:0:0:1000:0]`.
+For debugging purposes, there is string blob ID representation in `[TabletId:Generation:Step:Channel:Cookie:BlobSize:PartId]` format, for example, `[12345:1:1:0:0:1000:0]`.
 
 When writing a blob, the tablet selects the Channel, Step, and Cookie parameters. TabletId is fixed and must point to the tablet performing the write operation, while Generation must indicate the generation that the tablet performing the operation is running in.
 

@@ -251,7 +251,8 @@ protected:
         config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
         config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
             .StoreResult(&RunConfig.PathToConfigCacheFile);
-        config.Opts->AddLongOption("http-proxy-file", "Http prox config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("http-proxy-file", "Http proxy config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("public-http-file", "Public HTTP config file").OptionalArgument("PATH");
 
         config.Opts->AddHelpOption('h');
 
@@ -450,6 +451,7 @@ protected:
         OPTION("pdisk-key-file", PDiskKeyConfig);
         OPTION("sqs-file", SqsConfig);
         OPTION("http-proxy-file", HttpProxyConfig);
+        OPTION("public-http-file", PublicHttpConfig);
         OPTION("feature-flags-file", FeatureFlags);
         OPTION("rb-file", ResourceBrokerConfig);
         OPTION("metering-file", MeteringConfig);

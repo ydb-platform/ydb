@@ -145,7 +145,7 @@ message LocationStoragePool {
 }
 
 message LocationStorage {
-    repeated LocationNode node = 1;
+    LocationNode node = 1;
     LocationStoragePool pool = 2;
 }
 

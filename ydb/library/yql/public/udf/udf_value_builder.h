@@ -192,13 +192,9 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 class IValueBuilder5: public IValueBuilder4 {
 public:
-    virtual TFlatDataBlockPtr NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const = 0;
-    virtual TFlatArrayBlockPtr NewFlatArrayBlock(ui32 count) const = 0;
-    TBlockPtr NewEmptyBlock() const {
-        return NewFlatArrayBlock(0).Get();
-    }
-
-    virtual TSingleBlockPtr NewSingleBlock(const TUnboxedValue& value) const = 0;
+    virtual void Unused1() const = 0;
+    virtual void Unused2() const = 0;
+    virtual void Unused3() const = 0;
 };
 #endif
 

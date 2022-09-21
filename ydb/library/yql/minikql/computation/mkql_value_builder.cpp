@@ -202,16 +202,16 @@ NUdf::TUnboxedValue TDefaultValueBuilder::Run(const NUdf::TSourcePosition& calle
     return ret;
 }
 
-NUdf::TFlatDataBlockPtr TDefaultValueBuilder::NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const {
-    return HolderFactory_.CreateFlatDataBlock(initialSize, initialCapacity);
+void TDefaultValueBuilder::Unused1() const {
+    Y_FAIL("Not implemented");
 }
 
-NUdf::TFlatArrayBlockPtr TDefaultValueBuilder::NewFlatArrayBlock(ui32 count) const {
-    return HolderFactory_.CreateFlatArrayBlock(count);
+void TDefaultValueBuilder::Unused2() const {
+    Y_FAIL("Not implemented");
 }
 
-NUdf::TSingleBlockPtr TDefaultValueBuilder::NewSingleBlock(const NUdf::TUnboxedValue& value) const {
-    return HolderFactory_.CreateSingleBlock(value);
+void TDefaultValueBuilder::Unused3() const {
+    Y_FAIL("Not implemented");
 }
 
 bool TDefaultValueBuilder::FindTimezoneName(ui32 id, NUdf::TStringRef& name) const {

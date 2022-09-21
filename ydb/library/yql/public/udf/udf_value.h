@@ -32,16 +32,6 @@ enum class EFetchStatus : ui32 {
     Yield
 };
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-enum class EBlockType : ui32 {
-    Flat,
-    Single
-};
-
-constexpr ui32 PreferredBlockRows = 65536;
-constexpr ui32 PreferredBlockBytes = 1000000;
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////
 // IApplyContext
 ///////////////////////////////////////////////////////////////////////////////
@@ -52,15 +42,6 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IApplyContext, 8);
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-class TBlock;
-class TFlatDataBlock;
-class TFlatArrayBlock;
-class TSingleBlock;
-
-typedef bool(*TBlockCallback)(TBlock& block, void* context);
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////
 // IBoxedValue
 ///////////////////////////////////////////////////////////////////////////////
@@ -70,7 +51,6 @@ using IBoxedValuePtr = TRefCountedPtr<IBoxedValue>;
 class IBoxedValue1
 {
 friend struct TBoxedValueAccessor;
-friend class TBlock;
 public:
     inline bool IsCompatibleTo(ui16 compatibilityVersion) const {
         return AbiCompatibility_ >= compatibilityVersion;
@@ -155,7 +135,6 @@ private:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
 class IBoxedValue2 : public IBoxedValue1 {
 friend struct TBoxedValueAccessor;
-friend class TBlock;
 private:
     // Save/Load state
     virtual ui32 GetTraverseCount() const = 0;
@@ -168,7 +147,6 @@ private:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
 class IBoxedValue3 : public IBoxedValue2 {
 friend struct TBoxedValueAccessor;
-friend class TBlock;
 private:
     virtual void Push(const TUnboxedValuePod& value) = 0;
 };
@@ -177,7 +155,6 @@ private:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
 class IBoxedValue4 : public IBoxedValue3 {
 friend struct TBoxedValueAccessor;
-friend class TBlock;
 private:
     virtual bool IsSortedDict() const = 0;
 };
@@ -186,14 +163,13 @@ private:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 class IBoxedValue5 : public IBoxedValue4 {
 friend struct TBoxedValueAccessor;
-friend class TBlock;
 private:
-    virtual TBlock* AsBlock() = 0;
-    virtual TFlatArrayBlock* AsFlatArrayBlock() = 0;
-    virtual TFlatDataBlock* AsFlatDataBlock() = 0;
-    virtual TSingleBlock* AsSingleBlock() = 0;
-    virtual EFetchStatus FetchBlock(TUnboxedValue& result, ui32 rowsLimitHint) = 0;
-    virtual bool VisitBlocks(TBlockCallback callback, void* context) = 0;
+    virtual void Unused1() = 0;
+    virtual void Unused2() = 0;
+    virtual void Unused3() = 0;
+    virtual void Unused4() = 0;
+    virtual void Unused5() = 0;
+    virtual void Unused6() = 0;
 };
 #endif
 
@@ -212,183 +188,6 @@ class IBoxedValue : public IBoxedValue1 {};
 UDF_ASSERT_TYPE_SIZE(IBoxedValue, 16);
 
 UDF_ASSERT_TYPE_SIZE(IBoxedValuePtr, 8);
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-///////////////////////////////////////////////////////////////////////////////
-// TBlock
-///////////////////////////////////////////////////////////////////////////////
-
-class TBlock : public IBoxedValue {
-public:
-    using IBoxedValue::AsFlatArrayBlock;
-    using IBoxedValue::AsFlatDataBlock;
-    using IBoxedValue::AsSingleBlock;
-
-    ui32 GetRows() const {
-        return Rows_;
-    }
-
-    void SetRows(ui32 rows) {
-        Rows_ = rows;
-    }
-
-    EBlockType GetType() {
-        return Type_;
-    }
-
-protected:
-    TBlock(EBlockType type, ui32 rows = 0)
-        : Type_(type)
-        , Rows_(rows)
-    {}
-
-private:
-    const EBlockType Type_;
-    ui32 Rows_;
-};
-
-UDF_ASSERT_TYPE_SIZE(TBlock, 24);
-
-using TBlockPtr = TRefCountedPtr<TBlock>;
-
-UDF_ASSERT_TYPE_SIZE(TBlockPtr, 8);
-
-///////////////////////////////////////////////////////////////////////////////
-// TFlatArrayBlock
-///////////////////////////////////////////////////////////////////////////////
-class TFlatArrayBlock : public TBlock {
-protected:
-    TFlatArrayBlock(ui32 count);
-    ~TFlatArrayBlock();
-
-public:
-    ui32 Count() const {
-        return Count_;
-    }
-
-    TBlockPtr* Items() const {
-        return Items_;
-    }
-
-    TBlockPtr GetItem(ui32 i) const {
-        Y_VERIFY_DEBUG(i < Count_);
-        return Items_[i];
-    }
-
-    void SetItem(ui32 i, TBlockPtr item) const {
-        Y_VERIFY_DEBUG(i < Count_);
-        Items_[i] = item;
-    }
-
-protected:
-    TBlockPtr* const Items_;
-    const ui32 Count_;
-    ui32 Reserved_ = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(TFlatArrayBlock, 40);
-
-using TFlatArrayBlockPtr = TRefCountedPtr<TFlatArrayBlock>;
-
-UDF_ASSERT_TYPE_SIZE(TFlatArrayBlockPtr, 8);
-
-///////////////////////////////////////////////////////////////////////////////
-// TFlatDataBlock
-///////////////////////////////////////////////////////////////////////////////
-class TFlatDataBlock : public TBlock {
-protected:
-    TFlatDataBlock()
-        : TBlock(EBlockType::Flat)
-        , Data_(nullptr)
-        , Capacity_(0)
-        , Size_(0)
-        , Iter_(0)
-        , Reserved_(0)
-    {
-        Y_UNUSED(Reserved_);
-    }
-
-public:
-    void* Data() const {
-        return Data_;
-    }
-
-    ui32 Capacity() const {
-        return Capacity_;
-    }
-
-    ui32 Size() const {
-        return Size_;
-    }
-
-    void Clear() {
-        Size_ = 0;
-        SetRows(0);
-    }
-
-    void AppendData(const void* data, ui32 len) {
-        if (Size_ + len > Capacity_) {
-            Grow(len);
-        }
-
-        if (len) {
-            memcpy(static_cast<char*>(Data_) + Size_, data, len);
-        }
-
-        Size_ += len;
-    }
-
-    template <typename T>
-    const T& GetPod(i32 index) {
-        static_assert(sizeof(T) <= 16);
-        i32 offset = index * sizeof(T);
-        Y_VERIFY_DEBUG(Size_ % sizeof(T) == 0 && index >= -1 && offset + sizeof(T) <= Size_);
-        return *reinterpret_cast<const T*>(static_cast<const char*>(Data_) + offset);
-    }
-
-    template <typename T>
-    void AppendPodData(T x) {
-        static_assert(sizeof(T) <= 16);
-        AppendData(&x, sizeof(T));
-    }
-
-    void AppendRow(const void* data, ui32 len) {
-        AppendData(data, len);
-        SetRows(GetRows() + 1);
-    }
-
-    template <typename T>
-    void AppendPodRow(T x) {
-        static_assert(sizeof(T) <= 16);
-        AppendRow(&x, sizeof(T));
-        SetRows(GetRows() + 1);
-    }
-
-    virtual void Grow(ui32 size) = 0;
-
-    ui32 GetIter() const {
-        return Iter_;
-    }
-
-    void SetIter(ui32 iter) {
-        Iter_ = iter;
-    }
-
-protected:
-    void* Data_;
-    ui32 Capacity_;
-    ui32 Size_;
-    ui32 Iter_;
-    ui32 Reserved_;
-};
-
-UDF_ASSERT_TYPE_SIZE(TFlatDataBlock, 48);
-
-using TFlatDataBlockPtr = TRefCountedPtr<TFlatDataBlock>;
-
-UDF_ASSERT_TYPE_SIZE(TFlatDataBlockPtr, 8);
-
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // TBoxedValueAccessor
@@ -433,12 +232,12 @@ struct TBoxedValueAccessor
     xx(Load) \
     xx(Push) \
     xx(IsSortedDict) \
-    xx(AsBlock) \
-    xx(AsFlatArrayBlock) \
-    xx(AsFlatDataBlock) \
-    xx(AsSingleBlock) \
-    xx(FetchBlock) \
-    xx(VisitBlocks)
+    xx(Unused1) \
+    xx(Unused2) \
+    xx(Unused3) \
+    xx(Unused4) \
+    xx(Unused5) \
+    xx(Unused6)
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
 
@@ -678,15 +477,6 @@ struct TBoxedValueAccessor
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
     static inline bool IsSortedDict(IBoxedValue& value);
 #endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-    static inline TBlock* AsBlock(IBoxedValue& value);
-    static inline TFlatArrayBlock* AsFlatArrayBlock(IBoxedValue& value);
-    static inline TFlatDataBlock* AsFlatDataBlock(IBoxedValue& value);
-    static inline TSingleBlock* AsSingleBlock(IBoxedValue& value);
-    static inline EFetchStatus FetchBlock(IBoxedValue& value, TUnboxedValue& result, ui32 rowsLimitHint);
-    static inline bool VisitBlocks(IBoxedValue& value, TBlockCallback callback, void* context);
-#endif
 };
 
 #define MAP_HANDLER(xx) template<> inline uintptr_t TBoxedValueAccessor::GetMethodPtr<TBoxedValueAccessor::EMethod::xx>() { return GetMethodPtr(&IBoxedValue::xx); }
@@ -764,12 +554,12 @@ private:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-    TBlock* AsBlock() override;
-    TFlatArrayBlock* AsFlatArrayBlock() override;
-    TFlatDataBlock* AsFlatDataBlock() override;
-    TSingleBlock* AsSingleBlock() override;
-    EFetchStatus FetchBlock(TUnboxedValue& result, ui32 rowsLimitHint) override;
-    bool VisitBlocks(TBlockCallback callback, void* context) override;
+    void Unused1() override;
+    void Unused2() override;
+    void Unused3() override;
+    void Unused4() override;
+    void Unused5() override;
+    void Unused6() override;
 #endif
 };
 
@@ -936,15 +726,6 @@ public:
     inline bool IsSortedDict() const;
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-    inline TBlock* AsBlock();
-    inline TFlatArrayBlock* AsFlatArrayBlock();
-    inline TFlatDataBlock* AsFlatDataBlock();
-    inline TSingleBlock* AsSingleBlock();
-    inline EFetchStatus FetchBlock(TUnboxedValue& result, ui32 rowsLimitHint);
-    inline bool VisitBlocks(TBlockCallback callback, void* context);
-#endif
-
     inline bool TryMakeVariant(ui32 index);
 
     inline void SetTimezoneId(ui16 id);
@@ -1054,34 +835,6 @@ public:
 };
 
 UDF_ASSERT_TYPE_SIZE(TUnboxedValue, 16);
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-///////////////////////////////////////////////////////////////////////////////
-// TSingleBlock
-///////////////////////////////////////////////////////////////////////////////
-class TSingleBlock: public TBlock {
-protected:
-    TSingleBlock(const TUnboxedValue& value)
-        : TBlock(EBlockType::Single)
-        , Value_(value)
-    {}
-
-public:
-    const TUnboxedValue& Value() const {
-        return Value_;
-    }
-
-private:
-    TUnboxedValue Value_;
-};
-
-UDF_ASSERT_TYPE_SIZE(TSingleBlock, 40);
-
-using TSingleBlockPtr = TRefCountedPtr<TSingleBlock>;
-
-UDF_ASSERT_TYPE_SIZE(TSingleBlockPtr, 8);
-
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // TBoxedResource
@@ -1348,31 +1101,27 @@ inline bool TBoxedValueBase::IsSortedDict() const {
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-inline TBlock* TBoxedValueBase::AsBlock() {
-    return nullptr;
-}
-
-inline TFlatArrayBlock* TBoxedValueBase::AsFlatArrayBlock() {
-    return nullptr;
-}
-
-inline TFlatDataBlock* TBoxedValueBase::AsFlatDataBlock() {
-    return nullptr;
-}
-
-inline TSingleBlock* TBoxedValueBase::AsSingleBlock() {
-    return nullptr;
-}
-
-inline EFetchStatus TBoxedValueBase::FetchBlock(TUnboxedValue& result, ui32 rowsLimitHint) {
-    Y_UNUSED(result);
-    Y_UNUSED(rowsLimitHint);
+inline void TBoxedValueBase::Unused1() {
     Y_FAIL("Not implemented");
 }
 
-inline bool TBoxedValueBase::VisitBlocks(TBlockCallback callback, void* context) {
-    Y_UNUSED(callback);
-    Y_UNUSED(context);
+inline void TBoxedValueBase::Unused2() {
+    Y_FAIL("Not implemented");
+}
+
+inline void TBoxedValueBase::Unused3() {
+    Y_FAIL("Not implemented");
+}
+
+inline void TBoxedValueBase::Unused4() {
+    Y_FAIL("Not implemented");
+}
+
+inline void TBoxedValueBase::Unused5() {
+    Y_FAIL("Not implemented");
+}
+
+inline void TBoxedValueBase::Unused6() {
     Y_FAIL("Not implemented");
 }
 #endif

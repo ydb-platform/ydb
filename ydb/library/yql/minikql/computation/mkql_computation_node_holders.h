@@ -402,10 +402,6 @@ public:
 
     NUdf::TUnboxedValuePod CreateDirectArrayHolder(ui32 size, NUdf::TUnboxedValue*& itemsPtr) const;
 
-    NUdf::TFlatDataBlockPtr CreateFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const;
-    NUdf::TFlatArrayBlockPtr CreateFlatArrayBlock(ui32 count) const;
-    NUdf::TSingleBlockPtr CreateSingleBlock(const NUdf::TUnboxedValue& value) const;
-
     NUdf::TUnboxedValuePod CreateArrowBlock(arrow::Datum&& datum) const;
 
     NUdf::TUnboxedValuePod VectorAsArray(TUnboxedValueVector& values) const;

@@ -25,8 +25,9 @@ Y_UNIT_TEST_SUITE(TUdfValueBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(17, GetMethodIndex(&IValueBuilder::GetSecureParam));
         UNIT_ASSERT_VALUES_EQUAL(18, GetMethodIndex(&IValueBuilder::CalleePosition));
         UNIT_ASSERT_VALUES_EQUAL(19, GetMethodIndex(&IValueBuilder::Run));
-        UNIT_ASSERT_VALUES_EQUAL(20, GetMethodIndex(&IValueBuilder::NewFlatDataBlock));
-        UNIT_ASSERT_VALUES_EQUAL(21, GetMethodIndex(&IValueBuilder::NewFlatArrayBlock));
-        UNIT_ASSERT_VALUES_EQUAL(22, GetMethodIndex(&IValueBuilder::NewSingleBlock));
+        UNIT_ASSERT_VALUES_EQUAL(20, GetMethodIndex(&IValueBuilder::Unused1));
+        UNIT_ASSERT_VALUES_EQUAL(21, GetMethodIndex(&IValueBuilder::Unused2));
+        UNIT_ASSERT_VALUES_EQUAL(22, GetMethodIndex(&IValueBuilder::Unused3));
+        UNIT_ASSERT_VALUES_EQUAL(23, GetMethodIndex(&IValueBuilder::GetPgBuilder));
     }
 }

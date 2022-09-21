@@ -442,116 +442,6 @@ private:
     const ui32 Size;
 };
 
-class TFlatDataBlockImpl : public TComputationValue<TFlatDataBlockImpl, NUdf::TFlatDataBlock> {
-public:
-    TFlatDataBlockImpl(TMemoryUsageInfo* memInfo, ui32 initialSize, ui32 initialCapacity)
-        : TComputationValue(memInfo)
-        , Buffer_(nullptr)
-        , Allocated_(0)
-    {
-        Grow(Max(initialCapacity, initialSize));
-        Size_ = initialSize;
-    }
-
-    NUdf::TBlock* AsBlock() override {
-        return this;
-    }
-
-    NUdf::TFlatDataBlock* AsFlatDataBlock() override {
-        return this;
-    }
-
-    bool VisitBlocks(NUdf::TBlockCallback callback, void* context) override {
-        return callback(*this, context);
-    }
-
-    void Grow(ui32 size) override {
-        ui32 newCapacity = Max(Size_ + size, Capacity_ * 2);
-        if (!newCapacity) {
-            return;
-        }
-
-        ui32 newAllocated = AlignUp(2 * MKQL_ALIGNMENT + newCapacity, MKQL_ALIGNMENT);
-        void* newBuffer = MKQLAllocWithSize(newAllocated);
-        MKQL_MEM_TAKE(GetMemInfo(), newBuffer, newAllocated);
-        void* newData = static_cast<char*>(newBuffer) + MKQL_ALIGNMENT;
-        memset(newBuffer, 0, MKQL_ALIGNMENT);
-        if (Buffer_) {
-            memcpy(newData, Data_, Size_);
-            MKQL_MEM_RETURN(GetMemInfo(), Buffer_, Allocated_);
-            MKQLFreeWithSize(Buffer_, Allocated_);
-        }
-
-        Capacity_ = newCapacity;
-        Allocated_ = newAllocated;
-        Data_ = newData;
-        Buffer_ = newBuffer;
-    }
-
-    ~TFlatDataBlockImpl()
-    {
-        if (Buffer_) {
-            MKQL_MEM_RETURN(GetMemInfo(), Buffer_, Allocated_);
-            MKQLFreeWithSize(Buffer_, Allocated_);
-        }
-    }
-
-private:
-    void* Buffer_; // Data_ has padding of 16 zero bytes before and at least 16 garbage bytes after
-    ui32 Allocated_; // Full size of Buffer_
-};
-
-class TFlatArrayBlockImpl : public TComputationValue<TFlatArrayBlockImpl, NUdf::TFlatArrayBlock> {
-public:
-    TFlatArrayBlockImpl(TMemoryUsageInfo* memInfo, ui32 count)
-        : TComputationValue(memInfo, count)
-    {
-        MKQL_MEM_TAKE(GetMemInfo(), Items(), Count() * sizeof(NUdf::TBlockPtr));
-    }
-
-    ~TFlatArrayBlockImpl() {
-        MKQL_MEM_RETURN(GetMemInfo(), Items(), Count() * sizeof(NUdf::TBlockPtr));
-    }
-
-    NUdf::TBlock* AsBlock() override {
-        return this;
-    }
-
-    NUdf::TFlatArrayBlock* AsFlatArrayBlock() override {
-        return this;
-    }
-
-    bool VisitBlocks(NUdf::TBlockCallback callback, void* context) override {
-        for (ui32 i = 0; i < Count(); ++i) {
-            if (!callback(*GetItem(i), context)) {
-                return false;
-            }
-        }
-
-        return callback(*this, context);
-    }
-};
-
-class TSingleBlockImpl : public TComputationValue<TSingleBlockImpl, NUdf::TSingleBlock> {
-public:
-    TSingleBlockImpl(TMemoryUsageInfo* memInfo, const NUdf::TUnboxedValue& value)
-        : TComputationValue(memInfo, value)
-    {
-    }
-
-    NUdf::TBlock* AsBlock() override {
-        return this;
-    }
-
-    NUdf::TSingleBlock* AsSingleBlock() override {
-        return this;
-    }
-
-    bool VisitBlocks(NUdf::TBlockCallback callback, void* context) override {
-        return callback(*this, context);
-    }
-};
-
 class TArrayNode: public TMutableCodegeneratorFallbackNode<TArrayNode> {
     typedef TMutableCodegeneratorFallbackNode<TArrayNode> TBaseComputation;
 public:
@@ -3056,18 +2946,6 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui32 size, NUdf::
     auto res = NUdf::TUnboxedValuePod(h);
     itemsPtr = h->GetPtr();
     return res;
-}
-
-NUdf::TFlatDataBlockPtr THolderFactory::CreateFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const {
-    return AllocateOn<TFlatDataBlockImpl>(CurrentAllocState, &MemInfo, initialSize, initialCapacity);
-}
-
-NUdf::TFlatArrayBlockPtr THolderFactory::CreateFlatArrayBlock(ui32 count) const {
-    return AllocateOn<TFlatArrayBlockImpl>(CurrentAllocState, &MemInfo, count);
-}
-
-NUdf::TSingleBlockPtr THolderFactory::CreateSingleBlock(const NUdf::TUnboxedValue& value) const {
-    return AllocateOn<TSingleBlockImpl>(CurrentAllocState, &MemInfo, value);
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CreateArrowBlock(arrow::Datum&& datum) const {

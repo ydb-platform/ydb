@@ -991,31 +991,27 @@ private:
         return false;
     }
 
-    NUdf::TBlock* AsBlock() override {
-        return nullptr;
-    }
-
-    NUdf::TFlatArrayBlock* AsFlatArrayBlock() override {
-        return nullptr;
-    }
-
-    NUdf::TFlatDataBlock* AsFlatDataBlock() override {
-        return nullptr;
-    }
-
-    NUdf::TSingleBlock* AsSingleBlock() override {
-        return nullptr;
-    }
-
-    NUdf::EFetchStatus FetchBlock(NUdf::TUnboxedValue& result, ui32 rowsLimitHint) override {
-        Y_UNUSED(result);
-        Y_UNUSED(rowsLimitHint);
+    void Unused1() override {
         ThrowNotSupported(__func__);
     }
 
-    bool VisitBlocks(NUdf::TBlockCallback callback, void* context) override {
-        Y_UNUSED(callback);
-        Y_UNUSED(context);
+    void Unused2() override {
+        ThrowNotSupported(__func__);
+    }
+
+    void Unused3() override {
+        ThrowNotSupported(__func__);
+    }
+
+    void Unused4() override {
+        ThrowNotSupported(__func__);
+    }
+
+    void Unused5() override {
+        ThrowNotSupported(__func__);
+    }
+
+    void Unused6() override {
         ThrowNotSupported(__func__);
     }
 

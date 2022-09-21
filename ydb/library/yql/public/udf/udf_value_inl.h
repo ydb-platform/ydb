@@ -88,32 +88,6 @@ inline void IBoxedValue1::UnlockRef(i32 prev) noexcept {
    Refs_ = prev;
 }
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-//////////////////////////////////////////////////////////////////////////////
-// TFlatArrayBlock
-//////////////////////////////////////////////////////////////////////////////
-
-inline TFlatArrayBlock::TFlatArrayBlock(ui32 count)
-    : TBlock(EBlockType::Flat)
-    , Items_(count ? reinterpret_cast<TBlockPtr*>(UdfAllocateWithSize(count * sizeof(TBlockPtr))) : nullptr)
-    , Count_(count)
-{
-    Y_UNUSED(Reserved_);
-    for (ui32 i = 0; i < count; ++i) {
-        ::new(Items_ + i)TBlockPtr();
-    }
-}
-
-inline TFlatArrayBlock::~TFlatArrayBlock() {
-    for (ui32 i = 0; i < Count_; ++i) {
-        Items_[i] = nullptr;
-    }
-
-    UdfFreeWithSize(Items_, Count_ * sizeof(TBlockPtr));
-}
-
-#endif
-
 //////////////////////////////////////////////////////////////////////////////
 // TBoxedValueAccessor
 //////////////////////////////////////////////////////////////////////////////
@@ -300,39 +274,6 @@ inline bool TBoxedValueAccessor::IsSortedDict(IBoxedValue& value) {
 
     return value.IsSortedDict();
 }
-#endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-inline TBlock* TBoxedValueAccessor::AsBlock(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.AsBlock();
-}
-
-inline TFlatArrayBlock* TBoxedValueAccessor::AsFlatArrayBlock(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.AsFlatArrayBlock();
-}
-
-inline TFlatDataBlock* TBoxedValueAccessor::AsFlatDataBlock(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.AsFlatDataBlock();
-}
-
-inline TSingleBlock* TBoxedValueAccessor::AsSingleBlock(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.AsSingleBlock();
-}
-
-inline EFetchStatus TBoxedValueAccessor::FetchBlock(IBoxedValue& value, TUnboxedValue& result, ui32 rowsLimitHint) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.FetchBlock(result, rowsLimitHint);
-}
-
-inline bool TBoxedValueAccessor::VisitBlocks(IBoxedValue& value, TBlockCallback callback, void* context) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.VisitBlocks(callback, context);
-}
-
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
@@ -650,38 +591,6 @@ inline void TUnboxedValuePod::Load(const TStringRef& state) {
 inline bool TUnboxedValuePod::IsSortedDict() const {
     UDF_VERIFY(IsBoxed(), "Value is not boxed");
     return TBoxedValueAccessor::IsSortedDict(*Raw.Boxed.Value);
-}
-#endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-inline TBlock* TUnboxedValuePod::AsBlock() {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::AsBlock(*Raw.Boxed.Value);
-}
-
-inline TFlatArrayBlock* TUnboxedValuePod::AsFlatArrayBlock() {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::AsFlatArrayBlock(*Raw.Boxed.Value);
-}
-
-inline TFlatDataBlock* TUnboxedValuePod::AsFlatDataBlock() {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::AsFlatDataBlock(*Raw.Boxed.Value);
-}
-
-inline TSingleBlock* TUnboxedValuePod::AsSingleBlock() {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::AsSingleBlock(*Raw.Boxed.Value);
-}
-
-inline EFetchStatus TUnboxedValuePod::FetchBlock(TUnboxedValue& result, ui32 rowsLimitHint) {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::FetchBlock(*Raw.Boxed.Value, result, rowsLimitHint);
-}
-
-inline bool TUnboxedValuePod::VisitBlocks(TBlockCallback callback, void* context) {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::VisitBlocks(*Raw.Boxed.Value, callback, context);
 }
 #endif
 

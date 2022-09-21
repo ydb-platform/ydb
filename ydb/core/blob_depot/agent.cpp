@@ -36,7 +36,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
-        if (!Configured || (Config.HasDecommitGroupId() && DecommitState < EDecommitState::BlocksFinished)) {
+        if (!Configured || (Config.GetIsDecommittingGroup() && DecommitState < EDecommitState::BlocksFinished)) {
             auto& q = RegisterAgentQ[ev->Recipient];
             Y_VERIFY(q.empty());
             q.emplace_back(ev.Release());
@@ -79,8 +79,8 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        if (Config.HasDecommitGroupId()) {
-            record->SetDecommitGroupId(Config.GetDecommitGroupId());
+        if (Config.GetIsDecommittingGroup()) {
+            record->SetDecommitGroupId(Config.GetVirtualGroupId());
         }
 
         TActivationContext::Send(response.release());
@@ -255,7 +255,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::ProcessRegisterAgentQ() {
-        if (!Configured || (Config.HasDecommitGroupId() && DecommitState < EDecommitState::BlocksFinished)) {
+        if (!Configured || (Config.GetIsDecommittingGroup() && DecommitState < EDecommitState::BlocksFinished)) {
             return;
         }
 

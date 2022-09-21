@@ -15,13 +15,8 @@ message TChannelProfile {
     optional TChannelKind.E ChannelKind = 4;
 }
 
-enum EOperationMode {
-    VirtualGroup = 0;
-    KeyValueStorage = 1;
-}
-
 message TBlobDepotConfig {
-    optional EOperationMode OperationMode = 1; // can't be changed after tablet is created
-    repeated TChannelProfile ChannelProfiles = 2;
-    optional uint32 DecommitGroupId = 3; // group that is being decommitted by this BlobDepot
+    repeated TChannelProfile ChannelProfiles = 1;
+    optional uint32 VirtualGroupId = 2;
+    optional bool IsDecommittingGroup = 3;
 }

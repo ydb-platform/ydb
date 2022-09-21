@@ -125,7 +125,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             static TKey FromBinaryKey(const TString& key, const NKikimrBlobDepot::TBlobDepotConfig& config) {
-                if (config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup) {
+                if (config.HasVirtualGroupId()) {
                     return TKey(TLogoBlobID::FromBinary(key));
                 } else {
                     return TKey(key);

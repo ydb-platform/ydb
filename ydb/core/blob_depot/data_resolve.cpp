@@ -308,7 +308,7 @@ namespace NKikimr::NBlobDepot {
             if (value.OriginalBlobId) {
                 Y_VERIFY(item.GetValueChain().empty());
                 auto *out = item.AddValueChain();
-                out->SetGroupId(Self->Config.GetDecommitGroupId());
+                out->SetGroupId(Self->Config.GetVirtualGroupId());
                 LogoBlobIDFromLogoBlobID(*value.OriginalBlobId, out->MutableBlobId());
                 Y_VERIFY(!value.UncertainWrite);
             }
@@ -332,7 +332,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "TEvResolve", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
             (Sender, ev->Sender), (Cookie, ev->Cookie), (LastAssimilatedBlobId, LastAssimilatedBlobId));
 
-        if (Self->Config.HasDecommitGroupId() && Self->DecommitState <= EDecommitState::BlobsFinished) {
+        if (Self->Config.GetIsDecommittingGroup() && Self->DecommitState <= EDecommitState::BlobsFinished) {
             std::vector<std::tuple<ui64, bool, TLogoBlobID, TLogoBlobID>> queries;
 
             for (const auto& item : ev->Get()->Record.GetItems()) {
@@ -404,7 +404,7 @@ namespace NKikimr::NBlobDepot {
                     const auto& mustRestoreFirst_ = mustRestoreFirst;
                     STLOG(PRI_DEBUG, BLOB_DEPOT, BDT46, "going to TEvRange", (Id, Self->GetLogId()), (TabletId, tabletId_),
                         (MinId, minId_), (MaxId, maxId_), (MustRestoreFirst, mustRestoreFirst_));
-                    SendToBSProxy(Self->SelfId(), Self->Config.GetDecommitGroupId(), ev.release(), id);
+                    SendToBSProxy(Self->SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), id);
                 }
                 ResolveDecommitContexts[id] = {ev, (ui32)queries.size()};
                 return;

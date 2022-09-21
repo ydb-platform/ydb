@@ -1355,7 +1355,7 @@ message TEvResponseBSControllerInfo {
 message TEvControllerNodeReport {
     enum EVDiskPhase {
         UNKNOWN = 0;
-        // NORMAL = 1; // unused one
+        reserved 1;
         WIPED = 2;
         DESTROYED = 3;
         OPERATION_ERROR = 4;
@@ -1378,6 +1378,16 @@ message TEvControllerGroupDecommittedNotify {
 message TEvControllerGroupDecommittedResponse {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
+}
+
+message TGroupMetrics { 
+    optional fixed64 GroupId = 1;
+    optional TEvControllerSelectGroupsResult.TGroupParameters GroupParameters = 2;
+}
+
+message TEvControllerGroupMetricsExchange {
+    repeated TGroupMetrics GroupMetrics = 1;
+    repeated fixed32 GroupsToQuery = 2; // filled in by entities asking BSC to report some metrics in return
 }
 
 message TEvTestLoadRequest {

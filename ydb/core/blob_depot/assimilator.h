@@ -38,7 +38,7 @@ namespace NKikimr::NBlobDepot {
             : Token(self->Token)
             , Self(self)
         {
-            Y_VERIFY(Self->Config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup);
+            Y_VERIFY(Self->Config.HasVirtualGroupId());
         }
 
         void Bootstrap();

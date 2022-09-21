@@ -283,6 +283,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
 
         // hive-related commands
         case TEvBlobStorage::EvControllerSelectGroups:                 return 4;
+        case TEvBlobStorage::EvControllerGroupMetricsExchange:         return 4;
 
         // timers and different observation (also includes RO transactions in TConfigRequest)
         case TEvPrivate::EvScrub:                                      return 5;

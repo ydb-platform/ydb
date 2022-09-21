@@ -542,6 +542,10 @@ namespace NKikimr {
         }
     };
 
+    struct TEvBlobStorage::TEvControllerGroupMetricsExchange : TEventPB<TEvControllerGroupMetricsExchange,
+            NKikimrBlobStorage::TEvControllerGroupMetricsExchange, EvControllerGroupMetricsExchange>
+    {};
+
     struct TEvNodeWardenQueryGroupInfo : TEventPB<TEvNodeWardenQueryGroupInfo, NKikimrBlobStorage::TEvNodeWardenQueryGroupInfo,
             TEvBlobStorage::EvNodeWardenQueryGroupInfo> {
         TEvNodeWardenQueryGroupInfo() = default;

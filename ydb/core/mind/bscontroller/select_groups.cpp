@@ -92,6 +92,8 @@ void TBlobStorageController::ProcessSelectGroupsQueueItem(TList<TSelectGroupsQue
         Y_VERIFY(num);
     }
 
+    bool missing = false;
+
     auto& record = it->Event->Record;
     for (size_t i = 0; i < record.MatchingGroupsSize(); ++i) {
         auto& mg = *record.MutableMatchingGroups(i);
@@ -121,12 +123,13 @@ void TBlobStorageController::ProcessSelectGroupsQueueItem(TList<TSelectGroupsQue
                         it->BlockedPDisks.insert(pdiskId);
                         PDiskToQueue.emplace(pdiskId, it);
                     }
+                    missing = true;
                 }
             }
         }
     }
 
-    if (!it->BlockedPDisks) {
+    if (!missing) {
         Send(it->RespondTo, it->Event.Release(), 0, it->Cookie);
         SelectGroupsQueue.erase(it);
     }

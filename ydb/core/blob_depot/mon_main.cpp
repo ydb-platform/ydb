@@ -142,7 +142,7 @@ namespace NKikimr::NBlobDepot {
                                 Stream << NKikimrBlobDepot::EKeepState_Name(value.KeepState);
                             }
                             TABLED() {
-                                if (Self->Config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup) {
+                                if (Self->Config.HasVirtualGroupId()) {
                                     bool underSoft, underHard;
                                     Self->BarrierServer->GetBlobBarrierRelation(key.GetBlobId(), &underSoft, &underHard);
                                     Stream << (underSoft ? 'S' : '-') << (underHard ? 'H' : '-');

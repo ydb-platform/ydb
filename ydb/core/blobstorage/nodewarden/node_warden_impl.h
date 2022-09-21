@@ -163,7 +163,7 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Pipe management
 
-        void SendToController(std::unique_ptr<IEventBase> ev, ui64 cookie = 0);
+        void SendToController(std::unique_ptr<IEventBase> ev, ui64 cookie = 0, TActorId sender = {});
 
         void EstablishPipe();
 
@@ -407,6 +407,7 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase);
 
         void Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&);
         void Handle(TEvPrivate::TEvUpdateNodeDrives ::TPtr&);
         void Handle(NMon::TEvHttpInfo::TPtr&);
@@ -484,6 +485,7 @@ namespace NKikimr::NStorage {
                 hFunc(TEvBlobStorage::TEvControllerNodeServiceSetUpdate, Handle);
                 hFunc(TEvBlobStorage::TEvUpdateGroupInfo, Handle);
                 hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
+                hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
                 hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
                 hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
                 hFunc(NMon::TEvHttpInfo, Handle);

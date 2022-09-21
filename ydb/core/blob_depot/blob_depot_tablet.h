@@ -17,6 +17,7 @@ namespace NKikimr::NBlobDepot {
             enum {
                 EvCheckExpiredAgents = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvCommitCertainKeys,
+                EvDoGroupMetricsExchange,
             };
         };
 
@@ -112,6 +113,7 @@ namespace NKikimr::NBlobDepot {
 
         void StartOperation() {
             InitChannelKinds();
+            DoGroupMetricsExchange();
             StartGroupAssimilator();
             ProcessRegisterAgentQ();
         }
@@ -133,8 +135,8 @@ namespace NKikimr::NBlobDepot {
         void InitChannelKinds();
 
         TString GetLogId() const {
-            if (Config.HasDecommitGroupId()) {
-                return TStringBuilder() << "{" << TabletID() << "@" << Config.GetDecommitGroupId() << "}";
+            if (Config.HasVirtualGroupId()) {
+                return TStringBuilder() << "{" << TabletID() << "@" << Config.GetVirtualGroupId() << "}";
             } else {
                 return TStringBuilder() << "{" << TabletID() << "}";
             }
@@ -219,6 +221,12 @@ namespace NKikimr::NBlobDepot {
         class TGroupAssimilator;
 
         void StartGroupAssimilator();
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Group metrics exchange
+
+        void DoGroupMetricsExchange();
+        void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
     };
 
 } // NKikimr::NBlobDepot

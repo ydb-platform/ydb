@@ -137,7 +137,7 @@ namespace NKikimr::NBlobDepot {
         TAgent& agent = GetAgent(ev->Recipient);
         const ui32 generation = Executor()->Generation();
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTxx, "TEvDiscardSpoiledBlobSeq", (Id, GetLogId()), (AgentId, agent.ConnectedNodeId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT57, "TEvDiscardSpoiledBlobSeq", (Id, GetLogId()), (AgentId, agent.ConnectedNodeId),
             (Msg, ev->Get()->Record));
 
         // FIXME(alexvru): delete uncertain keys containing this BlobSeqId as they were never written

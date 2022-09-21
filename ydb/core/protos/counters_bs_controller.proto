@@ -214,4 +214,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_NODE_DRIVES = 22 [(TxTypeOpts) = {Name: "TTxUpdateNodeDrives"}];
     TXTYPE_MON_EVENT_OPERATION_LOG_ENTRY = 23 [(TxTypeOpts) = {Name: "TTxMonEvent_OperationLogEntry"}];
     TXTYPE_UPDATE_NODE_DISCONNECT_TIMESTAMP = 24 [(TxTypeOpts) = {Name: "TTxUpdateNodeDisconnectTimestamp"}];
+    TXTYPE_GROUP_METRICS_EXCHANGE = 25 [(TxTypeOpts) = {Name: "TTxGroupMetricsExchange"}];
 }

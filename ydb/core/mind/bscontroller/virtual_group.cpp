@@ -88,7 +88,7 @@ namespace NKikimr::NBsController {
         group->CalculateGroupStatus();
 
         NKikimrBlobDepot::TBlobDepotConfig config;
-        config.SetOperationMode(NKikimrBlobDepot::EOperationMode::VirtualGroup);
+        config.SetVirtualGroupId(group->ID);
         config.MutableChannelProfiles()->CopyFrom(cmd.GetChannelProfiles());
 
         const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
@@ -116,9 +116,9 @@ namespace NKikimr::NBsController {
             group->NeedAlter = true;
 
             NKikimrBlobDepot::TBlobDepotConfig config;
-            config.SetOperationMode(NKikimrBlobDepot::EOperationMode::VirtualGroup);
+            config.SetVirtualGroupId(groupId);
+            config.SetIsDecommittingGroup(true);
             config.MutableChannelProfiles()->CopyFrom(cmd.GetChannelProfiles());
-            config.SetDecommitGroupId(groupId);
 
             const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
             Y_VERIFY(success);

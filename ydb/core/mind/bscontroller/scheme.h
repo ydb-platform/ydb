@@ -71,12 +71,13 @@ struct Schema : NIceDb::Schema {
         struct BlobDepotId       : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
         struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
         struct NeedAlter         : Column<111, NScheme::NTypeIds::Bool>   {}; // did the BlobDepotConfig change?
+        struct Metrics           : Column<114, NScheme::NTypeIds::String> {}; // for virtual groups only
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
               SeenOperational, DecommitStatus, VirtualGroupName, VirtualGroupState, HiveId, BlobDepotConfig,
-              BlobDepotId, ErrorReason, NeedAlter>;
+              BlobDepotId, ErrorReason, NeedAlter, Metrics>;
     };
 
     struct State : Table<1> {

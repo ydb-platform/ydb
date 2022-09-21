@@ -213,6 +213,11 @@ public:
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
 
+                if (groups.HaveValue<T::Metrics>()) {
+                    const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
+                    Y_VERIFY_DEBUG(success);
+                }
+
 #undef OPTIONAL
 
                 Self->OwnerIdIdxToGroup.emplace(groups.GetValue<T::Owner>(), groups.GetKey());

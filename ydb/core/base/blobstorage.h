@@ -801,6 +801,7 @@ struct TEvBlobStorage {
         EvControllerUpdateNodeDrives,
         EvControllerGroupDecommittedNotify,
         EvControllerGroupDecommittedResponse,
+        EvControllerGroupMetricsExchange,
 
         // EvControllerReadSchemeStringResult = EvPut + 12 * 512,
         // EvControllerReadDataStringResult,
@@ -2289,6 +2290,7 @@ struct TEvBlobStorage {
     struct TEvTestLoadResponse;
     struct TEvControllerGroupDecommittedNotify;
     struct TEvControllerGroupDecommittedResponse;
+    struct TEvControllerGroupMetricsExchange;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

@@ -349,6 +349,10 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
     }
 }
 
+void TNodeWarden::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev) {
+    SendToController(std::unique_ptr<IEventBase>(ev->Release().Release()), ev->Cookie, ev->Sender);
+}
+
 void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
     STLOG(PRI_TRACE, BS_NODE, NW39, "Handle(TEvPrivate::TEvSendDiskMetrics)");
     SendDiskMetrics(true);

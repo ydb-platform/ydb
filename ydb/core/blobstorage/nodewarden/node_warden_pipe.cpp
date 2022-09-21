@@ -3,8 +3,8 @@
 using namespace NKikimr;
 using namespace NStorage;
 
-void TNodeWarden::SendToController(std::unique_ptr<IEventBase> ev, ui64 cookie) {
-    NTabletPipe::SendData(SelfId(), PipeClientId, ev.release(), cookie);
+void TNodeWarden::SendToController(std::unique_ptr<IEventBase> ev, ui64 cookie, TActorId sender) {
+    NTabletPipe::SendData(sender ? sender : SelfId(), PipeClientId, ev.release(), cookie);
 }
 
 void TNodeWarden::EstablishPipe() {

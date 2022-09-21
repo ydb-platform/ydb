@@ -51,6 +51,8 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
 
                 cFunc(TEvPrivate::EvCommitCertainKeys, Data->HandleCommitCertainKeys);
+                cFunc(TEvPrivate::EvDoGroupMetricsExchange, DoGroupMetricsExchange);
+                hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
 
                 default:
                     if (!HandleDefaultEvents(ev, ctx)) {

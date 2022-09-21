@@ -85,8 +85,9 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::SendAssimilateRequest() {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT53, "TAssimilator::SendAssimilateRequest", (Id, Self->GetLogId()),
-            (SelfId, SelfId()), (DecommitGroupId, Self->Config.GetDecommitGroupId()));
-        SendToBSProxy(SelfId(), Self->Config.GetDecommitGroupId(), new TEvBlobStorage::TEvAssimilate(SkipBlocksUpTo,
+            (SelfId, SelfId()));
+        Y_VERIFY(Self->Config.GetIsDecommittingGroup());
+        SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), new TEvBlobStorage::TEvAssimilate(SkipBlocksUpTo,
             SkipBarriersUpTo, SkipBlobsUpTo));
     }
 
@@ -203,8 +204,7 @@ namespace NKikimr::NBlobDepot {
                     Self->Self->Execute(std::make_unique<TTxPutAssimilatedData>(*this));
                 } else {
                     if (UnblockRegisterActorQ) {
-                        STLOG(PRI_INFO, BLOB_DEPOT, BDT35, "blocks assimilation complete", (Id, Self->Self->GetLogId()),
-                            (DecommitGroupId, Self->Self->Config.GetDecommitGroupId()));
+                        STLOG(PRI_INFO, BLOB_DEPOT, BDT35, "blocks assimilation complete", (Id, Self->Self->GetLogId()));
                         Self->Self->ProcessRegisterAgentQ();
                     }
 
@@ -274,7 +274,7 @@ namespace NKikimr::NBlobDepot {
             }
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, sz, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead);
             ev->Decommission = true;
-            SendToBSProxy(SelfId(), Self->Config.GetDecommitGroupId(), ev.release());
+            SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release());
         } else if (!finished) { // timeout hit, reschedule work
             TActivationContext::Send(new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
         } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
@@ -321,7 +321,7 @@ namespace NKikimr::NBlobDepot {
             if (resp.Status == NKikimrProto::OK) {
                 auto ev = std::make_unique<TEvBlobStorage::TEvPut>(resp.Id, resp.Buffer, TInstant::Max());
                 ev->Decommission = true;
-                SendToBSProxy(SelfId(), Self->Config.GetDecommitGroupId(), ev.release());
+                SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release());
                 ++NumPutsInFlight;
             } else if (resp.Status == NKikimrProto::NODATA) {
                 Self->Execute(std::make_unique<TTxDropBlobIfNoData>(Self, resp.Id, SelfId()));
@@ -387,7 +387,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::CreatePipe() {
-        const TGroupID groupId(Self->Config.GetDecommitGroupId());
+        const TGroupID groupId(Self->Config.GetVirtualGroupId());
         const ui64 tabletId = MakeBSControllerID(groupId.AvailabilityDomainID());
         PipeId = Register(NTabletPipe::CreateClient(SelfId(), tabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
         NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobStorage::TEvControllerGroupDecommittedNotify(groupId.GetRaw()));
@@ -462,7 +462,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::StartGroupAssimilator() {
-        if (Config.HasDecommitGroupId()) {
+        if (Config.GetIsDecommittingGroup()) {
            Y_VERIFY(!GroupAssimilatorId);
            GroupAssimilatorId = RegisterWithSameMailbox(new TGroupAssimilator(this));
         }

@@ -425,6 +425,11 @@
                 "ColumnId": 113,
                 "ColumnName": "HiveId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 114,
+                "ColumnName": "Metrics",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -452,7 +457,8 @@
                     110,
                     111,
                     112,
-                    113
+                    113,
+                    114
                 ],
                 "RoomID": 0,
                 "Codec": 0,

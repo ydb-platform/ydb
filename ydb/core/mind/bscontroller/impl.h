@@ -57,6 +57,7 @@ public:
     class TTxMonEvent_GetDown;
     class TTxUpdateDiskMetrics;
     class TTxUpdateGroupLatencies;
+    class TTxGroupMetricsExchange;
     class TTxGroupReconfigureWipe;
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
@@ -508,6 +509,7 @@ public:
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
+        std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         bool CommitInProgress = false;
 
         bool Down = false; // is group are down right now (not selectable)
@@ -698,16 +700,8 @@ public:
         }
 
         void FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params) const {
-            if (!VDisksInGroup) {
-                for (auto *p : {params->MutableAssuredResources(), params->MutableCurrentResources()}) {
-                    p->SetSpace(1'000'000'000'000);
-                    p->SetIOPS(1'000);
-                    p->SetReadThroughput(100'000'000);
-                    p->SetWriteThroughput(100'000'000);
-                }
-                params->SetAllocatedSize(1'000'000'000'000);
-                params->SetAvailableSize(1'000'000'000'000);
-                params->SetSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
+            if (GroupMetrics) {
+                params->MergeFrom(GroupMetrics->GetGroupParameters());
             } else {
                 FillInResources(params->MutableAssuredResources(), true);
                 FillInResources(params->MutableCurrentResources(), false);
@@ -1681,6 +1675,7 @@ private:
     void Handle(TEvBlobStorage::TEvControllerSelectGroups::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerUpdateGroupStat::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerUpdateNodeDrives::TPtr &ev);
     void Handle(TEvControllerCommitGroupLatencies::TPtr &ev);
     void Handle(TEvBlobStorage::TEvRequestControllerInfo::TPtr &ev);
@@ -1850,6 +1845,7 @@ public:
             hFunc(TEvBlobStorage::TEvControllerSelectGroups, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateGroupStat, Handle);
+            hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateNodeDrives, Handle);
             hFunc(TEvControllerCommitGroupLatencies, Handle);
             hFunc(TEvBlobStorage::TEvRequestControllerInfo, Handle);
@@ -1884,6 +1880,7 @@ public:
             fFunc(TEvBlobStorage::EvControllerSelectGroups, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerUpdateDiskStatus, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerUpdateGroupStat, EnqueueIncomingEvent);
+            fFunc(TEvBlobStorage::EvControllerGroupMetricsExchange, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerUpdateNodeDrives, EnqueueIncomingEvent);
             fFunc(TEvControllerCommitGroupLatencies::EventType, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);

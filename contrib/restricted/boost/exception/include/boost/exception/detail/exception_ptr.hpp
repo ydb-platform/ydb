@@ -1,54 +1,96 @@
 //Copyright (c) 2006-2009 Emil Dotchevski and Reverge Studios, Inc.
+//Copyright (c) 2019 Dario Menendez, Banco Santander
 
 //Distributed under the Boost Software License, Version 1.0. (See accompanying
 //file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#ifndef UUID_618474C2DE1511DEB74A388C56D89593
-#define UUID_618474C2DE1511DEB74A388C56D89593
+#ifndef BOOST_EXCEPTION_618474C2DE1511DEB74A388C56D89593
+#define BOOST_EXCEPTION_618474C2DE1511DEB74A388C56D89593
 
 #include <boost/config.hpp>
-#ifdef BOOST_NO_EXCEPTIONS
-#error This header requires exception handling to be enabled.
-#endif
 #include <boost/exception/exception.hpp>
 #include <boost/exception/info.hpp>
 #include <boost/exception/diagnostic_information.hpp>
-#include <boost/exception/detail/clone_current_exception.hpp>
+#ifndef BOOST_NO_EXCEPTIONS
+#   include <boost/exception/detail/clone_current_exception.hpp>
+#endif
 #include <boost/exception/detail/type_info.hpp>
 #ifndef BOOST_NO_RTTI
 #include <boost/core/demangle.hpp>
 #endif
 #include <boost/shared_ptr.hpp>
+#include <boost/make_shared.hpp>
 #include <stdexcept>
 #include <new>
 #include <ios>
 #include <stdlib.h>
 
-#if (__GNUC__*100+__GNUC_MINOR__>301) && !defined(BOOST_EXCEPTION_ENABLE_WARNINGS)
+#ifndef BOOST_EXCEPTION_ENABLE_WARNINGS
+#if __GNUC__*100+__GNUC_MINOR__>301
 #pragma GCC system_header
 #endif
-#if defined(_MSC_VER) && !defined(BOOST_EXCEPTION_ENABLE_WARNINGS)
+#ifdef __clang__
+#pragma clang system_header
+#endif
+#ifdef _MSC_VER
 #pragma warning(push,1)
+#endif
 #endif
 
 namespace
 boost
     {
+    namespace
+    exception_detail
+        {
+#ifndef BOOST_NO_CXX11_HDR_EXCEPTION
+        struct
+        std_exception_ptr_wrapper:
+            std::exception
+            {
+            std::exception_ptr p;
+            explicit std_exception_ptr_wrapper( std::exception_ptr const & ptr ) BOOST_NOEXCEPT:
+                p(ptr)
+                {
+                }
+#ifndef BOOST_NO_CXX11_RVALUE_REFERENCES
+            explicit std_exception_ptr_wrapper( std::exception_ptr && ptr ) BOOST_NOEXCEPT:
+                p(static_cast<std::exception_ptr &&>(ptr))
+                {
+                }
+#endif
+            };
+        shared_ptr<exception_detail::clone_base const>
+        inline
+        wrap_exception_ptr( std::exception_ptr const & e )
+            {
+            exception_detail::clone_base const & base =
+                boost::enable_current_exception(std_exception_ptr_wrapper(std::current_exception()));
+            return shared_ptr<exception_detail::clone_base const>(base.clone());
+            }
+#endif
+        }
+
     class exception_ptr;
-    BOOST_NORETURN void rethrow_exception( exception_ptr const & );
-    exception_ptr current_exception();
+    namespace exception_detail { void rethrow_exception_( exception_ptr const & ); }
 
     class
     exception_ptr
         {
         typedef boost::shared_ptr<exception_detail::clone_base const> impl;
         impl ptr_;
-        friend void rethrow_exception( exception_ptr const & );
+        friend void exception_detail::rethrow_exception_( exception_ptr const & );
         typedef exception_detail::clone_base const * (impl::*unspecified_bool_type)() const;
         public:
         exception_ptr()
             {
             }
+#ifndef BOOST_NO_CXX11_HDR_EXCEPTION
+        exception_ptr( std::exception_ptr const & e ):
+            ptr_(exception_detail::wrap_exception_ptr(e))
+            {
+            }
+#endif
         explicit
         exception_ptr( impl const & ptr ):
             ptr_(ptr)
@@ -70,20 +112,22 @@ boost
             }
         };
 
+    template <class E>
+    inline
+    exception_ptr
+    copy_exception( E const & e )
+        {
+        E cp = e;
+        exception_detail::copy_boost_exception(&cp, &e);
+        return exception_ptr(boost::make_shared<wrapexcept<E> >(cp));
+        }
+
     template <class T>
     inline
     exception_ptr
-    copy_exception( T const & e )
+    make_exception_ptr( T const & e )
         {
-        try
-            {
-            throw enable_current_exception(e);
-            }
-        catch(
-        ... )
-            {
-            return current_exception();
-            }
+        return boost::copy_exception(e);
         }
 
 #ifndef BOOST_NO_RTTI
@@ -97,6 +141,7 @@ boost
         }
 #endif
 
+#ifndef BOOST_NO_EXCEPTIONS
     namespace
     exception_detail
         {
@@ -105,7 +150,7 @@ boost
             boost::exception,
             std::bad_alloc
                 {
-                ~bad_alloc_() { }
+                ~bad_alloc_() BOOST_NOEXCEPT_OR_NOTHROW { }
                 };
 
         struct
@@ -113,7 +158,7 @@ boost
             boost::exception,
             std::bad_exception
                 {
-                ~bad_exception_() { }
+                ~bad_exception_() BOOST_NOEXCEPT_OR_NOTHROW { }
                 };
 
         template <class Exception>
@@ -174,7 +219,7 @@ boost
             add_original_type(e);
             }
 
-        ~unknown_exception()
+        ~unknown_exception() BOOST_NOEXCEPT_OR_NOTHROW
             {
             }
 
@@ -220,7 +265,7 @@ boost
                 add_original_type(e1);
                 }
 
-            ~current_exception_std_exception_wrapper()
+            ~current_exception_std_exception_wrapper() BOOST_NOEXCEPT_OR_NOTHROW
                 {
                 }
 
@@ -412,11 +457,14 @@ boost
                         {
                         return exception_detail::current_exception_std_exception(e);
                         }
+#ifdef BOOST_NO_CXX11_HDR_EXCEPTION
+                    // this case can be handled losslesly with std::current_exception() (see below)
                     catch(
                     std::exception & e )
                         {
                         return exception_detail::current_exception_unknown_std_exception(e);
                         }
+#endif
                     catch(
                     boost::exception & e )
                         {
@@ -425,7 +473,19 @@ boost
                     catch(
                     ... )
                         {
+#ifndef BOOST_NO_CXX11_HDR_EXCEPTION
+                        try
+                            {
+                            return exception_ptr(std::current_exception());
+                            }
+                        catch(
+                        ...)
+                            {
+                            return exception_detail::current_exception_unknown_exception();
+                            }
+#else
                         return exception_detail::current_exception_unknown_exception();
+#endif
                         }
                     }
                 }
@@ -454,21 +514,46 @@ boost
         BOOST_ASSERT(ret);
         return ret;
         }
+#endif // ifndef BOOST_NO_EXCEPTIONS
+
+    namespace
+    exception_detail
+        {
+        inline
+        void
+        rethrow_exception_( exception_ptr const & p )
+            {
+            BOOST_ASSERT(p);
+#if defined( BOOST_NO_CXX11_HDR_EXCEPTION ) || defined( BOOST_NO_EXCEPTIONS )
+            p.ptr_->rethrow();
+#else
+            try
+                {
+                p.ptr_->rethrow();
+                }
+            catch(
+            std_exception_ptr_wrapper const & wrp)
+                {
+                // if an std::exception_ptr was wrapped above then rethrow it
+                std::rethrow_exception(wrp.p);
+                }
+#endif
+            }
+        }
 
     BOOST_NORETURN
     inline
     void
     rethrow_exception( exception_ptr const & p )
         {
-        BOOST_ASSERT(p);
-        p.ptr_->rethrow();
+        exception_detail::rethrow_exception_(p);
         BOOST_ASSERT(0);
-        #if defined(UNDER_CE)
-            // some CE platforms don't define ::abort()
-            exit(-1);
-        #else
-            abort();
-        #endif
+#if defined(UNDER_CE)
+        // some CE platforms don't define ::abort()
+        exit(-1);
+#else
+        abort();
+#endif
         }
 
     inline
@@ -476,6 +561,9 @@ boost
     diagnostic_information( exception_ptr const & p, bool verbose=true )
         {
         if( p )
+#ifdef BOOST_NO_EXCEPTIONS
+            return "<unavailable> due to BOOST_NO_EXCEPTIONS";
+#else
             try
                 {
                 rethrow_exception(p);
@@ -485,6 +573,7 @@ boost
                 {
                 return current_exception_diagnostic_information(verbose);
                 }
+#endif
         return "<empty>";
         }
 

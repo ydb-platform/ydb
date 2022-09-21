@@ -1189,7 +1189,7 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
 
         auto simplify = ctx.Builder(node->Pos())
             .Lambda()
-                .Params("items", optionals.size() - args.size())
+                .Params("items", args.size())
                 .Apply(lambda)
                     .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
                         for (auto i = 0U, j = 0U; i < optionals.size(); ++i) {

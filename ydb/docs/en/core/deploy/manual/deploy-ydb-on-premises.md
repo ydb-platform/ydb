@@ -1,6 +1,6 @@
 # Deploying a {{ ydb-short-name }} cluster on virtual or bare metal servers
 
-This document describes the procedure to deploy a multi-tenant {{ ydb-short-name }} cluster on several servers.
+This document describes the procedure to deploy a multi-tenant {{ ydb-short-name }} cluster on several virtual or bare metal servers.
 
 ## Before you begin {#before-start}
 
@@ -23,16 +23,16 @@ Run each static node on a separate server.
 
 For more information about hardware requirements, see [{#T}](../../cluster/system-requirements.md).
 
-## Create a system user and a group to run {{ ydb-short-name }} under {#create-user}
+## Create a system user and a group to run {{ ydb-short-name }} {#create-user}
 
-On each server that will be running {{ ydb-short-name }}, execute the command below:
+On each server that will be running {{ ydb-short-name }}, execute the commands below:
 
 ```bash
 sudo groupadd ydb
 sudo useradd ydb -g ydb
 ```
 
-To make sure the {{ ydb-short-name }} server has access to block disks to run, you need to add the process owner to the disk group:
+To make sure the {{ ydb-short-name }} server has access to block disk devices, you need to add the process owner to the `disk` user group:
 
 ```bash
 sudo usermod -aG disk ydb
@@ -93,7 +93,7 @@ We don't recommend storing data on disks used by other processes (including the 
 1. Format the disk with the builtin command below:
 
    ```bash
-   sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
+   sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
    ```
 
    Perform this operation for each disk that will be used for data storage.
@@ -104,15 +104,13 @@ We don't recommend storing data on disks used by other processes (including the 
 
 - Unprotected mode
 
-   In this mode, traffic between cluster nodes and between client and cluster uses an unencrypted connection. Use this mode for testing purposes.
+   In the unprotected mode, traffic between cluster nodes and between client and cluster uses  unencrypted connections. Use this mode for testing purposes only.
 
    {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
-   Save the {{ ydb-short-name }} configuration file as `/opt/ydb/cfg/config.yaml`.
-
 - Protected mode
 
-   In this mode, traffic between cluster nodes and between the client and cluster is encrypted using the TLS protocol.
+   In the protected mode, traffic between cluster nodes and between the client and cluster is encrypted using the TLS protocol.
 
    {% note info %}
 
@@ -120,7 +118,7 @@ We don't recommend storing data on disks used by other processes (including the 
 
    {% endnote %}
 
-   1. Create a CA key:
+   1. Create a key and a certificate for the Certification Authority (CA):
 
       1. Create a directory named `secure` to store the CA key and one named `certs` for certificates and node keys:
 
@@ -231,7 +229,7 @@ We don't recommend storing data on disks used by other processes (including the 
          sudo chmod 0750 /opt/ydb/certs
          ```
 
-      1. Copy the node certificates and keys
+      1. Copy the node certificates and keys to the installation directory:
 
          ```bash
          sudo -u ydb cp certs/ca.crt certs/node.crt certs/node.key /opt/ydb/certs/
@@ -239,9 +237,11 @@ We don't recommend storing data on disks used by other processes (including the 
 
    1. {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
-      1. In the `interconnect_config` and `grpc_config` sections, specify the path to the certificate, key, and CA certificates:
+   1. Enable traffic encryption in the {{ ydb-short-name }} configuration file.
 
-      ```text
+        In the `interconnect_config` and `grpc_config` sections, specify the paths to the certificate, key, and CA certificate files:
+
+        ```json
         interconnect_config:
             start_tcp: true
             encryption_mode: OPTIONAL
@@ -253,13 +253,15 @@ We don't recommend storing data on disks used by other processes (including the 
             cert: "/opt/ydb/certs/node.crt"
             key: "/opt/ydb/certs/node.key"
             ca: "/opt/ydb/certs/ca.crt"
-      ```
-
-   Save the {{ ydb-short-name }} configuration file as `/opt/ydb/cfg/config.yaml`.
+        ```
 
 {% endlist %}
 
-## Start static nodes {# start-storage}
+Save the {{ ydb-short-name }} configuration file as `/opt/ydb/cfg/config.yaml` on each cluster node.
+
+For more detailed information about creating configurations, see [Cluster configurations](../configuration/config.md).
+
+## Start static nodes {#start-storage}
 
 {% list tabs %}
 
@@ -270,7 +272,7 @@ We don't recommend storing data on disks used by other processes (including the 
    ```bash
    sudo su - ydb
    cd /opt/ydb
-   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
+   export LD_LIBRARY_PATH=/opt/ydb/lib
    /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml  \
    --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
    ```
@@ -297,7 +299,7 @@ We don't recommend storing data on disks used by other processes (including the 
    SyslogIdentifier=ydbd
    SyslogFacility=daemon
    SyslogLevel=err
-   Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
+   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
    ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
    LimitNOFILE=65536
    LimitCORE=0
@@ -315,23 +317,76 @@ We don't recommend storing data on disks used by other processes (including the 
 
 {% endlist %}
 
-## Initialize a cluster {#initialize-cluster}
+## Initialize the cluster {#initialize-cluster}
 
-On one of the cluster nodes, run the command:
+The procedure of cluster initialization depends on whether user authentication mode is enabled in the {{ ydb-short-name }} configuration file.
 
-```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml ; echo $?
-```
+{% list tabs %}
 
-The command execution code should be null.
+- Authentication Disabled
 
-## Creating the first database {#create-fist-db}
+  On one of the cluster nodes, run the command:
+
+  ```bash
+  export LD_LIBRARY_PATH=/opt/ydb/lib
+  /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
+  echo $?
+  ```
+
+  The command status code should be zero.
+
+- Authentication Enabled
+
+  To perform the administrative commands (including cluster initialization, database creation, disk management, and others) in a cluster with user authentication enabled, you must first obtain an authentication token using the {{ ydb-short-name }} CLI client version 2.0.0 or higher. {{ ydb-short-name }} CLI can be installed on any host having network access to the cluster nodes (for example, on one of the cluster nodes themselves), according to the [installation instructions](../../reference/ydb-cli/install.md).
+  
+  While the cluster is being initially set up, it only has a single user account named `root` with an empty password. Therefore, the command to obtain the authentication token looks like the following:
+
+  ```bash
+  ydb -e grpc://<node1.ydb.tech>:2135 -d /Root \
+      --user root --no-password auth get-token --force >token-file
+  ```
+
+  A name of any server in the cluster can be specified as the connection endpoint (parameter `-e` or `--endpoint`).
+
+  If TLS traffic protection has been enabled, then instead of the `grpc` protocol in the command above, its secure flavor `grpcs` must be used. In addition, the path to the file with the CA certificate needs to be specified in the `--ca-file` parameter. For example:
+
+  ```bash
+  ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file /opt/ydb/certs/ca.crt \
+       --user root --no-password auth get-token --force >token-file
+  ```
+
+  Upon successful execution of the command shown above, the authentication token will be written to the `token-file`. This file will need to be copied to the cluster node on which you plan to run the cluster initialization and database creation commands. To initialize the cluster, run the following commands on that cluster node:
+
+  ```bash
+  export LD_LIBRARY_PATH=/opt/ydb/lib
+  /opt/ydb/bin/ydbd -f token-file admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
+  echo $?
+  ```
+
+  The command status code should be zero.
+
+{% endlist %}
+
+## Create the database {#create-db}
 
 To work with tables, you need to create at least one database and run a process to service this database (a dynamic node):
 
 ```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
+LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
 ```
+
+If the user authentication is enabled in the cluster, an authentication token must be passed to the database creation command. The procedure to obtain the token is described above in the [cluster initialization section](#initialize-cluster).
+
+The authenticated version of the database creation command:
+
+```bash
+LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd -f token-file admin database /Root/testdb create ssd:1
+```
+
+The following parameters are used in the command examples shown above:
+* `/Root` - name of the cluster root domain, must match the value of the `domains_config`.`domain`.`name` setting in the configuration file;
+* `testdb` - name of the database being created;
+* `ssd:1` - name of the storage pool and the "box" number within the pool. Name of the pool typically means the device type used, and should match the value of `storage_pool_types`.`kind` setting within the `domains_config`.`domain` element of the configuration file.
 
 ## Start the DB dynamic node {#start-dynnode}
 
@@ -344,7 +399,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
    ```bash
    sudo su - ydb
    cd /opt/ydb
-   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
+   export LD_LIBRARY_PATH=/opt/ydb/lib
    /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml \
    --tenant /Root/testdb --node-broker <node1.ydb.tech>:2135 --node-broker <node2.ydb.tech>:2135 --node-broker <node3.ydb.tech>:2135
    ```
@@ -375,7 +430,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
    SyslogIdentifier=ydbd
    SyslogFacility=daemon
    SyslogLevel=err
-   Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
+   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
    ExecStart=/opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker <node1.ydb.tech>:2135 --node-broker <node2.ydb.tech>:2135 --node-broker <node3.ydb.tech>:2135
    LimitNOFILE=65536
    LimitCORE=0
@@ -397,11 +452,50 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
 
 {% endlist %}
 
+## Initial setup of user accounts {#security-setup}
+
+If authentication mode is enabled in the cluster settings file, then you must perform the initial setup of user accounts before starting to work with the {{ ydb-short-name }} cluster.
+
+A single user account `root` with an empty password, and a standard set of pre-defined user groups, as specified in the [Access management](../../cluster/access.md) chapter, are created automatically during {{ ydb-short-name }} cluster initialization.
+
+In order to perform the initial setup of user accounts in the newly created {{ ydb-short-name }} cluster use the following steps:
+
+1. Install the {{ ydb-short-name }} CLI as described in [documentation](../../reference/ydb-cli/install.md).
+
+1. Change the password of the `root` user account:
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb --user root --no-password \
+        yql -s 'ALTER USER root PASSWORD "passw0rd"'
+    ```
+
+    Replace the `passw0rd` value in the command above with the password to be used.
+
+1. Create the additional user accounts:
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+        yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
+    ```
+
+1. Configure the permissions by putting the user accounts into the builtin groups:
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+        yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
+    ```
+
+In the command examples listed above `<node.ydb.tech>` is the FQDN of the server running the dynamic node for the database `/Root/testdb`.
+
+By default {{ ydb-short-name }} CLI application will query the password of the `root` user on each command. Password value can optionally be stored in the connection profile, as described in the [{{ ydb-short-name }} CLI documentation](../../reference/ydb-cli/profile/index.md), to avoid the need to repeatably enter it.
+
+If TLS traffic protection has been enabled, then instead of the `grpc` protocol in the commands above, its secure flavor `grpcs` must be used, and CA certificate filename has to be specified in the `--ca-file` parameter (or stored in the connection profile).
+
 ## Test the created database {#try-first-db}
 
-1. Install the {{ ydb-short-name }} CLI as described in [Installing the {{ ydb-short-name }} CLI](../../reference/ydb-cli/install.md):
+1. Install the {{ ydb-short-name }} CLI as described in [documentation](../../reference/ydb-cli/install.md).
 
-1. Create a `test_table`:
+1. Create a test table named `test_table`:
 
    ```bash
    ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb scripting yql \
@@ -409,3 +503,10 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
    ```
 
    Where `<node.ydb.tech>` is the FQDN of the server running the dynamic node that supports the `/Root/testdb` database.
+
+   The command shown above has to be modified if user authentication or TLS traffic protection modes are enabled in the cluster. For example:
+
+   ```bash
+   ydb -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --ca-file ydb-ca.crt --user root scripting yql \
+   --script 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
+   ```

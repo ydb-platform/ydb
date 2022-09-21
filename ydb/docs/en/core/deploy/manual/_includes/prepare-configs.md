@@ -4,11 +4,13 @@ Prepare a configuration file for {{ ydb-short-name }}:
 
    * [block-4-2](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/block-4-2.yaml): For a single-data center cluster.
    * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml): For a cross-data center cluster consisting of 9 nodes.
-   * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml): For a cross-data center cluster consisting of 3 nodes.
+   * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml): For a cross-data center cluster consisting of 3 nodes.
 
-1. In the host_configs section, specify all disks and their types on each cluster node. Possible disk types:
+1. In the `host_configs` section, specify all disks and their types on each cluster node. Possible disk types are:
+   * ROT: rotational, HDD devices.
+   * SSD: SSD or NVMe devices.
 
-   ```text
+   ```json
    host_configs:
    - drive:
      - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
@@ -16,12 +18,9 @@ Prepare a configuration file for {{ ydb-short-name }}:
      host_config_id: 1
    ```
 
-   * ROT (rotational): HDD.
-   * SSD: SSD or NVMe.
-
 1. In the `hosts` section, specify the FQDN of each node, their configuration and location in a `data_center` or `rack`:
 
-   ```text
+   ```json
    hosts:
    - host: node1.ydb.tech
      host_config_id: 1
@@ -43,4 +42,24 @@ Prepare a configuration file for {{ ydb-short-name }}:
        rack: '1'
    ```
 
-   For more detailed information about creating configurations, see [Cluster configurations](../../configuration/config.md).
+1. Enable user authentication (optional). 
+
+    If you plan to use the authentication and authorization capabilities in the {{ ydb-short-name }} cluster being created, add the following additional parameters to the `domains_config` section:
+
+    ```json
+    domains_config:
+      security_config:
+        enforce_user_token_requirement: true
+        monitoring_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+        administration_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+        viewer_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+    ```

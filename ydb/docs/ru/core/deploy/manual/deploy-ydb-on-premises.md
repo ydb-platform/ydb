@@ -1,12 +1,12 @@
-# Развертывание кластера {{ ydb-short-name }} на виртуальных или железных серверах
+# Развертывание кластера {{ ydb-short-name }} на виртуальных или физических серверах
 
-Данный документ описывает способ развернуть мультитенантный кластер {{ ydb-short-name }} на нескольких серверах.
+Этот документ описывает способ развернуть мультитенантный кластер {{ ydb-short-name }} на нескольких физических или виртуальных серверах.
 
 ## Перед началом работы {#before-start}
 
 ### Требования {#requirements}
 
-У вас должен быть ssh доступ на все сервера. Это необходимо для установки артефактов и запуска бинарника {{ ydb-short-name }}. Ваша сетевая конфигурация должна разрешать TCP соединения по следующим портам (по умолчанию):
+У вас должен быть ssh доступ на все сервера. Это необходимо для установки артефактов и запуска исполняемого файла {{ ydb-short-name }}. Сетевая конфигурация должна разрешать TCP соединения по следующим портам (по умолчанию):
 
 * 2135, 2136 - grpc для клиент-кластерного взаимодействия;
 * 19001, 19002 - Interconnect для внутрикластерного взаимодействия нод;
@@ -16,8 +16,8 @@
 
 Выберите серверы и диски, которые будут использоваться для хранения данных:
 
-* Используйте схему отказоустойчивости `block-4-2` для деплоя кластера в одной зоне доступности (AZ). Чтобы переживать отказ 2 нод используйте не менее 8 нод.
-* Используйте схему отказоустойчивости `mirror-3-dc` для деплоя кластера в трех зонах доступности (AZ). Чтобы переживать отказ 1 AZ и 1 ноды в другом AZ используйте не менее 9 нод. Количество нод в каждой AZ должно быть одинаковым.
+* Используйте схему отказоустойчивости `block-4-2` для развертывания кластера в одной зоне доступности (AZ). Чтобы переживать отказ 2 нод используйте не менее 8 нод.
+* Используйте схему отказоустойчивости `mirror-3-dc` для развертывания кластера в трех зонах доступности (AZ). Чтобы переживать отказ 1 AZ и 1 ноды в другом AZ используйте не менее 9 нод. Количество нод в каждой AZ должно быть одинаковым.
 
 Запускайте каждую статическую ноду на отдельном сервере.
 
@@ -32,7 +32,7 @@ sudo groupadd ydb
 sudo useradd ydb -g ydb
 ```
 
-Для того, чтобы {{ ydb-short-name }} server имел доступ к блочным дискам для работы, необходимо добавить пользователя, под которым будет запущен процесс, в группу disk:
+Для того, чтобы сервис {{ ydb-short-name }} имел доступ к блочным дискам для работы, необходимо добавить пользователя, под которым будет запущен процесс, в группу `disk`:
 
 ```bash
 sudo usermod -aG disk ydb
@@ -42,7 +42,7 @@ sudo usermod -aG disk ydb
 
 {% note warning %}
 
-Мы не рекомендуем использовать для хранения данных диски, которые используются другими процессами (в т.ч. операционной системой).
+Мы не рекомендуем использовать для хранения данных диски, которые используются другими процессами (в том числе операционной системой).
 
 {% endnote %}
 
@@ -81,7 +81,7 @@ sudo usermod -aG disk ydb
     sudo chown -R ydb:ydb /opt/ydb
     ```
 
-1. Скопируйте бинарник, библиотеки и конфигурационный файл в соответствующие директории:
+1. Скопируйте исполняемый файл, библиотеки и конфигурационный файл в соответствующие директории:
 
     ```bash
     sudo cp -i ydbd-stable-linux-amd64/bin/ydbd /opt/ydb/bin/
@@ -93,7 +93,7 @@ sudo usermod -aG disk ydb
 1. Отформатируйте диск встроенной командой:
 
     ```bash
-    sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
+    sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
     ```
 
     Проделайте данную операцию для каждого диска, который будет использоваться для хранения данных.
@@ -104,15 +104,13 @@ sudo usermod -aG disk ydb
 
 - Незащищенный режим
 
-  В данном режиме трафик между нодами кластера, а также между клиентом и кластером использует нешифрованное соединение. Используйте данный режим для тестовых задач.
+  В незащищенном режиме трафик между нодами кластера, а также между клиентом и кластером использует нешифрованное соединение. Используйте данный режим для тестовых задач.
 
   {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
-  Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/opt/ydb/cfg/config.yaml`.
-
 - Защищенный режим
 
-  В данном режиме трафик между нодами кластера, а также между клиентом и кластером шифруется протоколом TLS.
+  В защищенном режиме трафик между нодами кластера, а также между клиентом и кластером шифруется протоколом TLS.
 
   {% note info %}
 
@@ -120,7 +118,7 @@ sudo usermod -aG disk ydb
 
   {% endnote %}
 
-  1. Создайте CA ключ:
+  1. Создайте ключ и сертификат для центра сертификации (CA):
 
       1. Создайте директории `secure`, в которой будет храниться ключ CA, и `certs` для сертификатов и ключей нод:
 
@@ -231,7 +229,7 @@ sudo usermod -aG disk ydb
           sudo chmod 0750 /opt/ydb/certs
           ```
 
-      1. Скопируйте сертификаты и ключи ноды
+      1. Скопируйте сертификаты и ключи ноды в каталог инсталляции:
 
           ```bash
           sudo -u ydb cp certs/ca.crt certs/node.crt certs/node.key /opt/ydb/certs/
@@ -239,9 +237,11 @@ sudo usermod -aG disk ydb
 
   1. {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
-      1. В секциях `interconnect_config` и `grpc_config` укажите путь до сертификата, ключа и CA сертификаты:
+  1. Включите режим шифрования трафика в конфигурационном файле {{ ydb-short-name }}.
 
-      ```text
+       В секциях `interconnect_config` и `grpc_config` укажите путь до файлов сертификата, ключа и CA сертификата:
+
+        ```json
         interconnect_config:
             start_tcp: true
             encryption_mode: OPTIONAL
@@ -253,13 +253,15 @@ sudo usermod -aG disk ydb
             cert: "/opt/ydb/certs/node.crt"
             key: "/opt/ydb/certs/node.key"
             ca: "/opt/ydb/certs/ca.crt"
-      ```
-
-  Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/opt/ydb/cfg/config.yaml`.
+        ```
 
 {% endlist %}
 
-## Запустите статические ноды {# start-storage}
+Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/opt/ydb/cfg/config.yaml` на каждом узле кластера.
+
+Более подробная информация по созданию конфигурации приведена в статье [Конфигурация кластера](../configuration/config.md).
+
+## Запустите статические ноды {#start-storage}
 
 {% list tabs %}
 
@@ -270,7 +272,7 @@ sudo usermod -aG disk ydb
   ```bash
   sudo su - ydb
   cd /opt/ydb
-  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
+  export LD_LIBRARY_PATH=/opt/ydb/lib
   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml  \
   --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
   ```
@@ -297,7 +299,7 @@ sudo usermod -aG disk ydb
   SyslogIdentifier=ydbd
   SyslogFacility=daemon
   SyslogLevel=err
-  Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
+  Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
   LimitNOFILE=65536
   LimitCORE=0
@@ -317,23 +319,76 @@ sudo usermod -aG disk ydb
 
 ## Инициализируйте кластер {#initialize-cluster}
 
-На одной из нод кластера выполните команду:
+Действия по инициализации кластера зависят от того, включен ли в конфигурационном файле {{ ydb-short-name }} режим аутентификации пользователей.
 
-```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml ; echo $?
-```
+{% list tabs %}
 
-Код завершения команды должен быть нулевым.
+- Аутентификация выключена
 
-## Создание первой базы данных {#create-fist-db}
+  На одной из нод кластера выполните команды:
+
+  ```bash
+  export LD_LIBRARY_PATH=/opt/ydb/lib
+  /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
+  echo $?
+  ```
+
+  Код завершения команды должен быть нулевым.
+
+- Аутентификация включена
+
+  Для выполнения административных команд (включая инициализацию кластера, создание баз данных, управление дисками и другие) в кластере со включённым режимом аутентификации пользователей необходимо предварительно получить аутентификационный токен с использованием клиента {{ ydb-short-name }} CLI версии 2.0.0 или выше. Клиент {{ ydb-short-name }} CLI следует установить на любом компьютере, имеющем сетевой доступ к узлам кластера (например, на одном из узлов кластера), в соответствии с [инструкцией по установке](../../reference/ydb-cli/install.md).
+  
+  При первоначальной установке кластера в нём существует единственная учётная запись `root` с пустым паролем, поэтому команда получения токена выглядит следующим образом:
+
+  ```bash
+  ydb -e grpc://<node1.ydb.tech>:2135 -d /Root \
+      --user root --no-password auth get-token --force >token-file
+  ```
+
+  В качестве сервера для подключения (параметр `-e` или `--endpoint`) может быть указан любой из серверов кластера.
+
+  Если была включена защита трафика с использованием TLS, то вместо протокола `grpc` в команде выше следует использовать его защищенный вариант `grpcs`, и дополнительно указать путь к файлу с сертификатом CA в параметре `--ca-file`. Например:
+
+  ```bash
+  ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file /opt/ydb/certs/ca.crt \
+       --user root --no-password auth get-token --force >token-file
+  ```
+
+  При успешном выполнении указанной выше команды аутентификационный токен будет записан в файл `token-file`. Этот файл необходимо будет скопировать на ноду кластера, на которой в дальнейшем вы собираетесь выполнять команды инициализации кластера и создания базы данных. Далее на этой ноде кластера выполните команды:
+
+  ```bash
+  export LD_LIBRARY_PATH=/opt/ydb/lib
+  /opt/ydb/bin/ydbd -f token-file admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
+  echo $?
+  ```
+
+  Код завершения команды должен быть нулевым.
+
+{% endlist %}
+
+## Создайте базу данных {#create-db}
 
 Для работы с таблицами необходимо создать как минимум одну базу данных и поднять процесс, обслуживающий эту базу данных (динамическую ноду):
 
 ```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
+LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
 ```
 
-## Запустите динамическую ноду базы {#start-dynnode}
+Если в кластере включен режим аутентификации пользователей, то в команду создания базы данных необходимо передать аутентификационный токен. Процедура получения токена описана в разделе по [инициализации кластера](#initialize-cluster).
+
+Вариант команды создания базы данных с указанием файла токена:
+
+```bash
+LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd -f token-file admin database /Root/testdb create ssd:1
+```
+
+В приведенных выше примерах команд используются следующие параметры:
+* `/Root` - имя корневого домена, должно соответствовать настройке `domains_config`.`domain`.`name` в файле конфигурации кластера;
+* `testdb` - имя создаваемой базы данных;
+* `ssd:1` - имя пула хранения и номер блока в пуле. Имя пула обычно означает тип устройств хранения данных и должно соответствовать настройке `storage_pool_types`.`kind` внутри элемента `domains_config`.`domain` файла конфигурации.
+
+## Запустите динамическую ноду базы данных {#start-dynnode}
 
 {% list tabs %}
 
@@ -344,7 +399,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
   ```bash
   sudo su - ydb
   cd /opt/ydb
-  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
+  export LD_LIBRARY_PATH=/opt/ydb/lib
   /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml \
   --tenant /Root/testdb --node-broker <node1.ydb.tech>:2135 --node-broker <node2.ydb.tech>:2135 --node-broker <node3.ydb.tech>:2135
   ```
@@ -375,7 +430,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
   SyslogIdentifier=ydbd
   SyslogFacility=daemon
   SyslogLevel=err
-  Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
+  Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker <node1.ydb.tech>:2135 --node-broker <node2.ydb.tech>:2135 --node-broker <node3.ydb.tech>:2135
   LimitNOFILE=65536
   LimitCORE=0
@@ -397,9 +452,48 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
 
 {% endlist %}
 
+## Первоначальная настройка учетных записей {#security-setup}
+
+Если в файле настроек кластера включен режим аутентификации, то перед началом работы с кластером {{ ydb-short-name }} необходимо выполнить первоначальную настройку учетных записей.
+
+При первоначальной установке кластера {{ ydb-short-name }} автоматически создается учетная запись `root` с пустым паролем, а также стандартный набор групп пользователей, описанный в разделе [Управление доступом](../../cluster/access.md).
+
+Для выполнения первоначальной настройки учетных записей в созданном кластере {{ ydb-short-name }} выполните следующие операции: 
+
+1. Установите {{ ydb-short-name }} CLI, как описано в [документации](../../reference/ydb-cli/install.md).
+
+1. Выполните установку пароля учетной записи `root`:
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb --user root --no-password \
+        yql -s 'ALTER USER root PASSWORD "passw0rd"'
+    ```
+
+    Вместо значения `passw0rd` подставьте необходимый пароль.
+
+1. Создайте дополнительные учетные записи:
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+        yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
+    ```
+
+1. Установите права учетных записей, включив их во встроенные группы:
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+        yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
+    ```
+
+В перечисленных выше примерах команд `<node.ydb.tech>` - FQDN сервера, на котором запущена динамическая нода, обслуживающая базу `/Root/testdb`.
+
+При выполнении команд создания учетных записей и присвоения групп клиент {{ ydb-short-name }} CLI будет запрашивать ввод пароля пользователя `root`. Избежать многократного ввода пароля можно, создав профиль подключения, как описано в [документации {{ ydb-short-name }} CLI](../../reference/ydb-cli/profile/index.md).
+
+Если в кластере была включена защита трафика с использованием TLS, то вместо протокола `grpc` в команде выше следует использовать его защищенный вариант `grpcs`, и дополнительно указать путь к файлу с сертификатом CA в параметре `--ca-file` (либо сохранить в профиле подключения).
+
 ## Протестируйте работу с созданной базой {#try-first-db}
 
-1. Установите {{ ydb-short-name }} CLI, как описано в статье [Установка {{ ydb-short-name }} CLI](../../reference/ydb-cli/install.md):
+1. Установите {{ ydb-short-name }} CLI, как описано в [документации](../../reference/ydb-cli/install.md).
 
 1. Создайте тестовую таблицу `test_table`:
 
@@ -409,3 +503,10 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
    ```
 
    Где `<node.ydb.tech>` - FQDN сервера, на котором запущена динамическая нода, обслуживающая базу `/Root/testdb`.
+
+   Указанную выше команду необходимо будет скорректировать, если в кластере включена защита трафика с использованием TLS или активирован режим аутентификации пользователей. Пример:
+
+   ```bash
+   ydb -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --ca-file ydb-ca.crt --user root scripting yql \
+   --script 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
+   ```

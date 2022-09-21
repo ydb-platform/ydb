@@ -3,12 +3,14 @@
 1. Скачайте пример конфига для соответствующей модели отказа вашего кластера:
 
     * [block-4-2](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/block-4-2.yaml) - для однодатацентрового кластера.
-    * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml) - для crossDC кластера из 9 нод.
-    * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml) - для crossDC кластера из 3 нод.
+    * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml) - для cross-DC кластера из 9 нод.
+    * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml) - для cross-DC кластера из 3 нод.
 
-1. В секции host_configs укажите все диски и их тип на каждой из нод кластера. Возможные варианты типов дисков:
+1. В секции `host_configs` укажите все диски и их тип на каждой из нод кластера. Возможные варианты типов дисков:
+    * ROT: rotational, HDD диски.
+    * SSD: SSD или NVMe диски.
 
-    ```text
+    ```json
     host_configs:
     - drive:
       - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
@@ -16,12 +18,9 @@
       host_config_id: 1
     ```
 
-    * ROT (rotational) - HDD диски.
-    * SSD - SSD или NVMe диски.
-
 1. В секции `hosts` укажите FQDN всех нод, их конфигурацию и расположение по датацентрам (`data_center`) и стойкам (`rack`):
 
-    ```text
+    ```json
     hosts:
     - host: node1.ydb.tech
       host_config_id: 1
@@ -43,4 +42,24 @@
         rack: '1'
     ```
 
-    Более подробная информация по созданию конфигурации приведена в статье [Конфигурация кластера](../../configuration/config.md).
+1. Включите аутентификацию пользователей (опционально).
+
+    Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте в секцию `domains_config` следующие дополнительные параметры:
+
+    ```json
+    domains_config:
+      security_config:
+        enforce_user_token_requirement: true
+        monitoring_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+        administration_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+        viewer_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+    ```

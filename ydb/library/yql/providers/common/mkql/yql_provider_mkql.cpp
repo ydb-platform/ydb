@@ -2382,6 +2382,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockFunc(node.Child(0)->Content(), returnType, args);
     });
 
+    AddCallable("BlockBitCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto arg = MkqlBuildExpr(*node.Child(0), ctx);
+        auto targetType = BuildType(node, *node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockBitCast(arg, targetType);
+    });
+
     AddCallable("PgArray", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         std::vector<TRuntimeNode> args;
         args.reserve(node.ChildrenSize());

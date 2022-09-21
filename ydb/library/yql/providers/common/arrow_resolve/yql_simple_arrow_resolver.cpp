@@ -44,6 +44,27 @@ private:
         }
     }
 
+    bool HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, bool& has, TExprContext& ctx) const override {
+        try {
+            has = false;
+            TScopedAlloc alloc;
+            TTypeEnvironment env(alloc);
+            TProgramBuilder pgmBuilder(env, FunctionRegistry_);
+            TNullOutput null;
+            auto mkqlFromType = NCommon::BuildType(*from, pgmBuilder, null);
+            auto mkqlToType = NCommon::BuildType(*to, pgmBuilder, null);
+            if (!HasArrowCast(mkqlFromType, mkqlToType)) {
+                return true;
+            }
+
+            has = true;
+            return true;
+        } catch (const std::exception& e) {
+            ctx.AddError(TIssue(pos, e.what()));
+            return false;
+        }
+    }
+
 private:
     const IFunctionRegistry& FunctionRegistry_;
 };

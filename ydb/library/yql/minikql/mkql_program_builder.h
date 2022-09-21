@@ -241,6 +241,7 @@ public:
     TRuntimeNode AsScalar(TRuntimeNode value);
 
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
+    TRuntimeNode BlockBitCast(TRuntimeNode value, TType* targetType);
 
     // udfs
     TRuntimeNode Udf(

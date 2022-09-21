@@ -6,6 +6,7 @@
 #include <arrow/visitor.h>
 #include <arrow/compute/registry.h>
 #include <arrow/compute/function.h>
+#include <arrow/compute/cast.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -201,6 +202,20 @@ bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TTy
     }
 
     return true;
+}
+
+bool HasArrowCast(TType* from, TType* to) {
+    bool isOptional;
+    std::shared_ptr<arrow::DataType> fromArrowType, toArrowType;
+    if (!ConvertArrowType(from, isOptional, fromArrowType)) {
+        return false;
+    }
+
+    if (!ConvertArrowType(to, isOptional, toArrowType)) {
+        return false;
+    }
+
+    return arrow::compute::CanCast(*fromArrowType, *toArrowType);
 }
 
 }

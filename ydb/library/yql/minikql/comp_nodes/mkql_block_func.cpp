@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/arrow/mkql_functions.h>
 
 #include <arrow/array/builder_primitive.h>
+#include <arrow/compute/cast.h>
 #include <arrow/compute/exec_internal.h>
 #include <arrow/compute/function.h>
 #include <arrow/compute/kernel.h>
@@ -18,6 +19,56 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+
+arrow::ValueDescr ToValueDescr(TType* type) {
+    bool isOptional;
+    arrow::ValueDescr ret;
+    MKQL_ENSURE(ConvertInputArrowType(type, isOptional, ret), "can't get arrow type");
+    return ret;
+}
+
+std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
+    std::vector<arrow::ValueDescr> res;
+    res.reserve(types.size());
+    for (const auto& type : types) {
+        res.emplace_back(ToValueDescr(type));
+    }
+
+    return res;
+}
+
+const arrow::compute::ScalarKernel& ResolveKernel(const arrow::compute::Function& function, const std::vector<arrow::ValueDescr>& args) {
+    const auto kernel = ARROW_RESULT(function.DispatchExact(args));
+    return *static_cast<const arrow::compute::ScalarKernel*>(kernel);
+}
+
+struct TState : public TComputationValue<TState> {
+    using TComputationValue::TComputationValue;
+
+    TState(TMemoryUsageInfo* memInfo, const arrow::compute::Function& function, const arrow::compute::FunctionOptions* options,
+        const arrow::compute::ScalarKernel& kernel,
+        arrow::compute::FunctionRegistry& registry, const std::vector<arrow::ValueDescr>& argsValuesDescr, TComputationContext& ctx)
+        : TComputationValue(memInfo)
+        , ExecContext(&ctx.ArrowMemoryPool, nullptr, &registry)
+        , KernelContext(&ExecContext)
+        , Executor(arrow::compute::detail::KernelExecutor::MakeScalar())
+    {
+        if (kernel.init) {
+            State = ARROW_RESULT(kernel.init(&KernelContext, { &kernel, argsValuesDescr, options }));
+            KernelContext.SetState(State.get());
+        }
+
+        ARROW_OK(Executor->Init(&KernelContext, { &kernel, argsValuesDescr, options }));
+        Values.reserve(argsValuesDescr.size());
+    }
+
+    arrow::compute::ExecContext ExecContext;
+    arrow::compute::KernelContext KernelContext;
+    std::unique_ptr<arrow::compute::KernelState> State;
+    std::unique_ptr<arrow::compute::detail::KernelExecutor> Executor;
+
+    std::vector<arrow::Datum> Values;
+};
 
 class TBlockFuncWrapper : public TMutableComputationNode<TBlockFuncWrapper> {
 public:
@@ -66,60 +117,10 @@ private:
         return *function;
     }
 
-    static const arrow::compute::ScalarKernel& ResolveKernel(const arrow::compute::Function& function, const std::vector<arrow::ValueDescr>& args) {
-        const auto kernel = ARROW_RESULT(function.DispatchExact(args));
-        return *static_cast<const arrow::compute::ScalarKernel*>(kernel);
-    }
-
-    static arrow::ValueDescr ToValueDescr(TType* type) {
-        bool isOptional;
-        arrow::ValueDescr ret;
-        MKQL_ENSURE(ConvertInputArrowType(type, isOptional, ret), "can't get arrow type");
-        return ret;
-    }
-
-    static std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
-        std::vector<arrow::ValueDescr> res;
-        res.reserve(types.size());
-        for (const auto& type : types) {
-            res.emplace_back(ToValueDescr(type));
-        }
-
-        return res;
-    }
-
-    struct TState : public TComputationValue<TState> {
-        using TComputationValue::TComputationValue;
-
-        TState(TMemoryUsageInfo* memInfo, const arrow::compute::Function& function, const arrow::compute::ScalarKernel& kernel,
-            arrow::compute::FunctionRegistry& registry, const std::vector<arrow::ValueDescr>& argsValuesDescr, TComputationContext& ctx)
-            : TComputationValue(memInfo)
-            , ExecContext(&ctx.ArrowMemoryPool, nullptr, &registry)
-            , KernelContext(&ExecContext)
-            , Executor(arrow::compute::detail::KernelExecutor::MakeScalar())
-        {
-            auto options = function.default_options();
-            if (kernel.init) {
-                State = ARROW_RESULT(kernel.init(&KernelContext, { &kernel, argsValuesDescr, options }));
-                KernelContext.SetState(State.get());
-            }
-
-            ARROW_OK(Executor->Init(&KernelContext, { &kernel, argsValuesDescr, options }));
-            Values.reserve(argsValuesDescr.size());
-        }
-
-        arrow::compute::ExecContext ExecContext;
-        arrow::compute::KernelContext KernelContext;
-        std::unique_ptr<arrow::compute::KernelState> State;
-        std::unique_ptr<arrow::compute::detail::KernelExecutor> Executor;
-
-        std::vector<arrow::Datum> Values;
-    };
-
     TState& GetState(TComputationContext& ctx) const {
         auto& result = ctx.MutableValues[StateIndex];
         if (!result.HasValue()) {
-            result = ctx.HolderFactory.Create<TState>(Function, Kernel, FunctionRegistry, ArgsValuesDescr, ctx);
+            result = ctx.HolderFactory.Create<TState>(Function, Function.default_options(), Kernel, FunctionRegistry, ArgsValuesDescr, ctx);
         }
 
         return *static_cast<TState*>(result.AsBoxed().Get());
@@ -131,6 +132,67 @@ private:
     const TVector<IComputationNode*> ArgsNodes;
     const TVector<TType*> ArgsTypes;
 
+    const std::vector<arrow::ValueDescr> ArgsValuesDescr;
+    arrow::compute::FunctionRegistry& FunctionRegistry;
+    const arrow::compute::Function& Function;
+    const arrow::compute::ScalarKernel& Kernel;
+};
+
+class TBlockBitCastWrapper : public TMutableComputationNode<TBlockBitCastWrapper> {
+public:
+    TBlockBitCastWrapper(TComputationMutables& mutables, IComputationNode* arg, TType* argType, TType* to)
+        : TMutableComputationNode(mutables)
+        , StateIndex(mutables.CurValueIndex++)
+        , Arg(arg)
+        , ArgsValuesDescr({ ToValueDescr(argType) })
+        , FunctionRegistry(*arrow::compute::GetFunctionRegistry())
+        , Function(ResolveFunction(FunctionRegistry, to))
+        , Kernel(ResolveKernel(Function, ArgsValuesDescr))
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        auto& state = GetState(ctx);
+
+        state.Values.clear();
+        state.Values.emplace_back(TArrowBlock::From(Arg->GetValue(ctx)).GetDatum());
+        Y_VERIFY_DEBUG(ArgsValuesDescr[0] == state.Values.back().descr());
+
+        auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
+        ARROW_OK(state.Executor->Execute(state.Values, listener.get()));
+        auto output = state.Executor->WrapResults(state.Values, listener->values());
+        return ctx.HolderFactory.CreateArrowBlock(std::move(output));
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->DependsOn(Arg);
+    }
+
+    static const arrow::compute::Function& ResolveFunction(const arrow::compute::FunctionRegistry& registry, TType* to) {
+        bool isOptional;
+        std::shared_ptr<arrow::DataType> type;
+        MKQL_ENSURE(ConvertArrowType(to, isOptional, type), "can't get arrow type");
+
+        auto function = ARROW_RESULT(arrow::compute::GetCastFunction(type));
+        MKQL_ENSURE(function != nullptr, "missing function");
+        MKQL_ENSURE(function->kind() == arrow::compute::Function::SCALAR, "expected SCALAR function");
+        return *function;
+    }
+
+    TState& GetState(TComputationContext& ctx) const {
+        auto& result = ctx.MutableValues[StateIndex];
+        if (!result.HasValue()) {
+            arrow::compute::CastOptions options(false);
+            result = ctx.HolderFactory.Create<TState>(Function, (const arrow::compute::FunctionOptions*)&options, Kernel, FunctionRegistry, ArgsValuesDescr, ctx);
+        }
+
+        return *static_cast<TState*>(result.AsBoxed().Get());
+    }
+
+private:
+    const ui32 StateIndex;
+    IComputationNode* Arg;
     const std::vector<arrow::ValueDescr> ArgsValuesDescr;
     arrow::compute::FunctionRegistry& FunctionRegistry;
     const arrow::compute::Function& Function;
@@ -155,6 +217,17 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
         funcName,
         std::move(argsNodes),
         std::move(argsTypes)
+    );
+}
+
+IComputationNode* WrapBlockBitCast(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+    auto argNode = LocateNode(ctx.NodeLocator, callable, 0);
+    MKQL_ENSURE(callable.GetInput(1).GetStaticType()->IsType(), "Expected type");
+    return new TBlockBitCastWrapper(ctx.Mutables,
+        argNode,
+        callable.GetType()->GetArgumentType(0),
+        static_cast<TType*>(callable.GetInput(1).GetNode())
     );
 }
 

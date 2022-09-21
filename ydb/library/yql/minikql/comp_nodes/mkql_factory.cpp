@@ -264,6 +264,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"ToBlocks", &WrapToBlocks},
         {"WideToBlocks", &WrapWideToBlocks},
         {"BlockFunc", &WrapBlockFunc},
+        {"BlockBitCast", &WrapBlockBitCast},
         {"FromBlocks", &WrapFromBlocks},
         {"WideFromBlocks", &WrapWideFromBlocks},
         {"AsScalar", &WrapAsScalar},

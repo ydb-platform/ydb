@@ -449,43 +449,70 @@ private:
     const size_t Width_;
 };
 
-arrow::Datum ExtractLiteral(TRuntimeNode n) {
-    if (n.GetStaticType()->IsOptional()) {
-        const auto* dataLiteral = AS_VALUE(TOptionalLiteral, n);
-        if (!dataLiteral->HasItem()) {
-            bool isOptional;
-            auto unpacked = UnpackOptionalData(dataLiteral->GetType(), isOptional);
-            std::shared_ptr<arrow::DataType> type;
-            MKQL_ENSURE(ConvertArrowType(unpacked, isOptional, type), "Unsupported type of literal");
-            return arrow::MakeNullScalar(type);
-        }
-        n = dataLiteral->GetItem();
+class TAsScalarWrapper : public TMutableComputationNode<TAsScalarWrapper> {
+public:
+    TAsScalarWrapper(TComputationMutables& mutables, IComputationNode* arg, TType* type)
+        : TMutableComputationNode(mutables)
+        , Arg_(arg)
+    {
+        bool isOptional;
+        auto unpacked = UnpackOptionalData(type, isOptional);
+        MKQL_ENSURE(ConvertArrowType(unpacked, isOptional, Type_), "Unsupported type of scalar");
+        Slot_ = *unpacked->GetDataSlot();
     }
 
-    const auto* dataLiteral = AS_VALUE(TDataLiteral, n);
-    switch (*dataLiteral->GetType()->GetDataSlot()) {
-    case NUdf::EDataSlot::Bool:
-        return arrow::Datum(static_cast<bool>(dataLiteral->AsValue().Get<bool>()));
-    case NUdf::EDataSlot::Int8:
-        return arrow::Datum(static_cast<int8_t>(dataLiteral->AsValue().Get<i8>()));
-    case NUdf::EDataSlot::Uint8:
-        return arrow::Datum(static_cast<uint8_t>(dataLiteral->AsValue().Get<ui8>()));
-    case NUdf::EDataSlot::Int16:
-        return arrow::Datum(static_cast<int16_t>(dataLiteral->AsValue().Get<i16>()));
-    case NUdf::EDataSlot::Uint16:
-        return arrow::Datum(static_cast<uint16_t>(dataLiteral->AsValue().Get<ui16>()));
-    case NUdf::EDataSlot::Int32:
-        return arrow::Datum(static_cast<int32_t>(dataLiteral->AsValue().Get<i32>()));
-    case NUdf::EDataSlot::Uint32:
-        return arrow::Datum(static_cast<uint32_t>(dataLiteral->AsValue().Get<ui32>()));
-    case NUdf::EDataSlot::Int64:
-        return arrow::Datum(static_cast<int64_t>(dataLiteral->AsValue().Get<i64>()));
-    case NUdf::EDataSlot::Uint64:
-        return arrow::Datum(static_cast<uint64_t>(dataLiteral->AsValue().Get<ui64>()));
-    default:
-        MKQL_ENSURE(false, "Unsupported data slot");
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        auto value = Arg_->GetValue(ctx);
+        arrow::Datum result;
+        if (!value) {
+            result = arrow::MakeNullScalar(Type_);
+        } else {
+            switch (Slot_) {
+            case NUdf::EDataSlot::Bool:
+                result = arrow::Datum(static_cast<bool>(value.Get<bool>()));
+                break;
+            case NUdf::EDataSlot::Int8:
+                result = arrow::Datum(static_cast<int8_t>(value.Get<i8>()));
+                break;
+            case NUdf::EDataSlot::Uint8:
+                result = arrow::Datum(static_cast<uint8_t>(value.Get<ui8>()));
+                break;
+            case NUdf::EDataSlot::Int16:
+                result = arrow::Datum(static_cast<int16_t>(value.Get<i16>()));
+                break;
+            case NUdf::EDataSlot::Uint16:
+                result = arrow::Datum(static_cast<uint16_t>(value.Get<ui16>()));
+                break;
+            case NUdf::EDataSlot::Int32:
+                result = arrow::Datum(static_cast<int32_t>(value.Get<i32>()));
+                break;
+            case NUdf::EDataSlot::Uint32:
+                result = arrow::Datum(static_cast<uint32_t>(value.Get<ui32>()));
+                break;
+            case NUdf::EDataSlot::Int64:
+                result = arrow::Datum(static_cast<int64_t>(value.Get<i64>()));
+                break;
+            case NUdf::EDataSlot::Uint64:
+                result = arrow::Datum(static_cast<uint64_t>(value.Get<ui64>()));
+                break;
+            default:
+                MKQL_ENSURE(false, "Unsupported data slot");
+            }
+        }
+
+        return ctx.HolderFactory.CreateArrowBlock(std::move(result));
     }
-}
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Arg_);
+    }
+
+private:
+    IComputationNode* const Arg_;
+    std::shared_ptr<arrow::DataType> Type_;
+    NUdf::EDataSlot Slot_;
+};
 
 }
 
@@ -545,8 +572,7 @@ IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNode
 IComputationNode* WrapAsScalar(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
-    auto value = ExtractLiteral(callable.GetInput(0U));
-    return ctx.NodeFactory.CreateImmutableNode(ctx.HolderFactory.CreateArrowBlock(std::move(value)));
+    return new TAsScalarWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), callable.GetInput(0).GetStaticType());
 }
 
 }

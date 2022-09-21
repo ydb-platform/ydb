@@ -34,7 +34,12 @@ using TPeepHoleOptimizerMap = std::unordered_map<std::string_view, TPeepHoleOpti
 using TExtPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types);
 using TExtPeepHoleOptimizerMap = std::unordered_map<std::string_view, TExtPeepHoleOptimizerPtr>;
 
-using TBlockFuncMap = std::unordered_map<std::string_view, std::string_view>;
+struct TBlockFuncRule {
+    std::string_view Name;
+    bool BitcastToReturnType = false;
+};
+
+using TBlockFuncMap = std::unordered_map<std::string_view, TBlockFuncRule>;
 
 TExprNode::TPtr MakeNothing(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx) {
     return ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *ctx.MakeType<TOptionalExprType>(&type), ctx)});
@@ -4304,8 +4309,8 @@ TExprNode::TPtr OptimizeWideChopper(const TExprNode::TPtr& node, TExprContext& c
 struct TBlockRules {
 
     static constexpr std::initializer_list<TBlockFuncMap::value_type> FuncsInit = {
-        {"+", "add" },
-        {"Not", "invert" },
+        {"+", {"add", true} },
+        {"Not", {"invert", false} },
     };
 
     TBlockRules()
@@ -4377,7 +4382,7 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
         }
 
         TExprNode::TListType funcArgs;
-        funcArgs.push_back(ctx.NewAtom(node->Pos(), fit->second));
+        funcArgs.push_back(ctx.NewAtom(node->Pos(), fit->second.Name));
         for (const auto& child : node->Children()) {
             if (child->IsComplete()) {
                 funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { child }));
@@ -4401,9 +4406,45 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
             }
         }
 
-        YQL_ENSURE(types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), fit->second, argTypes, outType, ctx));
-        if (!outType) {
+        YQL_ENSURE(types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), fit->second.Name, argTypes, outType, ctx));
+        if (!outType && !fit->second.BitcastToReturnType) {
             return true;
+        }
+
+        if (!outType) {
+            argTypes.clear();
+            for (const auto& child : node->Children()) {
+                if (child->IsComplete()) {
+                    argTypes.push_back(ctx.MakeType<TScalarExprType>(node->GetTypeAnn()));
+                } else {
+                    argTypes.push_back(ctx.MakeType<TBlockExprType>(node->GetTypeAnn()));
+                }
+            }
+
+            YQL_ENSURE(types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), fit->second.Name, argTypes, outType, ctx));
+            if (!outType) {
+                return true;
+            }
+
+            auto typeNode = ExpandType(node->Pos(), *node->GetTypeAnn(), ctx);
+            for (ui32 i = 1; i < funcArgs.size(); ++i) {
+                if (IsSameAnnotation(*node->Child(i-1)->GetTypeAnn(), *node->GetTypeAnn())) {
+                    continue;
+                }
+
+                if (node->Child(i-1)->IsComplete()) {
+                    funcArgs[i] = ctx.Builder(node->Pos())
+                        .Callable("AsScalar")
+                            .Callable(0, "BitCast")
+                                .Add(0, funcArgs[i]->HeadPtr())
+                                .Add(1, typeNode)
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else {
+                    funcArgs[i] = ctx.NewCallable(node->Pos(), "BlockBitCast", { funcArgs[i], typeNode });
+                }
+            }
         }
 
         bool isScalar;

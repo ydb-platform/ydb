@@ -5,6 +5,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/wilson.h>
 #include <ydb/core/kqp/runtime/kqp_channel_storage.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
@@ -19,6 +20,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/wilson/wilson_profile_span.h>
 
 #include <util/generic/deque.h>
 
@@ -122,8 +124,10 @@ public:
         , Snapshot(snapshot)
         , ShardsScanningPolicy(shardsScanningPolicy)
         , Counters(counters)
-        , InFlightShards(ShardsScanningPolicy)
+        , KqpComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, TBase::ComputeActorSpan.GetTraceId(), "KqpScanActor", NWilson::EFlags::AUTO_END)
+        , InFlightShards(ShardsScanningPolicy, KqpComputeActorSpan)
     {
+        KqpComputeActorSpan.SetEnabled(IS_DEBUG_LOG_ENABLED(NKikimrServices::KQP_COMPUTE));
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
         YQL_ENSURE(!Meta.GetReads().empty());
         YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
@@ -191,8 +195,8 @@ public:
     STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpCompute::TEvCostData, HandleExecute)
-                    hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
+                hFunc(TEvKqpCompute::TEvCostData, HandleExecute);
+                hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
                 hFunc(TEvKqpCompute::TEvScanData, HandleExecute);
                 hFunc(TEvKqpCompute::TEvScanError, HandleExecute);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleExecute);
@@ -353,6 +357,7 @@ private:
     }
 
     void StartCostsRequest(TShardCostsState::TPtr state) {
+        KqpComputeActorSpan.AddMin("Costs");
         TSmallVec<TSerializedTableRange> serializedTableRanges = TShardCostsState::BuildSerializedTableRanges(state->GetReadData());
         THolder<TEvDataShard::TEvKqpScan> ev = BuildEvKqpScan(state->GetScanId(), 0, serializedTableRanges);
         ev->Record.SetCostDataOnly(true);
@@ -361,6 +366,7 @@ private:
     }
 
     void HandleExecute(TEvKqpCompute::TEvCostData::TPtr& ev) {
+        KqpComputeActorSpan.AddMax("Costs");
         const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta* read = nullptr;
         TSmallVec<TSerializedTableRange> ranges;
         Y_VERIFY(InFlightShards.ProcessCostReply(ev, read, ranges));
@@ -440,6 +446,8 @@ private:
     }
 
     void ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) {
+        auto gTime = KqpComputeActorSpan.StartStackTimeGuard("ProcessPendingScanDataItem");
+
         auto& msg = *ev->Get();
 
         auto state = GetShardState(msg, ev->Sender);
@@ -497,10 +505,7 @@ private:
             Stats.CompleteShard(state);
             StopReadChunk(*state);
             CA_LOG_T("TRACE:" << InFlightShards.TraceToString() << ":" << CalculateFreeSpace());
-
-            if (!StartTableScan()) {
-                stopFinally = true;
-            }
+            stopFinally = !StartTableScan();
         }
         if (stopFinally) {
             ScanData->Finish();
@@ -508,6 +513,7 @@ private:
             CA_LOG_D("EVLOGKQP(scans_count:" << ScansCounter << ";max_in_flight:" << MaxInFlight << ")"
                 << Endl << InFlightShards.GetDurationStats()
                 << Endl << InFlightShards.StatisticsToString()
+                << KqpComputeActorSpan.ProfileToString()
             );
             if (ScanData->BasicStats) {
                 ScanData->BasicStats->AffectedShards = InFlightShards.GetAffectedShards().size();
@@ -542,7 +548,10 @@ private:
 
         if (state->State == EShardState::Running || state->State == EShardState::PostRunning) {
             ProcessPendingScanDataItem(ev, enqueuedAt);
-            DoExecute();
+            {
+                auto gTime = KqpComputeActorSpan.StartStackTimeGuard("DoExecute");
+                DoExecute();
+            }
         } else {
             TerminateExpiredScan(ev->Sender, "Cancel expired scan");
         }
@@ -964,7 +973,10 @@ private:
     void EnqueueResolveShard(TShardState::TPtr state) {
         CA_LOG_D("Enqueue for resolve " << state->TabletId << " chunk " << state->ScannerIdx);
         YQL_ENSURE(StopReadChunk(*state));
-        DoExecute();
+        {
+            auto gTime = KqpComputeActorSpan.StartStackTimeGuard("DoExecute");
+            DoExecute();
+        }
         PendingResolveShards.emplace_back(*state);
         if (PendingResolveShards.size() == 1) {
             ResolveNextShard();
@@ -972,6 +984,7 @@ private:
     }
 
     bool StopReadChunk(const TShardState& state) {
+        auto gTime = KqpComputeActorSpan.StartStackTimeGuard("StopReadChunk");
         CA_LOG_D("Unlink from tablet " << state.TabletId << " chunk " << state.ScannerIdx << " and stop reading from it.");
         const ui64 tabletId = state.TabletId;
         const ui32 scannerIdx = state.ScannerIdx;
@@ -1167,6 +1180,7 @@ private:
     std::deque<TShardState> PendingShards;
     std::deque<TShardState> PendingResolveShards;
 
+    NWilson::TProfileSpan KqpComputeActorSpan;
     TInFlightShards InFlightShards;
     ui32 ScansCounter = 0;
 

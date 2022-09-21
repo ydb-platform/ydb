@@ -2,6 +2,7 @@
 #include "kqp_compute_actor.h"
 #include "kqp_compute_state.h"
 #include "kqp_scan_compute_stat.h"
+#include <library/cpp/actors/wilson/wilson_profile_span.h>
 
 namespace NKikimr::NKqp::NComputeActor {
 
@@ -20,9 +21,12 @@ private:
     std::map<ui64, TShardCostsState::TPtr> CostRequestsByShardId;
     const TShardsScanningPolicy& ScanningPolicy;
     bool IsActiveFlag = true;
+    NWilson::TProfileSpan& KqpProfileSpan;
+    THolder<NWilson::TSpan> CostsDataSpan;
 public:
-    TInFlightShards(const TShardsScanningPolicy& scanningPolicy)
+    TInFlightShards(const TShardsScanningPolicy& scanningPolicy, NWilson::TProfileSpan& kqpProfileSpan)
         : ScanningPolicy(scanningPolicy)
+        , KqpProfileSpan(kqpProfileSpan)
     {
 
     }

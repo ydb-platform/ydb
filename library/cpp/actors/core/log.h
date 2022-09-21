@@ -32,6 +32,16 @@
              0ull)                                                                               \
     )
 
+#define IS_EMERG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_EMERG, component)
+#define IS_ALERT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_ALERT, component)
+#define IS_CRIT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_CRIT, component)
+#define IS_ERROR_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_ERROR, component)
+#define IS_WARN_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_WARN, component)
+#define IS_NOTICE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_NOTICE, component)
+#define IS_INFO_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_INFO, component)
+#define IS_DEBUG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_DEBUG, component)
+#define IS_TRACE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_TRACE, component)
+
 #define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
     do {                                                                                                                       \
         ::NActors::NLog::TSettings* mSettings = static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()); \

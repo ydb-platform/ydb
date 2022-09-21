@@ -1,4 +1,5 @@
 #include "kqp_scan_compute_manager.h"
+#include <ydb/core/base/wilson.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -93,6 +94,10 @@ void TInFlightShards::ClearAll() {
     AllocatedGenerations.clear();
     StatesByIndex.clear();
     NeedAckStates.clear();
+    if (CostsDataSpan) {
+        CostsDataSpan->End();
+        CostsDataSpan.Destroy();
+    }
 }
 
 bool TInFlightShards::ProcessCostReply(TEvKqpCompute::TEvCostData::TPtr ev, const TShardCostsState::TReadData*& readData, TSmallVec<TSerializedTableRange>& result) {
@@ -106,10 +111,18 @@ bool TInFlightShards::ProcessCostReply(TEvKqpCompute::TEvCostData::TPtr ev, cons
     }
     CostRequestsByShardId.erase(it->second->GetShardId());
     CostRequestsByScanId.erase(it);
+    if (CostRequestsByScanId.empty()) {
+        Y_VERIFY(CostsDataSpan);
+        CostsDataSpan->End();
+        CostsDataSpan.Destroy();
+    }
     return true;
 }
 
 TShardCostsState::TPtr TInFlightShards::PrepareCostRequest(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& read) {
+    if (!CostsDataSpan) {
+        CostsDataSpan = MakeHolder<NWilson::TSpan>(NKikimr::TWilsonKqp::ComputeActor, KqpProfileSpan.GetTraceId(), "Costs");
+    }
     const ui32 scanId = CostRequestsByScanId.size() + 1;
     auto costsState = std::make_shared<TShardCostsState>(scanId, &read);
     Y_VERIFY(CostRequestsByScanId.emplace(scanId, costsState).second);

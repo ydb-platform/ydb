@@ -3,7 +3,7 @@
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data.h>
 #include "hullds_sstvec.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksstmngr.h>
+#include "hulldb_bulksstmngr.h"
 
 #include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 

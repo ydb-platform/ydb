@@ -16,8 +16,8 @@ add_subdirectory(generic)
 add_subdirectory(recovery)
 add_subdirectory(test)
 
-add_library(blobstorage-vdisk-hulldb)
-target_link_libraries(blobstorage-vdisk-hulldb PUBLIC
+add_library(blobstorage-vdisk-hulldb INTERFACE)
+target_link_libraries(blobstorage-vdisk-hulldb INTERFACE
   contrib-libs-cxxsupp
   yutil
   core-blobstorage-base
@@ -30,7 +30,4 @@ target_link_libraries(blobstorage-vdisk-hulldb PUBLIC
   vdisk-hulldb-recovery
   vdisk-hulldb-bulksst_add
   ydb-core-protos
-)
-target_sources(blobstorage-vdisk-hulldb PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksstmngr.cpp
 )

@@ -19,6 +19,7 @@ target_link_libraries(vdisk-hulldb-generic PUBLIC
 )
 target_sources(vdisk-hulldb-generic PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hulloptlsn.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstmngr.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst.cpp

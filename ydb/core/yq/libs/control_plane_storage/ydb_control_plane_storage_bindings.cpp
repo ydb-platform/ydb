@@ -107,6 +107,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         content.acl().visibility(),
         YdbConnection->TablePathPrefix);
 
+    auto connectionValidator = CreateBindingConnectionValidator(
+        scope,
+        connectionId,
+        user,
+        YdbConnection->TablePathPrefix);
+
+
     TVector<TValidationQuery> validators;
     if (idempotencyKey) {
         validators.push_back(CreateIdempotencyKeyValidator(scope, idempotencyKey, response, YdbConnection->TablePathPrefix));
@@ -115,6 +122,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
     validators.push_back(validatorName);
     validators.push_back(validatorCountBindings);
     validators.push_back(validatorConnectionExists);
+    validators.push_back(connectionValidator);
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};

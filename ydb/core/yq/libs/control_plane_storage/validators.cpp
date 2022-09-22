@@ -333,6 +333,42 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
     return {query.Sql, query.Params, validator};
 }
 
+TValidationQuery CreateBindingConnectionValidator(const TString& scope,
+                                                 const TString& connectionId,
+                                                 const TString& user,
+                                                 const TString& tablePathPrefix) {
+    TSqlQueryBuilder queryBuilder(tablePathPrefix);
+    queryBuilder.AddString("scope", scope);
+    queryBuilder.AddString("connection_id", connectionId);
+    queryBuilder.AddString("user", user);
+    queryBuilder.AddInt64("private_visibility", YandexQuery::Acl::PRIVATE);
+    queryBuilder.AddText(
+        "$name = SELECT `" NAME_COLUMN_NAME "`\n"
+        "FROM `" CONNECTIONS_TABLE_NAME "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;\n"
+        "SELECT `" CONNECTION_ID_COLUMN_NAME "`, `" NAME_COLUMN_NAME "`\n"
+        "FROM `" CONNECTIONS_TABLE_NAME "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` != $connection_id AND `" USER_COLUMN_NAME "` = $user AND `" NAME_COLUMN_NAME "` = $name AND `" VISIBILITY_COLUMN_NAME "` = $private_visibility;\n"
+    );
+
+    auto validator = [connectionId](NYdb::NTable::TDataQueryResult result) {
+        const auto& resultSets = result.GetResultSets();
+        if (resultSets.size() != 1) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+        }
+
+        TResultSetParser parser(resultSets.front());
+        if (!parser.TryNextRow()) {
+            return false;
+        }
+
+        TString privateConnectionName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
+        TString privateConnectionId = parser.ColumnParser(CONNECTION_ID_COLUMN_NAME).GetOptionalString().GetOrElse("");
+
+        ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The connection with id " << connectionId << " is overridden by the private conection with id " << privateConnectionId << " (" << privateConnectionName << "). Please rename the private connection or use another connection";
+    };
+    const auto query = queryBuilder.Build();
+    return {query.Sql, query.Params, validator};
+}
+
 TValidationQuery CreateTtlValidator(const TString& tableName,
                                     const TString& columnName,
                                     const TString& scope,

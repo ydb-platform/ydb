@@ -34,7 +34,14 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
+    void ValidateAuth(TConfig& config);
+    void PutAuthMethod(std::shared_ptr<IProfile> profile, const TString& id, const TString& value);
+    void PutAuthStatic(std::shared_ptr<IProfile> profile, const TString& user, const TString& pass);
+    void PutAuthMethodWithoutPars(std::shared_ptr<IProfile> profile, const TString& id);
+    bool AnyProfileOptionInCommandLine(TConfig& config);
     TString ProfileName;
+    bool UseMetadataCredentials = false;
+    bool Interactive;
 };
 
 class TCommandDeleteProfile : public TClientCommand {

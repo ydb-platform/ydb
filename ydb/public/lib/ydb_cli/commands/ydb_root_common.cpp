@@ -340,10 +340,11 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
     }
     bool knownMethod = false;
     if (config.UseIamAuth) {
-        knownMethod |= (authMethod == "iam-token" || authMethod == "yc-token" || authMethod == "sa-key-file");
+        knownMethod |= (authMethod == "iam-token" || authMethod == "yc-token" || authMethod == "sa-key-file" || 
+                        authMethod == "token-file" || authMethod == "yc-token-file");
     }
     if (config.UseOAuthToken) {
-        knownMethod |= (authMethod == "ydb-token");
+        knownMethod |= (authMethod == "ydb-token" || authMethod == "token-file");
     }
     if (config.UseStaticCredentials) {
         knownMethod |= (authMethod == "static-credentials");
@@ -362,11 +363,23 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             PrintSettingFromProfile("iam token", profile, explicitOption);
         }
         config.SecurityToken = authData.as<TString>();
+    } else if (authMethod == "token-file") {
+        if (IsVerbose()) {
+            PrintSettingFromProfile("token file", profile, explicitOption);
+        }
+        TString filename = authData.as<TString>();
+        config.SecurityToken = ReadFromFile(filename, "token");
     } else if (authMethod == "yc-token") {
         if (IsVerbose()) {
             PrintSettingFromProfile("Yandex.Cloud Passport token (yc-token)", profile, explicitOption);
         }
         config.YCToken = authData.as<TString>();
+    } else if (authMethod == "yc-token-file") {
+        if (IsVerbose()) {
+            PrintSettingFromProfile("Yandex.Cloud Passport token file (yc-token-file)", profile, explicitOption);
+        }
+        TString filename = authData.as<TString>();
+        config.YCToken = ReadFromFile(filename, "token");
     } else if (authMethod == "sa-key-file") {
         if (IsVerbose()) {
             PrintSettingFromProfile("service account key file (sa-key-file)", profile, explicitOption);
@@ -390,6 +403,15 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 DoNotAskForPassword = true;
             }
         }
+        if (authData["password-file"]) {
+            TString filename = authData["password-file"].as<TString>();
+            config.StaticCredentials.Password = ReadFromFile(filename, "password", true);
+            if (!config.StaticCredentials.Password) {
+                DoNotAskForPassword = true;
+            }
+
+        }
+
     } else {
         return false;
     }

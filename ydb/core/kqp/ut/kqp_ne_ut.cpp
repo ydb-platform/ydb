@@ -1145,6 +1145,32 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST_TWIN(PureTxMixedWithDeferred, UseSessionActor) {
+        auto settings = TKikimrSettings()
+            .SetEnableKqpSessionActor(UseSessionActor);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (3u, "Three")
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+            SELECT 1=1;
+        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        CompareYson(R"(
+            [ [%true]; ]
+        )", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_TWIN(PrunePartitionsByLiteral, UseSessionActor) {
         auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();

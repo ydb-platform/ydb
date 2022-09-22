@@ -19,6 +19,59 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicPutAndGet(tenv, 11, tenv.BlobDepot);
     }
 
+    Y_UNIT_TEST(GetBlockedTabletGeneration) {
+        ui32 seed;
+        Seed().LoadOrFail(&seed, sizeof(seed));
+        TBlobDepotTestEnvironment tenv(seed);
+
+        constexpr ui32 tabletId = 10;
+        constexpr ui32 cookie = 1;
+        constexpr ui32 tabletGeneration = 3;
+
+        TBlobInfo blob(tenv.DataGen(100), tabletId, cookie, tabletGeneration);
+
+        auto& env = *tenv.Env;
+        constexpr ui32 nodeId = 1;
+        auto groupId = tenv.BlobDepot;
+
+        TBSState state;
+        state[tabletId];
+
+        // write blob to blob depot
+        VerifiedPut(env, nodeId, groupId, blob, state);
+
+        // block all tablet generations <= tabletGeneration
+        VerifiedBlock(env, nodeId, groupId, tabletId, tabletGeneration, state);
+
+        // do TEvGet with Reader* params 
+        auto mustRestoreFirst = false;
+        auto isIndexOnly = false;
+        ui32 forceBlockedGeneration = 0;
+
+        auto ev = std::make_unique<TEvBlobStorage::TEvGet>(
+            blob.Id,
+            0,
+            blob.Id.BlobSize(),
+            TInstant::Max(),
+            NKikimrBlobStorage::EGetHandleClass::FastRead, 
+            mustRestoreFirst,
+            isIndexOnly,
+            forceBlockedGeneration);
+        ev->ReaderTabletId = tabletId;
+        ev->ReaderTabletGeneration = tabletGeneration;
+
+        auto sender = tenv.Env->Runtime->AllocateEdgeActor(nodeId);
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, groupId, ev.release(), cookie);
+        });
+
+        auto res = CaptureTEvGetResult(env, sender, true, true);
+
+        // check that TEvGet returns BLOCKED
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::BLOCKED);
+    }
+
     Y_UNIT_TEST(BasicRange) {
         ui32 seed;
         Seed().LoadOrFail(&seed, sizeof(seed));

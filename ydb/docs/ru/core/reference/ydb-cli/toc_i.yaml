@@ -46,13 +46,13 @@ items:
     - name: Добавление читателя топика
       href: topic-consumer-add.md
     - name: Удаление читателя топика
-      href: topic-consumer-drop.md    
+      href: topic-consumer-drop.md
     - name: Чтение из топика
-      href: topic-read.md    
+      href: topic-read.md
     - name: Запись в топик
-      href: topic-write.md    
+      href: topic-write.md
     - name: Конвейерная обработка сообщений
-      href: topic-pipeline.md    
+      href: topic-pipeline.md
 #  - name: Утилиты
 #    items:
     # - name: Копирование таблиц
@@ -77,5 +77,6 @@ items:
       href: commands/workload/index.md
     - name: Stock нагрузка
       href: commands/workload/stock.md
-
+    - name: Kv нагрузка
+      href: commands/workload/kv.md
 

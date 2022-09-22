@@ -366,6 +366,9 @@ private:
     }
 
     void HandleExecute(TEvKqpCompute::TEvCostData::TPtr& ev) {
+        if (!InFlightShards.IsActive()) {
+            return;
+        }
         KqpComputeActorSpan.AddMax("Costs");
         const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta* read = nullptr;
         TSmallVec<TSerializedTableRange> ranges;
@@ -379,6 +382,9 @@ private:
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
+        if (!InFlightShards.IsActive()) {
+            return;
+        }
         YQL_ENSURE(ScanData);
         auto& msg = ev->Get()->Record;
         auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
@@ -404,6 +410,9 @@ private:
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
+        if (!InFlightShards.IsActive()) {
+            return;
+        }
         YQL_ENSURE(ScanData);
         auto& msg = *ev->Get();
         auto state = GetShardState(msg, ev->Sender);
@@ -434,6 +443,7 @@ private:
         std::vector<TShardState::TPtr> currentScans;
         for (auto&& i : InFlightShards) {
             for (auto&& s : i.second) {
+                TerminateChunk(s.second);
                 currentScans.emplace_back(s.second);
             }
         }
@@ -558,6 +568,9 @@ private:
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
+        if (!InFlightShards.IsActive()) {
+            return;
+        }
         YQL_ENSURE(ScanData);
         auto& msg = ev->Get()->Record;
 
@@ -595,6 +608,9 @@ private:
     }
 
     void HandleExecute(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        if (!InFlightShards.IsActive()) {
+            return;
+        }
         YQL_ENSURE(ScanData);
         auto& msg = *ev->Get();
 
@@ -619,6 +635,9 @@ private:
     }
 
     void HandleExecute(TEvPrivate::TEvRetryShard::TPtr& ev) {
+        if (!InFlightShards.IsActive()) {
+            return;
+        }
         if (ev->Get()->IsCostsRequest) {
             auto costsState = InFlightShards.GetCostsState(ev->Get()->TabletId);
             if (!costsState) {
@@ -639,6 +658,9 @@ private:
     }
 
     void HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        if (!InFlightShards.IsActive()) {
+            return;
+        }
         YQL_ENSURE(ScanData);
         YQL_ENSURE(!PendingResolveShards.empty());
         auto state = std::move(PendingResolveShards.front());
@@ -961,6 +983,14 @@ private:
 
         auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Cancel unexpected/expired scan");
         Send(actorId, abortEv.Release());
+    }
+
+    void TerminateChunk(TShardState::TPtr sState) {
+        if (!sState->ActorId) {
+            return;
+        }
+        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Cancel scan");
+        Send(sState->ActorId, abortEv.Release());
     }
 
     void ResolveNextShard() {

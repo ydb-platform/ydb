@@ -100,7 +100,7 @@ public:
         Y_VERIFY(!nodesInfo->Nodes.empty());
         Nodes.reserve(nodesInfo->Nodes.size());
         for (const auto& ni : nodesInfo->Nodes) {
-            if (ni.Port != AppData(ctx)->PQConfig.GetLegacyApiPort()) continue;
+            if (ni.Port > AppData(ctx)->PQConfig.GetMaxStorageNodePort()) continue;
             NodeNames[ni.NodeId] = ni.Host;
             NodeDataCenter[ni.NodeId] = ni.Location.GetDataCenterId();
             SendRequest(ni.NodeId, ctx);

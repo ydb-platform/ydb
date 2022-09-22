@@ -169,7 +169,7 @@ message TPQConfig {
     }
     optional TPQDiscoveryConfig PQDiscoveryConfig = 46;
 
-    optional uint32 LegacyApiPort = 50 [default = 2135];
+    optional uint32 MaxStorageNodePort = 50 [default = 19001];
 }
 
 message TChannelProfile {

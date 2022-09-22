@@ -19,6 +19,7 @@ target_link_libraries(blobstorage-vdisk-hullop PUBLIC
   vdisk-hulldb-cache_block
   vdisk-hulldb-recovery
   vdisk-hulldb-bulksst_add
+  vdisk-hulldb-compstrat
   vdisk-hullop-hullcompdelete
   blobstorage-vdisk-handoff
   blobstorage-vdisk-synclog

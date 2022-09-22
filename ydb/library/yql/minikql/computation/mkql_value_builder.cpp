@@ -233,7 +233,7 @@ void TDefaultValueBuilder::ExportArrowBlock(NUdf::TUnboxedValuePod value, bool& 
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::ImportArrowBlock(ArrowArray* array, const NUdf::IArrowType& type, bool isScalar) const {
-    const auto dataType = ((const TArrowType&)type).GetType();
+    const auto dataType = static_cast<const TArrowType&>(type).GetType();
     auto arrRes = arrow::ImportArray(array, dataType);
     if (!arrRes.status().ok()) {
         UdfTerminate(arrRes.status().ToString().c_str());

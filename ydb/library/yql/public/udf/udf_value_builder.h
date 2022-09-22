@@ -9,8 +9,12 @@
 
 #include <array>
 
+struct ArrowArray;
+
 namespace NYql {
 namespace NUdf {
+
+class IArrowType;
 
 ///////////////////////////////////////////////////////////////////////////////
 // IDictValueBuilder
@@ -192,8 +196,10 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 class IValueBuilder5: public IValueBuilder4 {
 public:
-    virtual void Unused1() const = 0;
-    virtual void Unused2() const = 0;
+    // returns array with one element for scalars
+    virtual void ExportArrowBlock(TUnboxedValuePod value, bool& isScalar, ArrowArray* out) const = 0;
+    // the ArrowArray struct has its contents moved to a private object held alive by the result.
+    virtual TUnboxedValue ImportArrowBlock(ArrowArray* array, const IArrowType& type, bool isScalar) const = 0;
     virtual void Unused3() const = 0;
 };
 #endif

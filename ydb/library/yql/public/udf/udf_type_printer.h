@@ -2,11 +2,12 @@
 
 #include "udf_string_ref.h"
 #include "udf_types.h"
+#include "udf_type_inspection.h"
 
 namespace NYql {
 namespace NUdf {
 
-class TTypePrinter1 : private ITypeVisitor
+class TTypePrinter1 : private TStubTypeVisitor
 {
 public:
     TTypePrinter1(const ITypeInfoHelper1& typeHelper, const TType* type);
@@ -78,7 +79,6 @@ protected:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 class TTypePrinter5 : public TTypePrinter4 {
 public:
-    using TTypePrinter4::TTypePrinter4;
     TTypePrinter5(const ITypeInfoHelper2& typeHelper, const TType* type);
 
 protected:
@@ -94,7 +94,24 @@ private:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+class TTypePrinter6 : public TTypePrinter5 {
+public:
+    using TTypePrinter5::TTypePrinter5;
+
+protected:
+    void OnBlock(const TType* itemType, bool isScalar) final {
+        OnBlockImpl(itemType, isScalar);
+    }
+
+private:
+    void OnBlockImpl(const TType* itemType, bool isScalar);
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+using TTypePrinter = TTypePrinter6;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 using TTypePrinter = TTypePrinter5;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 using TTypePrinter = TTypePrinter4;

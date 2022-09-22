@@ -4,6 +4,8 @@
 #include <ydb/library/yql/public/udf/udf_type_printer.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <arrow/c/abi.h>
+
 namespace NKikimr {
 
 namespace NMiniKQL {
@@ -35,6 +37,8 @@ private:
         UNIT_TEST(TestVariantTypeFormat);
         UNIT_TEST(TestCallableTypeFormat);
         UNIT_TEST(TestDataTypeFormat);
+        UNIT_TEST(TestBlockTypeFormat);
+        UNIT_TEST(TestArrowType);
     UNIT_TEST_SUITE_END();
 
     TString FormatType(NUdf::TType* t) {
@@ -52,6 +56,17 @@ private:
         {
             auto s = FormatType(FunctionTypeInfoBuilder.Pg(NYql::NPg::LookupType("_bool").TypeId));
             UNIT_ASSERT_VALUES_EQUAL(s, "_pgbool");
+        }
+    }
+
+    void TestBlockTypeFormat() {
+        {
+            auto s = FormatType(FunctionTypeInfoBuilder.Block(true)->Item<ui32>().Build());
+            UNIT_ASSERT_VALUES_EQUAL(s, "Scalar<Uint32>");
+        }
+        {
+            auto s = FormatType(FunctionTypeInfoBuilder.Block(false)->Item<ui32>().Build());
+            UNIT_ASSERT_VALUES_EQUAL(s, "Block<Uint32>");
         }
     }
 
@@ -320,6 +335,17 @@ private:
             auto s = FormatType(FunctionTypeInfoBuilder.Decimal(7, 3));
             UNIT_ASSERT_VALUES_EQUAL(s, "Decimal(7,3)");
         }
+    }
+
+    void TestArrowType() {
+        auto type = FunctionTypeInfoBuilder.SimpleType<ui64>();
+        auto atype1 = FunctionTypeInfoBuilder.MakeArrowType(type);
+        UNIT_ASSERT(atype1);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype1.Get())->GetType()->ToString(), std::string("uint64"));
+        ArrowSchema s;
+        atype1->Export(&s);
+        auto atype2 = FunctionTypeInfoBuilder.ImportArrowType(&s);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype2.Get())->GetType()->ToString(), std::string("uint64"));
     }
 };
 

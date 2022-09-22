@@ -9,6 +9,8 @@
 
 #include <type_traits>
 
+struct ArrowSchema;
+
 namespace NYql {
 namespace NUdf {
 
@@ -60,6 +62,12 @@ struct TTagged { using BaseType = T; };
 
 template <ui32 TypeId>
 struct TPg;
+
+template <typename T>
+struct TBlockType { using ItemType = T; };
+
+template <typename T>
+struct TScalarType { using ItemType = T; };
 
 //////////////////////////////////////////////////////////////////////////////
 // ITypeBuilder
@@ -413,6 +421,33 @@ public:
 UDF_ASSERT_TYPE_SIZE(ICompare, 16);
 
 //////////////////////////////////////////////////////////////////////////////
+// IBlockTypeBuilder
+//////////////////////////////////////////////////////////////////////////////
+class IBlockTypeBuilder: public ITypeBuilder
+{
+public:
+    using TPtr = TUniquePtr<IBlockTypeBuilder>;
+
+    explicit IBlockTypeBuilder(bool isScalar)
+        : IsScalar_(isScalar)
+    {}
+public:
+    template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
+    inline IBlockTypeBuilder& Item() {
+        return Item(TDataType<T>::Id);
+    }
+
+    virtual IBlockTypeBuilder& Item(TDataTypeId type) = 0;
+    virtual IBlockTypeBuilder& Item(const TType* type) = 0;
+    virtual IBlockTypeBuilder& Item(const ITypeBuilder& type) = 0;
+
+protected:
+    bool IsScalar_;
+};
+
+UDF_ASSERT_TYPE_SIZE(IListTypeBuilder, 8);
+
+//////////////////////////////////////////////////////////////////////////////
 // IFunctionTypeInfoBuilder
 //////////////////////////////////////////////////////////////////////////////
 namespace NImpl {
@@ -594,7 +629,36 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+
+//////////////////////////////////////////////////////////////////////////////
+// IArrowType
+//////////////////////////////////////////////////////////////////////////////
+class IArrowType
+{
+public:
+    using TPtr = TUniquePtr<IArrowType>;
+
+    virtual ~IArrowType() = default;
+
+    virtual void Export(ArrowSchema* out) const = 0;
+};
+
+UDF_ASSERT_TYPE_SIZE(IArrowType, 8);
+
+class IFunctionTypeInfoBuilder14: public IFunctionTypeInfoBuilder13 {
+public:
+    virtual IBlockTypeBuilder::TPtr Block(bool isScalar) const = 0;
+    // returns nullptr if type isn't supported
+    virtual IArrowType::TPtr MakeArrowType(const TType* type) const = 0;
+    // The given ArrowSchema struct is released, even if this function fails. 
+    virtual IArrowType::TPtr ImportArrowType(ArrowSchema* schema) const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder14;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder13;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 22)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder12;
@@ -827,6 +891,26 @@ template <ui32 TypeId>
 struct TTypeBuilderHelper<TPg<TypeId>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         return builder.Pg(TypeId);
+    }
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+template <typename T>
+struct TTypeBuilderHelper<TBlockType<T>> {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+        return builder.Block(false)->
+                Item(TTypeBuilderHelper<T>::Build(builder))
+                .Build();
+    }
+};
+
+template <typename T>
+struct TTypeBuilderHelper<TScalarType<T>> {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+        return builder.Block(true)->
+                Item(TTypeBuilderHelper<T>::Build(builder))
+                .Build();
     }
 };
 #endif

@@ -67,7 +67,17 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+class TStubTypeVisitor6: public TStubTypeVisitor5
+{
+public:
+    void OnBlock(const TType* itemType, bool isScalar) override;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+using TStubTypeVisitor = TStubTypeVisitor6;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 using TStubTypeVisitor = TStubTypeVisitor5;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 using TStubTypeVisitor = TStubTypeVisitor4;
@@ -483,6 +493,35 @@ private:
 };
 #endif
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+//////////////////////////////////////////////////////////////////////////////
+// TBlockTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TBlockTypeInspector: public TStubTypeVisitor
+{
+public:
+    TBlockTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Block) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return ItemType_ != 0; }
+    const TType* GetItemType() const { return ItemType_; }
+    bool IsScalar() const { return IsScalar_; }
+
+private:
+    void OnBlock(const TType* itemType, bool isScalar) override {
+        ItemType_ = itemType;
+        IsScalar_ = isScalar;
+    }
+
+private:
+    const TType* ItemType_ = nullptr;
+    bool IsScalar_ = false;
+};
+#endif
+
 inline void TStubTypeVisitor1::OnDataType(TDataTypeId typeId)
 {
     Y_UNUSED(typeId);
@@ -560,6 +599,13 @@ inline void TStubTypeVisitor4::OnTagged(const TType*, TStringRef) {
 #endif
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 inline void TStubTypeVisitor5::OnPg(ui32) {
+    Y_FAIL("Not implemented");
+}
+#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+inline void TStubTypeVisitor6::OnBlock(const TType* itemType, bool isScalar) {
+    Y_UNUSED(itemType);
+    Y_UNUSED(isScalar);
     Y_FAIL("Not implemented");
 }
 #endif

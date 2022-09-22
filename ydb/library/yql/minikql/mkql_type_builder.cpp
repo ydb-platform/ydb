@@ -9,6 +9,8 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <array>
 
+#include <arrow/c/bridge.h>
+
 // TODO: remove const_casts
 
 namespace NKikimr {
@@ -1266,9 +1268,101 @@ private:
     const NUdf::ICompare::TPtr Compare_;
 };
 
+//////////////////////////////////////////////////////////////////////////////
+// TBlockTypeBuilder
+//////////////////////////////////////////////////////////////////////////////
+class TBlockTypeBuilder: public NUdf::IBlockTypeBuilder
+{
+public:
+    TBlockTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent, bool isScalar)
+        : NUdf::IBlockTypeBuilder(isScalar)
+        , Parent_(parent)
+    {
+    }
+
+    NUdf::IBlockTypeBuilder& Item(NUdf::TDataTypeId typeId) override {
+        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
+        return *this;
+    }
+
+    NUdf::IBlockTypeBuilder& Item(const NUdf::TType* type) override {
+        ItemType_ = static_cast<const NMiniKQL::TType*>(type);
+        return *this;
+    }
+
+    NUdf::IBlockTypeBuilder& Item(
+            const NUdf::ITypeBuilder& typeBuilder) override
+    {
+        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
+        return *this;
+    }
+
+    NUdf::TType* Build() const override {
+        return NMiniKQL::TBlockType::Create(
+                    const_cast<NMiniKQL::TType*>(ItemType_), 
+                    (IsScalar_ ? NMiniKQL::TBlockType::EShape::Scalar : NMiniKQL::TBlockType::EShape::Many),
+                    Parent_.Env());
+    }
+
+private:
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    const NMiniKQL::TType* ItemType_ = nullptr;
+};
+
 } // namespace
 
 namespace NMiniKQL {
+
+bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::DataType>& type) {
+    auto unpacked = UnpackOptional(itemType, isOptional);
+    if (!unpacked->IsData()) {
+        return false;
+    }
+
+    auto slot = AS_TYPE(TDataType, unpacked)->GetDataSlot();
+    if (!slot) {
+        return false;
+    }
+
+    switch (*slot) {
+    case NUdf::EDataSlot::Bool:
+        type = arrow::boolean();
+        return true;
+    case NUdf::EDataSlot::Uint8:
+        type = arrow::uint8();
+        return true;
+    case NUdf::EDataSlot::Int8:
+        type = arrow::int8();
+        return true;
+    case NUdf::EDataSlot::Uint16:
+        type = arrow::uint16();
+        return true;
+    case NUdf::EDataSlot::Int16:
+        type = arrow::int16();
+        return true;
+    case NUdf::EDataSlot::Uint32:
+        type = arrow::uint32();
+        return true;
+    case NUdf::EDataSlot::Int32:
+        type = arrow::int32();
+        return true;
+    case NUdf::EDataSlot::Int64:
+        type = arrow::int64();
+        return true;
+    case NUdf::EDataSlot::Uint64:
+        type = arrow::uint64();
+        return true;
+    default:
+        return false;
+    }
+}
+
+void TArrowType::Export(ArrowSchema* out) const {
+    auto status = arrow::ExportType(*Type, out);
+    if (!status.ok()) {
+        UdfTerminate(status.ToString().c_str());
+    }
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // TFunctionTypeInfoBuilder
@@ -1341,8 +1435,32 @@ NUdf::TType* TFunctionTypeInfoBuilder::Tagged(const NUdf::TType* baseType, const
     return TTaggedType::Create(const_cast<TType*>(static_cast<const TType*>(baseType)), tag, Env_);
 }
 
-NUdf::TType* TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder::Pg(ui32 typeId) const {
+NUdf::TType* TFunctionTypeInfoBuilder::Pg(ui32 typeId) const {
     return TPgType::Create(typeId, Env_);
+}
+
+NUdf::IBlockTypeBuilder::TPtr TFunctionTypeInfoBuilder::Block(bool isScalar) const {
+    return new TBlockTypeBuilder(*this, isScalar);
+}
+
+NUdf::IArrowType::TPtr TFunctionTypeInfoBuilder::MakeArrowType(const NUdf::TType* type) const {
+    bool isOptional;
+    std::shared_ptr<arrow::DataType> arrowType;
+    if (!ConvertArrowType(const_cast<TType*>(static_cast<const TType*>(type)), isOptional, arrowType)) {
+        return nullptr;
+    }
+
+    return new TArrowType(arrowType);
+}
+
+NUdf::IArrowType::TPtr TFunctionTypeInfoBuilder::ImportArrowType(ArrowSchema* schema) const {
+    auto res = arrow::ImportType(schema);
+    auto status = res.status();
+    if (!status.ok()) {
+        UdfTerminate(status.ToString().c_str());
+    }
+
+    return new TArrowType(std::move(res).ValueOrDie());
 }
 
 bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {
@@ -1607,6 +1725,7 @@ NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
     case NMiniKQL::TType::EKind::EmptyDict: return NUdf::ETypeKind::EmptyDict;
     case NMiniKQL::TType::EKind::Tagged: return NUdf::ETypeKind::Tagged;
     case NMiniKQL::TType::EKind::Pg: return NUdf::ETypeKind::Pg;
+    case NMiniKQL::TType::EKind::Block: return NUdf::ETypeKind::Block;
     default:
         Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
         return NUdf::ETypeKind::Unknown;
@@ -1642,6 +1761,7 @@ case NMiniKQL::TType::EKind::TypeKind: { \
         MKQL_HANDLE_UDF_TYPE(Resource)
         MKQL_HANDLE_UDF_TYPE(Tagged)
         MKQL_HANDLE_UDF_TYPE(Pg)
+        MKQL_HANDLE_UDF_TYPE(Block)
     default:
         Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
     }
@@ -1759,6 +1879,12 @@ void TTypeInfoHelper::DoTagged(const NMiniKQL::TTaggedType* tt, NUdf::ITypeVisit
 void TTypeInfoHelper::DoPg(const NMiniKQL::TPgType* tt, NUdf::ITypeVisitor* v) {
     if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 25))) {
         v->OnPg(tt->GetTypeId());
+    }
+}
+
+void TTypeInfoHelper::DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor* v) {
+    if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 26))) {
+        v->OnBlock(tt->GetItemType(), tt->GetShape() == TBlockType::EShape::Scalar);
     }
 }
 

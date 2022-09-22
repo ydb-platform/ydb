@@ -7,6 +7,10 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <arrow/array/builder_primitive.h>
+#include <arrow/c/abi.h>
+#include <arrow/scalar.h>
+
 namespace NYql {
 namespace NCommon {
 
@@ -68,6 +72,7 @@ private:
         UNIT_TEST(TestConvertToFromPg);
         UNIT_TEST(TestConvertToFromPgNulls);
         UNIT_TEST(TestPgNewString);
+        UNIT_TEST(TestArrowBlock);
     UNIT_TEST_SUITE_END();
 
 
@@ -252,6 +257,49 @@ private:
             auto stringType = FunctionTypeInfoBuilder.SimpleType<char*>();
             auto from = GetPgBuilder().ConvertFromPg(s, byteaString.TypeId, stringType);
             UNIT_ASSERT_VALUES_EQUAL((TStringBuf)from.AsStringRef(), "ABC"sv);
+        }
+    }
+
+    void TestArrowBlock() {
+        auto type = FunctionTypeInfoBuilder.SimpleType<ui64>();
+        auto atype = FunctionTypeInfoBuilder.MakeArrowType(type);
+
+        {
+            arrow::Datum d1(std::make_shared<arrow::UInt64Scalar>(123));
+            auto val1 = HolderFactory.CreateArrowBlock(std::move(d1));
+            ArrowArray arr1;
+            bool isScalar;
+            Builder.ExportArrowBlock(val1, isScalar, &arr1);
+            UNIT_ASSERT(isScalar);
+            auto val2 = Builder.ImportArrowBlock(&arr1, *atype, isScalar);
+            const auto d2 = TArrowBlock::From(val2).GetDatum();
+            UNIT_ASSERT(d2.is_scalar());
+            UNIT_ASSERT_VALUES_EQUAL(d2.scalar_as<arrow::UInt64Scalar>().value, 123);
+        }
+
+        {
+            arrow::UInt64Builder builder;
+            UNIT_ASSERT(builder.Reserve(3).ok());
+            builder.UnsafeAppend(ui64(10));
+            builder.UnsafeAppend(ui64(20));
+            builder.UnsafeAppend(ui64(30));
+            std::shared_ptr<arrow::ArrayData> builderResult;
+            UNIT_ASSERT(builder.FinishInternal(&builderResult).ok());
+            arrow::Datum d1(builderResult);
+            auto val1 = HolderFactory.CreateArrowBlock(std::move(d1));
+            ArrowArray arr1;
+            bool isScalar;
+            Builder.ExportArrowBlock(val1, isScalar, &arr1);
+            UNIT_ASSERT(!isScalar);
+            auto val2 = Builder.ImportArrowBlock(&arr1, *atype, isScalar);
+            const auto d2 = TArrowBlock::From(val2).GetDatum();
+            UNIT_ASSERT(d2.is_array());
+            UNIT_ASSERT_VALUES_EQUAL(d2.array()->length, 3);
+            UNIT_ASSERT_VALUES_EQUAL(d2.array()->GetNullCount(), 0);
+            auto flat = d2.array()->GetValues<ui64>(1);
+            UNIT_ASSERT_VALUES_EQUAL(flat[0], 10);
+            UNIT_ASSERT_VALUES_EQUAL(flat[1], 20);
+            UNIT_ASSERT_VALUES_EQUAL(flat[2], 30);
         }
     }
 };

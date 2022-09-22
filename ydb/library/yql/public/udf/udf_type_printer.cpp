@@ -184,5 +184,11 @@ void TTypePrinter5::OnPgImpl(ui32 typeId) {
     *Output_ << "pg" << name;
 }
 
+void TTypePrinter6::OnBlockImpl(const TType* itemType, bool isScalar) {
+    *Output_ << (isScalar ? "Scalar<" : "Block<");
+    OutImpl(itemType);
+    *Output_ << '>';
+}
+
 }
 }

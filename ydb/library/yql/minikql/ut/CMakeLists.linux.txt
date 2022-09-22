@@ -22,6 +22,7 @@ target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   library-yql-minikql
+  libs-apache-arrow
   yql-minikql-computation
   yql-minikql-invoke_builtins
   yql-parser-pg_wrapper

@@ -240,7 +240,7 @@ public:
         const TActorId& nodeWardenId = MakeBlobStorageNodeWardenID(self.SelfId().NodeId());
         if (vdiskId.GroupGeneration < Info->GroupGeneration) { // vdisk is older than our group
             RacingDomains |= {&Info->GetTopology(), vdiskId};
-            if (Info->GetQuorumChecker().CheckFailModelForGroupDomains(RacingDomains)) {
+            if (RacingDomains.GetNumSetItems() <= 1) {
                 record.SetStatus(NKikimrProto::ERROR);
                 auto adjustStatus = [](auto *v) {
                     for (int i = 0; i < v->size(); ++i) {

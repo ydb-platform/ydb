@@ -26,9 +26,7 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    bool TBlobDepotAgent::IssueRead(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TResolvedValueChain>& values,
-            ui64 offset, ui64 size, NKikimrBlobStorage::EGetHandleClass getHandleClass, bool mustRestoreFirst,
-            TQuery *query, ui64 tag, TString *error) {
+    bool TBlobDepotAgent::IssueRead(const TReadArg& arg, TString& error) {
         ui64 outputOffset = 0;
 
         struct TReadItem {
@@ -40,19 +38,21 @@ namespace NKikimr::NBlobDepot {
         };
         std::vector<TReadItem> items;
 
-        const ui64 offsetOnEntry = offset;
-        const ui64 sizeOnEntry = size;
+        const ui64 offsetOnEntry = arg.Offset;
+        ui64 offset = arg.Offset;
+        const ui64 sizeOnEntry = arg.Size;
+        ui64 size = arg.Size;
 
-        for (const auto& value : values) {
+        for (const auto& value : arg.Values) {
             const ui32 groupId = value.GetGroupId();
             const auto blobId = LogoBlobIDFromLogoBlobID(value.GetBlobId());
             const ui64 begin = value.GetSubrangeBegin();
             const ui64 end = value.HasSubrangeEnd() ? value.GetSubrangeEnd() : blobId.BlobSize();
 
             if (end <= begin || blobId.BlobSize() < end) {
-                *error = "incorrect SubrangeBegin/SubrangeEnd pair";
-                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, *error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
-                    (Values, FormatList(values)));
+                error = "incorrect SubrangeBegin/SubrangeEnd pair";
+                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
+                    (Values, FormatList(arg.Values)));
                 return false;
             }
 
@@ -82,20 +82,28 @@ namespace NKikimr::NBlobDepot {
         }
 
         if (size) {
-            *error = "incorrect offset/size provided";
-            STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, *error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
-                (Offset, offsetOnEntry), (Size, sizeOnEntry), (Values, FormatList(values)));
+            error = "incorrect offset/size provided";
+            STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
+                (Offset, offsetOnEntry), (Size, sizeOnEntry), (Values, FormatList(arg.Values)));
             return false;
         }
 
-        auto context = std::make_shared<TReadContext>(query, tag, outputOffset);
+        auto context = std::make_shared<TReadContext>(arg.Query, arg.Tag, outputOffset);
         for (const TReadItem& item : items) {
             auto key = std::make_tuple(item.Id, item.Offset, item.Size);
             auto& v = context->ReadOffsets[key];
             v.push_back(item.OutputOffset);
             if (v.size() == 1) {
-                SendToProxy(item.GroupId, std::make_unique<TEvBlobStorage::TEvGet>(item.Id, item.Offset, item.Size,
-                    TInstant::Max(), getHandleClass, mustRestoreFirst), query, context);
+                auto event = std::make_unique<TEvBlobStorage::TEvGet>(
+                    item.Id,
+                    item.Offset,
+                    item.Size,
+                    TInstant::Max(),
+                    arg.GetHandleClass,
+                    arg.MustRestoreFirst);
+                event->ReaderTabletId = arg.ReaderTabletId;
+                event->ReaderTabletGeneration = arg.ReaderTabletGeneration;
+                SendToProxy(item.GroupId, std::move(event), arg.Query, context);
             }
         }
 

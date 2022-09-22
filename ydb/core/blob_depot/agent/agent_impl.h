@@ -315,9 +315,19 @@ namespace NKikimr::NBlobDepot {
         // Reading
 
         struct TReadContext;
+        struct TReadArg {
+            const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TResolvedValueChain>& Values;
+            NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+            bool MustRestoreFirst = false;
+            TQuery *Query = nullptr;
+            ui64 Offset = 0;
+            ui64 Size = 0;
+            ui64 Tag = 0;
+            std::optional<ui64> ReaderTabletId;
+            std::optional<ui32> ReaderTabletGeneration;
+        };
 
-        bool IssueRead(const TResolvedValueChain& values, ui64 offset, ui64 size, NKikimrBlobStorage::EGetHandleClass getHandleClass,
-            bool mustRestoreFirst, TQuery *query, ui64 tag, TString *error);
+        bool IssueRead(const TReadArg& arg, TString& error);
 
         void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
 

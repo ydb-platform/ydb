@@ -109,9 +109,18 @@ namespace NKikimr::NBlobDepot {
                         Id = TLogoBlobID::FromBinary(item.GetKey());
                         Y_VERIFY(item.ValueChainSize() == 1);
                         if (ReadBody) {
+                            TReadArg arg{
+                                item.GetValueChain(),
+                                NKikimrBlobStorage::Discover,
+                                true,
+                                this,
+                                0,
+                                0,
+                                0,
+                                {},
+                                {}};
                             TString error;
-                            if (!Agent.IssueRead(item.GetValueChain(), 0, 0, NKikimrBlobStorage::Discover, true, this, 0,
-                                    &error)) {
+                            if (!Agent.IssueRead(arg, error)) {
                                 return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to read discovered blob: "
                                     << error);
                             }

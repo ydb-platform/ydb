@@ -109,9 +109,18 @@ namespace NKikimr::NBlobDepot {
                     }
 
                     if (!query.IsIndexOnly) {
+                        TReadArg arg{
+                            key.GetValueChain(),
+                            NKikimrBlobStorage::EGetHandleClass::FastRead,
+                            query.MustRestoreFirst,
+                            this,
+                            0,
+                            0,
+                            index,
+                            {},
+                            {}};
                         TString error;
-                        if (!Agent.IssueRead(key.GetValueChain(), 0, 0, NKikimrBlobStorage::EGetHandleClass::FastRead,
-                                query.MustRestoreFirst, this, index, &error)) {
+                        if (!Agent.IssueRead(arg, error)) {
                             return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to read discovered blob: "
                                 << error);
                         }

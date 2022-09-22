@@ -66,9 +66,18 @@ namespace NKikimr::NBlobDepot {
                     Response->Responses[queryIdx].Status = NKikimrProto::OK;
                     --AnswersRemain;
                 } else if (value) {
+                    TReadArg arg{
+                        *value,
+                        msg.GetHandleClass,
+                        msg.MustRestoreFirst,
+                        this,
+                        msg.Queries[queryIdx].Shift,
+                        msg.Queries[queryIdx].Size,
+                        queryIdx,
+                        msg.ReaderTabletId,
+                        msg.ReaderTabletGeneration};
                     TString error;
-                    const bool success = Agent.IssueRead(*value, msg.Queries[queryIdx].Shift, msg.Queries[queryIdx].Size,
-                        msg.GetHandleClass, msg.MustRestoreFirst, this, queryIdx, &error);
+                    const bool success = Agent.IssueRead(arg, error);
                     if (!success) {
                         EndWithError(NKikimrProto::ERROR, std::move(error));
                         return false;

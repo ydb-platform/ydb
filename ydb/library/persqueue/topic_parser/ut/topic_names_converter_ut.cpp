@@ -140,6 +140,34 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
 //        UNIT_ASSERT_VALUES_EQUAL(wrapper.GetClientsideName(), "rt3.dc3--account@dir1@dir2--topic");
 
     }
+    Y_UNIT_TEST(CmWay) {
+        auto converterFactory = NPersQueue::TTopicNamesConverterFactory(
+                false, "/Root/PQ", "dc1", false
+        );
+        auto converter = converterFactory.MakeDiscoveryConverter(
+                "account/account-topic", {}, "dc1", "account"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "account-topic-mirrored-from-dc1");
+
+        converter = converterFactory.MakeDiscoveryConverter(
+                "account/topic", {}, "dc1", "account"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "topic-mirrored-from-dc1");
+
+        converterFactory = NPersQueue::TTopicNamesConverterFactory(
+                false, "/Root/PQ", "dc1", true
+        );
+        converter = converterFactory.MakeDiscoveryConverter(
+                "account/topic", {}, "dc1", "account"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "topic");
+
+        converter = converterFactory.MakeDiscoveryConverter(
+                "account/account-topic", {}, "dc1", "account"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "account-topic");
+
+        }
 
     Y_UNIT_TEST(FirstClass) {
         TConverterTestWrapper wrapper(true, "", "");

@@ -18,6 +18,18 @@ bool IsPathPrefix(TStringBuf normPath, TStringBuf prefix) {
 }
 
 
+void SkipPathPrefix(TStringBuf& path, const TStringBuf& prefix) {
+    auto copy = path;
+    if (prefix.EndsWith('/')) {
+        path.SkipPrefix(prefix);
+    } else {
+        auto skip = path.SkipPrefix(prefix) && path.SkipPrefix("/");
+        if (!skip) {
+            path = copy;
+        }
+    }
+}
+
 namespace {
     TString FullPath(const TMaybe<TString>& database, const TString& path) {
         if (database.Defined() && !path.StartsWith(*database) && !path.Contains('\0')) {
@@ -193,21 +205,17 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
         if (IsPathPrefix(PQPrefix, databaseBuf)) {
             isRootDb = true;
             root = PQPrefix;
-            topicPath.SkipPrefix(PQPrefix);
-            topicPath.SkipPrefix("/");
+            SkipPathPrefix(topicPath, PQPrefix);
         } else {
-            topicPath.SkipPrefix(databaseBuf);
-            topicPath.SkipPrefix("/");
+            SkipPathPrefix(topicPath, databaseBuf);
         }
     } else if (IsPathPrefix(topicPath, PQPrefix)) {
         isRootDb = true;
-        topicPath.SkipPrefix(PQPrefix);
-        topicPath.SkipPrefix("/");
+        SkipPathPrefix(topicPath, PQPrefix);
         root = PQPrefix;
     }
     if (!isRootDb) {
-        topicPath.SkipPrefix(databaseBuf);
-        topicPath.SkipPrefix("/");
+        SkipPathPrefix(topicPath, databaseBuf);
         Database = databaseBuf;
     }
 

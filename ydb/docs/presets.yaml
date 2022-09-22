@@ -31,6 +31,7 @@ default:
   k8s: Kubernetes
   oss: true
   feature_not_null_for_pk: true
+  ydb_non_deterministic_functions: true
 
   ydb-doc-repo: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
 

@@ -77,6 +77,6 @@ items:
       href: commands/workload/index.md
     - name: Stock нагрузка
       href: commands/workload/stock.md
-    - name: Kv нагрузка
-      href: commands/workload/kv.md
+    - name: Key-Value нагрузка
+      href: workload-kv.md
 

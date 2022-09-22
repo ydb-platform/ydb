@@ -22,4 +22,4 @@ See the description of the command to run the data load:
 The following types of load tests are supported at the moment:
 
 * [Stock](../stock.md): An online store warehouse simulator.
-* [Kv](../kv.md): Key-Value load.
+* [Key-value](../../../workload-kv.md): Key-Value load.

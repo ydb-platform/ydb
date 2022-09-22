@@ -107,9 +107,9 @@ Parameter name | Short name | Parameter Description
 `--threads <value>` | `-t <value>` | The number of parallel threads creating the load. Default value: 10.
 `--quiet` | - | Outputs only the final test result.
 `--print-timestamp` | - | Print the time together with the statistics of each time window.
-`--client-timeout` | - | [Transport timeout in milliseconds](../../../../../best_practices/timeouts.md).
-`--operation-timeout` | - | [Operation timeout in milliseconds](../../../../../best_practices/timeouts.md).
-`--cancel-after` | - | [Operation cancellation timeout in milliseconds](../../../../../best_practices/timeouts.md).
+`--client-timeout` | - | [Transport timeout in milliseconds](../../best_practices/timeouts.md).
+`--operation-timeout` | - | [Operation timeout in milliseconds](../../best_practices/timeouts.md).
+`--cancel-after` | - | [Operation cancellation timeout in milliseconds](../../best_practices/timeouts.md).
 `--window` | - | Duration of the statistics collection window in seconds. Default value: 1.
 `--max-first-key` | - | The maximum value of the primary key of the table. Default value: $2^{64} - 1$.
 `--cols` | - | Number of columns in the table. Default value: 2, counting Key.

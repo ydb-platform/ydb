@@ -2221,6 +2221,37 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    // Using to detect warnings when operating (+, /, %, -, *) with integral types
+    namespace {
+        IGraphTransformer::TStatus CheckIntegralsWidth(const TExprNode::TPtr& input, TContext& ctx, EDataSlot first, EDataSlot second) {
+            if (!IsDataTypeIntegral(first) || !IsDataTypeIntegral(second)) {
+                return IGraphTransformer::TStatus::Ok;
+            }
+            ui32 first_width = GetDataTypeInfo(first).FixedSize,
+                 second_width = GetDataTypeInfo(second).FixedSize;
+            // invariant: first_width >= second_width
+            if (first_width < second_width) {
+                std::swap(first, second);
+                std::swap(first_width, second_width);
+            }
+            bool first_signed = IsDataTypeSigned(first);
+            bool second_signed = IsDataTypeSigned(second);
+            if (first_width > second_width && !first_signed && second_signed ||
+                first_width == second_width && first_signed != second_signed) 
+            {
+                auto issue = TIssue(
+                        ctx.Expr.GetPosition(input->Pos()), 
+                        TStringBuilder() << "Integral type implicit bitcast: " << *input->Head().GetTypeAnn() << " and " << *input->Tail().GetTypeAnn()
+                    );
+                SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_IMPLICIT_BITCAST, issue);
+                if (!ctx.Expr.AddWarning(issue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+            return IGraphTransformer::TStatus::Ok;
+        }
+    };
+
     IGraphTransformer::TStatus AddWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2243,6 +2274,11 @@ namespace NTypeAnnImpl {
             haveOptional |= isOptional[i];
         }
 
+        auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+        if (check_result != IGraphTransformer::TStatus::Ok) {
+            return check_result;
+        }
+        
         const bool isLeftNumeric = IsDataTypeNumeric(dataType[0]->GetSlot());
         const bool isRightNumeric = IsDataTypeNumeric(dataType[1]->GetSlot());
         // bool isOk = false;
@@ -2314,6 +2350,11 @@ namespace NTypeAnnImpl {
             haveOptional |= isOptional[i];
         }
 
+        auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+        if (check_result != IGraphTransformer::TStatus::Ok) {
+            return check_result;
+        }
+        
         const bool isLeftNumeric = IsDataTypeNumeric(dataType[0]->GetSlot());
         const bool isRightNumeric = IsDataTypeNumeric(dataType[1]->GetSlot());
         // bool isOk = false;
@@ -2383,6 +2424,11 @@ namespace NTypeAnnImpl {
             haveOptional |= isOptional[i];
         }
 
+        auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+        if (check_result != IGraphTransformer::TStatus::Ok) {
+            return check_result;
+        }
+        
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
@@ -2438,6 +2484,11 @@ namespace NTypeAnnImpl {
 
             haveOptional |= isOptional[i];
         }
+        
+        auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+        if (check_result != IGraphTransformer::TStatus::Ok) {
+            return check_result;
+        }
 
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
@@ -2492,6 +2543,11 @@ namespace NTypeAnnImpl {
             haveOptional |= isOptional[i];
         }
 
+        auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+        if (check_result != IGraphTransformer::TStatus::Ok) {
+            return check_result;
+        }
+        
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));

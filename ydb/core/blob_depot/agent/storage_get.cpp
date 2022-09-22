@@ -1,5 +1,6 @@
 #include "agent_impl.h"
 #include "blob_mapping_cache.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -35,6 +36,14 @@ namespace NKikimr::NBlobDepot {
                 Response = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg.QuerySize,
                     Agent.VirtualGroupId);
                 AnswersRemain = msg.QuerySize;
+
+                if (msg.ReaderTabletId && msg.ReaderTabletGeneration) {
+                    auto status = Agent.BlocksManager.CheckBlockForTablet(msg.ReaderTabletId.value(), msg.ReaderTabletGeneration.value(), this, nullptr);
+                    if (status == NKikimrProto::BLOCKED) {
+                        EndWithError(status, "Fail TEvGet due to BLOCKED tablet generation");
+                        return;
+                    }
+                }
 
                 for (ui32 i = 0; i < msg.QuerySize; ++i) {
                     auto& query = msg.Queries[i];

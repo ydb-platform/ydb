@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         auto res = CaptureTEvGetResult(env, sender, true, true);
 
         // check that TEvGet returns BLOCKED
-        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::BLOCKED);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::BLOCKED);
     }
 

@@ -4888,6 +4888,20 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
         return ret;
     }
 
+    case ETypeAnnotationKind::Block:
+    {
+        auto ret = ctx.NewCallable(position, "BlockType",
+            { ExpandType(position, *type.Cast<TBlockExprType>()->GetItemType(), ctx) });
+        return ret;
+    }
+
+    case ETypeAnnotationKind::Scalar:
+    {
+        auto ret = ctx.NewCallable(position, "ScalarType",
+            { ExpandType(position, *type.Cast<TScalarExprType>()->GetItemType(), ctx) });
+        return ret;
+    }
+
     default:
         YQL_ENSURE(false, "Unsupported kind: " << (ui32)type.GetKind());
     }

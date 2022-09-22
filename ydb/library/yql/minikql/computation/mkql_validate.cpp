@@ -473,6 +473,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
 
     case TType::EKind::Stream:
     case TType::EKind::Variant:
+    case TType::EKind::Block:
         // TODO validate it
         break;
 

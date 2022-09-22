@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/minikql/arrow/mkql_functions.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 
 #include <util/stream/null.h>
@@ -58,6 +59,30 @@ private:
             }
 
             has = true;
+            return true;
+        } catch (const std::exception& e) {
+            ctx.AddError(TIssue(pos, e.what()));
+            return false;
+        }
+    }
+
+    bool AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, bool& supported, TExprContext& ctx) const override {
+        try {
+            supported = false;
+            TScopedAlloc alloc;
+            TTypeEnvironment env(alloc);
+            TProgramBuilder pgmBuilder(env, FunctionRegistry_);
+            for (const auto& type : types) {
+                TNullOutput null;
+                auto mkqlType = NCommon::BuildType(*type, pgmBuilder, null);
+                bool isOptional;
+                std::shared_ptr<arrow::DataType> arrowType;
+                if (!ConvertArrowType(mkqlType, isOptional, arrowType)) {
+                    return true;
+                }
+            }
+
+            supported = true;
             return true;
         } catch (const std::exception& e) {
             ctx.AddError(TIssue(pos, e.what()));

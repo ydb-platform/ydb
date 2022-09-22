@@ -139,8 +139,8 @@ public:
     NUdf::TType* Tagged(const NUdf::TType* baseType, const NUdf::TStringRef& tag) const override;
     NUdf::TType* Pg(ui32 typeId) const override;
     NUdf::IBlockTypeBuilder::TPtr Block(bool isScalar) const override;
-    NUdf::IArrowType::TPtr MakeArrowType(const NUdf::TType* type) const override;
-    NUdf::IArrowType::TPtr ImportArrowType(ArrowSchema* schema) const override;
+    void Unused1() override;
+    void Unused2() override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
 
@@ -172,6 +172,8 @@ public:
     void VisitType(const NUdf::TType* type, NUdf::ITypeVisitor* visitor) const override;
     bool IsSameType(const NUdf::TType* type1, const NUdf::TType* type2) const override;
     const NYql::NUdf::TPgTypeDescription* FindPgTypeDescription(ui32 typeId) const override;
+    NUdf::IArrowType::TPtr MakeArrowType(const NUdf::TType* type) const override;
+    NUdf::IArrowType::TPtr ImportArrowType(ArrowSchema* schema) const override;
 
 private:
     static void DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v);

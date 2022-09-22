@@ -262,7 +262,7 @@ private:
 
     void TestArrowBlock() {
         auto type = FunctionTypeInfoBuilder.SimpleType<ui64>();
-        auto atype = FunctionTypeInfoBuilder.MakeArrowType(type);
+        auto atype = TypeInfoHelper->MakeArrowType(type);
 
         {
             arrow::Datum d1(std::make_shared<arrow::UInt64Scalar>(123));

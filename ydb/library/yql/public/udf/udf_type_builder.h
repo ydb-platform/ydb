@@ -9,8 +9,6 @@
 
 #include <type_traits>
 
-struct ArrowSchema;
-
 namespace NYql {
 namespace NUdf {
 
@@ -630,29 +628,11 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
-
-//////////////////////////////////////////////////////////////////////////////
-// IArrowType
-//////////////////////////////////////////////////////////////////////////////
-class IArrowType
-{
-public:
-    using TPtr = TUniquePtr<IArrowType>;
-
-    virtual ~IArrowType() = default;
-
-    virtual void Export(ArrowSchema* out) const = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IArrowType, 8);
-
 class IFunctionTypeInfoBuilder14: public IFunctionTypeInfoBuilder13 {
 public:
     virtual IBlockTypeBuilder::TPtr Block(bool isScalar) const = 0;
-    // returns nullptr if type isn't supported
-    virtual IArrowType::TPtr MakeArrowType(const TType* type) const = 0;
-    // The given ArrowSchema struct is released, even if this function fails. 
-    virtual IArrowType::TPtr ImportArrowType(ArrowSchema* schema) const = 0;
+    virtual void Unused1() = 0;
+    virtual void Unused2() = 0;
 };
 #endif
 

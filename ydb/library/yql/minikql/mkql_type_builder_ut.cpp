@@ -339,12 +339,12 @@ private:
 
     void TestArrowType() {
         auto type = FunctionTypeInfoBuilder.SimpleType<ui64>();
-        auto atype1 = FunctionTypeInfoBuilder.MakeArrowType(type);
+        auto atype1 = TypeInfoHelper->MakeArrowType(type);
         UNIT_ASSERT(atype1);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype1.Get())->GetType()->ToString(), std::string("uint64"));
         ArrowSchema s;
         atype1->Export(&s);
-        auto atype2 = FunctionTypeInfoBuilder.ImportArrowType(&s);
+        auto atype2 = TypeInfoHelper->ImportArrowType(&s);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype2.Get())->GetType()->ToString(), std::string("uint64"));
     }
 };

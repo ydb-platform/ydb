@@ -1443,24 +1443,10 @@ NUdf::IBlockTypeBuilder::TPtr TFunctionTypeInfoBuilder::Block(bool isScalar) con
     return new TBlockTypeBuilder(*this, isScalar);
 }
 
-NUdf::IArrowType::TPtr TFunctionTypeInfoBuilder::MakeArrowType(const NUdf::TType* type) const {
-    bool isOptional;
-    std::shared_ptr<arrow::DataType> arrowType;
-    if (!ConvertArrowType(const_cast<TType*>(static_cast<const TType*>(type)), isOptional, arrowType)) {
-        return nullptr;
-    }
-
-    return new TArrowType(arrowType);
+void TFunctionTypeInfoBuilder::Unused1() {
 }
 
-NUdf::IArrowType::TPtr TFunctionTypeInfoBuilder::ImportArrowType(ArrowSchema* schema) const {
-    auto res = arrow::ImportType(schema);
-    auto status = res.status();
-    if (!status.ok()) {
-        UdfTerminate(status.ToString().c_str());
-    }
-
-    return new TArrowType(std::move(res).ValueOrDie());
+void TFunctionTypeInfoBuilder::Unused2() {
 }
 
 bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {
@@ -1781,6 +1767,26 @@ bool TTypeInfoHelper::IsSameType(const NUdf::TType* type1, const NUdf::TType* ty
 
 const NYql::NUdf::TPgTypeDescription* TTypeInfoHelper::FindPgTypeDescription(ui32 typeId) const {
     return HugeSingleton<TPgTypeIndex>()->Resolve(typeId);
+}
+
+NUdf::IArrowType::TPtr TTypeInfoHelper::MakeArrowType(const NUdf::TType* type) const {
+    bool isOptional;
+    std::shared_ptr<arrow::DataType> arrowType;
+    if (!ConvertArrowType(const_cast<TType*>(static_cast<const TType*>(type)), isOptional, arrowType)) {
+        return nullptr;
+    }
+
+    return new TArrowType(arrowType);
+}
+
+NUdf::IArrowType::TPtr TTypeInfoHelper::ImportArrowType(ArrowSchema* schema) const {
+    auto res = arrow::ImportType(schema);
+    auto status = res.status();
+    if (!status.ok()) {
+        UdfTerminate(status.ToString().c_str());
+    }
+
+    return new TArrowType(std::move(res).ValueOrDie());
 }
 
 void TTypeInfoHelper::DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v) {

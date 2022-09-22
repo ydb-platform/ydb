@@ -26,6 +26,10 @@ struct TPGMessage {
     size_t GetMessageSize() const {
         return sizeof(*this) + GetDataSize();
     }
+
+    void operator delete(void* p) {
+        ::operator delete(p);
+    }
 };
 
 struct TPGInitial : TPGMessage { // it's not true, because we don't receive message code from a network, but imply it on the start
@@ -248,7 +252,7 @@ struct TPGEmptyQueryResponse : TPGMessage {
 template<typename TPGMessageType>
 std::unique_ptr<TPGMessageType> MakePGMessageCopy(const TPGMessageType* message) {
     size_t size = message->GetMessageSize();
-    std::unique_ptr<TPGMessageType> msg{reinterpret_cast<TPGMessageType*>(new uint8_t[size])};
+    std::unique_ptr<TPGMessageType> msg{reinterpret_cast<TPGMessageType*>(::operator new(size))};
     std::memcpy(msg.get(), message, size);
     return msg;
 }

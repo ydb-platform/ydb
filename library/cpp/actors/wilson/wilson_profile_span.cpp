@@ -27,23 +27,33 @@ void TProfileSpan::AddMin(const TString& eventId, const TString& /*info*/) {
     }
 }
 
+TProfileSpan::TProfileSpan(const ui8 verbosity, TTraceId parentId, std::optional<TString> name)
+    : TBase(verbosity, std::move(parentId), name, NWilson::EFlags::AUTO_END)
+{
+
+}
+
+TProfileSpan::~TProfileSpan() {
+    if (Enabled) {
+        TBase::Attribute("profile", ProfileToString());
+    }
+}
+
 TString TProfileSpan::ProfileToString() const {
     if (!Enabled) {
         return "DISABLED";
     }
     TStringBuilder sb;
-    sb << "----FullDuration = " << Now() - StartTime << ";";
-    sb << "----Durations:";
     FlushNoGuards();
     {
         NJsonWriter::TBuf sout;
-        ResultTimes.InsertValue("--current_guards_count", CurrentJsonPath.size());
-        ResultTimes.InsertValue("--duration", (Now() - StartTime).MicroSeconds() * 0.000001);
+        ResultTimes.InsertValue("-current_guards_count", CurrentJsonPath.size());
+        ResultTimes.InsertValue("-duration", (Now() - StartTime).MicroSeconds() * 0.000001);
         sout.WriteJsonValue(&ResultTimes, true, EFloatToStringMode::PREC_POINT_DIGITS, 6);
         sb << sout.Str();
     }
     sb << ";";
-    sb << "----Pairs:{";
+    sb << "Pairs:{";
     for (auto&& i : PairInstances) {
         sb << i.first << ":" << i.second.ToString() << ";";
     }

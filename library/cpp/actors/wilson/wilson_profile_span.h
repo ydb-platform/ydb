@@ -29,6 +29,9 @@ private:
     void FlushNoGuards() const;
     TProfileSpan() = default;
 public:
+    TProfileSpan(const ui8 verbosity, TTraceId parentId, std::optional<TString> name);
+    ~TProfileSpan();
+
     using TBase::TBase;
     TString ProfileToString() const;
 

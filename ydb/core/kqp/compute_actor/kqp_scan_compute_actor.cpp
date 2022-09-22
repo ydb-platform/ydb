@@ -124,10 +124,10 @@ public:
         , Snapshot(snapshot)
         , ShardsScanningPolicy(shardsScanningPolicy)
         , Counters(counters)
-        , KqpComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, TBase::ComputeActorSpan.GetTraceId(), "KqpScanActor", NWilson::EFlags::AUTO_END)
+        , KqpComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, TBase::ComputeActorSpan.GetTraceId(), "KqpScanActor")
         , InFlightShards(ShardsScanningPolicy, KqpComputeActorSpan)
     {
-        KqpComputeActorSpan.SetEnabled(IS_DEBUG_LOG_ENABLED(NKikimrServices::KQP_COMPUTE));
+        KqpComputeActorSpan.SetEnabled(IS_DEBUG_LOG_ENABLED(NKikimrServices::KQP_COMPUTE) || KqpComputeActorSpan.GetTraceId());
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
         YQL_ENSURE(!Meta.GetReads().empty());
         YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
@@ -989,7 +989,7 @@ private:
         if (!sState->ActorId) {
             return;
         }
-        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Cancel scan");
+        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Cancel non actual scan");
         Send(sState->ActorId, abortEv.Release());
     }
 

@@ -42,6 +42,7 @@ struct TEvPrivate {
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
         bool CacheData{false};
+        TDuration Duration;
 
         TEvWriteIndex(const NOlap::TIndexInfo& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,

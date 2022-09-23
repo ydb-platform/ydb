@@ -188,8 +188,12 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             LOG_S_ERROR("Write (out of disk space) " << data.size() << " bytes into pathId " << tableId
                 << " at tablet " << TabletID());
         } else {
-            IncCounter(COUNTER_WRITE_OVERLOAD);
             bool tableOverload = InsertTable->IsOverloaded(tableId);
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            if (!tableOverload) {
+                IncCounter(COUNTER_WRITE_OVERLOAD_SHARD);
+            }
+
             LOG_S_INFO("Write (overload) " << data.size() << " bytes into pathId " << tableId
                 << (ShardOverloaded()? " [shard]" : "") << (tableOverload? " [table]" : "")
                 << " at tablet " << TabletID());

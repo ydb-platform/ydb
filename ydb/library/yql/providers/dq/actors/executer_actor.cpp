@@ -147,7 +147,8 @@ private:
         AddChild(CheckPointCoordinatorId);
 
         int workerCount = ev->Get()->Record.GetRequest().GetTask().size();
-        YQL_CLOG(INFO, ProviderDq) << (TStringBuilder() << "Trying to allocate " << workerCount << " workers");
+        const bool enableComputeActor = Settings->EnableComputeActor.Get().GetOrElse(false);
+        YQL_CLOG(INFO, ProviderDq) << (TStringBuilder() << "Trying to allocate " << workerCount << " workers [EnableComputeActor=" << enableComputeActor << "]");
 
         THashMap<TString, Yql::DqsProto::TFile> files;
         TVector<NDqProto::TDqTask> tasks;
@@ -183,7 +184,6 @@ private:
             SelfId(), ResultId));
 
 
-        const bool enableComputeActor = Settings->EnableComputeActor.Get().GetOrElse(false);
         const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("sync");
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(

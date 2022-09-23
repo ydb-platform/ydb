@@ -1246,7 +1246,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
             PendingQuotaRequest = std::move(PendingRequest);
         }
     } else {
-        if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
+        if (!PendingQuotaRequest && SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
             SendRequest(std::move(PendingRequest), ctx);
         }
     }

@@ -205,7 +205,7 @@ private:
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
         auto create = modifyScheme->MutableCreateColumnStore();
         create->SetName(name);
-        create->SetColumnShardCount(req->column_shard_count());
+        create->SetColumnShardCount(req->shards_count());
         for (const auto& schemaPreset : req->schema_presets()) {
             auto* toSchemaPreset = create->AddSchemaPresets();
             toSchemaPreset->SetName(schemaPreset.name());
@@ -267,7 +267,7 @@ private:
                 }
                 ConvertDirectoryEntry(pathDescription.GetSelf(), selfEntry, true);
                 const auto& storeDescription = pathDescription.GetColumnStoreDescription();
-                describeLogStoreResult.set_column_shard_count(storeDescription.GetColumnShardCount());
+                describeLogStoreResult.set_shards_count(storeDescription.GetColumnShardCount());
 
                 bool firstPreset = true;
                 for (const auto& schemaPreset : storeDescription.GetSchemaPresets()) {
@@ -455,9 +455,16 @@ private:
             }
         }
 
-        create->SetColumnShardCount(req->column_shard_count());
+        create->SetColumnShardCount(req->shards_count());
         auto* sharding = create->MutableSharding()->MutableHashSharding();
-        sharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
+        if (req->sharding_type() == Ydb::LogStore::ShardingHashType::HASH_TYPE_MODULO_N) {
+            sharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+        } else {
+            sharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
+            if (req->active_shards_count()) {
+                sharding->SetActiveShardsCount(req->active_shards_count());
+            }
+        }
         sharding->MutableColumns()->CopyFrom(req->sharding_columns());
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
@@ -504,7 +511,7 @@ private:
                 }
                 ConvertDirectoryEntry(pathDescription.GetSelf(), selfEntry, true);
                 const auto& tableDescription = pathDescription.GetColumnTableDescription();
-                describeLogTableResult.set_column_shard_count(tableDescription.GetColumnShardCount());
+                describeLogTableResult.set_shards_count(tableDescription.GetColumnShardCount());
                 Ydb::StatusIds::StatusCode status;
                 TString error;
                 if (!ConvertSchemaFromInternalToPublic(tableDescription.GetSchema(), *describeLogTableResult.mutable_schema(), status, error)) {

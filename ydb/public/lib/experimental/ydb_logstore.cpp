@@ -104,16 +104,16 @@ void TSchema::SerializeTo(Ydb::LogStore::Schema& schema) const {
     DefaultCompression.SerializeTo(*schema.mutable_default_compression());
 }
 
-TLogStoreDescription::TLogStoreDescription(ui32 columnShardCount, const THashMap<TString, TSchema>& schemaPresets,
+TLogStoreDescription::TLogStoreDescription(ui32 shardsCount, const THashMap<TString, TSchema>& schemaPresets,
                                            const THashMap<TString, TTierConfig>& tierConfigs)
-    : ColumnShardCount(columnShardCount)
+    : ShardsCount(shardsCount)
     , SchemaPresets(schemaPresets)
     , TierConfigs(tierConfigs)
 {}
 
 TLogStoreDescription::TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult&& desc,
                                            const TDescribeLogStoreSettings& describeSettings)
-    : ColumnShardCount(desc.column_shard_count())
+    : ShardsCount(desc.shards_count())
     , SchemaPresets()
     , Owner(desc.self().owner())
 {
@@ -138,7 +138,7 @@ void TLogStoreDescription::SerializeTo(Ydb::LogStore::CreateLogStoreRequest& req
         pb.set_name(presetName);
         presetSchema.SerializeTo(*pb.mutable_schema());
     }
-    request.set_column_shard_count(ColumnShardCount);
+    request.set_shards_count(ShardsCount);
     for (const auto& [tierName, tierCfg] : TierConfigs) {
         auto& pb = *request.add_tiers();
         pb.set_name(tierName);
@@ -153,35 +153,44 @@ TDescribeLogStoreResult::TDescribeLogStoreResult(TStatus&& status, Ydb::LogStore
 {}
 
 
-TLogTableDescription::TLogTableDescription(const TString& schemaPresetName, const TVector<TString>& shardingColumns,
-    ui32 columnShardCount, const TMaybe<TTtlSettings>& ttlSettings)
+TLogTableSharding::TLogTableSharding(const Ydb::LogStore::DescribeLogTableResult& desc)
+    : Type(EShardingHashType::HASH_TYPE_UNSPECIFIED)
+    , Columns(desc.sharding_columns().begin(), desc.sharding_columns().end())
+    , ShardsCount(desc.shards_count())
+    , ActiveShardsCount(desc.active_shards_count())
+{
+    if (desc.sharding_type() == Ydb::LogStore::ShardingHashType::HASH_TYPE_MODULO_N) {
+        Type = EShardingHashType::HASH_TYPE_MODULO_N;
+    } else if (desc.sharding_type() == Ydb::LogStore::ShardingHashType::HASH_TYPE_LOGS_SPECIAL) {
+        Type = EShardingHashType::HASH_TYPE_LOGS_SPECIAL;
+    }
+}
+
+TLogTableDescription::TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding,
+    const TMaybe<TTtlSettings>& ttlSettings)
     : SchemaPresetName(schemaPresetName)
-    , ShardingColumns(shardingColumns)
-    , ColumnShardCount(columnShardCount)
+    , Sharding(sharding)
     , TtlSettings(ttlSettings)
 {}
 
-TLogTableDescription::TLogTableDescription(const TSchema& schema, const TVector<TString>& shardingColumns,
-    ui32 columnShardCount, const TMaybe<TTtlSettings>& ttlSettings)
+TLogTableDescription::TLogTableDescription(const TSchema& schema, const TLogTableSharding& sharding,
+    const TMaybe<TTtlSettings>& ttlSettings)
     : Schema(schema)
-    , ShardingColumns(shardingColumns)
-    , ColumnShardCount(columnShardCount)
+    , Sharding(sharding)
     , TtlSettings(ttlSettings)
 {}
 
-TLogTableDescription::TLogTableDescription(const TString& schemaPresetName, const TVector<TString>& shardingColumns,
-    ui32 columnShardCount, const THashMap<TString, TTier>& tiers)
+TLogTableDescription::TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding,
+    const THashMap<TString, TTier>& tiers)
     : SchemaPresetName(schemaPresetName)
-    , ShardingColumns(shardingColumns)
-    , ColumnShardCount(columnShardCount)
+    , Sharding(sharding)
     , Tiers(tiers)
 {}
 
 TLogTableDescription::TLogTableDescription(Ydb::LogStore::DescribeLogTableResult&& desc,
                                            const TDescribeLogTableSettings& describeSettings)
     : Schema(desc.schema())
-    , ShardingColumns(desc.sharding_columns().begin(), desc.sharding_columns().end())
-    , ColumnShardCount(desc.column_shard_count())
+    , Sharding(desc)
     , TtlSettings(TtlSettingsFromProto(desc.ttl_settings()))
     , Owner(desc.self().owner())
 {
@@ -195,10 +204,21 @@ void TLogTableDescription::SerializeTo(Ydb::LogStore::CreateLogTableRequest& req
         Schema.SerializeTo(*request.mutable_schema());
     }
     request.set_schema_preset_name(SchemaPresetName);
-    request.set_column_shard_count(ColumnShardCount);
-    for (const auto& sc : ShardingColumns) {
+    request.set_shards_count(Sharding.ShardsCount);
+    if (Sharding.ActiveShardsCount) {
+        request.set_active_shards_count(Sharding.ActiveShardsCount);
+    }
+    for (const auto& sc : Sharding.Columns) {
         request.add_sharding_columns(sc);
     }
+    Ydb::LogStore::ShardingHashType shardingType = (Sharding.Type == NYdb::NLogStore::HASH_TYPE_MODULO_N) ?
+        Ydb::LogStore::ShardingHashType::HASH_TYPE_MODULO_N :
+        Ydb::LogStore::ShardingHashType::HASH_TYPE_LOGS_SPECIAL;
+    request.set_sharding_type(shardingType);
+    if (Sharding.ActiveShardsCount) {
+        request.set_active_shards_count(Sharding.ActiveShardsCount);
+    }
+
     if (TtlSettings) {
         TtlSettings->SerializeTo(*request.mutable_ttl_settings());
     }

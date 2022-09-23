@@ -590,7 +590,7 @@ message TColumnTableSharding {
     message THashSharding {
         enum EHashFunction {
             // A simple hash modulo number of shards
-            HASH_FUNCTION_DEFAULT = 0;
+            HASH_FUNCTION_MODULO_N = 0;
             HASH_FUNCTION_CLOUD_LOGS = 1;
         }
 
@@ -605,6 +605,9 @@ message TColumnTableSharding {
         // changed and older data with the same column values may be left on
         // a different shard.
         optional bool UniqueShardKey = 3;
+
+        // Argument for HASH_FUNCTION_CLOUD_LOGS
+        optional uint32 ActiveShardsCount = 4;
     }
 
     oneof Method {

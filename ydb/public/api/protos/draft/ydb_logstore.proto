@@ -23,6 +23,12 @@ message Compression {
     int32 compression_level = 2;
 }
 
+enum ShardingHashType {
+    HASH_TYPE_UNSPECIFIED   = 0x0000;
+    HASH_TYPE_MODULO_N      = 0x0001; // hash(sharding_columns) % N
+    HASH_TYPE_LOGS_SPECIAL  = 0x0002;
+}
+
 message ColumnMeta {
     string name = 1;
     Type type = 2;
@@ -61,7 +67,7 @@ message CreateLogStoreRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
     string path = 2;        // Full path
-    uint32 column_shard_count = 3;
+    uint32 shards_count = 3;
     repeated SchemaPreset schema_presets = 4;
     repeated TierConfig tiers = 5;
 }
@@ -79,7 +85,7 @@ message DescribeLogStoreRequest {
 message DescribeLogStoreResult {
     Ydb.Scheme.Entry self = 1;  // Description of scheme object
 
-    uint32 column_shard_count = 2;
+    uint32 shards_count = 2;
     repeated SchemaPreset schema_presets = 3;
     repeated TierConfig tiers = 4;
 }
@@ -133,8 +139,10 @@ message CreateLogTableRequest {
     };
 
     // Specifies the desired number of ColumnShards for this table
-    uint32 column_shard_count = 7;
+    uint32 shards_count = 7;
     repeated string sharding_columns = 8;
+    ShardingHashType sharding_type = 9;
+    uint32 active_shards_count = 10; // optional parameter for HASH_TYPE_LOGS_SPECIAL
 }
 
 message CreateLogTableResponse {
@@ -158,8 +166,10 @@ message DescribeLogTableResult {
     }
 
     // Specifies the desired number of ColumnShards for this table
-    uint32 column_shard_count = 6;
+    uint32 shards_count = 6;
     repeated string sharding_columns = 7;
+    ShardingHashType sharding_type = 8;
+    uint32 active_shards_count = 9;
 }
 
 message DescribeLogTableResponse {

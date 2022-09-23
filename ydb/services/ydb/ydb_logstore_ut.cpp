@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = logStoreClient.DescribeLogStore("/Root/LogStore").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto descr = res.GetDescription();
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetColumnShardCount(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().count("default"), 1);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetOwner(), "root@builtin");
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = logStoreClient.DescribeLogStore("/Root/LogStore").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto descr = res.GetDescription();
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetColumnShardCount(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().count("default"), 1);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetOwner(), "root@builtin");
@@ -266,7 +266,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
         // Log table with intermediate dirs
         {
-            NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding);
             auto res = logStoreClient.CreateLogTable("/Root/home/folder/LogStore/Dir1/Dir2/log1", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
@@ -291,7 +292,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         }
 
         {
-            NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log1", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
@@ -300,7 +302,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = logStoreClient.DescribeLogTable("/Root/LogStore/log1").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto descr = res.GetDescription();
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetColumnShardCount(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[0].ToString(), "{ name: \"timestamp\", type: Timestamp? }");
@@ -312,7 +314,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         }
 
         {
-            NYdb::NLogStore::TLogTableDescription tableDescr(logSchema, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr(logSchema, sharding);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log2", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
@@ -321,7 +324,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = logStoreClient.DescribeLogTable("/Root/LogStore/log2").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto descr = res.GetDescription();
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetColumnShardCount(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[0].ToString(), "{ name: \"timestamp\", type: Timestamp? }");
@@ -333,7 +336,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         }
 
         {
-            NYdb::NLogStore::TLogTableDescription tableDescr(logSchema, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr(logSchema, sharding);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log2", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
@@ -445,7 +449,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
         // Create table without TTL settings
         {
-            NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log1", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
@@ -459,7 +464,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         // Create table with TTL settings
         {
             NYdb::NLogStore::TTtlSettings ttlSettings("saved_at", TDuration::Seconds(2000));
-            NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4, ttlSettings);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log2", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
@@ -542,7 +548,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         // Use invalid column for TTL
         {
             NYdb::NLogStore::TTtlSettings ttlSettings("nonexisting_column", TDuration::Seconds(2000));
-            NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4, ttlSettings);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log3", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
         }
@@ -550,7 +557,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         // Use column of invalid type for TTL
         {
             NYdb::NLogStore::TTtlSettings ttlSettings("message", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600));
-            NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4, ttlSettings);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log4", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
         }
@@ -558,7 +566,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         // Use non-Timestamp column for TTL
         {
             NYdb::NLogStore::TTtlSettings ttlSettings("uint_timestamp", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600));
-            NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4, ttlSettings);
+            NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
+            NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log5", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
         }

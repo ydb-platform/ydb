@@ -1,43 +1,19 @@
-#include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/digest/md5/md5.h>
-#include <library/cpp/openssl/init/init.h>
-#include <library/cpp/string_utils/base64/base64.h>
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/security/util.h>
-#include <util/generic/queue.h>
-#include <util/generic/deque.h>
-#include <util/stream/file.h>
 #include <util/string/vector.h>
+#include "ticket_parser_impl.h"
 #include "ticket_parser.h"
 
 namespace NKikimr {
 
-class TTicketParser : public TActorBootstrapped<TTicketParser> {
+class TTicketParser : public TTicketParserImpl<TTicketParser> {
     using TThis = TTicketParser;
-    using TBase = TActorBootstrapped<TTicketParser>;
-
-    NKikimrProto::TAuthConfig Config;
-    TString DomainName;
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsReceived;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsSuccess;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsRetryable;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsPermanent;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsBuiltin;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsLogin;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
-    NMonitoring::THistogramPtr CounterTicketsBuildTime;
-
-    TDuration RefreshPeriod = TDuration::Seconds(1); // how often do we check for ticket freshness/expiration
-    TDuration LifeTime = TDuration::Hours(1); // for how long ticket will remain in the cache after last access
-    TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
+    using TBase = TTicketParserImpl<TTicketParser>;
+    using TBase::TBase;
 
     enum class ETokenType {
         Unknown,
@@ -46,7 +22,7 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         Login,
     };
 
-    ETokenType ParseTokenType(TStringBuf tokenType) {
+    ETokenType ParseTokenType(const TStringBuf& tokenType) const {
         if (tokenType == "Login") {
             if (UseLoginProvider) {
                 return ETokenType::Login;
@@ -57,35 +33,13 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         return ETokenType::Unknown;
     }
 
-    struct TTokenRecord {
-        TTokenRecord(const TTokenRecord&) = delete;
-        TTokenRecord& operator =(const TTokenRecord&) = delete;
+    struct TTokenRecord : TBase::TTokenRecordBase {
+        using TBase::TTokenRecordBase::TTokenRecordBase;
 
-        TString Ticket;
-        TString Subject; // login
-        TEvTicketParser::TError Error;
-        TIntrusivePtr<NACLib::TUserToken> Token;
-        TString SerializedToken;
-        TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
-        ui64 ResponsesLeft = 0;
-        TInstant InitTime;
-        TInstant ExpireTime;
-        TInstant AccessTime;
         ETokenType TokenType = ETokenType::Unknown;
-        TString PeerName;
-        TString Database;
-        TStackVec<TString> AdditionalSIDs;
 
         TString GetSubject() const {
             return Subject;
-        }
-
-        TTokenRecord(TStringBuf ticket)
-            : Ticket(ticket)
-        {}
-
-        bool IsTokenReady() const {
-            return Token != nullptr;
         }
 
         TString GetAuthType() const {
@@ -102,66 +56,10 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         }
     };
 
-    struct TTokenRefreshRecord {
-        TString Key;
-        TInstant RefreshTime;
-
-        bool operator <(const TTokenRefreshRecord& o) const {
-            return RefreshTime > o.RefreshTime;
-        }
-    };
-
     THashMap<TString, TTokenRecord> UserTokens;
-    TPriorityQueue<TTokenRefreshRecord> RefreshQueue;
-    std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
-    bool UseLoginProvider = false;
 
     static TString GetKey(TEvTicketParser::TEvAuthorizeTicket* request) {
-        TStringStream key;
-        key << request->Ticket;
-        key << ':';
-        if (request->Database) {
-            key << request->Database;
-            key << ':';
-        }
-        for (const auto& entry : request->Entries) {
-            for (auto it = entry.Attributes.begin(); it != entry.Attributes.end(); ++it) {
-                if (it != entry.Attributes.begin()) {
-                    key << '-';
-                }
-                key << it->second;
-            }
-            key << ':';
-            for (auto it = entry.Permissions.begin(); it != entry.Permissions.end(); ++it) {
-                if (it != entry.Permissions.begin()) {
-                    key << '-';
-                }
-                key << it->Permission << "(" << it->Required << ")";
-            }
-        }
-        return key.Str();
-    }
-
-    static TStringBuf GetTicketFromKey(TStringBuf key) {
-        return key.Before(':');
-    }
-
-    TInstant GetExpireTime(TInstant now) {
-        return now + ExpireTime;
-    }
-
-    TDuration GetLifeTime() {
-        return LifeTime;
-    }
-
-    static void EnrichUserTokenWithBuiltins(const TTokenRecord& tokenRecord) {
-        const TString& allAuthenticatedUsers = AppData()->AllAuthenticatedUsers;
-        if (!allAuthenticatedUsers.empty()) {
-            tokenRecord.Token->AddGroupSID(allAuthenticatedUsers);
-        }
-        for (const TString& sid : tokenRecord.AdditionalSIDs) {
-            tokenRecord.Token->AddGroupSID(sid);
-        }
+        return request->Ticket + TBase::GetKey(request);
     }
 
     void InitTokenRecord(const TString& key, TTokenRecord& record, const TActorContext& ctx) {
@@ -285,28 +183,6 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         RefreshQueue.push({key, record.ExpireTime});
     }
 
-    void Respond(TTokenRecord& record, const TActorContext& ctx) {
-        if (record.IsTokenReady()) {
-            for (const auto& request : record.AuthorizeRequests) {
-                ctx.Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Token, record.SerializedToken), 0, request->Cookie);
-            }
-        } else {
-            for (const auto& request : record.AuthorizeRequests) {
-                ctx.Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Error), 0, request->Cookie);
-            }
-        }
-        record.AuthorizeRequests.clear();
-    }
-
-    void CrackTicket(const TString& ticketBody, TStringBuf& ticket, TStringBuf& ticketType) {
-        ticket = ticketBody;
-        ticketType = ticket.NextTok(' ');
-        if (ticket.empty()) {
-            ticket = ticketBody;
-            ticketType.Clear();
-        }
-    }
-
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TActorContext& ctx) {
         TStringBuf ticket;
         TStringBuf ticketType;
@@ -388,24 +264,6 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         UserTokens.erase(ev->Get()->Ticket);
     }
 
-    static TString GetLoginProviderKeys(const NLogin::TLoginProvider& loginProvider) {
-        TStringBuilder keys;
-        for (const auto& [key, pubKey, privKey, expiresAt] : loginProvider.Keys) {
-            if (!keys.empty()) {
-                keys << ",";
-            }
-            keys << key;
-        }
-        return keys;
-    }
-
-    void Handle(TEvTicketParser::TEvUpdateLoginSecurityState::TPtr& ev, const TActorContext& ctx) {
-        auto& loginProvider = LoginProviders[ev->Get()->SecurityState.GetAudience()];
-        loginProvider.UpdateSecurityState(ev->Get()->SecurityState);
-        LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER,
-            "Updated state for " << loginProvider.Audience << " keys " << GetLoginProviderKeys(loginProvider));
-    }
-
     void HandleRefresh(const NActors::TActorContext& ctx) {
         while (!RefreshQueue.empty() && RefreshQueue.top().RefreshTime <= ctx.Now()) {
             TString key = RefreshQueue.top().Key;
@@ -427,10 +285,6 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
             }
         }
         ctx.Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
-    }
-
-    static TStringBuf HtmlBool(bool v) {
-        return v ? "<span style='font-weight:bold'>&#x2611;</span>" : "<span style='font-weight:bold'>&#x2610;</span>";
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
@@ -565,14 +419,12 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::TICKET_PARSER_ACTOR; }
-
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
             HFunc(TEvTicketParser::TEvRefreshTicket, Handle);
             HFunc(TEvTicketParser::TEvDiscardTicket, Handle);
-            HFunc(TEvTicketParser::TEvUpdateLoginSecurityState, Handle);
+            HFunc(TEvTicketParser::TEvUpdateLoginSecurityState, TBase::Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleRefresh);
             CFunc(TEvents::TSystem::PoisonPill, Die);
@@ -615,9 +467,6 @@ public:
         ctx.Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
         TBase::Become(&TThis::StateWork);
     }
-
-    TTicketParser(const NKikimrProto::TAuthConfig& authConfig)
-        : Config(authConfig) {}
 };
 
 IActor* CreateTicketParser(const NKikimrProto::TAuthConfig& authConfig) {

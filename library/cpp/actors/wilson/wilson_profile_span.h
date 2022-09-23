@@ -19,7 +19,7 @@ private:
         void AddMin(const TInstant instance);
         TString ToString() const;
     };
-    mutable NJson::TJsonValue ResultTimes;
+    mutable NJson::TJsonValue ResultTimes = NJson::JSON_MAP;
     std::map<TString, TMinMaxPair> PairInstances;
     std::vector<NJson::TJsonValue*> CurrentJsonPath;
     mutable TInstant LastNoGuards = Now();
@@ -31,6 +31,8 @@ private:
 public:
     TProfileSpan(const ui8 verbosity, TTraceId parentId, std::optional<TString> name);
     ~TProfileSpan();
+
+    TProfileSpan BuildChildrenSpan(std::optional<TString> name, const ui8 verbosity = 0) const;
 
     using TBase::TBase;
     TString ProfileToString() const;

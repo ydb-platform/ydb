@@ -34,9 +34,15 @@ TProfileSpan::TProfileSpan(const ui8 verbosity, TTraceId parentId, std::optional
 }
 
 TProfileSpan::~TProfileSpan() {
-    if (Enabled) {
+    if (Enabled && (ResultTimes.GetMapSafe().size() || PairInstances.size())) {
         TBase::Attribute("profile", ProfileToString());
     }
+}
+
+NWilson::TProfileSpan TProfileSpan::BuildChildrenSpan(std::optional<TString> name, const ui8 verbosity) const {
+    TTraceId parentTraceId = TBase::GetTraceId();
+    const ui8 newVerbosity = verbosity ? verbosity : parentTraceId.GetVerbosity();
+    return TProfileSpan(newVerbosity, std::move(parentTraceId), name);
 }
 
 TString TProfileSpan::ProfileToString() const {

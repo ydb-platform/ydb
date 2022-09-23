@@ -138,6 +138,10 @@ public:
             auto request = MakeHolder<TEvConsole::TEvToggleConfigValidatorRequest>();
             request->Record.CopyFrom(Request.GetToggleConfigValidatorRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
+        } else if (Request.HasUpdateTenantPoolConfig()) {
+            auto request = MakeHolder<TEvConsole::TEvUpdateTenantPoolConfig>();
+            request->Record.CopyFrom(Request.GetUpdateTenantPoolConfig());
+            NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else {
             ReplyWithErrorAndDie("Unknown console request", ctx);
         }

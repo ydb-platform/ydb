@@ -1,3 +1,5 @@
+import "ydb/core/protos/blobstorage_config.proto";
+
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
@@ -66,6 +68,14 @@ message TDescribeTenantOptionsRequest {
 
 message TDescribeTenantOptionsResponse {
     optional Ydb.Cms.DescribeDatabaseOptionsResponse Response = 1;
+}
+
+// For internal use only. Commonly used for borrowed storage pools
+message TUpdateTenantPoolConfig {
+    optional string Tenant = 1;
+    optional string PoolType = 2;
+    optional NKikimrBlobStorage.TDefineStoragePool Config = 3;
+    optional bytes UserToken = 4;
 }
 
 message TSlotLocation {

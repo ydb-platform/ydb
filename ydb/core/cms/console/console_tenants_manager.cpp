@@ -3101,6 +3101,11 @@ void TTenantsManager::Handle(TEvConsole::TEvRemoveTenantRequest::TPtr &ev, const
     TxProcessor->ProcessTx(CreateTxRemoveTenant(ev), ctx);
 }
 
+void TTenantsManager::Handle(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev, const TActorContext &ctx)
+{
+    TxProcessor->ProcessTx(CreateTxUpdateTenantPoolConfig(ev), ctx);
+}
+
 void TTenantsManager::Handle(TEvPrivate::TEvPoolAllocated::TPtr &ev, const TActorContext &ctx)
 {
     auto tenant = ev->Get()->Tenant;

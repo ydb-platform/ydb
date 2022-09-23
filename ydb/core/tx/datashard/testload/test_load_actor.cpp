@@ -229,8 +229,10 @@ public:
     void Handle(TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
         const auto& msg = ev->Get();
         auto it = LoadActors.find(msg->Tag);
-        Y_VERIFY(it != LoadActors.end());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load actor with tag# " << msg->Tag << " finished");
+        Y_VERIFY(it != LoadActors.end(), "%s", (TStringBuilder() << "failed to find actor with tag# " << msg->Tag
+            << ", TEvTestLoadFinished from actor# " << ev->Sender).c_str());
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load actor# " << ev->Sender
+            << " with tag# " << msg->Tag << " finished");
 
         if (it->second.Parent) {
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>();

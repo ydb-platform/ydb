@@ -38,12 +38,22 @@ struct TEvDataShardLoad {
         ui64 OperationsOK = 0;
         ui64 OperationsError = 0;
 
+        // info might contain result for multiple subtests
+        TString Info;
+        ui64 SubtestCount = 0;
+
         TString ToString() const {
             TStringStream ss;
             ss << "Load duration: " << Duration << ", OK=" << OperationsOK << ", Error=" << OperationsError;
             if (OperationsOK && Duration.Seconds()) {
                 ui64 throughput = OperationsOK / Duration.Seconds();
                 ss << ", throughput=" << throughput << " OK_ops/s";
+            }
+            if (SubtestCount) {
+                ss << ", subtests: " << SubtestCount;
+            }
+            if (Info) {
+                ss << ", Info: " << Info;
             }
             return ss.Str();
         }

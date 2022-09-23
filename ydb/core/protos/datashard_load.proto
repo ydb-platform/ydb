@@ -22,8 +22,10 @@ message TEvTestLoadRequest {
     }
 
     message TReadStart {
-        optional uint64 TabletId = 1;
-        optional uint64 TableId = 2;
+        optional string Path = 1;
+
+        // defines dataset size, normally must be withing 2 GiB
+        optional uint64 RowCount = 2;
 
         // Specifies the format for result data in TEvReadResult
         optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 3;

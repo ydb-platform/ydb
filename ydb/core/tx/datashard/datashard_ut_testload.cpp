@@ -159,7 +159,27 @@ struct TTestHelper {
         return WaitReadResult();
     }
 
-    void RunTestLoad(std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request) {
+    void CheckKeysCount(size_t expectedRowCount) {
+        TVector<TString> from = {TString("user")};
+        TVector<TString> to = {TString("zzz")};
+
+        auto request = GetBaseReadRequest();
+        AddRangeQuery(
+            *request,
+            from,
+            true,
+            to,
+            true
+        );
+
+        auto readResult = SendRead(request.release());
+        UNIT_ASSERT(readResult);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), expectedRowCount);
+    }
+
+    std::unique_ptr<TEvDataShardLoad::TEvTestLoadFinished> RunTestLoad(
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request)
+    {
         request->Record.SetNotifyWhenFinished(true);
         auto &runtime = *Server->GetRuntime();
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
@@ -185,28 +205,14 @@ struct TTestHelper {
             auto response = handle->Release<TEvDataShardLoad::TEvTestLoadFinished>();
             UNIT_ASSERT(response->Report);
             UNIT_ASSERT(!response->ErrorReason);
+
+            return std::unique_ptr<TEvDataShardLoad::TEvTestLoadFinished>(response.Release());
         }
     }
 
     void RunUpsertTestLoad(std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> loadRequest, size_t expectedRowCount) {
         RunTestLoad(std::move(loadRequest));
-
-        // holds memory for TCell
-        TVector<TString> from = {TString("user")};
-        TVector<TString> to = {TString("zzz")};
-
-        auto request = GetBaseReadRequest();
-        AddRangeQuery(
-            *request,
-            from,
-            true,
-            to,
-            true
-        );
-
-        auto readResult = SendRead(request.release());
-        UNIT_ASSERT(readResult);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), expectedRowCount);
+        CheckKeysCount(expectedRowCount);
     }
 
 public:
@@ -273,5 +279,31 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
     }
 
 } // Y_UNIT_TEST_SUITE(UpsertLoad)
+
+Y_UNIT_TEST_SUITE(ReadLoad) {
+    Y_UNIT_TEST(ShouldReadIterate) {
+        TTestHelper helper;
+
+        const ui64 expectedRowCount = 20;
+
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        auto& record = request->Record;
+        auto& command = *record.MutableReadIteratorStart();
+
+        command.SetRowCount(expectedRowCount);
+        command.SetPath("/Root/usertable");
+
+        auto result = helper.RunTestLoad(std::move(request));
+        UNIT_ASSERT(result->Report);
+
+        // fullscans with different chunks: 5
+        // read head with inflight 1
+        UNIT_ASSERT_VALUES_EQUAL(result->Report->SubtestCount, 6);
+
+        // sanity check that there was data in table
+        helper.CheckKeysCount(expectedRowCount);
+    }
+
+} // Y_UNIT_TEST_SUITE(ReadLoad)
 
 } // namespace NKikimr

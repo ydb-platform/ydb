@@ -127,7 +127,7 @@ public:
                         return std::move(result);
                     }
 
-                    if (ComputeCtx.IsTabletNotReady()) {
+                    if (ComputeCtx.IsTabletNotReady() || ComputeCtx.HadInconsistentReads()) {
                         return NUdf::TUnboxedValue::MakeYield();
                     }
 
@@ -234,7 +234,7 @@ public:
                 return result;
             }
 
-            if (ComputeCtx.IsTabletNotReady()) {
+            if (ComputeCtx.IsTabletNotReady() || ComputeCtx.HadInconsistentReads()) {
                 return NUdf::TUnboxedValue::MakeYield();
             }
 

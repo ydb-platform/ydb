@@ -377,6 +377,12 @@ public:
         : TableId(tableId)
     {}
 
+    template<class TTag>
+    bool IsInList() const {
+        using TItem = TIntrusiveListItem<TTableLocks, TTag>;
+        return !static_cast<const TItem*>(this)->Empty();
+    }
+
     TPathId GetTableId() const { return TableId; }
 
     void AddShardLock(TLockInfo* lock);
@@ -607,6 +613,8 @@ struct TLocksUpdate {
     TRowVersion BreakVersion = TRowVersion::Min();
 
     bool BreakOwn = false;
+
+    ~TLocksUpdate();
 
     bool HasLocks() const {
         return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks);

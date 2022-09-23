@@ -478,6 +478,10 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
 {
     auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, tasks, tasksRunner, /* applyEffects */ true);
 
+    if (computeCtx.HadInconsistentReads()) {
+        return nullptr;
+    }
+
     if (runStatus == NYql::NDq::ERunStatus::PendingInput && computeCtx.IsTabletNotReady()) {
         return nullptr;
     }

@@ -181,6 +181,7 @@ public:
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
+    void ResetCollectedChanges() { EngineBay.ResetCollectedChanges(); }
 
     TActorId Source() const { return Source_; }
     void SetSource(const TActorId& actorId) { Source_ = actorId; }

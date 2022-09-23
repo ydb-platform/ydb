@@ -101,6 +101,7 @@ public:
     void SetIsRepeatableSnapshot();
 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
+    void ResetCollectedChanges();
 
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }

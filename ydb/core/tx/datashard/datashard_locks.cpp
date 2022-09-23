@@ -689,6 +689,28 @@ void TLockLocker::SaveBrokenPersistentLocks(ILocksDb* db) {
     }
 }
 
+// TLocksUpdate
+
+TLocksUpdate::~TLocksUpdate() {
+    auto cleanList = [](auto& list) {
+        while (!list.Empty()) {
+            list.PopFront();
+        }
+    };
+
+    // We clean all lists to make sure items are not left linked together
+    cleanList(ReadTables);
+    cleanList(WriteTables);
+    cleanList(AffectedTables);
+    cleanList(BreakLocks);
+    cleanList(BreakShardLocks);
+    cleanList(BreakAllLocks);
+    cleanList(ReadConflictLocks);
+    cleanList(WriteConflictLocks);
+    cleanList(WriteConflictShardLocks);
+    cleanList(EraseLocks);
+}
+
 // TSysLocks
 
 TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
@@ -1038,16 +1060,32 @@ bool TSysLocks::IsMyKey(const TArrayRef<const TCell>& key) const {
 }
 
 bool TSysLocks::HasWriteLock(ui64 lockId, const TTableId& tableId) const {
+    if (Update && Update->LockTxId == lockId && Update->WriteTables) {
+        if (auto* table = Locker.FindTablePtr(tableId.PathId)) {
+            if (table->IsInList<TTableLocksWriteListTag>()) {
+                return true;
+            }
+        }
+    }
+
     if (auto* lock = Locker.FindLockPtr(lockId)) {
-        return lock->WriteTables.contains(tableId.PathId);
+        if (lock->WriteTables.contains(tableId.PathId)) {
+            return true;
+        }
     }
 
     return false;
 }
 
 bool TSysLocks::HasWriteLocks(const TTableId& tableId) const {
+    if (Update && Update->WriteTables) {
+        return true;
+    }
+
     if (auto* table = Locker.FindTablePtr(tableId.PathId)) {
-        return !table->WriteLocks.empty();
+        if (!table->WriteLocks.empty()) {
+            return true;
+        }
     }
 
     return false;

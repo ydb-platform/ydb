@@ -400,14 +400,15 @@ bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, TArrayRef<con
             EngineHost.GetReadTxMap(tableId),
             EngineHost.GetReadTxObserver(tableId));
 
+    if (InconsistentReads) {
+        return false;
+    }
+
     kqpStats.NSelectRow = 1;
     kqpStats.InvisibleRowSkips = stats.InvisibleRowSkips;
 
     switch (ready) {
         case EReady::Page:
-            if (auto collector = EngineHost.GetChangeCollector(tableId)) {
-                collector->Reset();
-            }
             SetTabletNotReady();
             return false;
         case EReady::Gone:
@@ -485,6 +486,10 @@ bool TKqpDatashardComputeContext::ReadRowImpl(const TTableId& tableId, TReadTabl
     const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats)
 {
     while (iterator.Next(NTable::ENext::Data) == NTable::EReady::Data) {
+        if (InconsistentReads) {
+            return false;
+        }
+
         TDbTupleRef rowKey = iterator.GetKey();
         MKQL_ENSURE_S(skipNullKeys.size() <= rowKey.ColumnCount);
 
@@ -521,9 +526,6 @@ bool TKqpDatashardComputeContext::ReadRowImpl(const TTableId& tableId, TReadTabl
     }
 
     if (iterator.Last() == NTable::EReady::Page) {
-        if (auto collector = EngineHost.GetChangeCollector(tableId)) {
-            collector->Reset();
-        }
         SetTabletNotReady();
     }
 
@@ -536,6 +538,10 @@ bool TKqpDatashardComputeContext::ReadRowWideImpl(const TTableId& tableId, TRead
     NUdf::TUnboxedValue* const* result, TKqpTableStats& stats)
 {
     while (iterator.Next(NTable::ENext::Data) == NTable::EReady::Data) {
+        if (InconsistentReads) {
+            return false;
+        }
+
         TDbTupleRef rowKey = iterator.GetKey();
         MKQL_ENSURE_S(skipNullKeys.size() <= rowKey.ColumnCount);
 
@@ -572,9 +578,6 @@ bool TKqpDatashardComputeContext::ReadRowWideImpl(const TTableId& tableId, TRead
     }
 
     if (iterator.Last() == NTable::EReady::Page) {
-        if (auto collector = EngineHost.GetChangeCollector(tableId)) {
-            collector->Reset();
-        }
         SetTabletNotReady();
     }
 

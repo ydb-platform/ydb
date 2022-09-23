@@ -99,6 +99,9 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
             auto result = KqpRunTransaction(ctx, op->GetTxId(), dataTx->GetKqpTasks(), tasksRunner);
 
+            Y_VERIFY_S(!dataTx->GetKqpComputeCtx().HadInconsistentReads(),
+                "Unexpected inconsistent reads in operation " << *op << " when preparing persistent channels");
+
             if (result == NYql::NDq::ERunStatus::PendingInput && dataTx->GetKqpComputeCtx().IsTabletNotReady()) {
                 allocGuard.Release();
                 return OnTabletNotReady(*tx, *dataTx, txc, ctx);

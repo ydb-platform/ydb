@@ -83,6 +83,9 @@ public:
         const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
         NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
 
+    bool HadInconsistentReads() const { return InconsistentReads; }
+    void SetInconsistentReads() { InconsistentReads = true; }
+
 private:
     void TouchTableRange(const TTableId& tableId, const TTableRange& range) const;
     void TouchTablePoint(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
@@ -97,7 +100,7 @@ private:
         const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
         NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
 
-    void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; };
+    void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; }
 
 public:
     NTable::TDatabase* Database = nullptr;
@@ -111,6 +114,7 @@ private:
     ui32 LockNodeId = 0;
     bool PersistentChannels = false;
     bool TabletNotReady = false;
+    bool InconsistentReads = false;
     TRowVersion ReadVersion = TRowVersion::Min();
     THashMap<std::pair<ui64, ui64>, TActorId> OutputChannels;
 };

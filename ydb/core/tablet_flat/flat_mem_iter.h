@@ -206,6 +206,9 @@ namespace NTable {
                             ApplyColumn(row, up);
                         }
                     }
+                    if (isDelta && row.IsFinalized()) {
+                        break;
+                    }
                 } else {
                     transactionObserver.OnSkipUncommitted(update->RowVersion.TxId);
                 }

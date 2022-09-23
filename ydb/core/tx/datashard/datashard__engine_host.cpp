@@ -280,13 +280,14 @@ TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
 ///
 class TDataShardEngineHost : public TEngineHost {
 public:
-    TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, ui32& lockNodeId, TInstant now)
+    TDataShardEngineHost(TDataShard* self, TEngineBay& engineBay, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, ui32& lockNodeId, TInstant now)
         : TEngineHost(db, counters,
             TEngineHostSettings(self->TabletID(),
                 (self->State == TShardState::Readonly || self->State == TShardState::Frozen),
                 self->ByKeyFilterDisabled(),
                 self->GetKeyAccessSampler()))
         , Self(self)
+        , EngineBay(engineBay)
         , DB(db)
         , LockTxId(lockTxId)
         , LockNodeId(lockNodeId)
@@ -349,6 +350,14 @@ public:
         }
 
         return total;
+    }
+
+    void ResetCollectedChanges() {
+        for (auto& pr : ChangeCollectors) {
+            if (pr.second) {
+                pr.second->Reset();
+            }
+        }
     }
 
     bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override {
@@ -620,6 +629,7 @@ public:
             // and that future conflict, hence we must break locks and abort.
             // TODO: add an actual abort
             Self->SysLocksTable().BreakSetLocks(LockTxId, LockNodeId);
+            EngineBay.GetKqpComputeCtx().SetInconsistentReads();
         }
     }
 
@@ -698,6 +708,7 @@ private:
     }
 
     TDataShard* Self;
+    TEngineBay& EngineBay;
     NTable::TDatabase& DB;
     const ui64& LockTxId;
     const ui32& LockNodeId;
@@ -720,7 +731,7 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
     , LockNodeId(0)
 {
     auto now = TAppData::TimeProvider->Now();
-    EngineHost = MakeHolder<TDataShardEngineHost>(self, txc.DB, EngineHostCounters, LockTxId, LockNodeId, now);
+    EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, EngineHostCounters, LockTxId, LockNodeId, now);
 
     EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
         *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
@@ -898,6 +909,11 @@ TVector<IChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetCollectedChanges();
+}
+
+void TEngineBay::ResetCollectedChanges() {
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    host->ResetCollectedChanges();
 }
 
 IEngineFlat * TEngineBay::GetEngine() {

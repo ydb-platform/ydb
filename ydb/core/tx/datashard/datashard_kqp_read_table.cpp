@@ -225,7 +225,7 @@ protected:
             return EFetchResult::One;
         }
 
-        if (ComputeCtx.IsTabletNotReady()) {
+        if (ComputeCtx.IsTabletNotReady() || ComputeCtx.HadInconsistentReads()) {
             return EFetchResult::Yield;
         }
 

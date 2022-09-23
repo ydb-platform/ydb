@@ -22,6 +22,9 @@ target_link_libraries(ydb-library-yql-providers-s3-provider-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   providers-s3-provider
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+  yql-dq-opt
 )
 target_link_options(ydb-library-yql-providers-s3-provider-ut PRIVATE
   -ldl

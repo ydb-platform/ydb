@@ -16,6 +16,8 @@ target_link_libraries(table-perf PUBLIC
   library-cpp-charset
   library-cpp-getopt
   ydb-core-tablet_flat
+  yql-sql-pg_dummy
+  udf-service-exception_policy
 )
 target_link_options(table-perf PRIVATE
   -Wl,-no_deduplicate

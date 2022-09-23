@@ -2864,15 +2864,15 @@ bool TKeyValueState::PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyV
 }
 
 void RegisterReadRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
-        const TTabletStorageInfo *info)
+        const TTabletStorageInfo *info, ui32 tabletGeneration)
 {
-    ctx.RegisterWithSameMailbox(CreateKeyValueStorageReadRequest(std::move(intermediate), info));
+    ctx.RegisterWithSameMailbox(CreateKeyValueStorageReadRequest(std::move(intermediate), info, tabletGeneration));
 }
 
 void RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
-        const TTabletStorageInfo *info)
+        const TTabletStorageInfo *info, ui32 tabletGeneration)
 {
-    ctx.RegisterWithSameMailbox(CreateKeyValueStorageRequest(std::move(intermediate), info));
+    ctx.RegisterWithSameMailbox(CreateKeyValueStorageRequest(std::move(intermediate), info, tabletGeneration));
 }
 
 void TKeyValueState::ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,
@@ -2880,10 +2880,10 @@ void TKeyValueState::ProcessPostponedIntermediate(const TActorContext& ctx, THol
 {
     switch(intermediate->EvType) {
     case TEvKeyValue::TEvRequest::EventType:
-        return RegisterRequestActor(ctx, std::move(intermediate), info);
+        return RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
     case TEvKeyValue::TEvRead::EventType:
     case TEvKeyValue::TEvReadRange::EventType:
-        return RegisterReadRequestActor(ctx, std::move(intermediate), info);
+        return RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
     default:
         Y_FAIL_S("Unexpected event type# " << intermediate->EvType);
     }
@@ -2905,13 +2905,13 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
         if (requestType == TRequestType::ReadOnlyInline) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage inline read request, Marker# KV49");
-            RegisterReadRequestActor(ctx, std::move(intermediate), info);
+            RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
             if (IntermediatesInFlight < IntermediatesInFlightLimit) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Create storage read request, Marker# KV54");
-                RegisterReadRequestActor(ctx, std::move(intermediate), info);
+                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++IntermediatesInFlight;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
@@ -2942,13 +2942,13 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
         if (requestType == TRequestType::ReadOnlyInline) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage inline read range request, Marker# KV58");
-            RegisterReadRequestActor(ctx, std::move(intermediate), info);
+            RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
             if (IntermediatesInFlight < IntermediatesInFlightLimit) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Create storage read range request, Marker# KV66");
-                RegisterReadRequestActor(ctx, std::move(intermediate), info);
+                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++IntermediatesInFlight;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
@@ -2979,7 +2979,7 @@ void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::
         ++InFlightForStep[StoredState.GetChannelStep()];
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
             << " Create storage request for WO, Marker# KV67");
-        RegisterRequestActor(ctx, std::move(intermediate), info);
+        RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
 
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
@@ -3003,7 +3003,7 @@ void TKeyValueState::OnEvGetStorageChannelStatus(TEvKeyValue::TEvGetStorageChann
         ++InFlightForStep[StoredState.GetChannelStep()];
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
             << " Create GetStorageChannelStatus request, Marker# KV75");
-        RegisterRequestActor(ctx, std::move(intermediate), info);
+        RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
         ++RoInlineIntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
@@ -3027,7 +3027,7 @@ void TKeyValueState::OnEvAcquireLock(TEvKeyValue::TEvAcquireLock::TPtr &ev, cons
         ++InFlightForStep[StoredState.GetChannelStep()];
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
             << " Create AcquireLock request, Marker# KV80");
-        RegisterRequestActor(ctx, std::move(intermediate), info);
+        RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
         ++RoInlineIntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
@@ -3074,17 +3074,17 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
         if (requestType == TRequestType::WriteOnly) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage request for WO, Marker# KV42");
-            RegisterRequestActor(ctx, std::move(intermediate), info);
+            RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
         } else if (requestType == TRequestType::ReadOnlyInline) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage request for RO_INLINE, Marker# KV45");
-            RegisterRequestActor(ctx, std::move(intermediate), info);
+            RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
             if (IntermediatesInFlight < IntermediatesInFlightLimit) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Create storage request for RO/RW, Marker# KV43");
-                RegisterRequestActor(ctx, std::move(intermediate), info);
+                RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++IntermediatesInFlight;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId

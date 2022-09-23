@@ -28,6 +28,7 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     ui64 InFlightQueries;
     ui64 InFlightRequestsLimit;
     ui64 NextInFlightBatchCookie;
+    ui32 TabletGeneration;
 
     THolder<TIntermediate> IntermediateResults;
 
@@ -66,7 +67,7 @@ public:
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
     }
 
-    TKeyValueStorageRequest(THolder<TIntermediate>&& intermediate, const TTabletStorageInfo *tabletInfo)
+    TKeyValueStorageRequest(THolder<TIntermediate>&& intermediate, const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
         : ReadRequestsSent(0)
         , ReadRequestsReplied(0)
         , WriteRequestsSent(0)
@@ -80,6 +81,7 @@ public:
         , InFlightQueries(0)
         , InFlightRequestsLimit(10)
         , NextInFlightBatchCookie(1)
+        , TabletGeneration(tabletGeneration)
         , IntermediateResults(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
     {
@@ -586,12 +588,11 @@ public:
         InFlightBatchByCookie[cookie] = std::move(request);
 
         Y_VERIFY(queryIdx == readQueryCount);
-        SendToBSProxy(
-            ctx, prevGroup,
-            new TEvBlobStorage::TEvGet(readQueries, readQueryCount, IntermediateResults->Deadline,
-                handleClass, false),
-            cookie);
 
+        auto ev = std::make_unique<TEvBlobStorage::TEvGet>(readQueries, readQueryCount, IntermediateResults->Deadline, handleClass, false);
+        ev->ReaderTabletId = TabletInfo->TabletID;
+        ev->ReaderTabletGeneration = TabletGeneration;
+        SendToBSProxy(ctx, prevGroup, ev.release(), cookie);
         return true;
     }
 
@@ -684,9 +685,11 @@ public:
     }
 };
 
-IActor* CreateKeyValueStorageRequest(THolder<TIntermediate>&& intermediate,
-        const TTabletStorageInfo *tabletInfo) {
-    return new TKeyValueStorageRequest(std::move(intermediate), tabletInfo);
+IActor* CreateKeyValueStorageRequest(
+        THolder<TIntermediate>&& intermediate,
+        const TTabletStorageInfo *tabletInfo,
+        ui32 tabletGeneration) {
+    return new TKeyValueStorageRequest(std::move(intermediate), tabletInfo, tabletGeneration);
 }
 
 } // NKeyValue

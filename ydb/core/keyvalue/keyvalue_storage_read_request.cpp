@@ -39,6 +39,7 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
 
     THolder<TIntermediate> IntermediateResult;
     const TTabletStorageInfo *TabletInfo;
+    ui32 TabletGeneration;
     TStackVec<TGetBatch, 1> Batches;
 
     ui32 ReceivedGetResults = 0;
@@ -187,10 +188,12 @@ public:
                 readItem.InFlight = true;
             }
 
-            std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(
+            auto ev = std::make_unique<TEvBlobStorage::TEvGet>(
                     readQueries, batch.ReadItemIndecies.size(), IntermediateResult->Deadline, handleClass, false);
+            ev->ReaderTabletId = TabletInfo->TabletID;
+            ev->ReaderTabletGeneration = TabletGeneration;
 
-            SendToBSProxy(TActivationContext::AsActorContext(), batch.GroupId, get.release(),
+            SendToBSProxy(TActivationContext::AsActorContext(), batch.GroupId, ev.release(),
                     batch.Cookie);
             batch.SentTime = TActivationContext::Now();
         }
@@ -472,17 +475,18 @@ public:
    }
 
     TKeyValueStorageReadRequest(THolder<TIntermediate> &&intermediate,
-            const TTabletStorageInfo *tabletInfo)
+            const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
         : IntermediateResult(std::move(intermediate))
         , TabletInfo(tabletInfo)
+        , TabletGeneration(tabletGeneration)
     {}
 };
 
 
 IActor* CreateKeyValueStorageReadRequest(THolder<TIntermediate>&& intermediate,
-        const TTabletStorageInfo *tabletInfo)
+        const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
 {
-    return new TKeyValueStorageReadRequest(std::move(intermediate), tabletInfo);
+    return new TKeyValueStorageReadRequest(std::move(intermediate), tabletInfo, tabletGeneration);
 }
 
 } // NKeyValue

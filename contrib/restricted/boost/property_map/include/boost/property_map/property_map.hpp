@@ -15,7 +15,7 @@
 #include <boost/config.hpp>
 #include <boost/static_assert.hpp>
 #include <cstddef>
-#include <boost/detail/iterator.hpp>
+#include <iterator>
 #include <boost/concept/assert.hpp>
 #include <boost/concept_check.hpp>
 #include <boost/concept_archetype.hpp>
@@ -407,14 +407,14 @@ namespace boost {
   template <class RAIter, class ID>
   inline safe_iterator_property_map<
     RAIter, ID,
-    typename boost::detail::iterator_traits<RAIter>::value_type,
-    typename boost::detail::iterator_traits<RAIter>::reference>
+    typename std::iterator_traits<RAIter>::value_type,
+    typename std::iterator_traits<RAIter>::reference>
   make_safe_iterator_property_map(RAIter iter, std::size_t n, ID id) {
     BOOST_CONCEPT_ASSERT((RandomAccessIteratorConcept<RAIter>));
     typedef safe_iterator_property_map<
       RAIter, ID,
-      typename boost::detail::iterator_traits<RAIter>::value_type,
-      typename boost::detail::iterator_traits<RAIter>::reference> PA;
+      typename std::iterator_traits<RAIter>::value_type,
+      typename std::iterator_traits<RAIter>::reference> PA;
     return PA(iter, n, id);
   }
   template <class RAIter, class Value, class ID>
@@ -594,10 +594,6 @@ namespace boost {
   }
 
 } // namespace boost
-
-#ifdef BOOST_GRAPH_USE_MPI
-#error #include <boost/property_map/parallel/parallel_property_maps.hpp>
-#endif
 
 #include <boost/property_map/vector_property_map.hpp>
 

@@ -1,5 +1,5 @@
-#ifndef DYNAMIC_PROPERTY_MAP_RG09302004_HPP
-#define DYNAMIC_PROPERTY_MAP_RG09302004_HPP
+#ifndef BOOST_PROPERTY_MAP_DYNAMIC_PROPERTY_MAP_HPP
+#define BOOST_PROPERTY_MAP_DYNAMIC_PROPERTY_MAP_HPP
 
 // Copyright 2004-5 The Trustees of Indiana University.
 
@@ -24,13 +24,16 @@
 #include <boost/any.hpp>
 #include <boost/function/function3.hpp>
 #include <boost/type_traits/is_convertible.hpp>
-#include <typeinfo>
 #include <boost/mpl/bool.hpp>
-#include <stdexcept>
-#include <sstream>
-#include <map>
 #include <boost/type.hpp>
+#include <boost/type_index.hpp>
 #include <boost/smart_ptr.hpp>
+#include <exception>
+#include <map>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <typeinfo>
 
 namespace boost {
 
@@ -70,17 +73,17 @@ public:
 //////////////////////////////////////////////////////////////////////
 
 struct dynamic_property_exception : public std::exception {
-  virtual ~dynamic_property_exception() {}
-  virtual const char* what() const noexcept = 0;
+  ~dynamic_property_exception() BOOST_OVERRIDE {}
+  const char* what() const noexcept BOOST_OVERRIDE = 0;
 };
 
 struct property_not_found : public dynamic_property_exception {
   std::string property;
   mutable std::string statement;
   property_not_found(const std::string& property) : property(property) {}
-  virtual ~property_not_found() {}
+  ~property_not_found() BOOST_OVERRIDE {}
 
-  const char* what() const noexcept {
+  const char* what() const noexcept BOOST_OVERRIDE {
     if(statement.empty())
       statement =
         std::string("Property not found: ") + property + ".";
@@ -93,13 +96,13 @@ struct dynamic_get_failure : public dynamic_property_exception {
   std::string property;
   mutable std::string statement;
   dynamic_get_failure(const std::string& property) : property(property) {}
-  virtual ~dynamic_get_failure() {}
+  ~dynamic_get_failure() BOOST_OVERRIDE {}
 
-  const char* what() const noexcept {
+  const char* what() const noexcept BOOST_OVERRIDE {
     if(statement.empty())
       statement =
         std::string(
-         "dynamic property get cannot retrieve value for  property: ")
+         "dynamic property get cannot retrieve value for property: ")
         + property + ".";
 
     return statement.c_str();
@@ -107,9 +110,9 @@ struct dynamic_get_failure : public dynamic_property_exception {
 };
 
 struct dynamic_const_put_error  : public dynamic_property_exception {
-  virtual ~dynamic_const_put_error() {}
+  ~dynamic_const_put_error() BOOST_OVERRIDE {}
 
-  const char* what() const noexcept {
+  const char* what() const noexcept BOOST_OVERRIDE {
     return "Attempt to put a value into a const property map: ";
   }
 };
@@ -147,7 +150,7 @@ class dynamic_property_map_adaptor : public dynamic_property_map
     using boost::put;
 
     key_type key_ = any_cast<key_type>(in_key);
-    if (in_value.type() == typeid(value_type)) {
+    if (in_value.type() == boost::typeindex::type_id<value_type>()) {
       put(property_map_, key_, any_cast<value_type>(in_value));
     } else {
       //  if in_value is an empty string, put a default constructed value_type.
@@ -169,27 +172,27 @@ public:
   explicit dynamic_property_map_adaptor(const PropertyMap& property_map_)
     : property_map_(property_map_) { }
 
-  virtual boost::any get(const any& key_)
+  boost::any get(const any& key_) BOOST_OVERRIDE
   {
     return get_wrapper_xxx(property_map_, any_cast<typename boost::property_traits<PropertyMap>::key_type>(key_));
   }
 
-  virtual std::string get_string(const any& key_)
+  std::string get_string(const any& key_) BOOST_OVERRIDE
   {
     std::ostringstream out;
     out << get_wrapper_xxx(property_map_, any_cast<typename boost::property_traits<PropertyMap>::key_type>(key_));
     return out.str();
   }
 
-  virtual void put(const any& in_key, const any& in_value)
+  void put(const any& in_key, const any& in_value) BOOST_OVERRIDE
   {
     do_put(in_key, in_value,
            mpl::bool_<(is_convertible<category*,
                                       writable_property_map_tag*>::value)>());
   }
 
-  virtual const std::type_info& key()   const { return typeid(key_type); }
-  virtual const std::type_info& value() const { return typeid(value_type); }
+  const std::type_info& key()   const BOOST_OVERRIDE { return typeid(key_type); }
+  const std::type_info& value() const BOOST_OVERRIDE { return typeid(value_type); }
 
   PropertyMap&       base()       { return property_map_; }
   const PropertyMap& base() const { return property_map_; }
@@ -349,4 +352,4 @@ ignore_other_properties(const std::string&,
 
 } // namespace boost
 
-#endif // DYNAMIC_PROPERTY_MAP_RG09302004_HPP
+#endif // BOOST_PROPERTY_MAP_DYNAMIC_PROPERTY_MAP_HPP

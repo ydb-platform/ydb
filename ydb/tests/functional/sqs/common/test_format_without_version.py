@@ -42,25 +42,22 @@ class QueueWithoutVersionTest(KikimrSqsTestBase):
         create_queue_tables(queue_tables_path, is_fifo, self._driver, session, shards)
 
         queues_table = self.sqs_root + '/.Queues'
-        self._execute_yql_query(
-            f'''UPSERT INTO `{queues_table}`
+        fill_queue_state_query = f'''UPSERT INTO `{queues_table}`
                 (Account, QueueName, QueueId, QueueState, FifoQueue, DeadLetterQueue, Shards, MasterTabletId, CreatedTimestamp, FolderId, DlqName, Partitions)
                 VALUES
-                ("{self._username}", "{self.queue_name}", "{uuid.uuid1()}", 1, {is_fifo}, false, {shards}, {tablet_id}, {now}, "", "", 1);'''
-        )
+                ("{self._username}", "{self.queue_name}", "{uuid.uuid1()}", 1, {is_fifo}, false, {shards}, {tablet_id}, {now}, "", "", 1);
+                '''
 
         for shard in range(shards):
-            self._execute_yql_query(
-                f'''UPSERT INTO `{self.get_table_path("State")}`
+            fill_queue_state_query += f'''UPSERT INTO `{self.get_table_path("State")}`
                 (State, MessageCount, InflyCount, ReadOffset, WriteOffset, CreatedTimestamp, LastModifiedTimestamp, CleanupTimestamp, RetentionBoundary)
-                VALUES({shard}, 0, 0, 0, 0, {now}, {now}, {now}, {now});'''
-            )
+                VALUES({shard}, 0, 0, 0, 0, {now}, {now}, {now}, {now});
+                '''
 
-        self._execute_yql_query(
-            f'''UPSERT INTO `{self.get_table_path("Attributes")}`
+        fill_queue_state_query += f'''UPSERT INTO `{self.get_table_path("Attributes")}`
             (State, MessageRetentionPeriod, VisibilityTimeout, MaximumMessageSize, FifoQueue, ContentBasedDeduplication, ReceiveMessageWaitTime, DelaySeconds, MaxReceiveCount)
             VALUES (0, 345600000, 30000, 262144, {is_fifo}, false, 0, 0, 0);'''
-        )
+        self._execute_yql_query(fill_queue_state_query)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_common(self, is_fifo):

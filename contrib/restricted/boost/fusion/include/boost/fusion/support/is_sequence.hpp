@@ -10,13 +10,10 @@
 #include <boost/fusion/support/config.hpp>
 #include <boost/fusion/support/sequence_base.hpp>
 #include <boost/fusion/support/tag_of.hpp>
-#include <boost/mpl/and.hpp>
+#include <boost/fusion/support/detail/is_native_fusion_sequence.hpp>
 #include <boost/mpl/bool.hpp>
 #include <boost/mpl/is_sequence.hpp>
-#include <boost/mpl/or.hpp>
-#include <boost/type_traits/is_complete.hpp>
 #include <boost/type_traits/is_convertible.hpp>
-#include <boost/type_traits/is_same.hpp>
 
 namespace boost { namespace fusion
 {
@@ -69,13 +66,7 @@ namespace boost { namespace fusion
             >
         {};
 
-        template <typename Sequence, typename Enable = void>
-        struct is_native_fusion_sequence
-          : mpl::and_<
-            is_complete<Sequence>,
-            is_convertible<Sequence, fusion::detail::from_sequence_convertible_type>
-          >
-        {};
+        using detail::is_native_fusion_sequence;
     }
 }}
 

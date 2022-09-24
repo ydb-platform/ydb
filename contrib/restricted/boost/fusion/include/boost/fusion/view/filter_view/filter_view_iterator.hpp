@@ -1,5 +1,6 @@
 /*=============================================================================
     Copyright (c) 2001-2011 Joel de Guzman
+    Copyright (c) 2018 Kohei Takahashi
 
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,7 +10,6 @@
 
 #include <boost/fusion/support/config.hpp>
 #include <boost/fusion/iterator/mpl/convert_iterator.hpp>
-#include <boost/fusion/adapted/mpl/mpl_iterator.hpp>
 #include <boost/fusion/iterator/value_of.hpp>
 #include <boost/fusion/support/iterator_base.hpp>
 #include <boost/fusion/algorithm/query/detail/find_if.hpp>
@@ -59,11 +59,14 @@ namespace boost { namespace fusion
         filter_iterator(First const& in_first)
             : first(filter::iter_call(first_converter::call(in_first))) {}
 
+        BOOST_CONSTEXPR BOOST_FUSION_GPU_ENABLED
+        filter_iterator(filter_iterator const& rhs)
+            : first(rhs.first) {}
+
         first_type first;
 
         // silence MSVC warning C4512: assignment operator could not be generated
         BOOST_DELETED_FUNCTION(filter_iterator& operator= (filter_iterator const&))
-        filter_iterator(const filter_iterator&) = default;
     };
 }}
 

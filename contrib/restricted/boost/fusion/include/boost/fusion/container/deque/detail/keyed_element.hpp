@@ -13,6 +13,11 @@
 #include <boost/fusion/iterator/deref.hpp>
 #include <boost/fusion/iterator/next.hpp>
 
+#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES) && BOOST_WORKAROUND(BOOST_GCC, / 100 == 404)
+#include <boost/core/enable_if.hpp>
+#include <boost/type_traits/is_same.hpp>
+#endif
+
 namespace boost { namespace fusion
 {
     struct fusion_sequence_tag;
@@ -114,8 +119,13 @@ namespace boost { namespace fusion { namespace detail
         {}
 
 #if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
+#if BOOST_WORKAROUND(BOOST_GCC, / 100 == 404)
+        template <typename Value_, typename = typename enable_if<is_same<Value_, Value> >::type>
+#else
+        typedef Value Value_;
+#endif
         BOOST_CXX14_CONSTEXPR BOOST_FUSION_GPU_ENABLED
-        keyed_element(Value&& value, Rest&& rest)
+        keyed_element(Value_&& value, Rest&& rest)
             : Rest(std::move(rest))
             , value_(BOOST_FUSION_FWD_ELEM(Value, value))
         {}

@@ -111,7 +111,9 @@ public:
             }
         }
 
-        AuditLog(GrpcRequestBaseCtx_, CheckedDatabaseName_, GetSubject(), ctx);
+        if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
+            AuditLog(GrpcRequestBaseCtx_, CheckedDatabaseName_, GetSubject(), ctx);
+        }
 
         // Simple rps limitation
         static NRpcService::TRlConfig rpsRlConfig(

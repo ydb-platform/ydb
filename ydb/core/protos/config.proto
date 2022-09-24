@@ -715,6 +715,7 @@ message TFeatureFlags {
     optional bool EnableFailureInjectionTermination = 71 [default = false];
     optional bool EnableChunkLocking = 72 [default = false];
     optional bool EnableNotNullDataColumns = 73 [default = false];
+    optional bool EnableGrpcAudit = 74 [default = false];
 }
 
 

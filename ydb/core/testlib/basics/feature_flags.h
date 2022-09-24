@@ -39,6 +39,7 @@ public:
     FEATURE_FLAG_SETTER(EnablePredicateExtractForDataQueries)
     FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
     FEATURE_FLAG_SETTER(EnableArrowFormatAtDatashard)
+    FEATURE_FLAG_SETTER(EnableGrpcAudit)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

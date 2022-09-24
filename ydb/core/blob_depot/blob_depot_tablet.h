@@ -5,6 +5,12 @@
 #include "types.h"
 #include "schema.h"
 
+namespace NKikimr::NTesting {
+
+    class TGroupOverseer;
+
+} // NKikimr::NTesting
+
 namespace NKikimr::NBlobDepot {
 
     using NTabletFlatExecutor::TTabletExecutedFlat;
@@ -227,6 +233,11 @@ namespace NKikimr::NBlobDepot {
 
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Validation
+
+        void Validate(NTesting::TGroupOverseer& overseer) const;
     };
 
 } // NKikimr::NBlobDepot

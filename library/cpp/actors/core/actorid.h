@@ -194,3 +194,5 @@ struct THash<NActors::TActorId> {
         return x.Hash();
     }
 };
+
+template<> struct std::hash<NActors::TActorId> : THash<NActors::TActorId> {};

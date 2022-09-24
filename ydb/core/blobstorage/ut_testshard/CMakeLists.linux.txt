@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-blobstorage-ut_testshard PUBLIC
   blobstorage-dsproxy-mock
   core-blobstorage-nodewarden
   blobstorage-pdisk-mock
+  blobstorage-testing-group_overseer
   blobstorage-vdisk-common
   ydb-core-mind
   core-mind-bscontroller

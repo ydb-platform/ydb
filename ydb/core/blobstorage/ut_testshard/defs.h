@@ -2,11 +2,13 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/blob_depot.h>
+#include <ydb/core/blob_depot/testing.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
-#include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
+#include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
+#include <ydb/core/blobstorage/testing/group_overseer/group_overseer.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/dynamic_nameserver.h>

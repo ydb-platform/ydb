@@ -66,8 +66,8 @@ class TTestActorSystem {
         ISchedulerCookie *Cookie;
         ui32 NodeId;
 
-        TScheduleItem(TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, ui32 nodeId)
-            : Event(ev.Release())
+        TScheduleItem(std::unique_ptr<IEventHandle> ev, ISchedulerCookie *cookie, ui32 nodeId)
+            : Event(std::move(ev))
             , Cookie(cookie)
             , NodeId(nodeId)
         {}
@@ -160,6 +160,7 @@ class TTestActorSystem {
 
 public:
     std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> FilterFunction;
+    std::function<bool(ui32, std::unique_ptr<IEventHandle>&, ISchedulerCookie*, TInstant)> FilterEnqueue;
     IOutputStream *LogStream = &Cerr;
 
 public:
@@ -418,7 +419,10 @@ public:
         if (ev && ev->HasEvent() && ev->GetTypeRewrite() == ev->Type && !EventName.count(ev->Type)) {
             EventName.emplace(ev->Type, TypeName(*ev->GetBase()));
         }
-        ScheduleQ[ts].emplace_back(ev, cookie, nodeId);
+        std::unique_ptr<IEventHandle> evPtr(ev.Release());
+        if (!FilterEnqueue || FilterEnqueue(nodeId, evPtr, cookie, ts)) {
+            ScheduleQ[ts].emplace_back(std::move(evPtr), cookie, nodeId);
+        }
     }
 
     void Schedule(TDuration timeout, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, ui32 nodeId) {

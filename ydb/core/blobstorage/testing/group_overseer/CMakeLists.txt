@@ -1,0 +1,20 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(blobstorage-testing-group_overseer)
+target_link_libraries(blobstorage-testing-group_overseer PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+  contrib-libs-t1ha
+)
+target_sources(blobstorage-testing-group_overseer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_overseer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/testing/group_overseer/group_state.cpp
+)

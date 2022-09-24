@@ -14,17 +14,6 @@
 #include "viewer.h"
 #include "wb_aggregate.h"
 
-namespace std {
-
-template <>
-struct hash<NActors::TActorId> {
-    size_t operator ()(const NActors::TActorId& actorId) const {
-        return actorId.Hash();
-    }
-};
-
-}
-
 namespace NKikimr {
 namespace NViewer {
 

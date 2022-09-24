@@ -99,7 +99,19 @@ Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
             Cerr << "TabletId# " << tabletId << " configured" << Endl;
         }
 
-        env.Sim(TDuration::Seconds(5));
+        std::vector<IActor*> blobDepots;
+        env.Runtime->EnumActors([&](IActor *actor) {
+            if (NBlobDepot::IsBlobDepotActor(actor)) {
+                blobDepots.push_back(actor);
+            }
+        });
+
+        for (ui32 i = 0; i < 1000; ++i) {
+            for (IActor *actor : blobDepots) {
+                NBlobDepot::ValidateBlobDepot(actor, env.GroupOverseer);
+            }
+            env.Sim(TDuration::MilliSeconds(5));
+        }
     }
 
 }

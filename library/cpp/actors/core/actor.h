@@ -555,3 +555,5 @@ struct THash<NActors::TActorIdentity> {
         return x.Hash();
     }
 };
+
+template<> struct std::hash<NActors::TActorIdentity> : THash<NActors::TActorIdentity> {};

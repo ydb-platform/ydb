@@ -14,11 +14,11 @@ struct TEnvironmentSetup {
     TIntrusivePtr<NFake::TProxyDS> Group0 = MakeIntrusive<NFake::TProxyDS>();
     std::map<std::pair<ui32, ui32>, TIntrusivePtr<TPDiskMockState>> PDiskMockStates;
     NKikimr::NTestShard::TTestShardContext::TPtr TestShardContext = NKikimr::NTestShard::TTestShardContext::Create();
+    NKikimr::NTesting::TGroupOverseer GroupOverseer;
 
     struct TSettings {
         const ui32 NodeCount = 8;
         const bool Encryption = false;
-        const std::function<void(TTestActorSystem&)> PrepareRuntime;
         const ui32 ControllerNodeId = 1;
     };
 
@@ -77,9 +77,16 @@ struct TEnvironmentSetup {
 
     void Initialize() {
         Runtime = std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR);
-        if (Settings.PrepareRuntime) {
-            Settings.PrepareRuntime(*Runtime);
-        }
+
+        Runtime->FilterFunction = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            GroupOverseer.ExamineEvent(nodeId, *ev);
+            return true;
+        };
+        Runtime->FilterEnqueue = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev, ISchedulerCookie*, TInstant) {
+            GroupOverseer.ExamineEnqueue(nodeId, *ev);
+            return true;
+        };
+
         SetupLogging();
         Runtime->Start();
         auto *appData = Runtime->GetAppData();
@@ -339,8 +346,21 @@ struct TEnvironmentSetup {
             prof->SetCount(32);
         }
 
+        {
+            auto *cmd = request.AddCommand();
+            cmd->MutableQueryBaseConfig();
+        }
+
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+        for (const auto& status : response.GetStatus()) {
+            if (status.HasBaseConfig()) {
+                for (const auto& group : status.GetBaseConfig().GetGroup()) {
+                    GroupOverseer.AddGroupToOversee(group.GetGroupId());
+                }
+            }
+        }
     }
 
     void Sim(TDuration delta = TDuration::Zero()) {

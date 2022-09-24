@@ -95,7 +95,7 @@ void FqConvert(const YandexQuery::CommonMeta& src, FQHttp::QueryMeta& dst) {
 }
 
 void FqConvert(const YandexQuery::QueryMeta& src, FQHttp::QueryMeta& dst) {
-    SIMPLE_COPY_MUTABLE_FIELD(submitted_at);
+    SIMPLE_COPY_MUTABLE_RENAME_FIELD(submitted_at, started_at);
     SIMPLE_COPY_MUTABLE_FIELD(finished_at);
     FqConvert(src.common(), dst);
 }
@@ -182,6 +182,9 @@ void FqPackToJson(TStringStream& json, const FQHttp::GetResultDataResult& httpRe
     auto resultSet = NYdb::TResultSet(httpResult.result_set());
     NJson::TJsonValue v;
     NYq::FormatResultSet(v, resultSet, true, true);
+    // rename key data -> rows
+    v["rows"] = v["data"];
+    v.EraseValue("data");
     NJson::TJsonWriterConfig jsonWriterConfig;
     jsonWriterConfig.WriteNanAsString = true;
     NJson::WriteJson(&json, &v, jsonWriterConfig);

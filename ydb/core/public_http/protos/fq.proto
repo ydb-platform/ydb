@@ -19,7 +19,7 @@ message Error {
 
 message QueryMeta {
     google.protobuf.Timestamp created_at = 1;
-    google.protobuf.Timestamp submitted_at = 2;
+    google.protobuf.Timestamp started_at = 2;
     google.protobuf.Timestamp finished_at = 3;
 }
 
@@ -94,10 +94,6 @@ message GetResultDataRequest {
     int32 result_set_index = 2 [(Ydb.value) = ">= 0"];
     int64 offset = 3 [(Ydb.value) = ">= 0"];
     int64 limit = 4 [(Ydb.value) = "[1; 1000]"];
-}
-
-message RowData {
-    repeated string data = 1;
 }
 
 message GetResultDataResult {

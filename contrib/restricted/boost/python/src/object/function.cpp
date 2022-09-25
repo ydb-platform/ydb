@@ -21,7 +21,7 @@
 #include <boost/python/detail/none.hpp>
 #include <boost/mpl/vector/vector10.hpp>
 
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 #include <algorithm>
 #include <cstring>

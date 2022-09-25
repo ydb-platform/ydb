@@ -11,7 +11,7 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/reverse_graph.hpp>
 #include <boost/property_map/property_map.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/integer_traits.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
@@ -184,6 +184,7 @@ namespace
   // map a type to a position in the index
   inline type_index_t::iterator type_position(class_id type)
   {
+      using namespace boost::placeholders;
       typedef index_entry entry;
       
       return std::lower_bound(

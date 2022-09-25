@@ -81,9 +81,9 @@ inline object_manager_ref_arg_from_python<Ref>::object_manager_ref_arg_from_pyth
 # if defined(__EDG_VERSION__) && __EDG_VERSION__ <= 243
     // needed for warning suppression
     python::detail::borrowed_reference x_ = python::detail::borrowed_reference(x);
-    python::detail::construct_referent<Ref>(&m_result.bytes, x_);
+    python::detail::construct_referent<Ref>(m_result.bytes, x_);
 # else 
-    python::detail::construct_referent<Ref>(&m_result.bytes, (python::detail::borrowed_reference)x);
+    python::detail::construct_referent<Ref>(m_result.bytes, (python::detail::borrowed_reference)x);
 # endif 
 }
 

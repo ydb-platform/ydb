@@ -5,7 +5,7 @@
 
 #include <boost/python/object/iterator_core.hpp>
 #include <boost/python/object/function_object.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/mpl/vector/vector10.hpp>
 
 namespace boost { namespace python { namespace objects { 

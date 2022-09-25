@@ -22,7 +22,7 @@ works correctly. */
 #  pragma warning(disable: 4180)
 # endif
 
-# include <boost/bind.hpp>
+# include <boost/bind/bind.hpp>
 # include <boost/bind/protect.hpp>
 
 namespace boost { namespace python { 
@@ -40,6 +40,7 @@ namespace detail
     , Target&(*)()
   )
   {
+      using namespace boost::placeholders;
       return objects::make_iterator_function<Target>(
           boost::protect(boost::bind(get_start, _1))
         , boost::protect(boost::bind(get_finish, _1))

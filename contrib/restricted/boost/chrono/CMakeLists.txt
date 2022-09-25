@@ -8,12 +8,14 @@
 
 
 add_library(restricted-boost-chrono)
+target_compile_options(restricted-boost-chrono PRIVATE
+  -Wno-everything
+)
 target_include_directories(restricted-boost-chrono PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/include
 )
 target_link_libraries(restricted-boost-chrono PUBLIC
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core

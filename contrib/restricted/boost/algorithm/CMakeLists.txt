@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-algorithm INTERFACE
 )
 target_link_libraries(restricted-boost-algorithm INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-array
   restricted-boost-assert
   restricted-boost-bind

@@ -795,4 +795,18 @@ SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 ; -- 2
 ```
 
+## LambdaOptionalArgumentsCount
+
+**Сигнатура**
+```
+LambdaOptionalArgumentsCount(LambdaFunction)->Uint32 
+```
+Получение количества опциональных аргументов в лямбда-функции.
+
+**Примеры:**
+``` yql
+SELECT LambdaOptionalArgumentsCount(($x, $y, $z?)->(if($x,$y,$z)))
+; -- 1
+```
+
 {% endif %}

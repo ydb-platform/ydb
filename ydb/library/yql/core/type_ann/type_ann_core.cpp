@@ -9751,14 +9751,45 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!input->Head().IsLambda()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected lambda, but got: " << input->Head().Type()));
+        auto lambda = input->HeadPtr();
+        if (input->Head().IsCallable("WithOptionalArgs")) {
+            lambda = input->Head().HeadPtr();
+        }
+
+        if (!lambda->IsLambda()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected lambda, but got: " << lambda->Type()));
             return IGraphTransformer::TStatus::Error;
         }
 
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Uint32")
-                .Atom(0, ToString(input->Head().Head().ChildrenSize()))
+                .Atom(0, ToString(lambda->Head().ChildrenSize()))
+            .Seal()
+            .Build();
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus LambdaOptionalArgumentsCountWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ui32 optionalArgsCount = 0;
+        auto lambda = input->HeadPtr();
+        if (input->Head().IsCallable("WithOptionalArgs")) {
+            lambda = input->Head().HeadPtr();
+            optionalArgsCount = FromString<ui32>(input->Head().Tail().Content());
+        }
+
+        if (!lambda->IsLambda()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected lambda, but got: " << lambda->Type()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("Uint32")
+                .Atom(0, ToString(optionalArgsCount))
             .Seal()
             .Build();
 
@@ -11515,6 +11546,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CallableArgument"] = &CallableArgumentWrapper;
         Functions["CallableTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Callable>;
         Functions["LambdaArgumentsCount"] = LambdaArgumentsCountWrapper;
+        Functions["LambdaOptionalArgumentsCount"] = LambdaOptionalArgumentsCountWrapper;
         Functions["FormatCode"] = &FormatCodeWrapper;
         Functions["FormatCodeWithPositions"] = &FormatCodeWrapper;
         Functions["SerializeCode"] = &FormatCodeWrapper;

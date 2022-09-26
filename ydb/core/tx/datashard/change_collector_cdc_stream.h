@@ -28,6 +28,8 @@ public:
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) override;
 
+    void Reset() override;
+
 private:
     TRowVersion ReadVersion;
 

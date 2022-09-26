@@ -106,6 +106,10 @@ void TRowsCache::UpdateCachedRow(ui32 tid, ERowOp rop,
     }
 }
 
+void TRowsCache::Reset() {
+    Rows.clear();
+}
+
 const TRowsCache::TRow* TRowsCache::CacheRow(ui32 tid, EReady ready,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> tags, const TRowState& rowState)
 {

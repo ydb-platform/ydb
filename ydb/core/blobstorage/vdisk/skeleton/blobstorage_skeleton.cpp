@@ -880,9 +880,8 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
             } else if (!CheckVGetQuery(record)) {
                 ReplyError(NKikimrProto::ERROR, "get query is invalid", ev, ctx, now);
-            } else if (record.HasReaderTabletId()
-                    && record.HasReaderTabletGeneration()
-                    && Hull->IsBlocked(record.GetReaderTabletId(), {record.GetReaderTabletGeneration(), 0}).Status != TBlocksCache::EStatus::OK) {
+            } else if (record.HasReaderTabletData()
+                    && Hull->IsBlocked(record.GetReaderTabletData().GetId(), {record.GetReaderTabletData().GetGeneration(), 0}).Status != TBlocksCache::EStatus::OK) {
                 ReplyError(NKikimrProto::BLOCKED, "tablet's generation is blocked", ev, ctx, now);
             } else {
                 std::optional<THullDsSnap> fullSnap;

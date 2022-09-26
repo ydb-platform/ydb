@@ -491,8 +491,14 @@ message TEvVGet {
     optional bool AcquireBlockedGeneration = 22 [default = false]; // set to true to get the blocked generation
     optional TTimestamps Timestamps = 23;
     optional uint32 ForceBlockedGeneration = 24 [default = 0]; // non-zero means a successfull block must be done first
-    optional uint64 ReaderTabletId = 25;
-    optional uint32 ReaderTabletGeneration = 26;
+
+    message TReaderTabletData {
+        optional uint64 Id = 1;
+        optional uint32 Generation = 2;
+    }
+
+    optional TReaderTabletData ReaderTabletData = 25;
+
     optional bytes SnapshotId = 30; // read data from specific snapshot (if set)
 }
 

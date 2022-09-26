@@ -190,8 +190,7 @@ public:
 
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(
                     readQueries, batch.ReadItemIndecies.size(), IntermediateResult->Deadline, handleClass, false);
-            ev->ReaderTabletId = TabletInfo->TabletID;
-            ev->ReaderTabletGeneration = TabletGeneration;
+            ev->ReaderTabletData = {TabletInfo->TabletID, TabletGeneration};
 
             SendToBSProxy(TActivationContext::AsActorContext(), batch.GroupId, ev.release(),
                     batch.Cookie);

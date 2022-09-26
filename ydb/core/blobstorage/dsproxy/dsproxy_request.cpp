@@ -10,17 +10,6 @@ namespace NKikimr {
             return;
         }
 
-        if (ev->Get()->ReaderTabletId.has_value() != ev->Get()->ReaderTabletGeneration.has_value()) {
-            LOG_ERROR_S(*TlsActivationContext,
-                    NKikimrServices::BS_PROXY_GET,
-                    "HandleNormal TEvGet:"
-                    << " reader tablet params must either be both set or unset"
-                    << " " << ev->Get()->Print(true));
-
-            HandleError(ev);
-            return;
-        }
-
         if (StopGetBatchingEvent) {
             TActivationContext::Send(StopGetBatchingEvent.Release());
         }

@@ -10,11 +10,8 @@ Y_UNIT_TEST_SUITE(Get) {
         getQueries[0].Id = blobId;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(getQueries, 1, TInstant::Max(),
                 NKikimrBlobStorage::AsyncRead);
-        if (readerTabletId) {
-            ev->ReaderTabletId = *readerTabletId;
-        }
-        if (readerTabletGeneration) {
-            ev->ReaderTabletGeneration = *readerTabletGeneration;
+        if (readerTabletId && readerTabletGeneration) {
+            ev->ReaderTabletData = {*readerTabletId, *readerTabletGeneration};
         }
         test.Runtime->WrapInActorContext(test.Edge, [&] {
             SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
@@ -45,7 +42,7 @@ Y_UNIT_TEST_SUITE(Get) {
         UNIT_ASSERT_EQUAL(putResult->Status, status);
     }
 
-    void MakeGetTest() {
+    Y_UNIT_TEST(TestBlockedEvGetRequest) {
         TEnvironmentSetup env(true);
         TTestInfo test = InitTest(env);
 
@@ -78,9 +75,5 @@ Y_UNIT_TEST_SUITE(Get) {
         SendGet(test, originalBlobId, data, NKikimrProto::OK);
         // check that now TEvGet returns BLOCKED for blocked generation with reader params
         SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, tabletId, tabletGeneration);
-    }
-
-    Y_UNIT_TEST(EvGetReaderParams) {
-        MakeGetTest();
     }
 }

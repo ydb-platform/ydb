@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicPutAndGet(tenv, 11, tenv.BlobDepot);
     }
 
-    Y_UNIT_TEST(GetBlockedTabletGeneration) {
+    Y_UNIT_TEST(TestBlockedEvGetRequest) {
         ui32 seed;
         Seed().LoadOrFail(&seed, sizeof(seed));
         TBlobDepotTestEnvironment tenv(seed);
@@ -57,8 +57,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             mustRestoreFirst,
             isIndexOnly,
             forceBlockedGeneration);
-        ev->ReaderTabletId = tabletId;
-        ev->ReaderTabletGeneration = tabletGeneration;
+        ev->ReaderTabletData = {tabletId, tabletGeneration};
 
         auto sender = tenv.Env->Runtime->AllocateEdgeActor(nodeId);
         env.Runtime->WrapInActorContext(sender, [&] {

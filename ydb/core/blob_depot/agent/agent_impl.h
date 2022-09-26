@@ -323,8 +323,7 @@ namespace NKikimr::NBlobDepot {
             ui64 Offset = 0;
             ui64 Size = 0;
             ui64 Tag = 0;
-            std::optional<ui64> ReaderTabletId;
-            std::optional<ui32> ReaderTabletGeneration;
+            std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
         };
 
         bool IssueRead(const TReadArg& arg, TString& error);

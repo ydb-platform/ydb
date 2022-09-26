@@ -117,7 +117,6 @@ namespace NKikimr::NBlobDepot {
                             0,
                             0,
                             index,
-                            {},
                             {}};
                         TString error;
                         if (!Agent.IssueRead(arg, error)) {

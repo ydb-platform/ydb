@@ -590,8 +590,7 @@ public:
         Y_VERIFY(queryIdx == readQueryCount);
 
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(readQueries, readQueryCount, IntermediateResults->Deadline, handleClass, false);
-        ev->ReaderTabletId = TabletInfo->TabletID;
-        ev->ReaderTabletGeneration = TabletGeneration;
+        ev->ReaderTabletData = {TabletInfo->TabletID, TabletGeneration};
         SendToBSProxy(ctx, prevGroup, ev.release(), cookie);
         return true;
     }

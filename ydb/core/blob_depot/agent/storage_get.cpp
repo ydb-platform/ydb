@@ -37,8 +37,8 @@ namespace NKikimr::NBlobDepot {
                     Agent.VirtualGroupId);
                 AnswersRemain = msg.QuerySize;
 
-                if (msg.ReaderTabletId && msg.ReaderTabletGeneration) {
-                    auto status = Agent.BlocksManager.CheckBlockForTablet(msg.ReaderTabletId.value(), msg.ReaderTabletGeneration.value(), this, nullptr);
+                if (msg.ReaderTabletData) {
+                    auto status = Agent.BlocksManager.CheckBlockForTablet(msg.ReaderTabletData->Id, msg.ReaderTabletData->Generation, this, nullptr);
                     if (status == NKikimrProto::BLOCKED) {
                         EndWithError(status, "Fail TEvGet due to BLOCKED tablet generation");
                         return;
@@ -83,8 +83,7 @@ namespace NKikimr::NBlobDepot {
                         msg.Queries[queryIdx].Shift,
                         msg.Queries[queryIdx].Size,
                         queryIdx,
-                        msg.ReaderTabletId,
-                        msg.ReaderTabletGeneration};
+                        msg.ReaderTabletData};
                     TString error;
                     const bool success = Agent.IssueRead(arg, error);
                     if (!success) {

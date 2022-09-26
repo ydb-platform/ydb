@@ -37,8 +37,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
 
     TStackVec<TRequestInfo, TypicalDisksInGroup> RequestInfos;
 
-    std::optional<ui64> ReaderTabletId;
-    std::optional<ui32> ReaderTabletGeneration;
+    std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         RequestsInFlight--;
@@ -121,8 +120,7 @@ public:
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, endIdx - beginIdx, Deadline, GetHandleClass,
             MustRestoreFirst, false, ForceBlockedGeneration);
         ev->IsInternal = IsInternal;
-        ev->ReaderTabletId = ReaderTabletId;
-        ev->ReaderTabletGeneration = ReaderTabletGeneration;
+        ev->ReaderTabletData = ReaderTabletData;
         PendingGets.emplace_back(std::move(ev), cookie);
     }
 

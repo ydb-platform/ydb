@@ -285,12 +285,10 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
             vGet->Record.SetTabletId(TabletId);
             vGet->Record.SetAcquireBlockedGeneration(AcquireBlockedGeneration);
 
-            if (ReaderTabletId) {
-                vGet->Record.SetReaderTabletId(*ReaderTabletId);
-            }
-
-            if (ReaderTabletGeneration) {
-                vGet->Record.SetReaderTabletGeneration(*ReaderTabletGeneration);
+            if (ReaderTabletData) {
+                auto msg = vGet->Record.MutableReaderTabletData();
+                msg->SetId(ReaderTabletData->Id);
+                msg->SetGeneration(ReaderTabletData->Generation);
             }
 
             R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# " << diskOrderNumber

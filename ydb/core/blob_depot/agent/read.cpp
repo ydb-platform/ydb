@@ -101,8 +101,7 @@ namespace NKikimr::NBlobDepot {
                     TInstant::Max(),
                     arg.GetHandleClass,
                     arg.MustRestoreFirst);
-                event->ReaderTabletId = arg.ReaderTabletId;
-                event->ReaderTabletGeneration = arg.ReaderTabletGeneration;
+                event->ReaderTabletData = arg.ReaderTabletData;
                 SendToProxy(item.GroupId, std::move(event), arg.Query, context);
             }
         }

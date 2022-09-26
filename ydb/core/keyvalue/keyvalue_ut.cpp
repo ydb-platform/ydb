@@ -1016,8 +1016,12 @@ Y_UNIT_TEST(TestBlockedEvGetRequest) {
                     // key value tablet reads from dsproxy
                     dsProxyActor = event->Recipient;
                 }
-                keyValueTabletId = event->Get<TEvBlobStorage::TEvGet>()->ReaderTabletId;
-                keyValueTabletGeneration = event->Get<TEvBlobStorage::TEvGet>()->ReaderTabletGeneration;
+
+                auto readerTabletData = event->Get<TEvBlobStorage::TEvGet>()->ReaderTabletData;
+                if (readerTabletData) {
+                    keyValueTabletId = readerTabletData->Id;
+                    keyValueTabletGeneration = readerTabletData->Generation;
+                }
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;

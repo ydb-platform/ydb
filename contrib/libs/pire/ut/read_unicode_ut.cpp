@@ -295,4 +295,13 @@ Y_UNIT_TEST_SUITE(ReadUnicodeTest) {
 		}
 	}
 
+	Y_UNIT_TEST(AnyUnicodeCodepointIsAllowed)
+	{
+		REGEXP("[\\x{0}-\\x{77}\\x{79}-\\x{10ffff}]") {
+			ACCEPTS("w");
+			DENIES ("x");
+			ACCEPTS("y");
+		}
+	}
+
 }

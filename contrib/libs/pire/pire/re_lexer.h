@@ -43,8 +43,8 @@ namespace Pire {
 namespace Consts {
 enum { Inf = -1 };
 
-static const wchar32 Control     = 0xF000;
-static const wchar32 ControlMask = 0xFF00;
+static const wchar32 Control     = 0xF0000000;
+static const wchar32 ControlMask = 0xFF000000;
 static const wchar32 End         = Control | 0xFF;
 };
 

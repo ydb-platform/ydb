@@ -24,14 +24,11 @@ class TStringValue
     class TData {
         friend class TStringValue;
     public:
-        inline TData(ui32 size, ui32 cap)
+        inline TData(ui32 size, ui64 cap)
             : Size_(size)
             , Refs_(1)
             , Capacity_(cap)
-            , Reserved_(0)
-        {
-            Y_UNUSED(Reserved_);
-        }
+        {}
 
         inline i32 RefCount() const { return Refs_; }
         inline void Ref() {
@@ -80,7 +77,7 @@ class TStringValue
         inline char* Data() const { return (char*)(this+1); }
         inline ui32 Size() const { return Size_; }
         inline bool Empty() const { return Size_ == 0; }
-        inline ui32 Capacity() const { return Capacity_; }
+        inline ui64 Capacity() const { return Capacity_; }
 
         inline i32 LockRef() noexcept {
             Y_VERIFY_DEBUG(Refs_ != -1);
@@ -98,8 +95,7 @@ class TStringValue
     private:
         ui32 Size_;
         i32  Refs_;
-        ui32 Capacity_;
-        ui32 Reserved_;
+        ui64 Capacity_;
     };
 
     UDF_ASSERT_TYPE_SIZE(TData, 16);
@@ -136,7 +132,7 @@ public:
         return *this;
     }
 
-    inline ui32 Capacity() const { return Data_->Capacity(); }
+    inline ui64 Capacity() const { return Data_->Capacity(); }
     inline ui32 Size() const { return Data_->Size(); }
     inline char* Data() const { return Data_->Data(); }
 
@@ -200,12 +196,12 @@ private:
 
 public:
     static TData* AllocateData(ui32 len, ui32 cap) {
-        cap = AlignUp(cap, ui32(16));
-        const auto dataSize = sizeof(TData) + cap;
+        const auto alligned = AlignUp<ui64>(cap, 16ULL);
+        const auto dataSize = sizeof(TData) + alligned;
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-        return ::new(UdfAllocateWithSize(dataSize)) TData(len, cap);
+        return ::new(UdfAllocateWithSize(dataSize)) TData(len, alligned);
 #else
-        return ::new(UdfAllocate(dataSize)) TData(len, cap);
+        return ::new(UdfAllocate(dataSize)) TData(len, alligned);
 #endif
     }
 

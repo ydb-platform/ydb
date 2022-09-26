@@ -21,9 +21,9 @@ add_custom_command(
   OUTPUT
   ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
   DEPENDS
-  ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/gencrc/gencrc
+  ${TOOLS_ROOT}/library/cpp/digest/old_crc/gencrc/gencrc
   COMMAND
-  ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/gencrc/gencrc
+  ${TOOLS_ROOT}/library/cpp/digest/old_crc/gencrc/gencrc
   >
   crc.inc
 )

@@ -333,6 +333,47 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
     return {query.Sql, query.Params, validator};
 }
 
+TValidationQuery CreateConnectionOverrideBindingValidator(const TString& scope,
+                                                 const TString& connectionName,
+                                                 TPermissions permissions,
+                                                 const TString& user,
+                                                 const TString& tablePathPrefix) {
+    TSqlQueryBuilder queryBuilder(tablePathPrefix);
+    queryBuilder.AddString("scope", scope);
+    queryBuilder.AddString("connection_name", connectionName);
+    queryBuilder.AddInt64("scope_visibility", YandexQuery::Acl::SCOPE);
+    queryBuilder.AddText(
+        "$connection_id = SELECT `" CONNECTION_ID_COLUMN_NAME "`\n"
+        "FROM `" CONNECTIONS_TABLE_NAME "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" NAME_COLUMN_NAME "` = $connection_name AND `" VISIBILITY_COLUMN_NAME "` = $scope_visibility;\n"
+        "SELECT `" NAME_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`\n"
+        "FROM `" BINDINGS_TABLE_NAME "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;\n"
+    );
+
+    auto validator = [connectionName, user, permissions](NYdb::NTable::TDataQueryResult result) {
+        const auto& resultSets = result.GetResultSets();
+        if (resultSets.size() != 1) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+        }
+
+        TResultSetParser parser(resultSets.front());
+        if (!parser.TryNextRow()) {
+            return false;
+        }
+
+        TString bindingUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
+        TString bindingName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
+        YandexQuery::Acl::Visibility bindingVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
+
+        if (HasViewAccess(permissions, bindingVisibility, bindingUser, user)) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Connection named " << connectionName << " overrides connection from binding " << bindingName << ". Please rename this connection";
+        }
+
+        return false;
+    };
+    const auto query = queryBuilder.Build();
+    return {query.Sql, query.Params, validator};
+}
+
 TValidationQuery CreateBindingConnectionValidator(const TString& scope,
                                                  const TString& connectionId,
                                                  const TString& user,

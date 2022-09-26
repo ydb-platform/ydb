@@ -107,6 +107,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     validators.push_back(validatorName);
     validators.push_back(validatorCountConnections);
 
+    if (content.acl().visibility() == YandexQuery::Acl::PRIVATE) {
+        auto overridBindingValidator = CreateConnectionOverrideBindingValidator(
+            scope,
+            content.name(),
+            permissions,
+            user,
+            YdbConnection->TablePathPrefix);
+        validators.push_back(overridBindingValidator);
+    }
+
     const auto query = queryBuilder.Build();
 
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};

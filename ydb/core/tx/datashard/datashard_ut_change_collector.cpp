@@ -848,15 +848,31 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(PageFaults) {
-        Run(TinyCacheParams(), "/Root/path", TinyCacheTable(), TVector<TCdcStream>{KeysOnly()}, TVector<TString>{
-            "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
+        constexpr ui32 count = 1000;
+        TVector<TStructRecord> expectedRecords(Reserve(count + 2));
+        auto bigUpsert = TStringBuilder() << "UPSERT INTO `/Root/path` (key, value) VALUES ";
+
+        for (ui32 i = 1; i <= count; ++i) {
+            expectedRecords.push_back(TStructRecord(NTable::ERowOp::Upsert, {{"key", i}}, {}, {}, {{"value", i}}));
+
+            if (i > 1) {
+                bigUpsert << ",";
+            }
+
+            bigUpsert << "(" << i << "," << i << ")";
+        }
+
+        bigUpsert << ";";
+        expectedRecords.push_back(TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 1}}, {{"value", 10}}));
+        expectedRecords.push_back(TStructRecord(NTable::ERowOp::Upsert, {{"key", 1000}}, {}, {{"value", 1000}}, {{"value", 10000}}));
+
+        Run(TinyCacheParams(), "/Root/path", TinyCacheTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+            bigUpsert,
             "COMPACT TABLE `/Root/path`;",
-            "UPDATE `/Root/path` SET value = 20 WHERE key = 1;",
+            "SELECT * FROM `/Root/path` WHERE key = 1;",
+            "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1000, 10000);",
         }, {
-            {"keys_stream", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}),
-            }},
+            {"new_and_old_images", expectedRecords},
         });
     }
 

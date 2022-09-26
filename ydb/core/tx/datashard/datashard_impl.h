@@ -1593,6 +1593,18 @@ public:
     void SubscribeNewLocks(const TActorContext &ctx);
     void SubscribeNewLocks();
 
+    /**
+     * Breaks uncommitted write locks at the specified key
+     *
+     * Prerequisites: TSetupSysLocks is active and caller does not have any
+     * uncommitted write locks.
+     * Note: the specified table should have some write locks, otherwise
+     * this call is a very expensive no-op.
+     *
+     * Returns true on success and false on page fault.
+     */
+    bool BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId, TArrayRef<const TCell> keyCells);
+
 private:
     ///
     class TLoanReturnTracker {
@@ -2312,6 +2324,8 @@ private:
 
     TReadIteratorsMap ReadIterators;
     THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
+
+    NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
 
 protected:
     // Redundant init state required by flat executor implementation

@@ -75,6 +75,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
     }
 
+    const bool breakWriteConflicts = self->SysLocksTable().HasWriteLocks(fullTableId);
+
     bool pageFault = false;
     for (const auto& serializedKey : request.GetKeyColumns()) {
         TSerializedCellVec keyCells;
@@ -138,6 +140,12 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
 
         if (auto collector = params.GetChangeCollector()) {
             if (!collector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) {
+                pageFault = true;
+            }
+        }
+
+        if (breakWriteConflicts) {
+            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, keyCells.GetCells())) {
                 pageFault = true;
             }
         }

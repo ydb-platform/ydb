@@ -3271,6 +3271,63 @@ void SendViaSession(const TActorId& sessionId,
     TActivationContext::Send(ev.Release());
 }
 
+class TBreakWriteConflictsTxObserver : public NTable::ITransactionObserver {
+public:
+    TBreakWriteConflictsTxObserver(TDataShard* self)
+        : Self(self)
+    {
+    }
+
+    void OnSkipUncommitted(ui64 txId) override {
+        Self->SysLocksTable().BreakLock(txId);
+    }
+
+    void OnSkipCommitted(const TRowVersion&) override {
+        // nothing
+    }
+
+    void OnSkipCommitted(const TRowVersion&, ui64) override {
+        // nothing
+    }
+
+    void OnApplyCommitted(const TRowVersion&) override {
+        // nothing
+    }
+
+    void OnApplyCommitted(const TRowVersion&, ui64) override {
+        // nothing
+    }
+
+private:
+    TDataShard* Self;
+};
+
+bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId, TArrayRef<const TCell> keyCells) {
+    const auto localTid = GetLocalTableId(tableId);
+    Y_VERIFY(localTid);
+    const NTable::TScheme& scheme = db.GetScheme();
+    const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTid);
+    TSmallVec<TRawTypeValue> key;
+    NMiniKQL::ConvertTableKeys(scheme, tableInfo, keyCells, key, nullptr);
+
+    if (!BreakWriteConflictsTxObserver) {
+        BreakWriteConflictsTxObserver = new TBreakWriteConflictsTxObserver(this);
+    }
+
+    // We are not actually interested in the row version, we only need to
+    // detect uncommitted transaction skips on the path to that version.
+    auto res = db.SelectRowVersion(
+        localTid, key, /* readFlags */ 0,
+        nullptr,
+        BreakWriteConflictsTxObserver);
+
+    if (res.Ready == NTable::EReady::Page) {
+        return false;
+    }
+
+    return true;
+}
+
 } // NDataShard
 
 TString TEvDataShard::TEvRead::ToString() const {

@@ -57,6 +57,8 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     const bool readForTableShadow = writeToTableShadow && !shadowTableId;
     const ui32 writeTableId = writeToTableShadow && shadowTableId ? shadowTableId : localTableId;
 
+    const bool breakWriteConflicts = BreakLocks && self->SysLocksTable().HasWriteLocks(fullTableId);
+
     if (CollectChanges) {
         ChangeCollector.Reset(CreateChangeCollector(*self, txc.DB, tableInfo, true));
     }
@@ -188,6 +190,16 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             if (BreakLocks) {
+                if (breakWriteConflicts) {
+                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells())) {
+                        pageFault = true;
+                    }
+
+                    if (pageFault) {
+                        continue;
+                    }
+                }
+
                 self->SysLocksTable().BreakLock(fullTableId, keyCells.GetCells());
             }
         }

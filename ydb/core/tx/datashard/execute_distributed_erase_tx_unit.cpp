@@ -100,6 +100,8 @@ public:
         Y_VERIFY(DataShard.GetUserTables().contains(tableId));
         const TUserTable& tableInfo = *DataShard.GetUserTables().at(tableId);
 
+        const bool breakWriteConflicts = DataShard.SysLocksTable().HasWriteLocks(fullTableId);
+
         size_t row = 0;
         bool pageFault = false;
         Y_FOR_EACH_BIT(i, presentRows) {
@@ -124,6 +126,12 @@ public:
             if (changeCollector) {
                 if (!changeCollector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) {
                     changeCollector->Reset();
+                    pageFault = true;
+                }
+            }
+
+            if (breakWriteConflicts) {
+                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells())) {
                     pageFault = true;
                 }
             }

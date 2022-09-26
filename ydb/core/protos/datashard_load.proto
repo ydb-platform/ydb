@@ -27,8 +27,10 @@ message TEvTestLoadRequest {
         // defines dataset size, normally must be withing 2 GiB
         optional uint64 RowCount = 2;
 
+        repeated uint32 Inflights = 3;
+
         // Specifies the format for result data in TEvReadResult
-        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 3;
+        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 4;
     }
 
     optional uint64 Cookie = 1;

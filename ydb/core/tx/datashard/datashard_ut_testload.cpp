@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
 
         // fullscans with different chunks: 5
         // read head with inflight 1
-        UNIT_ASSERT_VALUES_EQUAL(result->Report->SubtestCount, 6);
+        UNIT_ASSERT_VALUES_EQUAL(result->Report->SubtestCount, 12);
 
         // sanity check that there was data in table
         helper.CheckKeysCount(expectedRowCount);

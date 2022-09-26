@@ -42,8 +42,14 @@ struct TEvDataShardLoad {
         TString Info;
         ui64 SubtestCount = 0;
 
+        // used by test launchers to specify params and test number
+        TString PrefixInfo;
+
         TString ToString() const {
             TStringStream ss;
+            if (PrefixInfo)
+                ss << PrefixInfo << ". ";
+
             ss << "Load duration: " << Duration << ", OK=" << OperationsOK << ", Error=" << OperationsError;
             if (OperationsOK && Duration.Seconds()) {
                 ui64 throughput = OperationsOK / Duration.Seconds();

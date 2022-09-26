@@ -82,9 +82,8 @@ namespace NUdf {
                     SetIRImplementation(builder, irResourceId, irFunctionName);             \
                 }                                                                           \
                 return true;                                                                \
-            } else {                                                                        \
-                return false;                                                               \
             }                                                                               \
+            return false;                                                                   \
         }                                                                                   \
     private:                                                                                \
         ::NYql::NUdf::TSourcePosition Pos_;                                              \
@@ -163,9 +162,8 @@ namespace NUdf {
                     SetIRImplementation(builder, irResourceId, irFunctionName);             \
                 }                                                                           \
                 return true;                                                                \
-            } else {                                                                        \
-                return false;                                                               \
             }                                                                               \
+            return false;                                                                   \
         }                                                                                   \
     private:                                                                                \
         ::NYql::NUdf::TSourcePosition Pos_;                                              \

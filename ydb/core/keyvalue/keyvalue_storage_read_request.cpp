@@ -243,6 +243,22 @@ public:
             return;
         }
 
+        if (result->Status == NKikimrProto::BLOCKED) {
+            STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV323,
+                    "Received BLOCKED EvGetResult.",
+                    (KeyValue, TabletInfo->TabletID),
+                    (Status, result->Status),
+                    (Deadline, IntermediateResult->Deadline.MilliSeconds()),
+                    (Now, TActivationContext::Now().MilliSeconds()),
+                    (SentAt, batch.SentTime),
+                    (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
+                    (ErrorReason, result->ErrorReason));
+            // kill the key value tablet due to it's obsolete generation
+            Send(IntermediateResult->KeyValueActorId, new TKikimrEvents::TEvPoisonPill);
+            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_ERROR);
+            return;
+        }
+
         if (result->Status != NKikimrProto::OK) {
             STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV316,
                     "Unexpected EvGetResult.",
@@ -332,6 +348,7 @@ public:
         if (IntermediateResult->HasCookie) {
             response->Record.set_cookie(IntermediateResult->Cookie);
         }
+
         return response;
     }
 
@@ -348,7 +365,14 @@ public:
 
     std::unique_ptr<IEventBase> MakeErrorResponse(NKikimrKeyValue::Statuses::ReplyStatus status) {
         if (IsRead()) {
-            return CreateReadResponse(status, ErrorDescription);
+            auto response = CreateReadResponse(status, ErrorDescription);
+            auto &cmd = GetCommand();
+            Y_VERIFY(std::holds_alternative<TIntermediate::TRead>(cmd));
+            auto& intermediateRead = std::get<TIntermediate::TRead>(cmd);
+            response->Record.set_requested_key(intermediateRead.Key);
+            response->Record.set_requested_offset(intermediateRead.Offset);
+            response->Record.set_requested_size(intermediateRead.RequestedSize);
+            return response;
         } else {
             return CreateReadRangeResponse(status, ErrorDescription);
         }

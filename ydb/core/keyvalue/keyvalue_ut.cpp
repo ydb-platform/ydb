@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
+#include <ydb/core/base/blobstorage.h>
 
 const bool ENABLE_DETAILED_KV_LOG = false;
 const bool ENABLE_TESTLOG_OUTPUT = false;
@@ -1002,6 +1003,54 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEvents) {
     ExecuteRead(tc, "key1", "value1", 0, 0, 0);
 }
 
+
+Y_UNIT_TEST(TestBlockedEvGetRequest) {
+    std::optional<TActorId> tabletActor;
+    std::optional<TActorId> dsProxyActor;
+    std::optional<ui64> keyValueTabletId;
+    std::optional<ui32> keyValueTabletGeneration;
+    auto setup = [&] (TTestActorRuntime &runtime) {
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::TEvGet::EventType) {
+                if (tabletActor && *tabletActor == event->Sender) {
+                    // key value tablet reads from dsproxy
+                    dsProxyActor = event->Recipient;
+                }
+                keyValueTabletId = event->Get<TEvBlobStorage::TEvGet>()->ReaderTabletId;
+                keyValueTabletGeneration = event->Get<TEvBlobStorage::TEvGet>()->ReaderTabletGeneration;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase&, const TActorId& /*parentId*/, const TActorId& actorId) {
+            if (TypeName(*runtime.FindActor(actorId)) == "NKikimr::NKeyValue::TKeyValueStorageReadRequest") {
+                tabletActor = actorId;
+            }
+        });
+    };
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, setup, activeZone);
+    ExecuteWrite(tc, {{"key", "value"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    ExecuteRead(tc, "key", "value", 0, 0, 0);
+
+    // block current generation of the key value tablet
+    UNIT_ASSERT(tabletActor);
+    UNIT_ASSERT(dsProxyActor);
+    UNIT_ASSERT(keyValueTabletId);
+    UNIT_ASSERT(keyValueTabletGeneration);
+    auto generation = *keyValueTabletGeneration;
+    auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(*keyValueTabletId, generation, TInstant::Max());
+    tc.Runtime->Send(new IEventHandle(*dsProxyActor, *tabletActor, ev.release()));
+
+    // read with the blocked generation should fail and lead to a restart of the key value tablet
+    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_ERROR>(tc, "key", "", 0, 0, 0);
+    // read data through the newly created key value tablet
+    ExecuteRead(tc, "key", "value", 0, 0, 0);
+    // check that the key value tablet has indeed restarted
+    UNIT_ASSERT(generation < *keyValueTabletGeneration);
+}
 
 Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowInitialGC) {
     TTestContext tc;

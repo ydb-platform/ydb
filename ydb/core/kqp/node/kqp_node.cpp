@@ -12,11 +12,8 @@
 #include <ydb/core/kqp/rm/kqp_resource_estimation.h>
 #include <ydb/core/kqp/rm/kqp_rm.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
-#include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 
 #include <ydb/core/base/wilson.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -307,11 +304,11 @@ private:
             IActor* computeActor;
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
                 computeActor = CreateKqpScanComputeActor(msg.GetSnapshot(), request.Executer, txId, std::move(dqTask),
-                    CreateAsyncIoFactory(), nullptr, runtimeSettings, memoryLimits, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId));
+                    CreateKqpAsyncIoFactory(), nullptr, runtimeSettings, memoryLimits, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId));
                 taskCtx.ComputeActorId = Register(computeActor);
             } else {
                 if (Y_LIKELY(!CaFactory)) {
-                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), CreateAsyncIoFactory(),
+                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), CreateKqpAsyncIoFactory(),
                         nullptr, runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId));
                     taskCtx.ComputeActorId = Register(computeActor);
                 } else {
@@ -539,12 +536,6 @@ private:
         }
         ResourceManager_ = GetKqpResourceManager();
         return ResourceManager_;
-    }
-
-    NYql::NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory() {
-        auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-        RegisterStreamLookupActorFactory(*factory);
-        return factory;
     }
 
 private:

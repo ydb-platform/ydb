@@ -3484,6 +3484,93 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(StreamLookupForDataQuery) {
+        auto settings = TKikimrSettings()
+            .SetEnableKqpDataQueryStreamLookup(true)
+            .SetEnablePredicateExtractForDataQueries(false);
+        TKikimrRunner kikimr{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = db.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/EightShard` (Key, Text, Data) VALUES
+                    (1u, "Value1",  1),
+                    (2u, "Value2",  1),
+                    (3u, "Value3",  1),
+                    (4u, "Value4",  1),
+                    (5u, "Value5",  1);
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                PRAGMA kikimr.UseNewEngine = "true";
+                $subquery = SELECT Key FROM `/Root/EightShard`;
+
+                SELECT * FROM `/Root/KeyValue`
+                WHERE Key IN $subquery ORDER BY Key;
+            )", TTxControl::BeginTx(), querySettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
+            auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+            UNIT_ASSERT(streamLookup.IsDefined());
+        }
+
+        {
+            auto params = kikimr.GetTableClient().GetParamsBuilder()
+                .AddParam("$keys").BeginList()
+                    .AddListItem()
+                        .Uint64(1)
+                    .AddListItem()
+                        .Uint64(2)
+                    .EndList()
+                    .Build()
+                    .Build();
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                PRAGMA kikimr.UseNewEngine = "true";
+                DECLARE $keys AS List<Uint64>;
+
+                SELECT * FROM `/Root/KeyValue`
+                WHERE Key IN $keys ORDER BY Key;
+            )", TTxControl::BeginTx(), params, querySettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
+            auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+            UNIT_ASSERT(streamLookup.IsDefined());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                PRAGMA kikimr.UseNewEngine = "true";
+
+                SELECT * FROM `/Root/KeyValue`
+                WHERE Key = 1;
+            )", TTxControl::BeginTx(), querySettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
+            auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+            UNIT_ASSERT(streamLookup.IsDefined());
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

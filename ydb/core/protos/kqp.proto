@@ -607,4 +607,6 @@ message TKqpStreamLookupSettings {
      repeated string KeyColumns = 2;
      repeated string Columns = 3;
      optional TKqpSnapshot Snapshot = 4;
+     optional uint64 LockTxId = 5;
+     optional bool ImmediateTx = 6;
 }

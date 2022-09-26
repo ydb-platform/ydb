@@ -121,6 +121,19 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos, const T
             .Done();
     }
 
+    if (kqpCtx.Config->FeatureFlags.GetEnableKqpDataQueryStreamLookup()) {
+        return Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(read.Table())
+            .LookupKeys<TCoSkipNullMembers>()
+                .Input(keysToLookup)
+                .Members()
+                    .Add(lookupNames)
+                    .Build()
+                .Build()
+            .Columns(read.Columns())
+            .Done();
+    }
+
     return Build<TKqlLookupTable>(ctx, pos)
         .Table(read.Table())
         .LookupKeys<TCoSkipNullMembers>()
@@ -362,8 +375,10 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    bool needPrecomputeLeft = kqpCtx.IsDataQuery() && !join.LeftInput().Maybe<TCoParameter>() &&
-        !IsParameterToListOfStructsRepack(join.LeftInput());
+    bool needPrecomputeLeft = kqpCtx.IsDataQuery()
+        && !kqpCtx.Config->FeatureFlags.GetEnableKqpDataQueryStreamLookup()
+        && !join.LeftInput().Maybe<TCoParameter>()
+        && !IsParameterToListOfStructsRepack(join.LeftInput());
 
     TExprBase leftData = needPrecomputeLeft
         ? Build<TDqPrecompute>(ctx, join.Pos())

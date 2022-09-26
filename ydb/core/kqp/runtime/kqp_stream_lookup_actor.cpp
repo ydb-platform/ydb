@@ -27,6 +27,8 @@ public:
         : InputIndex(inputIndex), Input(input), ComputeActorId(computeActorId), TypeEnv(typeEnv)
         , HolderFactory(holderFactory), TableId(MakeTableId(settings.GetTable()))
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
+        , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
+        , ImmediateTx(settings.GetImmediateTx())
         , KeyPrefixColumns(settings.GetKeyColumns().begin(), settings.GetKeyColumns().end())
         , Columns(settings.GetColumns().begin(), settings.GetColumns().end())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
@@ -152,18 +154,21 @@ private:
         TActorBootstrapped<TKqpStreamLookupActor>::PassAway();
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, TMaybe<TInstant>&, bool& finished, i64) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         i64 totalDataSize = 0;
 
         if (TableScheme) {
-            totalDataSize = PackResults(batch);
+            totalDataSize = PackResults(batch, freeSpace);
             auto status = FetchLookupKeys();
 
             if (Partitioning) {
                 ProcessLookupKeys();
             }
 
-            finished = (status == NUdf::EFetchStatus::Finish) && UnprocessedKeys.empty() && AllReadsFinished();
+            finished = (status == NUdf::EFetchStatus::Finish)
+                && UnprocessedKeys.empty()
+                && AllReadsFinished()
+                && Results.empty();
         } else {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
@@ -184,16 +189,18 @@ private:
                 hFunc(TEvPrivate::TEvRetryReadTimeout, Handle);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
-                    RuntimeError(TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
+                    RuntimeError(TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite(),
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             }
         } catch (const yexception& e) {
-            RuntimeError(e.what());
+            RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         if (ev->Get()->Request->ErrorCount > 0) {
-            return RuntimeError(TStringBuilder() << "Failed to get partitioning for table: " << TableId);
+            return RuntimeError(TStringBuilder() << "Failed to get partitioning for table: " << TableId,
+                NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
         auto& resultSet = ev->Get()->Request->ResultSet;
@@ -209,7 +216,8 @@ private:
         auto& result = resultSet[0];
 
         if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            return RuntimeError(TStringBuilder() << "Failed to resolve table: " << ToString(result.Status));
+            return RuntimeError(TStringBuilder() << "Failed to resolve table: " << ToString(result.Status),
+                NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
         TableScheme = std::make_unique<TTableScheme>(result.Columns);
@@ -225,6 +233,18 @@ private:
 
         if (read.State != EReadState::Running) {
             return;
+        }
+
+        if (record.BrokenTxLocksSize()) {
+            return RuntimeError("Transaction locks invalidated.", NYql::NDqProto::StatusIds::ABORTED);
+        }
+
+        if (!Snapshot.IsValid() && !record.GetFinished()) {
+            // HEAD read was converted to repeatable read
+            Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
+        } else if (Snapshot.IsValid()) {
+            YQL_ENSURE(record.GetSnapshot().GetStep() == Snapshot.Step && record.GetSnapshot().GetTxId() == Snapshot.TxId,
+                "Snapshot version mismatch");
         }
 
         // TODO: refactor after KIKIMR-15102
@@ -284,17 +304,18 @@ private:
             case EEvSchemeCacheRequestTag::TableSchemeResolving:
                 if (!TableScheme) {
                     RuntimeError(TStringBuilder() << "Failed to resolve scheme for table: " << TableId
-                        << " (request timeout exceeded)");
+                        << " (request timeout exceeded)", NYql::NDqProto::StatusIds::TIMEOUT);
                 }
                 break;
             case EEvSchemeCacheRequestTag::TableShardsResolving:
                 if (!Partitioning) {
                     RuntimeError(TStringBuilder() << "Failed to resolve shards for table: " << TableId
-                        << " (request timeout exceeded)");
+                        << " (request timeout exceeded)", NYql::NDqProto::StatusIds::TIMEOUT);
                 }
                 break;
             default:
-                RuntimeError(TStringBuilder() << "Unexpected tag for TEvSchemeCacheRequestTimeout: " << (ui64)ev->Get()->Tag);
+                RuntimeError(TStringBuilder() << "Unexpected tag for TEvSchemeCacheRequestTimeout: " << (ui64)ev->Get()->Tag,
+                    NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
     }
 
@@ -304,14 +325,26 @@ private:
         auto& read = readIt->second;
 
         if (read.Retried) {
-            RuntimeError(TStringBuilder() << "Retry timeout exceeded for read: " << ev->Get()->ReadId);
+            RuntimeError(TStringBuilder() << "Retry timeout exceeded for read: " << ev->Get()->ReadId,
+                NYql::NDqProto::StatusIds::TIMEOUT);
         }
     }
 
-    ui64 PackResults(NKikimr::NMiniKQL::TUnboxedValueVector& batch) {
+    ui64 PackResults(NKikimr::NMiniKQL::TUnboxedValueVector& batch, i64 freeSpace) {
         YQL_ENSURE(TableScheme);
 
-        ui64 totalSize = 0;
+        i64 totalSize = 0;
+        batch.clear();
+        batch.reserve(Results.size());
+
+        std::vector<NKikimr::NScheme::TTypeId> columnTypes;
+        columnTypes.reserve(Columns.size());
+        for (const auto& column : Columns) {
+            auto colIt = TableScheme->ColumnsByName.find(column);
+            YQL_ENSURE(colIt != TableScheme->ColumnsByName.end());
+            columnTypes.push_back(colIt->second.PType);
+        }
+
         for (; !Results.empty(); Results.pop_front()) {
             const auto& result = Results.front();
             YQL_ENSURE(result.size() == Columns.size(), "Result columns mismatch");
@@ -319,15 +352,19 @@ private:
             NUdf::TUnboxedValue* rowItems = nullptr;
             auto row = HolderFactory.CreateDirectArrayHolder(Columns.size(), rowItems);
 
+            i64 rowSize = 0;
             for (ui32 colId = 0; colId < Columns.size(); ++colId) {
-                auto colIt = TableScheme->ColumnsByName.find(Columns[colId]);
-                YQL_ENSURE(colIt != TableScheme->ColumnsByName.end());
-                rowItems[colId] = NMiniKQL::GetCellValue(result[colId], colIt->second.PType);
+                rowItems[colId] = NMiniKQL::GetCellValue(result[colId], columnTypes[colId]);
+                rowSize += result[colId].Size();
+            }
 
-                totalSize += result[colId].Size();
+            if (totalSize + rowSize > freeSpace) {
+                row.DeleteUnreferenced();
+                break;
             }
 
             batch.push_back(std::move(row));
+            totalSize += rowSize;
         }
 
         return totalSize;
@@ -429,10 +466,16 @@ private:
         THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
         auto& record = request->Record;
 
-        YQL_ENSURE(Snapshot.IsValid());
+        if (Snapshot.IsValid()) {
+            record.MutableSnapshot()->SetStep(Snapshot.Step);
+            record.MutableSnapshot()->SetTxId(Snapshot.TxId);
+        } else {
+            YQL_ENSURE(ImmediateTx, "HEAD reading is only available for immediate txs");
+        }
 
-        record.MutableSnapshot()->SetStep(Snapshot.Step);
-        record.MutableSnapshot()->SetTxId(Snapshot.TxId);
+        if (LockTxId) {
+            record.SetLockTxId(*LockTxId);
+        }
 
         record.SetReadId(read.Id);
         record.SetResultFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
@@ -537,7 +580,7 @@ private:
         return TypeEnv.BindAllocator();
     }
 
-    void RuntimeError(const TString& message, const NYql::TIssues& subIssues = {}) {
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
         NYql::TIssue issue(message);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
@@ -545,7 +588,7 @@ private:
 
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
 
 private:
@@ -555,7 +598,9 @@ private:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     const TTableId TableId;
-    const IKqpGateway::TKqpSnapshot Snapshot;
+    IKqpGateway::TKqpSnapshot Snapshot;
+    const TMaybe<ui64> LockTxId;
+    const bool ImmediateTx;
     const std::vector<TString> KeyPrefixColumns;
     const std::vector<TString> Columns;
     std::unique_ptr<const TTableScheme> TableScheme;

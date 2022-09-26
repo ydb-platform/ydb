@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
+#include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -43,6 +44,12 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 } // namespace NMiniKQL
 
 namespace NKqp {
+
+NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory() {
+    auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
+    RegisterStreamLookupActorFactory(*factory);
+    return factory;
+}
 
 void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta,
     ui32& maxInFlight, bool& isAggregationRequest) const {

@@ -1226,7 +1226,8 @@ private:
                     break;
                 }
 
-                case NKqpProto::TKqpPhyConnection::kMap: {
+                case NKqpProto::TKqpPhyConnection::kMap:
+                case NKqpProto::TKqpPhyConnection::kStreamLookup: {
                     partitionsCount = originStageInfo.Tasks.size();
                     break;
                 }
@@ -1344,7 +1345,7 @@ private:
             return false;
         };
 
-        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), nullptr, nullptr, settings, limits, ExecuterSpan.GetTraceId());
+        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), CreateKqpAsyncIoFactory(), nullptr, settings, limits);
         auto computeActorId = Register(computeActor);
         task.ComputeActorId = computeActorId;
 
@@ -1793,6 +1794,7 @@ private:
         TVector<ui64> computeTaskIds{Reserve(computeTasks.size())};
         for (auto&& taskDesc : computeTasks) {
             computeTaskIds.emplace_back(taskDesc.GetId());
+            FillInputSettings(taskDesc, lockTxId);
             ExecuteDataComputeTask(std::move(taskDesc));
         }
 
@@ -2044,6 +2046,36 @@ private:
             issue.AddSubIssue(new TIssue(message));
             issue.GetSubIssues()[0]->SetCode(NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, TSeverityIds::S_ERROR);
             ReplyErrorAndDie(Ydb::StatusIds::UNDETERMINED, issue);
+        }
+    }
+
+    void FillInputSettings(NYql::NDqProto::TDqTask& task, const TMaybe<ui64> lockTxId) {
+        for (auto& input : *task.MutableInputs()) {
+            if (input.HasTransform()) {
+                auto transform = input.MutableTransform();
+                YQL_ENSURE(transform->GetType() == "StreamLookupInputTransformer",
+                    "Unexpected input transform type: " << transform->GetType());
+
+                const google::protobuf::Any& settingsAny = transform->GetSettings();
+                YQL_ENSURE(settingsAny.Is<NKikimrKqp::TKqpStreamLookupSettings>(), "Expected settings type: "
+                    << NKikimrKqp::TKqpStreamLookupSettings::descriptor()->full_name()
+                    << " , but got: " << settingsAny.type_url());
+
+                NKikimrKqp::TKqpStreamLookupSettings settings;
+                YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
+
+                if (Snapshot.IsValid()) {
+                    settings.MutableSnapshot()->SetStep(Snapshot.Step);
+                    settings.MutableSnapshot()->SetTxId(Snapshot.TxId);
+                }
+
+                if (lockTxId.Defined()) {
+                    settings.SetLockTxId(*lockTxId);
+                }
+
+                settings.SetImmediateTx(ImmediateTx);
+                transform->MutableSettings()->PackFrom(settings);
+            }
         }
     }
 

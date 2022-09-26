@@ -245,11 +245,19 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                     .Index(indexName.Cast())
                     .Done();
             } else {
-                readInput = Build<TKqlLookupTable>(ctx, read.Pos())
-                    .Table(read.Table())
-                    .LookupKeys(lookupKeys)
-                    .Columns(read.Columns())
-                    .Done();
+                if (kqpCtx.Config->FeatureFlags.GetEnableKqpDataQueryStreamLookup()) {
+                    readInput = Build<TKqlStreamLookupTable>(ctx, read.Pos())
+                        .Table(read.Table())
+                        .LookupKeys(lookupKeys)
+                        .Columns(read.Columns())
+                        .Done();
+                } else {
+                    readInput = Build<TKqlLookupTable>(ctx, read.Pos())
+                        .Table(read.Table())
+                        .LookupKeys(lookupKeys)
+                        .Columns(read.Columns())
+                        .Done();
+                }
             }
         } else {
             auto keyRangeExpr = BuildKeyRangeExpr(keyRange, tableDesc, node.Pos(), ctx);

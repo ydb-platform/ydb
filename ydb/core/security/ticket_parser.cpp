@@ -15,6 +15,8 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
     using TBase = TTicketParserImpl<TTicketParser>;
     using TBase::TBase;
 
+    friend TBase;
+
     enum class ETokenType {
         Unknown,
         Unsupported,
@@ -22,7 +24,7 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
         Login,
     };
 
-    ETokenType ParseTokenType(const TStringBuf& tokenType) const {
+    ETokenType ParseTokenType(const TStringBuf tokenType) const {
         if (tokenType == "Login") {
             if (UseLoginProvider) {
                 return ETokenType::Login;
@@ -58,8 +60,18 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
 
     THashMap<TString, TTokenRecord> UserTokens;
 
-    static TString GetKey(TEvTicketParser::TEvAuthorizeTicket* request) {
-        return request->Ticket + TBase::GetKey(request);
+    TTokenRecord* GetUserToken(const TString& key) {
+        auto it = UserTokens.find(key);
+        return it != UserTokens.end() ? &it->second : nullptr;
+    }
+
+    TTokenRecord* InsertUserToken(const TString& key, const TStringBuf ticket) {
+        auto it = UserTokens.emplace(key, ticket).first;
+        return &it->second;
+    }
+
+    static TStringStream GetKey(TEvTicketParser::TEvAuthorizeTicket* request) {
+        return request->Ticket;
     }
 
     void InitTokenRecord(const TString& key, TTokenRecord& record, const TActorContext& ctx) {
@@ -183,50 +195,11 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
         RefreshQueue.push({key, record.ExpireTime});
     }
 
-    void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TActorContext& ctx) {
-        TStringBuf ticket;
-        TStringBuf ticketType;
-        CrackTicket(ev->Get()->Ticket, ticket, ticketType);
+    bool IsTicketEmpty(const TStringBuf ticket, TEvTicketParser::TEvAuthorizeTicket::TPtr&) {
+        return ticket.empty();
+    }
 
-        TString key = GetKey(ev->Get());
-        TActorId sender = ev->Sender;
-        ui64 cookie = ev->Cookie;
-
-        CounterTicketsReceived->Inc();
-        if (ticket.empty()) {
-            TEvTicketParser::TError error;
-            error.Message = "Ticket is empty";
-            error.Retryable = false;
-            LOG_ERROR_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(ticket) << ": " << error);
-            ctx.Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
-            return;
-        }
-        auto it = UserTokens.find(key);
-        if (it != UserTokens.end()) {
-            auto& record = it->second;
-            // we know about token
-            if (record.IsTokenReady()) {
-                // token already have built
-                record.AccessTime = ctx.Now();
-                ctx.Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Token, record.SerializedToken), 0, cookie);
-            } else if (record.Error) {
-                // token stores information about previous error
-                record.AccessTime = ctx.Now();
-                ctx.Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
-            } else {
-                // token building in progress
-                record.AuthorizeRequests.emplace_back(ev.Release());
-            }
-            CounterTicketsCacheHit->Inc();
-            return;
-        } else {
-            it = UserTokens.emplace(key, ticket).first;
-            CounterTicketsCacheMiss->Inc();
-        }
-
-        auto& record = it->second;
-        record.PeerName = std::move(ev->Get()->PeerName);
-        record.Database = std::move(ev->Get()->Database);
+    void SetTokenType(TTokenRecord& record, TStringBuf&, const TStringBuf ticketType) {
         if (ticketType) {
             record.TokenType = ParseTokenType(ticketType);
             switch (record.TokenType) {
@@ -242,18 +215,6 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
                     break;
             }
         }
-        InitTokenRecord(key, record, ctx);
-        if (record.Error) {
-            LOG_ERROR_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(ticket) << ": " << record.Error);
-            ctx.Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
-            return;
-        }
-        if (record.IsTokenReady()) {
-            // offline check ready
-            ctx.Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Token, record.SerializedToken), 0, cookie);
-            return;
-        }
-        record.AuthorizeRequests.emplace_back(ev.Release());
     }
 
     void Handle(TEvTicketParser::TEvRefreshTicket::TPtr& ev, const TActorContext&) {
@@ -421,7 +382,7 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
 public:
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+            HFunc(TEvTicketParser::TEvAuthorizeTicket, TBase::Handle);
             HFunc(TEvTicketParser::TEvRefreshTicket, Handle);
             HFunc(TEvTicketParser::TEvDiscardTicket, Handle);
             HFunc(TEvTicketParser::TEvUpdateLoginSecurityState, TBase::Handle);

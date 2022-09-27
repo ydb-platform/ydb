@@ -121,7 +121,6 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         return EExecutionStatus::Executed;
     }
 
-
     try {
         auto& kqpTx = dataTx->GetKqpTransaction();
         auto& tasksRunner = dataTx->GetKqpTasksRunner();
@@ -133,6 +132,38 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
             DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
             return EExecutionStatus::Restart;
+        }
+
+        if (guardLocks.LockTxId) {
+            switch (DataShard.SysLocksTable().EnsureCurrentLock()) {
+                case EEnsureCurrentLock::Success:
+                    // Lock is valid, we may continue with reads and side-effects
+                    break;
+
+                case EEnsureCurrentLock::Broken:
+                    // Lock is valid, but broken, we could abort early in some
+                    // cases, but it doesn't affect correctness.
+                    break;
+
+                case EEnsureCurrentLock::TooMany:
+                    // Lock cannot be created, it's not necessarily a problem
+                    // for read-only transactions, for non-readonly we need to
+                    // abort;
+                    if (op->IsReadOnly()) {
+                        break;
+                    }
+
+                    [[fallthrough]];
+
+                case EEnsureCurrentLock::Abort:
+                    // Lock cannot be created and we must abort
+                    LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
+                        << " aborting because it cannot acquire locks");
+
+                    op->SetAbortedFlag();
+                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                    return EExecutionStatus::Executed;
+            }
         }
 
         if (!KqpValidateLocks(tabletId, tx, DataShard.SysLocksTable())) {
@@ -229,8 +260,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         op->Result().Swap(result);
         op->SetKqpAttachedRSFlag();
 
-        if (dataTx->GetCounters().InvisibleRowSkips) {
-            DataShard.SysLocksTable().BreakSetLocks(op->LockTxId(), op->LockNodeId());
+        if (dataTx->GetCounters().InvisibleRowSkips && op->LockTxId()) {
+            DataShard.SysLocksTable().BreakSetLocks();
         }
 
         AddLocksToResult(op, ctx);

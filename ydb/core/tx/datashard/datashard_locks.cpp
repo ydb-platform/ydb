@@ -779,7 +779,11 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         Locker.ForceBreakLock(Update->LockTxId);
         Locker.SaveBrokenPersistentLocks(Db);
     } else {
-        lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
+        if (Update->Lock) {
+            lock = std::move(Update->Lock);
+        } else {
+            lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
+        }
         if (!lock) {
             counter = TLock::ErrorTooMuch;
         } else if (lock->IsBroken()) {
@@ -933,41 +937,38 @@ void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
     }
 }
 
-void TSysLocks::SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId) {
+void TSysLocks::SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key) {
+    Y_VERIFY(Update && Update->LockTxId);
     Y_VERIFY(!TSysTables::IsSystemTable(tableId));
     if (!Self->IsUserTable(tableId))
         return;
 
-    if (lockTxId) {
-        Y_VERIFY(Update);
-        Update->AddPointLock(Locker.MakePoint(tableId, key), lockTxId, lockNodeId);
-    }
+    Update->AddPointLock(Locker.MakePoint(tableId, key));
 }
 
-void TSysLocks::SetLock(const TTableId& tableId, const TTableRange& range, ui64 lockTxId, ui32 lockNodeId) {
+void TSysLocks::SetLock(const TTableId& tableId, const TTableRange& range) {
     if (range.Point) { // if range is point replace it with a point lock
-        SetLock(tableId, range.From, lockTxId, lockNodeId);
+        SetLock(tableId, range.From);
         return;
     }
 
+    Y_VERIFY(Update && Update->LockTxId);
     Y_VERIFY(!TSysTables::IsSystemTable(tableId));
     if (!Self->IsUserTable(tableId))
         return;
 
-    if (lockTxId) {
-        Y_VERIFY(Update);
-        Update->AddRangeLock(Locker.MakeRange(tableId, range), lockTxId, lockNodeId);
-    }
+    Update->AddRangeLock(Locker.MakeRange(tableId, range));
 }
 
-void TSysLocks::SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId) {
+void TSysLocks::SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key) {
+    Y_VERIFY(Update && Update->LockTxId);
     Y_VERIFY(!TSysTables::IsSystemTable(tableId));
     if (!Self->IsUserTable(tableId))
         return;
 
     if (auto* table = Locker.FindTablePtr(tableId)) {
-        Update->AddWriteLock(table, lockTxId, lockNodeId);
-        AddWriteConflict(tableId, key, lockTxId, lockNodeId);
+        Update->AddWriteLock(table);
+        AddWriteConflict(tableId, key);
     }
 }
 
@@ -977,7 +978,7 @@ void TSysLocks::BreakLock(ui64 lockId) {
     }
 }
 
-void TSysLocks::BreakLock(const TTableId& tableId, const TArrayRef<const TCell>& key) {
+void TSysLocks::BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key) {
     Y_VERIFY(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
 
     if (auto* table = Locker.FindTablePtr(tableId)) {
@@ -994,29 +995,28 @@ void TSysLocks::BreakLock(const TTableId& tableId, const TArrayRef<const TCell>&
     }
 }
 
-void TSysLocks::AddReadConflict(ui64 conflictId, ui64 lockTxId, ui32 lockNodeId) {
-    Y_UNUSED(lockNodeId);
+void TSysLocks::AddReadConflict(ui64 conflictId) {
+    Y_VERIFY(Update && Update->LockTxId);
 
-    if (conflictId != lockTxId) {
+    if (conflictId != Update->LockTxId) {
         if (auto* lock = Locker.FindLockPtr(conflictId)) {
             Update->AddReadConflictLock(lock);
         }
     }
 }
 
-void TSysLocks::AddWriteConflict(ui64 conflictId, ui64 lockTxId, ui32 lockNodeId) {
-    Y_UNUSED(lockNodeId);
+void TSysLocks::AddWriteConflict(ui64 conflictId) {
+    Y_VERIFY(Update && Update->LockTxId);
 
-    if (conflictId != lockTxId) {
+    if (conflictId != Update->LockTxId) {
         if (auto* lock = Locker.FindLockPtr(conflictId)) {
             Update->AddWriteConflictLock(lock);
         }
     }
 }
 
-void TSysLocks::AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId) {
-    Y_UNUSED(lockTxId);
-    Y_UNUSED(lockNodeId);
+void TSysLocks::AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key) {
+    Y_VERIFY(Update && Update->LockTxId);
 
     if (auto* table = Locker.FindTablePtr(tableId)) {
         if (table->HasRangeLocks()) {
@@ -1035,6 +1035,7 @@ void TSysLocks::AddWriteConflict(const TTableId& tableId, const TArrayRef<const 
 }
 
 void TSysLocks::BreakAllLocks(const TTableId& tableId) {
+    Y_VERIFY(Update);
     Y_VERIFY(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
     if (!Self->IsUserTable(tableId))
         return;
@@ -1046,11 +1047,10 @@ void TSysLocks::BreakAllLocks(const TTableId& tableId) {
     }
 }
 
-void TSysLocks::BreakSetLocks(ui64 lockTxId, ui32 lockNodeId) {
-    Y_VERIFY(Update);
+void TSysLocks::BreakSetLocks() {
+    Y_VERIFY(Update && Update->LockTxId);
 
-    if (lockTxId)
-        Update->BreakSetLocks(lockTxId, lockNodeId);
+    Update->BreakSetLocks();
 }
 
 bool TSysLocks::IsMyKey(const TArrayRef<const TCell>& key) const {
@@ -1059,8 +1059,10 @@ bool TSysLocks::IsMyKey(const TArrayRef<const TCell>& key) const {
     return ok && (Self->TabletID() == tabletId);
 }
 
-bool TSysLocks::HasWriteLock(ui64 lockId, const TTableId& tableId) const {
-    if (Update && Update->LockTxId == lockId && Update->WriteTables) {
+bool TSysLocks::HasCurrentWriteLock(const TTableId& tableId) const {
+    Y_VERIFY(Update && Update->LockTxId);
+
+    if (Update->WriteTables) {
         if (auto* table = Locker.FindTablePtr(tableId.PathId)) {
             if (table->IsInList<TTableLocksWriteListTag>()) {
                 return true;
@@ -1068,8 +1070,24 @@ bool TSysLocks::HasWriteLock(ui64 lockId, const TTableId& tableId) const {
         }
     }
 
-    if (auto* lock = Locker.FindLockPtr(lockId)) {
+    if (auto* lock = Locker.FindLockPtr(Update->LockTxId)) {
         if (lock->WriteTables.contains(tableId.PathId)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TSysLocks::HasCurrentWriteLocks() const {
+    Y_VERIFY(Update && Update->LockTxId);
+
+    if (Update->WriteTables) {
+        return true;
+    }
+
+    if (auto* lock = Locker.FindLockPtr(Update->LockTxId)) {
+        if (lock->IsWriteLock()) {
             return true;
         }
     }
@@ -1091,14 +1109,31 @@ bool TSysLocks::HasWriteLocks(const TTableId& tableId) const {
     return false;
 }
 
-bool TSysLocks::MayAddLock(ui64 lockId) const {
-    if (auto* lock = Locker.FindLockPtr(lockId)) {
-        // We may expand the lock unless it's broken
-        return !lock->IsBroken();
+EEnsureCurrentLock TSysLocks::EnsureCurrentLock() {
+    Y_VERIFY(Update && Update->LockTxId);
+    Y_VERIFY(Db, "EnsureCurrentLock needs a valid locks database");
+
+    if (auto* lock = Locker.FindLockPtr(Update->LockTxId)) {
+        // We cannot expand a broken lock
+        if (lock->IsBroken()) {
+            return EEnsureCurrentLock::Broken;
+        }
+
+        Update->Lock = lock;
+
+        return EEnsureCurrentLock::Success;
     }
 
-    Y_VERIFY(Db, "MayAddLock needs a valid locks database");
-    return Db->MayAddLock(lockId);
+    if (!Db->MayAddLock(Update->LockTxId)) {
+        return EEnsureCurrentLock::Abort;
+    }
+
+    Update->Lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
+    if (!Update->Lock) {
+        return EEnsureCurrentLock::TooMany;
+    }
+
+    return EEnsureCurrentLock::Success;
 }
 
 TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId) const {

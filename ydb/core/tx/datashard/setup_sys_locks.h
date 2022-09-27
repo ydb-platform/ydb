@@ -17,8 +17,7 @@ struct TSetupSysLocks
         CheckVersion = TRowVersion::Max();
         BreakVersion = TRowVersion::Min();
 
-        SysLocksTable.SetTxUpdater(this);
-        SysLocksTable.SetDb(db);
+        SysLocksTable.SetupUpdate(this, db);
     }
 
     TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, TDataShard& self, ILocksDb* db)
@@ -29,8 +28,7 @@ struct TSetupSysLocks
         CheckVersion = TRowVersion::Max();
         BreakVersion = TRowVersion::Min();
 
-        SysLocksTable.SetTxUpdater(this);
-        SysLocksTable.SetDb(db);
+        SysLocksTable.SetupUpdate(this, db);
     }
 
     TSetupSysLocks(TOperation::TPtr op,
@@ -55,19 +53,17 @@ struct TSetupSysLocks
             BreakVersion = outOfOrder ? writeVersion : TRowVersion::Min();
         }
 
-        SysLocksTable.SetTxUpdater(this);
         if (!op->LocksCache().Locks.empty())
             SysLocksTable.SetCache(&op->LocksCache());
         else
             SysLocksTable.SetAccessLog(&op->LocksAccessLog());
-        SysLocksTable.SetDb(db);
+        SysLocksTable.SetupUpdate(this, db);
     }
 
     ~TSetupSysLocks() {
-        SysLocksTable.SetTxUpdater(nullptr);
+        SysLocksTable.ResetUpdate();
         SysLocksTable.SetCache(nullptr);
         SysLocksTable.SetAccessLog(nullptr);
-        SysLocksTable.SetDb(nullptr);
     }
 };
 

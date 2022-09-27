@@ -259,6 +259,14 @@ public:
     TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs);
     ~TLockInfo();
 
+    bool Empty() const {
+        return !(
+            IsPersistent() ||
+            !ReadTables.empty() ||
+            !WriteTables.empty() ||
+            IsBroken());
+    }
+
     template<class TTag>
     bool IsInList() const {
         using TItem = TIntrusiveListItem<TLockInfo, TTag>;
@@ -620,22 +628,19 @@ struct TLocksUpdate {
         return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks);
     }
 
-    void AddRangeLock(const TRangeKey& range, ui64 lockId, ui32 lockNodeId) {
-        Y_VERIFY(LockTxId == lockId && LockNodeId == lockNodeId);
+    void AddRangeLock(const TRangeKey& range) {
         ReadTables.PushBack(range.Table.Get());
         AffectedTables.PushBack(range.Table.Get());
         RangeLocks.push_back(range);
     }
 
-    void AddPointLock(const TPointKey& key, ui64 lockId, ui32 lockNodeId) {
-        Y_VERIFY(LockTxId == lockId && LockNodeId == lockNodeId);
+    void AddPointLock(const TPointKey& key) {
         ReadTables.PushBack(key.Table.Get());
         AffectedTables.PushBack(key.Table.Get());
         PointLocks.push_back(key);
     }
 
-    void AddWriteLock(TTableLocks* table, ui64 lockId, ui32 lockNodeId) {
-        Y_VERIFY(LockTxId == lockId && LockNodeId == lockNodeId);
+    void AddWriteLock(TTableLocks* table) {
         WriteTables.PushBack(table);
         AffectedTables.PushBack(table);
     }
@@ -668,14 +673,29 @@ struct TLocksUpdate {
         EraseLocks.PushBack(lock);
     }
 
-    void BreakSetLocks(ui64 lockId, ui32 lockNodeId) {
-        Y_VERIFY(LockTxId == lockId && LockNodeId == lockNodeId);
+    void BreakSetLocks() {
         BreakOwn = true;
     }
 };
 
 struct TLocksCache {
     THashMap<ui64, TSysTables::TLocksTable::TLock> Locks;
+};
+
+enum class EEnsureCurrentLock {
+    // New lock was created or an existing unbroken lock was found.
+    Success,
+    // Lock was already broken, this is not an error for some operations, e.g.
+    // readonly snapshot operations may usually continue until they write.
+    Broken,
+    // Some constraint prevents adding new lock, e.g. there are too many locks
+    // or not enough memory. This is usually similar to Broken.
+    TooMany,
+    // Operation must abort due to temporal violation. This may happen when
+    // transaction was already marked committed or aborted in the transaction
+    // map, but not yet fully compacted. New reads and especially writes may
+    // cause inconsistencies or data corruption and cannot be performed.
+    Abort,
 };
 
 /// /sys/locks table logic
@@ -690,8 +710,21 @@ public:
         , Locker(self)
     {}
 
-    void SetTxUpdater(TLocksUpdate* up) {
-        Update = up;
+    void SetupUpdate(TLocksUpdate* update, ILocksDb* db = nullptr) noexcept {
+        Y_VERIFY(!Update, "Cannot setup a recursive update");
+        Y_VERIFY(update, "Cannot setup a nullptr update");
+        Update = update;
+        Db = db;
+    }
+
+    void ResetUpdate() noexcept {
+        if (Y_LIKELY(Update)) {
+            if (Update->Lock && Update->Lock->Empty()) {
+                Locker.RemoveLock(Update->LockTxId, nullptr);
+            }
+            Update = nullptr;
+            Db = nullptr;
+        }
     }
 
     void SetAccessLog(TLocksCache* log) {
@@ -700,10 +733,6 @@ public:
 
     void SetCache(TLocksCache* cache) {
         Cache = cache;
-    }
-
-    void SetDb(ILocksDb* db) {
-        Db = db;
     }
 
     ui64 CurrentLockTxId() const {
@@ -724,20 +753,33 @@ public:
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
     void CommitLock(const TArrayRef<const TCell>& syslockKey);
-    void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId);
-    void SetLock(const TTableId& tableId, const TTableRange& range, ui64 lockTxId, ui32 lockNodeId);
-    void SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId);
+    void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
+    void SetLock(const TTableId& tableId, const TTableRange& range);
+    void SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void BreakLock(ui64 lockId);
-    void BreakLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
-    void AddReadConflict(ui64 conflictId, ui64 lockTxId, ui32 lockNodeId);
-    void AddWriteConflict(ui64 conflictId, ui64 lockTxId, ui32 lockNodeId);
-    void AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId);
+    void BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key);
+    void AddReadConflict(ui64 conflictId);
+    void AddWriteConflict(ui64 conflictId);
+    void AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void BreakAllLocks(const TTableId& tableId);
-    void BreakSetLocks(ui64 lockTxId, ui32 lockNodeId);
+    void BreakSetLocks();
     bool IsMyKey(const TArrayRef<const TCell>& key) const;
-    bool HasWriteLock(ui64 lockId, const TTableId& tableId) const;
+    bool HasCurrentWriteLock(const TTableId& tableId) const;
+    bool HasCurrentWriteLocks() const;
     bool HasWriteLocks(const TTableId& tableId) const;
-    bool MayAddLock(ui64 lockId) const;
+
+    /**
+     * Ensures current update has a valid lock pointer
+     *
+     * Prerequisites: TSetupSysLocks with LockId and LocksDb is active, and
+     *                operation is planning to set read or write locks.
+     *
+     * Returns Success when a new lock is allocated or an existing (unbroken)
+     * lock is found. Returns Broken when a lock is likely to fail, e.g. due
+     * to memory or other constraints. Returns Abort when operation must abort
+     * early, e.g. because the given LockId cannot be reused.
+     */
+    EEnsureCurrentLock EnsureCurrentLock();
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }

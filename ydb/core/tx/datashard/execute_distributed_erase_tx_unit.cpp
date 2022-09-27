@@ -140,7 +140,7 @@ public:
                 continue;
             }
 
-            DataShard.SysLocksTable().BreakLock(fullTableId, keyCells.GetCells());
+            DataShard.SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
             txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
         }
 

@@ -599,7 +599,7 @@ private:
         if (!TxMap &&
             State.LockId &&
             !TSysTables::IsSystemTable(State.PathId) &&
-            Self->SysLocksTable().HasWriteLock(State.LockId, State.PathId))
+            Self->SysLocksTable().HasCurrentWriteLock(State.PathId))
         {
             TxMap = new NTable::TSingleTransactionMap(State.LockId, TRowVersion::Min());
         }
@@ -655,7 +655,7 @@ private:
         // We have skipped uncommitted changes in txId, which would affect
         // the read result when it commits. Add a conflict edge that breaks
         // our lock when txId is committed.
-        Self->SysLocksTable().AddReadConflict(txId, State.LockId, State.LockNodeId);
+        Self->SysLocksTable().AddReadConflict(txId);
     }
 
     void CheckReadConflict(const TRowVersion& rowVersion) {
@@ -843,7 +843,34 @@ public:
         state.LockNodeId = state.Request->Record.GetLockNodeId();
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guard(state.LockId, state.LockNodeId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
+
+        if (guardLocks.LockTxId) {
+            switch (Self->SysLocksTable().EnsureCurrentLock()) {
+                case EEnsureCurrentLock::Success:
+                    // Lock is valid, we may continue with reads and side-effects
+                    break;
+
+                case EEnsureCurrentLock::Broken:
+                    // Lock is valid, but broken, we could abort early in some
+                    // cases, but it doesn't affect correctness.
+                    break;
+
+                case EEnsureCurrentLock::TooMany:
+                    // Lock cannot be created, it's not necessarily a problem
+                    // for read-only transactions.
+                    break;
+
+                case EEnsureCurrentLock::Abort:
+                    // Lock cannot be created and we must abort
+                    SendErrorAndAbort(
+                        ctx,
+                        state,
+                        Ydb::StatusIds::ABORTED,
+                        TStringBuilder() << "Transaction was already committed or aborted");
+                    return EExecutionStatus::DelayComplete;
+            }
+        }
 
         if (!Read(txc, ctx, state))
             return EExecutionStatus::Restart;
@@ -891,7 +918,7 @@ public:
             hadWrites |= locksDb.HasChanges();
 
             // We remember acquired lock for faster checking
-            state.Lock = guard.Lock;
+            state.Lock = guardLocks.Lock;
         }
 
         if (!Self->IsFollower()) {
@@ -1392,21 +1419,21 @@ private:
                         true,
                         key.GetCells(),
                         true);
-                    sysLocks.SetLock(tableId, lockRange, state.LockId, state.LockNodeId);
+                    sysLocks.SetLock(tableId, lockRange);
                 } else {
-                    sysLocks.SetLock(tableId, key.GetCells(), state.LockId, state.LockNodeId);
+                    sysLocks.SetLock(tableId, key.GetCells());
                 }
             }
         } else {
             // no keys, so we must have ranges (has been checked initially)
             for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
                 auto range = state.Request->Ranges[i].ToTableRange();
-                sysLocks.SetLock(tableId, range, state.LockId, state.LockNodeId);
+                sysLocks.SetLock(tableId, range);
             }
         }
 
         if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
-            sysLocks.BreakSetLocks(state.LockId, state.LockNodeId);
+            sysLocks.BreakSetLocks();
         }
 
         auto locks = sysLocks.ApplyLocks();
@@ -1684,7 +1711,7 @@ public:
             << ", FirstUnprocessedQuery# " << state.FirstUnprocessedQuery);
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guard(state.LockId, state.LockNodeId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
 
         Reader.reset(new TReader(state, *BlockBuilder, TableInfo, Self));
         if (Reader->Read(txc, ctx)) {

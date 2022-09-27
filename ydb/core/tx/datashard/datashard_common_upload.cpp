@@ -200,7 +200,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                     }
                 }
 
-                self->SysLocksTable().BreakLock(fullTableId, keyCells.GetCells());
+                self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
             }
         }
 

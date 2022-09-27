@@ -159,21 +159,21 @@ namespace NTest {
 
         template <typename T>
         void SetLock(const TPointKey<T>& key) {
-            Locks.SetLock(TableId, key.GetRow(), LockId(), 0);
+            Locks.SetLock(TableId, key.GetRow());
         }
 
         template <typename T>
         void SetLock(const TRangeKey<T>& range) {
-            Locks.SetLock(TableId, range.GetRowsRange(), LockId(), 0);
+            Locks.SetLock(TableId, range.GetRowsRange());
         }
 
         template <typename T>
-        void BreakLock(const TPointKey<T>& key) {
-            Locks.BreakLock(TableId, key.GetRow());
+        void BreakLocks(const TPointKey<T>& key) {
+            Locks.BreakLocks(TableId, key.GetRow());
         }
 
         void BreakSetLocks() {
-            Locks.BreakSetLocks(LockId(), 0);
+            Locks.BreakSetLocks();
         }
 
         //
@@ -191,17 +191,17 @@ namespace NTest {
 
         void StartTx(TLocksUpdate& update) {
             update.LockTxId = 0;
-            Locks.SetTxUpdater(&update);
+            Locks.SetupUpdate(&update);
         }
 
         void StartTx(ui64 lockTxId, TLocksUpdate& update) {
             update.LockTxId = lockTxId;
-            Locks.SetTxUpdater(&update);
+            Locks.SetupUpdate(&update);
         }
 
         TVector<TSysLocks::TLock> ApplyTxLocks() {
             auto locks = Locks.ApplyLocks();
-            Locks.SetTxUpdater(nullptr);
+            Locks.ResetUpdate();
             return locks;
         }
 
@@ -233,7 +233,7 @@ namespace NTest {
         template <typename T>
         void Update(const TVector<T>& updates) {
             for (auto& value : updates) {
-                BreakLock(TLockTester::TPointKey<T>(value));
+                BreakLocks(TLockTester::TPointKey<T>(value));
             }
         }
 

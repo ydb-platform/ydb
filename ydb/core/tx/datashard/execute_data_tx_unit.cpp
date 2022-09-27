@@ -121,6 +121,35 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Restart;
         }
         engine->SetMemoryLimit(txc.GetMemoryLimit() - tx->GetDataTx()->GetTxSize());
+
+        if (guardLocks.LockTxId) {
+            switch (DataShard.SysLocksTable().EnsureCurrentLock()) {
+                case EEnsureCurrentLock::Success:
+                    // Lock is valid, we may continue with reads and side-effects
+                    break;
+
+                case EEnsureCurrentLock::Broken:
+                    // Lock is valid, but broken, we could abort early in some
+                    // cases, but it doesn't affect correctness.
+                    break;
+
+                case EEnsureCurrentLock::TooMany:
+                    // Lock cannot be created, it's not necessarily a problem
+                    // for read-only transactions, for non-readonly we need to
+                    // abort;
+                    if (op->IsReadOnly()) {
+                        break;
+                    }
+
+                    [[fallthrough]];
+
+                case EEnsureCurrentLock::Abort:
+                    // Lock cannot be created and we must abort
+                    op->SetAbortedFlag();
+                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                    return EExecutionStatus::Executed;
+            }
+        }
     }
 
     try {
@@ -260,8 +289,8 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         KqpFillTxStats(DataShard, counters, *result);
     }
 
-    if (counters.InvisibleRowSkips) {
-        DataShard.SysLocksTable().BreakSetLocks(op->LockTxId(), op->LockNodeId());
+    if (counters.InvisibleRowSkips && op->LockTxId()) {
+        DataShard.SysLocksTable().BreakSetLocks();
     }
 
     AddLocksToResult(op, ctx);

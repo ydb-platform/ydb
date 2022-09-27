@@ -154,7 +154,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             continue;
         }
 
-        self->SysLocksTable().BreakLock(fullTableId, keyCells.GetCells());
+        self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
         params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion);
     }
 

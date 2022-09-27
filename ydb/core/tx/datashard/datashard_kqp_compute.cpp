@@ -137,17 +137,23 @@ const NDataShard::TUserTable* TKqpDatashardComputeContext::GetTable(const TTable
 }
 
 void TKqpDatashardComputeContext::TouchTableRange(const TTableId& tableId, const TTableRange& range) const {
-    Shard->SysLocksTable().SetLock(tableId, range, LockTxId, LockNodeId);
+    if (LockTxId) {
+        Shard->SysLocksTable().SetLock(tableId, range);
+    }
     Shard->SetTableAccessTime(tableId, Now);
 }
 
 void TKqpDatashardComputeContext::TouchTablePoint(const TTableId& tableId, const TArrayRef<const TCell>& key) const {
-    Shard->SysLocksTable().SetLock(tableId, key, LockTxId, LockNodeId);
+    if (LockTxId) {
+        Shard->SysLocksTable().SetLock(tableId, key);
+    }
     Shard->SetTableAccessTime(tableId, Now);
 }
 
 void TKqpDatashardComputeContext::BreakSetLocks() const {
-    Shard->SysLocksTable().BreakSetLocks(LockTxId, LockNodeId);
+    if (LockTxId) {
+        Shard->SysLocksTable().BreakSetLocks();
+    }
 }
 
 void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {

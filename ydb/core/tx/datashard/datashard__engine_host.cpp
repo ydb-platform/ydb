@@ -391,7 +391,9 @@ public:
             return DataShardSysTable(tableId).SelectRow(row, columnIds, returnType, readTarget, holderFactory);
         }
 
-        Self->SysLocksTable().SetLock(tableId, row, LockTxId, LockNodeId);
+        if (LockTxId) {
+            Self->SysLocksTable().SetLock(tableId, row);
+        }
 
         Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
@@ -404,7 +406,9 @@ public:
     {
         Y_VERIFY(!TSysTables::IsSystemTable(tableId), "SelectRange no system table is not supported");
 
-        Self->SysLocksTable().SetLock(tableId, range, LockTxId, LockNodeId);
+        if (LockTxId) {
+            Self->SysLocksTable().SetLock(tableId, range);
+        }
 
         Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
@@ -420,9 +424,9 @@ public:
         CheckWriteConflicts(tableId, row);
 
         if (LockTxId) {
-            Self->SysLocksTable().SetWriteLock(tableId, row, LockTxId, LockNodeId);
+            Self->SysLocksTable().SetWriteLock(tableId, row);
         } else {
-            Self->SysLocksTable().BreakLock(tableId, row);
+            Self->SysLocksTable().BreakLocks(tableId, row);
         }
         Self->SetTableUpdateTime(tableId, Now);
 
@@ -478,9 +482,9 @@ public:
         CheckWriteConflicts(tableId, row);
 
         if (LockTxId) {
-            Self->SysLocksTable().SetWriteLock(tableId, row, LockTxId, LockNodeId);
+            Self->SysLocksTable().SetWriteLock(tableId, row);
         } else {
-            Self->SysLocksTable().BreakLock(tableId, row);
+            Self->SysLocksTable().BreakLocks(tableId, row);
         }
 
         Self->SetTableUpdateTime(tableId, Now);
@@ -541,7 +545,7 @@ public:
 
         // Don't use tx map when we know there's no write lock for a table
         // Note: currently write lock implies uncommitted changes
-        if (!Self->SysLocksTable().HasWriteLock(LockTxId, tableId)) {
+        if (!Self->SysLocksTable().HasCurrentWriteLock(tableId)) {
             return nullptr;
         }
 
@@ -610,16 +614,18 @@ public:
 
     void AddReadConflict(const TTableId& tableId, ui64 txId) const {
         Y_UNUSED(tableId);
-        if (LockTxId) {
-            // We have detected uncommitted changes in txId that could affect
-            // our read result. We arrange a conflict that breaks our lock
-            // when txId commits.
-            Self->SysLocksTable().AddReadConflict(txId, LockTxId, LockNodeId);
-        }
+        Y_VERIFY(LockTxId);
+
+        // We have detected uncommitted changes in txId that could affect
+        // our read result. We arrange a conflict that breaks our lock
+        // when txId commits.
+        Self->SysLocksTable().AddReadConflict(txId);
     }
 
     void CheckReadConflict(const TTableId& tableId, const TRowVersion& rowVersion) const {
         Y_UNUSED(tableId);
+        Y_VERIFY(LockTxId);
+
         if (rowVersion > ReadVersion) {
             // We are reading from snapshot at ReadVersion and should not normally
             // observe changes with a version above that. However, if we have an
@@ -628,7 +634,7 @@ public:
             // snapshot. This is a clear indication of a conflict between read
             // and that future conflict, hence we must break locks and abort.
             // TODO: add an actual abort
-            Self->SysLocksTable().BreakSetLocks(LockTxId, LockNodeId);
+            Self->SysLocksTable().BreakSetLocks();
             EngineBay.GetKqpComputeCtx().SetInconsistentReads();
         }
     }
@@ -696,7 +702,7 @@ public:
     void AddWriteConflict(const TTableId& tableId, ui64 txId) const {
         Y_UNUSED(tableId);
         if (LockTxId) {
-            Self->SysLocksTable().AddWriteConflict(txId, LockTxId, LockNodeId);
+            Self->SysLocksTable().AddWriteConflict(txId);
         } else {
             Self->SysLocksTable().BreakLock(txId);
         }

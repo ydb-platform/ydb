@@ -121,7 +121,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << SelfId()
-            << " with parent# " << Parent << " Bootstrap called");
+            << " with parent# " << Parent << " Bootstrap called, will read keys# " << Points.size());
 
         Become(&TReadIteratorPoints::StateFunc);
 
@@ -263,7 +263,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-            << " with parent# " << Parent << " Bootstrap called");
+            << " with parent# " << Parent << " Bootstrap called, sample# " << SampleKeyCount);
 
         Become(&TReadIteratorScan::StateFunc);
         Connect(ctx);
@@ -316,7 +316,6 @@ private:
             }
 
             return StopWithError(ctx, ss.Str());
-            return;
         }
 
         if (Format != NKikimrTxDataShard::CELLVEC) {
@@ -335,7 +334,10 @@ private:
 
             if (record.GetFinished() || SampledKeys.size() >= SampleKeyCount) {
                 LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-                    << " with parent# " << Parent << " finished in " << delta << ", sampled# " << SampledKeys.size());
+                    << " with parent# " << Parent << " finished in " << delta
+                    << ", sampled# " << SampledKeys.size()
+                    << ", iter finished# " << record.GetFinished()
+                    << ", oks# " << Oks);
 
                 ctx.Send(Parent, new TEvPrivate::TEvKeys(std::move(SampledKeys)));
                 return Die(ctx);
@@ -344,7 +346,8 @@ private:
             return;
         } else if (record.GetFinished()) {
             LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-                << " with parent# " << Parent << " finished in " << delta);
+                << " with parent# " << Parent << " finished in " << delta
+                << ", read# " << Oks);
 
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(0);
             response->Report = TEvDataShardLoad::TLoadReport();
@@ -428,7 +431,7 @@ class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadSce
     ui64 Inflight = 0;
 
     // setup for fullscan
-    const TVector<ui64> ChunkSizes = {0, 0, 1, 1, 10, 10, 100, 100, 1000, 1000}; // each twice intentionally
+    TVector<ui64> ChunkSizes = {0, 0, 1, 1, 10, 10, 100, 100, 1000, 1000}; // each twice intentionally
     size_t ChunkIndex = 0;
 
     // note that might be overwritten by test incoming test config
@@ -450,6 +453,13 @@ public:
             Inflights.clear();
             for (auto inflight: Config.GetInflights()) {
                 Inflights.push_back(inflight);
+            }
+        }
+
+        if (Config.ChunksSize()) {
+            ChunkSizes.clear();
+            for (auto chunk: Config.GetChunks()) {
+                ChunkSizes.push_back(chunk);
             }
         }
     }

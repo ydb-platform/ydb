@@ -34,5 +34,36 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
             UNIT_ASSERT_VALUES_EQUAL(buf.AsStringValue().Size(), NUdf::TUnboxedValuePod::InternalBufferSize + 1U);
         }
     }
+
+    Y_UNIT_TEST(MakeLargeString) {
+        TScopedAlloc alloc;
+
+        {
+            const auto buf= MakeStringNotFilled(0xFFFFFFFFU);
+            UNIT_ASSERT(buf.IsString());
+            UNIT_ASSERT_VALUES_EQUAL(buf.AsStringRef().Size(), 0xFFFFFFFFU);
+            const auto& value = buf.AsStringValue();
+            UNIT_ASSERT_VALUES_EQUAL(value.Size(), 0xFFFFFFFFU);
+            UNIT_ASSERT_VALUES_EQUAL(value.Capacity(), 0x100000000ULL);
+        }
+
+        {
+            const auto buf= MakeStringNotFilled(0xFFFFFFF1U);
+            UNIT_ASSERT(buf.IsString());
+            UNIT_ASSERT_VALUES_EQUAL(buf.AsStringRef().Size(), 0xFFFFFFF1U);
+            const auto& value = buf.AsStringValue();
+            UNIT_ASSERT_VALUES_EQUAL(value.Size(), 0xFFFFFFF1U);
+            UNIT_ASSERT_VALUES_EQUAL(value.Capacity(), 0x100000000ULL);
+        }
+
+        {
+            const auto buf= MakeStringNotFilled(0xFFFFFFF0U);
+            UNIT_ASSERT(buf.IsString());
+            UNIT_ASSERT_VALUES_EQUAL(buf.AsStringRef().Size(), 0xFFFFFFF0U);
+            const auto& value = buf.AsStringValue();
+            UNIT_ASSERT_VALUES_EQUAL(value.Size(), 0xFFFFFFF0U);
+            UNIT_ASSERT_VALUES_EQUAL(value.Capacity(), 0xFFFFFFF0ULL);
+        }
+    }
 }
 

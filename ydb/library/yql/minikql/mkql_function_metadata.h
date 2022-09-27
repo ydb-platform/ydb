@@ -2,6 +2,10 @@
 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
+namespace arrow::compute {
+class FunctionRegistry;
+};
+
 namespace NKikimr {
 
 namespace NMiniKQL {
@@ -65,6 +69,8 @@ public:
     virtual const TFunctionsMap& GetFunctions() const = 0;
 
     virtual TFunctionDescriptor GetBuiltin(const std::string_view& name, const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const = 0;
+
+    virtual arrow::compute::FunctionRegistry* GetArrowFunctionRegistry() const = 0;
 };
 
 }

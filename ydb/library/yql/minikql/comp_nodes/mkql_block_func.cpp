@@ -48,9 +48,9 @@ struct TState : public TComputationValue<TState> {
 
     TState(TMemoryUsageInfo* memInfo, const arrow::compute::Function& function, const arrow::compute::FunctionOptions* options,
         const arrow::compute::ScalarKernel& kernel,
-        arrow::compute::FunctionRegistry& registry, const std::vector<arrow::ValueDescr>& argsValuesDescr, TComputationContext& ctx)
+        const arrow::compute::FunctionRegistry& registry, const std::vector<arrow::ValueDescr>& argsValuesDescr, TComputationContext& ctx)
         : TComputationValue(memInfo)
-        , ExecContext(&ctx.ArrowMemoryPool, nullptr, &registry)
+        , ExecContext(&ctx.ArrowMemoryPool, nullptr, const_cast<arrow::compute::FunctionRegistry*>(&registry))
         , KernelContext(&ExecContext)
         , Executor(arrow::compute::detail::KernelExecutor::MakeScalar())
     {
@@ -74,6 +74,7 @@ struct TState : public TComputationValue<TState> {
 class TBlockFuncWrapper : public TMutableComputationNode<TBlockFuncWrapper> {
 public:
     TBlockFuncWrapper(TComputationMutables& mutables,
+        const arrow::compute::FunctionRegistry& functionRegistry,
         const TString& funcName,
         TVector<IComputationNode*>&& argsNodes,
         TVector<TType*>&& argsTypes)
@@ -83,7 +84,7 @@ public:
         , ArgsNodes(std::move(argsNodes))
         , ArgsTypes(std::move(argsTypes))
         , ArgsValuesDescr(ToValueDescr(ArgsTypes))
-        , FunctionRegistry(*arrow::compute::GetFunctionRegistry())
+        , FunctionRegistry(functionRegistry)
         , Function(ResolveFunction(FunctionRegistry, FuncName))
         , Kernel(ResolveKernel(Function, ArgsValuesDescr))
     {
@@ -134,19 +135,23 @@ private:
     const TVector<TType*> ArgsTypes;
 
     const std::vector<arrow::ValueDescr> ArgsValuesDescr;
-    arrow::compute::FunctionRegistry& FunctionRegistry;
+    const arrow::compute::FunctionRegistry& FunctionRegistry;
     const arrow::compute::Function& Function;
     const arrow::compute::ScalarKernel& Kernel;
 };
 
 class TBlockBitCastWrapper : public TMutableComputationNode<TBlockBitCastWrapper> {
 public:
-    TBlockBitCastWrapper(TComputationMutables& mutables, IComputationNode* arg, TType* argType, TType* to)
+    TBlockBitCastWrapper(TComputationMutables& mutables,
+        const arrow::compute::FunctionRegistry& functionRegistry,
+        IComputationNode* arg,
+        TType* argType,
+        TType* to)
         : TMutableComputationNode(mutables)
         , StateIndex(mutables.CurValueIndex++)
         , Arg(arg)
         , ArgsValuesDescr({ ToValueDescr(argType) })
-        , FunctionRegistry(*arrow::compute::GetFunctionRegistry())
+        , FunctionRegistry(functionRegistry)
         , Function(ResolveFunction(FunctionRegistry, to))
         , Kernel(ResolveKernel(Function, ArgsValuesDescr))
     {
@@ -195,7 +200,7 @@ private:
     const ui32 StateIndex;
     IComputationNode* Arg;
     const std::vector<arrow::ValueDescr> ArgsValuesDescr;
-    arrow::compute::FunctionRegistry& FunctionRegistry;
+    const arrow::compute::FunctionRegistry& FunctionRegistry;
     const arrow::compute::Function& Function;
     const arrow::compute::ScalarKernel& Kernel;
 };
@@ -215,6 +220,7 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
     }
 
     return new TBlockFuncWrapper(ctx.Mutables,
+        *ctx.FunctionRegistry.GetBuiltins()->GetArrowFunctionRegistry(),
         funcName,
         std::move(argsNodes),
         std::move(argsTypes)
@@ -226,6 +232,7 @@ IComputationNode* WrapBlockBitCast(TCallable& callable, const TComputationNodeFa
     auto argNode = LocateNode(ctx.NodeLocator, callable, 0);
     MKQL_ENSURE(callable.GetInput(1).GetStaticType()->IsType(), "Expected type");
     return new TBlockBitCastWrapper(ctx.Mutables,
+        *ctx.FunctionRegistry.GetBuiltins()->GetArrowFunctionRegistry(),
         argNode,
         callable.GetType()->GetArgumentType(0),
         static_cast<TType*>(callable.GetInput(1).GetNode())

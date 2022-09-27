@@ -3,6 +3,7 @@
 #include <ydb/library/yql/minikql/arrow/mkql_functions.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 
 #include <util/stream/null.h>
@@ -33,7 +34,7 @@ private:
                 mkqlInputTypes.emplace_back(mkqlType);
             }
 
-            if (!FindArrowFunction(name, mkqlInputTypes, mkqlOutputType, env)) {
+            if (!FindArrowFunction(name, mkqlInputTypes, mkqlOutputType, env, *FunctionRegistry_.GetBuiltins())) {
                 return true;
             }
 

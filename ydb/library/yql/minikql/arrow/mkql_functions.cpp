@@ -2,6 +2,7 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/minikql/mkql_function_metadata.h>
 
 #include <arrow/datum.h>
 #include <arrow/visitor.h>
@@ -121,9 +122,8 @@ bool ConvertOutputArrowType(const arrow::compute::OutputType& outType, const std
     }
 }
 
-bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TType*& outputType, TTypeEnvironment& env) {
-    auto registry = arrow::compute::GetFunctionRegistry();
-    auto resFunc = registry->GetFunction(TString(name));
+bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TType*& outputType, TTypeEnvironment& env, const IBuiltinFunctionRegistry& registry) {
+    auto resFunc = registry.GetArrowFunctionRegistry()->GetFunction(TString(name));
     if (!resFunc.ok()) {
         return false;
     }

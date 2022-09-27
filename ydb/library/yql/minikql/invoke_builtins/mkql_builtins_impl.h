@@ -4,9 +4,14 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/minikql/mkql_function_metadata.h>
+#include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <util/string/cast.h>
 
+#include "mkql_builtins.h"
 #include "mkql_builtins_codegen.h"
+
+#include <arrow/compute/function.h>
+#include <arrow/scalar.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -760,9 +765,12 @@ void RegisterBinaryRealFunction(IBuiltinFunctionRegistry& registry, const std::s
 }
 
 void RegisterAdd(IBuiltinFunctionRegistry& registry);
+void RegisterAdd(arrow::compute::FunctionRegistry& registry);
 void RegisterAggrAdd(IBuiltinFunctionRegistry& registry);
 void RegisterSub(IBuiltinFunctionRegistry& registry);
+void RegisterSub(arrow::compute::FunctionRegistry& registry);
 void RegisterMul(IBuiltinFunctionRegistry& registry);
+void RegisterMul(arrow::compute::FunctionRegistry& registry);
 void RegisterDiv(IBuiltinFunctionRegistry& registry);
 void RegisterMod(IBuiltinFunctionRegistry& registry);
 void RegisterIncrement(IBuiltinFunctionRegistry& registry);
@@ -792,6 +800,273 @@ void RegisterMin(IBuiltinFunctionRegistry& registry);
 void RegisterAggrMax(IBuiltinFunctionRegistry& registry);
 void RegisterAggrMin(IBuiltinFunctionRegistry& registry);
 void RegisterWith(IBuiltinFunctionRegistry& registry);
+
+void AddFunction(arrow::compute::FunctionRegistry& registry, const std::shared_ptr<arrow::compute::ScalarFunction>& f);
+
+template <typename T>
+std::shared_ptr<arrow::DataType> GetPrimitiveDataType();
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<bool>() {
+    return arrow::boolean();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i8>() {
+    return arrow::int8();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui8>() {
+    return arrow::uint8();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i16>() {
+    return arrow::int16();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui16>() {
+    return arrow::uint16();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i32>() {
+    return arrow::int32();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui32>() {
+    return arrow::uint32();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<i64>() {
+    return arrow::int64();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui64>() {
+    return arrow::uint64();
+}
+
+template <typename T>
+arrow::compute::InputType GetPrimitiveInputArrowType(bool isScalar) {
+    return arrow::compute::InputType(GetPrimitiveDataType<T>(), isScalar ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY);
+}
+
+template <typename T>
+arrow::compute::OutputType GetPrimitiveOutputArrowType() {
+    return arrow::compute::OutputType(GetPrimitiveDataType<T>());
+}
+
+template <typename T>
+T GetPrimitiveScalarValue(const arrow::Scalar& scalar) {
+    return *static_cast<const T*>(dynamic_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data());
+}
+
+template <typename T>
+arrow::Datum MakeScalarDatum(T value);
+
+template <>
+inline arrow::Datum MakeScalarDatum<bool>(bool value) {
+    return arrow::Datum(std::make_shared<arrow::BooleanScalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<i8>(i8 value) {
+    return arrow::Datum(std::make_shared<arrow::Int8Scalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<ui8>(ui8 value) {
+    return arrow::Datum(std::make_shared<arrow::UInt8Scalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<i16>(i16 value) {
+    return arrow::Datum(std::make_shared<arrow::Int16Scalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<ui16>(ui16 value) {
+    return arrow::Datum(std::make_shared<arrow::UInt16Scalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<i32>(i32 value) {
+    return arrow::Datum(std::make_shared<arrow::Int32Scalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<ui32>(ui32 value) {
+    return arrow::Datum(std::make_shared<arrow::UInt32Scalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<i64>(i64 value) {
+    return arrow::Datum(std::make_shared<arrow::Int64Scalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<ui64>(ui64 value) {
+    return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(value));
+}
+
+template<typename TInput1, typename TInput2, typename TOutput,
+    template<typename, typename, typename> class TFunc>
+void AddBinaryKernel(arrow::compute::ScalarFunction& function) {
+    auto exec1 = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res)->arrow::Status {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
+        const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
+        *res = MakeScalarDatum<TOutput>(TFunc<TInput1, TInput2, TOutput>::Do(val1, val2));
+        return arrow::Status::OK();
+    };
+
+    auto exec2 = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res)->arrow::Status {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
+        const auto& arr2 = *arg2.array();
+        auto length = arr2.length;
+        const auto values2 = arr2.GetValues<TInput2>(1);
+        auto resValues = res->array()->GetMutableValues<TOutput>(1);
+        for (int64_t i = 0; i < length; ++i) {
+            resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(val1, values2[i]);
+        }
+
+        return arrow::Status::OK();
+    };
+
+    auto exec3 = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res)->arrow::Status {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        const auto& arr1 = *arg1.array();
+        auto length = arr1.length;
+        const auto values1 = arr1.GetValues<TInput1>(1);
+        auto resValues = res->array()->GetMutableValues<TOutput>(1);
+        const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
+        for (int64_t i = 0; i < length; ++i) {
+            resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(values1[i], val2);
+        }
+
+        return arrow::Status::OK();
+    };
+
+    auto exec4 = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res)->arrow::Status {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        const auto& arr1 = *arg1.array();
+        const auto& arr2 = *arg2.array();
+        MKQL_ENSURE(arr1.length == arr2.length, "Expected same length");
+        auto length = arr1.length;
+        const auto values1 = arr1.GetValues<TInput1>(1);
+        const auto values2 = arr2.GetValues<TInput2>(1);
+        auto resValues = res->array()->GetMutableValues<TOutput>(1);
+        for (int64_t i = 0; i < length; ++i) {
+            resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(values1[i], values2[i]);
+        }
+
+        return arrow::Status::OK();
+    };
+
+    ARROW_OK(function.AddKernel({ GetPrimitiveInputArrowType<TInput1>(true), GetPrimitiveInputArrowType<TInput2>(true) }, GetPrimitiveOutputArrowType<TOutput>(), exec1));
+    ARROW_OK(function.AddKernel({ GetPrimitiveInputArrowType<TInput1>(true), GetPrimitiveInputArrowType<TInput2>(false) }, GetPrimitiveOutputArrowType<TOutput>(), exec2));
+    ARROW_OK(function.AddKernel({ GetPrimitiveInputArrowType<TInput1>(false), GetPrimitiveInputArrowType<TInput2>(true) }, GetPrimitiveOutputArrowType<TOutput>(), exec3));
+    ARROW_OK(function.AddKernel({ GetPrimitiveInputArrowType<TInput1>(false), GetPrimitiveInputArrowType<TInput2>(false) }, GetPrimitiveOutputArrowType<TOutput>(), exec4));
+}
+
+template<template<typename, typename, typename> class TFunc>
+void AddBinaryIntegralKernels(arrow::compute::ScalarFunction& function) {
+    AddBinaryKernel<ui8, ui8, ui8, TFunc>(function);
+    AddBinaryKernel<ui8, i8, i8, TFunc>(function);
+    AddBinaryKernel<ui8, ui16, ui16, TFunc>(function);
+    AddBinaryKernel<ui8, i16, i16, TFunc>(function);
+    AddBinaryKernel<ui8, ui32, ui32, TFunc>(function);
+    AddBinaryKernel<ui8, i32, i32, TFunc>(function);
+    AddBinaryKernel<ui8, ui64, ui64, TFunc>(function);
+    AddBinaryKernel<ui8, i64, i64, TFunc>(function);
+
+    AddBinaryKernel<i8, ui8, i8, TFunc>(function);
+    AddBinaryKernel<i8, i8, i8, TFunc>(function);
+    AddBinaryKernel<i8, ui16, ui16, TFunc>(function);
+    AddBinaryKernel<i8, i16, i16, TFunc>(function);
+    AddBinaryKernel<i8, ui32, ui32, TFunc>(function);
+    AddBinaryKernel<i8, i32, i32, TFunc>(function);
+    AddBinaryKernel<i8, ui64, ui64, TFunc>(function);
+    AddBinaryKernel<i8, i64, i64, TFunc>(function);
+
+    AddBinaryKernel<ui16, ui8, ui16, TFunc>(function);
+    AddBinaryKernel<ui16, i8, ui16, TFunc>(function);
+    AddBinaryKernel<ui16, ui16, ui16, TFunc>(function);
+    AddBinaryKernel<ui16, i16, i16, TFunc>(function);
+    AddBinaryKernel<ui16, ui32, ui32, TFunc>(function);
+    AddBinaryKernel<ui16, i32, i32, TFunc>(function);
+    AddBinaryKernel<ui16, ui64, ui64, TFunc>(function);
+    AddBinaryKernel<ui16, i64, i64, TFunc>(function);
+
+    AddBinaryKernel<i16, ui8, i16, TFunc>(function);
+    AddBinaryKernel<i16, i8, i16, TFunc>(function);
+    AddBinaryKernel<i16, ui16, i16, TFunc>(function);
+    AddBinaryKernel<i16, i16, i16, TFunc>(function);
+    AddBinaryKernel<i16, ui32, ui32, TFunc>(function);
+    AddBinaryKernel<i16, i32, i32, TFunc>(function);
+    AddBinaryKernel<i16, ui64, ui64, TFunc>(function);
+    AddBinaryKernel<i16, i64, i64, TFunc>(function);
+
+    AddBinaryKernel<ui32, ui8, ui32, TFunc>(function);
+    AddBinaryKernel<ui32, i8, ui32, TFunc>(function);
+    AddBinaryKernel<ui32, ui16, ui32, TFunc>(function);
+    AddBinaryKernel<ui32, i16, ui32, TFunc>(function);
+    AddBinaryKernel<ui32, ui32, ui32, TFunc>(function);
+    AddBinaryKernel<ui32, i32, i32, TFunc>(function);
+    AddBinaryKernel<ui32, ui64, ui64, TFunc>(function);
+    AddBinaryKernel<ui32, i64, i64, TFunc>(function);
+
+    AddBinaryKernel<i32, ui8, i32, TFunc>(function);
+    AddBinaryKernel<i32, i8, i32, TFunc>(function);
+    AddBinaryKernel<i32, ui16, i32, TFunc>(function);
+    AddBinaryKernel<i32, i16, i32, TFunc>(function);
+    AddBinaryKernel<i32, ui32, i32, TFunc>(function);
+    AddBinaryKernel<i32, i32, i32, TFunc>(function);
+    AddBinaryKernel<i32, ui64, ui64, TFunc>(function);
+    AddBinaryKernel<i32, i64, i64, TFunc>(function);
+
+    AddBinaryKernel<ui64, ui8, ui64, TFunc>(function);
+    AddBinaryKernel<ui64, i8, ui64, TFunc>(function);
+    AddBinaryKernel<ui64, ui16, ui64, TFunc>(function);
+    AddBinaryKernel<ui64, i16, ui64, TFunc>(function);
+    AddBinaryKernel<ui64, ui32, ui64, TFunc>(function);
+    AddBinaryKernel<ui64, i32, ui64, TFunc>(function);
+    AddBinaryKernel<ui64, ui64, ui64, TFunc>(function);
+    AddBinaryKernel<ui64, i64, i64, TFunc>(function);
+
+    AddBinaryKernel<i64, ui8, i64, TFunc>(function);
+    AddBinaryKernel<i64, i8, i64, TFunc>(function);
+    AddBinaryKernel<i64, ui16, i64, TFunc>(function);
+    AddBinaryKernel<i64, i16, i64, TFunc>(function);
+    AddBinaryKernel<i64, ui32, i64, TFunc>(function);
+    AddBinaryKernel<i64, i32, i64, TFunc>(function);
+    AddBinaryKernel<i64, ui64, i64, TFunc>(function);
+    AddBinaryKernel<i64, i64, i64, TFunc>(function);
+}
+
+template<template<typename, typename, typename> class TFunc>
+class TBinaryNumericFunction : public arrow::compute::ScalarFunction {
+public:
+    TBinaryNumericFunction(const std::string& name)
+        : ScalarFunction(name, arrow::compute::Arity::Binary(), nullptr)
+    {
+        AddBinaryIntegralKernels<TFunc>(*this);
+    }
+};
 
 }
 }

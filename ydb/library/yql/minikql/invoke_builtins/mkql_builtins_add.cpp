@@ -190,6 +190,10 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
         NUdf::TDataType<NUdf::TInterval>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 }
 
+void RegisterAdd(arrow::compute::FunctionRegistry& registry) {
+    AddFunction(registry, std::make_shared<TBinaryNumericFunction<TAdd>>("Add"));
+}
+
 void RegisterAggrAdd(IBuiltinFunctionRegistry& registry) {
     RegisterNumericAggregateFunction<TAggrAdd, TBinaryArgsSameOpt>(registry, "AggrAdd");
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TInterval>, TIntervalAggrAdd, TBinaryArgsSameOptArgsWithNullableResult>(registry, "AggrAdd");

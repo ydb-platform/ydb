@@ -17,8 +17,10 @@ target_link_libraries(yql-minikql-invoke_builtins PUBLIC
   library-cpp-pop_count
   ydb-library-binary_json
   library-yql-minikql
+  yql-minikql-arrow
   yql-minikql-computation
   yql-public-udf
+  libs-apache-arrow
   yql-minikql-codegen
   llvm12-lib-IR
   lib-ExecutionEngine-MCJIT

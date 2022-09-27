@@ -1,3 +1,4 @@
+#include "mkql_builtins.h"
 #include "mkql_builtins_impl.h"
 #include "mkql_builtins_compare.h"
 
@@ -7,16 +8,22 @@
 
 #include <algorithm>
 
+#include <arrow/compute/registry.h>
+#include <arrow/compute/registry_internal.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry) {
+void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, arrow::compute::FunctionRegistry& arrowRegistry) {
     RegisterAdd(registry);
+    RegisterAdd(arrowRegistry);
     RegisterAggrAdd(registry);
     RegisterSub(registry);
+    RegisterSub(arrowRegistry);
     RegisterMul(registry);
+    RegisterMul(arrowRegistry);
     RegisterDiv(registry);
     RegisterMod(registry);
     RegisterIncrement(registry);
@@ -138,6 +145,8 @@ private:
 
     const TFunctionsMap& GetFunctions() const final;
 
+    arrow::compute::FunctionRegistry* GetArrowFunctionRegistry() const final;
+
     void CalculateMetadataEtag();
 
     std::optional<TFunctionDescriptor> FindBuiltin(const std::string_view& name, const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const;
@@ -147,11 +156,14 @@ private:
     TFunctionsMap Functions;
     TFunctionParamMetadataList ArgumentsMetadata;
     std::optional<ui64> MetadataEtag;
+    std::unique_ptr<arrow::compute::FunctionRegistry> ArrowRegistry;
 };
 
 TBuiltinFunctionRegistry::TBuiltinFunctionRegistry()
+    : ArrowRegistry(arrow::compute::FunctionRegistry::Make())
 {
-    RegisterDefaultOperations(*this);
+    RegisterDefaultOperations(*this, *ArrowRegistry);
+    arrow::compute::internal::RegisterScalarBoolean(ArrowRegistry.get());
     CalculateMetadataEtag();
 }
 
@@ -276,10 +288,18 @@ void TBuiltinFunctionRegistry::PrintInfoTo(IOutputStream& out) const
     }
 }
 
+arrow::compute::FunctionRegistry* TBuiltinFunctionRegistry::GetArrowFunctionRegistry() const {
+   return ArrowRegistry.get();
+}
+
 } // namespace
 
 IBuiltinFunctionRegistry::TPtr CreateBuiltinRegistry() {
     return MakeIntrusive<TBuiltinFunctionRegistry>();
+}
+
+void AddFunction(arrow::compute::FunctionRegistry& registry, const std::shared_ptr<arrow::compute::ScalarFunction>& f) {
+    ARROW_OK(registry.AddFunction(f));
 }
 
 

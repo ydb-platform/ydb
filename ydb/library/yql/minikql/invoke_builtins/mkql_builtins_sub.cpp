@@ -287,5 +287,9 @@ void RegisterSub(IBuiltinFunctionRegistry& registry) {
         NUdf::TDataType<NUdf::TTzTimestamp>, TAnyDateTimeSubIntervalTz, TBinaryArgsOptWithNullableResult>(registry, "Sub");
 }
 
+void RegisterSub(arrow::compute::FunctionRegistry& registry) {
+    AddFunction(registry, std::make_shared<TBinaryNumericFunction<TSub>>("Sub"));
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

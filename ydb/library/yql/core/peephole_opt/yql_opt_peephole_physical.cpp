@@ -36,7 +36,6 @@ using TExtPeepHoleOptimizerMap = std::unordered_map<std::string_view, TExtPeepHo
 
 struct TBlockFuncRule {
     std::string_view Name;
-    bool BitcastToReturnType = false;
 };
 
 using TBlockFuncMap = std::unordered_map<std::string_view, TBlockFuncRule>;
@@ -4309,8 +4308,10 @@ TExprNode::TPtr OptimizeWideChopper(const TExprNode::TPtr& node, TExprContext& c
 struct TBlockRules {
 
     static constexpr std::initializer_list<TBlockFuncMap::value_type> FuncsInit = {
-        {"+", {"add", true} },
-        {"Not", {"invert", false} },
+        {"+", { "Add" } },
+        {"-", { "Sub" } },
+        {"*", { "Mul" } },
+        {"Not", { "invert" }},
     };
 
     TBlockRules()
@@ -4378,7 +4379,6 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        bool bitcastToReturnType = false;
         if (node->IsCallable("Apply") && node->Head().IsCallable("Udf")) {
             auto func = node->Head().Head().Content();
             if (!func.StartsWith("ClickHouse.")) {
@@ -4405,7 +4405,6 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
             }
 
             arrowFunctionName = fit->second.Name;
-            bitcastToReturnType = fit->second.BitcastToReturnType;
             funcArgs.push_back(ctx.NewAtom(node->Pos(), arrowFunctionName));
         }
 
@@ -4436,44 +4435,8 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
         if (!arrowFunctionName.empty()) {
             YQL_ENSURE(types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), arrowFunctionName, argTypes, outType, ctx));
-            if (!outType && !bitcastToReturnType) {
-                return true;
-            }
-
             if (!outType) {
-                argTypes.clear();
-                for (const auto& child : node->Children()) {
-                    if (child->IsComplete()) {
-                        argTypes.push_back(ctx.MakeType<TScalarExprType>(node->GetTypeAnn()));
-                    } else {
-                        argTypes.push_back(ctx.MakeType<TBlockExprType>(node->GetTypeAnn()));
-                    }
-                }
-
-                YQL_ENSURE(types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), arrowFunctionName, argTypes, outType, ctx));
-                if (!outType) {
-                    return true;
-                }
-
-                auto typeNode = ExpandType(node->Pos(), *node->GetTypeAnn(), ctx);
-                for (ui32 i = 1; i < funcArgs.size(); ++i) {
-                    if (IsSameAnnotation(*node->Child(i-1)->GetTypeAnn(), *node->GetTypeAnn())) {
-                        continue;
-                    }
-
-                    if (node->Child(i-1)->IsComplete()) {
-                        funcArgs[i] = ctx.Builder(node->Pos())
-                            .Callable("AsScalar")
-                                .Callable(0, "BitCast")
-                                    .Add(0, funcArgs[i]->HeadPtr())
-                                    .Add(1, typeNode)
-                                .Seal()
-                            .Seal()
-                            .Build();
-                    } else {
-                        funcArgs[i] = ctx.NewCallable(node->Pos(), "BlockBitCast", { funcArgs[i], typeNode });
-                    }
-                }
+                return true;
             }
 
             bool isScalar;

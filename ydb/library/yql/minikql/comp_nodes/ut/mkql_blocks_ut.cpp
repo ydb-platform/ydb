@@ -121,7 +121,7 @@ Y_UNIT_TEST(TestBlockFunc) {
     });
     const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
     const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
-        return {pb.BlockFunc("add", ui64BlockType, {items[0], items[1]})};
+        return {pb.BlockFunc("Add", ui64BlockType, {items[0], items[1]})};
     });
     const auto sumNarrowFlow = pb.NarrowMap(sumWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
@@ -178,7 +178,7 @@ Y_UNIT_TEST(TestBlockFuncWithNullables) {
     });
     const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
     const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
-        return {pb.BlockFunc("add", ui64OptBlockType, {items[0], items[1]})};
+        return {pb.BlockFunc("Add", ui64OptBlockType, {items[0], items[1]})};
     });
     const auto sumNarrowFlow = pb.NarrowMap(sumWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
@@ -229,7 +229,7 @@ Y_UNIT_TEST(TestBlockFuncWithNullableScalar) {
     {
         const auto scalar = pb.AsScalar(emptyOptionalUi64);
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockFunc("add", ui64OptBlockType, {scalar, item})};
+            return {pb.BlockFunc("Add", ui64OptBlockType, {scalar, item})};
         });
 
         NUdf::TUnboxedValue item;
@@ -248,7 +248,7 @@ Y_UNIT_TEST(TestBlockFuncWithNullableScalar) {
     {
         const auto scalar = pb.AsScalar(emptyOptionalUi64);
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockFunc("add", ui64OptBlockType, {item, scalar})};
+            return {pb.BlockFunc("Add", ui64OptBlockType, {item, scalar})};
         });
 
         NUdf::TUnboxedValue item;
@@ -267,7 +267,7 @@ Y_UNIT_TEST(TestBlockFuncWithNullableScalar) {
     {
         const auto scalar = pb.AsScalar(pb.NewDataLiteral<ui64>(100));
         auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
-            return {pb.BlockFunc("add", ui64OptBlockType, {item, scalar})};
+            return {pb.BlockFunc("Add", ui64OptBlockType, {item, scalar})};
         });
 
         NUdf::TUnboxedValue item;
@@ -301,7 +301,7 @@ Y_UNIT_TEST(TestBlockFuncWithScalar) {
     const auto flow = pb.ToFlow(list);
     const auto blocksFlow = pb.ToBlocks(flow);
     const auto sumBlocksFlow = pb.Map(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode {
-        return {pb.BlockFunc("add", ui64BlockType, { leftScalar, {pb.BlockFunc("add", ui64BlockType, { item, rightScalar } )}})};
+        return {pb.BlockFunc("Add", ui64BlockType, { leftScalar, {pb.BlockFunc("Add", ui64BlockType, { item, rightScalar } )}})};
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumBlocksFlow));
 

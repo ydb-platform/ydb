@@ -107,7 +107,11 @@ namespace NKikimr::NTesting {
         std::unordered_map<TBarrierId, TBarrierInfo> Barriers;
         std::unordered_multimap<TQueryId, std::tuple<bool, TLogoBlobID>> FlagsInFlight;
 
+        struct TBlobInfo;
         EConfidence IsCollected(TLogoBlobID id, EConfidence keep, EConfidence doNotKeep) const;
+        EConfidence IsCollected(TLogoBlobID id, const TBlobInfo *blob) const;
+        void ApplyBarrier(TBarrierId barrierId, std::optional<std::tuple<ui32, ui32>> prevGenStep,
+            std::tuple<ui32, ui32> collectGenStep);
 
         struct TBlobValueHash {
             ui64 Low;
@@ -134,7 +138,6 @@ namespace NKikimr::NTesting {
             bool ConfirmedDoNotKeep = false;
             ui32 NumKeepsInFlight = 0; // number of CollectGarbage requests in flight with Keep flag for this blob
             ui32 NumDoNotKeepsInFlight = 0; // the same, but for DoNotKeep flag
-            EBlobState BlobState = EBlobState::NOT_WRITTEN;
 
             struct TQueryContext {
                 bool IsBlocked = false; // was the request already blocked when the Put got issued?
@@ -147,7 +150,11 @@ namespace NKikimr::NTesting {
 
         TBlobInfo *LookupBlob(TLogoBlobID id, bool create) const;
 
+        void Log(TString message) const;
+
     public:
+        TGroupState(ui32 groupId);
+
         template<typename T>
         void ExamineQueryEvent(const TQueryId& queryId, const T& msg);
 
@@ -156,6 +163,9 @@ namespace NKikimr::NTesting {
 
         EBlobState GetBlobState(TLogoBlobID id, const TBlobInfo *blob = nullptr) const;
         void EnumerateBlobs(const std::function<void(TLogoBlobID, EBlobState)>& callback) const;
+
+    private:
+        TString LogPrefix;
     };
 
 } // NKikimr::NTesting

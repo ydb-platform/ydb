@@ -42,6 +42,8 @@ namespace NKikimr::NTesting {
 
     template<>
     void TGroupState::ExamineQueryEvent(const TQueryId& queryId, const TEvBlobStorage::TEvPut& msg) {
+        Log(TStringBuilder() << "TEvPut " << msg.ToString());
+
         TBlobInfo& blob = *LookupBlob(msg.Id, true);
 
         TBlobValueHash valueHash(msg);
@@ -74,6 +76,8 @@ namespace NKikimr::NTesting {
 
     template<>
     void TGroupState::ExamineResultEvent(const TQueryId& queryId, const TEvBlobStorage::TEvPutResult& msg) {
+        Log(TStringBuilder() << "TEvPutResult " << msg.ToString());
+
         const auto it = Blobs.find(msg.Id);
         if (msg.Status != NKikimrProto::OK && it == Blobs.end()) {
             Y_VERIFY(GetBlobState(msg.Id) == EBlobState::CERTAINLY_COLLECTED_OR_NEVER_WRITTEN);
@@ -131,16 +135,20 @@ namespace NKikimr::NTesting {
 
     template<>
     void TGroupState::ExamineQueryEvent(const TQueryId& queryId, const TEvBlobStorage::TEvCollectGarbage& msg) {
+        Log(TStringBuilder() << "TEvCollectGarbage " << msg.ToString());
+
         auto processFlags = [&](TVector<TLogoBlobID> *vector, bool isKeepFlag) {
-            for (const TLogoBlobID& id : vector ? *vector : TVector<TLogoBlobID>()) {
-                TBlobInfo& blob = *LookupBlob(id, true);
-                ++(isKeepFlag ? blob.NumKeepsInFlight : blob.NumDoNotKeepsInFlight);
-                FlagsInFlight.emplace(queryId, std::make_tuple(isKeepFlag, id));
+            if (vector) {
+                for (const TLogoBlobID& id : *vector) {
+                    TBlobInfo& blob = *LookupBlob(id, true);
+                    ++(isKeepFlag ? blob.NumKeepsInFlight : blob.NumDoNotKeepsInFlight);
+                    FlagsInFlight.emplace(queryId, std::make_tuple(isKeepFlag, id));
+                }
             }
         };
 
         processFlags(msg.Keep.Get(), true);
-        processFlags(msg.DoNotKeep.Get(), true);
+        processFlags(msg.DoNotKeep.Get(), false);
 
         if (msg.Collect) {
             const TBarrierId id(msg.TabletId, msg.Channel);
@@ -163,6 +171,10 @@ namespace NKikimr::NTesting {
 
     template<>
     void TGroupState::ExamineResultEvent(const TQueryId& queryId, const TEvBlobStorage::TEvCollectGarbageResult& msg) {
+        Log(TStringBuilder() << "TEvCollectGarbageResult " << msg.ToString());
+
+        std::set<TLogoBlobID> idsToExamine;
+
         auto [begin, end] = FlagsInFlight.equal_range(queryId);
         for (auto it = begin; it != end; ++it) {
             const auto& [isKeepFlag, id] = it->second;
@@ -171,6 +183,7 @@ namespace NKikimr::NTesting {
             if (msg.Status == NKikimrProto::OK) {
                 (isKeepFlag ? blob.ConfirmedKeep : blob.ConfirmedDoNotKeep) = true;
             }
+            idsToExamine.insert(id);
         }
         FlagsInFlight.erase(begin, end);
 
@@ -182,11 +195,21 @@ namespace NKikimr::NTesting {
             auto inFlight = barrier.InFlight[hard].extract(inFlightIt);
             Y_VERIFY(inFlight);
             if (msg.Status == NKikimrProto::OK) {
+                const auto& value = inFlight.value().Value;
+                std::optional<std::tuple<ui32, ui32>> prev;
                 if (auto& dest = barrier.Confirmed[hard]) {
-                    dest->Supersede(inFlight.value().Value);
+                    prev.emplace(dest->GetCollectGenStep());
+                    dest->Supersede(value);
                 } else {
-                    dest.emplace(inFlight.value().Value);
+                    dest.emplace(value);
                 }
+                ApplyBarrier(barrierId, prev, value.GetCollectGenStep());
+            }
+        }
+
+        for (const TLogoBlobID& id : idsToExamine) {
+            if (const auto it = Blobs.find(id); it != Blobs.end() && IsCollected(id, &it->second) == EConfidence::CONFIRMED) {
+                Blobs.erase(id);
             }
         }
     }
@@ -232,6 +255,16 @@ namespace NKikimr::NTesting {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Common parts
+
+    TGroupState::TGroupState(ui32 groupId)
+        : LogPrefix(TStringBuilder() << "[" << groupId << "] ")
+    {}
+
+    void TGroupState::Log(TString message) const {
+        if (LogPrefix) {
+            Cerr << LogPrefix << message << Endl;
+        }
+    }
 
     TGroupState::EConfidence TGroupState::TBlockInfo::IsBlocked(ui32 generation) const {
         if (Confirmed && generation <= Confirmed->Generation) {
@@ -311,6 +344,34 @@ namespace NKikimr::NTesting {
         return result;
     }
 
+    TGroupState::EConfidence TGroupState::IsCollected(TLogoBlobID id, const TBlobInfo *blob) const {
+        const EConfidence keep = blob->ConfirmedKeep ? EConfidence::CONFIRMED :
+            blob->NumKeepsInFlight ? EConfidence::POSSIBLE : EConfidence::SURELY_NOT;
+        const EConfidence doNotKeep = blob->ConfirmedDoNotKeep ? EConfidence::CONFIRMED :
+            blob->NumDoNotKeepsInFlight ? EConfidence::POSSIBLE : EConfidence::SURELY_NOT;
+        return IsCollected(id, keep, doNotKeep);
+    }
+
+    void TGroupState::ApplyBarrier(TBarrierId barrierId, std::optional<std::tuple<ui32, ui32>> prevGenStep,
+            std::tuple<ui32, ui32> collectGenStep) {
+        const auto& [tabletId, channel] = barrierId;
+        auto it = prevGenStep
+            ? Blobs.upper_bound(TLogoBlobID(tabletId, std::get<0>(*prevGenStep), std::get<1>(*prevGenStep), channel,
+                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode))
+            : Blobs.lower_bound(TLogoBlobID(tabletId, 0, 0, channel, 0, 0));
+        auto key = [](const TLogoBlobID& id) {
+            return std::make_tuple(id.TabletID(), id.Channel(), id.Generation(), id.Step());
+        };
+        const auto maxKey = std::tuple_cat(std::make_tuple(tabletId, channel), collectGenStep);
+        while (it != Blobs.end() && key(it->first) <= maxKey) {
+            if (IsCollected(it->first, &it->second) == EConfidence::CONFIRMED) {
+                it = Blobs.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     TGroupState::TBlobInfo *TGroupState::LookupBlob(TLogoBlobID id, bool create) const {
         Y_VERIFY(id.BlobSize() != 0);
         Y_VERIFY(id.PartId() == 0);
@@ -347,11 +408,7 @@ namespace NKikimr::NTesting {
         if (!blob->ValueHash) {
             return EBlobState::NOT_WRITTEN;
         }
-        const EConfidence keep = blob->ConfirmedKeep ? EConfidence::CONFIRMED :
-            blob->NumKeepsInFlight ? EConfidence::POSSIBLE : EConfidence::SURELY_NOT;
-        const EConfidence doNotKeep = blob->ConfirmedDoNotKeep ? EConfidence::CONFIRMED :
-            blob->NumDoNotKeepsInFlight ? EConfidence::POSSIBLE : EConfidence::SURELY_NOT;
-        switch (IsCollected(id, keep, doNotKeep)) {
+        switch (IsCollected(id, blob)) {
             case EConfidence::SURELY_NOT:
                 return blob->ConfirmedValue ? EBlobState::CERTAINLY_WRITTEN : EBlobState::POSSIBLY_WRITTEN;
 

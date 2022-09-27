@@ -12,7 +12,7 @@ namespace NKikimr::NTesting {
         void AddGroupToOversee(ui32 groupId) {
             const TActorId proxyId = MakeBlobStorageProxyID(groupId);
             OverseenServiceMap[proxyId] = groupId;
-            GroupStates.try_emplace(groupId);
+            GroupStates.try_emplace(groupId, groupId);
         }
 
         void ExamineEvent(ui32 nodeId, IEventHandle& ev) {
@@ -75,7 +75,8 @@ namespace NKikimr::NTesting {
             const TQueryId queryId{nodeId, resultEventType, ev.Sender, ev.Cookie};
             const auto [_, inserted] = QueryToGroup.emplace(queryId, groupId);
             if (inserted) {
-                GroupStates[groupId].ExamineQueryEvent(queryId, *ev.Get<T>());
+                const auto groupStateIt = GroupStates.try_emplace(groupId, groupId).first;
+                groupStateIt->second.ExamineQueryEvent(queryId, *ev.Get<T>());
             }
         }
 
@@ -99,7 +100,8 @@ namespace NKikimr::NTesting {
                 Y_VERIFY(groupId == msg.GroupId);
             }
 
-            GroupStates[groupId].ExamineResultEvent(queryId, msg);
+            const auto groupStateIt = GroupStates.try_emplace(groupId, groupId).first;
+            groupStateIt->second.ExamineResultEvent(queryId, msg);
         }
     };
 

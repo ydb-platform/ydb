@@ -10,15 +10,17 @@ namespace NKikimr::NBlobDepot {
         const ui32 GroupId;
         const TGenStep IssuedGenStep;
         std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> CollectGarbage;
+        const ui64 Cookie;
 
     public:
         TTxIssueGC(TBlobDepot *self, ui8 channel, ui32 groupId, TGenStep issuedGenStep,
-                std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage)
+                std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage, ui64 cookie)
             : TTransactionBase(self)
             , Channel(channel)
             , GroupId(groupId)
             , IssuedGenStep(issuedGenStep)
             , CollectGarbage(std::move(collectGarbage))
+            , Cookie(cookie)
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -28,13 +30,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            SendToBSProxy(Self->SelfId(), GroupId, CollectGarbage.release(), GroupId);
+            SendToBSProxy(Self->SelfId(), GroupId, CollectGarbage.release(), Cookie);
         }
     };
 
     void TData::ExecuteIssueGC(ui8 channel, ui32 groupId, TGenStep issuedGenStep,
-            std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage) {
-        Self->Execute(std::make_unique<TTxIssueGC>(Self, channel, groupId, issuedGenStep, std::move(collectGarbage)));
+            std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage, ui64 cookie) {
+        Self->Execute(std::make_unique<TTxIssueGC>(Self, channel, groupId, issuedGenStep, std::move(collectGarbage), cookie));
     }
 
     class TData::TTxConfirmGC : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {

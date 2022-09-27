@@ -12,5 +12,6 @@ namespace NKikimr::NBlobDepot {
 
     bool IsBlobDepotActor(IActor *actor);
     void ValidateBlobDepot(IActor *actor, NTesting::TGroupOverseer& overseer);
+    void OnSuccessfulGetResult(IActor *actor, TLogoBlobID id);
 
 } // NKikimr::NBlobDepot

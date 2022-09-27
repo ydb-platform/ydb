@@ -80,7 +80,7 @@ namespace NKikimr::NBlobDepot {
             if (const auto it = Data.find(key); it == Data.end()) {
                 return false; // no such key existed and will not be created as it hits the barrier
             } else {
-                Y_VERIFY_S(!underHard && it->second.KeepState == NKikimrBlobDepot::EKeepState::Keep,
+                Y_VERIFY_S(!underHard && it->second.KeepState == EKeepState::Keep,
                     "barrier invariant failed Key# " << key.ToString() << " Value# " << it->second.ToString());
             }
         }
@@ -109,7 +109,7 @@ namespace NKikimr::NBlobDepot {
             Y_VERIFY(!value.UncertainWrite || !value.ValueChain.empty());
 
             Y_VERIFY(!inserted || outcome != EUpdateOutcome::NO_CHANGE);
-            if (underSoft && value.KeepState != NKikimrBlobDepot::EKeepState::Keep) {
+            if (underSoft && value.KeepState != EKeepState::Keep) {
                 outcome = EUpdateOutcome::DROP;
             }
 
@@ -288,10 +288,10 @@ namespace NKikimr::NBlobDepot {
                 (Value, value), (Inserted, inserted));
 
             // update keep state if necessary
-            if (blob.DoNotKeep && value.KeepState < NKikimrBlobDepot::EKeepState::DoNotKeep) {
-                value.KeepState = NKikimrBlobDepot::EKeepState::DoNotKeep;
-            } else if (blob.Keep && value.KeepState < NKikimrBlobDepot::EKeepState::Keep) {
-                value.KeepState = NKikimrBlobDepot::EKeepState::Keep;
+            if (blob.DoNotKeep && value.KeepState < EKeepState::DoNotKeep) {
+                value.KeepState = EKeepState::DoNotKeep;
+            } else if (blob.Keep && value.KeepState < EKeepState::Keep) {
+                value.KeepState = EKeepState::Keep;
             }
 
             // if there is not value chain for this blob, map it to the original blob id
@@ -318,7 +318,7 @@ namespace NKikimr::NBlobDepot {
         record.LastConfirmedGenStep = confirmedGenStep;
     }
 
-    bool TData::UpdateKeepState(TKey key, NKikimrBlobDepot::EKeepState keepState,
+    bool TData::UpdateKeepState(TKey key, EKeepState keepState,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         return UpdateKey(std::move(key), txc, cookie, [&](TValue& value, bool inserted) {
              STLOG(PRI_DEBUG, BLOB_DEPOT, BDT51, "UpdateKeepState", (Id, Self->GetLogId()), (Key, key),
@@ -445,6 +445,7 @@ namespace NKikimr::NBlobDepot {
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(record.TabletId, generation,
                 record.PerGenerationCounter, record.Channel, collect, nextGenStep.Generation(), nextGenStep.Step(),
                 keep_.get(), doNotKeep_.get(), TInstant::Max(), true);
+
             keep_.release();
             doNotKeep_.release();
 
@@ -462,10 +463,13 @@ namespace NKikimr::NBlobDepot {
                 (LastConfirmedGenStep, record.LastConfirmedGenStep), (IssuedGenStep, record.IssuedGenStep),
                 (TrashInFlight.size, record.TrashInFlight.size()));
 
+            const ui64 id = ++LastCollectCmdId;
+            CollectCmdToGroup.emplace(id, record.GroupId);
+
             if (collect) {
-                ExecuteIssueGC(record.Channel, record.GroupId, record.IssuedGenStep, std::move(ev));
+                ExecuteIssueGC(record.Channel, record.GroupId, record.IssuedGenStep, std::move(ev), id);
             } else {
-                SendToBSProxy(Self->SelfId(), record.GroupId, ev.release(), record.GroupId);
+                SendToBSProxy(Self->SelfId(), record.GroupId, ev.release(), id);
             }
         }
 
@@ -486,7 +490,12 @@ namespace NKikimr::NBlobDepot {
     void TData::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "TEvCollectGarbageResult", (Id, Self->GetLogId()),
             (Channel, ev->Get()->Channel), (GroupId, ev->Cookie), (Msg, ev->Get()->ToString()));
-        const auto& key = std::make_tuple(ev->Get()->TabletId, ev->Get()->Channel, ev->Cookie);
+
+        auto cmd = CollectCmdToGroup.extract(ev->Cookie);
+        Y_VERIFY(cmd);
+        const ui32 groupId = cmd.mapped();
+
+        const auto& key = std::make_tuple(ev->Get()->TabletId, ev->Get()->Channel, groupId);
         const auto it = RecordsPerChannelGroup.find(key);
         Y_VERIFY(it != RecordsPerChannelGroup.end());
         auto& record = it->second;
@@ -577,7 +586,7 @@ namespace NKikimr::NBlobDepot {
 
         bool finished = true;
         Self->Data->ScanRange(&first, &last, TData::EScanFlags::INCLUDE_END, [&](auto& key, auto& value) {
-            if (value.KeepState != NKikimrBlobDepot::EKeepState::Keep || hard) {
+            if (value.KeepState != EKeepState::Keep || hard) {
                 if (maxItems) {
                     Self->Data->DeleteKey(key, txc, cookie);
                     --maxItems;

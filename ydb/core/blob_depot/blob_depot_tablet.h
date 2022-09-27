@@ -238,6 +238,7 @@ namespace NKikimr::NBlobDepot {
         // Validation
 
         void Validate(NTesting::TGroupOverseer& overseer) const;
+        void OnSuccessfulGetResult(TLogoBlobID id) const;
     };
 
 } // NKikimr::NBlobDepot

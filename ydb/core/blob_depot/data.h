@@ -10,6 +10,8 @@ namespace NKikimr::NBlobDepot {
     class TBlobDepot::TData {
         TBlobDepot* const Self;
 
+        using EKeepState = NKikimrBlobDepot::EKeepState;
+
     public:
         class alignas(TString) TKey {
             struct TData {
@@ -219,7 +221,7 @@ namespace NKikimr::NBlobDepot {
         struct TValue {
             TString Meta;
             TValueChain ValueChain;
-            NKikimrBlobDepot::EKeepState KeepState = NKikimrBlobDepot::EKeepState::Default;
+            EKeepState KeepState = EKeepState::Default;
             bool Public = false;
             std::optional<TLogoBlobID> OriginalBlobId;
             bool UncertainWrite = false;
@@ -252,7 +254,7 @@ namespace NKikimr::NBlobDepot {
                 locator->CopyFrom(item.GetBlobLocator());
             }
 
-            explicit TValue(NKikimrBlobDepot::EKeepState keepState)
+            explicit TValue(EKeepState keepState)
                 : KeepState(keepState)
                 , Public(false)
                 , UncertainWrite(true)
@@ -297,7 +299,7 @@ namespace NKikimr::NBlobDepot {
             void Output(IOutputStream& s) const {
                 s << "{Meta# '" << EscapeC(Meta) << "'"
                     << " ValueChain# " << FormatList(ValueChain)
-                    << " KeepState# " << NKikimrBlobDepot::EKeepState_Name(KeepState)
+                    << " KeepState# " << EKeepState_Name(KeepState)
                     << " Public# " << (Public ? "true" : "false")
                     << " OriginalBlobId# " << (OriginalBlobId ? OriginalBlobId->ToString() : "<none>")
                     << " UncertainWrite# " << (UncertainWrite ? "true" : "false")
@@ -381,6 +383,9 @@ namespace NKikimr::NBlobDepot {
         std::deque<TKey> KeysMadeCertain; // but not yet committed
         bool CommitCertainKeysScheduled = false;
 
+        ui64 LastCollectCmdId = 0;
+        std::unordered_map<ui64, ui32> CollectCmdToGroup;
+
     public:
         TData(TBlobDepot *self);
         ~TData();
@@ -435,7 +440,7 @@ namespace NKikimr::NBlobDepot {
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 
-        bool UpdateKeepState(TKey key, NKikimrBlobDepot::EKeepState keepState,
+        bool UpdateKeepState(TKey key, EKeepState keepState,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void CommitTrash(void *cookie);
@@ -478,7 +483,7 @@ namespace NKikimr::NBlobDepot {
 
     private:
         void ExecuteIssueGC(ui8 channel, ui32 groupId, TGenStep issuedGenStep,
-            std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage);
+            std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage, ui64 cookie);
 
         void ExecuteConfirmGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, TGenStep confirmedGenStep);
     };

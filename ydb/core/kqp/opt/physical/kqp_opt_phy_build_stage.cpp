@@ -180,7 +180,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
 }
 
 TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx)
+    const TKqpOptimizeContext& kqpCtx, const TParentsMap& parents)
 {
     if (!node.Maybe<TKqlReadTableRanges>()) {
         return node;
@@ -227,6 +227,10 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
                 auto input = TDqConnection(cn);
                 if (!input.Maybe<TDqCnUnionAll>()) {
                     return node;
+                }
+                
+                if (!IsSingleConsumerConnection(input, parents, false)) {
+                    continue;
                 }
 
                 inputs.push_back(input);

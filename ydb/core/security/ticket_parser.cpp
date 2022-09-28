@@ -38,8 +38,6 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
     struct TTokenRecord : TBase::TTokenRecordBase {
         using TBase::TTokenRecordBase::TTokenRecordBase;
 
-        ETokenType TokenType = ETokenType::Unknown;
-
         TString GetSubject() const {
             return Subject;
         }
@@ -60,102 +58,12 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
 
     THashMap<TString, TTokenRecord> UserTokens;
 
-    TTokenRecord* GetUserToken(const TString& key) {
-        auto it = UserTokens.find(key);
-        return it != UserTokens.end() ? &it->second : nullptr;
-    }
-
-    TTokenRecord* InsertUserToken(const TString& key, const TStringBuf ticket) {
-        auto it = UserTokens.emplace(key, ticket).first;
-        return &it->second;
+    THashMap<TString, TTokenRecord>& GetUserTokens() {
+        return UserTokens;
     }
 
     static TStringStream GetKey(TEvTicketParser::TEvAuthorizeTicket* request) {
         return request->Ticket;
-    }
-
-    void InitTokenRecord(const TString& key, TTokenRecord& record, const TActorContext& ctx) {
-        TInstant now = ctx.Now();
-        record.InitTime = now;
-        record.AccessTime = now;
-        record.ExpireTime = GetExpireTime(now);
-
-        if (record.Error) {
-            return;
-        }
-
-        if (record.TokenType == ETokenType::Unknown || record.TokenType == ETokenType::Builtin) {
-            if(record.Ticket.EndsWith("@" BUILTIN_ACL_DOMAIN)) {
-                record.TokenType = ETokenType::Builtin;
-                SetToken(key, record, new NACLib::TUserToken({
-                    .OriginalUserToken = record.Ticket,
-                    .UserSID = record.Ticket,
-                    .AuthType = record.GetAuthType()
-                }), ctx);
-                CounterTicketsBuiltin->Inc();
-                return;
-            }
-
-            if(record.Ticket.EndsWith("@" BUILTIN_ERROR_DOMAIN)) {
-                record.TokenType = ETokenType::Builtin;
-                SetError(key, record, {"Builtin error simulation"}, ctx);
-                CounterTicketsBuiltin->Inc();
-                return;
-            }
-        }
-
-        if (UseLoginProvider && (record.TokenType == ETokenType::Unknown || record.TokenType == ETokenType::Login)) {
-            TString database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
-            auto itLoginProvider = LoginProviders.find(database);
-            if (itLoginProvider != LoginProviders.end()) {
-                NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
-                auto response = loginProvider.ValidateToken({.Token = record.Ticket});
-                if (response.Error) {
-                    if (!response.TokenUnrecognized || record.TokenType != ETokenType::Unknown) {
-                        record.TokenType = ETokenType::Login;
-                        TEvTicketParser::TError error;
-                        error.Message = response.Error;
-                        error.Retryable = response.ErrorRetryable;
-                        SetError(key, record, error, ctx);
-                        CounterTicketsLogin->Inc();
-                        return;
-                    }
-                } else {
-                    record.TokenType = ETokenType::Login;
-                    TVector<NACLib::TSID> groups;
-                    if (response.Groups.has_value()) {
-                        const std::vector<TString>& tokenGroups = response.Groups.value();
-                        groups.assign(tokenGroups.begin(), tokenGroups.end());
-                    } else {
-                        const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(response.User);
-                        groups.assign(providerGroups.begin(), providerGroups.end());
-                    }
-                    record.ExpireTime = ToInstant(response.ExpiresAt);
-                    SetToken(key, record, new NACLib::TUserToken({
-                        .OriginalUserToken = record.Ticket,
-                        .UserSID = response.User,
-                        .GroupSIDs = groups,
-                        .AuthType = record.GetAuthType()
-                    }), ctx);
-                    CounterTicketsLogin->Inc();
-                    return;
-                }
-            } else {
-                if (record.TokenType == ETokenType::Login) {
-                    TEvTicketParser::TError error;
-                    error.Message = "Login state is not available yet";
-                    error.Retryable = false;
-                    SetError(key, record, error, ctx);
-                    CounterTicketsLogin->Inc();
-                    return;
-                }
-            }
-        }
-
-        if (record.TokenType == ETokenType::Unknown && record.ResponsesLeft == 0) {
-            record.Error.Message = "Could not find correct token validator";
-            record.Error.Retryable = false;
-        }
     }
 
     void SetToken(const TString& key, TTokenRecord& record, TIntrusivePtr<NACLib::TUserToken> token, const TActorContext& ctx) {
@@ -197,24 +105,6 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
 
     bool IsTicketEmpty(const TStringBuf ticket, TEvTicketParser::TEvAuthorizeTicket::TPtr&) {
         return ticket.empty();
-    }
-
-    void SetTokenType(TTokenRecord& record, TStringBuf&, const TStringBuf ticketType) {
-        if (ticketType) {
-            record.TokenType = ParseTokenType(ticketType);
-            switch (record.TokenType) {
-                case ETokenType::Unsupported:
-                    record.Error.Message = "Token is not supported";
-                    record.Error.Retryable = false;
-                    break;
-                case ETokenType::Unknown:
-                    record.Error.Message = "Unknown token";
-                    record.Error.Retryable = false;
-                    break;
-                default:
-                    break;
-            }
-        }
     }
 
     void Handle(TEvTicketParser::TEvRefreshTicket::TPtr& ev, const TActorContext&) {

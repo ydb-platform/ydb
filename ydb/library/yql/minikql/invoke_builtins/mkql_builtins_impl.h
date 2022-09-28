@@ -921,9 +921,14 @@ void AddBinaryKernel(arrow::compute::ScalarFunction& function) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
-        const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
-        const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
-        *res = MakeScalarDatum<TOutput>(TFunc<TInput1, TInput2, TOutput>::Do(val1, val2));
+        if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
+            *res = arrow::MakeNullScalar(GetPrimitiveDataType<TOutput>());
+        } else {
+            const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
+            const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
+            *res = MakeScalarDatum<TOutput>(TFunc<TInput1, TInput2, TOutput>::Do(val1, val2));
+        }
+
         return arrow::Status::OK();
     };
 
@@ -931,13 +936,15 @@ void AddBinaryKernel(arrow::compute::ScalarFunction& function) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
-        const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
-        const auto& arr2 = *arg2.array();
-        auto length = arr2.length;
-        const auto values2 = arr2.GetValues<TInput2>(1);
-        auto resValues = res->array()->GetMutableValues<TOutput>(1);
-        for (int64_t i = 0; i < length; ++i) {
-            resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(val1, values2[i]);
+        if (arg1.scalar()->is_valid) {
+            const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
+            const auto& arr2 = *arg2.array();
+            auto length = arr2.length;
+            const auto values2 = arr2.GetValues<TInput2>(1);
+            auto resValues = res->array()->GetMutableValues<TOutput>(1);
+            for (int64_t i = 0; i < length; ++i) {
+                resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(val1, values2[i]);
+            }
         }
 
         return arrow::Status::OK();
@@ -947,13 +954,15 @@ void AddBinaryKernel(arrow::compute::ScalarFunction& function) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
-        const auto& arr1 = *arg1.array();
-        auto length = arr1.length;
-        const auto values1 = arr1.GetValues<TInput1>(1);
-        auto resValues = res->array()->GetMutableValues<TOutput>(1);
-        const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
-        for (int64_t i = 0; i < length; ++i) {
-            resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(values1[i], val2);
+        if (arg2.scalar()->is_valid) {
+            const auto& arr1 = *arg1.array();
+            auto length = arr1.length;
+            const auto values1 = arr1.GetValues<TInput1>(1);
+            auto resValues = res->array()->GetMutableValues<TOutput>(1);
+            const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
+            for (int64_t i = 0; i < length; ++i) {
+                resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(values1[i], val2);
+            }
         }
 
         return arrow::Status::OK();

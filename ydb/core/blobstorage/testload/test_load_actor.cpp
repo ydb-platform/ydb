@@ -2,13 +2,35 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
-#include <google/protobuf/text_format.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
+
+namespace NKqpConstants {
+    const TString DEFAULT_PROTO = R"_(
+KqpLoadStart: {
+    DurationSeconds: 30
+    WindowDuration: 1
+    WorkingDir: "/slice/db"
+    NumOfSessions: 64
+    UniformPartitionsCount: 1000
+    DeleteTableOnFinish: 1
+    WorkloadType: 0
+    Kv: {
+        InitRowCount: 1000
+        PartitionsByLoad: true
+        MaxFirstKey: 18446744073709551615
+        StringLen: 8
+        ColumnsCnt: 2
+        RowsCnt: 1
+    }
+})_";
+
+}
 
 using namespace NActors;
 
@@ -49,6 +71,9 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
 
     // issure tags in ascending order
     ui64 NextTag = 1;
+
+    // queue for all-nodes load
+    TVector<NKikimrBlobStorage::TEvTestLoadRequest> AllNodesLoadConfigs;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
@@ -237,7 +262,6 @@ public:
         Y_VERIFY(iter != LoadActors.end());
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor with tag# " << msg->Tag << " finished");
         LoadActors.erase(iter);
-
         FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->LastHtmlPage});
 
         auto it = InfoRequests.begin();
@@ -258,7 +282,15 @@ public:
         }
     }
 
+    void RunRecordOnAllNodes(const auto& record, const TActorContext& ctx) {
+        AllNodesLoadConfigs.push_back(record);
+        const TActorId nameserviceId = GetNameserviceActorId();
+        bool sendStatus = ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "send status: " << sendStatus);
+    }
+
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "Handle HttpInfo request");
         // calculate ID of this request
         ui32 id = NextRequestId++;
 
@@ -272,21 +304,43 @@ public:
         info.ErrorMessage.clear();
 
         const auto& params = ev->Get()->Request.GetParams();
+
         if (params.Has("protobuf")) {
             NKikimrBlobStorage::TEvTestLoadRequest record;
             bool status = google::protobuf::TextFormat::ParseFromString(params.Get("protobuf"), &record);
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST,
+                "received protobuf: " << params.Get("protobuf") << " | "
+                "proto parse status: " << std::to_string(status)
+            );
             if (status) {
-                try {
-                    ProcessCmd(record, ctx);
-                } catch (const TLoadActorException& ex) {
-                    info.ErrorMessage = ex.what();
+                if (params.Has("run_all") && params.Get("run_all") == "true") {
+                    LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "running on all nodes");
+                    RunRecordOnAllNodes(record, ctx);
+                } else {
+                    try {
+                        LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "running on node: " << SelfId().NodeId());
+                        ProcessCmd(record, ctx);
+                    } catch (const TLoadActorException& ex) {
+                        info.ErrorMessage = ex.what();
+                    }
                 }
             } else {
                 info.ErrorMessage = "bad protobuf";
             }
 
-            GenerateHttpInfoRes(ctx, id, true);
+            GenerateHttpInfoRes(ctx, id);
             return;
+        } else if (params.Has("stop_request")) {
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "received stop request");
+            NKikimrBlobStorage::TEvTestLoadRequest record;
+            record.MutableLoadStop()->SetRemoveAllTags(true);
+            if (params.Has("stop_all") && params.Get("stop_all") == "true") {
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on all nodes");
+                RunRecordOnAllNodes(record, ctx);
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on node: " << SelfId().NodeId());
+                ProcessCmd(record, ctx);
+            }
         }
 
         // send messages to subactors
@@ -301,6 +355,29 @@ public:
         if (!info.HttpInfoResPending) {
             GenerateHttpInfoRes(ctx, id);
         }
+    }
+
+    void Handle(const TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
+        TAppData* appDataPtr = AppData();
+
+        TVector<ui32> dyn_node_ids;
+        for (const auto& nodeInfo : ev->Get()->Nodes) {
+            if (nodeInfo.NodeId >= appDataPtr->DynamicNameserviceConfig->MaxStaticNodeId) {
+                dyn_node_ids.push_back(nodeInfo.NodeId);
+            }
+        }
+
+        for (const auto& cmd : AllNodesLoadConfigs) {
+            for (const auto& id : dyn_node_ids) {
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "sending load request to: " << id);
+                auto msg = MakeHolder<TEvBlobStorage::TEvTestLoadRequest>();
+                msg->Record = cmd;
+                msg->Record.SetCookie(id);
+                ctx.Send(MakeBlobStorageLoadID(id), msg.Release());
+            }
+        }
+
+        AllNodesLoadConfigs.clear();
     }
 
     void Handle(NMon::TEvHttpInfoRes::TPtr& ev, const TActorContext& ctx) {
@@ -344,6 +421,57 @@ public:
                 }
             }
 
+            COLLAPSED_BUTTON_CONTENT("start_load_info", "Start load") {
+                str << R"___(
+                    <script>
+                        function sendStartRequest() {
+                            $.ajax({
+                                url: "",
+                                data: {
+                                    protobuf: document.querySelector('textarea[name=protobuf]').value,
+                                    run_all: document.querySelector('input[id=runAllNodes]').checked
+                                },
+                                method: "GET",
+                                dataType: "html",
+                                success: function(result) {
+                                    $("html").html(result);
+                                }
+                            });
+                        }
+                    </script>
+                )___";
+                str << R"(<textarea id="protobuf" name="protobuf" rows="20" cols="50">)";
+                str << NKqpConstants::DEFAULT_PROTO;
+                str << "</textarea><br>";
+                str << R"(<input type="checkbox" id="runAllNodes" name="runAll"> )";
+                str << R"(<label for="runAllNodes"> Run on all nodes</label>)" << "<br><br>";
+                str << R"(<button onClick='sendStartRequest()' name='startNewLoad' class='btn btn-default'>Start new load</button>)" << "<br><br>";
+            }
+
+            COLLAPSED_BUTTON_CONTENT("stop_load_info", "Stop load") {
+                str << R"___(
+                    <script>
+                        function sendStopRequest() {
+                            $.ajax({
+                                url: "",
+                                data: {
+                                    stop_request: true,
+                                    stop_all: document.querySelector('input[id=stopAllNodes]').checked
+                                },
+                                method: "GET",
+                                dataType: "html",
+                                success: function(result) {
+                                    $("html").html(result);
+                                }
+                            });
+                        }
+                    </script>
+                )___";
+                str << R"(<input type="checkbox" id="stopAllNodes" name="stopAll"> )";
+                str << R"(<label for="stopAllNodes"> Stop load on all nodes</label>)" << "<br><br>";
+                str << R"(<button onClick='sendStopRequest()' name='stopNewLoad' class='btn btn-default'>Stop load</button>)" << "<br><br>";
+            }
+
             if (!nodata) {
                 for (const auto& pair : info.ActorMap) {
                     const TActorInfo& perActorInfo = pair.second;
@@ -384,6 +512,7 @@ public:
         HFunc(TEvTestLoadFinished, Handle)
         HFunc(NMon::TEvHttpInfo, Handle)
         HFunc(NMon::TEvHttpInfoRes, Handle)
+        HFunc(TEvInterconnect::TEvNodesInfo, Handle)
     )
 };
 

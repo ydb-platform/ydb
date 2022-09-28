@@ -593,6 +593,9 @@ message TGRpcConfig {
     optional string CA = 10;
     optional string Cert = 11;
     optional string Key = 12;
+    optional string PathToCertificateFile = 27;
+    optional string PathToPrivateKeyFile = 28;
+    optional string PathToCaFile = 29;
 
     // public host/port for publishing
     optional string PublicHost = 13;

@@ -857,16 +857,23 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             }
         }
 
+#define GET_PATH_TO_FILE(GRPC_CONFIG, PRIMARY_FIELD, SECONDARY_FIELD) \
+        (GRPC_CONFIG.Has##PRIMARY_FIELD() ? GRPC_CONFIG.Get##PRIMARY_FIELD() : GRPC_CONFIG.Get##SECONDARY_FIELD())
+
         NGrpc::TServerOptions sslOpts = opts;
         if (grpcConfig.HasSslPort() && grpcConfig.GetSslPort()) {
-            Y_VERIFY(grpcConfig.HasCA(), "CA not set");
-            Y_VERIFY(grpcConfig.HasCert(), "Cert not set");
-            Y_VERIFY(grpcConfig.HasKey(), "Key not set");
+            const auto& pathToCaFile = GET_PATH_TO_FILE(grpcConfig, PathToCaFile, CA);
+            const auto& pathToCertificateFile = GET_PATH_TO_FILE(grpcConfig, PathToCertificateFile, Cert);
+            const auto& pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
+
+            Y_VERIFY(!pathToCaFile.Empty(), "CA not set");
+            Y_VERIFY(!pathToCertificateFile.Empty(), "Cert not set");
+            Y_VERIFY(!pathToPrivateKeyFile.Empty(), "Key not set");
             sslOpts.SetPort(grpcConfig.GetSslPort());
             NGrpc::TSslData sslData;
-            sslData.Root = ReadFile(grpcConfig.GetCA());
-            sslData.Cert = ReadFile(grpcConfig.GetCert());
-            sslData.Key = ReadFile(grpcConfig.GetKey());
+            sslData.Root = ReadFile(pathToCaFile);
+            sslData.Cert = ReadFile(pathToCertificateFile);
+            sslData.Key = ReadFile(pathToPrivateKeyFile);
             sslOpts.SetSslData(sslData);
 
             GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(sslOpts) });
@@ -898,9 +905,26 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
 
                 NGrpc::TSslData sslData;
-                sslData.Root = ex.HasCA() ? ReadFile(ex.GetCA()) : ReadFile(grpcConfig.GetCA());
-                sslData.Cert = ex.HasCert() ? ReadFile(ex.GetCert()) : ReadFile(grpcConfig.GetCert());
-                sslData.Key = ex.HasKey() ? ReadFile(ex.GetKey()) : ReadFile(grpcConfig.GetKey());
+
+                auto pathToCaFile = GET_PATH_TO_FILE(ex, PathToCaFile, CA);
+                if (pathToCaFile.Empty()) {
+                    pathToCaFile = GET_PATH_TO_FILE(grpcConfig, PathToCaFile, CA);
+                }
+                sslData.Root = ReadFile(pathToCaFile);
+
+                auto pathToCertificateFile = GET_PATH_TO_FILE(ex, PathToCertificateFile, Cert);
+                if (pathToCertificateFile.Empty()) {
+                    pathToCertificateFile = GET_PATH_TO_FILE(grpcConfig, PathToCertificateFile, Cert);
+                }
+                sslData.Cert = ReadFile(pathToCertificateFile);
+
+                auto pathToPrivateKeyFile = GET_PATH_TO_FILE(ex, PathToPrivateKeyFile, Key);
+                if (pathToPrivateKeyFile.Empty()) {
+                    pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
+                }
+                sslData.Key = ReadFile(pathToPrivateKeyFile);
+#undef GET_PATH_TO_FILE
+
                 xopts.SetSslData(sslData);
 
                 Y_VERIFY(xopts.SslData->Root, "CA not set");

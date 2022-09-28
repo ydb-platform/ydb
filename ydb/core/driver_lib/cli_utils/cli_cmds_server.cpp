@@ -84,9 +84,12 @@ protected:
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride;
-    TString PathToCert;
-    TString PathToPKey;
-    TString PathToCA;
+    TString PathToGrpcCertFile;
+    TString PathToInterconnectCertFile;
+    TString PathToGrpcPrivateKeyFile;
+    TString PathToInterconnectPrivateKeyFile;
+    TString PathToGrpcCaFile;
+    TString PathToInterconnectCaFile;
     TVector<TString> YamlConfigFiles;
 
     TClientCommandServerBase(const char *cmd, const char *description)
@@ -239,9 +242,15 @@ protected:
                 .RequiredArgument("NAME").StoreResult(&NodeType);
         config.Opts->AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
                 .NoArgument().SetFlag(&IgnoreCmsConfigs);
-        config.Opts->AddLongOption("cert", "Path to client certificate file (PEM)").RequiredArgument("PATH").StoreResult(&PathToCert);
-        config.Opts->AddLongOption("key", "Path to private key file (PEM)").RequiredArgument("PATH").StoreResult(&PathToPKey);
-        config.Opts->AddLongOption("ca", "Path to certificate authority file (PEM)").RequiredArgument("PATH").StoreResult(&PathToCA);
+        config.Opts->AddLongOption("cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
+        config.Opts->AddLongOption("grpc-cert", "Path to client certificate file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&PathToGrpcCertFile);
+        config.Opts->AddLongOption("ic-cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
+        config.Opts->AddLongOption("key", "Path to private key file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectPrivateKeyFile);
+        config.Opts->AddLongOption("grpc-key", "Path to private key file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&PathToGrpcPrivateKeyFile);
+        config.Opts->AddLongOption("ic-key", "Path to private key file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectPrivateKeyFile);
+        config.Opts->AddLongOption("ca", "Path to certificate authority file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCaFile);
+        config.Opts->AddLongOption("grpc-ca", "Path to certificate authority file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&PathToGrpcCaFile);
+        config.Opts->AddLongOption("ic-ca", "Path to certificate authority file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCaFile);
         config.Opts->AddLongOption("data-center", "data center name (used to describe dynamic node location)")
                 .RequiredArgument("NAME").StoreResult(&DataCenter);
         config.Opts->AddLongOption("rack", "rack name (used to describe dynamic node location)")
@@ -467,14 +476,40 @@ protected:
         }
 
         // apply certificates, if any
-        if (config.ParseResult->Has("cert")) {
-            AppConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToCert);
+        if (!PathToInterconnectCertFile.Empty()) {
+            AppConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToInterconnectCertFile);
         }
-        if (config.ParseResult->Has("key")) {
-            AppConfig.MutableInterconnectConfig()->SetPathToPrivateKeyFile(PathToPKey);
+
+        if (!PathToInterconnectPrivateKeyFile.Empty()) {
+            AppConfig.MutableInterconnectConfig()->SetPathToPrivateKeyFile(PathToInterconnectPrivateKeyFile);
         }
-        if (config.ParseResult->Has("ca")) {
-            AppConfig.MutableInterconnectConfig()->SetPathToCaFile(PathToCA);
+
+        if (!PathToInterconnectCaFile.Empty()) {
+            AppConfig.MutableInterconnectConfig()->SetPathToCaFile(PathToInterconnectCaFile);
+        }
+
+        if (AppConfig.HasGRpcConfig() && AppConfig.GetGRpcConfig().HasCert()) {
+            AppConfig.MutableGRpcConfig()->SetPathToCertificateFile(AppConfig.GetGRpcConfig().GetCert());
+        }
+
+        if (!PathToGrpcCertFile.Empty()) {
+            AppConfig.MutableGRpcConfig()->SetPathToCertificateFile(PathToGrpcCertFile);
+        }
+
+        if (AppConfig.HasGRpcConfig() && AppConfig.GetGRpcConfig().HasKey()) {
+            AppConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(AppConfig.GetGRpcConfig().GetKey());
+        }
+
+        if (config.ParseResult->Has("grpc-key")) {
+            AppConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(PathToGrpcPrivateKeyFile);
+        }
+
+        if (AppConfig.HasGRpcConfig() && AppConfig.GetGRpcConfig().HasCA()) {
+            AppConfig.MutableGRpcConfig()->SetPathToCaFile(AppConfig.GetGRpcConfig().GetCA());
+        }
+
+        if (config.ParseResult->Has("grpc-ca")) {
+            AppConfig.MutableGRpcConfig()->SetPathToCaFile(PathToGrpcCaFile);
         }
 
         if (!AppConfig.HasDomainsConfig())
@@ -1120,8 +1155,8 @@ private:
         grpcConfig.LoadBalancingPolicy = "round_robin";
         if (endpoint.EnableSsl.Defined()) {
             grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
-            if (PathToCA) {
-                grpcConfig.SslCaCert = ReadFromFile(PathToCA, "CA certificates");
+            if (!PathToInterconnectCaFile.Empty()) {
+                grpcConfig.SslCaCert = ReadFromFile(PathToInterconnectCaFile, "CA certificates");
             }
         }
         return NClient::TKikimr(grpcConfig);

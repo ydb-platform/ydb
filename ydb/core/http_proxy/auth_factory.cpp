@@ -23,7 +23,7 @@ void TAuthFactory::Initialize(
             // secure = true;
             grpcPort = grpcConfig.GetSslPort();
         }
-        CA = grpcConfig.GetCA();
+        CA = grpcConfig.HasPathToCaFile() ? grpcConfig.GetPathToCaFile() : grpcConfig.GetCA();
 
         NKikimrConfig::TServerlessProxyConfig config;
         config.MutableHttpConfig()->CopyFrom(httpConfig);

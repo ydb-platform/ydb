@@ -4307,10 +4307,13 @@ TExprNode::TPtr OptimizeWideChopper(const TExprNode::TPtr& node, TExprContext& c
 
 struct TBlockRules {
 
+    // all kernels whose name begins with capital letter are YQL kernel
     static constexpr std::initializer_list<TBlockFuncMap::value_type> FuncsInit = {
         {"+", { "Add" } },
         {"-", { "Sub" } },
         {"*", { "Mul" } },
+        {"/", { "Div?" } }, // kernel produces optional output on non-optional inputs
+        {"%", { "Mod?" } }, // kernel produces optional output on non-optional inputs
         {"Not", { "invert" }},
     };
 

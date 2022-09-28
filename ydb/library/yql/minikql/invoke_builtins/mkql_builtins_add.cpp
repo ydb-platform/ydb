@@ -11,6 +11,8 @@ namespace {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TAdd : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TAdd<TLeft, TRight, TOutput>> {
+    static constexpr bool DefaultNulls = true;
+
     static TOutput Do(TOutput left, TOutput right)
     {
         return left + right;

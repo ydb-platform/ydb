@@ -10,6 +10,8 @@ namespace {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TMul : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMul<TLeft, TRight, TOutput>> {
+    static constexpr bool DefaultNulls = true;
+
     static TOutput Do(TOutput left, TOutput right)
     {
         return left * right;

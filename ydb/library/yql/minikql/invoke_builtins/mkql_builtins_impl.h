@@ -12,6 +12,9 @@
 
 #include <arrow/compute/function.h>
 #include <arrow/scalar.h>
+#include <arrow/util/bit_util.h>
+#include <arrow/util/bitmap.h>
+#include <arrow/util/bitmap_ops.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -772,7 +775,9 @@ void RegisterSub(arrow::compute::FunctionRegistry& registry);
 void RegisterMul(IBuiltinFunctionRegistry& registry);
 void RegisterMul(arrow::compute::FunctionRegistry& registry);
 void RegisterDiv(IBuiltinFunctionRegistry& registry);
+void RegisterDiv(arrow::compute::FunctionRegistry& registry);
 void RegisterMod(IBuiltinFunctionRegistry& registry);
+void RegisterMod(arrow::compute::FunctionRegistry& registry);
 void RegisterIncrement(IBuiltinFunctionRegistry& registry);
 void RegisterDecrement(IBuiltinFunctionRegistry& registry);
 void RegisterBitAnd(IBuiltinFunctionRegistry& registry);
@@ -802,6 +807,10 @@ void RegisterAggrMin(IBuiltinFunctionRegistry& registry);
 void RegisterWith(IBuiltinFunctionRegistry& registry);
 
 void AddFunction(arrow::compute::FunctionRegistry& registry, const std::shared_ptr<arrow::compute::ScalarFunction>& f);
+
+inline arrow::internal::Bitmap GetBitmap(const arrow::ArrayData& arr, int index) {
+    return arrow::internal::Bitmap{ arr.buffers[index], arr.offset, arr.length };
+}
 
 template <typename T>
 std::shared_ptr<arrow::DataType> GetPrimitiveDataType();
@@ -915,9 +924,16 @@ inline arrow::Datum MakeScalarDatum<ui64>(ui64 value) {
 }
 
 template<typename TInput1, typename TInput2, typename TOutput,
-    template<typename, typename, typename> class TFunc>
-void AddBinaryKernel(arrow::compute::ScalarFunction& function) {
-    auto exec1 = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res)->arrow::Status {
+    template<typename, typename, typename> class TFunc, bool DefaultNulls>
+struct TBinaryKernelExecs;
+
+template<typename TInput1, typename TInput2, typename TOutput,
+        template<typename, typename, typename> class TFunc>
+struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, true>
+{
+    using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
+
+    static arrow::Status ExecScalarScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
@@ -926,49 +942,165 @@ void AddBinaryKernel(arrow::compute::ScalarFunction& function) {
         } else {
             const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
             const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
-            *res = MakeScalarDatum<TOutput>(TFunc<TInput1, TInput2, TOutput>::Do(val1, val2));
+            *res = MakeScalarDatum<TOutput>(TFuncInstance::Do(val1, val2));
         }
 
         return arrow::Status::OK();
-    };
+    }
 
-    auto exec2 = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res)->arrow::Status {
+    static arrow::Status ExecScalarArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
+        auto& resArr = *res->array();
         if (arg1.scalar()->is_valid) {
             const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
             const auto& arr2 = *arg2.array();
             auto length = arr2.length;
             const auto values2 = arr2.GetValues<TInput2>(1);
-            auto resValues = res->array()->GetMutableValues<TOutput>(1);
+            auto resValues = resArr.GetMutableValues<TOutput>(1);
             for (int64_t i = 0; i < length; ++i) {
-                resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(val1, values2[i]);
+                resValues[i] = TFuncInstance::Do(val1, values2[i]);
             }
         }
 
         return arrow::Status::OK();
-    };
+    }
 
-    auto exec3 = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res)->arrow::Status {
+    static arrow::Status ExecArrayScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
+        auto& resArr = *res->array();
         if (arg2.scalar()->is_valid) {
             const auto& arr1 = *arg1.array();
             auto length = arr1.length;
             const auto values1 = arr1.GetValues<TInput1>(1);
-            auto resValues = res->array()->GetMutableValues<TOutput>(1);
+            auto resValues = resArr.GetMutableValues<TOutput>(1);
             const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
             for (int64_t i = 0; i < length; ++i) {
-                resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(values1[i], val2);
+                resValues[i] = TFuncInstance::Do(values1[i], val2);
             }
         }
 
         return arrow::Status::OK();
-    };
+    }
 
-    auto exec4 = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res)->arrow::Status {
+    static arrow::Status ExecArrayArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        const auto& arr1 = *arg1.array();
+        const auto& arr2 = *arg2.array();
+        auto& resArr = *res->array();
+        MKQL_ENSURE(arr1.length == arr2.length, "Expected same length");
+        auto length = arr1.length;
+        const auto values1 = arr1.GetValues<TInput1>(1);
+        const auto values2 = arr2.GetValues<TInput2>(1);
+        auto resValues = resArr.GetMutableValues<TOutput>(1);
+        for (int64_t i = 0; i < length; ++i) {
+            resValues[i] = TFuncInstance::Do(values1[i], values2[i]);
+        }
+
+        return arrow::Status::OK();
+    }
+};
+
+template<typename TInput1, typename TInput2, typename TOutput,
+        template<typename, typename, typename> class TFunc>
+struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false>
+{
+    using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
+
+    static arrow::Status ExecScalarScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
+            *res = arrow::MakeNullScalar(GetPrimitiveDataType<TOutput>());
+        } else {
+            const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
+            const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
+            auto podRes = TFuncInstance::Execute(NUdf::TUnboxedValuePod(val1), NUdf::TUnboxedValuePod(val2));
+            if (!podRes) {
+                *res = arrow::MakeNullScalar(GetPrimitiveDataType<TOutput>());
+            } else {
+                *res = MakeScalarDatum<TOutput>(podRes.template Get<TOutput>());
+            }
+        }
+
+        return arrow::Status::OK();
+    }
+
+    static arrow::Status ExecScalarArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        const auto& arr2 = *arg2.array();
+        auto& resArr = *res->array();
+        if (arg1.scalar()->is_valid) {
+            const auto val1 = GetPrimitiveScalarValue<TInput1>(*arg1.scalar());
+            auto length = arr2.length;
+            const auto values2 = arr2.GetValues<TInput2>(1);
+            const auto valid2 = arr2.GetValues<uint8_t>(0);
+            const auto nullCount2 = arr2.GetNullCount();
+            auto resValues = resArr.GetMutableValues<TOutput>(1);
+            auto resValid = resArr.GetMutableValues<uint8_t>(0);
+
+            for (int64_t i = 0; i < length; ++i) {
+                if (nullCount2 == 0 || arrow::BitUtil::GetBit(valid2, i + arr2.offset)) {
+                    auto podRes = TFuncInstance::Execute(NUdf::TUnboxedValuePod(val1), NUdf::TUnboxedValuePod(values2[i]));
+                    if (podRes) {
+                        resValues[i] = podRes.template Get<TOutput>();
+                        arrow::BitUtil::SetBit(resValid, i + resArr.offset);
+                        continue;
+                    }
+                }
+                
+                arrow::BitUtil::ClearBit(resValid, i + resArr.offset);
+            }
+        } else {
+            GetBitmap(resArr, 0).SetBitsTo(false);
+        }
+
+        return arrow::Status::OK();
+    }
+
+    static arrow::Status ExecArrayScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        const auto& arg1 = batch.values[0];
+        const auto& arg2 = batch.values[1];
+        const auto& arr1 = *arg1.array();
+        auto& resArr = *res->array();
+        if (arg2.scalar()->is_valid) {
+            const auto val2 = GetPrimitiveScalarValue<TInput1>(*arg2.scalar());
+            auto length = arr1.length;
+            const auto values1 = arr1.GetValues<TInput2>(1);
+            const auto valid1 = arr1.GetValues<uint8_t>(0);
+            const auto nullCount1 = arr1.GetNullCount();
+            auto resValues = resArr.GetMutableValues<TOutput>(1);
+            auto resValid = resArr.GetMutableValues<uint8_t>(0);
+
+            for (int64_t i = 0; i < length; ++i) {
+                if (nullCount1 == 0 || arrow::BitUtil::GetBit(valid1, i + arr1.offset)) {
+                    auto podRes = TFuncInstance::Execute(NUdf::TUnboxedValuePod(values1[i]), NUdf::TUnboxedValuePod(val2));
+                    if (podRes) {
+                        resValues[i] = podRes.template Get<TOutput>();
+                        arrow::BitUtil::SetBit(resValid, i + resArr.offset);
+                        continue;
+                    }
+                }
+
+                arrow::BitUtil::ClearBit(resValid, i + resArr.offset);
+            }
+        } else {
+            GetBitmap(resArr, 0).SetBitsTo(false);
+        }
+
+        return arrow::Status::OK();
+    }
+
+    static arrow::Status ExecArrayArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
@@ -977,19 +1109,54 @@ void AddBinaryKernel(arrow::compute::ScalarFunction& function) {
         MKQL_ENSURE(arr1.length == arr2.length, "Expected same length");
         auto length = arr1.length;
         const auto values1 = arr1.GetValues<TInput1>(1);
+        const auto valid1 = arr1.GetValues<uint8_t>(0);
+        const auto nullCount1 = arr1.GetNullCount();
         const auto values2 = arr2.GetValues<TInput2>(1);
-        auto resValues = res->array()->GetMutableValues<TOutput>(1);
+        const auto valid2 = arr2.GetValues<uint8_t>(0);
+        const auto nullCount2 = arr2.GetNullCount();
+        auto& resArr = *res->array();
+        auto resValues = resArr.GetMutableValues<TOutput>(1);
+        auto resValid = resArr.GetMutableValues<uint8_t>(0);
         for (int64_t i = 0; i < length; ++i) {
-            resValues[i] = TFunc<TInput1, TInput2, TOutput>::Do(values1[i], values2[i]);
+            if ((nullCount1 == 0 || arrow::BitUtil::GetBit(valid1, i + arr1.offset)) &&
+                (nullCount2 == 0 || arrow::BitUtil::GetBit(valid2, i + arr2.offset))) {
+                auto podRes = TFuncInstance::Execute(NUdf::TUnboxedValuePod(values1[i]), NUdf::TUnboxedValuePod(values2[i]));
+                if (podRes) {
+                    resValues[i] = podRes.template Get<TOutput>();
+                    arrow::BitUtil::SetBit(resValid, i + resArr.offset);
+                    continue;
+                }
+            }
+
+            arrow::BitUtil::ClearBit(resValid, i + resArr.offset);
         }
 
         return arrow::Status::OK();
-    };
+    }
+};
 
-    ARROW_OK(function.AddKernel({ GetPrimitiveInputArrowType<TInput1>(true), GetPrimitiveInputArrowType<TInput2>(true) }, GetPrimitiveOutputArrowType<TOutput>(), exec1));
-    ARROW_OK(function.AddKernel({ GetPrimitiveInputArrowType<TInput1>(true), GetPrimitiveInputArrowType<TInput2>(false) }, GetPrimitiveOutputArrowType<TOutput>(), exec2));
-    ARROW_OK(function.AddKernel({ GetPrimitiveInputArrowType<TInput1>(false), GetPrimitiveInputArrowType<TInput2>(true) }, GetPrimitiveOutputArrowType<TOutput>(), exec3));
-    ARROW_OK(function.AddKernel({ GetPrimitiveInputArrowType<TInput1>(false), GetPrimitiveInputArrowType<TInput2>(false) }, GetPrimitiveOutputArrowType<TOutput>(), exec4));
+template<typename TInput1, typename TInput2, typename TOutput,
+    template<typename, typename, typename> class TFunc>
+void AddBinaryKernel(arrow::compute::ScalarFunction& function) {
+    using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
+    using TExecs = TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, TFuncInstance::DefaultNulls>;
+    auto nullHandling = TFuncInstance::DefaultNulls ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
+    arrow::compute::ScalarKernel ss({GetPrimitiveInputArrowType<TInput1>(true), GetPrimitiveInputArrowType<TInput2>(true) }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::ExecScalarScalar);
+    ss.null_handling = nullHandling;
+    ARROW_OK(function.AddKernel(ss));
+
+    arrow::compute::ScalarKernel sa({ GetPrimitiveInputArrowType<TInput1>(true), GetPrimitiveInputArrowType<TInput2>(false) }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::ExecScalarArray);
+    sa.null_handling = nullHandling;
+    ARROW_OK(function.AddKernel(sa));
+
+    arrow::compute::ScalarKernel as({ GetPrimitiveInputArrowType<TInput1>(false), GetPrimitiveInputArrowType<TInput2>(true) }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::ExecArrayScalar);
+    as.null_handling = nullHandling;
+    ARROW_OK(function.AddKernel(as));
+
+    arrow::compute::ScalarKernel aa({ GetPrimitiveInputArrowType<TInput1>(false), GetPrimitiveInputArrowType<TInput2>(false) }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::ExecArrayArray);
+    aa.null_handling = nullHandling;
+    ARROW_OK(function.AddKernel(aa));
 }
 
 template<template<typename, typename, typename> class TFunc>

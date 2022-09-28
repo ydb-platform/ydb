@@ -154,7 +154,7 @@ bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TTy
     const auto& kernel = static_cast<const arrow::compute::ScalarKernel*>(*resKernel);
     auto notNull = (kernel->null_handling == arrow::compute::NullHandling::OUTPUT_NOT_NULL);
     const auto& outType = kernel->signature->out_type();
-    if (!ConvertOutputArrowType(outType, values, hasOptionals && !notNull, outputType, env)) {
+    if (!ConvertOutputArrowType(outType, values, name.EndsWith("?") || (hasOptionals && !notNull), outputType, env)) {
         return false;
     }
 

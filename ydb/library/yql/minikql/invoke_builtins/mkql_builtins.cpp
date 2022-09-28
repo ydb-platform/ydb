@@ -25,7 +25,9 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, arrow::comput
     RegisterMul(registry);
     RegisterMul(arrowRegistry);
     RegisterDiv(registry);
+    RegisterDiv(arrowRegistry);
     RegisterMod(registry);
+    RegisterMod(arrowRegistry);
     RegisterIncrement(registry);
     RegisterDecrement(registry);
     RegisterBitAnd(registry);

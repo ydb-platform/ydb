@@ -29,6 +29,8 @@ template <typename TLeft, typename TRight, typename TOutput>
 struct TIntegralDiv {
     static_assert(std::is_integral<TOutput>::value, "integral type expected");
 
+    static constexpr bool DefaultNulls = false;
+
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         const auto lv = static_cast<TOutput>(left.template Get<TLeft>());
@@ -162,6 +164,10 @@ void RegisterDiv(IBuiltinFunctionRegistry& registry) {
         NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i64>,
         NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+}
+
+void RegisterDiv(arrow::compute::FunctionRegistry& registry) {
+    AddFunction(registry, std::make_shared<TBinaryNumericFunction<TIntegralDiv>>("Div?"));
 }
 
 } // namespace NMiniKQL

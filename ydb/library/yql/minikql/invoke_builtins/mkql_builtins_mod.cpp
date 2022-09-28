@@ -30,6 +30,8 @@ template <typename TLeft, typename TRight, typename TOutput>
 struct TIntegralMod {
     static_assert(std::is_integral<TOutput>::value, "integral type expected");
 
+    static constexpr bool DefaultNulls = false;
+
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         const auto lv = static_cast<TOutput>(left.template Get<TLeft>());
@@ -86,6 +88,10 @@ struct TIntegralMod {
 void RegisterMod(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryRealFunctionOpt<TMod, TBinaryArgsOpt>(registry, "Mod");
     RegisterBinaryIntegralFunctionOpt<TIntegralMod, TBinaryArgsOptWithNullableResult>(registry, "Mod");
+}
+
+void RegisterMod(arrow::compute::FunctionRegistry& registry) {
+    AddFunction(registry, std::make_shared<TBinaryNumericFunction<TIntegralMod>>("Mod?"));
 }
 
 } // namespace NMiniKQL

@@ -91,9 +91,8 @@ struct TTestHelper {
         auto &runtime = *Server->GetRuntime();
         Sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::DS_LOAD_TEST, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::DS_LOAD_TEST, NLog::PRI_INFO);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
 
         InitRoot(Server, Sender);
 
@@ -284,11 +283,17 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
     Y_UNIT_TEST(ShouldReadIterate) {
         TTestHelper helper;
 
-        const ui64 expectedRowCount = 20;
+        const ui64 expectedRowCount = 1000;
 
         std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableReadIteratorStart();
+
+        command.AddChunks(0);
+        command.AddChunks(1);
+        command.AddChunks(10);
+
+        command.AddInflights(1);
 
         command.SetRowCount(expectedRowCount);
         command.SetPath("/Root/usertable");
@@ -296,9 +301,8 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
         auto result = helper.RunTestLoad(std::move(request));
         UNIT_ASSERT(result->Report);
 
-        // fullscans with different chunks: 5
-        // read head with inflight 1
-        UNIT_ASSERT_VALUES_EQUAL(result->Report->SubtestCount, 12);
+        UNIT_ASSERT_VALUES_EQUAL(result->Report->SubtestCount, 4);
+        UNIT_ASSERT_VALUES_EQUAL(result->Report->OperationsOK, (4 * expectedRowCount));
 
         // sanity check that there was data in table
         helper.CheckKeysCount(expectedRowCount);

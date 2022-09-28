@@ -284,7 +284,6 @@ public:
             keyFromCells = range.From;
         }
         const auto keyFrom = ToRawTypeValue(keyFromCells, TableInfo, fromInclusive);
-
         const TSerializedCellVec keyToCells(range.To);
         const auto keyTo = ToRawTypeValue(keyToCells, TableInfo, !range.ToInclusive);
 
@@ -300,10 +299,10 @@ public:
         EReadStatus result;
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = Iterate(iter.Get(), true, ctx);
+            result = IterateRange(iter.Get(), ctx);
         } else {
             auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = Iterate(iter.Get(), true, ctx);
+            result = IterateRange(iter.Get(), ctx);
         }
 
         if (result == EReadStatus::NeedData) {
@@ -385,6 +384,8 @@ public:
             case EReadStatus::StoppedByLimit:
                 return true;
             case EReadStatus::NeedData:
+                if (RowsRead)
+                    return true;
                 return false;
             }
         }
@@ -405,6 +406,8 @@ public:
             case EReadStatus::StoppedByLimit:
                 return true;
             case EReadStatus::NeedData:
+                if (RowsRead)
+                    return true;
                 return false;
             }
         }
@@ -555,14 +558,12 @@ private:
     }
 
     template <typename TIterator>
-    EReadStatus Iterate(TIterator* iter, bool isRange, const TActorContext& ctx) {
+    EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             TDbTupleRef rowKey = iter->GetKey();
 
-            if (isRange) {
-                LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
-            }
+            LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
 
             TDbTupleRef rowValues = iter->GetValues();
 
@@ -584,12 +585,12 @@ private:
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
-        if (iter->Last() == NTable::EReady::Page && RowsRead == 0) {
+        if (iter->Last() == NTable::EReady::Page) {
             return EReadStatus::NeedData;
         }
 
         // range fully read, no reason to keep LastProcessedKey
-        if (isRange && iter->Last() == NTable::EReady::Gone)
+        if (iter->Last() == NTable::EReady::Gone)
             LastProcessedKey.clear();
 
         return EReadStatus::Done;
@@ -1802,6 +1803,10 @@ public:
                 Y_VERIFY(locks.empty(), "ApplyLocks acquired unexpected locks");
             }
         }
+
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " readContinue iterator# " << readId
+            << " sends rowCount# " << Reader->GetRowsRead() << ", hasUnreadQueries# " << Reader->HasUnreadQueries()
+            << ", firstUnprocessed# " << state.FirstUnprocessedQuery);
 
         Reader->FillResult(*Result);
         Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);

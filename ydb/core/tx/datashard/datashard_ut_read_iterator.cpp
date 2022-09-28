@@ -303,14 +303,14 @@ struct TTestHelper {
         auto &runtime = *Server->GetRuntime();
         Sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_INFO);
 
         InitRoot(Server, Sender);
 
-        auto& table1 = Tables["table-1"];
-        table1.Name = "table-1";
         {
+            auto& table1 = Tables["table-1"];
+            table1.Name = "table-1";
             CreateTable(Server, Sender, "/Root", "table-1", WithFollower, ShardCount);
             ExecSQL(Server, Sender, R"(
                 UPSERT INTO `/Root/table-1`
@@ -336,9 +336,9 @@ struct TTestHelper {
             table1.ClientId = runtime.ConnectToPipe(table1.TabletId, Sender, 0, GetTestPipeConfig());
         }
 
-        auto& table2 = Tables["movies"];
-        table2.Name = "movies";
         {
+            auto& table2 = Tables["movies"];
+            table2.Name = "movies";
             CreateMoviesTable(Server, Sender, "/Root", "movies");
             ExecSQL(Server, Sender, R"(
                 UPSERT INTO `/Root/movies`
@@ -357,6 +357,83 @@ struct TTestHelper {
             table2.UserTable = tables["movies"];
 
             table2.ClientId = runtime.ConnectToPipe(table2.TabletId, Sender, 0, GetTestPipeConfig());
+        }
+
+        {
+            auto& table3 = Tables["table-1-many"];
+            table3.Name = "table-1-many";
+            CreateTable(Server, Sender, "/Root", "table-1-many", WithFollower, ShardCount);
+
+            auto shards = GetTableShards(Server, Sender, "/Root/table-1-many");
+            table3.TabletId = shards.at(0);
+
+            auto [tables, ownerId] = GetTables(Server, table3.TabletId);
+            table3.OwnerId = ownerId;
+            table3.UserTable = tables["table-1-many"];
+
+            table3.ClientId = runtime.ConnectToPipe(table3.TabletId, Sender, 0, GetTestPipeConfig());
+        }
+    }
+
+    void UpsertMany(ui32 startRow, ui32 rowCount) {
+        auto &runtime = *Server->GetRuntime();
+        const auto& table = Tables["table-1-many"];
+        auto endRow = startRow + rowCount;
+
+        for (ui32 key = startRow; key < endRow;) {
+            auto request = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
+            auto& record = request->Record;
+            record.SetTableId(table.UserTable.GetPathId());
+
+            auto& rowScheme = *record.MutableRowScheme();
+
+            const auto& description = table.UserTable.GetDescription();
+            std::set<ui32> keyColumns(
+                description.GetKeyColumnIds().begin(),
+                description.GetKeyColumnIds().end());
+
+            for (const auto& column: description.GetColumns()) {
+                if (keyColumns.contains(column.GetId()))
+                    continue;
+                rowScheme.AddValueColumnIds(column.GetId());
+            }
+
+            for (auto column: keyColumns) {
+                rowScheme.AddKeyColumnIds(column);
+            }
+
+            for (size_t i = 0; i < 1000 && key < endRow; ++i) {
+                TVector<TCell> keys;
+                keys.reserve(keyColumns.size());
+                for (size_t i = 0; i < keyColumns.size(); ++i) {
+                    keys.emplace_back(TCell::Make(key));
+                }
+
+                TVector<TCell> values;
+                for (size_t i = 0; i < description.ColumnsSize() - keyColumns.size(); ++i) {
+                    values.emplace_back(TCell::Make(key)); // key intentionally as value
+                }
+
+                auto& row = *record.AddRows();
+                row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
+                row.SetValueColumns(TSerializedCellVec::Serialize(values));
+
+                ++key;
+            }
+
+            runtime.SendToPipe(
+                table.TabletId,
+                Sender,
+                request.release(),
+                0,
+                GetTestPipeConfig(),
+                table.ClientId);
+
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(handle);
+            UNIT_ASSERT(handle);
+            auto event = handle->Release<TEvDataShard::TEvUploadRowsResponse>();
+            UNIT_ASSERT(event->Record.GetStatus() == 0);
         }
     }
 
@@ -383,10 +460,6 @@ struct TTestHelper {
         record.MutableTableId()->SetTableId(table.UserTable.GetPathId());
 
         const auto& description = table.UserTable.GetDescription();
-        std::vector<ui32> keyColumns(
-            description.GetKeyColumnIds().begin(),
-            description.GetKeyColumnIds().end());
-
         for (const auto& column: description.GetColumns()) {
             record.AddColumns(column.GetId());
         }
@@ -555,6 +628,36 @@ struct TTestHelper {
         UNIT_ASSERT_VALUES_EQUAL(newLock->GetLockId(), prevLock->GetLockId());
         UNIT_ASSERT(newLock->GetCounter() != prevLock->GetCounter()
             || newLock->GetGeneration() != prevLock->GetGeneration());
+    }
+
+    void TestChunkRead(ui32 chunkSize, ui32 rowCount) {
+        UpsertMany(1, rowCount);
+
+        auto request = GetBaseReadRequest("table-1-many", 1, NKikimrTxDataShard::CELLVEC, TRowVersion::Max());
+        request->Record.ClearSnapshot();
+        AddRangeQuery<ui32>(
+            *request,
+            {1, 1, 1},
+            true,
+            {rowCount + 1, 1, 1},
+            true
+        );
+
+        request->Record.SetMaxRowsInResult(chunkSize);
+
+        auto readResult = SendRead("table-1-many", request.release());
+        UNIT_ASSERT(readResult);
+
+        ui32 rowsRead = readResult->GetRowsCount();
+        UNIT_ASSERT(rowsRead > 0);
+
+        while (!readResult->Record.GetFinished()) {
+            readResult = WaitReadResult();
+            UNIT_ASSERT(readResult);
+            rowsRead += readResult->GetRowsCount();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(rowsRead, rowCount);
     }
 
     struct THangedReturn {
@@ -1280,6 +1383,41 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT_VALUES_EQUAL(record5.GetReadId(), 1UL);
         UNIT_ASSERT_VALUES_EQUAL(record5.GetSeqNo(), 5UL);
         // TODO: check no continuation token
+    }
+
+    Y_UNIT_TEST(ShouldReadRangeChunk1_100) {
+        TTestHelper helper;
+        helper.TestChunkRead(1, 100);
+    }
+
+    Y_UNIT_TEST(ShouldReadRangeChunk1) {
+        TTestHelper helper;
+        helper.TestChunkRead(1, 1000);
+    }
+
+    Y_UNIT_TEST(ShouldReadRangeChunk2) {
+        TTestHelper helper;
+        helper.TestChunkRead(2, 1000);
+    }
+
+    Y_UNIT_TEST(ShouldReadRangeChunk3) {
+        TTestHelper helper;
+        helper.TestChunkRead(3, 1000);
+    }
+
+    Y_UNIT_TEST(ShouldReadRangeChunk5) {
+        TTestHelper helper;
+        helper.TestChunkRead(5, 1000);
+    }
+
+    Y_UNIT_TEST(ShouldReadRangeChunk7) {
+        TTestHelper helper;
+        helper.TestChunkRead(7, 1000);
+    }
+
+    Y_UNIT_TEST(ShouldReadRangeChunk100) {
+        TTestHelper helper;
+        helper.TestChunkRead(99, 10000);
     }
 
     Y_UNIT_TEST(ShouldReadKeyPrefix1) {

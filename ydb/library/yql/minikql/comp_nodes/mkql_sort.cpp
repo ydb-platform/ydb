@@ -296,6 +296,15 @@ struct TCompareDescr {
             }
         }
     }
+    
+    void PrepareValue(TComputationContext& ctx, NUdf::TUnboxedValue& item) const {
+        if (!KeyTypes.empty()) {
+            auto& encoder = Encoders.RefMutableObject(ctx, KeySchemeTypes, Comparators.empty()).Columns.front();
+            if (encoder) {
+                Set(item) = MakeString(encoder->Encode(Get(item), false));
+            }
+        }
+    }
 
     const std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> KeySchemeTypes;
     const std::vector<NUdf::EDataSlot> KeyTypes;
@@ -540,8 +549,12 @@ public:
         if (size < count) {
             return ctx.HolderFactory.Append(list.Release(), item.Release());
         }
-
         auto hotkey = HotKey->GetValue(ctx);
+        auto hotkey_prepared = hotkey;
+        
+        if (!hotkey_prepared.IsInvalid()) {            
+            Description.PrepareValue(ctx, hotkey_prepared);
+        }
 
         if (size == count) {
             if (hotkey.IsInvalid()) {
@@ -554,19 +567,25 @@ public:
                     return Key->GetValue(ctx);
                 });
 
+                auto keys_copy = keys;
+                
+                Description.Prepare(ctx, keys);
+
                 const auto& ascending = Ascending->GetValue(ctx);
                 const auto max = std::max_element(keys.begin(), keys.end(), Description.MakeComparator<TUnboxedValueVector>(ascending));
-                hotkey = *max;
-                HotKey->SetValue(ctx, std::move(*max));
+                hotkey_prepared = *max;
+                HotKey->SetValue(ctx, std::move(keys_copy[max - keys.begin()]));
             }
         }
 
         const auto copy = item;
         Arg->SetValue(ctx, item.Release());
-        const auto& key = Key->GetValue(ctx);
+        auto key_prepared = Key->GetValue(ctx);
+        Description.PrepareValue(ctx, key_prepared);
 
         const auto& ascending = Ascending->GetValue(ctx);
-        if (Description.MakeComparator<TUnboxedValueVector>(ascending)(key, hotkey)) {
+
+        if (Description.MakeComparator<TUnboxedValueVector>(ascending)(key_prepared, hotkey_prepared)) {
             const auto reserve = std::max<ui64>(count << 1ULL, 1ULL << 8ULL);
             if (size < reserve) {
                 return ctx.HolderFactory.Append(list.Release(), Arg->GetValue(ctx).Release());

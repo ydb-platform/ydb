@@ -1468,88 +1468,34 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
 bool ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const TRule_expr_list& node);
 
 bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints) {
-    const auto& settings = Context().Settings;
-    auto pit = settings.PrivateBindings.find(binding);
-    auto sit = settings.ScopedBindings.find(binding);
-
-    if (pit == settings.PrivateBindings.end() && sit == settings.ScopedBindings.end()) {
-        Ctx.Error() << "Table binding `" << binding << "` is not defined";
+    NSQLTranslation::TBindingInfo bindingInfo;
+    if (const auto& error = ExtractBindingInfo(Context().Settings, binding, bindingInfo)) {
+        Ctx.Error() << error;
         return false;
     }
 
-    if (pit != settings.PrivateBindings.end() && sit != settings.ScopedBindings.end()) {
-        //  warn
-        Ctx.Warning(Ctx.Pos(),
-            TIssuesIds::YQL_TABLE_BINDING_DUPLICATE) << "Table binding `" << binding << "` is defined both as private and scoped binding";
-    }
-
-    const auto& bindSettings = (pit != settings.PrivateBindings.end()) ? pit->second : sit->second;
-
-    if (!IsIn({S3ProviderName, PqProviderName}, bindSettings.ClusterType)) {
-        Ctx.Error() << "Cluster type " << bindSettings.ClusterType << " is not supported for table bindings";
-        return false;
-    }
-
-    // ordered map ensures AST stability
-    TMap<TString, TString> kvs(bindSettings.Settings.begin(), bindSettings.Settings.end());
-    auto pullSettingOrFail = [&](const TString& name, TString& value) -> bool {
-        auto it = kvs.find(name);
-        if (it == kvs.end()) {
-            Ctx.Error() << name << " is not found for " << binding;
-            return false;
-        }
-        value = it->second;
-        kvs.erase(it);
-        return true;
-    };
-
-    TString cluster;
-    TString path;
-    TString format;
-
-    if (!pullSettingOrFail("cluster", cluster) ||
-        !pullSettingOrFail("path", path) ||
-        !pullSettingOrFail("format", format))
-    {
-        return false;
-    }
-
-    if (auto it = kvs.find("schema"); it != kvs.end()) {
-        TNodePtr schema = BuildQuotedAtom(Ctx.Pos(), it->second);
+    if (bindingInfo.Schema) {
+        TNodePtr schema = BuildQuotedAtom(Ctx.Pos(), bindingInfo.Schema);
 
         TNodePtr type = new TCallNodeImpl(Ctx.Pos(), "SqlTypeFromYson", { schema });
         TNodePtr columns = new TCallNodeImpl(Ctx.Pos(), "SqlColumnOrderFromYson", { schema });
 
         hints["user_schema"] = { type, columns };
-        kvs.erase(it);
     }
 
-    if (auto it = kvs.find("partitioned_by"); it != kvs.end()) {
-        TVector<TString> columns;
-        if (const auto& error = NSQLTranslation::ParsePartitionedByBinding(it->first, it->second, columns)) {
-            Ctx.Error() << error;
-            return false;
-        }
+    for (auto& [key, values] : bindingInfo.Attributes) {
         TVector<TNodePtr> hintValue;
-        for (auto& column : columns) {
+        for (auto& column : values) {
             hintValue.push_back(BuildQuotedAtom(Ctx.Pos(), column));
         }
-        hints[it->first] = std::move(hintValue);
-        kvs.erase(it);
+        hints[key] = std::move(hintValue);
     }
 
-    tr.Service = bindSettings.ClusterType;
-    tr.Cluster = TDeferredAtom(Ctx.Pos(), cluster);
-    // put format back to hints
-    kvs["format"] = format;
-
-    for (auto& [key, value] : kvs) {
-        YQL_ENSURE(!key.empty());
-        hints[key] = { BuildQuotedAtom(Ctx.Pos(), value) };
-    }
+    tr.Service = bindingInfo.ClusterType;
+    tr.Cluster = TDeferredAtom(Ctx.Pos(), bindingInfo.Cluster);
 
     const TString view = "";
-    tr.Keys = BuildTableKey(Ctx.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx.Pos(), path), view);
+    tr.Keys = BuildTableKey(Ctx.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx.Pos(), bindingInfo.Path), view);
 
     return true;
 }

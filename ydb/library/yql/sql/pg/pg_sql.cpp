@@ -1253,82 +1253,30 @@ public:
 
     TAstNode* BuildBindingSource(const RangeVar* value) {
         const TString binding = value->relname;
-        auto pit = Settings.PrivateBindings.find(binding);
-        auto sit = Settings.ScopedBindings.find(binding);
-
-        if (pit == Settings.PrivateBindings.end() && sit == Settings.ScopedBindings.end()) {
-            AddError(TStringBuilder() << "Table binding `" << binding << "` is not defined");
+        NSQLTranslation::TBindingInfo bindingInfo;
+        if (const auto& error = ExtractBindingInfo(Settings, binding, bindingInfo)) {
+            AddError(error);
             return nullptr;
         }
-
-        const auto& bindSettings = (pit != Settings.PrivateBindings.end()) ? pit->second : sit->second;
-
-        // ordered map ensures AST stability
-        std::map<TString, TString> kvs(bindSettings.Settings.begin(), bindSettings.Settings.end());
-        auto pullSettingOrFail = [&](const TString& name, TString& value) -> bool {
-            auto it = kvs.find(name);
-            if (it == kvs.end()) {
-                AddError(TStringBuilder() << name << " is not found for " << binding);
-                return false;
-            }
-            value = it->second;
-            kvs.erase(it);
-            return true;
-        };
-
-        TString cluster;
-        TString path;
-        TString format;
-
-        if (!pullSettingOrFail("cluster", cluster) ||
-            !pullSettingOrFail("path", path) ||
-            !pullSettingOrFail("format", format)) {
-            return nullptr;
-        }
-
         TVector<TAstNode*> hints;
-        if (auto it = kvs.find("schema"); it != kvs.end()) {
-            auto schema = QA(it->second);
+        if (bindingInfo.Schema) {
+            auto schema = QA(bindingInfo.Schema);
 
             auto type = L(A("SqlTypeFromYson"), schema);
             auto columns = L(A("SqlColumnOrderFromYson"), schema);
             hints.emplace_back(QL(QA("userschema"), type, columns));
-            kvs.erase(it);
         }
 
-        if (auto it = kvs.find("partitioned_by"); it != kvs.end()) {
-            TVector<TString> columns;
-            if (const TString& error = NSQLTranslation::ParsePartitionedByBinding(it->first, it->second, columns)) {
-                AddError(error);
-            }
+        for (auto& [key, value] : bindingInfo.Attributes) {
             TVector<TAstNode*> hintValues;
-            hintValues.push_back(QA("partitionedby"));
-            for (auto& column : columns) {
-                hintValues.push_back(QA(column));
+            hintValues.push_back(QA(key));
+            for (auto& v : value) {
+                hintValues.push_back(QA(v));
             }
             hints.emplace_back(QVL(hintValues.data(), hintValues.size()));
-            kvs.erase(it);
         }
 
-        // put format back to hints
-        kvs["format"] = format;
-
-        for (auto& [key, value] : kvs) {
-            if (!key) {
-                AddError(TStringBuilder() << "Hint key should not be empty");
-                return nullptr;
-            }
-
-            hints.emplace_back(QL(QA(key), QA(value)));
-        }
-
-        auto p = Settings.ClusterMapping.FindPtr(cluster);
-        if (!p) {
-            AddError(TStringBuilder() << "Unknown cluster: " << cluster);
-            return nullptr;
-        }
-
-        auto source = L(A("DataSource"), QAX(*p), QAX(cluster));
+        auto source = L(A("DataSource"), QAX(bindingInfo.ClusterType), QAX(bindingInfo.Cluster));
         return L(
                   A("Read!"),
                   A("world"),
@@ -1341,7 +1289,7 @@ public:
                         QA("table"),
                         L(
                           A("String"),
-                          QAX(path)
+                          QAX(bindingInfo.Path)
                         )
                       )
                     )

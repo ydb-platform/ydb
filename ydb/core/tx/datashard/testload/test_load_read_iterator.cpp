@@ -100,6 +100,7 @@ class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
     size_t Oks = 0;
 
     TVector<TOwnedCellVec> Points;
+    ui64 ReadCount = 0;
     size_t CurrentPoint = 0;
     THPTimer RequestTimer;
 
@@ -109,12 +110,14 @@ public:
     TReadIteratorPoints(TEvDataShard::TEvRead* request,
                         ui64 tablet,
                         const TActorId& parent,
-                        const TVector<TOwnedCellVec>& points)
+                        const TVector<TOwnedCellVec>& points,
+                        ui64 readCount)
         : BaseRequest(request)
         , Format(BaseRequest->Record.GetResultFormat())
         , TabletId(tablet)
         , Parent(parent)
         , Points(points)
+        , ReadCount(readCount)
     {
         RequestTimes.reserve(Points.size());
     }
@@ -127,6 +130,8 @@ public:
 
         auto rng = std::default_random_engine {};
         std::shuffle(Points.begin(), Points.end(), rng);
+
+        Points.resize(ReadCount);
 
         Connect(ctx);
     }
@@ -435,8 +440,10 @@ class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadSce
     size_t ChunkIndex = 0;
 
     // note that might be overwritten by test incoming test config
-    TVector<ui64> Inflights = {1, 2, 10, 50, 100, 200, 400};
+    TVector<ui64> Inflights = {1, 2, 10, 50, 100, 200, 400, 1000, 2000, 5000};
     size_t InflightIndex = 0;
+
+    ui64 ReadCount = 0;
 
 public:
     TReadIteratorLoadScenario(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd, const TActorId& parent,
@@ -461,6 +468,12 @@ public:
             for (auto chunk: Config.GetChunks()) {
                 ChunkSizes.push_back(chunk);
             }
+        }
+
+        if (Config.HasReadCount()) {
+            ReadCount = Config.GetReadCount();
+        } else {
+            ReadCount = Config.GetRowCount();
         }
     }
 
@@ -686,7 +699,13 @@ private:
 
         record.SetResultFormat(::NKikimrTxDataShard::EScanDataFormat::CELLVEC);
 
-        auto* readActor = new TReadIteratorPoints(request.release(), TabletId, SelfId(), Keys);
+        auto* readActor = new TReadIteratorPoints(
+            request.release(),
+            TabletId,
+            SelfId(),
+            Keys,
+            ReadCount);
+
         StartedActors.emplace_back(ctx.Register(readActor));
 
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag

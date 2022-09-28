@@ -25,13 +25,17 @@ message TEvTestLoadRequest {
         optional string Path = 1;
 
         // defines dataset size, normally must be withing 2 GiB
+        // also used for full scan
         optional uint64 RowCount = 2;
 
-        repeated uint32 Inflights = 3;
-        repeated uint32 Chunks = 4;
+        // number of random rows to be read (point reads)
+        optional uint64 ReadCount = 3;
+
+        repeated uint32 Inflights = 4;
+        repeated uint32 Chunks = 5;
 
         // Specifies the format for result data in TEvReadResult
-        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 5;
+        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 6;
     }
 
     optional uint64 Cookie = 1;

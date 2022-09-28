@@ -61,6 +61,12 @@ target_sources(libs-apache-orc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Writer.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/InputStream.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/OutputStream.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/ExpressionTree.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/Literal.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/PredicateLeaf.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/SargsApplier.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/SearchArgument.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/sargs/TruthValue.cc
 )
 target_proto_addincls(libs-apache-orc
   ./

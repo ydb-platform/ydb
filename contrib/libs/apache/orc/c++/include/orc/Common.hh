@@ -34,6 +34,7 @@ namespace orc {
   public:
     static const FileVersion& v_0_11();
     static const FileVersion& v_0_12();
+    static const FileVersion& UNSTABLE_PRE_2_0();
 
     FileVersion(uint32_t major, uint32_t minor) :
                 majorVersion(major), minorVersion(minor) {
@@ -120,6 +121,17 @@ namespace orc {
     StreamKind_ROW_INDEX = 6,
     StreamKind_BLOOM_FILTER = 7,
     StreamKind_BLOOM_FILTER_UTF8 = 8
+  };
+
+  /**
+   * Specific read intention when selecting a certain TypeId.
+   * This enum currently only being utilized by LIST, MAP, and UNION type selection.
+   */
+  enum ReadIntent {
+    ReadIntent_ALL = 0,
+
+    // Only read the offsets of selected type. Do not read the children types.
+    ReadIntent_OFFSETS = 1
   };
 
   /**
@@ -280,6 +292,30 @@ namespace orc {
     UTF8 = 1,
     FUTURE = INT32_MAX
   };
+
+  inline bool operator<(const Decimal& lhs, const Decimal& rhs) {
+    return compare(lhs, rhs);
+  }
+
+  inline bool operator>(const Decimal& lhs, const Decimal& rhs) {
+    return rhs < lhs;
+  }
+
+  inline bool operator<=(const Decimal& lhs, const Decimal& rhs) {
+    return !(lhs > rhs);
+  }
+
+  inline bool operator>=(const Decimal& lhs, const Decimal& rhs) {
+    return !(lhs < rhs);
+  }
+
+  inline bool operator!=(const Decimal& lhs, const Decimal& rhs) {
+    return lhs < rhs || rhs < lhs;
+  }
+
+  inline bool operator==(const Decimal& lhs, const Decimal& rhs) {
+    return !(lhs != rhs);
+  }
 
 }
 

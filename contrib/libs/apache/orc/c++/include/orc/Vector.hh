@@ -134,7 +134,7 @@ namespace orc {
     DataBuffer<int64_t> dictionaryOffset;
 
     void getValueByIndex(int64_t index, char*& valPtr, int64_t& length) {
-      if (index < 0 || static_cast<uint64_t>(index) >= dictionaryOffset.size()) {
+      if (index < 0 || static_cast<uint64_t>(index) + 1 >= dictionaryOffset.size()) {
         throw std::out_of_range("index out of range.");
       }
 
@@ -154,6 +154,7 @@ namespace orc {
     EncodedStringVectorBatch(uint64_t capacity, MemoryPool& pool);
     virtual ~EncodedStringVectorBatch();
     std::string toString() const;
+    void resize(uint64_t capacity);
     std::shared_ptr<StringDictionary> dictionary;
 
     // index for dictionary entry
@@ -240,7 +241,7 @@ namespace orc {
     explicit Decimal(const std::string& value);
     Decimal();
 
-    std::string toString() const;
+    std::string toString(bool trimTrailingZeros = false) const;
     Int128 value;
     int32_t scale;
   };

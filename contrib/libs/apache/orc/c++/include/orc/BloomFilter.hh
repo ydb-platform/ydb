@@ -40,6 +40,6 @@ namespace orc {
     std::vector<std::shared_ptr<BloomFilter>> entries;
   };
 
-};
+}
 
 #endif //ORC_BLOOMFILTER_HH

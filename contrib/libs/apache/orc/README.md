@@ -15,18 +15,18 @@ lists, maps, and unions.
 
 ## ORC File Library
 
-This project includes both a Java library and a C++ library for reading and writing the _Optimized Row Columnar_ (ORC) file format. The C++ and Java libraries are completely independent of each other and will each read all versions of ORC files. But the C++ library only writes the original (Hive 0.11) version of ORC files, and will be extended in the future.
+This project includes both a Java library and a C++ library for reading and writing the _Optimized Row Columnar_ (ORC) file format. The C++ and Java libraries are completely independent of each other and will each read all versions of ORC files.
 
 Releases:
 * Latest: <a href="http://orc.apache.org/releases">Apache ORC releases</a>
 * Maven Central: <a href="http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.orc%22">![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.apache.orc/orc/badge.svg)</a>
 * Downloads: <a href="http://orc.apache.org/downloads">Apache ORC downloads</a>
+* Release tags: <a href="https://github.com/apache/orc/releases">Apache ORC release tags</a>
+* Plan: <a href="https://github.com/apache/orc/milestones">Apache ORC future release plan</a>
 
 The current build status:
-* Master branch <a href="https://travis-ci.org/apache/orc/branches">
-![master build status](https://travis-ci.org/apache/orc.svg?branch=master)</a>
-* <a href="https://travis-ci.org/apache/orc/pull_requests">Pull Requests</a>
-
+* Main branch <a href="https://github.com/apache/orc/actions/workflows/build_and_test.yml?query=branch%3Amain">
+![main build status](https://github.com/apache/orc/actions/workflows/build_and_test.yml/badge.svg?branch=main)</a>
 
 Bug tracking: <a href="http://orc.apache.org/bugs">Apache Jira</a>
 
@@ -39,13 +39,12 @@ The subdirectories are:
 * java - the java reader and writer
 * proto - the protocol buffer definition for the ORC metadata
 * site - the website and documentation
-* snap - the script to build [snaps](https://snapcraft.io/) of the ORC tools
 * tools - the c++ tools for reading and inspecting ORC files
 
 ### Building
 
 * Install java 1.8 or higher
-* Install maven 3 or higher
+* Install maven 3.8.6 or higher
 * Install cmake
 
 To build a release version with debug information:

@@ -42,6 +42,10 @@ namespace orc {
     bool isDst;
     std::string name;
 
+    bool hasSameTzRule(const TimezoneVariant& other) const {
+      return gmtOffset == other.gmtOffset && isDst == other.isDst;
+    }
+
     std::string toString() const;
   };
 

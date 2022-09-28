@@ -311,8 +311,13 @@ namespace orc {
     /**
      * Return the base 10 string representation with a decimal point,
      * the given number of places after the decimal.
+     *
+     * @param scale scale of the Int128 to be interpreted as a decimal value
+     * @param trimTrailingZeros whether or not to trim trailing zeros
+     * @return converted string representation
      */
-    std::string toDecimalString(int32_t scale=0) const;
+    std::string toDecimalString(int32_t scale = 0,
+                                bool trimTrailingZeros = false) const;
 
     /**
      * Return the base 16 string representation of the two's complement with

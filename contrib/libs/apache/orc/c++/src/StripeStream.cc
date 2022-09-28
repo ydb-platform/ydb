@@ -30,14 +30,16 @@ namespace orc {
                                        const proto::StripeFooter& _footer,
                                        uint64_t _stripeStart,
                                        InputStream& _input,
-                                       const Timezone& _writerTimezone
+                                       const Timezone& _writerTimezone,
+                                       const Timezone& _readerTimezone
                                        ): reader(_reader),
                                           stripeInfo(_stripeInfo),
                                           footer(_footer),
                                           stripeIndex(_index),
                                           stripeStart(_stripeStart),
                                           input(_input),
-                                          writerTimezone(_writerTimezone) {
+                                          writerTimezone(_writerTimezone),
+                                          readerTimezone(_readerTimezone) {
     // PASS
   }
 
@@ -69,6 +71,10 @@ namespace orc {
 
   const Timezone& StripeStreamsImpl::getWriterTimezone() const {
     return writerTimezone;
+  }
+
+  const Timezone& StripeStreamsImpl::getReaderTimezone() const {
+    return readerTimezone;
   }
 
   std::ostream* StripeStreamsImpl::getErrorStream() const {
@@ -119,6 +125,10 @@ namespace orc {
 
   bool StripeStreamsImpl::getThrowOnHive11DecimalOverflow() const {
     return reader.getThrowOnHive11DecimalOverflow();
+  }
+
+  bool StripeStreamsImpl::isDecimalAsLong() const {
+    return reader.getIsDecimalAsLong();
   }
 
   int32_t StripeStreamsImpl::getForcedScaleOnHive11Decimal() const {

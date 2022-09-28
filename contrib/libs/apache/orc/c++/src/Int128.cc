@@ -391,41 +391,51 @@ namespace orc {
     return buf.str();
   }
 
-  std::string Int128::toDecimalString(int32_t scale) const {
+  std::string Int128::toDecimalString(int32_t scale, bool trimTrailingZeros) const {
     std::string str = toString();
+    std::string result;
     if (scale == 0) {
       return str;
     } else if (*this < 0) {
       int32_t len = static_cast<int32_t>(str.length());
       if (len - 1 > scale) {
-        return str.substr(0, static_cast<size_t>(len - scale)) + "." +
-          str.substr(static_cast<size_t>(len - scale),
-                     static_cast<size_t>(scale));
+        result = str.substr(0, static_cast<size_t>(len - scale)) + "." +
+                 str.substr(static_cast<size_t>(len - scale),
+                            static_cast<size_t>(len));
       } else if (len - 1 == scale) {
-        return "-0." + str.substr(1, std::string::npos);
+        result = "-0." + str.substr(1, std::string::npos);
       } else {
-        std::string result = "-0.";
-        for(int32_t i=0; i < scale - len + 1; ++i) {
+        result = "-0.";
+        for (int32_t i = 0; i < scale - len + 1; ++i) {
           result += "0";
         }
-        return result + str.substr(1, std::string::npos);
+        result += str.substr(1, std::string::npos);
       }
     } else {
       int32_t len = static_cast<int32_t>(str.length());
       if (len > scale) {
-        return str.substr(0, static_cast<size_t>(len - scale)) + "." +
-          str.substr(static_cast<size_t>(len - scale),
-                     static_cast<size_t>(scale));
+        result = str.substr(0, static_cast<size_t>(len - scale)) + "." +
+                 str.substr(static_cast<size_t>(len - scale),
+                            static_cast<size_t>(len));
       } else if (len == scale) {
-        return "0." + str;
+        result = "0." + str;
       } else {
-        std::string result = "0.";
-        for(int32_t i=0; i < scale - len; ++i) {
+        result = "0.";
+        for (int32_t i = 0; i < scale - len; ++i) {
           result += "0";
         }
-        return result + str;
+        result += str;
       }
     }
+    if (trimTrailingZeros) {
+      size_t pos = result.find_last_not_of('0');
+      if (result[pos] == '.') {
+        result = result.substr(0, pos);
+      } else {
+        result = result.substr(0, pos + 1);
+      }
+    }
+    return result;
   }
 
   std::string Int128::toHexString() const {

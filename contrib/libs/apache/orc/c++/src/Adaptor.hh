@@ -30,7 +30,7 @@
 #define HAS_DOUBLE_TO_STRING
 #define HAS_INT64_TO_STRING
 #define HAS_PRE_1970
-#define HAS_POST_2038
+/* #undef HAS_POST_2038 */
 #define HAS_STD_ISNAN
 #define HAS_STD_MUTEX
 #ifndef _MSC_VER

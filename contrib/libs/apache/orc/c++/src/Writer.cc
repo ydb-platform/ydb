@@ -41,6 +41,7 @@ namespace orc {
     std::set<uint64_t> columnsUseBloomFilter;
     double bloomFilterFalsePositiveProb;
     BloomFilterVersion bloomFilterVersion;
+    std::string timezone;
 
     WriterOptionsPrivate() :
                             fileVersion(FileVersion::v_0_12()) { // default to Hive_0_12
@@ -56,6 +57,10 @@ namespace orc {
       enableIndex = true;
       bloomFilterFalsePositiveProb = 0.05;
       bloomFilterVersion = UTF8;
+      //Writer timezone uses "GMT" by default to get rid of potential issues
+      //introduced by moving timestamps between different timezones.
+      //Explictly set the writer timezone if the use case depends on it.
+      timezone = "GMT";
     }
   };
 
@@ -73,9 +78,7 @@ namespace orc {
 
   WriterOptions::WriterOptions(WriterOptions& rhs) {
     // swap privateBits with rhs
-    WriterOptionsPrivate* l = privateBits.release();
-    privateBits.reset(rhs.privateBits.release());
-    rhs.privateBits.reset(l);
+    privateBits.swap(rhs.privateBits);
   }
 
   WriterOptions& WriterOptions::operator=(const WriterOptions& rhs) {
@@ -137,6 +140,14 @@ namespace orc {
   WriterOptions& WriterOptions::setFileVersion(const FileVersion& version) {
     // Only Hive_0_11 and Hive_0_12 version are supported currently
     if (version.getMajor() == 0 && (version.getMinor() == 11 || version.getMinor() == 12)) {
+      privateBits->fileVersion = version;
+      return *this;
+    }
+    if (version == FileVersion::UNSTABLE_PRE_2_0()) {
+      *privateBits->errorStream << "Warning: ORC files written in "
+                                << FileVersion::UNSTABLE_PRE_2_0().toString()
+                                << " will not be readable by other versions of the software."
+                                << " It is only for developer testing.\n";
       privateBits->fileVersion = version;
       return *this;
     }
@@ -229,6 +240,19 @@ namespace orc {
   // we only support UTF8 for now.
   BloomFilterVersion WriterOptions::getBloomFilterVersion() const {
     return privateBits->bloomFilterVersion;
+  }
+
+  const Timezone& WriterOptions::getTimezone() const {
+    return getTimezoneByName(privateBits->timezone);
+  }
+
+  const std::string& WriterOptions::getTimezoneName() const {
+    return privateBits->timezone;
+  }
+
+  WriterOptions& WriterOptions::setTimezoneName(const std::string& zone) {
+    privateBits->timezone = zone;
+    return *this;
   }
 
   Writer::~Writer() {
@@ -442,9 +466,7 @@ namespace orc {
       *stripeFooter.add_columns() = encodings[i];
     }
 
-    // use GMT to guarantee TimestampVectorBatch from reader can write
-    // same wall clock time
-    stripeFooter.set_writertimezone("GMT");
+    stripeFooter.set_writertimezone(TString(options.getTimezoneName()));
 
     // add stripe statistics to metadata
     proto::StripeStatistics* stripeStats = metadata.add_stripestats();
@@ -572,6 +594,10 @@ namespace orc {
       protoType.set_kind(proto::Type_Kind_TIMESTAMP);
       break;
     }
+    case TIMESTAMP_INSTANT: {
+      protoType.set_kind(proto::Type_Kind_TIMESTAMP_INSTANT);
+      break;
+    }
     case LIST: {
       protoType.set_kind(proto::Type_Kind_LIST);
       break;
@@ -606,6 +632,13 @@ namespace orc {
     }
     default:
       throw std::logic_error("Unknown type.");
+    }
+
+    for (auto& key : t.getAttributeKeys()) {
+      const auto& value = t.getAttributeValue(key);
+      auto protoAttr = protoType.add_attributes();
+      protoAttr->set_key(TString(key));
+      protoAttr->set_value(TString(value));
     }
 
     int pos = static_cast<int>(index);

@@ -312,13 +312,11 @@ namespace orc {
               output += SIZE_OF_INT;
               matchAddress += increment32;
 
-              *reinterpret_cast<int32_t*>(output) =
-                *reinterpret_cast<int32_t*>(matchAddress);
+              memcpy(output, matchAddress, SIZE_OF_INT);
               output += SIZE_OF_INT;
               matchAddress -= decrement64;
             } else {
-              *reinterpret_cast<int64_t*>(output) =
-                *reinterpret_cast<int64_t*>(matchAddress);
+              memcpy(output, matchAddress, SIZE_OF_LONG);
               matchAddress += SIZE_OF_LONG;
               output += SIZE_OF_LONG;
             }
@@ -329,8 +327,7 @@ namespace orc {
               }
 
               while (output < fastOutputLimit) {
-                *reinterpret_cast<int64_t*>(output) =
-                  *reinterpret_cast<int64_t*>(matchAddress);
+                memcpy(output, matchAddress, SIZE_OF_LONG);
                 matchAddress += SIZE_OF_LONG;
                 output += SIZE_OF_LONG;
               }
@@ -340,8 +337,7 @@ namespace orc {
               }
             } else {
               while (output < matchOutputLimit) {
-                *reinterpret_cast<int64_t*>(output) =
-                  *reinterpret_cast<int64_t*>(matchAddress);
+                memcpy(output, matchAddress, SIZE_OF_LONG);
                 matchAddress += SIZE_OF_LONG;
                 output += SIZE_OF_LONG;
               }
@@ -366,8 +362,7 @@ namespace orc {
           // fast copy. We may over-copy but there's enough room in input
           // and output to not overrun them
           do {
-            *reinterpret_cast<int64_t*>(output) =
-              *reinterpret_cast<const int64_t*>(input);
+            memcpy(output, input, SIZE_OF_LONG);
             input += SIZE_OF_LONG;
             output += SIZE_OF_LONG;
           } while (output < literalOutputLimit);

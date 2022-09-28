@@ -169,22 +169,20 @@ namespace orc {
   private:
     const unsigned char *tags;
     const uint64_t* offsets;
-    std::vector<ColumnPrinter*> fieldPrinter;
+    std::vector<std::unique_ptr<ColumnPrinter>> fieldPrinter;
 
   public:
     UnionColumnPrinter(std::string&, const Type& type);
-    virtual ~UnionColumnPrinter() override;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
   };
 
   class StructColumnPrinter: public ColumnPrinter {
   private:
-    std::vector<ColumnPrinter*> fieldPrinter;
+    std::vector<std::unique_ptr<ColumnPrinter>> fieldPrinter;
     std::vector<std::string> fieldNames;
   public:
     StructColumnPrinter(std::string&, const Type& type);
-    virtual ~StructColumnPrinter() override;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
   };
@@ -251,6 +249,7 @@ namespace orc {
         break;
 
       case TIMESTAMP:
+      case TIMESTAMP_INSTANT:
         result = new TimestampColumnPrinter(buffer);
         break;
 
@@ -540,14 +539,7 @@ namespace orc {
                                             tags(nullptr),
                                             offsets(nullptr) {
     for(unsigned int i=0; i < type.getSubtypeCount(); ++i) {
-      fieldPrinter.push_back(createColumnPrinter(buffer, type.getSubtype(i))
-                             .release());
-    }
-  }
-
-  UnionColumnPrinter::~UnionColumnPrinter() {
-    for (size_t i = 0; i < fieldPrinter.size(); i++) {
-      delete fieldPrinter[i];
+      fieldPrinter.push_back(createColumnPrinter(buffer, type.getSubtype(i)));
     }
   }
 
@@ -582,15 +574,7 @@ namespace orc {
                                            ): ColumnPrinter(_buffer) {
     for(unsigned int i=0; i < type.getSubtypeCount(); ++i) {
       fieldNames.push_back(type.getFieldName(i));
-      fieldPrinter.push_back(createColumnPrinter(buffer,
-                                                 type.getSubtype(i))
-                             .release());
-    }
-  }
-
-  StructColumnPrinter::~StructColumnPrinter() {
-    for (size_t i = 0; i < fieldPrinter.size(); i++) {
-      delete fieldPrinter[i];
+      fieldPrinter.push_back(createColumnPrinter(buffer, type.getSubtype(i)));
     }
   }
 

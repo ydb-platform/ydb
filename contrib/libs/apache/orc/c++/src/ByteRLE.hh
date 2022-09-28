@@ -55,6 +55,11 @@ namespace orc {
      * @param recorder use the recorder to record current positions
      */
     virtual void recordPosition(PositionRecorder* recorder) const = 0;
+
+    /**
+     * suppress the data and reset to initial state
+     */
+    virtual void suppress() = 0;
   };
 
   class ByteRleDecoder {

@@ -64,9 +64,7 @@ namespace orc {
 
   ReaderOptions::ReaderOptions(ReaderOptions& rhs) {
     // swap privateBits with rhs
-    ReaderOptionsPrivate* l = privateBits.release();
-    privateBits.reset(rhs.privateBits.release());
-    rhs.privateBits.reset(l);
+    privateBits.swap(rhs.privateBits);
   }
 
   ReaderOptions& ReaderOptions::operator=(const ReaderOptions& rhs) {
@@ -130,6 +128,9 @@ namespace orc {
     bool throwOnHive11DecimalOverflow;
     int32_t forcedScaleOnHive11Decimal;
     bool enableLazyDecoding;
+    std::shared_ptr<SearchArgument> sargs;
+    std::string readerTimezone;
+    RowReaderOptions::IdReadIntentMap idReadIntentMap;
 
     RowReaderOptionsPrivate() {
       selection = ColumnSelection_NONE;
@@ -138,6 +139,7 @@ namespace orc {
       throwOnHive11DecimalOverflow = true;
       forcedScaleOnHive11Decimal = 6;
       enableLazyDecoding = false;
+      readerTimezone = "GMT";
     }
   };
 
@@ -155,9 +157,7 @@ namespace orc {
 
   RowReaderOptions::RowReaderOptions(RowReaderOptions& rhs) {
     // swap privateBits with rhs
-    RowReaderOptionsPrivate* l = privateBits.release();
-    privateBits.reset(rhs.privateBits.release());
-    rhs.privateBits.reset(l);
+    privateBits.swap(rhs.privateBits);
   }
 
   RowReaderOptions& RowReaderOptions::operator=(const RowReaderOptions& rhs) {
@@ -175,6 +175,7 @@ namespace orc {
     privateBits->selection = ColumnSelection_FIELD_IDS;
     privateBits->includedColumnIndexes.assign(include.begin(), include.end());
     privateBits->includedColumnNames.clear();
+    privateBits->idReadIntentMap.clear();
     return *this;
   }
 
@@ -182,12 +183,27 @@ namespace orc {
     privateBits->selection = ColumnSelection_NAMES;
     privateBits->includedColumnNames.assign(include.begin(), include.end());
     privateBits->includedColumnIndexes.clear();
+    privateBits->idReadIntentMap.clear();
     return *this;
   }
 
   RowReaderOptions& RowReaderOptions::includeTypes(const std::list<uint64_t>& types) {
     privateBits->selection = ColumnSelection_TYPE_IDS;
     privateBits->includedColumnIndexes.assign(types.begin(), types.end());
+    privateBits->includedColumnNames.clear();
+    privateBits->idReadIntentMap.clear();
+    return *this;
+  }
+
+  RowReaderOptions&
+  RowReaderOptions::includeTypesWithIntents(const IdReadIntentMap& idReadIntentMap) {
+    privateBits->selection = ColumnSelection_TYPE_IDS;
+    privateBits->includedColumnIndexes.clear();
+    privateBits->idReadIntentMap.clear();
+    for (const auto& typeIntentPair : idReadIntentMap) {
+      privateBits->idReadIntentMap[typeIntentPair.first] = typeIntentPair.second;
+      privateBits->includedColumnIndexes.push_back(typeIntentPair.first);
+    }
     privateBits->includedColumnNames.clear();
     return *this;
   }
@@ -252,6 +268,29 @@ namespace orc {
   RowReaderOptions& RowReaderOptions::setEnableLazyDecoding(bool enable) {
     privateBits->enableLazyDecoding = enable;
     return *this;
+  }
+
+  RowReaderOptions& RowReaderOptions::searchArgument(std::unique_ptr<SearchArgument> sargs) {
+    privateBits->sargs = std::move(sargs);
+    return *this;
+  }
+
+  std::shared_ptr<SearchArgument> RowReaderOptions::getSearchArgument() const {
+    return privateBits->sargs;
+  }
+
+  RowReaderOptions& RowReaderOptions::setTimezoneName(const std::string& zoneName) {
+    privateBits->readerTimezone = zoneName;
+    return *this;
+  }
+
+  const std::string& RowReaderOptions::getTimezoneName() const {
+    return privateBits->readerTimezone;
+  }
+
+  const RowReaderOptions::IdReadIntentMap
+  RowReaderOptions::getIdReadIntentMap() const {
+    return privateBits->idReadIntentMap;
   }
 }
 

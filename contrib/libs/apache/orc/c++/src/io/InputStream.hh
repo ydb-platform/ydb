@@ -41,6 +41,7 @@ namespace orc {
   public:
     PositionProvider(const std::list<uint64_t>& positions);
     uint64_t next();
+    uint64_t current();
   };
 
   /**

@@ -305,26 +305,26 @@ namespace orc {
     virtual ~TimestampColumnStatistics();
 
     /**
-     * Check whether column minimum.
+     * Check whether minimum timestamp exists.
      * @return true if has minimum
      */
     virtual bool hasMinimum() const = 0;
 
     /**
-     * Check whether column maximum.
+     * Check whether maximum timestamp exists.
      * @return true if has maximum
      */
     virtual bool hasMaximum() const = 0;
 
     /**
-     * Get the minimum value for the column.
-     * @return minimum value
+     * Get the millisecond of minimum timestamp in UTC.
+     * @return minimum value in millisecond
      */
     virtual int64_t getMinimum() const = 0;
 
     /**
-     * Get the maximum value for the column.
-     * @return maximum value
+     * Get the millisecond of maximum timestamp in UTC.
+     * @return maximum value in millisecond
      */
     virtual int64_t getMaximum() const = 0;
 
@@ -352,7 +352,17 @@ namespace orc {
      */
     virtual int64_t getUpperBound() const = 0;
 
+    /**
+     * Get the last 6 digits of nanosecond of minimum timestamp.
+     * @return last 6 digits of nanosecond of minimum timestamp.
+     */
+    virtual int32_t getMinimumNanos() const = 0;
 
+    /**
+     * Get the last 6 digits of nanosecond of maximum timestamp.
+     * @return last 6 digits of nanosecond of maximum timestamp.
+     */
+    virtual int32_t getMaximumNanos() const = 0;
   };
 
   class Statistics {
@@ -372,6 +382,74 @@ namespace orc {
      * @return the number of columns
      */
     virtual uint32_t getNumberOfColumns() const = 0;
+  };
+
+  /**
+   * Statistics for all of collections such as Map and List.
+   */
+  class CollectionColumnStatistics : public ColumnStatistics {
+  public:
+    virtual ~CollectionColumnStatistics();
+
+    /**
+     * check whether column has minimum number of children
+     * @return true if has minimum children count
+     */
+    virtual bool hasMinimumChildren() const = 0;
+
+    /**
+     * check whether column has maximum number of children
+     * @return true if has maximum children count
+     */
+    virtual bool hasMaximumChildren() const = 0;
+
+    /**
+     * check whether column has total number of children
+     * @return true if has total children count
+     */
+    virtual bool hasTotalChildren() const = 0;
+
+    /**
+     * set hasTotalChildren value
+     * @param newHasTotalChildren hasTotalChildren value
+     */
+    virtual void setHasTotalChildren(bool newHasTotalChildren) = 0;
+
+    /**
+     * Get minimum number of children in the collection.
+     * @return the minimum children count
+     */
+    virtual uint64_t getMinimumChildren() const = 0;
+
+    /**
+     * set new minimum children count
+     * @param min new minimum children count
+     */
+    virtual void setMinimumChildren(uint64_t min) = 0;
+
+    /**
+     * Get maximum number of children in the collection.
+     * @return the maximum children count
+     */
+    virtual uint64_t getMaximumChildren() const = 0;
+
+    /**
+     * set new maximum children count
+     * @param max new maximum children count
+     */
+    virtual void setMaximumChildren(uint64_t max) = 0;
+
+    /**
+     * Get the total number of children in the collection.
+     * @return the total number of children
+     */
+    virtual uint64_t getTotalChildren() const = 0;
+
+    /**
+     * set new total children count
+     * @param newTotalChildrenCount total children count to be set
+     */
+    virtual void setTotalChildren(uint64_t newTotalChildrenCount) = 0;
   };
 
   class StripeStatistics : public Statistics {

@@ -52,6 +52,10 @@ namespace orc {
     return result;
   }
 
+  uint64_t PositionProvider::current() {
+    return *position;
+  }
+
   SeekableInputStream::~SeekableInputStream() {
     // PASS
   }

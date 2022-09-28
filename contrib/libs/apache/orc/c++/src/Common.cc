@@ -131,8 +131,11 @@ namespace orc {
   }
 
   std::string FileVersion::toString() const {
+    if (majorVersion == 1 && minorVersion == 9999) {
+      return "UNSTABLE-PRE-2.0";
+    }
     std::stringstream ss;
-    ss << getMajor() << '.' << getMinor();
+    ss << majorVersion << '.' << minorVersion;
     return ss.str();
   }
   
@@ -143,6 +146,19 @@ namespace orc {
   
   const FileVersion& FileVersion::v_0_12(){
     static FileVersion version(0,12);
+    return version;
+  }
+
+  /**
+   * Do not use this format except for testing. It will not be compatible
+   * with other versions of the software. While we iterate on the ORC 2.0
+   * format, we will make incompatible format changes under this version
+   * without providing any forward or backward compatibility.
+   *
+   * When 2.0 is released, this version identifier will be completely removed.
+  */
+  const FileVersion& FileVersion::UNSTABLE_PRE_2_0() {
+    static FileVersion version(1, 9999);
     return version;
   }
 }

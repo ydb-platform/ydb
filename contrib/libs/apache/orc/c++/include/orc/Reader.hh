@@ -23,6 +23,7 @@
 #include "orc/Common.hh"
 #include "orc/orc-config.hh"
 #include "orc/Statistics.hh"
+#include "orc/sargs/SearchArgument.hh"
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
 
@@ -149,6 +150,24 @@ namespace orc {
     RowReaderOptions& includeTypes(const std::list<uint64_t>& types);
 
     /**
+     * A map type of <typeId, ReadIntent>.
+     */
+    typedef std::map<uint64_t, ReadIntent> IdReadIntentMap;
+
+    /**
+     * Selects which type ids to read and specific ReadIntents for each
+     * type id. The ancestor types are automatically selected, but the children
+     * are not.
+     *
+     * This option clears any previous setting of the selected columns or
+     * types.
+     * @param idReadIntentMap a map of IdReadIntentMap.
+     * @return this
+     */
+    RowReaderOptions&
+    includeTypesWithIntents(const IdReadIntentMap& idReadIntentMap);
+
+    /**
      * Set the section of the file to process.
      * @param offset the starting byte offset
      * @param length the number of bytes to read
@@ -190,6 +209,11 @@ namespace orc {
      * reference to corresponding dictionary.
      */
     RowReaderOptions& setEnableLazyDecoding(bool enable);
+
+    /**
+     * Set search argument for predicate push down
+     */
+    RowReaderOptions& searchArgument(std::unique_ptr<SearchArgument> sargs);
 
     /**
      * Should enable encoding block mode
@@ -245,6 +269,26 @@ namespace orc {
      * What scale should all Hive 0.11 decimals be normalized to?
      */
     int32_t getForcedScaleOnHive11Decimal() const;
+
+    /**
+     * Get search argument for predicate push down
+     */
+    std::shared_ptr<SearchArgument> getSearchArgument() const;
+
+    /**
+     * Set desired timezone to return data of timestamp type
+     */
+    RowReaderOptions& setTimezoneName(const std::string& zoneName);
+
+    /**
+     * Get desired timezone to return data of timestamp type
+     */
+    const std::string& getTimezoneName() const;
+
+    /**
+     * Get the IdReadIntentMap map that was supplied by client.
+     */
+    const IdReadIntentMap getIdReadIntentMap() const;
   };
 
 

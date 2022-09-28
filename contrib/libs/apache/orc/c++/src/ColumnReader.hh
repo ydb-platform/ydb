@@ -69,6 +69,11 @@ namespace orc {
     virtual const Timezone& getWriterTimezone() const = 0;
 
     /**
+     * Get the reader's timezone, so that we can convert their dates correctly.
+     */
+    virtual const Timezone& getReaderTimezone() const = 0;
+
+    /**
      * Get the error stream.
      * @return a pointer to the stream that should get error messages
      */
@@ -86,6 +91,12 @@ namespace orc {
      * @return the number of scale digits
      */
     virtual int32_t getForcedScaleOnHive11Decimal() const = 0;
+
+    /**
+     * Whether decimals that have precision <=18 are encoded as fixed scale and values
+     * encoded in RLE.
+     */
+    virtual bool isDecimalAsLong() const = 0;
   };
 
   /**

@@ -217,6 +217,24 @@ namespace orc {
      * Get version of BloomFilter
      */
     BloomFilterVersion getBloomFilterVersion() const;
+
+    /**
+     * Get writer timezone
+     * @return writer timezone
+     */
+    const Timezone& getTimezone() const;
+
+    /**
+     * Get writer timezone name
+     * @return writer timezone name
+     */
+    const std::string& getTimezoneName() const;
+
+    /**
+     * Set writer timezone
+     * @param zone writer timezone name
+     */
+    WriterOptions& setTimezoneName(const std::string& zone);
   };
 
   class Writer {

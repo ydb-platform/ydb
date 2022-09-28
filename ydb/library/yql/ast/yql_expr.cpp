@@ -1208,7 +1208,6 @@ namespace {
         }
 
         if (!ctx.ModuleResolver) {
-            ctx.AddInfo(*name, "Module resolver isn't available");
             return true;
         }
 

@@ -97,7 +97,6 @@ class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
     TActorId Pipe;
 
     TInstant StartTs; // actor started to send requests
-    size_t Oks = 0;
 
     TVector<TOwnedCellVec> Points;
     ui64 ReadCount = 0;
@@ -129,8 +128,9 @@ public:
         Become(&TReadIteratorPoints::StateFunc);
 
         auto rng = std::default_random_engine {};
-        std::shuffle(Points.begin(), Points.end(), rng);
+        rng.seed(SelfId().Hash());
 
+        std::shuffle(Points.begin(), Points.end(), rng);
         Points.resize(ReadCount);
 
         Connect(ctx);
@@ -194,14 +194,16 @@ private:
             }
 
             return StopWithError(ctx, ss.Str());
-            return;
         }
 
         if (Format != NKikimrTxDataShard::CELLVEC) {
             return StopWithError(ctx, "Unsupported format");
         }
 
-        Oks += msg->GetRowsCount();
+        if (msg->GetRowsCount() != 1) {
+            return StopWithError(ctx, "Empty reply with data");
+        }
+
         RequestTimes.push_back(TDuration::Seconds(RequestTimer.Passed()));
 
         if (CurrentPoint < Points.size()) {

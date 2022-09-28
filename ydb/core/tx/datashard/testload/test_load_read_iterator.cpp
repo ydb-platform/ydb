@@ -609,13 +609,13 @@ private:
 
         switch (State) {
         case EState::Upsert: {
-            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "upsert actor# " << ev->Sender
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "upsert actor# " << ev->Sender
                 << " finished: " << msg->Report->ToString());
             State = EState::FullScan;
             return Run(ctx);
         }
         case EState::FullScan: {
-            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "fullscan actor# " << ev->Sender
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "fullscan actor# " << ev->Sender
                 << " with chunkSize# " << ChunkSizes[ChunkIndex]
                 << " finished: " << msg->Report->ToString());
             Errors += msg->Report->OperationsError;
@@ -642,7 +642,7 @@ private:
             return StopWithError(ctx, TStringBuilder() << "TEvTestLoadFinished while in " << State);
         case EState::ReadHeadPoints: {
             Y_VERIFY(Inflight == 0);
-            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "headread with inflight# " << Inflights[InflightIndex]
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "headread with inflight# " << Inflights[InflightIndex]
                 << " finished: " << msg->Report->ToString());
             Errors += msg->Report->OperationsError;
             Oks += msg->Report->OperationsOK;
@@ -733,7 +733,7 @@ private:
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(0);
             response->Report = TEvDataShardLoad::TLoadReport();
             response->Report->Duration = delta;
-            response->Report->OperationsOK = Inflights[InflightIndex] * Config.GetRowCount();
+            response->Report->OperationsOK = Inflights[InflightIndex] * ReadCount;
             response->Report->OperationsError = 0;
 
             TStringStream ss;
@@ -795,7 +795,7 @@ private:
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
             << " stopped with error: " << reason);
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));

@@ -1,4 +1,5 @@
 #include <ydb/library/yql/sql/pg_sql.h>
+#include <ydb/library/yql/sql/settings/partitioning.h>
 #include <ydb/library/yql/parser/pg_wrapper/parser.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
@@ -1229,6 +1230,14 @@ public:
             return { view->Source, alias, colnames.empty() ? view->ColNames : colnames, false };
         }
 
+        if (!StrCompare(value->schemaname, "bindings")) {
+            auto s = BuildBindingSource(value);
+            if (!s) {
+                return {};
+            }
+            return { s, alias, colnames, true };
+        }
+
         auto p = Settings.ClusterMapping.FindPtr(value->schemaname);
         if (!p) {
             AddError(TStringBuilder() << "Unknown cluster: " << value->schemaname);
@@ -1240,6 +1249,106 @@ public:
             QL(QA("table"), L(A("String"), QAX(TablePathPrefix + value->relname)))),
             L(A("Void")),
             QL()), alias, colnames, true };
+    }
+
+    TAstNode* BuildBindingSource(const RangeVar* value) {
+        const TString binding = value->relname;
+        auto pit = Settings.PrivateBindings.find(binding);
+        auto sit = Settings.ScopedBindings.find(binding);
+
+        if (pit == Settings.PrivateBindings.end() && sit == Settings.ScopedBindings.end()) {
+            AddError(TStringBuilder() << "Table binding `" << binding << "` is not defined");
+            return nullptr;
+        }
+
+        const auto& bindSettings = (pit != Settings.PrivateBindings.end()) ? pit->second : sit->second;
+
+        // ordered map ensures AST stability
+        std::map<TString, TString> kvs(bindSettings.Settings.begin(), bindSettings.Settings.end());
+        auto pullSettingOrFail = [&](const TString& name, TString& value) -> bool {
+            auto it = kvs.find(name);
+            if (it == kvs.end()) {
+                AddError(TStringBuilder() << name << " is not found for " << binding);
+                return false;
+            }
+            value = it->second;
+            kvs.erase(it);
+            return true;
+        };
+
+        TString cluster;
+        TString path;
+        TString format;
+
+        if (!pullSettingOrFail("cluster", cluster) ||
+            !pullSettingOrFail("path", path) ||
+            !pullSettingOrFail("format", format)) {
+            return nullptr;
+        }
+
+        TVector<TAstNode*> hints;
+        if (auto it = kvs.find("schema"); it != kvs.end()) {
+            auto schema = QA(it->second);
+
+            auto type = L(A("SqlTypeFromYson"), schema);
+            auto columns = L(A("SqlColumnOrderFromYson"), schema);
+            hints.emplace_back(QL(QA("userschema"), type, columns));
+            kvs.erase(it);
+        }
+
+        if (auto it = kvs.find("partitioned_by"); it != kvs.end()) {
+            TVector<TString> columns;
+            if (const TString& error = NSQLTranslation::ParsePartitionedByBinding(it->first, it->second, columns)) {
+                AddError(error);
+            }
+            TVector<TAstNode*> hintValues;
+            hintValues.push_back(QA("partitionedby"));
+            for (auto& column : columns) {
+                hintValues.push_back(QA(column));
+            }
+            hints.emplace_back(QVL(hintValues.data(), hintValues.size()));
+            kvs.erase(it);
+        }
+
+        // put format back to hints
+        kvs["format"] = format;
+
+        for (auto& [key, value] : kvs) {
+            if (!key) {
+                AddError(TStringBuilder() << "Hint key should not be empty");
+                return nullptr;
+            }
+
+            hints.emplace_back(QL(QA(key), QA(value)));
+        }
+
+        auto p = Settings.ClusterMapping.FindPtr(cluster);
+        if (!p) {
+            AddError(TStringBuilder() << "Unknown cluster: " << cluster);
+            return nullptr;
+        }
+
+        auto source = L(A("DataSource"), QAX(*p), QAX(cluster));
+        return L(
+                  A("Read!"),
+                  A("world"),
+                  source,
+                  L(
+                    A("MrTableConcat"),
+                    L(
+                      A("Key"),
+                      QL(
+                        QA("table"),
+                        L(
+                          A("String"),
+                          QAX(path)
+                        )
+                      )
+                    )
+                  ),
+                  L(A("Void")),
+                  QVL(hints.data(), hints.size())
+                );
     }
 
     TFromDesc ParseRangeFunction(const RangeFunction* value) {

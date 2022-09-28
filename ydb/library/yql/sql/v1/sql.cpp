@@ -19,6 +19,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/sql/settings/partitioning.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/core/yql_atom_enums.h>
 
@@ -885,7 +886,6 @@ private:
 
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service, TDeferredAtom& cluster, bool& isBinding);
     bool ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints);
-    bool ParsePartitionedByBinding(const TString& name, const TString& value, TVector<TString>& columns);
     bool StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value);
 protected:
     NSQLTranslation::ESqlMode Mode;
@@ -1526,7 +1526,8 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
 
     if (auto it = kvs.find("partitioned_by"); it != kvs.end()) {
         TVector<TString> columns;
-        if (!ParsePartitionedByBinding(it->first, it->second, columns)) {
+        if (const auto& error = NSQLTranslation::ParsePartitionedByBinding(it->first, it->second, columns)) {
+            Ctx.Error() << error;
             return false;
         }
         TVector<TNodePtr> hintValue;
@@ -1549,38 +1550,6 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
 
     const TString view = "";
     tr.Keys = BuildTableKey(Ctx.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx.Pos(), path), view);
-
-    return true;
-}
-
-bool TSqlTranslation::ParsePartitionedByBinding(const TString& name, const TString& value, TVector<TString>& columns) {
-    using namespace NJson;
-    TJsonValue json;
-    bool throwOnError = false;
-    if (!ReadJsonTree(value, &json, throwOnError)) {
-        Ctx.Error() << "Binding setting " << name << " is not a valid JSON";
-        return false;
-    }
-
-    const TJsonValue::TArray* arr = nullptr;
-    if (!json.GetArrayPointer(&arr)) {
-        Ctx.Error() << "Binding setting " << name << ": expecting array";
-        return false;
-    }
-
-    if (arr->empty()) {
-        Ctx.Error() << "Binding setting " << name << ": expecting non-empty array";
-        return false;
-    }
-
-    for (auto& item : *arr) {
-        TString str;
-        if (!item.GetString(&str)) {
-            Ctx.Error() << "Binding setting " << name << ": expecting non-empty array of strings";
-            return false;
-        }
-        columns.push_back(std::move(str));
-    }
 
     return true;
 }

@@ -18,9 +18,9 @@ target_link_libraries(yql-sql-pg PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-yql-ast
+  yql-parser-pg_catalog
   yql-parser-pg_wrapper
   yql-sql-settings
-  yql-parser-pg_catalog
 )
 target_sources(yql-sql-pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql.cpp

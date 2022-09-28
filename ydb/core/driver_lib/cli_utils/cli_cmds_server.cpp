@@ -500,7 +500,7 @@ protected:
             AppConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(AppConfig.GetGRpcConfig().GetKey());
         }
 
-        if (config.ParseResult->Has("grpc-key")) {
+        if (!PathToGrpcPrivateKeyFile.Empty()) {
             AppConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(PathToGrpcPrivateKeyFile);
         }
 
@@ -508,7 +508,7 @@ protected:
             AppConfig.MutableGRpcConfig()->SetPathToCaFile(AppConfig.GetGRpcConfig().GetCA());
         }
 
-        if (config.ParseResult->Has("grpc-ca")) {
+        if (!PathToGrpcCaFile.Empty()) {
             AppConfig.MutableGRpcConfig()->SetPathToCaFile(PathToGrpcCaFile);
         }
 

@@ -1820,7 +1820,11 @@ bool TPipeline::WaitCompletion(const TOperation::TPtr& op) const {
     if(!op->Result() || op->Result()->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE)
         return true;
 
-    return CommittingOps.HasOpsBelow(op->GetMvccSnapshot());
+    return HasCommittingOpsBelow(op->GetMvccSnapshot());
+}
+
+bool TPipeline::HasCommittingOpsBelow(TRowVersion upperBound) const {
+    return CommittingOps.HasOpsBelow(upperBound);
 }
 
 bool TPipeline::PromoteCompleteEdgeUpTo(const TRowVersion& version, TTransactionContext& txc) {

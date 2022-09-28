@@ -927,7 +927,14 @@ public:
             hadWrites |= res.HadWrites;
         }
 
-        return hadWrites ? EExecutionStatus::DelayCompleteNoMoreRestarts : EExecutionStatus::DelayComplete;
+        if (hadWrites)
+            return EExecutionStatus::DelayCompleteNoMoreRestarts;
+
+        if (Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion))
+            return EExecutionStatus::DelayComplete;
+
+        Complete(ctx);
+        return EExecutionStatus::Executed;
     }
 
     void CheckRequestAndInit(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -1129,7 +1136,7 @@ public:
         }
     }
 
-    void SendResult(const TActorContext& ctx) override {
+    void SendResult(const TActorContext& ctx) {
         if (ResultSent)
             return;
         ResultSent = true;

@@ -349,6 +349,7 @@ public:
     void AddCommittingOp(const TOperation::TPtr& op);
     void RemoveCommittingOp(const TOperation::TPtr& op);
     bool WaitCompletion(const TOperation::TPtr& op) const;
+    bool HasCommittingOpsBelow(TRowVersion upperBound) const;
 
     /**
      * Promotes the mvcc complete edge to the last distributed transaction less than version

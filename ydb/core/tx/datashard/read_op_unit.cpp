@@ -25,8 +25,6 @@ public:
         if (status == EExecutionStatus::Restart || status == EExecutionStatus::Continue)
             return status;
 
-        // TODO: check if we can send result right here to decrease latency
-
         // note that op has set locks itself, no ApplyLocks() required
         DataShard.SubscribeNewLocks(ctx);
 

@@ -533,7 +533,7 @@ void TCommandCreateProfile::Parse(TConfig& config) {
 int TCommandCreateProfile::Run(TConfig& config) {
 //    Y_UNUSED(config);
     TString profileName = ProfileName;
-    Interactive = !AnyProfileOptionInCommandLine(config) | !profileName;
+    Interactive = !AnyProfileOptionInCommandLine(config) || !profileName;
     if (Interactive) {
         Cout << "Welcome! This command will take you through configuration profile creation process." << Endl;
     }

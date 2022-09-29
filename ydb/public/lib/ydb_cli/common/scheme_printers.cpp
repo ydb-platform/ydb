@@ -79,8 +79,17 @@ void TDefaultSchemePrinter::PrintDirectory(
         Cout << (relativePath ? relativePath : "./") << ":" << Endl;
     }
     if (children.size()) {
-        TAdaptiveTabbedTable table(children);
-        Cout << table;
+        if (Settings.FromNewLine) {
+            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+            for (const auto& child : children) {
+                PrintSchemeEntry(Cout, child, colors);
+                Cout << Endl;
+            }
+        }
+        else {
+            TAdaptiveTabbedTable table(children);
+            Cout << table;
+        }
     }
 }
 

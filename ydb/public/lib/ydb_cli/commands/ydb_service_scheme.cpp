@@ -708,6 +708,8 @@ void TCommandList::Config(TConfig& config) {
         .StoreTrue(&AdvancedMode);
     config.Opts->AddCharOption('R', "List subdirectories recursively")
         .StoreTrue(&Recursive);
+    config.Opts->AddCharOption('1', "List one object per line")
+        .StoreTrue(&FromNewLine);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::Json });
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<path>", "Path to list");
@@ -716,6 +718,10 @@ void TCommandList::Config(TConfig& config) {
 void TCommandList::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParsePath(config, 0, true);
+    if (AdvancedMode && FromNewLine) {
+        // TODO: add "consider using --format shell"
+        throw TMisuseException() << "Options -1 and -l are incompatible";
+    }
 }
 
 int TCommandList::Run(TConfig& config) {
@@ -723,6 +729,7 @@ int TCommandList::Run(TConfig& config) {
     ISchemePrinter::TSettings settings = {
         Path,
         Recursive,
+        FromNewLine,
         FillSettings(NScheme::TListDirectorySettings()),
         FillSettings(NTable::TDescribeTableSettings().WithTableStatistics(true))
     };

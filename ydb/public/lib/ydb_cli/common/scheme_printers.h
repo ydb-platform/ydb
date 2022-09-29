@@ -13,6 +13,7 @@ public:
     struct TSettings {
         TString Path;
         bool Recursive;
+        bool FromNewLine;
         NScheme::TListDirectorySettings ListDirectorySettings;
         NTable::TDescribeTableSettings DescribeTableSettings;
     };

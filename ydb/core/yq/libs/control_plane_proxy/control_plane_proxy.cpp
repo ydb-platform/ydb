@@ -49,7 +49,33 @@ using namespace NYdb::NTable;
 
 LWTRACE_USING(YQ_CONTROL_PLANE_PROXY_PROVIDER);
 
-struct TRequestCounters: public virtual TThrRefBase {
+struct TRequestScopeCounters: public virtual TThrRefBase {
+    const TString Name;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Error;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Timeout;
+
+    explicit TRequestScopeCounters(const TString& name)
+        : Name(name)
+    { }
+
+    void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
+        ::NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request_scope", Name);
+        InFly = subgroup->GetCounter("InFly", false);
+        Ok = subgroup->GetCounter("Ok", true);
+        Error = subgroup->GetCounter("Error", true);
+        Timeout = subgroup->GetCounter("Timeout", true);
+    }
+
+private:
+    static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
+        return ::NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+    }
+};
+
+struct TRequestCommonCounters: public virtual TThrRefBase {
     const TString Name;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
@@ -58,12 +84,12 @@ struct TRequestCounters: public virtual TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr Timeout;
     ::NMonitoring::THistogramPtr LatencyMs;
 
-    explicit TRequestCounters(const TString& name)
+    explicit TRequestCommonCounters(const TString& name)
         : Name(name)
     { }
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
-        ::NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request", Name);
+        ::NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request_common", Name);
         InFly = subgroup->GetCounter("InFly", false);
         Ok = subgroup->GetCounter("Ok", true);
         Error = subgroup->GetCounter("Error", true);
@@ -77,7 +103,53 @@ private:
     }
 };
 
-using TRequestCountersPtr = TIntrusivePtr<TRequestCounters>;
+using TRequestScopeCountersPtr = TIntrusivePtr<TRequestScopeCounters>;
+using TRequestCommonCountersPtr = TIntrusivePtr<TRequestCommonCounters>;
+
+struct TRequestCounters {
+    TRequestScopeCountersPtr Scope;
+    TRequestCommonCountersPtr Common;
+
+    void IncInFly() {
+        Scope->InFly->Inc();
+        Common->InFly->Inc();
+    }
+
+    void DecInFly() {
+        Scope->InFly->Inc();
+        Common->InFly->Inc();
+    }
+
+    void IncOk() {
+        Scope->Ok->Inc();
+        Common->Ok->Inc();
+    }
+
+    void DecOk() {
+        Scope->Ok->Inc();
+        Common->Ok->Inc();
+    }
+
+    void IncError() {
+        Scope->Error->Inc();
+        Common->Error->Inc();
+    }
+
+    void DecError() {
+        Scope->Error->Inc();
+        Common->Error->Inc();
+    }
+
+    void IncTimeout() {
+        Scope->Timeout->Inc();
+        Common->Timeout->Inc();
+    }
+
+    void DecTimeout() {
+        Scope->Timeout->Inc();
+        Common->Timeout->Inc();
+    }
+};
 
 template<class TEventRequest, class TResponseProxy>
 class TGetQuotaActor : public NActors::TActorBootstrapped<TGetQuotaActor<TEventRequest, TResponseProxy>> {
@@ -135,7 +207,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
 
     NConfig::TControlPlaneProxyConfig Config;
     TActorId Sender;
-    TRequestCountersPtr Counters;
+    TRequestCommonCountersPtr Counters;
     TString FolderId;
     TString Token;
     std::function<void(const TDuration&, bool, bool)> Probe;
@@ -145,7 +217,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
     bool GetQuotas;
 
 public:
-    TResolveFolderActor(const TRequestCountersPtr& counters,
+    TResolveFolderActor(const TRequestCommonCountersPtr& counters,
                         TActorId sender, const NConfig::TControlPlaneProxyConfig& config,
                         const TString& folderId, const TString& token,
                         const std::function<void(const TDuration&, bool, bool)>& probe,
@@ -245,7 +317,7 @@ class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestP
     TActorId Sender;
     ui32 Cookie;
     TActorId ServiceId;
-    TRequestCountersPtr Counters;
+    TRequestCounters Counters;
     TInstant StartTime;
     std::function<void(const TDuration&, bool, bool)> Probe;
     TPermissions Permissions;
@@ -259,7 +331,7 @@ public:
                            TActorId sender, ui32 cookie,
                            const TString& scope, const TString& folderId, TRequestProto&& requestProto,
                            TString&& user, TString&& token, const TActorId& serviceId,
-                           const TRequestCountersPtr& counters,
+                           const TRequestCounters& counters,
                            const std::function<void(const TDuration&, bool, bool)>& probe,
                            TPermissions permissions,
                            const TString& cloudId, const TQuotaMap& quotas = {})
@@ -279,7 +351,7 @@ public:
         , CloudId(cloudId)
         , Quotas(quotas)
     {
-        Counters->InFly->Inc();
+        Counters.IncInFly();
         FillDefaultParameters(Config);
     }
 
@@ -301,8 +373,8 @@ public:
         NYql::TIssues issues;
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Request timeout. Try repeating the request later");
         issues.AddIssue(issue);
-        Counters->Error->Inc();
-        Counters->Timeout->Inc();
+        Counters.IncError();
+        Counters.IncTimeout();
         const TDuration delta = TInstant::Now() - StartTime;
         Probe(delta, false, true);
         Send(Sender, new TResponseProxy(issues), 0, Cookie);
@@ -318,11 +390,11 @@ public:
     template<typename T>
     void ProcessResponse(const TDuration& delta, const T& response) {
         if (response.Issues) {
-            Counters->Error->Inc();
+            Counters.IncError();
             Probe(delta, false, false);
             Send(Sender, new TResponseProxy(response.Issues), 0, Cookie);
         } else {
-            Counters->Ok->Inc();
+            Counters.IncOk();
             Probe(delta, true, false);
             Send(Sender, new TResponseProxy(response.Result), 0, Cookie);
         }
@@ -332,11 +404,11 @@ public:
     template<typename T> requires requires (T t) { t.AuditDetails; }
     void ProcessResponse(const TDuration& delta, const T& response) {
         if (response.Issues) {
-            Counters->Error->Inc();
+            Counters.IncError();
             Probe(delta, false, false);
             Send(Sender, new TResponseProxy(response.Issues), 0, Cookie);
         } else {
-            Counters->Ok->Inc();
+            Counters.IncOk();
             Probe(delta, true, false);
             Send(Sender, new TResponseProxy(response.Result, response.AuditDetails), 0, Cookie);
         }
@@ -344,8 +416,8 @@ public:
     }
 
     virtual ~TRequestActor() {
-        Counters->InFly->Dec();
-        Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
+        Counters.DecInFly();
+        Counters.Common->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
     }
 
     TDuration GetDuration(const TString& value, const TDuration& defaultValue)
@@ -391,6 +463,27 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
 
     enum ERequestTypeCommon {
         RTC_RESOLVE_FOLDER,
+        RTC_CREATE_QUERY,
+        RTC_LIST_QUERIES,
+        RTC_DESCRIBE_QUERY,
+        RTC_GET_QUERY_STATUS,
+        RTC_MODIFY_QUERY,
+        RTC_DELETE_QUERY,
+        RTC_CONTROL_QUERY,
+        RTC_GET_RESULT_DATA,
+        RTC_LIST_JOBS,
+        RTC_DESCRIBE_JOB,
+        RTC_CREATE_CONNECTION,
+        RTC_LIST_CONNECTIONS,
+        RTC_DESCRIBE_CONNECTION,
+        RTC_MODIFY_CONNECTION,
+        RTC_DELETE_CONNECTION,
+        RTC_TEST_CONNECTION,
+        RTC_CREATE_BINDING,
+        RTC_LIST_BINDINGS,
+        RTC_DESCRIBE_BINDING,
+        RTC_MODIFY_BINDING,
+        RTC_DELETE_BINDING,
         RTC_MAX,
     };
 
@@ -404,11 +497,32 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             }
         };
 
-        using TScopeCounters = std::array<TRequestCountersPtr, RTS_MAX>;
+        using TScopeCounters = std::array<TRequestScopeCountersPtr, RTS_MAX>;
         using TScopeCountersPtr = std::shared_ptr<TScopeCounters>;
 
-        std::array<TRequestCountersPtr, RTC_MAX> CommonRequests = CreateArray<RTC_MAX, TRequestCountersPtr>({
-            { MakeIntrusive<TRequestCounters>("ResolveFolder") },
+        std::array<TRequestCommonCountersPtr, RTC_MAX> CommonRequests = CreateArray<RTC_MAX, TRequestCommonCountersPtr>({
+            { MakeIntrusive<TRequestCommonCounters>("ResolveFolder") },
+            { MakeIntrusive<TRequestCommonCounters>("CreateQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("ListQueries") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("GetQueryStatus") },
+            { MakeIntrusive<TRequestCommonCounters>("ModifyQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("ControlQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("GetResultData") },
+            { MakeIntrusive<TRequestCommonCounters>("ListJobs") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeJob") },
+            { MakeIntrusive<TRequestCommonCounters>("CreateConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("ListConnections") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("ModifyConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("TestConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("CreateBinding") },
+            { MakeIntrusive<TRequestCommonCounters>("ListBindings") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeBinding") },
+            { MakeIntrusive<TRequestCommonCounters>("ModifyBinding") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteBinding") },
         });
 
         TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
@@ -423,39 +537,43 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             }
         }
 
-        TRequestCountersPtr GetCommonCounters(ERequestTypeCommon type) {
+        TRequestCounters GetCounters(const TString& cloudId, const TString& scope, ERequestTypeScope scopeType, ERequestTypeCommon commonType) {
+            return {GetScopeCounters(cloudId, scope, scopeType), GetCommonCounters(commonType)};
+        }
+
+        TRequestCommonCountersPtr GetCommonCounters(ERequestTypeCommon type) {
             return CommonRequests[type];
         }
 
-        TRequestCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
+        TRequestScopeCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
             TMetricsScope key{cloudId, scope};
             auto it = ScopeCounters.find(key);
             if (it != ScopeCounters.end()) {
                 return (*it->second)[type];
             }
 
-            auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestCountersPtr>({
-                { MakeIntrusive<TRequestCounters>("CreateQuery") },
-                { MakeIntrusive<TRequestCounters>("ListQueries") },
-                { MakeIntrusive<TRequestCounters>("DescribeQuery") },
-                { MakeIntrusive<TRequestCounters>("GetQueryStatus") },
-                { MakeIntrusive<TRequestCounters>("ModifyQuery") },
-                { MakeIntrusive<TRequestCounters>("DeleteQuery") },
-                { MakeIntrusive<TRequestCounters>("ControlQuery") },
-                { MakeIntrusive<TRequestCounters>("GetResultData") },
-                { MakeIntrusive<TRequestCounters>("ListJobs") },
-                { MakeIntrusive<TRequestCounters>("DescribeJob") },
-                { MakeIntrusive<TRequestCounters>("CreateConnection") },
-                { MakeIntrusive<TRequestCounters>("ListConnections") },
-                { MakeIntrusive<TRequestCounters>("DescribeConnection") },
-                { MakeIntrusive<TRequestCounters>("ModifyConnection") },
-                { MakeIntrusive<TRequestCounters>("DeleteConnection") },
-                { MakeIntrusive<TRequestCounters>("TestConnection") },
-                { MakeIntrusive<TRequestCounters>("CreateBinding") },
-                { MakeIntrusive<TRequestCounters>("ListBindings") },
-                { MakeIntrusive<TRequestCounters>("DescribeBinding") },
-                { MakeIntrusive<TRequestCounters>("ModifyBinding") },
-                { MakeIntrusive<TRequestCounters>("DeleteBinding") },
+            auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestScopeCountersPtr>({
+                { MakeIntrusive<TRequestScopeCounters>("CreateQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("ListQueries") },
+                { MakeIntrusive<TRequestScopeCounters>("DescribeQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("GetQueryStatus") },
+                { MakeIntrusive<TRequestScopeCounters>("ModifyQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("DeleteQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("ControlQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("GetResultData") },
+                { MakeIntrusive<TRequestScopeCounters>("ListJobs") },
+                { MakeIntrusive<TRequestScopeCounters>("DescribeJob") },
+                { MakeIntrusive<TRequestScopeCounters>("CreateConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("ListConnections") },
+                { MakeIntrusive<TRequestScopeCounters>("DescribeConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("ModifyConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("DeleteConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("TestConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("CreateBinding") },
+                { MakeIntrusive<TRequestScopeCounters>("ListBindings") },
+                { MakeIntrusive<TRequestScopeCounters>("DescribeBinding") },
+                { MakeIntrusive<TRequestScopeCounters>("ModifyBinding") },
+                { MakeIntrusive<TRequestScopeCounters>("DeleteBinding") },
             }));
 
             auto scopeCounters = Counters
@@ -593,14 +711,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_QUERY);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_QUERY, RTC_CREATE_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.create@as"});
         if (issues) {
             CPS_LOG_E("CreateQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateQueryResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -649,14 +767,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_QUERIES);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_QUERIES, RTC_LIST_QUERIES);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.get@as"});
         if (issues) {
             CPS_LOG_E("ListQueriesRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListQueriesResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -705,14 +823,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_QUERY);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_QUERY, RTC_DESCRIBE_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.get@as"});
         if (issues) {
             CPS_LOG_E("DescribeQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeQueryResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -762,14 +880,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_GET_QUERY_STATUS);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_GET_QUERY_STATUS, RTC_GET_QUERY_STATUS);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.getStatus@as"});
         if (issues) {
             CPS_LOG_E("GetQueryStatusRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvGetQueryStatusResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -818,14 +936,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_MODIFY_QUERY);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_QUERY, RTC_MODIFY_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.update@as"});
         if (issues) {
             CPS_LOG_E("ModifyQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyQueryResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -877,14 +995,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DELETE_QUERY);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_QUERY, RTC_DELETE_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.delete@as"});
         if (issues) {
             CPS_LOG_E("DeleteQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteQueryResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -933,14 +1051,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CONTROL_QUERY);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CONTROL_QUERY, RTC_CONTROL_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.control@as"});
         if (issues) {
             CPS_LOG_E("ControlQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvControlQueryResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -992,14 +1110,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_GET_RESULT_DATA);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_GET_RESULT_DATA, RTC_GET_RESULT_DATA);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.getData@as"});
         if (issues) {
             CPS_LOG_E("GetResultDataRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvGetResultDataResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1048,14 +1166,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_JOBS);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_JOBS, RTC_LIST_JOBS);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.jobs.get@as"});
         if (issues) {
             CPS_LOG_E("ListJobsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListJobsResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1104,14 +1222,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_JOB);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_JOB, RTC_DESCRIBE_JOB);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.jobs.get@as"});
         if (issues) {
             CPS_LOG_E("DescribeJobRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeJobResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1159,7 +1277,7 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_CONNECTION);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_CONNECTION, RTC_CREATE_CONNECTION);
         TVector<TString> requiredPermissions = {"yq.connections.create@as"};
         if (ExtractServiceAccountId(request)) {
             requiredPermissions.push_back("iam.serviceAccounts.use@as");
@@ -1169,9 +1287,9 @@ private:
         if (issues) {
             CPS_LOG_E("CreateConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateConnectionResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1217,14 +1335,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_CONNECTIONS);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_CONNECTIONS, RTC_LIST_CONNECTIONS);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.connections.get@as"});
         if (issues) {
             CPS_LOG_E("ListConnectionsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListConnectionsResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1273,14 +1391,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_CONNECTION);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_CONNECTION, RTC_DESCRIBE_CONNECTION);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.connections.get@as"});
         if (issues) {
             CPS_LOG_E("DescribeConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeConnectionResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1329,7 +1447,7 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_MODIFY_CONNECTION);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_CONNECTION, RTC_MODIFY_CONNECTION);
         TVector<TString> requiredPermissions = {"yq.connections.update@as"};
         if (ExtractServiceAccountId(request)) {
             requiredPermissions.push_back("iam.serviceAccounts.use@as");
@@ -1339,9 +1457,9 @@ private:
         if (issues) {
             CPS_LOG_E("ModifyConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyConnectionResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1390,14 +1508,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DELETE_CONNECTION);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_CONNECTION, RTC_DELETE_CONNECTION);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.connections.delete@as"});
         if (issues) {
             CPS_LOG_E("DeleteConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteConnectionResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1445,7 +1563,7 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_TEST_CONNECTION);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_TEST_CONNECTION, RTC_TEST_CONNECTION);
         TVector<TString> requiredPermissions = {"yq.connections.create@as"};
         if (ExtractServiceAccountId(request)) {
             requiredPermissions.push_back("iam.serviceAccounts.use@as");
@@ -1455,9 +1573,9 @@ private:
         if (issues) {
             CPS_LOG_E("TestConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvTestConnectionResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1499,14 +1617,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_BINDING);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_BINDING, RTC_CREATE_BINDING);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.create@as"});
         if (issues) {
             CPS_LOG_E("CreateBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateBindingResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1552,14 +1670,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_BINDINGS);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_BINDINGS, RTC_LIST_BINDINGS);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.get@as"});
         if (issues) {
             CPS_LOG_E("ListBindingsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListBindingsResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1608,14 +1726,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_BINDING);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_BINDING, RTC_DESCRIBE_BINDING);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.get@as"});
         if (issues) {
             CPS_LOG_E("DescribeBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeBindingResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1664,14 +1782,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_MODIFY_BINDING);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_BINDING, RTC_MODIFY_BINDING);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.update@as"});
         if (issues) {
             CPS_LOG_E("ModifyBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyBindingResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }
@@ -1720,14 +1838,14 @@ private:
             return;
         }
 
-        TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DELETE_BINDING);
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_BINDING, RTC_DELETE_BINDING);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.delete@as"});
         if (issues) {
             CPS_LOG_E("DeleteBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteBindingResponse(issues), 0, ev->Cookie);
-            requestCounters->Error->Inc();
+            requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
         }

@@ -86,7 +86,6 @@ public:
 
     void Abort(TSessionClosedEvent&& closeEvent);
 
-    void WaitAllDecompressionTasks();
     void ClearAllEvents();
 
 private:
@@ -97,7 +96,7 @@ private:
 
     void CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>& deferred);
 
-    void OnUserRetrievedEvent(const TReadSessionEvent::TEvent& event) override;
+    void OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) override;
 
     void MakeCountersIfNeeded();
     void DumpCountersToLog(size_t timeNumber = 0);

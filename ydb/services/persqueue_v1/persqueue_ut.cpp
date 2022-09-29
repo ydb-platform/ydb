@@ -2125,7 +2125,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(CheckKillBalancer) {
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
-        PrepareForGrpc(server);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
         auto driver = server.AnnoyingClient->GetDriver();
         auto decompressor = CreateThreadPoolExecutorWrapper(2);
@@ -2135,6 +2135,20 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         settings.DecompressionExecutor(decompressor);
         auto reader = CreateReader(*driver, settings);
 
+        auto counters = reader->GetCounters();
+
+        auto DumpCounters = [&](const char *message) {
+            Cerr << "===== " << message << " =====" << Endl;
+            Cerr << "MessagesInflight: " << counters->MessagesInflight->Val() << Endl;
+            Cerr << "BytesInflightUncompressed: " << counters->BytesInflightUncompressed->Val() << Endl;
+            Cerr << "BytesInflightCompressed: " << counters->BytesInflightCompressed->Val() << Endl;
+            Cerr << "BytesInflightTotal: " << counters->BytesInflightTotal->Val() << Endl;
+            Cerr << "============" << Endl;
+        };
+
+        DumpCounters("CreateReader");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
 
         for (ui32 i = 0; i < 2; ++i) {
             auto msg = reader->GetEvent(true, 1);
@@ -2158,7 +2172,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(res);
         }
 
+        DumpCounters("Write");
 
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 10);
 
         ui32 createEv = 0, destroyEv = 0, dataEv = 0;
         std::vector<ui32> gotDestroy{0, 0};
@@ -2196,16 +2212,31 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         decompressor->StartFuncs({0, 1, 2, 3, 4});
 
+        DumpCounters("StartFuncs-1");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 10);
+
         for (ui32 i = 0; i < 5; ++i) {
             doRead();
         }
 
         UNIT_ASSERT_VALUES_EQUAL(dataEv, 5);
 
-        server.AnnoyingClient->RestartBalancerTablet(server.CleverServer->GetRuntime(), "rt3.dc1--topic1");
-        Cerr << "Balancer killed\n";
+        DumpCounters("doRead(5)");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 5);
+
+        Cerr << ">>>> Restart balancer" << Endl;
+        server.AnnoyingClient->RestartBalancerTablet(server.CleverServer->GetRuntime(), DEFAULT_TOPIC_NAME);
+        Cerr << ">>>> Balancer restarted" << Endl;
 
         Sleep(TDuration::Seconds(5));
+
+        decompressor->StartFuncs({5, 6, 7, 8, 9});
+
+        DumpCounters("StartFuncs-2");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 5);
 
         for (ui32 i = 0; i < 4; ++i) {
             doRead();
@@ -2213,20 +2244,408 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(createEv, 2);
         UNIT_ASSERT_VALUES_EQUAL(destroyEv, 2);
-
         UNIT_ASSERT_VALUES_EQUAL(dataEv, 5);
 
-        decompressor->StartFuncs({5, 6, 7, 8, 9});
+        DumpCounters("doRead(4)");
 
         Sleep(TDuration::Seconds(5));
 
         auto msg = reader->GetEvent(false, 1);
-
         UNIT_ASSERT(!msg);
 
         UNIT_ASSERT(!reader->WaitEvent().Wait(TDuration::Seconds(1)));
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
+
+        DumpCounters("End");
     }
 
+    Y_UNIT_TEST(CheckDeleteTopic) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateThreadPoolExecutorWrapper(2);
+
+        NYdb::NPersQueue::TReadSessionSettings settings;
+        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.DecompressionExecutor(decompressor);
+        auto reader = CreateReader(*driver, settings);
+
+        auto counters = reader->GetCounters();
+
+        auto DumpCounters = [&](const char *message) {
+            Cerr << "===== " << message << " =====" << Endl;
+            Cerr << "MessagesInflight: " << counters->MessagesInflight->Val() << Endl;
+            Cerr << "BytesInflightUncompressed: " << counters->BytesInflightUncompressed->Val() << Endl;
+            Cerr << "BytesInflightCompressed: " << counters->BytesInflightCompressed->Val() << Endl;
+            Cerr << "BytesInflightTotal: " << counters->BytesInflightTotal->Val() << Endl;
+            Cerr << "============" << Endl;
+        };
+
+        DumpCounters("CreateReader");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+
+        for (ui32 i = 0; i < 2; ++i) {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            Cerr << NYdb::NPersQueue::DebugString(*msg) << "\n";
+
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+
+            UNIT_ASSERT(ev);
+
+            ev->Confirm();
+        }
+
+
+        for (ui32 i = 0; i < 10; ++i) {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << i);
+            bool res = writer->Write("valuevaluevalue", 1);
+            UNIT_ASSERT(res);
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        DumpCounters("Write");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 10);
+
+        ui32 createEv = 0, destroyEv = 0, dataEv = 0;
+        std::vector<ui32> gotDestroy{0, 0};
+
+        auto doRead = [&]() {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            Cerr << "Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n";
+
+
+            if (std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*msg)) {
+                ++dataEv;
+                return;
+            }
+
+            auto ev1 = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*msg);
+            auto ev2 = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+
+            UNIT_ASSERT(ev1 || ev2);
+
+            if (ev1) {
+                ++destroyEv;
+                UNIT_ASSERT(ev1->GetPartitionStream()->GetPartitionId() < 2);
+                gotDestroy[ev1->GetPartitionStream()->GetPartitionId()]++;
+            }
+            if (ev2) {
+                ev2->Confirm(ev2->GetEndOffset());
+                ++createEv;
+                UNIT_ASSERT(ev2->GetPartitionStream()->GetPartitionId() < 2);
+                UNIT_ASSERT_VALUES_EQUAL(gotDestroy[ev2->GetPartitionStream()->GetPartitionId()], 1);
+
+            }
+        };
+
+        decompressor->StartFuncs({0, 1, 2, 3, 4});
+
+        DumpCounters("StartFuncs-1");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 10);
+
+        for (ui32 i = 0; i < 5; ++i) {
+            doRead();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(dataEv, 5);
+
+        DumpCounters("doRead(5)");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 5);
+
+        Cerr << ">>>> Delete topic" << Endl;
+        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
+        Cerr << ">>>> Topic deleted" << Endl;
+
+        Sleep(TDuration::Seconds(5));
+
+        doRead();
+        doRead();
+
+        //
+        // there should be 2 TPartitionStreamClosedEvent events in the queue
+        //
+        UNIT_ASSERT_VALUES_EQUAL(createEv, 0);
+        UNIT_ASSERT_VALUES_EQUAL(destroyEv, 2);
+        UNIT_ASSERT_VALUES_EQUAL(dataEv, 5);
+
+        decompressor->StartFuncs({5, 6, 7, 8, 9});
+
+        DumpCounters("StartFuncs-2");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 5);
+
+        Sleep(TDuration::Seconds(5));
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
+
+        DumpCounters("End");
+    }
+
+    enum WhenTheTopicIsDeletedMode {
+        AFTER_WRITES,
+        AFTER_START_TASKS,
+        AFTER_DOREAD
+    };
+
+    void WhenTheTopicIsDeletedImpl(WhenTheTopicIsDeletedMode mode, i64 maxMemoryUsageSize, bool decompress, i64 decompressedSize, i64 compressedSize) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateThreadPoolExecutorWrapper(2);
+
+        NYdb::NPersQueue::TReadSessionSettings settings;
+        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.DecompressionExecutor(decompressor);
+        settings.MaxMemoryUsageBytes(maxMemoryUsageSize);
+        settings.Decompress(decompress);
+
+        auto reader = CreateReader(*driver, settings);
+        auto counters = reader->GetCounters();
+
+        auto DumpCounters = [&](const char *message) {
+            Cerr << "===== " << message << " =====" << Endl;
+            Cerr << "MessagesInflight: " << counters->MessagesInflight->Val() << Endl;
+            Cerr << "BytesInflightUncompressed: " << counters->BytesInflightUncompressed->Val() << Endl;
+            Cerr << "BytesInflightCompressed: " << counters->BytesInflightCompressed->Val() << Endl;
+            Cerr << "BytesInflightTotal: " << counters->BytesInflightTotal->Val() << Endl;
+            Cerr << "============" << Endl;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+
+        //
+        // there should be 1 TCreatePartitionStreamEvent events in the queue
+        //
+        {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            Cerr << ">>>> message: " << NYdb::NPersQueue::DebugString(*msg) << Endl;
+
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+            UNIT_ASSERT(ev);
+
+            ev->Confirm();
+        }
+
+        for (ui32 i = 0; i < 2; ++i) {
+            std::optional<TString> codec;
+            if (!decompress) {
+                codec = "raw";
+            }
+
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << i, {}, codec);
+
+            std::string message(decompressedSize, 'x');
+
+            bool res = writer->Write(message, 1);
+            UNIT_ASSERT(res);
+
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        Sleep(TDuration::Seconds(1));
+
+        DumpCounters("write");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), compressedSize);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), compressedSize);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
+
+        if (mode == AFTER_WRITES) {
+            Cerr << ">>>> Delete topic" << Endl;
+            server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
+            Cerr << ">>>> Topic deleted" << Endl;
+
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+            UNIT_ASSERT(std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*msg));
+
+            decompressor->RunAllTasks();
+            Sleep(TDuration::Seconds(1));
+
+            UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
+
+            return;
+        }
+
+        ui32 dataEv = 0;
+
+        auto doRead = [&]() {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            if (!std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*msg)) {
+                UNIT_FAIL("a TDataReceivedEvent event is expected");
+            }
+
+            ++dataEv;
+        };
+
+        decompressor->StartFuncs({0});
+        Sleep(TDuration::Seconds(1));
+
+        DumpCounters("task #0");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), compressedSize + decompressedSize);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), compressedSize);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), decompressedSize);
+
+        if (mode == AFTER_START_TASKS) {
+            Cerr << ">>>> Delete topic" << Endl;
+            server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
+            Cerr << ">>>> Topic deleted" << Endl;
+
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+            UNIT_ASSERT(std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*msg));
+
+            msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+            UNIT_ASSERT(std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*msg));
+
+            decompressor->RunAllTasks();
+            Sleep(TDuration::Seconds(1));
+
+            UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
+
+            return;
+        }
+
+        doRead();
+        Sleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(dataEv, 1);
+
+        DumpCounters("read");
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), compressedSize);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), compressedSize);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
+
+        if (mode == AFTER_DOREAD) {
+            Cerr << ">>>> Delete topic" << Endl;
+            server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
+            Cerr << ">>>> Topic deleted" << Endl;
+
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+            UNIT_ASSERT(std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*msg));
+
+            decompressor->RunAllTasks();
+            Sleep(TDuration::Seconds(1));
+
+            UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
+
+            return;
+        }
+
+        UNIT_FAIL("incorrect mode");
+    }
+    
+    Y_UNIT_TEST(WhenTheTopicIsDeletedBeforeDataIsDecompressed_Compressed) {
+        WhenTheTopicIsDeletedImpl(AFTER_WRITES, 1_MB + 1, true, 1_MB - 1_KB, 1050);
+    }
+    
+    Y_UNIT_TEST(WhenTheTopicIsDeletedAfterDecompressingTheData_Compressed) {
+        WhenTheTopicIsDeletedImpl(AFTER_START_TASKS, 1_MB + 1, true, 1_MB - 1_KB, 1050);
+    }
+    
+    Y_UNIT_TEST(WhenTheTopicIsDeletedAfterReadingTheData_Compressed) {
+        WhenTheTopicIsDeletedImpl(AFTER_DOREAD, 1_MB + 1, true, 1_MB - 1_KB, 1050);
+    }
+    
+    Y_UNIT_TEST(WhenTheTopicIsDeletedBeforeDataIsDecompressed_Uncompressed) {
+        WhenTheTopicIsDeletedImpl(AFTER_WRITES, 1_MB + 1, false, 1_MB - 1_KB, 1_MB - 1_KB);
+    }
+    
+    Y_UNIT_TEST(WhenTheTopicIsDeletedAfterDecompressingTheData_Uncompressed) {
+        WhenTheTopicIsDeletedImpl(AFTER_START_TASKS, 1_MB + 1, false, 1_MB - 1_KB, 1_MB - 1_KB);
+    }
+    
+    Y_UNIT_TEST(WhenTheTopicIsDeletedAfterReadingTheData_Uncompressed) {
+        WhenTheTopicIsDeletedImpl(AFTER_DOREAD, 1_MB + 1, false, 1_MB - 1_KB, 1_MB - 1_KB);
+    }
+
+    Y_UNIT_TEST(CheckDecompressionTasksWithoutSession) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateThreadPoolExecutorWrapper(2);
+
+        NYdb::NPersQueue::TReadSessionSettings settings;
+        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.DecompressionExecutor(decompressor);
+
+        auto reader = CreateReader(*driver, settings);
+        auto counters = reader->GetCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+
+        {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+            UNIT_ASSERT(ev);
+
+            ev->Confirm();
+        }
+
+        for (ui32 i = 0; i < 2; ++i) {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << i);
+
+            bool res = writer->Write("abracadabra", 1);
+            UNIT_ASSERT(res);
+
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 2);
+
+        reader = nullptr;
+
+        decompressor->RunAllTasks();
+        Sleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 2);
+    }
 
     Y_UNIT_TEST(TestWriteStat) {
         auto testWriteStat = [](const TString& originallyProvidedConsumerName,

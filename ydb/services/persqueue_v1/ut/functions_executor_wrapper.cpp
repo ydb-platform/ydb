@@ -43,6 +43,17 @@ size_t FunctionExecutorWrapper::GetFuncsCount() const
     }
 }
 
+void FunctionExecutorWrapper::RunAllTasks()
+{
+    with_lock (Mutex) {
+        for (auto& func : Funcs) {
+            if (func) {
+                Executor->Post(std::move(func));
+            }
+        }
+    }
+}
+
 TIntrusivePtr<FunctionExecutorWrapper> CreateThreadPoolExecutorWrapper(size_t threads)
 {
     return MakeIntrusive<FunctionExecutorWrapper>(NYdb::NPersQueue::CreateThreadPoolExecutor(threads));

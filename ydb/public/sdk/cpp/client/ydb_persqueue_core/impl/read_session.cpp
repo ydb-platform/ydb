@@ -56,7 +56,6 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 
 TReadSession::~TReadSession() {
     Abort(EStatus::ABORTED, "Aborted");
-    WaitAllDecompressionTasks();
     ClearAllEvents();
 }
 
@@ -450,14 +449,6 @@ void TReadSession::Abort(TSessionClosedEvent&& closeEvent) {
     }
 }
 
-void TReadSession::WaitAllDecompressionTasks() {
-    for (auto& [cluster, sessionInfo] : ClusterSessions) {
-        if (sessionInfo.Session) {
-            sessionInfo.Session->WaitAllDecompressionTasks();
-        }
-    }
-}
-
 void TReadSession::ClearAllEvents() {
     EventsQueue->ClearAllEvents();
 }
@@ -504,20 +495,13 @@ void TReadSession::ResumeReadingData() {
     }
 }
 
-static ELogPriority GetEventLogPriority(const TReadSessionEvent::TEvent& event) {
-    if (std::holds_alternative<TReadSessionEvent::TCreatePartitionStreamEvent>(event)
-        || std::holds_alternative<TReadSessionEvent::TDestroyPartitionStreamEvent>(event)
-        || std::holds_alternative<TReadSessionEvent::TPartitionStreamClosedEvent>(event)
-        || std::holds_alternative<TSessionClosedEvent>(event))
-    { // Control event.
-        return TLOG_INFO;
-    } else {
-        return TLOG_DEBUG;
-    }
-}
-
-void TReadSession::OnUserRetrievedEvent(const TReadSessionEvent::TEvent& event) {
-    Log.Write(GetEventLogPriority(event), GetLogPrefix() << "Read session event " << DebugString(event));
+void TReadSession::OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) {
+    Log.Write(TLOG_DEBUG, GetLogPrefix()
+                          << "The application data is transferred to the client. Number of messages "
+                          << messagesCount
+                          << ", size "
+                          << decompressedSize
+                          << " bytes");
 }
 
 void TReadSession::MakeCountersIfNeeded() {

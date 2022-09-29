@@ -20,6 +20,8 @@ public:
 
     size_t GetFuncsCount() const;
 
+    void RunAllTasks();
+
 private:
     void DoStart() override;
 

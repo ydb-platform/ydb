@@ -334,7 +334,6 @@ protected:
         template <class TEventType, class TFunc>
         void PushSpecificHandler(TEventInfo&& eventInfo, const TFunc& f) {
             Post(Settings.EventHandlers_.HandlersExecutor_, [func = f, event = std::move(eventInfo)]() mutable {
-                event.OnUserRetrievedEvent();
                 func(std::get<TEventType>(event.GetEvent()));
             });
         }
@@ -342,7 +341,6 @@ protected:
         template <class TFunc>
         void PushCommonHandler(TEventInfo&& eventInfo, const TFunc& f) {
             Post(Settings.EventHandlers_.HandlersExecutor_, [func = f, event = std::move(eventInfo)]() mutable {
-                event.OnUserRetrievedEvent();
                 func(event.GetEvent());
             });
         }

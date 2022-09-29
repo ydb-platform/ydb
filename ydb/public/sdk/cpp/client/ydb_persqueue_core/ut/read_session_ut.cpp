@@ -1444,9 +1444,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         const size_t messagesInServerBatchCount = 10; // Many messages in order to fit in two 512 KB-tasks packs.
         const size_t messageSize = 1000000;
         const size_t batchLimit = std::numeric_limits<size_t>::max();
-        const size_t batches = messagesInServerBatchCount;
-        const size_t messagesInBatch = 1;
-        const size_t expectedDecompressionTasksCount = messagesInServerBatchCount;
+        const size_t batches = 1;
+        const size_t messagesInBatch = 10;
+        const size_t expectedDecompressionTasksCount = 1;
         const size_t reorderedCycleSize = 1;
         const size_t memoryLimit = 10;
         PacksBatchesImpl(serverBatchesCount, messagesInServerBatchCount, messageSize, batchLimit, batches, messagesInBatch, expectedDecompressionTasksCount, reorderedCycleSize, memoryLimit);
@@ -1485,7 +1485,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
             UNIT_ASSERT_EVENT_TYPE(events[0], TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(events[0]);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 28);
+            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 50);
             UNIT_ASSERT_EQUAL(dataEvent.GetPartitionStream(), stream1);
         }
 
@@ -1494,25 +1494,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
             UNIT_ASSERT_EVENT_TYPE(events[0], TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(events[0]);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 22);
-            UNIT_ASSERT_EQUAL(dataEvent.GetPartitionStream(), stream1);
-        }
-
-        {
-            TVector<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
-            UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
-            UNIT_ASSERT_EVENT_TYPE(events[0], TReadSessionEvent::TDataReceivedEvent);
-            TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(events[0]);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 27);
-            UNIT_ASSERT_EQUAL(dataEvent.GetPartitionStream(), stream2);
-        }
-
-        {
-            TVector<TReadSessionEvent::TEvent> events = setup.EventsQueue->GetEvents(true);
-            UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
-            UNIT_ASSERT_EVENT_TYPE(events[0], TReadSessionEvent::TDataReceivedEvent);
-            TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(events[0]);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 23);
+            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 50);
             UNIT_ASSERT_EQUAL(dataEvent.GetPartitionStream(), stream2);
         }
 

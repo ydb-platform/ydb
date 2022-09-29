@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
 
         {
-            auto result = testServer.DataStreamsClient->ListStreams().ExtractValueSync();
+            auto result = testServer.DataStreamsClient->ListStreams(NYdb::NDataStreams::V1::TListStreamsSettings().Recurse(false)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 1);
@@ -309,11 +309,18 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListStreams(NYdb::NDataStreams::V1::TListStreamsSettings().Recurse(true)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            Cerr << result.GetResult() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names(0), streamName);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names(1), streamName2);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names(2), streamName3);
+        }
+
+        // should behave the same, returning 3 names
+        {
+            auto result = testServer.DataStreamsClient->ListStreams().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 3);
         }
 
         // now when stream is created delete should work fine
@@ -335,8 +342,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
-
-
     }
 
     Y_UNIT_TEST(TestReservedResourcesMetering) {

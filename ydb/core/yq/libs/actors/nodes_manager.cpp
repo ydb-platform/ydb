@@ -4,6 +4,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/interconnect/events_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
@@ -76,7 +77,7 @@ public:
         Become(&TNodesManagerActor::StateFunc);
         ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc();
         LOG_I("Bootstrap, InstanceId: " << InstanceId);
-        NodesHealthCheck();
+        ResolveSelfAddress();        
     }
 
 private:
@@ -176,6 +177,7 @@ private:
         hFunc(NDqs::TEvFreeWorkersNotify, Handle)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
         hFunc(NFq::TEvInternalService::TEvHealthCheckResponse, HandleResponse)
+        hFunc(NActors::TEvAddressInfo, Handle)
         )
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -188,7 +190,26 @@ private:
         }
     }
 
+    void Handle(NActors::TEvAddressInfo::TPtr& ev) {
+        if (ev->Get()->Address) {
+            Address = NAddr::PrintHost(*ev->Get()->Address);
+            NodesHealthCheck();
+        } else {
+            LOG_E("TNodesManagerActor error resolving");
+            ResolveSelfAddress();
+        }
+    }
+
+    void ResolveSelfAddress() {
+        LOG_D("TNodesManagerActor::ResolveSelfAddress");
+        auto resolve = MakeHolder<NActors::TEvResolveAddress>();
+        resolve->Address = HostName();
+        resolve->Port = IcPort;
+        Send(GetNameserviceActorId(), resolve.Release());
+    }
+
     void NodesHealthCheck() {
+        LOG_T("TNodesManagerActor::NodesHealthCheck");
         const TDuration ttl = TDuration::Seconds(5);
         Schedule(ttl, new NActors::TEvents::TEvWakeup(WU_NodesHealthCheck));
 
@@ -200,6 +221,7 @@ private:
         node.set_node_id(SelfId().NodeId());
         node.set_instance_id(InstanceId);
         node.set_hostname(HostName());
+        node.set_node_address(Address);
         node.set_active_workers(AtomicGet(WorkerManagerCounters.ActiveWorkers->GetAtomic()));
         node.set_memory_limit(AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic()));
         node.set_memory_allocated(AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic()));
@@ -292,6 +314,7 @@ private:
     ui32 NextPeer = 0;
     TString InstanceId;
     TActorId InternalServiceId;
+    TString Address;
 };
 
 TActorId MakeNodesManagerId() {

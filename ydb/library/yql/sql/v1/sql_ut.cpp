@@ -1587,6 +1587,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["MrTableConcat"]);
     }
 
+    Y_UNIT_TEST(TableBindingsWithInsert) {
+        NSQLTranslation::TTranslationSettings settings = GetSettingsWithS3Binding("foo");
+        NYql::TAstParseResult res = SqlToYqlWithSettings(
+            "insert into bindings.foo with truncate (x, y) values (1, 2);",
+            settings
+            );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('table (String '"path"))) values '('('"bar" '"1") '('"compression" '"ccompression") '('"format" '"format") '('"partitionedby" '"key" '"subkey") '('"userschema" (SqlTypeFromYson)__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
     Y_UNIT_TEST(TrailingCommaInWithout) {
         UNIT_ASSERT(SqlToYql("SELECT * WITHOUT stream, FROM plato.Input").IsOk());
         UNIT_ASSERT(SqlToYql("SELECT a.* WITHOUT a.intersect, FROM plato.Input AS a").IsOk());

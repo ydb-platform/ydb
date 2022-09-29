@@ -835,6 +835,7 @@ protected:
     TMaybe<TSourcePtr> AsTableImpl(const TRule_table_ref& node);
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, TString& service, TDeferredAtom& cluster);
     bool ClusterExprOrBinding(const TRule_cluster_expr& node, TString& service, TDeferredAtom& cluster, bool& isBinding);
+    bool ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints);
 
     TMaybe<TColumnSchema> ColumnSchemaImpl(const TRule_column_schema& node);
     bool CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params);
@@ -885,7 +886,6 @@ private:
     bool SortSpecification(const TRule_sort_specification& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service, TDeferredAtom& cluster, bool& isBinding);
-    bool ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints);
     bool StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value);
 protected:
     NSQLTranslation::ESqlMode Mode;
@@ -8135,15 +8135,20 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     auto service = Ctx.Scoped->CurrService;
     auto cluster = Ctx.Scoped->CurrCluster;
     std::pair<bool, TDeferredAtom> nameOrAt;
+    bool isBinding = false;
     switch (tableRefCore.Alt_case()) {
         case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
             if (tableRefCore.GetAlt_simple_table_ref_core1().GetBlock1().HasBlock1()) {
-                if (!ClusterExpr(tableRefCore.GetAlt_simple_table_ref_core1().GetBlock1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+                const auto& clusterExpr = tableRefCore.GetAlt_simple_table_ref_core1().GetBlock1().GetBlock1().GetRule_cluster_expr1();
+                bool hasAt = tableRefCore.GetAlt_simple_table_ref_core1().GetBlock1().GetRule_id_or_at2().HasBlock1();
+                bool result = !hasAt ?
+                    ClusterExprOrBinding(clusterExpr, service, cluster, isBinding) : ClusterExpr(clusterExpr, false, service, cluster);
+                if (!result) {
                     return nullptr;
                 }
             }
 
-            if (cluster.Empty()) {
+            if (!isBinding && cluster.Empty()) {
                 Ctx.Error() << "No cluster name given and no default cluster is selected";
                 return nullptr;
             }
@@ -8219,9 +8224,17 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     const auto SqlIntoMode = iterMode->second;
 
     TPosition pos(Ctx.Pos());
-    TNodePtr tableKey = BuildTableKey(pos, service, cluster, nameOrAt.second, nameOrAt.first ? "@" : "");
-
-    TTableRef table(Ctx.MakeName("table"), service, cluster, tableKey);
+    TTableRef table(Ctx.MakeName("table"), service, cluster, nullptr);
+    if (isBinding) {
+        const TString* binding = nameOrAt.second.GetLiteral();
+        YQL_ENSURE(binding);
+        YQL_ENSURE(!nameOrAt.first);
+        if (!ApplyTableBinding(*binding, table, tableHints)) {
+            return nullptr;
+        }
+    } else {
+        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, nameOrAt.first ? "@" : "");
+    }
 
     Ctx.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
 

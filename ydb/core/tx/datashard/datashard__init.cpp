@@ -350,9 +350,17 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             bool parseOk = ParseFromStringNoSizeLimit(*Self->SrcSplitDescription, splitDescr);
             Y_VERIFY(parseOk);
 
-            for (ui32 i = 0; i < Self->SrcSplitDescription->DestinationRangesSize(); ++i) {
-                ui64 dstTablet = Self->SrcSplitDescription->GetDestinationRanges(i).GetTabletID();
-                Self->ChangeExchangeSplitter.AddDst(dstTablet);
+            switch (Self->State) {
+            case TShardState::SplitSrcWaitForNoTxInFlight:
+            case TShardState::SplitSrcMakeSnapshot:
+                // split just started, there might be in-flight transactions
+                break;
+            default:
+                for (ui32 i = 0; i < Self->SrcSplitDescription->DestinationRangesSize(); ++i) {
+                    ui64 dstTablet = Self->SrcSplitDescription->GetDestinationRanges(i).GetTabletID();
+                    Self->ChangeExchangeSplitter.AddDst(dstTablet);
+                }
+                break;
             }
         }
     }

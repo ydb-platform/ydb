@@ -916,8 +916,7 @@ public:
 
     void SetRuHeader(ui64 ru) override {
         Ru = ru;
-        auto ruStr = Sprintf("%lu", ru);
-        Ctx_->AddTrailingMetadata(NYdb::YDB_CONSUMED_UNITS_HEADER, ruStr);
+        Ctx_->AddTrailingMetadata(NYdb::YDB_CONSUMED_UNITS_HEADER, IntToString<10>(ru));
     }
 
     const TString& GetInternalToken() const override {

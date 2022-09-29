@@ -113,6 +113,7 @@ namespace boost { namespace fusion {
 
         // silence MSVC warning C4512: assignment operator could not be generated
         BOOST_DELETED_FUNCTION(deque_iterator& operator= (deque_iterator const&))
+        deque_iterator(const deque_iterator&) = default;
     };
 
 }}

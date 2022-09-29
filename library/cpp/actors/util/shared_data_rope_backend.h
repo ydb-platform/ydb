@@ -29,7 +29,7 @@ public:
         return {const_cast<char *>(Buffer.data()), Buffer.size()};
     }
 
-    size_t GetCapacity() const override {
+    size_t GetOccupiedMemorySize() const override {
         return Buffer.size();
     }
 };

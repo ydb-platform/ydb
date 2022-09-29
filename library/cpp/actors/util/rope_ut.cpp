@@ -23,7 +23,7 @@ public:
         return {const_cast<char*>(Buffer.data()), Buffer.size()};
     }
 
-    size_t GetCapacity() const override {
+    size_t GetOccupiedMemorySize() const override {
         return Buffer.capacity();
     }
 };
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TRope) {
 
     Y_UNIT_TEST(Compacted) {
         TRope rope = CreateRope(Text, 10);
-        UNIT_ASSERT_EQUAL(rope.UnsafeGetContiguousSpanMut().data(), Text);
+        UNIT_ASSERT_EQUAL(rope.UnsafeGetContiguousSpanMut(), Text);
         UNIT_ASSERT(rope.IsContiguous());
     }
 
@@ -141,12 +141,13 @@ Y_UNIT_TEST_SUITE(TRope) {
     Y_UNIT_TEST(ContiguousDataInterop) {
         TString string = "Some long-long text needed for not sharing data and testing";
         TContiguousData data(string);
+        UNIT_ASSERT_EQUAL(data.UnsafeGetDataMut(), &(*string.cbegin()));
         TRope rope(data); // check operator TRope
-        UNIT_ASSERT_EQUAL(rope.UnsafeGetContiguousSpanMut().data(), string.data());
+        UNIT_ASSERT_EQUAL(rope.UnsafeGetContiguousSpanMut().data(), &(*string.cbegin()));
         TContiguousData otherData(rope);
-        UNIT_ASSERT_EQUAL(otherData.UnsafeGetDataMut(), string.data());
+        UNIT_ASSERT_EQUAL(otherData.UnsafeGetDataMut(), &(*string.cbegin()));
         TString extractedBack = otherData.ExtractUnderlyingContainerOrCopy<TString>();
-        UNIT_ASSERT_EQUAL(extractedBack.data(), string.data());
+        UNIT_ASSERT_EQUAL(extractedBack.data(), &(*string.cbegin()));
     }
 #endif
     Y_UNIT_TEST(CrossCompare) {

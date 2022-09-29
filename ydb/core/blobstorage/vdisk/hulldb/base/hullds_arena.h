@@ -18,7 +18,7 @@ namespace NKikimr {
             return {Data, Capacity};
         }
 
-        size_t GetCapacity() const override {
+        size_t GetOccupiedMemorySize() const override {
             return Capacity;
         }
 

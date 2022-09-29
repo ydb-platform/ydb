@@ -77,7 +77,7 @@ public:
         return {reinterpret_cast<char *>(Buffer.Data()), Buffer.Size()};
     }
 
-    size_t GetCapacity() const override {
+    size_t GetOccupiedMemorySize() const override {
         return Buffer.Size();
     }
 };

@@ -62,7 +62,11 @@ public:
         return {Data + Offset, Size};
     }
 
-    size_t GetCapacity() const override {
+    size_t GetOccupiedMemorySize() const override {
+        return Capacity;
+    }
+
+    size_t GetCapacity() const {
         return Capacity;
     }
 
@@ -356,10 +360,18 @@ public:
     TRope(const TRope& rope) = default;
 
     TRope(const TContiguousData& data) {
+        if(!data.HasBuffer()) {
+            return;
+        }
+        Size = data.GetSize();
         Chain.PutToEnd(data);
     }
 
     TRope(TContiguousData&& data) {
+        if(!data.HasBuffer()) {
+            return;
+        }
+        Size = data.GetSize();
         Chain.PutToEnd(std::move(data));
     }
 
@@ -727,8 +739,8 @@ public:
     void Compact() {
         if(!IsContiguous()) {
             // TODO(innokentii): use better container, when most outer users stop use TString
-            TString res = TString::Uninitialized(GetSize());
-            Begin().ExtractPlainDataAndAdvance(res.Detach(), res.size());
+            TContiguousData res = TContiguousData::Uninitialized(GetSize());
+            Begin().ExtractPlainDataAndAdvance(res.UnsafeGetDataMut(), res.size());
             Erase(Begin(), End());
             Insert(End(), TRope(res));
         }
@@ -736,7 +748,7 @@ public:
 
     static TRope Uninitialized(size_t size)
     {
-        TString res = TString::Uninitialized(size);
+        TContiguousData res = TContiguousData::Uninitialized(size);
         return TRope(res);
     }
 
@@ -790,6 +802,9 @@ public:
     }
 
     explicit operator TContiguousData() {
+        if(GetSize() == 0) {
+            return TContiguousData();
+        }
         Compact();
         return TContiguousData(Begin().GetChunk());
     }
@@ -853,11 +868,12 @@ private:
         // consider special case -- when begin and end point to the same block; in this case we have to split up this
         // block into two parts
         if (begin.Iter == end.Iter) {
-            addBlock(begin.GetChunk(), begin.Ptr, end.Ptr);
+            TContiguousData chunkToSplit = begin.GetChunk();
+            addBlock(chunkToSplit, begin.Ptr, end.Ptr);
             const char *firstChunkBegin = begin.PointsToChunkMiddle() ? begin->Begin : nullptr;
             begin->Begin = end.Ptr; // this affects both begin and end iterator pointed values
             if (firstChunkBegin) {
-                Chain.InsertBefore(begin.Iter, TContiguousData::Slice, firstChunkBegin, begin.Ptr, begin.GetChunk());
+                Chain.InsertBefore(begin.Iter, TContiguousData::Slice, firstChunkBegin, begin.Ptr, chunkToSplit);
             }
         } else {
             // check the first iterator -- if it starts not from the begin of the block, we have to adjust end of the
@@ -941,7 +957,7 @@ public:
 
     void AccountChunk(const TContiguousData& chunk) {
         if (AccountedBuffers.insert(chunk.Backend.UniqueId()).second) {
-            Size += chunk.GetCapacity();
+            Size += chunk.GetOccupiedMemorySize();
         }
     }
 };
@@ -1073,7 +1089,7 @@ public:
 inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, TRopeArena& arena) {
     TRope res;
     for (TContiguousData& chunk : origin.Chain) {
-        size_t ratio = chunk.GetSize() * 1024 / chunk.GetCapacity();
+        size_t ratio = chunk.GetSize() * 1024 / chunk.GetOccupiedMemorySize();
         if (ratio < 1024 - worstRatioPer1k) {
             res.Insert(res.End(), arena.CreateRope(chunk.Begin, chunk.GetSize()));
         } else {

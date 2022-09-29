@@ -24,8 +24,8 @@ constexpr bool IsVerbose = false;
 
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
-    Y_UNIT_TEST_LLVM(TestMem1) {
-             
+    Y_UNIT_TEST(TestMem1) {
+
     const ui64 TupleSize = 1024;
     const ui64 NBuckets = 128;
     const ui64 NTuples = 10000;
@@ -162,14 +162,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
     CTEST  << Endl;
 
     UNIT_ASSERT(true);
-        
+
     }
 
 }
 
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
-    Y_UNIT_TEST_LLVM(TestImp1) {
+    Y_UNIT_TEST(TestImp1) {
 
             ui64 tuple[11] = {0,1,2,3,4,5,6,7,8,9,10};
             ui32 strSizes[2] = {4, 4};
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
                                  (char *)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
             ui32 bigStrSize[2] = {151, 151};
 
-            
+
 
             GraceJoin::TTable bigTable(1,1,1,1);
             GraceJoin::TTable smallTable(1,1,1,1);
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             const ui64 TupleSize = 1024;
 
-            ui64 bigTuple[TupleSize]; 
+            ui64 bigTuple[TupleSize];
 
             for (ui64 i = 0; i < TupleSize; i++) {
                 bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
@@ -197,13 +197,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             ui64 milliseconds = 0;
 
-            
+
 
             const ui64 BigTableTuples = 60000;
             const ui64 SmallTableTuples = 15000;
             const ui64 BigTupleSize = 32;
 
-            std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
 
             for ( ui64 i = 0; i < BigTableTuples; i++) {
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             bigTable.Clear();
             smallTable.Clear();
 
-            begin03 = std::chrono::steady_clock::now();   
+            begin03 = std::chrono::steady_clock::now();
 
 
             for ( ui64 i = 0; i < BigTableTuples; i++) {
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             CTEST << "Time for hash = " << milliseconds << "[ms]" << Endl;
             CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / ( milliseconds * 1024 * 1024) << "MB/sec" << Endl;
             CTEST << Endl;
-           
+
 
 
             std::vector<ui64> vals1, vals2;
@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             ui64 numBigTuples = 0;
             bigTable.ResetIterator();
 
-            std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();
 
             while(bigTable.NextTuple(td1)) { numBigTuples++; }
 
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             numBigTuples = 0;
             bigTable.ResetIterator();
 
-            std::chrono::steady_clock::time_point begin041 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin041 = std::chrono::steady_clock::now();
 
             while(bigTable.NextTuple(td2)) { numBigTuples++; }
 
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             CTEST << Endl;
 
 
-            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
 
             joinTable.Join(bigTable,smallTable);
 
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             ui64 numJoinedTuples = 0;
 
 
-            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
 
             while(joinTable.NextJoinedData(td1, td2)) { numJoinedTuples++; }
 
@@ -331,13 +331,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
     }
 }
 
-
-
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     Y_UNIT_TEST_LLVM(TestInner1) {
-
-        if (LLVM) return;
-             
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -400,16 +395,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
         }
 
-        
+
     }
 
-
-
-
     Y_UNIT_TEST_LLVM(TMiniKQLGraceJoinTestInnerMulti1) {
-
-        if (LLVM) return;
-
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -477,9 +466,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestLeft1) {
-
-        if (LLVM) return;
-
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -551,9 +537,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestLeftMulti1) {
-
-        if (LLVM) return;
-
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -626,9 +609,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestLeftSemi1) {
-
-        if (LLVM) return;
-
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -691,9 +671,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestLeftOnly1) {
-
-        if (LLVM) return;
-
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -751,9 +728,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestLeftSemiWithNullKey1) {
-
-        if (LLVM) return;
-
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -818,9 +792,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestLeftOnlyWithNullKey1) {
-
-        if (LLVM) return;
-
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -885,9 +856,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestRight1) {
-
-        if (LLVM) return;
-
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -958,10 +926,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-
-        Y_UNIT_TEST_LLVM(TestRightOnly1) {
-
-        if (LLVM) return;
+    Y_UNIT_TEST_LLVM(TestRightOnly1) {
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1017,10 +982,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-
-
     Y_UNIT_TEST_LLVM(TestRightSemi1) {
-        if (LLVM) return;
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1082,9 +1044,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-
     Y_UNIT_TEST_LLVM(TestRightMulti1) {
-        if (LLVM) return;
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1156,9 +1116,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
         }
     }
 
-
-   Y_UNIT_TEST_LLVM(TestRightSemiWithNullKey1) {
-        if (LLVM) return;
+    Y_UNIT_TEST_LLVM(TestRightSemiWithNullKey1) {
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1223,7 +1181,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestRightOnlyWithNullKey1) {
-        if (LLVM) return;
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1288,7 +1245,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestFull1) {
-        if (LLVM) return;
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1353,9 +1309,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");            
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT(!tuple.GetElement(1));
-            UNIT_ASSERT(iterator.Next(tuple));        
+            UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
             UNIT_ASSERT(!tuple.GetElement(0));
             UNIT_ASSERT(!iterator.Next(tuple));
@@ -1365,7 +1321,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 
     Y_UNIT_TEST_LLVM(TestExclusion1) {
-        if (LLVM) return;
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1418,9 +1373,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 
             UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");            
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT(!tuple.GetElement(1));
-            UNIT_ASSERT(iterator.Next(tuple));        
+            UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
             UNIT_ASSERT(!tuple.GetElement(0));
             UNIT_ASSERT(!iterator.Next(tuple));
@@ -1429,7 +1384,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
     }
 
 }
-
 
 }
 

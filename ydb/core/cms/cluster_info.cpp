@@ -786,6 +786,18 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
     }
 }
 
+void TClusterInfo::ApplySysTabletsInfo(const NKikimrConfig::TBootstrap& config) {
+    for (ui32 i = 0; i < config.TabletSize(); ++i) {
+        const auto &tablet = config.GetTablet(i);
+ 
+        for (ui32 j = 0; j < tablet.NodeSize(); ++j) {
+            ui32 nodeId = tablet.GetNode(j);
+            TabletTypeToNodes[tablet.GetType()].push_back(nodeId);
+            NodeToTabletTypes[nodeId].push_back(tablet.GetType());
+        }
+    }
+}
+
 void TClusterInfo::DebugDump(const TActorContext &ctx) const
 {
     LOG_DEBUG_S(ctx, NKikimrServices::CMS,

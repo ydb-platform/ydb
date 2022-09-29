@@ -57,6 +57,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/console_tenant.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_tx_allocator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_bs_controller.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_cms.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_coordinator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_columnshard.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_datashard.proto

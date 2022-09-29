@@ -18,6 +18,8 @@ public:
         Y_VERIFY(Response);
     }
 
+    TTxType GetTxType() const override { return TXTYPE_STORE_WALLE_TASK; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStoreWalleTask Execute");

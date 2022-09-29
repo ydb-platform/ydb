@@ -13,6 +13,8 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_LOG_AND_SEND; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS,

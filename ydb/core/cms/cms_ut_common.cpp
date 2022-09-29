@@ -17,6 +17,8 @@
 
 #include <util/string/subst.h>
 
+#include <memory>
+
 const bool STRAND_PDISK = true;
 
 #ifndef NDEBUG
@@ -29,11 +31,23 @@ namespace NKikimr {
 namespace NCmsTest {
 
 using namespace NCms;
+using namespace NConsole;
 using namespace NNodeWhiteboard;
 using namespace NKikimrWhiteboard;
 using namespace NKikimrCms;
 using namespace NKikimrBlobStorage;
 
+void TFakeNodeWhiteboardService::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev,
+                                        const TActorContext &ctx)
+{
+    TGuard<TMutex> guard(Mutex);
+    Y_UNUSED(ev); 
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableBootstrapConfig()->CopyFrom(BootstrapConfig);
+    auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
+    resp->Config = std::make_shared<NKikimrConfig::TAppConfig>(appConfig);
+    ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
+}
 void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
@@ -155,6 +169,7 @@ void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvSystemStateRequest::TP
 NKikimrBlobStorage::TEvControllerConfigResponse TFakeNodeWhiteboardService::Config;
 THashMap<ui32, TFakeNodeInfo> TFakeNodeWhiteboardService::Info;
 TMutex TFakeNodeWhiteboardService::Mutex;
+NKikimrConfig::TBootstrap TFakeNodeWhiteboardService::BootstrapConfig;
 
 namespace {
 
@@ -332,6 +347,44 @@ static bool IsTabletActiveEvent(IEventHandle& ev) {
     return false;
 }
 
+
+inline void AddTablet(NKikimrConfig::TBootstrap::ETabletType type,
+                      const TVector<ui32> &nodes,
+                      NKikimrConfig::TBootstrap &config)
+{
+    auto &tablet = *config.AddTablet();
+    tablet.SetType(type);
+    for (ui32 node : nodes)
+        tablet.AddNode(node);
+}
+
+static NKikimrConfig::TBootstrap GenerateBootstrapConfig(TTestActorRuntime &runtime,
+                                                         const ui32 nodesCount, 
+                                                         const TNodeTenantsMap &tenants) {
+    NKikimrConfig::TBootstrap res;
+
+    TVector<ui32> nodes;
+    nodes.reserve(nodesCount);
+    for (ui32 nodeIndex = 0; nodeIndex < nodesCount; ++nodeIndex) {
+        ui32 nodeId = runtime.GetNodeId(nodeIndex);
+        if (tenants.contains(nodeId))
+            continue;
+        nodes.push_back(nodeId);
+    }
+
+    AddTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER, nodes, res);
+    AddTablet(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD, nodes, res);
+    AddTablet(NKikimrConfig::TBootstrap::FLAT_TX_COORDINATOR, nodes, res);
+    AddTablet(NKikimrConfig::TBootstrap::TX_MEDIATOR, nodes, res);
+    AddTablet(NKikimrConfig::TBootstrap::TX_ALLOCATOR, nodes, res);
+    AddTablet(NKikimrConfig::TBootstrap::CONSOLE, nodes, res);
+    AddTablet(NKikimrConfig::TBootstrap::CMS, nodes, res);
+    AddTablet(NKikimrConfig::TBootstrap::NODE_BROKER, nodes, res);
+    AddTablet(NKikimrConfig::TBootstrap::TENANT_SLOT_BROKER, nodes, res);
+
+    return res;
+}
+
 static void SetupServices(TTestActorRuntime &runtime,
                           const TNodeTenantsMap &tenants)
 {
@@ -416,6 +469,9 @@ static void SetupServices(TTestActorRuntime &runtime,
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig);
         SetupTabletResolver(runtime, nodeIndex);
 
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
+
         // fake NodeWhiteBoard
         runtime.AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(runtime.GetNodeId(nodeIndex)),
                                 TActorSetupCmd(CreateFakeNodeWhiteboardService(), TMailboxType::Simple, 0), nodeIndex);
@@ -426,13 +482,18 @@ static void SetupServices(TTestActorRuntime &runtime,
                                 TActorSetupCmd(new TFakeTenantPool(nodeTenants), TMailboxType::Simple, 0), nodeIndex);
     }
 
-    runtime.Initialize(app.Unwrap());
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
+    runtime.AddLocalService(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
+                           TActorSetupCmd(CreateConfigsDispatcher(appConfig), TMailboxType::Simple, 0), 0);
 
+    runtime.Initialize(app.Unwrap());
     auto dnsConfig = new TDynamicNameserviceConfig();
     dnsConfig->MaxStaticNodeId = 1000;
     dnsConfig->MaxDynamicNodeId = 2000;
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
+    runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -441,11 +502,14 @@ static void SetupServices(TTestActorRuntime &runtime,
         runtime.DispatchEvents(options);
     }
 
+    auto cid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeConsoleID(0), TTabletTypes::Console),
+                     &NConsole::CreateConsole);
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::BSController),
                      &CreateFlatBsController);
 
     auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeCmsID(0), TTabletTypes::Cms), &CreateCms);
     runtime.EnableScheduleForActor(aid, true);
+    runtime.EnableScheduleForActor(cid, true);
 }
 
 } // anonymous namespace
@@ -460,12 +524,16 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     status.SetSuccess(true);
     auto *config = status.MutableBaseConfig();
 
+    TFakeNodeWhiteboardService::BootstrapConfig = GenerateBootstrapConfig(*this, options.NodeCount, options.Tenants);
+
     GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
 
     // Set observer to pass fake base blobstorage config.
     auto redirectConfigRequest = [](TTestActorRuntimeBase&,
                                     TAutoPtr<IEventHandle> &event) -> auto {
-        if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest) {
+        if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
+            || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest
+            ) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
                 event = event->Forward(fakeId);

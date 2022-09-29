@@ -36,6 +36,7 @@ conan_cmake_configure(
     bison/3.5.3
     c-ares/1.18.1
     libiconv/1.15
+    liburing/2.1
     openssl/1.1.1l
     ragel/6.10
     yasm/1.3.0

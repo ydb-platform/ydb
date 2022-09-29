@@ -421,14 +421,20 @@ private:
             ev->Cookie);
     }
 
-    THolder<TEvDq::TEvAbortExecution> GetError(const NKikimr::TMemoryLimitExceededException&) {
-        const TString err = TStringBuilder() << "Mkql memory limit exceeded"
-            << ", limit: " << (MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : -1)
-            << ", canAllocateExtraMemory: " << (MemoryQuota ? MemoryQuota->GetCanAllocateExtraMemory() : 0);
+    THolder<TEvDq::TEvAbortExecution> GetError(const NKikimr::TMemoryLimitExceededException& e) {
+        const bool isHardLimit = dynamic_cast<const THardMemoryLimitException*>(&e) != nullptr;
+        TStringBuilder err;
+        err << "Mkql memory limit exceeded";
+        if (isHardLimit) {
+            err << ", hard limit: " << MemoryQuota->GetHardMemoryLimit();
+        } else {
+            err << ", limit: " << (MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : -1)
+                << ", canAllocateExtraMemory: " << (MemoryQuota ? MemoryQuota->GetCanAllocateExtraMemory() : 0);
+        }
         LOG_E("TMemoryLimitExceededException: " << err);
         TIssue issue(err);
         SetIssueCode(TIssuesIds::KIKIMR_PRECONDITION_FAILED, issue);
-        return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::OVERLOADED, TVector<TIssue>{issue});
+        return MakeHolder<TEvDq::TEvAbortExecution>(isHardLimit ? NYql::NDqProto::StatusIds::LIMIT_EXCEEDED : NYql::NDqProto::StatusIds::OVERLOADED, TVector<TIssue>{issue});
     }
 
     THolder<TEvDq::TEvAbortExecution> GetError(const TString& message) {

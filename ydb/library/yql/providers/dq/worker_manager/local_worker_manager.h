@@ -34,6 +34,7 @@ namespace NYql::NDqs {
         ui64 MkqlInitialMemoryLimit = 8_GB;
         ui64 MkqlTotalMemoryLimit = 0;
         ui64 MkqlMinAllocSize = 30_MB;
+        ui64 MkqlProgramHardMemoryLimit = 0;
 
         bool CanUseComputeActor = true;
         NActors::TActorId QuoterServiceActorId;

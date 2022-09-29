@@ -4,6 +4,7 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/aligned_page_pool.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -20,6 +21,9 @@ namespace NYql::NDq {
 #define CAMQ_LOG_W(s) \
     LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 
+    class THardMemoryLimitException : public NKikimr::TMemoryLimitExceededException {
+    };
+
     class TDqMemoryQuota {
     public:
         TDqMemoryQuota(ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, bool canAllocateExtraMemory, NActors::TActorSystem* actorSystem)
@@ -29,7 +33,7 @@ namespace NYql::NDq {
             , TxId(txId)
             , TaskId(taskId)
             , ProfileStats(profileStats ? MakeHolder<TProfileStats>() : nullptr)
-            , CanAllocateExtraMemory(canAllocateExtraMemory) 
+            , CanAllocateExtraMemory(canAllocateExtraMemory)
             , ActorSystem(actorSystem) {
         }
 
@@ -93,9 +97,17 @@ namespace NYql::NDq {
             return CanAllocateExtraMemory;
         }
 
+        ui64 GetHardMemoryLimit() const {
+            return MemoryLimits.MkqlProgramHardMemoryLimit;
+        }
+
     private:
         void RequestExtraMemory(ui64 memory, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
+
+            if (MemoryLimits.MkqlProgramHardMemoryLimit && MkqlMemoryLimit + memory > MemoryLimits.MkqlProgramHardMemoryLimit) {
+                throw THardMemoryLimitException();
+            }
 
             if (MemoryLimits.AllocateMemoryFn(TxId, TaskId, memory)) {
                 MkqlMemoryLimit += memory;
@@ -112,7 +124,7 @@ namespace NYql::NDq {
                 ProfileStats->MkqlExtraMemoryRequests++;
             }
         }
-        
+
         ui64 AlignMemorySizeToMbBoundary(ui64 memory) {
             // allocate memory in 1_MB (2^20B) chunks, so requested value is rounded up to MB boundary
             constexpr ui64 alignMask = 1_MB - 1;

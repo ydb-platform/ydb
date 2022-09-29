@@ -33,7 +33,10 @@ struct TAlignedPagePoolCounters {
 
 // NOTE: We intentionally avoid inheritance from std::exception here to make it harder
 // to catch this exception in UDFs code, so we can handle it in the host.
-class TMemoryLimitExceededException {};
+class TMemoryLimitExceededException {
+public:
+    virtual ~TMemoryLimitExceededException() = default;
+};
 
 class TAlignedPagePool {
 public:

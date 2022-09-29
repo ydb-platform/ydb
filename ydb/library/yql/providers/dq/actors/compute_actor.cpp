@@ -30,6 +30,7 @@ IActor* CreateComputeActor(
     // light == heavy since we allow extra allocation
     memoryLimits.MkqlLightProgramMemoryLimit = options.MkqlInitialMemoryLimit;
     memoryLimits.MkqlHeavyProgramMemoryLimit = options.MkqlInitialMemoryLimit;
+    memoryLimits.MkqlProgramHardMemoryLimit = options.MkqlProgramHardMemoryLimit;
     memoryLimits.AllocateMemoryFn = allocateMemoryFn;
     memoryLimits.FreeMemoryFn = freeMemoryFn;
     // min alloc size == min free size to simplify api

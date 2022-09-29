@@ -238,8 +238,9 @@ using TFreeMemoryCallback = std::function<void(const TTxId& txId, ui64 taskId, u
 
 struct TComputeMemoryLimits {
     ui64 ChannelBufferSize = 0;
-    ui64 MkqlLightProgramMemoryLimit = 0;
-    ui64 MkqlHeavyProgramMemoryLimit = 0;
+    ui64 MkqlLightProgramMemoryLimit = 0; // Limit for light program.
+    ui64 MkqlHeavyProgramMemoryLimit = 0; // Limit for heavy program.
+    ui64 MkqlProgramHardMemoryLimit = 0; // Limit that stops program execution if reached.
 
     TAllocateMemoryCallback AllocateMemoryFn = nullptr;
     TFreeMemoryCallback FreeMemoryFn = nullptr;

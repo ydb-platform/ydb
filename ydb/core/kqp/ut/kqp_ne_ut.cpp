@@ -3481,7 +3481,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 ON l.Key = r.Key;
             SELECT * FROM `/Root/TwoShard` WHERE $count1 = $count2;
 
-        )", TTxControl::BeginTx()).ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
@@ -3516,7 +3516,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
                 SELECT * FROM `/Root/KeyValue`
                 WHERE Key IN $subquery ORDER BY Key;
-            )", TTxControl::BeginTx(), querySettings).ExtractValueSync();
+            )", TTxControl::BeginTx().CommitTx(), querySettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
@@ -3544,7 +3544,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
                 SELECT * FROM `/Root/KeyValue`
                 WHERE Key IN $keys ORDER BY Key;
-            )", TTxControl::BeginTx(), params, querySettings).ExtractValueSync();
+            )", TTxControl::BeginTx().CommitTx(), params, querySettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
@@ -3561,7 +3561,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
                 SELECT * FROM `/Root/KeyValue`
                 WHERE Key = 1;
-            )", TTxControl::BeginTx(), querySettings).ExtractValueSync();
+            )", TTxControl::BeginTx().CommitTx(), querySettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
 

@@ -1342,6 +1342,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
                 YandexQuery::QueryMeta::PAUSING
             }, metaQuery.status());
 
+            const bool isTerminalStatus = IsTerminalStatus(metaQuery.status());
+            if (isTerminalStatus) {
+                return make_pair(TString{}, NYdb::TParamsBuilder{}.Build());
+            }
+
             if (isValidStatusForAbort) {
                 metaQuery.set_status(YandexQuery::QueryMeta::ABORTING_BY_USER);
                 metaQuery.set_aborted_by(user);

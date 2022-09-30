@@ -7,11 +7,11 @@ namespace NYq {
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.GetCommonCounters(RTC_NODES_HEALTH_CHECK);
-    requestCounters->InFly->Inc();
+    TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(RTC_NODES_HEALTH_CHECK)};
+    requestCounters.IncInFly();
 
     const TEvControlPlaneStorage::TEvNodesHealthCheckRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const auto& request = event.Request;
     const TString tenant = request.tenant();
     const auto& node = request.node();

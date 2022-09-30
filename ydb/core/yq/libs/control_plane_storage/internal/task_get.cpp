@@ -204,8 +204,8 @@ TDuration ExtractLimit(const TTask& task) {
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.GetCommonCounters(RTC_GET_TASK);
-    requestCounters->InFly->Inc();
+    TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(RTC_GET_TASK)};
+    requestCounters.IncInFly();
 
     auto& request = ev->Get()->Request;
     const TString owner = request.owner_id();

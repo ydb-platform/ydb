@@ -5,10 +5,10 @@ namespace NYq {
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.GetCommonCounters(RTC_WRITE_RESULT_DATA);
-    requestCounters->InFly->Inc();
+    TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(RTC_WRITE_RESULT_DATA)};
+    requestCounters.IncInFly();
 
-    requestCounters->RequestBytes->Add(ev->Get()->GetByteSize());
+    requestCounters.Common->RequestBytes->Add(ev->Get()->GetByteSize());
     auto& request = ev->Get()->Request;
     const TString resultId = request.result_id().value();
     const int32_t resultSetId = request.result_set_id();

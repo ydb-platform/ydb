@@ -93,74 +93,122 @@ TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatu
 
 LWTRACE_USING(YQ_CONTROL_PLANE_STORAGE_PROVIDER);
 
-using TRequestCountersPtr = TIntrusivePtr<TRequestCounters>;
+using TRequestScopeCountersPtr = TIntrusivePtr<TRequestScopeCounters>;
+using TRequestCommonCountersPtr = TIntrusivePtr<TRequestCommonCounters>;
 
-    template<typename T>
-    THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName)
-    {
-        THashMap<TString, T> entities;
-        TResultSetParser parser(resultSet);
-        while (parser.TryNextRow()) {
-            T entity;
-            Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
-            const TString name = entity.content().name();
-            if (auto it = entities.find(name); it != entities.end()) {
-                const auto visibility = entity.content().acl().visibility();
-                if (visibility == YandexQuery::Acl::PRIVATE) {
-                    entities[name] = std::move(entity);
-                }
-            } else {
+struct TRequestCounters {
+    TRequestScopeCountersPtr Scope;
+    TRequestCommonCountersPtr Common;
+
+    void IncInFly() {
+        if (Scope) {
+            Scope->InFly->Inc();
+        }
+        if (Common) {
+            Common->InFly->Inc();
+        }
+    }
+
+    void DecInFly() {
+        if (Scope) {
+            Scope->InFly->Inc();
+        }
+        if (Common) {
+            Common->InFly->Inc();
+        }
+    }
+
+    void IncOk() {
+        if (Scope) {
+            Scope->Ok->Inc();
+        }
+        if (Common) {
+            Common->Ok->Inc();
+        }
+    }
+
+    void DecOk() {
+        if (Scope) {
+            Scope->Ok->Inc();
+        }
+        if (Common) {
+            Common->Ok->Inc();
+        }
+    }
+
+    void IncError() {
+        if (Scope) {
+            Scope->Error->Inc();
+        }
+        if (Common) {
+            Common->Error->Inc();
+        }
+    }
+
+    void DecError() {
+        if (Scope) {
+            Scope->Error->Inc();
+        }
+        if (Common) {
+            Common->Error->Inc();
+        }
+    }
+
+    void IncRetry() {
+        if (Scope) {
+            Scope->Retry->Inc();
+        }
+        if (Common) {
+            Common->Retry->Inc();
+        }
+    }
+
+    void DecRetry() {
+        if (Scope) {
+            Scope->Retry->Inc();
+        }
+        if (Common) {
+            Common->Retry->Inc();
+        }
+    }
+};
+
+template<typename T>
+THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName)
+{
+    THashMap<TString, T> entities;
+    TResultSetParser parser(resultSet);
+    while (parser.TryNextRow()) {
+        T entity;
+        Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        const TString name = entity.content().name();
+        if (auto it = entities.find(name); it != entities.end()) {
+            const auto visibility = entity.content().acl().visibility();
+            if (visibility == YandexQuery::Acl::PRIVATE) {
                 entities[name] = std::move(entity);
             }
+        } else {
+            entities[name] = std::move(entity);
         }
-
-        return entities;
     }
 
-    template<typename T>
-    TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName)
-    {
-        TVector<T> entities;
-        TResultSetParser parser(resultSet);
-        while (parser.TryNextRow()) {
-            Y_VERIFY(entities.emplace_back().ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
-        }
-        return entities;
+    return entities;
+}
+
+template<typename T>
+TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName)
+{
+    TVector<T> entities;
+    TResultSetParser parser(resultSet);
+    while (parser.TryNextRow()) {
+        Y_VERIFY(entities.emplace_back().ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
     }
+    return entities;
+}
 
 void InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt);
 
 void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey);
-
-class TRequestCountersScope {
-    TRequestCountersPtr Counters;
-public:
-    TRequestCountersScope(TRequestCountersPtr counters, ui64 requestSize) : Counters(counters) {
-        StartTime = TInstant::Now();
-        Counters->InFly->Inc();
-        Counters->RequestBytes->Add(requestSize);
-    }
-
-    void Reply(const NYql::TIssues& issues, ui64 resultSize) {
-        Delta = TInstant::Now() - StartTime;
-        Counters->ResponseBytes->Add(resultSize);
-        Counters->InFly->Dec();
-        Counters->LatencyMs->Collect(Delta.MilliSeconds());
-        if (issues) {
-            Counters->Error->Inc();
-            for (const auto& issue : issues) {
-                NYql::WalkThroughIssues(issue, true, [&counters=Counters](const NYql::TIssue& err, ui16 level) {
-                    Y_UNUSED(level);
-                    counters->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
-                });
-            }
-        } else {
-            Counters->Ok->Inc();
-        }
-    }
-    TInstant StartTime;
-    TDuration Delta;
-};
 
 class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbControlPlaneStorageActor> {
     enum ERequestTypeScope {
@@ -195,6 +243,27 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RTS_QUOTA_USAGE,
         RTC_CREATE_RATE_LIMITER_RESOURCE,
         RTC_DELETE_RATE_LIMITER_RESOURCE,
+        RTC_CREATE_QUERY,
+        RTC_LIST_QUERIES,
+        RTC_DESCRIBE_QUERY,
+        RTC_GET_QUERY_STATUS,
+        RTC_MODIFY_QUERY,
+        RTC_DELETE_QUERY,
+        RTC_CONTROL_QUERY,
+        RTC_GET_RESULT_DATA,
+        RTC_LIST_JOBS_DATA,
+        RTC_DESCRIBE_JOB,
+        RTC_CREATE_CONNECTION,
+        RTC_LIST_CONNECTIONS,
+        RTC_DESCRIBE_CONNECTION,
+        RTC_MODIFY_CONNECTION,
+        RTC_DELETE_CONNECTION,
+        RTC_CREATE_BINDING,
+        RTC_LIST_BINDINGS,
+        RTC_DESCRIBE_BINDING,
+        RTC_MODIFY_BINDING,
+        RTC_DELETE_BINDING,
+        RTC_PING_TASK,
         RTC_MAX,
     };
 
@@ -208,17 +277,38 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             }
         };
 
-        using TScopeCounters = std::array<TRequestCountersPtr, RTS_MAX>;
+        using TScopeCounters = std::array<TRequestScopeCountersPtr, RTS_MAX>;
         using TScopeCountersPtr = std::shared_ptr<TScopeCounters>;
         using TFinalStatusCountersPtr = TIntrusivePtr<TFinalStatusCounters>;
 
-        std::array<TRequestCountersPtr, RTC_MAX> CommonRequests = CreateArray<RTC_MAX, TRequestCountersPtr>({
-            { MakeIntrusive<TRequestCounters>("WriteResultData") },
-            { MakeIntrusive<TRequestCounters>("GetTask") },
-            { MakeIntrusive<TRequestCounters>("NodesHealthCheck") },
-            { MakeIntrusive<TRequestCounters>("GetQuotaUsage") },
-            { MakeIntrusive<TRequestCounters>("CreateRateLimiterResource") },
-            { MakeIntrusive<TRequestCounters>("DeleteRateLimiterResource") },
+        std::array<TRequestCommonCountersPtr, RTC_MAX> CommonRequests = CreateArray<RTC_MAX, TRequestCommonCountersPtr>({
+            { MakeIntrusive<TRequestCommonCounters>("WriteResultData") },
+            { MakeIntrusive<TRequestCommonCounters>("GetTask") },
+            { MakeIntrusive<TRequestCommonCounters>("NodesHealthCheck") },
+            { MakeIntrusive<TRequestCommonCounters>("GetQuotaUsage") },
+            { MakeIntrusive<TRequestCommonCounters>("CreateRateLimiterResource") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteRateLimiterResource") },
+            { MakeIntrusive<TRequestCommonCounters>("CreateQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("ListQueries") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("GetQueryStatus") },
+            { MakeIntrusive<TRequestCommonCounters>("ModifyQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("ControlQuery") },
+            { MakeIntrusive<TRequestCommonCounters>("GetResultData") },
+            { MakeIntrusive<TRequestCommonCounters>("ListJobs") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeJob") },
+            { MakeIntrusive<TRequestCommonCounters>("CreateConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("ListConnections") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("ModifyConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteConnection") },
+            { MakeIntrusive<TRequestCommonCounters>("CreateBinding") },
+            { MakeIntrusive<TRequestCommonCounters>("ListBindings") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeBinding") },
+            { MakeIntrusive<TRequestCommonCounters>("ModifyBinding") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteBinding") },
+            { MakeIntrusive<TRequestCommonCounters>("PingTask") },
         });
 
         TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
@@ -235,7 +325,11 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             }
         }
 
-        TRequestCountersPtr GetCommonCounters(ERequestTypeCommon type) {
+        TRequestCounters GetCounters(const TString& cloudId, const TString& scope, ERequestTypeScope scopeType, ERequestTypeCommon commonType) {
+            return {GetScopeCounters(cloudId, scope, scopeType), GetCommonCounters(commonType)};
+        }
+
+        TRequestCommonCountersPtr GetCommonCounters(ERequestTypeCommon type) {
             return CommonRequests[type];
         }
 
@@ -255,35 +349,35 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             return finalStatusCounters;
         }
 
-        TRequestCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
+        TRequestScopeCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
             TMetricsScope key{cloudId, scope};
             auto it = ScopeCounters.find(key);
             if (it != ScopeCounters.end()) {
                 return (*it->second)[type];
             }
 
-            auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestCountersPtr>({
-                { MakeIntrusive<TRequestCounters>("CreateQuery") },
-                { MakeIntrusive<TRequestCounters>("ListQueries") },
-                { MakeIntrusive<TRequestCounters>("DescribeQuery") },
-                { MakeIntrusive<TRequestCounters>("GetQueryStatus") },
-                { MakeIntrusive<TRequestCounters>("ModifyQuery") },
-                { MakeIntrusive<TRequestCounters>("DeleteQuery") },
-                { MakeIntrusive<TRequestCounters>("ControlQuery") },
-                { MakeIntrusive<TRequestCounters>("GetResultData") },
-                { MakeIntrusive<TRequestCounters>("ListJobs") },
-                { MakeIntrusive<TRequestCounters>("DescribeJob") },
-                { MakeIntrusive<TRequestCounters>("CreateConnection") },
-                { MakeIntrusive<TRequestCounters>("ListConnections") },
-                { MakeIntrusive<TRequestCounters>("DescribeConnection") },
-                { MakeIntrusive<TRequestCounters>("ModifyConnection") },
-                { MakeIntrusive<TRequestCounters>("DeleteConnection") },
-                { MakeIntrusive<TRequestCounters>("CreateBinding") },
-                { MakeIntrusive<TRequestCounters>("ListBindings") },
-                { MakeIntrusive<TRequestCounters>("DescribeBinding") },
-                { MakeIntrusive<TRequestCounters>("ModifyBinding") },
-                { MakeIntrusive<TRequestCounters>("DeleteBinding") },
-                { MakeIntrusive<TRequestCounters>("PingTask") },
+            auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestScopeCountersPtr>({
+                { MakeIntrusive<TRequestScopeCounters>("CreateQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("ListQueries") },
+                { MakeIntrusive<TRequestScopeCounters>("DescribeQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("GetQueryStatus") },
+                { MakeIntrusive<TRequestScopeCounters>("ModifyQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("DeleteQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("ControlQuery") },
+                { MakeIntrusive<TRequestScopeCounters>("GetResultData") },
+                { MakeIntrusive<TRequestScopeCounters>("ListJobs") },
+                { MakeIntrusive<TRequestScopeCounters>("DescribeJob") },
+                { MakeIntrusive<TRequestScopeCounters>("CreateConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("ListConnections") },
+                { MakeIntrusive<TRequestScopeCounters>("DescribeConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("ModifyConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("DeleteConnection") },
+                { MakeIntrusive<TRequestScopeCounters>("CreateBinding") },
+                { MakeIntrusive<TRequestScopeCounters>("ListBindings") },
+                { MakeIntrusive<TRequestScopeCounters>("DescribeBinding") },
+                { MakeIntrusive<TRequestScopeCounters>("ModifyBinding") },
+                { MakeIntrusive<TRequestScopeCounters>("DeleteBinding") },
+                { MakeIntrusive<TRequestScopeCounters>("PingTask") },
             }));
 
             auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)
@@ -472,7 +566,7 @@ private:
         NActors::TActorSystem* actorSystem,
         const TString& query,
         const NYdb::TParams& params,
-        const TRequestCountersPtr& requestCounters,
+        const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo,
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryOnTli = true);
@@ -490,7 +584,7 @@ private:
         NActors::TActorSystem* actorSystem,
         const TString& query,
         const NYdb::TParams& params,
-        const TRequestCountersPtr& requestCounters,
+        const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo,
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
@@ -501,7 +595,7 @@ private:
         const TString& readQuery,
         const NYdb::TParams& readParams,
         const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
-        const TRequestCountersPtr& requestCounters,
+        const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo = {},
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
@@ -514,11 +608,11 @@ private:
         TActorId self,
         const RequestEventPtr& ev,
         const TInstant& startTime,
-        const TRequestCountersPtr& requestCounters,
+        const TRequestCounters& requestCounters,
         const std::function<Result()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=](const auto& future) {
+        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
@@ -556,11 +650,11 @@ private:
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
-                requestCounters->Error->Inc();
+                requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
                       Y_UNUSED(level);
-                      requestCounters->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                      requestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
                     });
                 }
             } else {
@@ -569,12 +663,12 @@ private:
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
-                requestCounters->Ok->Inc();
+                requestCounters.IncOk();
             }
-            requestCounters->InFly->Dec();
-            requestCounters->ResponseBytes->Add(responseByteSize);
+            requestCounters.IncInFly();
+            requestCounters.Common->ResponseBytes->Add(responseByteSize);
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             return MakeFuture(!issues);
         });
     }
@@ -586,11 +680,11 @@ private:
         TActorId self,
         const RequestEventPtr& ev,
         const TInstant& startTime,
-        const TRequestCountersPtr& requestCounters,
+        const TRequestCounters& requestCounters,
         const std::function<std::pair<Result, AuditDetails>()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=](const auto& future) {
+        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
@@ -631,11 +725,11 @@ private:
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
-                requestCounters->Error->Inc();
+                requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
                       Y_UNUSED(level);
-                      requestCounters->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                      requestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
                     });
                 }
             } else {
@@ -644,12 +738,12 @@ private:
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
-                requestCounters->Ok->Inc();
+                requestCounters.IncOk();
             }
-            requestCounters->InFly->Dec();
-            requestCounters->ResponseBytes->Add(responseByteSize);
+            requestCounters.DecInFly();
+            requestCounters.Common->ResponseBytes->Add(responseByteSize);
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             return MakeFuture(!issues);
         });
     }
@@ -661,11 +755,11 @@ private:
         TActorId self,
         const RequestEventPtr& ev,
         const TInstant& startTime,
-        const TRequestCountersPtr& requestCounters,
+        const TRequestCounters& requestCounters,
         const std::function<Result()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=](const auto& future) {
+        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
@@ -701,11 +795,11 @@ private:
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
-                requestCounters->Error->Inc();
+                requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
                       Y_UNUSED(level);
-                      requestCounters->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                      requestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
                     });
                 }
             } else {
@@ -714,12 +808,12 @@ private:
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
-                requestCounters->Ok->Inc();
+                requestCounters.IncOk();
             }
-            requestCounters->InFly->Dec();
-            requestCounters->ResponseBytes->Add(responseByteSize);
+            requestCounters.IncInFly();
+            requestCounters.Common->ResponseBytes->Add(responseByteSize);
             TDuration delta = TInstant::Now() - startTime;
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
             return MakeFuture(!issues);
         });
     }
@@ -729,13 +823,13 @@ private:
                             const NYql::TIssues& issues,
                             ui64 cookie,
                             const TDuration& delta,
-                            const TRequestCountersPtr& requestCounters) {
+                            TRequestCounters requestCounters) {
         std::unique_ptr<T> event(new T{issues});
-        requestCounters->ResponseBytes->Add(event->GetByteSize());
+        requestCounters.Common->ResponseBytes->Add(event->GetByteSize());
         Send(sender, event.release(), 0, cookie);
-        requestCounters->InFly->Dec();
-        requestCounters->Error->Inc();
-        requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+        requestCounters.DecInFly();
+        requestCounters.IncError();
+        requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
     }
 
     static YandexQuery::CommonMeta CreateCommonMeta(const TString& id, const TString& user, const TInstant& startTime, int64_t revision) {
@@ -772,7 +866,7 @@ private:
 
     NThreading::TFuture<void> PickTask(
         const TPickTaskParams& taskParams,
-        const TRequestCountersPtr& requestCounters,
+        const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo,
         std::shared_ptr<TResponseTasks> responseTasks,
         const TVector<TValidationQuery>& validators = {},

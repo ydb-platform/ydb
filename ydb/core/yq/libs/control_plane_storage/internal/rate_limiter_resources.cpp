@@ -45,7 +45,7 @@ class TRateLimiterRequestActor : public NActors::TActor<TDerived> {
 public:
     using TResponseEvent = TResponse;
 
-    TRateLimiterRequestActor(TInstant startTime, typename TRequest::TPtr&& ev, TRequestCountersPtr requestCounters, TDebugInfoPtr debugInfo)
+    TRateLimiterRequestActor(TInstant startTime, typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo)
         : NActors::TActor<TDerived>(&TDerived::StateFunc)
         , Request(std::move(ev))
         , RequestCounters(std::move(requestCounters))
@@ -138,15 +138,15 @@ public:
     void SendResponseEventAndPassAway(std::unique_ptr<TResponse> event, bool success) {
         event->DebugInfo = std::move(DebugInfo);
 
-        RequestCounters->ResponseBytes->Add(event->GetByteSize());
-        RequestCounters->InFly->Dec();
+        RequestCounters.Common->ResponseBytes->Add(event->GetByteSize());
+        RequestCounters.IncInFly();
         if (success) {
-            RequestCounters->Ok->Inc();
+            RequestCounters.IncOk();
         } else {
-            RequestCounters->Error->Inc();
+            RequestCounters.IncError();
         }
         const TDuration duration = TInstant::Now() - StartTime;
-        RequestCounters->LatencyMs->Collect(duration.MilliSeconds());
+        RequestCounters.Common->LatencyMs->Collect(duration.MilliSeconds());
 
         TDerived::LwProbe(QueryId, duration, success);
 
@@ -157,7 +157,7 @@ public:
 
 protected:
     const typename TRequest::TPtr Request;
-    TRequestCountersPtr RequestCounters;
+    TRequestCounters RequestCounters;
     TDebugInfoPtr DebugInfo;
     const TString QueryId;
     const TString OwnerId;
@@ -272,9 +272,9 @@ const TString TRateLimiterDeleteRequest::RequestTypeName = "DeleteRateLimiterRes
 template <class TEventPtr, class TRequestActor, TYdbControlPlaneStorageActor::ERequestTypeCommon requestType>
 void TYdbControlPlaneStorageActor::HandleRateLimiterImpl(TEventPtr& ev) {
     const TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.GetCommonCounters(requestType);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(ev->Get()->GetByteSize());
+    TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(requestType)};
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(ev->Get()->GetByteSize());
 
     auto& request = ev->Get()->Request;
     const TString& queryId = request.query_id().value();

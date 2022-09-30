@@ -14,9 +14,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
     const TEvControlPlaneStorage::TEvCreateBindingRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_BINDING);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_BINDING, RTC_CREATE_BINDING);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -151,9 +151,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
     const TEvControlPlaneStorage::TEvListBindingsRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_BINDINGS);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_BINDINGS, RTC_LIST_BINDINGS);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::ListBindingsRequest& request = event.Request;
     const TString user = event.User;
     const TString pageToken = request.page_token();
@@ -296,9 +296,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
     const TEvControlPlaneStorage::TEvDescribeBindingRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_BINDING);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_BINDING, RTC_DESCRIBE_BINDING);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DescribeBindingRequest& request = event.Request;
     const TString bindingId = request.binding_id();
     const TString user = event.User;
@@ -383,9 +383,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     const TEvControlPlaneStorage::TEvModifyBindingRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_MODIFY_BINDING);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_BINDING, RTC_MODIFY_BINDING);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::ModifyBindingRequest& request = event.Request;
     const TString bindingId = request.binding_id();
     const TString user = event.User;
@@ -580,9 +580,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
     const TEvControlPlaneStorage::TEvDeleteBindingRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DELETE_BINDING);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_BINDING, RTC_DELETE_BINDING);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DeleteBindingRequest& request = event.Request;
     const TString user = event.User;
     const TString token = event.Token;

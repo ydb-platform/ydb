@@ -16,9 +16,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     const TEvControlPlaneStorage::TEvCreateConnectionRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_CONNECTION);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_CONNECTION, RTC_CREATE_CONNECTION);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::CreateConnectionRequest& request = event.Request;
     const TString user = event.User;
     const TString token = event.Token;
@@ -145,9 +145,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     const TEvControlPlaneStorage::TEvListConnectionsRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_CONNECTIONS);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_CONNECTIONS, RTC_LIST_CONNECTIONS);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::ListConnectionsRequest& request = event.Request;
 
     const TString user = event.User;
@@ -278,9 +278,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     const TEvControlPlaneStorage::TEvDescribeConnectionRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_CONNECTION);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_CONNECTION, RTC_DESCRIBE_CONNECTION);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DescribeConnectionRequest& request = event.Request;
     const TString user = event.User;
     const TString connectionId = request.connection_id();
@@ -374,9 +374,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     const TEvControlPlaneStorage::TEvModifyConnectionRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_MODIFY_CONNECTION);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_CONNECTION, RTC_MODIFY_CONNECTION);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -551,9 +551,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
     const TEvControlPlaneStorage::TEvDeleteConnectionRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DELETE_CONNECTION);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_CONNECTION, RTC_DELETE_CONNECTION);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DeleteConnectionRequest& request = event.Request;
 
     const TString user = event.User;

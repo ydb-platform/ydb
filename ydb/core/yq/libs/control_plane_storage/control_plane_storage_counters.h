@@ -5,7 +5,21 @@
 
 namespace NYq {
 
-class TRequestCounters: public virtual TThrRefBase {
+class TRequestScopeCounters: public virtual TThrRefBase {
+public:
+    const TString Name;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Error;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Retry;
+
+    explicit TRequestScopeCounters(const TString& name);
+
+    void Register(const ::NMonitoring::TDynamicCounterPtr& counters);
+};
+
+class TRequestCommonCounters: public virtual TThrRefBase {
 public:
     const TString Name;
 
@@ -15,10 +29,10 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr Retry;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
-    NMonitoring::THistogramPtr LatencyMs;
+    ::NMonitoring::THistogramPtr LatencyMs;
     ::NMonitoring::TDynamicCounterPtr Issues;
 
-    explicit TRequestCounters(const TString& name);
+    explicit TRequestCommonCounters(const TString& name);
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters);
 

@@ -2,11 +2,22 @@
 
 namespace NYq {
 
-TRequestCounters::TRequestCounters(const TString& name)
+TRequestScopeCounters::TRequestScopeCounters(const TString& name)
     : Name(name) {}
 
-void TRequestCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
-    auto requestCounters = counters->GetSubgroup("request", Name);
+void TRequestScopeCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
+    auto requestCounters = counters->GetSubgroup("request_scope", Name);
+    InFly = requestCounters->GetCounter("InFly", false);
+    Ok = requestCounters->GetCounter("Ok", true);
+    Error = requestCounters->GetCounter("Error", true);
+    Retry = requestCounters->GetCounter("Retry", true);
+}
+
+TRequestCommonCounters::TRequestCommonCounters(const TString& name)
+    : Name(name) {}
+
+void TRequestCommonCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
+    auto requestCounters = counters->GetSubgroup("request_common", Name);
     InFly = requestCounters->GetCounter("InFly", false);
     Ok = requestCounters->GetCounter("Ok", true);
     Error = requestCounters->GetCounter("Error", true);
@@ -17,10 +28,9 @@ void TRequestCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counter
     Issues = requestCounters->GetSubgroup("subcomponent", "Issues");
 }
 
-NMonitoring::IHistogramCollectorPtr TRequestCounters::GetLatencyHistogramBuckets() {
+NMonitoring::IHistogramCollectorPtr TRequestCommonCounters::GetLatencyHistogramBuckets() {
     return NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
 }
-
 
 TFinalStatusCounters::TFinalStatusCounters(const ::NMonitoring::TDynamicCounterPtr& counters) {
     auto subgroup = counters->GetSubgroup("subcomponent", "FinalStatus");

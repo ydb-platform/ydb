@@ -329,7 +329,7 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
     NActors::TActorSystem* actorSystem,
     const TString& query,
     const NYdb::TParams& params,
-    const TRequestCountersPtr& requestCounters,
+    const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
     TTxSettings transactionMode,
     bool retryOnTli)
@@ -337,9 +337,9 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
     auto resultSet = std::make_shared<TVector<NYdb::TResultSet>>();
 
     std::shared_ptr<int> retryCount = std::make_shared<int>();
-    auto handler = [=](TSession& session) {
+    auto handler = [=, requestCounters=requestCounters](TSession& session) mutable {
         if (*retryCount != 0) {
-            requestCounters->Retry->Inc();
+            requestCounters.IncRetry();
         }
         ++(*retryCount);
         CollectDebugInfo(query, params, session, debugInfo);
@@ -406,7 +406,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
     NActors::TActorSystem* actorSystem,
     const TString& query,
     const NYdb::TParams& params,
-    const TRequestCountersPtr& requestCounters,
+    const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
     const TVector<TValidationQuery>& validators,
     TTxSettings transactionMode,
@@ -433,9 +433,9 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
         });
     };
 
-    auto handler = [=] (TSession session) {
+    auto handler = [=, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
-            requestCounters->Retry->Inc();
+            requestCounters.IncRetry();
         }
         ++(*retryCount);
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
@@ -468,7 +468,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
 
 NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
     const TPickTaskParams& taskParams,
-    const TRequestCountersPtr& requestCounters,
+    const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
     std::shared_ptr<TResponseTasks> responseTasks,
     const TVector<TValidationQuery>& validators,
@@ -489,7 +489,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
     const TString& readQuery,
     const NYdb::TParams& readParams,
     const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
-    const TRequestCountersPtr& requestCounters,
+    const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
     const TVector<TValidationQuery>& validators,
     TTxSettings transactionMode,
@@ -569,9 +569,9 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
         });
     };
 
-    auto handler = [=] (TSession session) {
+    auto handler = [=, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
-            requestCounters->Retry->Inc();
+            requestCounters.IncRetry();
         }
         ++(*retryCount);
 

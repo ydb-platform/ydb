@@ -445,9 +445,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     Fq::Private::PingTaskRequest& request = ev->Get()->Request;
     const TString cloudId = "";
     const TString scope = request.scope();
-    TRequestCountersPtr requestCounters = Counters.GetScopeCounters("" /*CloudId*/, scope, RTS_PING_TASK);
-    requestCounters->InFly->Inc();
-    requestCounters->RequestBytes->Add(ev->Get()->GetByteSize());
+    TRequestCounters requestCounters = Counters.GetCounters("" /*CloudId*/, scope, RTS_PING_TASK, RTC_PING_TASK);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(ev->Get()->GetByteSize());
     const TString queryId = request.query_id().value();
     const TString owner = request.owner_id();
     const TInstant deadline = NProtoInterop::CastFromProto(request.deadline());

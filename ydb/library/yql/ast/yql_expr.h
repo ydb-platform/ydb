@@ -117,7 +117,7 @@ struct TTypeAnnotationVisitor {
     virtual void Visit(const TScalarExprType& type) = 0;
 };
 
-enum ETypeAnnotationFlags {
+enum ETypeAnnotationFlags : ui32 {
     TypeNonComposable = 0x01,
     TypeNonPersistable = 0x02,
     TypeNonComputable = 0x04,
@@ -130,6 +130,7 @@ enum ETypeAnnotationFlags {
     TypeHasManyValues = 0x200,
     TypeHasBareYson = 0x400,
     TypeHasNestedOptional = 0x800,
+    TypeNonPresortable = 0x1000
 };
 
 const ui64 TypeHashMagic = 0x10000;
@@ -238,6 +239,10 @@ public:
 
     bool HasBareYson() const {
         return (GetFlags() & TypeHasBareYson) != 0;
+    }
+
+    bool IsPresortSupported() const {
+        return (GetFlags() & TypeNonPresortable) == 0;
     }
 
     ui32 GetFlags() const {

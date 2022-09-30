@@ -2996,6 +2996,23 @@ ui32 TPgExprType::GetFlags(ui32 typeId) {
         ret |= TypeNonHashable;
     }
 
+    static const std::unordered_set<std::string_view> PgSupportedPresort = {
+        "bool"sv,
+        "int2"sv,
+        "int4"sv,
+        "int8"sv,
+        "float4"sv,
+        "float8"sv,
+        "bytea"sv,
+        "varchar"sv,
+        "text"sv,
+        "cstring"sv
+    };
+
+    if (!PgSupportedPresort.contains(descPtr->Name)) {
+        ret |= TypeNonPresortable;
+    }
+
     return ret;
 }
 

@@ -335,6 +335,7 @@ TUnboxedValuePod ConvertOutputValueForPgType(const NDB::IColumn* col, const TPgC
         if (!ret) {
             ythrow yexception() << "Failed to parse value of pg type " << meta.TypeName << ", details: " << TStringBuf(parseError.Data(), parseError.Size());
         }
+        return ret.Release();
     }
 
     switch (*meta.SourceLogicalSlot) {
@@ -503,7 +504,8 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
         auto size = GetDataTypeInfo(*meta.Slot).FixedSize;
         TUnboxedValuePod ret = TUnboxedValuePod::Zero();
         Y_ENSURE(ref.size <= 8);
-        memcpy(&ret, ref.data, size);
+        Y_ENSURE(ref.size == size);
+        memcpy(&ret, ref.data, ref.size);
         if (tzId) {
             if (*meta.Slot == EDataSlot::TzDatetime) {
                 ret.SetTimezoneId(tzId);
@@ -712,7 +714,7 @@ private:
 class TStreamValue : public TBoxedValue {
 public:
     TStreamValue(const std::string& type, const NDB::FormatSettings& settings, const IValueBuilder* valueBuilder, const TUnboxedValue& stream,
-    const std::vector<TColumnMeta> outMeta, const NDB::ColumnsWithTypeAndName& columns, ui32 tupleSize, const TSourcePosition& pos, ui32 tzId)
+    const std::vector<TColumnMeta>& outMeta, const NDB::ColumnsWithTypeAndName& columns, ui32 tupleSize, const TSourcePosition& pos, ui32 tzId)
         : ValueBuilder(valueBuilder)
         , Stream(stream)
         , OutMeta(outMeta)

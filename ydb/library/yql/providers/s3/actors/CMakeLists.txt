@@ -9,6 +9,7 @@
 
 add_library(providers-s3-actors)
 target_compile_options(providers-s3-actors PRIVATE
+  -DARCADIA_BUILD
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(providers-s3-actors PRIVATE

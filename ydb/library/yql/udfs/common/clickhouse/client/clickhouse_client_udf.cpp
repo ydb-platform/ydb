@@ -20,6 +20,7 @@
 #include "src/DataTypes/DataTypeEnum.h"
 #include "src/DataTypes/DataTypesNumber.h"
 #include "src/DataTypes/DataTypeDate.h"
+#include "src/DataTypes/DataTypeDateTime64.h"
 #include "src/DataTypes/DataTypeFactory.h"
 #include "src/DataTypes/DataTypeArray.h"
 #include "src/DataTypes/DataTypeNothing.h"
@@ -287,6 +288,10 @@ NDB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
         case EDataSlot::Datetime:
         case EDataSlot::TzDatetime:
             ret = std::make_shared<NDB::DataTypeDateTime>();
+            break;
+        case EDataSlot::Timestamp:
+        case EDataSlot::TzTimestamp:
+            ret = std::make_shared<NDB::DataTypeDateTime64>(6);
             break;
         case EDataSlot::Uuid:
             ret = std::make_shared<NDB::DataTypeUUID>();

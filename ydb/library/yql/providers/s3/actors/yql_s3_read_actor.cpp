@@ -2,6 +2,7 @@
 #if defined(_linux_) || defined(_darwin_)
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeArray.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDate.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDateTime64.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeEnum.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeFactory.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeInterval.h>
@@ -872,6 +873,9 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializat
             case NUdf::EDataSlot::Datetime:
             case NUdf::EDataSlot::TzDatetime:
                 return std::make_shared<NDB::DataTypeDateTime>();
+            case NUdf::EDataSlot::Timestamp:
+            case NUdf::EDataSlot::TzTimestamp:
+                return std::make_shared<NDB::DataTypeDateTime64>(6);
             case NUdf::EDataSlot::Uuid:
                 return std::make_shared<NDB::DataTypeUUID>();
             case NUdf::EDataSlot::Interval:

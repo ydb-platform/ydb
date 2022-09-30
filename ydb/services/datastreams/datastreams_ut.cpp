@@ -882,6 +882,60 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
     }
 
+    Y_UNIT_TEST(ChangeBetweenRetentionModes) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+
+        // CREATE STREAM IF NOT EXISTS
+        auto result = testServer.DataStreamsClient->CreateStream(streamName,
+            NYDS_V1::TCreateStreamSettings().ShardCount(10)
+                                            .RetentionStorageMegabytes(50_GB / 1_MB)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        // UPDATE: Gb -> hours
+        auto updResult = testServer.DataStreamsClient->UpdateStream(streamName,
+            NYDS_V1::TUpdateStreamSettings().TargetShardCount(10)
+                                            .RetentionPeriodHours(4)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(updResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(updResult.GetStatus(), EStatus::SUCCESS);
+
+        auto describeResult = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetResult().stream_description().retention_period_hours(),
+                                    TDuration::Hours(4).Hours());
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetResult().stream_description().storage_limit_mb(), 0);
+
+        // UPDATE #2: hours -> Gb
+        updResult = testServer.DataStreamsClient->UpdateStream(streamName,
+            NYDS_V1::TUpdateStreamSettings().TargetShardCount(10)
+                                            .RetentionStorageMegabytes(50_GB / 1_MB)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(updResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(updResult.GetStatus(), EStatus::SUCCESS);
+
+        describeResult = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetResult().stream_description().retention_period_hours(),
+                                    TDuration::Days(7).Hours());
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetResult().stream_description().storage_limit_mb(), 50_GB / 1_MB);
+
+        // UPDATE #3: Gb -> hours
+        updResult = testServer.DataStreamsClient->UpdateStream(streamName,
+            NYDS_V1::TUpdateStreamSettings().TargetShardCount(10)
+                                            .RetentionPeriodHours(4)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(updResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(updResult.GetStatus(), EStatus::SUCCESS);
+
+        describeResult = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetResult().stream_description().retention_period_hours(),
+                                    TDuration::Hours(4).Hours());
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetResult().stream_description().storage_limit_mb(), 0);
+    }
+
     Y_UNIT_TEST(TestCreateExistingStream) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;

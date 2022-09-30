@@ -256,7 +256,8 @@ private:
 
                     if (publicCounterName) {
                         auto& counter = *ServiceCounters.PublicCounters->GetNamedCounter("name", publicCounterName, isDeriv);
-                        if (isDeriv) {
+                        if (name == "MultiHop_LateThrownEventsCount") {
+                            // the only incremental sensor from TaskRunner
                             counter += v.Count;
                         } else {
                             counter = v.Count;

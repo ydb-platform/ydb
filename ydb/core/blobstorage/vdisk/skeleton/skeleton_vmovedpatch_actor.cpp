@@ -66,7 +66,7 @@ namespace NKikimr {
                     Y_VERIFY(diff.HasOffset());
                     Diffs[idx].Offset = diff.GetOffset();
                     Y_VERIFY(diff.HasBuffer());
-                    Diffs[idx].Buffer = diff.GetBuffer();
+                    Diffs[idx].Buffer = TContiguousData(diff.GetBuffer());
                 }
             }
 

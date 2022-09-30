@@ -252,10 +252,10 @@ namespace NKikimr {
                 // read existing one
                 emptyDb = false;
                 counter = 0;
-                const TString &data = it->second.Data;
+                const TContiguousData &data = it->second.Data;
                 TString explanation;
                 NKikimrVDiskData::THullDbEntryPoint pb;
-                const bool good = THullDbSignatureRoutines::Parse(pb, data, explanation);
+                const bool good = THullDbSignatureRoutines::ParseArray(pb, data.GetData(), data.GetSize(), explanation);
                 if (!good) {
                     TString dbtype = TLogSignature(signature).ToString();
                     explanation = "Entry point for Hull (" + dbtype + ") check failed: " + explanation;
@@ -317,7 +317,7 @@ namespace NKikimr {
         bool InitSyncLogData(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             TStartingPoints::const_iterator it;
             it = startingPoints.find(TLogSignature::SignatureSyncLogIdx);
-            TString entryPoint;
+            TContiguousData entryPoint;
             ui64 entryPointLsn = 0;
 
             if (it == startingPoints.end()) {
@@ -340,7 +340,7 @@ namespace NKikimr {
             };
             // parse entry point
             TString explanation;
-            auto repaired = TSyncLogRepaired::Construct(std::move(params), entryPoint, entryPointLsn, explanation);
+            auto repaired = TSyncLogRepaired::Construct(std::move(params), entryPoint.GetData(), entryPoint.GetSize(), entryPointLsn, explanation);
             if (!repaired) {
                 explanation = "Error parsing SyncLog entry point; explanation# " + explanation;
                 SignalErrorAndDie(ctx, NKikimrProto::ERROR, explanation);
@@ -372,7 +372,7 @@ namespace NKikimr {
             } else {
                 // read existing one
                 LocRecCtx->RecovInfo->EmptySyncer = false;
-                const TString &entryPoint = it->second.Data;
+                const TContiguousData &entryPoint = it->second.Data;
                 if (!TSyncerData::CheckEntryPoint(LocRecCtx->VCtx->VDiskLogPrefix, SkeletonId,
                                                   LocRecCtx->VCtx->ShortSelfVDisk, LocRecCtx->VCtx->Top, entryPoint)) {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for Syncer check failed");
@@ -424,7 +424,7 @@ namespace NKikimr {
                 LocRecCtx->RecovInfo->EmptyHuge = false;
 
                 const ui64 lsn = it->second.Lsn;
-                const TString &entryPoint = it->second.Data;
+                const TContiguousData &entryPoint = it->second.Data;
                 if (!THullHugeKeeperPersState::CheckEntryPoint(entryPoint)) {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for HugeKeeper check failed");
                     return false;
@@ -452,7 +452,7 @@ namespace NKikimr {
         bool InitScrub(const TStartingPoints& startingPoints, const TActorContext& ctx) {
             if (const auto it = startingPoints.find(TLogSignature::SignatureScrub); it != startingPoints.end()) {
                 ScrubEntrypointLsn = it->second.Lsn;
-                if (!ScrubEntrypoint.ParseFromString(it->second.Data)) {
+                if (!ScrubEntrypoint.ParseFromArray(it->second.Data.GetData(), it->second.Data.GetSize())) {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for Scrub actor is incorrect");
                 }
             }

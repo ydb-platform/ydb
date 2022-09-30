@@ -168,6 +168,7 @@ namespace NKikimr {
 
             TString Serialize() const;
             bool ParseFromString(const TString &data);
+            bool ParseFromArray(const char* data, size_t size);
             TString ToString() const;
         };
 
@@ -183,6 +184,7 @@ namespace NKikimr {
 
             TString Serialize() const;
             bool ParseFromString(const TString &data);
+            bool ParseFromArray(const char* data, size_t size);
             TString ToString() const;
         };
 
@@ -203,6 +205,7 @@ namespace NKikimr {
 
             TString Serialize() const;
             bool ParseFromString(const TString &data);
+            bool ParseFromArray(const char* data, size_t size);
             TString ToString() const;
         };
 

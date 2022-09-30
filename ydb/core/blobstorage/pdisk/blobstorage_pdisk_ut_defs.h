@@ -81,7 +81,7 @@ do { \
         ASSERT_YTHROW((a).size() == (b).size(), "Unexpected data size, got size# " << (a).size() << " expected size# " << (b).size()); \
     } else { \
         ASSERT_YTHROW((a).size() == (b).size(), "Unexpected data size, got size# " << (a).size() << " expected size# " << (b).size() << \
-            "\n got \n'" << (a).c_str() << "'\n expected \n'" << (b).c_str() << "'\n" ); \
+            "\n got \n'" << a.c_str() << "'\n expected \n'" << (b).c_str() << "'\n" ); \
     } \
     for (ui32 i = 0; i < (a).size(); ++i) { \
         if ((a).data()[i] != (b).data()[i]) { \
@@ -104,7 +104,7 @@ do { \
 do { \
     ASSERT_YTHROW((record).Lsn == (lsn), "Unexpected Lsn == " << (record).Lsn << " instead of: " << (lsn)); \
     ASSERT_YTHROW((record).Signature == (signature), "Unexpected Signature == " << (ui32)(record).Signature); \
-    TEST_DATA_EQUALS((record).Data, (data)); \
+    TEST_DATA_EQUALS(TContiguousData((record).Data).ExtractUnderlyingContainerOrCopy<TString>(), (data)); \
 } while(false)
 
 #define TEST_PDISK_STATUS(s) \

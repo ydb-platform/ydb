@@ -146,7 +146,7 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                 TOwnerData &ownerData = OwnerData[header.OwnerId];
                 if (ownerData.VDiskId != TVDiskID::InvalidId) {
                     TLogSignature unmasked = header.Signature.GetUnmasked();
-                    ownerData.StartingPoints[unmasked] = NPDisk::TLogRecord(unmasked, data, header.OwnerLsn);
+                    ownerData.StartingPoints[unmasked] = NPDisk::TLogRecord(unmasked, TContiguousData(data), header.OwnerLsn);
                 }
             }
         } else {
@@ -180,7 +180,7 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                     ownerData.LastSeenLsn = header.OwnerLsn;
                 }
             }
-            result->Results.push_back(NPDisk::TLogRecord(header.Signature.GetUnmasked(), data, header.OwnerLsn));
+            result->Results.push_back(NPDisk::TLogRecord(header.Signature.GetUnmasked(), TContiguousData(data), header.OwnerLsn));
         }
     }
 }

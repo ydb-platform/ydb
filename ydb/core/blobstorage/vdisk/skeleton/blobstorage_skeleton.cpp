@@ -367,9 +367,14 @@ namespace NKikimr {
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(
                 new NSyncLog::TEvSyncLogPut(Db->GType, seg.Point(), TLogoBlobID(id, 0), info.Ingress));
 #endif
+            // FIXME(innokentii) unclear semantics: we make only copy of wrapper here
+            // so, in right scenario we only take underlying container and call .GrowFront() on him
+            // which (if there is headroom) doesn't invalidate anything and change behavior only for wrapper
+            // and even if there is no headroom - copy will occur, making wrappers point to two unrelated memory
+            // regions
 
             // prepare message to recovery log
-            TString dataToWrite = TPutRecoveryLogRecOpt::Serialize(Db->GType, id, buffer);
+            TContiguousData dataToWrite = TPutRecoveryLogRecOpt::SerializeZeroCopy(Db->GType, id, TRope(buffer));
             LOG_DEBUG_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
                     << evPrefix << ": userDataSize# " << buffer.GetSize()
                     << " writtenSize# " << dataToWrite.size()

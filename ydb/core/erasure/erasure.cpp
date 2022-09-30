@@ -44,16 +44,16 @@ static TString DebugFormatBits(ui64 value) {
 
 namespace NKikimr {
 
-static void Refurbish(TRope &str, ui64 size) {
+static void Refurbish(TRope &str, ui64 size, ui64 headroom = 0, ui64 tailroom = 0) {
     if (str.size() != size) {
-        str = TRope::Uninitialized(size);
+        str = TRope(TContiguousData::Uninitialized(size, headroom, tailroom));
     }
 }
 
-static void Refurbish(TPartFragment &fragment, ui64 size) {
+static void Refurbish(TPartFragment &fragment, ui64 size, ui64 headroom = 0, ui64 tailroom = 0) {
     if (fragment.size() != size) {
         TRACE("Refurbish fragment size# " << fragment.size() << " to size# " << size << Endl);
-        fragment.UninitializedOwnedWhole(size);
+        fragment.UninitializedOwnedWhole(size, headroom, tailroom);
     }
 }
 
@@ -120,7 +120,7 @@ void PadAndCrcAtTheEnd(char *data, ui64 dataSize, ui64 bufferSize) {
     memcpy(data + bufferSize - sizeof(ui32), &hash, sizeof(ui32));
 }
 
-bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TString& buf) {
+bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf) {
     switch (crcMode) {
     case TErasureType::CrcModeNone:
         return true;
@@ -2506,7 +2506,6 @@ void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope
         TDataPartSet& outPartSet) {
     outPartSet.FullDataSize = buffer.size();
     outPartSet.Parts.resize(type.TotalPartCount());
-    TString partBuffer;
     ui32 parityParts = type.ParityParts();
     switch (crcMode) {
     case TErasureType::CrcModeNone:
@@ -2514,29 +2513,28 @@ void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope
             outPartSet.Parts[partIdx].ReferenceTo(buffer);
             outPartSet.PartsMask |= (1 << partIdx);
         }
-        outPartSet.MemoryConsumed = buffer.capacity();
+        outPartSet.MemoryConsumed = buffer.capacity(); //FIXME(innokentii) check how MemoryConsumed actually used
         return;
     case TErasureType::CrcModeWholePart:
         {
             ui64 partSize = type.PartSize(crcMode, buffer.size());
-            TRope part = TRope::Uninitialized(partSize);
+            TContiguousData part(buffer);
+            part.GrowBack(partSize - buffer.GetSize());
             char *dst = part.GetContiguousSpanMut().data();
             if (buffer.size() || part.size()) {
                 Y_VERIFY(part.size() >= buffer.size() + sizeof(ui32), "Part size too small, buffer size# %" PRIu64
                         " partSize# %" PRIu64, (ui64)buffer.size(), (ui64)partSize);
-                memcpy(dst, buffer.GetContiguousSpan().data(), buffer.size());
                 PadAndCrcAtTheEnd(dst, buffer.size(), part.size());
             }
             for (ui32 partIdx = 0; partIdx <= parityParts; ++partIdx) {
                 outPartSet.Parts[partIdx].ReferenceTo(part);
                 outPartSet.PartsMask |= (1 << partIdx);
             }
-            outPartSet.MemoryConsumed = part.capacity();
+            outPartSet.MemoryConsumed = part.GetOccupiedMemorySize(); //FIXME(innokentii) check how MemoryConsumed actually used
         }
         return;
     }
     ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
-
 }
 
 template <bool restoreParts, bool restoreFullData>
@@ -2561,10 +2559,10 @@ void MirrorRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDa
                         TRope outBuffer = partSet.Parts[partIdx].OwnedString;
                         outBuffer.GetContiguousSpanMut(); // Detach
                         if(outBuffer.size() != partSet.FullDataSize) {
-                            TString newOutBuffer(outBuffer.GetContiguousSpan().data(), outBuffer.size()); //FIXME(innokentii) potentially redundant allocation for resize
+                            TContiguousData newOutBuffer(outBuffer);
                             Y_VERIFY(outBuffer.size() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
                                     " fullDataSize# %" PRIu64, (ui64)outBuffer.size(), (ui64)partSet.FullDataSize);
-                            newOutBuffer.resize(partSet.FullDataSize); // To pad with zeroes!
+                            newOutBuffer.Trim(partSet.FullDataSize); // To pad with zeroes!
                             outBuffer = TRope(newOutBuffer);
                         }
                         partSet.FullDataFragment.ReferenceTo(outBuffer);
@@ -2606,7 +2604,7 @@ void TErasureType::IncrementalSplitData(ECrcMode crcMode, TRope& buffer, TDataPa
         case TErasureType::ErasureParityStripe:
             switch (erasure.ParityParts) {
                 case 1:
-                    XorBlockSplit<true>(crcMode ,*this, buffer, outPartSet);
+                    XorBlockSplit<true>(crcMode, *this, buffer, outPartSet);
                     break;
                 case 2:
                     EoBlockSplit<true>(crcMode, *this, buffer, outPartSet);
@@ -2689,8 +2687,8 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 Y_VERIFY(bufferSize);
                 Y_VERIFY_S(diffShift + bufferSize <= diff.Buffer.size(), "diffShift# " << diffShift
                         << " bufferSize# " << bufferSize << " diff.GetDiffLength()# " << diff.GetDiffLength());
-                TString newBuffer = TString::Uninitialized(bufferSize);
-                memcpy(newBuffer.begin(), diff.Buffer.begin() + diffShift, bufferSize);
+                TContiguousData newBuffer(diff.Buffer);
+                newBuffer.Trim(bufferSize, diffShift);
                 part.Diffs.emplace_back(newBuffer, 0, false, true);
 
                 if (diffEnd <= nextOffset) {
@@ -2699,12 +2697,12 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                     break;
                 }
             } else if (diffEnd <= nextOffset) {
-                TString buffer;
+                TContiguousData buffer;
                 ui32 bufferSize = 0;
                 if (lineOffset && !diff.IsAligned) {
                     bufferSize = diff.GetDiffLength() + lineOffset;
-                    buffer = TString::Uninitialized(bufferSize);
-                    memcpy(buffer.begin() + lineOffset, diff.Buffer.begin(), diff.GetDiffLength());
+                    buffer = diff.Buffer;
+                    buffer.GrowFront(lineOffset); // FIXME(innokentii) should the [0..lineOffset) be zeroed?
                 } else {
                     buffer = diff.Buffer;
                     bufferSize = diff.Buffer.size();
@@ -2714,8 +2712,9 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 diffIdx++;
             } else if (diff.Offset < nextOffset) {
                 ui32 bufferSize = nextOffset - diff.Offset + lineOffset;
-                TString newBuffer = TString::Uninitialized(bufferSize);
-                memcpy(newBuffer.begin() + lineOffset, diff.Buffer.begin(), bufferSize - lineOffset);
+                TContiguousData newBuffer = diff.Buffer;
+                newBuffer.GrowFront(lineOffset); // FIXME(innokentii) should the [0..lineOffset) be zeroed?
+                newBuffer.Trim(bufferSize);
                 Y_VERIFY(bufferSize);
                 part.Diffs.emplace_back(newBuffer, diff.Offset - partOffset, false, true);
                 break;
@@ -2774,7 +2773,7 @@ void MakeEoBlockXorDiff(TErasureType::ECrcMode crcMode, const TErasureType &type
 
         ui32 bufferSize = upperEndPos - lowerStartPos;
         Y_VERIFY(bufferSize);
-        TString xorDiffBuffer = TString::Uninitialized(bufferSize);
+        TContiguousData xorDiffBuffer = TContiguousData::Uninitialized(bufferSize); // FIXME(innokentii) candidate
         ui8 *xorDiffBufferBytes = reinterpret_cast<ui8*>(const_cast<char*>(xorDiffBuffer.data()));
 
         if (lowerEndPos == lowerStartPos) {

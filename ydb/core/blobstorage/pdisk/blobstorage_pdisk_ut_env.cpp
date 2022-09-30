@@ -30,7 +30,7 @@ void TestChunkWriteReleaseRun() {
     commitRecord.CommitChunks.push_back(reservedChunk);
     testCtx.TestResponce<NPDisk::TEvLogResult>(
             new NPDisk::TEvLog(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0, commitRecord,
-                    TString(), TLsnSeg(1, 1), nullptr),
+                    TContiguousData(TString()), TLsnSeg(1, 1), nullptr),
             NKikimrProto::OK);
 
     const auto evControlRes = testCtx.TestResponce<NPDisk::TEvYardControlResult>(
@@ -43,7 +43,7 @@ void TestChunkWriteReleaseRun() {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.DeleteChunks.push_back(reservedChunk);
         NPDisk::TEvLog ev(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0, commitRecord,
-                TString(), TLsnSeg(2, 2), nullptr);
+                TContiguousData(TString()), TLsnSeg(2, 2), nullptr);
         NPDisk::TLogWrite *log = new NPDisk::TLogWrite(ev, testCtx.Sender, 0, {}, {});
         bool ok = pDisk->PreprocessRequest(log);
         UNIT_ASSERT(ok);

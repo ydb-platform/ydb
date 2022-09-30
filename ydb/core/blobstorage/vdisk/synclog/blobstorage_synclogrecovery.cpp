@@ -13,9 +13,19 @@ namespace NKikimr {
                 ui64 entryPointLsn,
                 TString &explanation)
         {
+            return Construct(std::move(params), data.data(), data.size(), entryPointLsn, explanation);
+        }
+
+        std::unique_ptr<TSyncLogRepaired> TSyncLogRepaired::Construct(
+                TSyncLogParams &&params,
+                const char* data,
+                size_t size,
+                ui64 entryPointLsn,
+                TString &explanation)
+        {
             TEntryPointParser parser(std::move(params));
             bool needsInitialCommit = false;
-            bool success = parser.Parse(data, needsInitialCommit, explanation);
+            bool success = parser.ParseArray(data, size, needsInitialCommit, explanation);
             if (!success) {
                 return nullptr;
             }

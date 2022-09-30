@@ -442,7 +442,7 @@ public:
         TLsnSeg seg(Lsn, Lsn);
         ++Lsn;
         SendRequest(ctx, std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound,
-                TLogSignature::SignatureHugeLogoBlob, record, logRecord, seg,
+                TLogSignature::SignatureHugeLogoBlob, record, TContiguousData(logRecord), seg,
                 reinterpret_cast<void*>(requestIdx)));
         ++LogInFlight;
     }

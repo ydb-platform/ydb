@@ -27,8 +27,12 @@ namespace NKikimr {
     }
 
     bool TAnubisOsirisPutRecoveryLogRec::ParseFromString(const TString &data) {
+        return ParseFromArray(data.data(), data.size());
+    }
+
+    bool TAnubisOsirisPutRecoveryLogRec::ParseFromArray(const char* data, size_t size) {
         NKikimrVDiskData::TAnubisOsirisPutRecoveryLogRec proto;
-        bool res = proto.ParseFromString(data);
+        bool res = proto.ParseFromArray(data, size);
         if (!res)
             return res;
         Id = LogoBlobIDFromLogoBlobID(proto.GetLogoBlobId());

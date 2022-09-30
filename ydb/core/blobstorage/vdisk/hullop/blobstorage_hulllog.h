@@ -28,4 +28,21 @@ namespace NKikimr {
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg);
 
+    std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
+                                             TLogSignature signature,
+                                             const TContiguousData &data,
+                                             TLsnSeg seg,
+                                             void *cookie,
+                                             std::unique_ptr<IEventBase> syncLogMsg,
+                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice);
+
+    std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
+                                             TLogSignature signature,
+                                             const NPDisk::TCommitRecord &commitRecord,
+                                             const TContiguousData &data,
+                                             TLsnSeg seg,
+                                             void *cookie,
+                                             std::unique_ptr<IEventBase> syncLogMsg);
+
+
 } // NKikimr

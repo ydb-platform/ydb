@@ -182,7 +182,9 @@ public:
         }
 
         NKikimrProto::EReplyStatus Put(const TVDiskID& vdiskId, const TLogoBlobID& blobId, const TString& data) {
-            Send(GetBackpressureFor(Info->GetOrderNumber(vdiskId)), new TEvBlobStorage::TEvVPut(blobId, TRope(data), vdiskId,
+            TContiguousData dataWithHeadroom(TContiguousData::Uninitialized(data.size(), 32));
+            std::memcpy(dataWithHeadroom.UnsafeGetDataMut(), data.data(), data.size());
+            Send(GetBackpressureFor(Info->GetOrderNumber(vdiskId)), new TEvBlobStorage::TEvVPut(blobId, TRope(dataWithHeadroom), vdiskId,
                 false, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog));
             auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVPutResult>();
             auto& record = ev->Get()->Record;

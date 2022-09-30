@@ -196,6 +196,13 @@ namespace NKikimr {
                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                     const TString &entryPoint = TString());
 
+        TSyncerData(const TString &logPrefix,
+                    const TActorId &notifyId,
+                    const TVDiskIdShort &selfVDisk,
+                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                    TContiguousSpan entryPoint);
+
+
         // we call this func during local recovery to apply last changes from recovery log
         // FIXME: looks like we MUST NOT call this function!!!!!!!!!!!!!!!!!!!!!!!!
         void PutFromRecoveryLog(const TVDiskIdShort &vdisk, const TSyncState &syncState);
@@ -203,17 +210,28 @@ namespace NKikimr {
         void Serialize(TSyncerDataSerializer &s, const TBlobStorageGroupInfo *info) const;
 
         // check and cut signature
+        static TContiguousSpan WithoutSignature(TContiguousSpan entryPoint);
         static TString WithoutSignature(const TString &entryPoint);
         static bool CheckEntryPoint(const TString &logPrefix,
                                     const TActorId &notifyId,
                                     const TVDiskIdShort &selfVDisk,
                                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                     const TString &entryPoint);
+        static bool CheckEntryPoint(const TString &logPrefix,
+                                    const TActorId &notifyId,
+                                    const TVDiskIdShort &selfVDisk,
+                                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                                    const TContiguousSpan &entryPoint);
+
         // Convert from old entry point format to protobuf format
         // TODO: we can remove this function after migrating to the protobuf format
         static TString Convert(const TVDiskIdShort &selfVDisk,
                               std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                               const TString &entryPoint);
+
+        static TString Convert(const TVDiskIdShort &selfVDisk,
+                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                              const TContiguousSpan &entryPoint);
 
     private:
         void ParseWOSignature(const TString &serProto);

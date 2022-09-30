@@ -287,11 +287,41 @@ namespace NKikimr {
         }
     }
 
+    TContiguousSpan TSyncerData::WithoutSignature(TContiguousSpan entryPoint) {
+        if (entryPoint.size() == 0) {
+            return entryPoint;
+        } else {
+            TMemoryInput str(entryPoint.GetData(), entryPoint.GetSize());
+            ui32 sign = 0;
+            if (str.Load(&sign, sizeof(sign)) != sizeof(sign)
+                || sign != SyncerDataSignature) {
+                ythrow yexception() << "incorrect signature";
+            }
+            return entryPoint.SubSpan(sizeof(sign), entryPoint.size() - sizeof(sign));
+        }
+    }
+
     TSyncerData::TSyncerData(const TString &logPrefix,
                              const TActorId &notifyId,
                              const TVDiskIdShort &selfVDisk,
                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                              const TString &entryPoint)
+        : Neighbors(MakeIntrusive<TSyncNeighbors>(logPrefix,
+                                                  notifyId,
+                                                  selfVDisk,
+                                                  top))
+        , LocalSyncerState()
+        , NotifyId(notifyId)
+    {
+        TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
+        ParseWOSignature(serProto);
+    }
+
+    TSyncerData::TSyncerData(const TString &logPrefix,
+                             const TActorId &notifyId,
+                             const TVDiskIdShort &selfVDisk,
+                             std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                             TContiguousSpan entryPoint)
         : Neighbors(MakeIntrusive<TSyncNeighbors>(logPrefix,
                                                   notifyId,
                                                   selfVDisk,
@@ -318,6 +348,21 @@ namespace NKikimr {
         return true;
     }
 
+    bool TSyncerData::CheckEntryPoint(const TString &logPrefix,
+                                      const TActorId &notifyId,
+                                      const TVDiskIdShort &selfVDisk,
+                                      std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                                      const TContiguousSpan &entryPoint) {
+        try {
+            TSyncerData n(logPrefix, notifyId, selfVDisk, top);
+            TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint)); //FIXME(innokentii) unnecessary copy
+            n.ParseWOSignature(serProto);
+        } catch (yexception) {
+            return false;
+        }
+        return true;
+    }
+
     // Convert from old entry point format to protobuf format
     // TODO: we can remove this function after migrating to the protobuf format
     TString TSyncerData::Convert(const TVDiskIdShort &selfVDisk,
@@ -334,6 +379,44 @@ namespace NKikimr {
 
             if (sign == SyncerDataSignature) {
                 return entryPoint;
+            } else if (sign == OldSyncerDataSignature) {
+                using TNeighbors = NSync::TVDiskNeighborsSerializable<NSyncer::TPeer>;
+
+                // create empty neighbors
+                TNeighbors n(selfVDisk, top);
+                // parse from old format data
+                TSyncNeighbors::TOldDes des(str);
+                n.GenericParse(des);
+                // recover groupId and groupGen for further conversion
+                ui32 groupId = des.GetGroupId();
+                ui32 groupGen = des.GetGroupGeneration();
+                // serialize into current format
+                TStringStream output;
+                // current syncer data signature
+                output.Write(&SyncerDataSignature, sizeof(SyncerDataSignature));
+                TSyncNeighbors::TSer ser(output, groupId, groupGen);
+                n.GenericSerialize(ser);
+                return output.Str();
+            } else {
+                ythrow yexception() << "incorrect signature";
+            }
+        }
+    }
+
+    TString TSyncerData::Convert(const TVDiskIdShort &selfVDisk,
+                                std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                                const TContiguousSpan &entryPoint) {
+        if (entryPoint.size() == 0) {
+            return TString();
+        } else {
+            TMemoryInput str(entryPoint.GetData(), entryPoint.GetSize());
+            ui32 sign = 0;
+            if (str.Load(&sign, sizeof(sign)) != sizeof(sign)) {
+                ythrow yexception() << "incorrect signature";
+            }
+
+            if (sign == SyncerDataSignature) {
+                return TString(entryPoint.GetData(), entryPoint.GetSize());
             } else if (sign == OldSyncerDataSignature) {
                 using TNeighbors = NSync::TVDiskNeighborsSerializable<NSyncer::TPeer>;
 

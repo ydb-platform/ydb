@@ -47,7 +47,7 @@ protected:
         }
         const TIntervalVec<i32> interval(0, state.Id.BlobSize());
         Y_VERIFY(interval.IsSubsetOf(state.Whole.Here), "missing blob data State# %s", state.ToString().data());
-        TRope wholeBuffer(MakeIntrusive<TRopeSharedDataBackend>(TSharedData::Uninitialized(state.Id.BlobSize())));
+        TRope wholeBuffer(TSharedData::Uninitialized(state.Id.BlobSize()));
         state.Whole.Data.Read(0, wholeBuffer.UnsafeGetContiguousSpanMut().data(), state.Id.BlobSize());
         TDataPartSet partSet;
         info.Type.SplitData((TErasureType::ECrcMode)state.Id.CrcMode(), wholeBuffer, partSet);

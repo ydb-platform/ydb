@@ -188,7 +188,7 @@ public:
     void ReadSysLog(const TActorId &pDiskActor); // Called by actor
     void ProcessChunk0(const TEvReadLogResult &readLogResult);
     void PrintChunksDebugInfo();
-    TString ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn, const TEvReadLogResult &readLogResult);
+    TContiguousData ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn, const TEvReadLogResult &readLogResult);
     void ReadAndParseMainLog(const TActorId &pDiskActor);
     void WriteFormatAsync(TDiskFormat format, const TKey &mainKey);
     // Called by the log reader on success with the current chunkOwnerMap.

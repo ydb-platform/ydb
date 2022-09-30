@@ -134,7 +134,7 @@ namespace NKikimr {
             // commit
             NPDisk::TCommitRecord commitRec;
             commitRec.IsStartingPoint = true;
-            TString data = State.Serialize();
+            TContiguousData data = TContiguousData(State.Serialize());
             size_t dataSize = data.size();
             TLsnSeg seg = SyncerCtx->LsnMngr->AllocLsnForLocalUse();
             auto msg = std::make_unique<NPDisk::TEvLog>(SyncerCtx->PDiskCtx->Dsk->Owner,

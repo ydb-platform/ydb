@@ -47,6 +47,7 @@ namespace NKikimr {
             TString ToString() const;
             TString Serialize() const;
             void ParseFromString(const TString &serialized);
+            void ParseFromArray(const char* data, size_t size);
             static bool CheckEntryPoint(const TString &serialized);
         };
 
@@ -151,12 +152,27 @@ namespace NKikimr {
                                      const ui64 entryPointLsn,
                                      const TString &entryPointData,
                                      std::function<void(const TString&)> logFunc);
+            THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
+                                     const ui32 chunkSize,
+                                     const ui32 appendBlockSize,
+                                     const ui32 minHugeBlobInBytes,
+                                     const ui32 milestoneHugeBlobInBytes,
+                                     const ui32 maxBlobInBytes,
+                                     const ui32 overhead,
+                                     const ui32 freeChunksReservation,
+                                     const bool oldMapCompatible,
+                                     const ui64 entryPointLsn,
+                                     const TContiguousSpan &entryPointData,
+                                     std::function<void(const TString&)> logFunc);
             ~THullHugeKeeperPersState();
 
             TString Serialize() const;
             void ParseFromString(const TString &data);
+            void ParseFromArray(const char* data, size_t size);
             static TString ExtractLogPosition(const TString &data);
+            static TContiguousSpan ExtractLogPosition(TContiguousSpan data);
             static bool CheckEntryPoint(const TString &data);
+            static bool CheckEntryPoint(TContiguousSpan data);
             TString ToString() const;
             void RenderHtml(IOutputStream &str) const;
             ui32 GetMinREALHugeBlobInBytes() const;
@@ -201,6 +217,10 @@ namespace NKikimr {
             TRlas ApplyEntryPoint(const TActorContext &ctx,
                         ui64 lsn,
                         const TString &data);
+            TRlas ApplyEntryPoint(const TActorContext &ctx,
+                        ui64 lsn,
+                        const TContiguousSpan &data);
+
             void FinishRecovery(const TActorContext &ctx);
 
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;

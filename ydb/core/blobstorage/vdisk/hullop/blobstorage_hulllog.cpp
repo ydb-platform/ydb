@@ -57,7 +57,7 @@ namespace NKikimr {
         return std::make_unique<NPDisk::TEvLog>(hullLogCtx->PDiskCtx->Dsk->Owner,
                                   hullLogCtx->PDiskCtx->Dsk->OwnerRound,
                                   signature,
-                                  data,
+                                  TContiguousData(data), //FIXME(innokentii) wrapping
                                   seg,
                                   cookie,
                                   std::move(callback));
@@ -68,6 +68,48 @@ namespace NKikimr {
                                              TLogSignature signature,
                                              const NPDisk::TCommitRecord &commitRecord,
                                              const TString &data,
+                                             TLsnSeg seg,
+                                             void *cookie,
+                                             std::unique_ptr<IEventBase> syncLogMsg)
+    {
+        auto callback = std::make_unique<THullCallback>(seg, hullLogCtx->VCtx, hullLogCtx->SkeletonId,
+              hullLogCtx->SyncLogId, TActorId(), std::move(syncLogMsg), nullptr);
+
+        return std::make_unique<NPDisk::TEvLog>(hullLogCtx->PDiskCtx->Dsk->Owner,
+                                  hullLogCtx->PDiskCtx->Dsk->OwnerRound,
+                                  signature,
+                                  commitRecord,
+                                  TContiguousData(data), //FIXME(innokentii) wrapping
+                                  seg,
+                                  cookie,
+                                  std::move(callback));
+    }
+    std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
+                                             TLogSignature signature,
+                                             const TContiguousData &data,
+                                             TLsnSeg seg,
+                                             void *cookie,
+                                             std::unique_ptr<IEventBase> syncLogMsg,
+                                             std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice)
+    {
+        auto callback = std::make_unique<THullCallback>(seg, hullLogCtx->VCtx, hullLogCtx->SkeletonId,
+              hullLogCtx->SyncLogId, hullLogCtx->HugeKeeperId, std::move(syncLogMsg),
+              std::move(hugeKeeperNotice));
+
+        return std::make_unique<NPDisk::TEvLog>(hullLogCtx->PDiskCtx->Dsk->Owner,
+                                  hullLogCtx->PDiskCtx->Dsk->OwnerRound,
+                                  signature,
+                                  data,
+                                  seg,
+                                  cookie,
+                                  std::move(callback));
+    }
+
+
+    std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
+                                             TLogSignature signature,
+                                             const NPDisk::TCommitRecord &commitRecord,
+                                             const TContiguousData &data,
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg)

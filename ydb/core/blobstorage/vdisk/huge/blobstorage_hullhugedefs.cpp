@@ -31,9 +31,13 @@ namespace NKikimr {
         }
 
         bool TAllocChunkRecoveryLogRec::ParseFromString(const TString &data) {
-            if (data.size() != sizeof(ui32) + sizeof(ui64)) // refPointLsn(ui64) (for backward compatibility, can be removed)
+            return ParseFromArray(data.data(), data.size());
+        }
+
+        bool TAllocChunkRecoveryLogRec::ParseFromArray(const char* data, size_t size) {
+            if (size != sizeof(ui32) + sizeof(ui64)) // refPointLsn(ui64) (for backward compatibility, can be removed)
                 return false;
-            const char *cur = data.data();
+            const char *cur = data;
             ChunkId = ReadUnaligned<ui32>(cur);
 
             return true;
@@ -61,9 +65,13 @@ namespace NKikimr {
         }
 
         bool TFreeChunkRecoveryLogRec::ParseFromString(const TString &data) {
+            return ParseFromArray(data.data(), data.size());
+        }
+
+        bool TFreeChunkRecoveryLogRec::ParseFromArray(const char* data, size_t s) {
             ChunkIds.clear();
-            const char *cur = data.data();
-            const char *end = cur + data.size();
+            const char *cur = data;
+            const char *end = cur + s;
             if (size_t(end - cur) < sizeof(ui64) + sizeof(ui32))
                 return false;
 
@@ -134,8 +142,12 @@ namespace NKikimr {
         }
 
         bool TPutRecoveryLogRec::ParseFromString(const TString &data) {
-            const char *cur = data.data();
-            const char *end = cur + data.size();
+            return ParseFromArray(data.data(), data.size());
+        }
+
+        bool TPutRecoveryLogRec::ParseFromArray(const char* data, size_t size) {
+            const char *cur = data;
+            const char *end = cur + size;
 
             // LogoBlobID
             if (size_t(end - cur) < sizeof(ui16))

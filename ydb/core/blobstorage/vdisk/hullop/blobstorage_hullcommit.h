@@ -257,7 +257,7 @@ namespace NKikimr {
                 if (CallerInfo) {
                     DebugMessage << " caller# " << CallerInfo;
                 }
-                TString data = GenerateEntryPointData();
+                TContiguousData data = TContiguousData(GenerateEntryPointData());
                 CommitMsg = std::make_unique<NPDisk::TEvLog>(Ctx->PDiskCtx->Dsk->Owner, Ctx->PDiskCtx->Dsk->OwnerRound,
                     PDiskSignatureForHullDbKey<TKey>(), CommitRecord, data, LsnSeg, nullptr);
             }

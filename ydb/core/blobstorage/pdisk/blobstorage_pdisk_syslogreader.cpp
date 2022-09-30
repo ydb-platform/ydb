@@ -357,12 +357,12 @@ void TSysLogReader::FindMaxNonce() {
 
 void TSysLogReader::PrepareResult() {
     TSectorSetInfo &info = SectorSetInfo[BestRecordFirstOffset % SectorSetInfo.size()];
-    TString payload(TString::Uninitialized(info.FullPayloadSize));
+    TContiguousData payload(TContiguousData::Uninitialized(info.FullPayloadSize));
     VerboseCheck(info.FullPayloadSize >= info.PayloadPartSize, "First payload part too large. Marker# BPS04");
     if (IsReplied) {
         return;
     }
-    memcpy(payload.Detach(), info.Payload, info.PayloadPartSize);
+    memcpy(payload.UnsafeGetDataMut(), info.Payload, info.PayloadPartSize);
     ui32 writePosition = info.PayloadPartSize;
     for (ui32 idx = 1; idx <= BestRecordLastOffset - BestRecordFirstOffset; ++idx) {
         ui32 setIdx = (idx + BestRecordFirstOffset) % SectorSetInfo.size();

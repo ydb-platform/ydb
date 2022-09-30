@@ -12,6 +12,10 @@ namespace NKikimr {
         static const ui32 CurSignature;
 
         static TString Serialize(const NKikimrVDiskData::THullDbEntryPoint &pb);
+        static bool ParseArray(NKikimrVDiskData::THullDbEntryPoint &pb,
+                          const char* data,
+                          size_t size,
+                          TString &explanation);
         static bool Parse(NKikimrVDiskData::THullDbEntryPoint &pb,
                           const TString &source,
                           TString &explanation);

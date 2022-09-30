@@ -57,7 +57,7 @@ class TWorker {
     ui64 StartingPoint = 0;
     ui64 NextStartingPoint = Lsn;
 
-    TString DataBuffer;
+    TContiguousData DataBuffer;
     TReallyFastRng32 *Gen;
 
     TIntrusivePtr<TPDiskParams> PDiskParams;
@@ -86,8 +86,8 @@ public:
         SizeMin = cmd.GetSizeIntervalMin();
         VERIFY_PARAM(SizeIntervalMax);
         SizeMax = cmd.GetSizeIntervalMax();
-        DataBuffer = TString::TUninitialized(SizeMax);
-        ::memset(DataBuffer.Detach(), 0, SizeMax);
+        DataBuffer = TContiguousData::Uninitialized(SizeMax);
+        ::memset(DataBuffer.UnsafeGetDataMut(), 0, SizeMax);
 
         VERIFY_PARAM(VDiskId);
         VDiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
@@ -142,7 +142,7 @@ public:
                 ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(),
                         DataBuffer, seg, nullptr);
             }
-            BytesInFlight += DataBuffer.Size();
+            BytesInFlight += DataBuffer.GetSize();
             ++LogInFlight;
         }
         return ev;

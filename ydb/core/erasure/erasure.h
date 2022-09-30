@@ -17,7 +17,7 @@
 namespace NKikimr {
 
 struct TDiff {
-    TString Buffer;
+    TContiguousData Buffer;
     ui32 Offset = 0;
     bool IsXor = false;
     bool IsAligned = false;
@@ -31,6 +31,19 @@ struct TDiff {
     }
 
     TDiff(const TString &buffer, ui32 offset)
+        : TDiff(buffer, offset, false, false)
+    {
+    }
+
+    TDiff(const TContiguousData &buffer, ui32 offset, bool isXor, bool isAligned)
+        : Buffer(buffer)
+        , Offset(offset)
+        , IsXor(isXor)
+        , IsAligned(isAligned)
+    {
+    }
+
+    TDiff(const TContiguousData &buffer, ui32 offset)
         : TDiff(buffer, offset, false, false)
     {
     }
@@ -76,8 +89,8 @@ struct TPartFragment {
         PartSize = 0;
     }
 
-    void UninitializedOwnedWhole(ui64 size) {
-        OwnedString = TRope::Uninitialized(size);
+    void UninitializedOwnedWhole(ui64 size, ui64 headroom = 0, ui64 tailroom = 0) {
+        OwnedString = TRope(TContiguousData::Uninitialized(size, headroom, tailroom));
         Bytes = OwnedString.UnsafeGetContiguousSpanMut().data();
         Offset = 0;
         Size = size;
@@ -364,7 +377,7 @@ protected:
     ui32 ColumnSize() const;
 };
 
-bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TString& buf);
+bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf);
 
 }
 

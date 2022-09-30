@@ -32,10 +32,27 @@ namespace NKikimr {
         return res;
     }
 
-    bool TPutRecoveryLogRecOpt::ParseFromString(const TBlobStorageGroupType &gtype,
-                                                const TString &data) {
-        const char *pos = data.data();
-        const char *end = data.data() + data.size();
+    TContiguousData TPutRecoveryLogRecOpt::SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
+            TRope &&rope) {
+        return SerializeZeroCopy(gtype, id, TContiguousData(rope));
+    }
+
+    TContiguousData TPutRecoveryLogRecOpt::SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
+            TContiguousData &&data) {
+        Y_VERIFY(id.PartId() && data.GetSize() == gtype.PartSize(id),
+            "id# %s rope.GetSize()# %zu", id.ToString().data(), data.GetSize());
+
+        data.GrowFront(sizeof(id));
+        memcpy(data.UnsafeGetDataMut(), id.GetRaw(), sizeof(id));
+
+        return data;
+    }
+
+    bool TPutRecoveryLogRecOpt::ParseFromArray(const TBlobStorageGroupType &gtype,
+                                               const char* data,
+                                               size_t size) {
+        const char *pos = data;
+        const char *end = data + size;
         if (size_t(end - pos) < 24)
             return false;
 
@@ -50,6 +67,11 @@ namespace NKikimr {
 
         Data = TString(pos, partSize);
         return true;
+    }
+
+    bool TPutRecoveryLogRecOpt::ParseFromString(const TBlobStorageGroupType &gtype,
+                                                const TString &data) {
+        return ParseFromArray(gtype, data.data(), data.size());
     }
 
     TString TPutRecoveryLogRecOpt::ToString() const {

@@ -255,7 +255,7 @@ public:
 
     TLogSignature Signature;
     ui32 EstimatedChunkIdx;
-    TString Data;
+    TContiguousData Data;
     ui64 LsnSegmentStart; // Additional data, for sanity checks only.
     ui64 Lsn; // Log sequence number
     void *Cookie;

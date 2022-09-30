@@ -289,7 +289,7 @@ namespace NKikimr {
 
             // prepare log record
             NHuge::TAllocChunkRecoveryLogRec logRec(ChunkId);
-            TString data = logRec.Serialize();
+            TContiguousData data = TContiguousData(logRec.Serialize());
 
             LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
                     VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
@@ -356,7 +356,7 @@ namespace NKikimr {
             // prepare log record
             Y_VERIFY_DEBUG(!ChunksToFree.empty());
             NHuge::TFreeChunkRecoveryLogRec logRec(ChunksToFree);
-            TString data = logRec.Serialize();
+            TContiguousData data = TContiguousData(logRec.Serialize());
 
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkDestroyer: bootstrap:"
                 " chunks# %s Lsn# %" PRIu64, FormatList(ChunksToFree).data(), Lsn));
@@ -440,7 +440,7 @@ namespace NKikimr {
             TLsnSeg seg(EntryPointLsn, EntryPointLsn);
             ctx.Send(HugeKeeperCtx->LoggerId,
                     new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner, HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound,
-                        TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, Serialized, seg, nullptr));
+                        TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, TContiguousData(Serialized), seg, nullptr)); //FIXME(innokentii): wrapping
             TThis::Become(&TThis::StateFunc);
         }
 

@@ -174,7 +174,7 @@ void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
     TGuard<TMutex> guard(StateMutex);
     ui64 writePosition = 0;
     ui64 lastLsn = 0;
-    TString lastSysLogRecord = ProcessReadSysLogResult(writePosition, lastLsn, readLogResult);
+    TContiguousData lastSysLogRecord = ProcessReadSysLogResult(writePosition, lastLsn, readLogResult);
     if (lastSysLogRecord.size() == 0) {
         LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
             << " lastSysLogRecord.Size()# 0 writePosition# " << writePosition
@@ -386,7 +386,7 @@ void TPDisk::PrintChunksDebugInfo() {
     LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, print());
 }
 
-TString TPDisk::ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn,
+TContiguousData TPDisk::ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn,
         const NPDisk::TEvReadLogResult &readLogResult) {
     ui64 sectorIdx = (readLogResult.NextPosition.OffsetInChunk + Format.SectorSize - 1) / Format.SectorSize;
     ui64 firstSysLogSectorIdx = Format.FirstSysLogSectorIdx();
@@ -401,11 +401,11 @@ TString TPDisk::ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn,
             << " ProcessReadSysLogResult Results.size()# 0"
             << " Marker# BPD54");
         outLsn = 0;
-        TString data;
+        TContiguousData data;
         return data;
     }
     ui64 lastSysLogLsn = readLogResult.Results[0].Lsn;
-    TString data = readLogResult.Results[0].Data;
+    TContiguousData data = readLogResult.Results[0].Data;
     for (ui32 i = 1; i < readLogResult.Results.size(); ++i) {
         if (lastSysLogLsn < readLogResult.Results[i].Lsn) {
             lastSysLogLsn = readLogResult.Results[i].Lsn;

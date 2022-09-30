@@ -376,7 +376,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleLogoBlob(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = PutMsg.ParseFromString(record.Data);
+            bool success = PutMsg.ParseFromArray(record.Data.GetData(), record.Data.GetSize());
             if (!success)
                 return EDispatchStatus::Error;
 
@@ -390,7 +390,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleOptLogoBlob(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = PutMsgOpt.ParseFromString(LocRecCtx->VCtx->Top->GType, record.Data);
+            bool success = PutMsgOpt.ParseFromArray(LocRecCtx->VCtx->Top->GType, record.Data.GetData(), record.Data.GetSize());
             if (!success)
                 return EDispatchStatus::Error;
 
@@ -403,7 +403,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleBlock(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = BlockMsg.ParseFromString(record.Data);
+            bool success = BlockMsg.ParseFromArray(record.Data.GetData(), record.Data.GetSize());
             if (!success)
                 return EDispatchStatus::Error;
 
@@ -414,7 +414,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleGC(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = GCMsg.ParseFromString(record.Data);
+            bool success = GCMsg.ParseFromArray(record.Data.GetData(), record.Data.GetSize());
             if (!success)
                 return EDispatchStatus::Error;
 
@@ -548,7 +548,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleSyncData(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            TStringInput str(record.Data);
+            TMemoryInput str(record.Data.GetData(), record.Data.GetSize());
             bool success = LocalSyncDataMsg.Deserialize(str);
             if (!success)
                 return EDispatchStatus::Error;
@@ -569,7 +569,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleHandoffDel(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = HandoffDelMsg.ParseFromString(record.Data);
+            bool success = HandoffDelMsg.ParseFromArray(record.Data.GetData(), record.Data.GetSize());
             if (!success)
                 return EDispatchStatus::Error;
 
@@ -597,7 +597,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleHugeBlobAllocChunk(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = HugeBlobAllocChunkRecoveryLogRec.ParseFromString(record.Data);
+            bool success = HugeBlobAllocChunkRecoveryLogRec.ParseFromArray(record.Data.GetData(), record.Data.GetSize());
             if (!success)
                 return EDispatchStatus::Error;
 
@@ -622,7 +622,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleHugeBlobFreeChunk(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = HugeBlobFreeChunkRecoveryLogRec.ParseFromString(record.Data);
+            bool success = HugeBlobFreeChunkRecoveryLogRec.ParseFromArray(record.Data.GetData(), record.Data.GetSize());
             if (!success)
                 return EDispatchStatus::Error;
 
@@ -648,7 +648,7 @@ namespace NKikimr {
 
         EDispatchStatus HandleHugeBlobEntryPoint(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
             ui64 lsn = record.Lsn;
-            TRlas res = LocRecCtx->RepairedHuge->ApplyEntryPoint(ctx, lsn, record.Data);
+            TRlas res = LocRecCtx->RepairedHuge->ApplyEntryPoint(ctx, lsn, record.Data.GetContiguousSpan());
             if (!res.Ok)
                 return EDispatchStatus::Error;
             else
@@ -656,7 +656,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleHugeLogoBlob(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = HugeBlobPutRecoveryLogRec.ParseFromString(record.Data);
+            bool success = HugeBlobPutRecoveryLogRec.ParseFromArray(record.Data.GetData(), record.Data.GetSize());
             if (!success)
                 return EDispatchStatus::Error;
 
@@ -688,7 +688,7 @@ namespace NKikimr {
                                        THullHugeKeeperPersState::ESlotDelDbType dbType) {
             TString explanation;
             NKikimrVDiskData::THullDbEntryPoint pb;
-            const bool good = THullDbSignatureRoutines::Parse(pb, record.Data, explanation);
+            const bool good = THullDbSignatureRoutines::ParseArray(pb, record.Data.GetData(), record.Data.GetSize(), explanation);
             if (!good)
                 return EDispatchStatus::Error;
 
@@ -727,8 +727,8 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandlePhantomLogoBlobs(const TActorContext& ctx, const NPDisk::TLogRecord& record) {
-            const TString& data = record.Data;
-            if (!PhantomLogoBlobs.ParseFromString(data)) {
+            const TContiguousData& data = record.Data;
+            if (!PhantomLogoBlobs.ParseFromArray(data.GetData(), data.GetSize())) {
                 return EDispatchStatus::Error;
             }
 
@@ -746,7 +746,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandleAnubisOsirisPut(const TActorContext& ctx, const NPDisk::TLogRecord& record) {
-            if (!AnubisOsirisPutMsg.ParseFromString(record.Data)) {
+            if (!AnubisOsirisPutMsg.ParseFromArray(record.Data.GetData(), record.Data.GetSize())) {
                 return EDispatchStatus::Error;
             }
 
@@ -759,7 +759,7 @@ namespace NKikimr {
 
         EDispatchStatus HandleAddBulkSst(const TActorContext& ctx, const NPDisk::TLogRecord& record) {
             NKikimrVDiskData::TAddBulkSstRecoveryLogRec proto;
-            if (!proto.ParseFromString(record.Data)) {
+            if (!proto.ParseFromArray(record.Data.GetData(), record.Data.GetSize())) {
                 return EDispatchStatus::Error;
             }
 

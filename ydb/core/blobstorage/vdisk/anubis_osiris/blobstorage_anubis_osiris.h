@@ -102,6 +102,7 @@ namespace NKikimr {
         TAnubisOsirisPutRecoveryLogRec(const TEvAnubisOsirisPut &msg);
         TString Serialize() const;
         bool ParseFromString(const TString &data);
+        bool ParseFromArray(const char* data, size_t size);
         TString ToString() const;
         void Output(IOutputStream &str) const;
     };

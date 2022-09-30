@@ -1471,6 +1471,18 @@ namespace NKikimr {
             diffBlock->SetBuffer(buffer);
         }
 
+        void AddDiff(ui64 startIdx, const TContiguousData &buffer) {
+            TLogoBlobID id = LogoBlobIDFromLogoBlobID(this->Record.GetOriginalBlobId());
+            Y_VERIFY(startIdx < id.BlobSize());
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&buffer, sizeof(buffer));
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size() + 1);
+            Y_VERIFY(startIdx + buffer.size() <= id.BlobSize());
+
+            NKikimrBlobStorage::TDiffBlock *diffBlock = this->Record.AddDiffs();
+            diffBlock->SetOffset(startIdx);
+            diffBlock->SetBuffer(buffer.data(), buffer.size());
+        }
+
         TString ToString() const override {
             return ToString(this->Record);
         }
@@ -1911,6 +1923,14 @@ namespace NKikimr {
             r->SetBuffer(buffer.data(), buffer.size());
         }
 
+        void AddDiff(ui64 startIdx, const TContiguousData &buffer) {
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size());
+
+            NKikimrBlobStorage::TDiffBlock *r = Record.AddDiffs();
+            r->SetOffset(startIdx);
+            r->SetBuffer(buffer.data(), buffer.size());
+        }
+
         void AddXorReceiver(const TVDiskID &vDiskId, ui8 partId) {
             NKikimrBlobStorage::TXorDiffReceiver *r = Record.AddXorReceivers();
             VDiskIDFromVDiskID(vDiskId, r->MutableVDiskID());
@@ -1967,7 +1987,7 @@ namespace NKikimr {
             Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob);
         }
 
-        void AddDiff(ui64 startIdx, const TString &buffer) {
+        void AddDiff(ui64 startIdx, const TContiguousData &buffer) {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size());
 
             NKikimrBlobStorage::TDiffBlock *r = Record.AddDiffs();

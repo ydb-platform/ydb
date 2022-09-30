@@ -72,7 +72,7 @@ void TTestInitOwner::TestFSM(const TActorContext &ctx) {
 }
 
 void TTestLogStartingPoint::TestFSM(const TActorContext &ctx) {
-    TString data("testdata");
+    TContiguousData data(TString("testdata"));
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
@@ -120,7 +120,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         ChunkSize = LastResponse.ChunkSize;
         VERBOSE_COUT(" Sending TEvLog");
         auto lsn = NextLsn();
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner+1, OwnerRound, 0, nullptr, TLsnSeg(lsn, lsn), (void*)456));
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner+1, OwnerRound, 0, TContiguousData(), TLsnSeg(lsn, lsn), (void*)456));
         break;
     }
     case 20:
@@ -155,7 +155,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks.push_back(1);
         auto lsn = NextLsn();
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, nullptr, TLsnSeg(lsn, lsn),
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(), TLsnSeg(lsn, lsn),
                     (void*)43));
         break;
     }
@@ -181,7 +181,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks.push_back(1);
         auto lsn = NextLsn();
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, nullptr, TLsnSeg(lsn, lsn),
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(), TLsnSeg(lsn, lsn),
                     (void*)43));
         break;
     }
@@ -192,7 +192,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks.push_back(3);
         auto lsn = NextLsn();
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, nullptr, TLsnSeg(lsn, lsn),
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(), TLsnSeg(lsn, lsn),
                     (void*)43));
         break;
     }
@@ -203,7 +203,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.DeleteChunks.push_back(0);
         auto lsn = NextLsn();
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, nullptr, TLsnSeg(lsn, lsn),
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(), TLsnSeg(lsn, lsn),
                     (void*)43));
         break;
     }
@@ -214,7 +214,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.DeleteChunks.push_back(1);
         auto lsn = NextLsn();
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, nullptr, TLsnSeg(lsn, lsn),
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(), TLsnSeg(lsn, lsn),
                     (void*)43));
         break;
     }
@@ -225,7 +225,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.DeleteChunks.push_back(3);
         auto lsn = NextLsn();
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, nullptr, TLsnSeg(lsn, lsn),
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(), TLsnSeg(lsn, lsn),
                     (void*)43));
         break;
     }
@@ -236,7 +236,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.DeleteChunks.push_back((ui32)-1);
         auto lsn = NextLsn();
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, nullptr, TLsnSeg(lsn, lsn),
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(), TLsnSeg(lsn, lsn),
                     (void*)43));
         break;
     }
@@ -328,7 +328,7 @@ void TTestEmptyLogRead::TestFSM(const TActorContext &ctx) {
 
 
 void TTestChunkWriteReadWhole::TestFSM(const TActorContext &ctx) {
-    TString data2("testdata2");
+    TContiguousData data2(TString("testdata2"));
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
@@ -422,7 +422,7 @@ void TTestChunkWrite20Read02::TestFSM(const TActorContext &ctx) {
         for (ui32 i = 0; i < ReservedChunks.size(); ++i) {
             VERBOSE_COUT("  id = " << ReservedChunks[i]);
         }
-        CommitData = TString::Uninitialized(sizeof(ui32) * ReservedChunks.size());
+        CommitData = TContiguousData::Uninitialized(sizeof(ui32) * ReservedChunks.size());
         memcpy((void*)CommitData.data(), &(ReservedChunks[0]), sizeof(ui32) * ReservedChunks.size());
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks = ReservedChunks;
@@ -528,8 +528,8 @@ void TTestChunkRecommit::TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteData1 = PrepareData(BlockSize * 2);
         ChunkWriteData2 = PrepareData(BlockSize);
-        Commit1Data = PrepareData(5030);
-        Commit2Data = PrepareData(5030);
+        Commit1Data = TContiguousData(PrepareData(5030));
+        Commit2Data = TContiguousData(PrepareData(5030));
         ChunkData = ChunkWriteData1 + ChunkWriteData2;
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteParts[0].Data = ChunkWriteData1.data();
@@ -612,7 +612,7 @@ void TTestChunkRestartRecommit1::TestFSM(const TActorContext &ctx) {
         ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
             "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
         ChunkIdx = LastResponse.ChunkIds[0];
-        Commit1Data = PrepareData(5030);
+        Commit1Data = TContiguousData(PrepareData(5030));
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteParts[0].Data = ChunkWriteData1.data();
@@ -626,7 +626,7 @@ void TTestChunkRestartRecommit1::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
         VERBOSE_COUT(" Sending TEvLog to commit ChunkIdx=" << ChunkIdx);
-        Commit1Data = TString::Uninitialized(sizeof(ChunkIdx));
+        Commit1Data = TContiguousData::Uninitialized(sizeof(ChunkIdx));
         *(ui32*)Commit1Data.data() = ChunkIdx;
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks.push_back(ChunkIdx);
@@ -672,7 +672,7 @@ void TTestChunkRestartRecommit2::TestFSM(const TActorContext &ctx) {
         OwnerRound = LastResponse.OwnerRound;
         ChunkWriteData1 = PrepareData(LastResponse.AppendBlockSize);
         ChunkWriteData2 = PrepareData(LastResponse.AppendBlockSize);
-        Commit2Data = PrepareData(5030);
+        Commit2Data = TContiguousData(PrepareData(5030));
         ChunkData = ChunkWriteData1 + ChunkWriteData2;
         VERBOSE_COUT(" Sending TEvChunkWrite ChunkIdx=" << ChunkIdx);
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
@@ -737,7 +737,7 @@ void TTestChunkDelete1::TestFSM(const TActorContext &ctx) {
         for (ui32 i = 0; i < ReservedChunks.size(); ++i) {
             VERBOSE_COUT("  id = " << ReservedChunks[i]);
         }
-        CommitData = TString::Uninitialized(sizeof(ui32) * ReservedChunks.size());
+        CommitData = TContiguousData::Uninitialized(sizeof(ui32) * ReservedChunks.size());
         memcpy((void*)CommitData.data(), &(ReservedChunks[0]), sizeof(ui32) * ReservedChunks.size());
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks = ReservedChunks;
@@ -750,7 +750,7 @@ void TTestChunkDelete1::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog to commit Chunks");
-        CommitData = TString::Uninitialized(sizeof(ui32) * (ReservedChunks.size() - 3));
+        CommitData = TContiguousData::Uninitialized(sizeof(ui32) * (ReservedChunks.size() - 3));
         memcpy((void*)CommitData.data(), &(ReservedChunks[3]), sizeof(ui32) * (ReservedChunks.size()-3));
         NPDisk::TCommitRecord commitRecord;
         for (int i = 0; i < 3; ++i) {
@@ -841,7 +841,7 @@ void TTestChunkForget1::TestFSM(const TActorContext &ctx) {
         for (ui32 i = 0; i < ReservedChunks.size(); ++i) {
             VERBOSE_COUT("  id = " << ReservedChunks[i]);
         }
-        CommitData = TString::Uninitialized(sizeof(ui32) * ReservedChunks.size());
+        CommitData = TContiguousData::Uninitialized(sizeof(ui32) * ReservedChunks.size());
         memcpy((void*)CommitData.data(), &(ReservedChunks[0]), sizeof(ui32) * ReservedChunks.size());
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks = ReservedChunks;
@@ -858,7 +858,7 @@ void TTestChunkForget1::TestFSM(const TActorContext &ctx) {
     case 40:
         TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE);
         VERBOSE_COUT(" Sending TEvLog to delete Chunks");
-        CommitData = TString();
+        CommitData = TContiguousData();
     {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.DeleteChunks = ReservedChunks;
@@ -907,7 +907,7 @@ void TTestInitStartingPoints::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvYardInitResult, OK);
         ASSERT_YTHROW(LastResponse.StartingPoints.size() == 1,
             "Unexpected number of starting points in response (" << LastResponse.StartingPoints.size() << ")");
-        TEST_DATA_EQUALS(LastResponse.StartingPoints.begin()->second.Data, data);
+        TEST_DATA_EQUALS(LastResponse.StartingPoints.begin()->second.Data.ExtractUnderlyingContainerOrCopy<TString>(), data);
         VERBOSE_COUT("Done");
         SignalDoneEvent();
         break;
@@ -1399,14 +1399,14 @@ void TTestFirstRecordToKeepWriteAB::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(67890);
+        Data = TContiguousData(PrepareData(67890));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(Lsn, Lsn), (void*)456));
         break;
     case 20:
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(100500);
+        Data = TContiguousData(PrepareData(100500));
         NPDisk::TCommitRecord commitRecord;
         ++Lsn;
         commitRecord.FirstLsnToKeep = Lsn;
@@ -1441,11 +1441,11 @@ void TTestFirstRecordToKeepReadB::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
         break;
     case 20:
-        Data = PrepareData(100500);
+        Data = TContiguousData(PrepareData(100500));
         TEST_RESPONSE(EvReadLogResult, OK);
         ASSERT_YTHROW(LastResponse.LogRecords.size() == 1,
             "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
-        TEST_LOG_RECORD(LastResponse.LogRecords[0], 2, 7, Data);
+        TEST_LOG_RECORD(LastResponse.LogRecords[0], 2, 7, Data.ExtractUnderlyingContainerOrCopy<TString>());
         VERBOSE_COUT("Done");
         SignalDoneEvent();
         break;
@@ -1460,7 +1460,7 @@ void TTestLotsOfTinyAsyncLogLatency::TestFSM(const TActorContext &ctx) {
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
-        Data = PrepareData(1500);
+        Data = TContiguousData(PrepareData(1500));
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
@@ -1550,7 +1550,7 @@ void TTestLogLatency::TestFSM(const TActorContext &ctx) {
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
-        Data = PrepareData(500);
+        Data = TContiguousData(PrepareData(500));
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
@@ -1645,7 +1645,7 @@ void TTestHugeChunkAndLotsOfTinyAsyncLogOrder::TestFSM(const TActorContext &ctx)
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
-        Data = PrepareData(1500);
+        Data = TContiguousData(PrepareData(1500));
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
@@ -1759,7 +1759,7 @@ void TTestHugeChunkAndLotsOfTinyAsyncLogOrder::TestFSM(const TActorContext &ctx)
             VERBOSE_COUT(" Sending TEvLog to commit");
             NPDisk::TCommitRecord commitRecord;
             commitRecord.CommitChunks.push_back(ChunkIdx);
-            Commit1Data = PrepareData(302010);
+            Commit1Data = TContiguousData(PrepareData(302010));
             ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, Commit1Data,
                 TLsnSeg((ui64)MessagesToSend+1, (ui64)MessagesToSend+1),
                 (void*)43));
@@ -1861,7 +1861,7 @@ void TTestLog2Records3Sectors::TestFSM(const TActorContext &ctx) {
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
-        Data = PrepareData(5500);
+        Data = TContiguousData(PrepareData(5500));
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
@@ -1902,7 +1902,7 @@ void TTestLogDamageSector3Append1::TestFSM(const TActorContext &ctx) {
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
-        Data = PrepareData(5501);
+        Data = TContiguousData(PrepareData(5501));
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
@@ -1957,10 +1957,10 @@ void TTestLogRead2Sectors::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvReadLogResult, OK);
         ASSERT_YTHROW(LastResponse.LogRecords.size() == 2,
             "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
-        TString expectedData = PrepareData(5500);
-        TEST_LOG_RECORD(LastResponse.LogRecords[0], 1, 7, expectedData);
-        expectedData = PrepareData(5501);
-        TEST_LOG_RECORD(LastResponse.LogRecords[1], 2, 7, expectedData);
+        TContiguousData expectedData = TContiguousData(PrepareData(5500));
+        TEST_LOG_RECORD(LastResponse.LogRecords[0], 1, 7, expectedData.ExtractUnderlyingContainerOrCopy<TString>());
+        expectedData = TContiguousData(PrepareData(5501));
+        TEST_LOG_RECORD(LastResponse.LogRecords[1], 2, 7, expectedData.ExtractUnderlyingContainerOrCopy<TString>());
         VERBOSE_COUT("Done");
         SignalDoneEvent();
         break;
@@ -1987,7 +1987,7 @@ void TTestLogFillChunkPlus1::TestFSM(const TActorContext &ctx) {
         ChunkSize = LastResponse.ChunkSize;
         VERBOSE_COUT(" Owner=" << (int)Owner << " ChunkSize=" << ChunkSize);
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(5 << 10);
+        Data = TContiguousData(PrepareData(5 << 10));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(1, 1), (void*)456));
         break;
     case 20:
@@ -2008,13 +2008,13 @@ void TTestLogFillChunkPlus1::TestFSM(const TActorContext &ctx) {
     case 40:
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(ChunkSize);
+        Data = TContiguousData(PrepareData(ChunkSize));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(4, 4), (void*)456));
         break;
     case 50:
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(5 << 10);
+        Data = TContiguousData(PrepareData(5 << 10));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(5, 5), (void*)456));
         break;
     case 60:
@@ -2062,7 +2062,7 @@ void TTestLogKeep5Plus1::TestFSM(const TActorContext &ctx) {
         TEST_LOG_RECORD(LastResponse.LogRecords[3], 5, 7, expectedData);
 
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(12 << 10);
+        Data = TContiguousData(PrepareData(12 << 10));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 5;
         commitRecord.IsStartingPoint = true;
@@ -2072,7 +2072,7 @@ void TTestLogKeep5Plus1::TestFSM(const TActorContext &ctx) {
     case 30:
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(1 << 10);
+        Data = TContiguousData(PrepareData(1 << 10));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(7, 7), (void*)456));
         break;
     case 40:
@@ -2178,7 +2178,7 @@ void TTestWriteAndReleaseChunk2A::TestFSM(const TActorContext &ctx) {
         ASSERT_YTHROW(ChunkIdx == 2, "This test is designed to work with chunk 2, but got chunk " << ChunkIdx);
         VERBOSE_COUT(" Sending TEvLog to commit");
         NPDisk::TCommitRecord commitRecord;
-        commitData = "commit A data";
+        commitData = TContiguousData(TString("commit A data"));
         commitRecord.CommitChunks.push_back(ChunkIdx);
         commitRecord.IsStartingPoint = true;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, commitData, TLsnSeg(1, 1),
@@ -2196,7 +2196,7 @@ void TTestWriteAndReleaseChunk2A::TestFSM(const TActorContext &ctx) {
         TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData);
         VERBOSE_COUT(" Sending TEvLog to delete");
         NPDisk::TCommitRecord commitRecord;
-        commitData = "delete A data";
+        commitData = TContiguousData(TString("delete A data"));
         commitRecord.DeleteChunks.push_back(ChunkIdx);
         commitRecord.IsStartingPoint = true;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, commitData, TLsnSeg(2, 2),
@@ -2257,7 +2257,7 @@ void TTestWriteAndCheckChunk2B::TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT(" Sending TEvLog to commit");
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks.push_back(ChunkIdx);
-        Data = "commit B data";
+        Data = TContiguousData(TString("commit B data"));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, Data, TLsnSeg(3, 3), (void*)43));
         break;
     }
@@ -2377,7 +2377,7 @@ void TTestWriteChunksAndLog::TestFSM(const TActorContext &ctx) {
         ASSERT_YTHROW(ChunkIdx3 == 3, "This test is designed to work with chunk 2, but got " << ChunkIdx3);
         VERBOSE_COUT(" Sending TEvLog to commit");
         NPDisk::TCommitRecord commitRecord;
-        commitData = "commit A data";
+        commitData = TContiguousData(TString("commit A data"));
         commitRecord.CommitChunks.push_back(ChunkIdx3);
         commitRecord.CommitChunks.push_back(ChunkIdx2);
         commitRecord.IsStartingPoint = true;
@@ -2390,7 +2390,7 @@ void TTestWriteChunksAndLog::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending huge TEvLog");
-        TString hugeData = PrepareData(ChunkSize);
+        TContiguousData hugeData = TContiguousData(PrepareData(ChunkSize));
         auto lsn = NextLsn();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, hugeData, TLsnSeg(lsn, lsn), (void*)43));
         break;
@@ -2401,7 +2401,7 @@ void TTestWriteChunksAndLog::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending large TEvLog");
-        TString largeData = PrepareData(ChunkSize / 8);
+        TContiguousData largeData = TContiguousData(PrepareData(ChunkSize / 8));
         auto lsn = NextLsn();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, largeData, TLsnSeg(lsn, lsn), (void*)43));
         break;
@@ -2410,7 +2410,7 @@ void TTestWriteChunksAndLog::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending small TEvLogs");
-        TString smallData = PrepareData(3000);
+        TContiguousData smallData = TContiguousData(PrepareData(3000));
         ui64 lsn = NextLsn();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, smallData, TLsnSeg(lsn, lsn), (void*)43));
         lsn = NextLsn();
@@ -2438,7 +2438,7 @@ void TTestWriteChunksAndLog::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending medium TEvLog");
-        TString mediumData = PrepareData(100500);
+        TContiguousData mediumData = TContiguousData(PrepareData(100500));
         auto lsn = NextLsn();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, mediumData, TLsnSeg(lsn, lsn), (void*)43));
         break;
@@ -2493,7 +2493,7 @@ void TTestContinueWriteLogChunk::TestFSM(const TActorContext &ctx) {
         }
         Ctest << " Read log done" << Endl;
         Ctest << " Sending small TEvLogs" << Endl;
-        TString smallData = PrepareData(3000);
+        TContiguousData smallData = TContiguousData(PrepareData(3000));
         ui64 lsn = NextLsn();
         SentSize = smallData.size();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, smallData, TLsnSeg(lsn, lsn), (void*)43));
@@ -2507,7 +2507,7 @@ void TTestContinueWriteLogChunk::TestFSM(const TActorContext &ctx) {
             SignalDoneEvent();
             break;
         } else {
-            TString smallData = PrepareData(3000);
+            TContiguousData smallData = TContiguousData(PrepareData(3000));
             ui64 lsn = NextLsn();
             SentSize += smallData.size();
             ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, smallData, TLsnSeg(lsn, lsn), (void*)43));
@@ -2657,7 +2657,7 @@ void TTestChunkFlush::TestFSM(const TActorContext &ctx) {
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
         VERBOSE_COUT(" Sending TEvLog to set a starting point");
         NPDisk::TCommitRecord commitRecord;
-        commitData.resize(sizeof(ui32));
+        commitData = TContiguousData::Uninitialized(sizeof(ui32));
         *(ui32*)commitData.data() = ChunkIdx;
         commitRecord.IsStartingPoint = true;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, commitData, TLsnSeg(1, 1),
@@ -2750,7 +2750,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
             | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
         ASSERT_YTHROW(ChunkIds.size() > 0, "Unexpected ChunkIds.size() == " << ChunkIds.size());
         VERBOSE_COUT(" Sending large TEvLog");
-        TString tinyData = PrepareData(1);
+        TContiguousData tinyData = TContiguousData(PrepareData(1));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, tinyData, TLsnSeg(1, 1), (void*)43));
         break;
     }
@@ -2766,7 +2766,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
             | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
         VERBOSE_COUT(" Sending TEvLog to delete a chunk");
         NPDisk::TCommitRecord commitRecord;
-        TString commitData = "hello";
+        TContiguousData commitData = TContiguousData(TString("hello"));
         ui32 count = ChunkIds.size();
         for (ui32 i = 0; i < count / 2; ++i) {
             commitRecord.DeleteChunks.push_back(ChunkIds.back());
@@ -2781,7 +2781,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, OK);
 
         VERBOSE_COUT(" Sending TEvLog to log ChunkSize bytes");
-        TString largeData = PrepareData(ChunkSize * 20);
+        TContiguousData largeData = TContiguousData(PrepareData(ChunkSize * 20));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, largeData, TLsnSeg(3, 3), (void*)43));
         break;
     }
@@ -2791,7 +2791,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
         TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid));
 
         VERBOSE_COUT(" Sending TEvLog to log 3 * ChunkSize bytes");
-        TString largeData = PrepareData(ChunkSize * 3);
+        TContiguousData largeData = TContiguousData(PrepareData(ChunkSize * 3));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, largeData, TLsnSeg(4, 4), (void*)43));
         break;
     }
@@ -2802,7 +2802,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
 
         VERBOSE_COUT(" Sending TEvLog to cut log");
         NPDisk::TCommitRecord commitRecord;
-        TString commitData = "cut 1";
+        TContiguousData commitData = TContiguousData(TString("cut 1"));
         commitRecord.FirstLsnToKeep = 3;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, commitData, TLsnSeg(5, 5),
                     (void*)43));
@@ -2813,7 +2813,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog to cut log");
         NPDisk::TCommitRecord commitRecord;
-        TString commitData = "cut 2";
+        TContiguousData commitData = TContiguousData(TString("cut 2"));
         commitRecord.FirstLsnToKeep = 4;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, commitData, TLsnSeg(6, 6),
                     (void*)43));
@@ -2824,7 +2824,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, OK);
         // We don't promise to update status color after cutting the log
         VERBOSE_COUT(" Sending TEvLog to log ChunkSize bytes");
-        TString largeData = PrepareData(ChunkSize);
+        TContiguousData largeData = TContiguousData(PrepareData(ChunkSize));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, largeData, TLsnSeg(7, 7), (void*)43));
         break;
     }
@@ -2862,7 +2862,7 @@ void TTestFillDiskPhase1::TestFSM(const TActorContext &ctx) {
         OwnerRound = LastResponse.OwnerRound;
         ChunkSize = LastResponse.ChunkSize;
         MessageIdx = 0;
-        Data = PrepareData(ChunkSize / 8);
+        Data = TContiguousData(PrepareData(ChunkSize / 8));
         VERBOSE_COUT(" Sending TEvChunkReserve");
         ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
         break;
@@ -2917,7 +2917,7 @@ void TTestFillDiskPhase2::TestFSM(const TActorContext &ctx) {
         OwnerRound = LastResponse.OwnerRound;
         ChunkSize = LastResponse.ChunkSize;
         MessageIdx = 0;
-        Data = PrepareData(ChunkSize / 8);
+        Data = TContiguousData(PrepareData(ChunkSize / 8));
         VERBOSE_COUT(" Sending TEvLog messages");
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(MessageIdx+1, MessageIdx+1),
                     (void*)456));
@@ -2937,7 +2937,7 @@ void TTestFillDiskPhase2::TestFSM(const TActorContext &ctx) {
         }
         //TEST_RESPONSE(EvLogResult, ERROR);
         if (Data.size() > 2) {
-            Data = PrepareData(Data.size() / 2);
+            Data = TContiguousData(PrepareData(Data.size() / 2));
             VERBOSE_COUT(" Sending TEvLog messages");
             ++MessageIdx;
             ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(MessageIdx+1, MessageIdx+1),
@@ -2998,7 +2998,7 @@ void TTestHarakiri::TestFSM(const TActorContext &ctx) {
         // ASSERT_YTHROW(GoodChunkCount == 3, "Unexpedcted good chunk count = " << GoodChunkCount);
         // TODO: invalidate chunk nonces and thus render them unreadable, pass owner to read requests.
         VERBOSE_COUT(" Sending TEvLog");
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, PrepareData(100), TLsnSeg(123, 123), (void*)456));
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, TContiguousData(PrepareData(100)), TLsnSeg(123, 123), (void*)456));
         break;
     case 50:
         TEST_RESPONSE(EvLogResult, INVALID_OWNER);
@@ -3073,7 +3073,7 @@ void TTestSlay::TestFSM(const TActorContext &ctx) {
     case 30:
         TEST_RESPONSE(EvReadLogResult, INVALID_OWNER);
         VERBOSE_COUT(" Sending TEvLog");
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, PrepareData(100), TLsnSeg(123, 123), (void*)456));
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, TContiguousData(PrepareData(100)), TLsnSeg(123, 123), (void*)456));
         break;
     case 40:
         TEST_RESPONSE(EvLogResult, INVALID_OWNER);
@@ -3121,7 +3121,7 @@ void TTestSlayRace::TestFSM(const TActorContext &ctx) {
     case 30:
         TEST_RESPONSE(EvReadLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog");
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, PrepareData(100), TLsnSeg(123, 123), (void*)456));
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, TContiguousData(PrepareData(100)), TLsnSeg(123, 123), (void*)456));
         break;
     case 40:
         TEST_RESPONSE(EvLogResult, OK);
@@ -3188,7 +3188,7 @@ void TTestSlayRecreate::TestFSM(const TActorContext &ctx) {
     case 40:
         TEST_RESPONSE(EvReadLogResult, INVALID_ROUND);
         VERBOSE_COUT(" Sending TEvLog");
-        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, PrepareData(100), TLsnSeg(123, 123), (void*)456));
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, TContiguousData(PrepareData(100)), TLsnSeg(123, 123), (void*)456));
         break;
     case 50:
         TEST_RESPONSE(EvLogResult, INVALID_ROUND);
@@ -3248,7 +3248,7 @@ void TTestDestructionWhileWritingChunk::TestFSM(const TActorContext &ctx) {
 }
 
 void TTestDestructionWhileReadingChunk::TestFSM(const TActorContext &ctx) {
-    TString data2("testdata2");
+    TContiguousData data2(TString("testdata2"));
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
@@ -3321,7 +3321,7 @@ void TTestDestructionWhileWritingLog::TestFSM(const TActorContext &ctx) {
         OwnerRound = LastResponse.OwnerRound;
         ChunkSize = LastResponse.ChunkSize;
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(ChunkSize);
+        Data = TContiguousData(PrepareData(ChunkSize));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, Data, TLsnSeg(1, 1), (void*)43));
 
         VERBOSE_COUT("Done");
@@ -3350,7 +3350,7 @@ void TTestDestructionWhileReadingLog::TestFSM(const TActorContext &ctx) {
         OwnerRound = LastResponse.OwnerRound;
         ChunkSize = LastResponse.ChunkSize;
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(ChunkSize);
+        Data = TContiguousData(PrepareData(ChunkSize));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, Data, TLsnSeg(1, 1), (void*)43));
         break;
     case 20:
@@ -3369,7 +3369,7 @@ void TTestDestructionWhileReadingLog::TestFSM(const TActorContext &ctx) {
 }
 
 void TTestChunkDeletionWhileWritingIt::TestFSM(const TActorContext &ctx) {
-    TString data2("testdata2");
+    TContiguousData data2(TString("testdata2"));
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
@@ -3484,7 +3484,7 @@ void TTestAllocateAllChunks::TestFSM(const TActorContext &ctx) {
                 ++ResponsesExpected;
             }
         }
-        Data = PrepareData(4096);
+        Data = TContiguousData(PrepareData(4096));
         for (ui32 logIdx = 0; logIdx < 32; ++logIdx) {
             ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, Data, TLsnSeg(logIdx+1, logIdx+1), (void*)43));
             ++ResponsesExpected;
@@ -3508,7 +3508,7 @@ void TTestAllocateAllChunks::TestFSM(const TActorContext &ctx) {
         }
 
         VERBOSE_COUT(" Sending TEvLog to commit");
-        Data = PrepareData(ChunkSize / 4);
+        Data = TContiguousData(PrepareData(ChunkSize / 4));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.CommitChunks = LastResponse.ChunkIds;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, Data, TLsnSeg(33, 33), (void*)43));
@@ -3518,7 +3518,7 @@ void TTestAllocateAllChunks::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog to delete");
-        Data = PrepareData(ChunkSize / 2);
+        Data = TContiguousData(PrepareData(ChunkSize / 2));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.DeleteChunks.push_back(ReservedChunks.back());
         ReservedChunks.pop_back();
@@ -3553,20 +3553,20 @@ void TTestCutMultipleLogChunks1::TestFSM(const TActorContext &ctx) {
         ChunkSize = LastResponse.ChunkSize;
         VERBOSE_COUT(" Owner=" << (int)Owner << " ChunkSize=" << ChunkSize);
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(ChunkSize / 2);
+        Data = TContiguousData(PrepareData(ChunkSize / 2));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(1, 1), (void*)456));
         break;
     case 20:
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(ChunkSize * 3);
+        Data = TContiguousData(PrepareData(ChunkSize * 3));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(2, 2), (void*)456));
         break;
     case 30:
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(103);
+        Data = TContiguousData(PrepareData(103));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 3;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, commitRecord, Data, TLsnSeg(3, 3), (void*)567));
@@ -3581,7 +3581,7 @@ void TTestCutMultipleLogChunks1::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvCutLog, OK);
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(104);
+        Data = TContiguousData(PrepareData(104));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 3;
         commitRecord.IsStartingPoint = true;
@@ -3622,8 +3622,8 @@ void TTestCutMultipleLogChunks2::TestFSM(const TActorContext &ctx) {
         ASSERT_YTHROW(LastResponse.StartingPoints.begin()->second.Data.size() == 104,
             "Unexpected StartingPoints[0].Data.size() = " <<
             LastResponse.StartingPoints.begin()->second.Data.size());
-        Data = PrepareData(104);
-        TEST_DATA_EQUALS(LastResponse.StartingPoints.begin()->second.Data, Data);
+        Data = TContiguousData(PrepareData(104));
+        TEST_DATA_EQUALS(LastResponse.StartingPoints.begin()->second.Data.ExtractUnderlyingContainerOrCopy<TString>(), Data.ExtractUnderlyingContainerOrCopy<TString>());
 
         VERBOSE_COUT("Done");
         SignalDoneEvent();
@@ -3650,14 +3650,14 @@ void TTestLogOwerwrite1::TestFSM(const TActorContext &ctx) {
         ChunkSize = LastResponse.ChunkSize;
         VERBOSE_COUT(" Owner=" << (int)Owner << " ChunkSize=" << ChunkSize);
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(ChunkSize * 2, 1);
+        Data = TContiguousData(PrepareData(ChunkSize * 2, 1));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(1, 1), (void*)456));
         break;
     case 20:
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(ChunkSize * 1, 2);
+        Data = TContiguousData(PrepareData(ChunkSize * 1, 2));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 2;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, commitRecord, Data, TLsnSeg(2, 2), (void*)567));
@@ -3667,7 +3667,7 @@ void TTestLogOwerwrite1::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(ChunkSize * 1, 3);
+        Data = TContiguousData(PrepareData(ChunkSize * 1, 3));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 3;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, commitRecord, Data, TLsnSeg(3, 3), (void*)567));
@@ -3677,7 +3677,7 @@ void TTestLogOwerwrite1::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(ChunkSize * 1, 4);
+        Data = TContiguousData(PrepareData(ChunkSize * 1, 4));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 4;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, commitRecord, Data, TLsnSeg(4, 4), (void*)567));
@@ -3687,7 +3687,7 @@ void TTestLogOwerwrite1::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(ChunkSize * 1, 5);
+        Data = TContiguousData(PrepareData(ChunkSize * 1, 5));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 4;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, commitRecord, Data, TLsnSeg(5, 5), (void*)567));
@@ -3697,7 +3697,7 @@ void TTestLogOwerwrite1::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(ChunkSize * 1, 6);
+        Data = TContiguousData(PrepareData(ChunkSize * 1, 6));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 4;
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, commitRecord, Data, TLsnSeg(6, 6), (void*)567));
@@ -3707,7 +3707,7 @@ void TTestLogOwerwrite1::TestFSM(const TActorContext &ctx) {
     {
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvLog commit");
-        Data = PrepareData(107);
+        Data = TContiguousData(PrepareData(107));
         NPDisk::TCommitRecord commitRecord;
         commitRecord.FirstLsnToKeep = 5;
         commitRecord.IsStartingPoint = true;
@@ -3744,8 +3744,8 @@ void TTestLogOwerwrite2::TestFSM(const TActorContext &ctx) {
         ASSERT_YTHROW(LastResponse.StartingPoints.begin()->second.Data.size() == 107,
             "Unexpected StartingPoints[0].Data.size() = " <<
             LastResponse.StartingPoints.begin()->second.Data.size());
-        Data = PrepareData(107);
-        TEST_DATA_EQUALS(LastResponse.StartingPoints.begin()->second.Data, Data);
+        Data = TContiguousData(PrepareData(107));
+        TEST_DATA_EQUALS(LastResponse.StartingPoints.begin()->second.Data.ExtractUnderlyingContainerOrCopy<TString>(), Data.ExtractUnderlyingContainerOrCopy<TString>());
 
         VERBOSE_COUT("Done");
         SignalDoneEvent();
@@ -3770,7 +3770,7 @@ void TTestWriteAndCutLogChunk::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         VERBOSE_COUT(" Sending TEvLog");
-        Data = PrepareData(LastResponse.ChunkSize / 4);
+        Data = TContiguousData(PrepareData(LastResponse.ChunkSize / 4));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, Data, TLsnSeg(Lsn, Lsn), (void*)456));
         break;
     case 20:
@@ -3806,7 +3806,7 @@ void TTestStartingPointRebootsIteration::TestFSM(const TActorContext &ctx) {
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
-        Commit1Data = PrepareData(rand() % 50030 + 10);
+        Commit1Data = TContiguousData(PrepareData(rand() % 50030 + 10));
         break;
     case 10:
         TEST_RESPONSE(EvYardInitResult, OK);

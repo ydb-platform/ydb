@@ -29,6 +29,13 @@ namespace NKikimr {
                 ui64 entryPointLsn,
                 TString &explanation);
 
+            static std::unique_ptr<TSyncLogRepaired> Construct(
+                TSyncLogParams &&params,
+                const char *data,
+                size_t size,
+                ui64 entryPointLsn,
+                TString &explanation);
+
         private:
             TSyncLogRepaired(
                 TSyncLogPtr &&syncLog,

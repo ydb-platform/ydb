@@ -10,8 +10,7 @@ TFragmentedBuffer::TFragmentedBuffer() {
 
 void TFragmentedBuffer::Insert(i32 begin, const char* source, i32 bytesToCopy) {
     Y_VERIFY(bytesToCopy);
-    //FIXME(innokentii): can save allocation
-    BufferForOffset[begin] = TRope(MakeIntrusive<TRopeSharedDataBackend>(TSharedData::Copy(source, bytesToCopy)));
+    BufferForOffset[begin] = TRope(TSharedData::Copy(source, bytesToCopy));
 }
 
 

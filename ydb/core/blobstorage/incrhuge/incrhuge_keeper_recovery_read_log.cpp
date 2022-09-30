@@ -64,7 +64,7 @@ namespace NKikimr {
                         case TLogSignature::SignatureIncrHugeChunks:
                             if (!ChunksEntrypointLsn || item.Lsn >= *ChunksEntrypointLsn) {
                                 NKikimrVDiskData::TIncrHugeChunks record;
-                                bool status = record.ParseFromString(item.Data);
+                                bool status = record.ParseFromArray(item.Data.GetData(), item.Data.GetSize());
                                 Y_VERIFY(status);
                                 ChunkMerger(record);
                             }
@@ -73,7 +73,7 @@ namespace NKikimr {
                         case TLogSignature::SignatureIncrHugeDeletes:
                             if (!DeletesEntrypointLsn || item.Lsn >= *DeletesEntrypointLsn) {
                                 NKikimrVDiskData::TIncrHugeDelete record;
-                                bool status = record.ParseFromString(item.Data);
+                                bool status = record.ParseFromArray(item.Data.GetData(), item.Data.GetSize());
                                 Y_VERIFY(status);
 
                                 TStringStream s;

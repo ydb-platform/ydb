@@ -489,8 +489,12 @@ namespace NKikimr {
         // TEntryPointParser - a class for parsing SyncLog entry point
         ////////////////////////////////////////////////////////////////////////////
         bool TEntryPointParser::Parse(const TString &serializedData, bool &needsInitialCommit, TString &explanation) {
+            return ParseArray(serializedData.data(), serializedData.size(), needsInitialCommit, explanation);
+        }
+
+        bool TEntryPointParser::ParseArray(const char* serializedData, size_t size, bool &needsInitialCommit, TString &explanation) {
             NKikimrVDiskData::TSyncLogEntryPoint pb;
-            bool success = ParseToProto(pb, serializedData, needsInitialCommit, explanation);
+            bool success = ParseArrayToProto(pb, serializedData, size, needsInitialCommit, explanation);
             if (!success) {
                 return false;
             }
@@ -532,29 +536,39 @@ namespace NKikimr {
                 bool &needsInitialCommit,
                 TString &explanation)
         {
+            return ParseArrayToProto(pb, serializedData.data(), serializedData.size(), needsInitialCommit, explanation);
+        }
+
+        bool TEntryPointParser::ParseArrayToProto(
+                NKikimrVDiskData::TSyncLogEntryPoint &pb,
+                const char* serializedData,
+                size_t size,
+                bool &needsInitialCommit,
+                TString &explanation)
+        {
             TStringStream err;
-            if (serializedData.empty()) {
+            if (size == 0) {
                 // empty entry point
                 needsInitialCommit = true;
                 FillInEmptyEntryPoint(pb);
                 return true;
             }
 
-            if (serializedData.size() < sizeof(ui32)) {
+            if (size < sizeof(ui32)) {
                 err << "Can't check signature because serialized data size is less than sizeof(ui32)";
                 explanation = err.Str();
                 return false;
             }
 
             // check signature
-            const ui32 signature = *(const ui32*)serializedData.data();
+            const ui32 signature = *(const ui32*)serializedData;
             if (signature == TSyncLogHeader::SyncLogOldSignature) {
                 // old format, convert to proto
-                return ConvertOldFormatToProto(pb, serializedData, explanation);
+                return ConvertOldFormatArrayToProto(pb, serializedData, size, explanation);
             } else if (signature == TSyncLogHeader::SyncLogPbSignature) {
                 // new format -- protobuf
-                bool success = pb.ParseFromArray(serializedData.data() + sizeof(ui32),
-                    serializedData.size() - sizeof(ui32));
+                bool success = pb.ParseFromArray(serializedData + sizeof(ui32),
+                    size - sizeof(ui32));
                 if (!success) {
                     err << "Failed to parse protobuf";
                     explanation = err.Str();
@@ -572,14 +586,23 @@ namespace NKikimr {
                 const TString &serializedData,
                 TString &explanation)
         {
-            Y_VERIFY(!serializedData.empty());
+            return ConvertOldFormatArrayToProto(pb, serializedData.data(), serializedData.size(), explanation);
+        }
+
+        bool TEntryPointParser::ConvertOldFormatArrayToProto(
+                NKikimrVDiskData::TSyncLogEntryPoint &pb,
+                const char* serializedData,
+                size_t size,
+                TString &explanation)
+        {
+            Y_VERIFY(size != 0);
             // Data Format
             // data ::= [TSyncLogHeader] [LogStartLsn=8b] ChunksToDelete DiskRecLogData
             // ChunksToDelete ::= [size=4b] [chunkIdx=4b]*
             // DiskRecLogData format is defined in TDiskRecLog
 
-            const char *pos = serializedData.data();
-            const char *end = serializedData.data() + serializedData.size();
+            const char *pos = serializedData;
+            const char *end = serializedData + size;
             // create header
             if (size_t(end - pos) < TSyncLogHeader::HdrSize ||
                 !TSyncLogHeader::CheckEntryPoint(pos, pos + TSyncLogHeader::HdrSize)) {

@@ -208,8 +208,9 @@ namespace NKikimr {
             state.CorruptedPart.SerializeToProto(*pb->MutableCorruptedPart());
         }
 
-        TString data;
-        const bool success = ScrubEntrypoint.SerializeToString(&data);
+        TContiguousData data(TContiguousData::Uninitialized(ScrubEntrypoint.ByteSizeLong()));
+        //FIXME(innokentii): better use SerializeWithCachedSizesToArray + check that all fields are set
+        const bool success = ScrubEntrypoint.SerializeToArray(reinterpret_cast<uint8_t*>(data.UnsafeGetDataMut()), data.GetSize());
         Y_VERIFY(success);
 
         auto seg = ScrubCtx->LsnMngr->AllocLsnForLocalUse();

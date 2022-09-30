@@ -122,7 +122,7 @@ void TestAllLossesDifferentSizes(TErasureType &groupType, ui32 maxParts) {
     } // missingVariant
 }
 
-void PrintBuffer(const TString &buffer) {
+void PrintBuffer(const TContiguousSpan &buffer) {
     Cerr << " [";
     for (ui32 idx = 0; idx < buffer.size(); ++idx) {
         if (idx) {

@@ -848,6 +848,14 @@ public:
         return GetSize();
     }
 
+    bool empty() const {
+        return !static_cast<bool>(Backend);
+    }
+
+    operator bool() const {
+        return !empty();
+    }
+
     const char* data() const {
         return GetData();
     }

@@ -107,15 +107,15 @@ namespace NKikimr::NBlobDepot {
                     locator->SetFooterLen(sizeof(TVirtualGroupBlobFooter));
                 }
 
-                TString footerData;
+                TContiguousData footerData;
                 if (!SuppressFooter) {
-                    footerData = TString::Uninitialized(sizeof(TVirtualGroupBlobFooter));
-                    auto& footer = *reinterpret_cast<TVirtualGroupBlobFooter*>(footerData.Detach());
+                    footerData = TContiguousData::Uninitialized(sizeof(TVirtualGroupBlobFooter));
+                    auto& footer = *reinterpret_cast<TVirtualGroupBlobFooter*>(footerData.UnsafeGetDataMut());
                     memset(&footer, 0, sizeof(footer));
                     footer.StoredBlobId = msg.Id;
                 }
 
-                auto put = [&](EBlobType type, TRope&& buffer) {
+                auto put = [&](EBlobType type, TContiguousData&& buffer) {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_VERIFY(!locator->HasGroupId() || locator->GetGroupId() == groupId);
                     locator->SetGroupId(groupId);
@@ -130,17 +130,17 @@ namespace NKikimr::NBlobDepot {
 
                 if (SuppressFooter) {
                     // write the blob as is, we don't need footer for this kind
-                    put(EBlobType::VG_DATA_BLOB, TRope(std::move(msg.Buffer)));
+                    put(EBlobType::VG_DATA_BLOB, TContiguousData(std::move(msg.Buffer)));
                 } else if (msg.Buffer.size() + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize) {
                     // write single blob with footer
-                    TRope buffer = std::move(msg.Buffer);
-                    buffer.Insert(buffer.End(), TRope(std::move(footerData)));
+                    TRope buffer = TRope(std::move(msg.Buffer));
+                    buffer.Insert(buffer.End(), std::move(footerData));
                     buffer.Compact();
-                    put(EBlobType::VG_COMPOSITE_BLOB, std::move(buffer));
+                    put(EBlobType::VG_COMPOSITE_BLOB, TContiguousData(std::move(buffer)));
                 } else {
                     // write data blob and blob with footer
-                    put(EBlobType::VG_DATA_BLOB, TRope(std::move(msg.Buffer)));
-                    put(EBlobType::VG_FOOTER_BLOB, TRope(std::move(footerData)));
+                    put(EBlobType::VG_DATA_BLOB, TContiguousData(std::move(msg.Buffer)));
+                    put(EBlobType::VG_FOOTER_BLOB, TContiguousData(std::move(footerData)));
                 }
 
                 if (IssueUncertainWrites) {

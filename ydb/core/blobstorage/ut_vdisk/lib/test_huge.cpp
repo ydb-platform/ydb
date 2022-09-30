@@ -158,7 +158,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         } else {
             // read existing one
             const ui64 lsn = it->second.Lsn;
-            const TString &entryPoint = it->second.Data;
+            const TContiguousData &entryPoint = it->second.Data;
             if (!THullHugeKeeperPersState::CheckEntryPoint(entryPoint)) {
                 return false;
             }

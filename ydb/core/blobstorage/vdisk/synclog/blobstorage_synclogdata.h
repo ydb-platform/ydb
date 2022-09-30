@@ -305,6 +305,7 @@ namespace NKikimr {
             {}
 
             bool Parse(const TString &serializedData, bool &needsInitialCommit, TString &explanation);
+            bool ParseArray(const char* serializedData, size_t size, bool &needsInitialCommit, TString &explanation);
             TSyncLogPtr GetSyncLogPtr() const { return SyncLogPtr; }
             TVector<ui32> GetChunksToDelete() const { return ChunksToDelete; }
             ui64 GetRecoveryLogConfirmedLsn() const { return RecoveryLogConfirmedLsn; }
@@ -320,10 +321,25 @@ namespace NKikimr {
                     const TString &serializedData,
                     bool &needsInitialCommit,
                     TString &explanation);
+
+            bool ParseArrayToProto(
+                    NKikimrVDiskData::TSyncLogEntryPoint &pb,
+                    const char* serializedData,
+                    size_t size,
+                    bool &needsInitialCommit,
+                    TString &explanation);
+
             bool ConvertOldFormatToProto(
                     NKikimrVDiskData::TSyncLogEntryPoint &pb,
                     const TString &serializedData,
                     TString &explanation);
+
+            bool ConvertOldFormatArrayToProto(
+                    NKikimrVDiskData::TSyncLogEntryPoint &pb,
+                    const char* serializedData,
+                    size_t size,
+                    TString &explanation);
+
             void FillInEmptyEntryPoint(NKikimrVDiskData::TSyncLogEntryPoint &pb);
         };
 

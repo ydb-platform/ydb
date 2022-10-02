@@ -100,71 +100,6 @@ struct TTxStatesBucket {
 
 constexpr ui64 BucketsCount = 64;
 
-class TTakeResourcesSnapshotActor : public TActorBootstrapped<TTakeResourcesSnapshotActor> {
-public:
-    TTakeResourcesSnapshotActor(const TString& boardPath, ui32 stateStorageGroupId,
-        std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>&& callback)
-        : BoardPath(boardPath)
-        , StateStorageGroupId(stateStorageGroupId)
-        , Callback(std::move(callback)) {}
-
-    void Bootstrap() {
-        auto boardLookup = CreateBoardLookupActor(BoardPath, SelfId(), StateStorageGroupId, EBoardLookupMode::Majority,
-                                                  false, false);
-        BoardLookupId = Register(boardLookup);
-
-        Become(&TTakeResourcesSnapshotActor::WorkState);
-    }
-
-    STATEFN(WorkState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, HandleWait);
-            cFunc(TEvents::TSystem::Poison, PassAway);
-            default:
-                LOG_C("Unexpected event type: " << ev->GetTypeRewrite()
-                    << ", event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "<serialized>"));
-        }
-    }
-
-    void HandleWait(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        BoardLookupId = {};
-
-        TEvStateStorage::TEvBoardInfo* event = ev->Get();
-        TVector<NKikimrKqp::TKqpNodeResources> resources;
-
-        if (event->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            LOG_I("WhiteBoard entries: " << event->InfoEntries.size());
-            resources.resize(event->InfoEntries.size());
-
-            int i = 0;
-            for (auto& [_, entry] : event->InfoEntries) {
-                Y_PROTOBUF_SUPPRESS_NODISCARD resources[i].ParseFromString(entry.Payload);
-                LOG_D("WhiteBoard [" << i << "]: " << resources[i].ShortDebugString());
-                i++;
-            }
-        } else {
-            LOG_E("WhiteBoard error: " << (int) event->Status << ", path: " << event->Path);
-        }
-
-        Callback(std::move(resources));
-
-        PassAway();
-    }
-
-    void PassAway() {
-        if (BoardLookupId) {
-            Send(BoardLookupId, new TEvents::TEvPoison);
-        }
-        IActor::PassAway();
-    }
-
-private:
-    const TString BoardPath;
-    const ui32 StateStorageGroupId;
-    std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)> Callback;
-    TActorId BoardLookupId;
-};
-
 struct TKqpNodeResourceManager {
     ui32 NodeId;
     IKqpResourceManager* Instance;
@@ -567,7 +502,7 @@ public:
         FireResourcesPublishing();
     }
 
-    void RequestClusterResourcesInfo(std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>&& callback) override {
+    void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
         LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, "Schedule Snapshot request");
         auto ev = MakeHolder<TEvPrivate::TEvTakeResourcesSnapshot>();
         ev->Callback = std::move(callback);
@@ -647,8 +582,8 @@ private:
 
         LOG_D("Create Snapshot actor, board: " << WbState.BoardPath << ", ssGroupId: " << WbState.StateStorageGroupId);
 
-        Register(new TTakeResourcesSnapshotActor(
-            WbState.BoardPath, WbState.StateStorageGroupId, std::move(ev->Get()->Callback)));
+        Register(
+            CreateTakeResourcesSnapshotActor(WbState.BoardPath, WbState.StateStorageGroupId, std::move(ev->Get()->Callback)));
     }
 
     void HandleWork(TEvResourceBroker::TEvConfigResponse::TPtr& ev) {

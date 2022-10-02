@@ -28,6 +28,8 @@ enum EKqpMemoryPool : ui32 {
     Count = 3
 };
 
+using TOnResourcesSnapshotCallback = std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>;
+
 /// resources request
 struct TKqpResourcesRequest {
     ui32 ExecutionUnits = 0;
@@ -83,7 +85,7 @@ public:
     virtual void NotifyExternalResourcesAllocated(ui64 queryId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
     virtual void NotifyExternalResourcesFreed(ui64 queryId, ui64 taskId) = 0;
 
-    virtual void RequestClusterResourcesInfo(std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&& resources)>&& callback) = 0;
+    virtual void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) = 0;
 
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
     virtual NKikimrConfig::TTableServiceConfig::TResourceManager GetConfig() = 0;
@@ -91,6 +93,11 @@ public:
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetLiteralPatternCache() = 0;
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetComputeActorPatternCache() = 0;
 };
+
+
+NActors::IActor* CreateTakeResourcesSnapshotActor(
+    const TString& boardPath, ui32 stateStorageGroupId,
+    std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>&& callback);
 
 } // namespace NRm
 

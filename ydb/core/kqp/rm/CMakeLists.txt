@@ -27,6 +27,7 @@ target_link_libraries(core-kqp-rm PUBLIC
   ydb-core-tablet
 )
 target_sources(core-kqp-rm PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm/kqp_resource_tracker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm/kqp_resource_estimation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm/kqp_snapshot_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm/kqp_rm.cpp

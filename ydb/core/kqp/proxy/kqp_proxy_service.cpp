@@ -123,11 +123,11 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             EvReadyToPublishResources = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvCollectPeerProxyData,
             EvOnRequestTimeout,
+            EvCloseIdleSessions,
         };
 
         struct TEvReadyToPublishResources : public TEventLocal<TEvReadyToPublishResources, EEv::EvReadyToPublishResources> {};
         struct TEvCollectPeerProxyData: public TEventLocal<TEvCollectPeerProxyData, EEv::EvCollectPeerProxyData> {};
-
         struct TEvOnRequestTimeout: public TEventLocal<TEvOnRequestTimeout, EEv::EvOnRequestTimeout> {
             public:
                 ui64 RequestId;
@@ -135,6 +135,8 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
 
             TEvOnRequestTimeout(ui64 requestId, TDuration timeout):  RequestId(requestId), Timeout(timeout) {};
         };
+
+        struct TEvCloseIdleSessions : public TEventLocal<TEvCloseIdleSessions, EEv::EvCloseIdleSessions> {};
     };
 
 public:
@@ -216,6 +218,38 @@ public:
         PublishResourceUsage();
         AskSelfNodeInfo();
         SendWhiteboardRequest();
+        ScheduleIdleSessionCheck();
+    }
+
+    void ScheduleIdleSessionCheck() {
+        if (!ShutdownState) {
+            const TDuration IdleSessionsCheckInterval = TDuration::Seconds(2);
+            Schedule(IdleSessionsCheckInterval, new TEvPrivate::TEvCloseIdleSessions());
+        }
+    }
+
+    void Handle(TEvPrivate::TEvCloseIdleSessions::TPtr&) {
+        CheckIdleSessions();
+        ScheduleIdleSessionCheck();
+    }
+
+    void CheckIdleSessions(const ui32 maxSessionsToClose = 10) {
+        ui32 closedIdleSessions = 0;
+        const NActors::TMonotonic now = TActivationContext::Monotonic();
+        while(true) {
+            const TKqpSessionInfo* sessionInfo = LocalSessions->GetIdleSession(now);
+            if (sessionInfo == nullptr || closedIdleSessions > maxSessionsToClose)
+                break;
+
+            SendSessionClose(sessionInfo);
+            ++closedIdleSessions;
+        }
+    }
+
+    void SendSessionClose(const TKqpSessionInfo* sessionInfo) {
+        auto closeSessionEv = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+        closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo->SessionId);
+        Send(sessionInfo->WorkerId, closeSessionEv.release());
     }
 
     void AskSelfNodeInfo() {
@@ -342,9 +376,7 @@ public:
         KQP_PROXY_LOG_I("Received tenant pool status, serving tenants: " << JoinRange(", ", Tenants.begin(), Tenants.end()));
         for (auto& [_, sessionInfo] : *LocalSessions) {
             if (!sessionInfo.Database.empty() && !Tenants.contains(sessionInfo.Database)) {
-                auto closeSessionEv = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
-                closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo.SessionId);
-                Send(sessionInfo.WorkerId, closeSessionEv.Release());
+                SendSessionClose(&sessionInfo);
             }
         }
 
@@ -550,6 +582,7 @@ public:
         TActorId targetId;
         if (sessionInfo) {
             targetId = sessionInfo->WorkerId;
+            LocalSessions->StopIdleCheck(sessionInfo);
         } else {
             targetId = TryGetSessionTargetActor(request.GetSessionId(), requestInfo, requestId);
             if (!targetId) {
@@ -595,6 +628,10 @@ public:
         }
     }
 
+    TDuration GetSessionIdleDuration() const {
+        return TDuration::Seconds(TableServiceConfig.GetSessionIdleDurationSeconds());
+    }
+
     void Handle(TEvKqp::TEvPingSessionRequest::TPtr& ev) {
         auto& event = ev->Get()->Record;
         auto& request = event.GetRequest();
@@ -610,7 +647,9 @@ public:
         TActorId targetId;
         if (sessionInfo) {
             targetId = sessionInfo->WorkerId;
+            LocalSessions->StopIdleCheck(sessionInfo);
         } else {
+            // forward request to kqp proxy on the different node.
             targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
             if (!targetId) {
                 return;
@@ -636,6 +675,11 @@ public:
         if (!proxyRequest) {
             KQP_PROXY_LOG_E("Unknown sender for proxy response, requestId: " << requestId);
             return;
+        }
+
+        const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
+        if (info) {
+            LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
         LogResponse(proxyRequest->TraceId, ev->Get()->Record, proxyRequest->DbCounters);
@@ -997,6 +1041,7 @@ public:
             hFunc(TEvPrivate::TEvOnRequestTimeout, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
+            hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
@@ -1157,7 +1202,7 @@ private:
                 ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters)
                 : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(workerActor, TMailboxType::HTSwap, AppData()->UserPoolId);
-        TKqpSessionInfo* sessionInfo = LocalSessions->Create(sessionId, workerId, database, dbCounters, supportsBalancing);
+        TKqpSessionInfo* sessionInfo = LocalSessions->Create(sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration());
 
         KQP_PROXY_LOG_D(requestInfo << "Created new session"
             << ", sessionId: " << sessionInfo->SessionId

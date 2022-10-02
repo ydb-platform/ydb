@@ -1172,6 +1172,7 @@ message TTableServiceConfig {
     optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
     optional TQueryReplayConfig QueryReplayConfig = 21;
     optional bool EnableKqpSessionActor = 23 [default = true];
+    optional uint32 SessionIdleDurationSeconds = 24 [default = 600];
 };
 
 // Config describes immediate controls and allows

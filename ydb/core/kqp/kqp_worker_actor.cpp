@@ -125,7 +125,6 @@ public:
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , CreationTime(TInstant::Now())
         , QueryId(0)
-        , IdleTimerId(0)
         , ShutdownState(std::nullopt)
     {
         Y_VERIFY(ModuleResolverState);
@@ -161,7 +160,6 @@ public:
             AppData(ctx)->FunctionRegistry, !Settings.LongSession);
 
         Become(&TKqpWorkerActor::ReadyState);
-        StartIdleTimer(ctx);
     }
 
     void HandleReady(TEvKqp::TEvCloseSessionRequest::TPtr &ev, const TActorContext &ctx) {
@@ -189,8 +187,6 @@ public:
             FinalCleanup(ctx);
             return;
         }
-
-        StartIdleTimer(ctx);
 
         ReplyPingStatus(ev->Sender, proxyRequestId, true, ctx);
     }
@@ -381,8 +377,6 @@ public:
             // some kind of internal query? or verify here?
         }
 
-        StopIdleTimer(ctx);
-
         if (CompileQuery(ctx)) {
             if (QueryState) {
                 QueryState->CpuTime += timer.GetTime();
@@ -411,19 +405,6 @@ public:
         }
     }
 
-    void HandleReady(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
-        auto timerId = ev->Get()->TimerId;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Received TEvIdleTimeout in ready state, timer id: "
-            << timerId << ", sender: " << ev->Sender);
-
-        if (timerId == IdleTimerId) {
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
-                << "Worker idle timeout, worker destroyed");
-            Counters->ReportWorkerClosedIdle(Settings.DbCounters);
-            FinalCleanup(ctx);
-        }
-    }
-
     void HandleCompileQuery(TEvKqp::TEvCompileResponse::TPtr &ev, const TActorContext &ctx) {
         auto compileResult = ev->Get()->CompileResult;
 
@@ -432,7 +413,6 @@ public:
 
         if (compileResult->Status != Ydb::StatusIds::SUCCESS) {
             if (ReplyQueryCompileError(compileResult, ctx)) {
-                StartIdleTimer(ctx);
                 Become(&TKqpWorkerActor::ReadyState);
             } else {
                 FinalCleanup(ctx);
@@ -455,7 +435,6 @@ public:
 
         if (queryRequest.GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE) {
             if (ReplyPrepareResult(compileResult, ctx)) {
-                StartIdleTimer(ctx);
                 Become(&TKqpWorkerActor::ReadyState);
             } else {
                 FinalCleanup(ctx);
@@ -505,11 +484,6 @@ public:
     void HandleCompileQuery(TEvKqp::TEvPingSessionRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
         ReplyPingStatus(ev->Sender, proxyRequestId, false, ctx);
-    }
-
-    void HandleCompileQuery(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
     }
 
     void HandlePerformQuery(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
@@ -592,11 +566,6 @@ public:
         }
     }
 
-    void HandlePerformQuery(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-    }
-
     void HandlePerformCleanup(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
         auto& event = ev->Get()->Record;
@@ -677,11 +646,6 @@ public:
         }
     }
 
-    void HandlePerformCleanup(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-    }
-
     STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -690,7 +654,6 @@ public:
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 HFunc(TEvKqp::TEvPingSessionRequest, HandleReady);
                 HFunc(TEvKqp::TEvContinueProcess, HandleReady);
-                HFunc(TEvKqp::TEvIdleTimeout, HandleReady);
                 HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
                 HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
             default:
@@ -708,7 +671,6 @@ public:
                 HFunc(TEvKqp::TEvCompileResponse, HandleCompileQuery);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandleCompileQuery);
                 HFunc(TEvKqp::TEvPingSessionRequest, HandleCompileQuery);
-                HFunc(TEvKqp::TEvIdleTimeout, HandleCompileQuery);
                 HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
                 HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
             default:
@@ -727,7 +689,6 @@ public:
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformQuery);
-                HFunc(TEvKqp::TEvIdleTimeout, HandlePerformQuery);
                 HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
                 HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
             default:
@@ -746,7 +707,6 @@ public:
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformCleanup);
-                HFunc(TEvKqp::TEvIdleTimeout, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
                 HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
             default:
@@ -1202,7 +1162,6 @@ private:
         CleanupState->Start = TInstant::Now();
 
         if (isFinal) {
-            StopIdleTimer(ctx);
             Counters->ReportQueriesPerWorker(Settings.DbCounters, QueryId);
 
             MakeNewQueryState();
@@ -1251,7 +1210,6 @@ private:
             Die(ctx);
         } else {
             if (ReplyQueryResult(ctx)) {
-                StartIdleTimer(ctx);
                 Become(&TKqpWorkerActor::ReadyState);
             } else {
                 FinalCleanup(ctx);
@@ -2055,26 +2013,6 @@ private:
         }
     }
 
-    void StartIdleTimer(const TActorContext& ctx) {
-        StopIdleTimer(ctx);
-
-        ++IdleTimerId;
-        auto idleDuration = TDuration::Seconds(Config->_KqpSessionIdleTimeoutSec.Get().GetRef());
-        IdleTimerActorId = CreateLongTimer(ctx, idleDuration,
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvKqp::TEvIdleTimeout(IdleTimerId)));
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Created long timer for idle timeout, timer id: " << IdleTimerId
-            << ", duration: " << idleDuration << ", actor: " << IdleTimerActorId);
-    }
-
-    void StopIdleTimer(const TActorContext& ctx) {
-        if (IdleTimerActorId) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Destroying long timer actor for idle timout: "
-                << IdleTimerActorId);
-            ctx.Send(IdleTimerActorId, new TEvents::TEvPoisonPill());
-        }
-        IdleTimerActorId = TActorId();
-    }
-
     IKikimrQueryExecutor::TExecuteSettings CreateRollbackSettings() {
         YQL_ENSURE(QueryState);
 
@@ -2161,8 +2099,6 @@ private:
     ui32 QueryId;
     THolder<TKqpQueryState> QueryState;
     THolder<TKqpCleanupState> CleanupState;
-    ui32 IdleTimerId;
-    TActorId IdleTimerActorId;
     std::optional<TSessionShutdownState> ShutdownState;
 };
 

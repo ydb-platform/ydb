@@ -177,7 +177,6 @@ public:
         Config->FeatureFlags = AppData()->FeatureFlags;
 
         Become(&TKqpSessionActor::ReadyState);
-        StartIdleTimer();
     }
 
     NYql::TKikimrQueryDeadlines GetQueryDeadlines(const NKikimrKqp::TQueryRequest& queryRequest) {
@@ -416,8 +415,6 @@ public:
                 AddOffsetsToTransaction(ctx);
                 return;
         }
-
-        StopIdleTimer();
 
         CompileQuery();
     }
@@ -1755,8 +1752,6 @@ public:
             ? Ydb::Table::KeepAliveResult::SESSION_STATUS_READY
             : Ydb::Table::KeepAliveResult::SESSION_STATUS_BUSY;
         record.MutableResponse()->SetSessionStatus(sessionStatus);
-        StartIdleTimer();
-
         Send(ev->Sender, result.release(), 0, proxyRequestId);
     }
 
@@ -1808,35 +1803,6 @@ public:
         } else {
             ScheduleNextShutdownTick();
             LOG_I("Schedule next shutdown tick " << TKqpRequestInfo("", SessionId));
-        }
-    }
-
-    void StartIdleTimer() {
-        StopIdleTimer();
-
-        ++IdleTimerId;
-        auto idleDuration = TDuration::Seconds(*Config->_KqpSessionIdleTimeoutSec.Get());
-        IdleTimerActorId = CreateLongTimer(TlsActivationContext->AsActorContext(), idleDuration,
-                new IEventHandle(SelfId(), SelfId(), new TEvKqp::TEvIdleTimeout(IdleTimerId)));
-        LOG_D("Created long timer for idle timeout, timer id: " << IdleTimerId
-                << ", duration: " << idleDuration << ", actor: " << IdleTimerActorId);
-    }
-
-    void StopIdleTimer() {
-        if (IdleTimerActorId) {
-            LOG_D("Destroying long timer actor for idle timout: " << IdleTimerActorId);
-            Send(IdleTimerActorId, new TEvents::TEvPoisonPill());
-        }
-        IdleTimerActorId = TActorId();
-    }
-
-    void Handle(TEvKqp::TEvIdleTimeout::TPtr& ev) {
-        auto timerId = ev->Get()->TimerId;
-
-        if (timerId == IdleTimerId) {
-            LOG_N(TKqpRequestInfo("", SessionId) << "SessionActor idle timeout, worker destroyed");
-            Counters->ReportSessionActorClosedIdle(Settings.DbCounters);
-            FinalCleanup();
         }
     }
 
@@ -1985,7 +1951,6 @@ public:
             TransactionsToBeAborted.clear();
             CleanupCtx.reset();
             QueryState.reset();
-            StartIdleTimer();
             Become(&TKqpSessionActor::ReadyState);
         }
     }
@@ -2040,7 +2005,6 @@ public:
                 HFunc(TEvKqp::TEvQueryRequest, HandleReady);
 
                 hFunc(TEvKqp::TEvPingSessionRequest, Handle);
-                hFunc(TEvKqp::TEvIdleTimeout, Handle);
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
@@ -2064,7 +2028,6 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCompile);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
             default:
                 UnexpectedEvent("CompileState", ev);
             }
@@ -2092,7 +2055,6 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
@@ -2119,7 +2081,6 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
@@ -2142,7 +2103,6 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleTopicOps);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
             default:
                 UnexpectedEvent("TopicOpsState", ev);
             }
@@ -2299,9 +2259,6 @@ private:
     std::vector<TIntrusivePtr<TKqpTransactionContext>> TransactionsToBeAborted;
     ui64 EvictedTx = 0;
     std::unique_ptr<TEvKqp::TEvQueryResponse> QueryResponse;
-
-    TActorId IdleTimerActorId;
-    ui32 IdleTimerId = 0;
     std::optional<TSessionShutdownState> ShutdownState;
 
     TULIDGenerator UlidGen;

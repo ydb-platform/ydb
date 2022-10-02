@@ -78,23 +78,26 @@ struct TKqpSessionInfo {
     TActorId WorkerId;
     TString Database;
     TKqpDbCountersPtr DbCounters;
-    TInstant LastRequestAt;
-    TInstant CreatedAt;
     TInstant ShutdownStartedAt;
     std::vector<i32> ReadyPos;
+    NActors::TMonotonic IdleTimeout;
+    // position in the idle list.
+    std::list<TKqpSessionInfo*>::iterator IdlePos;
 
-    TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
-        const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos)
+    TKqpSessionInfo(
+        const TString& sessionId, const TActorId& workerId,
+        const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos,
+        NActors::TMonotonic idleTimeout,
+        std::list<TKqpSessionInfo*>::iterator idlePos)
         : SessionId(sessionId)
         , WorkerId(workerId)
         , Database(database)
         , DbCounters(dbCounters)
         , ShutdownStartedAt()
         , ReadyPos(std::move(pos))
+        , IdleTimeout(idleTimeout)
+        , IdlePos(idlePos)
     {
-        auto now = TAppData::TimeProvider->Now();
-        LastRequestAt = now;
-        CreatedAt = now;
     }
 };
 
@@ -113,7 +116,6 @@ struct TSimpleResourceStats {
 struct TPeerStats {
     TSimpleResourceStats LocalSessionCount;
     TSimpleResourceStats CrossAZSessionCount;
-
     TSimpleResourceStats LocalCpu;
     TSimpleResourceStats CrossAZCpu;
 
@@ -136,6 +138,7 @@ class TLocalSessionsRegistry {
     THashMap<TString, ui32> SessionsCountPerDatabase;
     std::vector<std::vector<TString>> ReadySessions;
     TIntrusivePtr<IRandomProvider> RandomProvider;
+    std::list<TKqpSessionInfo*> IdleSessions;
 
 public:
     TLocalSessionsRegistry(TIntrusivePtr<IRandomProvider> randomProvider)
@@ -144,7 +147,8 @@ public:
     {}
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
-        const TString& database, TKqpDbCountersPtr dbCounters, bool supportsBalancing)
+        const TString& database, TKqpDbCountersPtr dbCounters, bool supportsBalancing,
+        TDuration idleDuration)
     {
         std::vector<i32> pos(2, -1);
         pos[0] = ReadySessions[0].size();
@@ -155,11 +159,28 @@ public:
             ReadySessions[1].push_back(sessionId);
         }
 
-        auto result = LocalSessions.emplace(sessionId, TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos)));
+        auto result = LocalSessions.emplace(
+            sessionId, TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
+            NActors::TActivationContext::Monotonic() + idleDuration, IdleSessions.end()));
         SessionsCountPerDatabase[database]++;
         Y_VERIFY(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
+        StartIdleCheck(&(result.first->second), idleDuration);
         return &result.first->second;
+    }
+
+    const TKqpSessionInfo* GetIdleSession(const NActors::TMonotonic& now) {
+        if (IdleSessions.empty()) {
+            return nullptr;
+        }
+
+        const TKqpSessionInfo* candidate = (*IdleSessions.begin());
+        if (candidate->IdleTimeout > now) {
+            return nullptr;
+        }
+
+        IdleSessions.erase(IdleSessions.begin());
+        return candidate;
     }
 
     const THashSet<TString>& GetShutdownInFlight() const {
@@ -196,6 +217,31 @@ public:
         return ShutdownInFlightSessions.size();
     }
 
+    void StartIdleCheck(const TKqpSessionInfo* sessionInfo, const TDuration idleDuration) {
+        if (!sessionInfo)
+            return;
+
+        TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
+
+        info->IdleTimeout = NActors::TActivationContext::Monotonic() + idleDuration;
+        if (info->IdlePos != IdleSessions.end()) {
+            IdleSessions.erase(info->IdlePos);
+        }
+
+        info->IdlePos = IdleSessions.insert(IdleSessions.end(), info);
+    }
+
+    void StopIdleCheck(const TKqpSessionInfo* sessionInfo) {
+        if (!sessionInfo)
+            return;
+
+        TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
+        if (info->IdlePos != IdleSessions.end()) {
+            IdleSessions.erase(info->IdlePos);
+            info->IdlePos = IdleSessions.end();
+        }
+    }
+
     void Erase(const TString& sessionId) {
         auto it = LocalSessions.find(sessionId);
         if (it != LocalSessions.end()) {
@@ -208,6 +254,10 @@ public:
             }
 
             RemoveSessionFromLists(&(it->second));
+            if (it->second.IdlePos != IdleSessions.end()) {
+                IdleSessions.erase(it->second.IdlePos);
+            }
+
             ShutdownInFlightSessions.erase(sessionId);
             TargetIdIndex.erase(it->second.WorkerId);
             LocalSessions.erase(it);

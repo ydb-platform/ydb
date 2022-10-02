@@ -11,7 +11,7 @@
 #include <util/system/file.h>
 #include <util/stream/format.h>
 
-#include <contrib/libs/liburing/src/include/liburing.h>
+#include <liburing.h>
 #include <libaio.h>
 #include <linux/fs.h>
 #include <sys/ioctl.h>

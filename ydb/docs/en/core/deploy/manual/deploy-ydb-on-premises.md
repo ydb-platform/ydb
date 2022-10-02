@@ -67,6 +67,12 @@ We don't recommend storing data on disks used by other processes (including the 
 
    If you plan to use more than one disk on each server, replace `ydb_disk_ssd_01` with a unique label for each one. You'll need to use these disks later in the configuration files.
 
+   {% note info %}
+
+   A {{ ydb-short-name }} stating from 22.4 required libaio and libidn dynamic libraries to run. Install it using your system package manager. See [{#T}](../../cluster/system-requirements.md#dynamic-libraries) for more information.
+
+   {% endnote %}
+
 1. Download and unpack an archive with the `ydbd` executable and the libraries required for {{ ydb-short-name }} to run:
 
    ```bash
@@ -77,17 +83,15 @@ We don't recommend storing data on disks used by other processes (including the 
 1. Create directories to run:
 
    ```bash
-   sudo mkdir -p /opt/ydb/bin /opt/ydb/cfg /opt/ydb/lib
+   sudo mkdir -p /opt/ydb /opt/ydb/cfg
    sudo chown -R ydb:ydb /opt/ydb
    ```
 
-1. Copy the binary file, libraries, and configuration file to the appropriate directories:
+1. Copy the binary file, and libraries to the appropriate directories:
 
    ```bash
-   sudo cp -i ydbd-stable-linux-amd64/bin/ydbd /opt/ydb/bin/
-   sudo cp -i ydbd-stable-linux-amd64/lib/libaio.so /opt/ydb/lib/
-   sudo cp -i ydbd-stable-linux-amd64/lib/libiconv.so /opt/ydb/lib/
-   sudo cp -i ydbd-stable-linux-amd64/lib/libidn.so /opt/ydb/lib/
+    sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
+    sudo cp -iR ydbd-stable-linux-amd64/lib /opt/ydb/
    ```
 
 1. Format the disk with the builtin command below:

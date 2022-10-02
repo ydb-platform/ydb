@@ -67,6 +67,12 @@ sudo usermod -aG disk ydb
 
     Если вы планируете использовать более одного диска на каждом сервере, укажите для каждого свой уникальный лейбл вместо `ydb_disk_ssd_01`. Эти диски необходимо будет использовать в конфигурационных файлах далее.
 
+   {% note info %}
+
+   Начиная с версии 22.4 для запуска {{ ydb-short-name }} необходимы динамические библиотеки libaio и libidn. Установите их, используя системные пакетные менеджеры. Подробнее  [{#T}](../../cluster/system-requirements.md#dynamic-libraries)
+
+   {% endnote %}
+
 1. Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками:
 
     ```bash
@@ -77,17 +83,15 @@ sudo usermod -aG disk ydb
 1. Создайте директории для запуска:
 
     ```bash
-    sudo mkdir -p /opt/ydb/bin /opt/ydb/cfg /opt/ydb/lib
+    sudo mkdir -p /opt/ydb /opt/ydb/cfg
     sudo chown -R ydb:ydb /opt/ydb
     ```
 
-1. Скопируйте исполняемый файл, библиотеки и конфигурационный файл в соответствующие директории:
+1. Скопируйте исполняемый файл и библиотеки в соответствующие директории:
 
     ```bash
-    sudo cp -i ydbd-stable-linux-amd64/bin/ydbd /opt/ydb/bin/
-    sudo cp -i ydbd-stable-linux-amd64/lib/libaio.so /opt/ydb/lib/
-    sudo cp -i ydbd-stable-linux-amd64/lib/libiconv.so /opt/ydb/lib/
-    sudo cp -i ydbd-stable-linux-amd64/lib/libidn.so /opt/ydb/lib/
+    sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
+    sudo cp -iR ydbd-stable-linux-amd64/lib /opt/ydb/
     ```
 
 1. Отформатируйте диск встроенной командой:

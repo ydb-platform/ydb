@@ -936,17 +936,16 @@ private:
         return out.Str();
     }
 
-    void SaveStatistics(const NYql::NDqProto::TQueryResponse& result) {
+    void SaveStatistics(const TString& graphKey, const NYql::NDqProto::TQueryResponse& result) {
         // Yson routines are very strict, so it's better to try-catch them
         try {
-            Statistics.push_back(BuildNormalizedStatistics(result));
+            Statistics.emplace_back(graphKey, BuildNormalizedStatistics(result));
             TStringStream out;
             NYson::TYsonWriter writer(&out);
             writer.OnBeginMap();
-            ui32 graphIndex = 0;
-            for (const auto& s : Statistics) {
-                writer.OnKeyedItem("Graph=" + ToString(++graphIndex));
-                writer.OnRaw(s);
+            for (const auto& p : Statistics) {
+                writer.OnKeyedItem(p.first);
+                writer.OnRaw(p.second);
             }
             writer.OnEndMap();
             QueryStateUpdateRequest.set_statistics(NJson2Yson::ConvertYson2Json(out.Str()));
@@ -983,7 +982,7 @@ private:
 
         QueryStateUpdateRequest.mutable_result_id()->set_value(Params.ResultId);
 
-        SaveStatistics(result);
+        SaveStatistics("Graph=" + ToString(DqGraphIndex), result);
 
         KillExecuter();
     }
@@ -1013,6 +1012,8 @@ private:
             if (!error) {
                 QueryResult.SetSuccess();
             }
+
+            SaveStatistics("Precompute=", result);
 
             QueryResult.AddIssues(issues);
             QueryResult.Truncated = result.GetTruncated();
@@ -1962,7 +1963,7 @@ private:
     // Consumers creation
     TVector<NYql::NPq::NProto::TDqPqTopicSource> TopicsForConsumersCreation;
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> CredentialsForConsumersCreation;
-    TVector<TString> Statistics;
+    TVector<std::pair<TString, TString>> Statistics;
     NActors::TActorId ReadRulesCreatorId;
 
     // Rate limiter resource creation

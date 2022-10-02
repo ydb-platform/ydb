@@ -184,7 +184,11 @@ private:
             requestedNode.RequestedFlag = true;
             auto delta = TInstant::Now() - requestedNode.StartTime;
             // catched and grpc_service
-            QueryStat.AddCounter(QueryStat.GetCounterName("Actor", {{"ClusterName", requestedNode.ClusterName}}, "ActorCreateTime"), delta);
+            std::map<TString, TString> labels;
+            if (requestedNode.ClusterName) {
+                labels.emplace("ClusterName", requestedNode.ClusterName);
+            }
+            QueryStat.AddCounter(QueryStat.GetCounterName("Actor", labels, "ActorCreateTime"), delta);
         }
 
         if (AllocatedCount == RequestedCount) {

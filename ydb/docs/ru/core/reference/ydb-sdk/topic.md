@@ -4,6 +4,83 @@
 
 Перед выполнением примеров [создайте топик](../ydb-cli/topic-create.md) и [добавьте читателя](../ydb-cli/topic-consumer-add.md).
 
+## Управление топиками
+### Создание топика
+
+{% list tabs %}
+
+Единственный обязательный параметр для создания топика - это его путь, остальные параметры - опциональны.
+
+- Go
+
+  Полный список поддерживаемых параметров можно посмотреть в [документации SDK](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
+
+  Пример создания тописка со списком поддерживаемых кодеков и минимальным количество партиций
+  ```go
+  err := db.Topic().Create(ctx, "topic-path",
+      // optional
+	  topicoptions.CreateWithSupportedCodecs(topictypes.CodecRaw, topictypes.CodecGzip),
+
+	  // optional
+	  topicoptions.CreateWithMinActivePartitions(3),
+  )
+  ```
+
+{% endlist %}
+
+### Изменение топика
+
+При изменении топика в параметрах нужно указать путь топика и те параметры, которые будут изменяться.
+
+{% list tabs %}
+- Go
+
+  Полный список поддерживаемых параметров можно посмотреть в [документации SDK](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#AlterOption).
+
+  Пример добавления читателя к топику
+
+  ```go
+   err := db.Topic().Alter(ctx, "topic-path",
+		topicoptions.AlterWithAddConsumers(topictypes.Consumer{
+			Name:            "new-consumer",
+			SupportedCodecs: []topictypes.Codec{topictypes.CodecRaw, topictypes.CodecGzip}, // optional
+		}),
+	)
+  ```
+{% endlist %}
+
+### Получение информации о топике
+
+{% list tabs %}
+
+- Go
+
+  ```go
+    descResult, err := db.Topic().Describe(ctx, "topic-path")
+	if err != nil {
+		log.Fatalf("failed drop topic: %v", err)
+		return
+	}
+	fmt.Printf("describe: %#v\n", descResult)
+  ```
+
+{% endlist %}
+
+### Удаление топика
+
+Для удаления топика достаточно указать путь к нему.
+
+{% list tabs %}
+
+- Go
+
+  ```go
+    err := db.Topic().Drop(ctx, "topic-path")
+  ```
+
+{% endlist %}
+
+
 ## Запись сообщений
 ### Подключение к топику для записи сообщений {#start-writer}
 

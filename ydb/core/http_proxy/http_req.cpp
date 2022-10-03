@@ -49,6 +49,7 @@ namespace NKikimr::NHttpProxy {
         switch(status) {
         case NYdb::EStatus::BAD_REQUEST:
             return "InvalidParameterValueException"; //TODO: bring here issues and parse from them
+        case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
         case NYdb::EStatus::UNAUTHORIZED:
             return "AccessDeniedException";
         case NYdb::EStatus::INTERNAL_ERROR:
@@ -87,6 +88,7 @@ namespace NKikimr::NHttpProxy {
         case NYdb::EStatus::UNSUPPORTED:
         case NYdb::EStatus::BAD_REQUEST:
             return HTTP_BAD_REQUEST;
+        case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
         case NYdb::EStatus::UNAUTHORIZED:
             return HTTP_FORBIDDEN;
         case NYdb::EStatus::INTERNAL_ERROR:

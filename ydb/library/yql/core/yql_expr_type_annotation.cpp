@@ -1630,6 +1630,10 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
     if (!(one && two))
         return nullptr;
 
+    if (HasError(one, ctx) || HasError(two, ctx)) {
+        return nullptr;
+    }
+
     if (IsSameAnnotation(*one, *two))
         return two;
 
@@ -1660,6 +1664,8 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
             default:
                 break;
         }
+
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << kindOne));
     } else {
         if constexpr (!Strict) {
             if (ETypeAnnotationKind::Pg == kindOne) {

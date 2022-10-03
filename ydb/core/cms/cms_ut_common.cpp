@@ -303,7 +303,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 ui32 groupId = groupShift + vdiskId;
                 ui32 failRealm = 0;
                 if (useMirror3dcErasure)
-                    failRealm = nodeIndex % 8;
+                    failRealm = (nodeIndex % 9) / 3;
 
                 TVDiskID id = {(ui8)groupId, 1, (ui8)failRealm, (ui8)(nodeIndex % 8), (ui8)0};
 

@@ -159,7 +159,7 @@ void TMirror3dcCounter::CountVDisk(const TVDiskInfo& vdisk,
         error.Reason = TStringBuilder() << "Issue in affected group " << GroupId 
                                         << ". " << err.Reason;
         error.Deadline = Max(error.Deadline, err.Deadline);
-        ++DataCenterDisabledNodes[vdisk.VDiskId.FailRealm / 3];
+        ++DataCenterDisabledNodes[vdisk.VDiskId.FailRealm];
     }
 }
 
@@ -173,7 +173,7 @@ void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info,
             CountVDisk(info->VDisk(vdId), info, retryTime, duration, error);
     }
     ++Locked;
-    ++DataCenterDisabledNodes[VDisk.VDiskId.FailRealm / 3];
+    ++DataCenterDisabledNodes[VDisk.VDiskId.FailRealm];
 }
 
 void TDefaultErasureCounter::CountGroupState(TClusterInfoPtr info,

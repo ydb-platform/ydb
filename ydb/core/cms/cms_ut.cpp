@@ -1073,15 +1073,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(StateStorageTwoRings)
     {   
-        TTestEnvOpts options;
-        options.NodeCount = 5;
-        options.DataCenterCount = 5;
+        TTestEnvOpts options(5);
         options.VDisks = 0;
         options.NRings = 2;
         options.RingSize = 2;
         options.NToSelect = 2;
-        options.UseMirror3dcErasure = false;
-    
+
         TCmsTestEnv env(options);
         
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
@@ -1093,15 +1090,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(StateStorageNodesFromOneRing)
     {   
-        TTestEnvOpts options;
-        options.NodeCount = 5;
+        TTestEnvOpts options(5);
         options.VDisks = 0;
         options.NRings = 2;
         options.RingSize = 2;
         options.NToSelect = 2;
-        options.DataCenterCount = 5;
-        options.UseMirror3dcErasure = false;
-    
+
         TCmsTestEnv env(options);
 
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
@@ -1113,15 +1107,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(StateStorageAvailabilityMode)
     {   
-        TTestEnvOpts options;
-        options.NodeCount = 5;
+        TTestEnvOpts options(5);
         options.VDisks = 0;
         options.NRings = 2;
         options.RingSize = 2;
         options.NToSelect = 2;
-        options.DataCenterCount = 5;
-        options.UseMirror3dcErasure = false;
-    
+
         TCmsTestEnv env(options);
         
         TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
@@ -1136,15 +1127,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(StateStorageTwoBrokenRings)
     {   
-        TTestEnvOpts options;
-        options.NodeCount = 7;
-        options.DataCenterCount = 7;
+        TTestEnvOpts options(7);
         options.VDisks = 0;
         options.NRings = 3;
         options.RingSize = 2;
         options.NToSelect = 2;
-        options.UseMirror3dcErasure = false;
-    
+ 
         TCmsTestEnv env(options);
 
         TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
@@ -1161,15 +1149,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(StateStorageRollingRestart) 
     {
-        TTestEnvOpts options;
-        options.NodeCount = 20;
-        options.DataCenterCount = 20;
+        TTestEnvOpts options(20);
         options.VDisks = 0;
         options.NRings = 6;
         options.RingSize = 3;
         options.NToSelect = 5;
-        options.UseMirror3dcErasure = false;
-    
+ 
         TCmsTestEnv env(options);
 
         TIntrusiveConstPtr<TStateStorageInfo> info = env.GetStateStorageInfo();
@@ -1309,9 +1294,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(Mirror3dcPermissions) 
     {
-        TTestEnvOpts options;
+        TTestEnvOpts options(18);
         options.UseMirror3dcErasure = true;
-        options.NodeCount = 18;
         options.VDisks = 9;
         options.NRings = 3;
         options.DataCenterCount = 3;

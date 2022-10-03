@@ -102,11 +102,11 @@ public:
                 result.Data = queryResult.yson().empty()
                     ? NYdb::FormatResultSetYson(queryResult.result(), NYson::EYsonFormat::Binary)
                     : queryResult.yson();
-                result.Issues.AddIssues(issues);
+                result.AddIssues(issues);
                 result.SetSuccess();
             } else {
                 YQL_CLOG(ERROR, ProviderDq) << "Issue " << issues.ToString();
-                result.Issues.AddIssues(issues);
+                result.AddIssues(issues);
                 if (fallback) {
                     result.Fallback = true;
                     result.SetSuccess();
@@ -124,10 +124,10 @@ public:
                 YQL_CLOG(ERROR, ProviderDq) << "Fallback " << status.GRpcStatusCode;
                 result.Fallback = true;
                 result.SetSuccess();
-                result.Issues.AddIssue(issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
+                result.AddIssue(issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
             } else {
                 error = true;
-                result.Issues.AddIssue(issue.SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR));
+                result.AddIssue(issue.SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR));
             }
         }
 
@@ -136,10 +136,6 @@ public:
             result.Fallback = true;
             result.ForceFallback = true;
             result.SetSuccess();
-        }
-
-        if (!result.Success()) {
-            result.AddIssues(result.Issues);
         }
 
         promise.SetValue(result);

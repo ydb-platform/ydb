@@ -825,7 +825,7 @@ private:
                 if (res.Fallback) {
                     if (state->Settings->FallbackPolicy.Get().GetOrElse("default") == "never" || state->TypeCtx->ForceDq) {
                         auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
-                        issues.AddIssues(res.Issues);
+                        issues.AddIssues(res.Issues());
                         ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
@@ -1182,7 +1182,6 @@ private:
                 state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
                 // never fallback will be captured in yql_facade
                 auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
-                issues.AddIssues(res.Issues);
                 ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
             }
@@ -1212,7 +1211,7 @@ private:
             if (truncated && !state->TypeCtx->ForceDq && !enableFullResultWrite) {
                 auto issue = TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "DQ cannot execute the query. Cause: " << "too big result " <<  trStr).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO);
                 bool error = settings->FallbackPolicy.Get().GetOrElse("default") == "never";
-                for (const auto& i : res.Issues) {
+                for (const auto& i : res.Issues()) {
                     TIssuePtr subIssue = new TIssue(i);
                     if (error && subIssue->Severity == TSeverityIds::S_WARNING) {
                         subIssue->Severity = TSeverityIds::S_ERROR;
@@ -1271,7 +1270,7 @@ private:
 
             writer.OnEndMap();
 
-            ctx.IssueManager.RaiseIssues(res.Issues);
+            ctx.IssueManager.RaiseIssues(res.Issues());
             input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
             return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
         }, "");
@@ -1626,7 +1625,7 @@ private:
                         state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
                     }
 
-                    CompleteNode(execState, node, [resIssues = res.Issues, fallback = res.Fallback](const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) -> IGraphTransformer::TStatus {
+                    CompleteNode(execState, node, [resIssues = res.Issues(), fallback = res.Fallback](const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) -> IGraphTransformer::TStatus {
                         auto issue = TIssue(ctx.GetPosition(input->Pos()), "Gateway Error");
                         if (fallback) {
                             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING);
@@ -1642,7 +1641,7 @@ private:
                     });
                 } else if (res.Truncated) {
                     YQL_CLOG(DEBUG, ProviderDq) << "Finished with truncated result";
-                    CompleteNode(execState, node, [neverFallback, resIssues = res.Issues](const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) -> IGraphTransformer::TStatus {
+                    CompleteNode(execState, node, [neverFallback, resIssues = res.Issues()](const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) -> IGraphTransformer::TStatus {
                         auto issue = TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "DQ cannot execute the query. Cause: " << "too big precompute result").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO);
                         for (const auto& i : resIssues) {
                             TIssuePtr subIssue = new TIssue(i);
@@ -1662,7 +1661,7 @@ private:
                     });
                 } else {
                     YQL_CLOG(DEBUG, ProviderDq) << "Finished";
-                    CompleteNode(execState, node, [resIssues = res.Issues, data = res.Data, success = res.Success()](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
+                    CompleteNode(execState, node, [resIssues = res.Issues(), data = res.Data, success = res.Success()](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                         output = input;
                         ctx.IssueManager.RaiseIssues(resIssues);
                         input->SetResult(ctx.NewAtom(input->Pos(), data));

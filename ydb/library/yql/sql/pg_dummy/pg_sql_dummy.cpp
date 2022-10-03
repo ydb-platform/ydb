@@ -1,5 +1,6 @@
 #include <ydb/library/yql/sql/pg_sql.h>
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <ydb/library/yql/minikql/computation/presort_impl.h>
 #include <ydb/library/yql/core/yql_pg_utils.h>
@@ -250,6 +251,10 @@ public:
 
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
     return std::make_unique<TPgDummyBuilder>();
+}
+
+NKikimr::NMiniKQL::TComputationNodeFactory GetPgFactory() {
+    return {};
 }
 
 } // NYql

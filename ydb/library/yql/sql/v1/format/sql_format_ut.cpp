@@ -714,4 +714,14 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(SquareBrackets) {
+        TCases cases = {
+            {"select a[0]",
+             "SELECT\n\ta[0];\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

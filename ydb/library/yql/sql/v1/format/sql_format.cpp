@@ -958,7 +958,9 @@ private:
             && str != "}" && str != "|>" && str != "::" && !AfterNamespace && !AfterBracket
             && !AfterInvokeExpr && !AfterDollarOrAt && !AfterDot && (!AfterQuestion || str != "?")
             && (!InsideType || (str != "<" && str != ">" && str != "<>"))
-            && (!InsideType || !AfterLess)) {
+            && (!InsideType || !AfterLess)
+            && (!AfterKeyExpr || str != "[")
+            ) {
             Out(' ');
         }
 
@@ -969,6 +971,7 @@ private:
         AfterDigits = !str.Empty() && AllOf(str, [](char c) { return c >= '0' && c <= '9'; });
         AfterQuestion = (str == "?");
         AfterLess = (str == "<");
+        AfterKeyExpr = false;
 
         if (forceKeyword) {
             str = to_upper(str);
@@ -1623,6 +1626,11 @@ private:
         Visit(msg.GetRule_order_by_clause2());
     }
 
+    void VisitKeyExpr(const TRule_key_expr& msg) {
+        AfterKeyExpr = true;
+        VisitAllFields(TRule_key_expr::GetDescriptor(), msg);
+    }
+
     void PushCurrentIndent() {
         CurrentIndent += OneIndent;
     }
@@ -1651,6 +1659,7 @@ private:
     bool AfterDigits = false;
     bool AfterQuestion = false;
     bool AfterLess = false;
+    bool AfterKeyExpr = false;
 };
 
 template <typename T>
@@ -1707,6 +1716,7 @@ TStaticData::TStaticData()
         {TRule_cast_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitCastExpr)},
         {TRule_bitcast_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitBitCastExpr)},
         {TRule_ext_order_by_clause::GetDescriptor(), MakeFunctor(&TVisitor::VisitExtOrderByClause)},
+        {TRule_key_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitKeyExpr)},
 
         {TRule_pragma_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitPragma)},
         {TRule_select_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelect)},

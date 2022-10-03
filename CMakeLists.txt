@@ -30,33 +30,18 @@ include(cmake/protobuf.cmake)
 include(cmake/yandex_common.cmake)
 include(cmake/global_vars.cmake)
 
-conan_cmake_configure(
-  GENERATORS cmake_find_package
-  REQUIRES
-    bison/3.5.3
-    c-ares/1.18.1
-    libiconv/1.15
-    liburing/2.1
-    openssl/1.1.1l
-    ragel/6.10
-    yasm/1.3.0
-    zlib/1.2.12
-  IMPORTS
-    "bin, *yasm* -> ./bin"
-    "bin, bison* -> ./bin/bison/bin"
-    "bin, ragel* -> ./bin"
-    "bin, ytasm* -> ./bin"
-    "res, * -> ./bin/bison/res"
-  OPTIONS
-    libiconv:shared=True
-)
-conan_cmake_autodetect(settings)
-conan_cmake_install(
-  PATH_OR_REFERENCE .
-  BUILD missing
-  REMOTE conancenter
-  SETTINGS ${settings}
-)
+if (CMAKE_CROSSCOMPILING)
+  include(${CMAKE_BINARY_DIR}/conan_paths.cmake)
+else()
+  conan_cmake_autodetect(settings)
+  conan_cmake_install(
+    PATH_OR_REFERENCE ${CMAKE_SOURCE_DIR}
+    INSTALL_FOLDER ${CMAKE_BINARY_DIR}
+    BUILD missing
+    REMOTE conancenter
+    SETTINGS ${settings}
+  )
+endif()
 
 if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
   include(CMakeLists.linux.txt)

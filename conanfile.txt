@@ -1,0 +1,23 @@
+[requires]
+bison/3.5.3
+c-ares/1.18.1
+libiconv/1.15
+liburing/2.1
+openssl/1.1.1l
+ragel/6.10
+yasm/1.3.0
+zlib/1.2.12
+
+[options]
+libiconv:shared=True
+
+[imports]
+bin, *yasm* -> ./bin
+bin, bison* -> ./bin/bison/bin
+bin, ragel* -> ./bin
+bin, ytasm* -> ./bin
+res, * -> ./bin/bison/res
+
+[generators]
+cmake_find_package
+cmake_paths

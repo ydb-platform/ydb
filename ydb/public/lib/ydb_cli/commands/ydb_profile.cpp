@@ -242,7 +242,9 @@ namespace {
     }
 
     bool SetAuthFromCommandLine( std::shared_ptr<IProfile> profile, TClientCommand::TConfig& config) {
-
+        if (config.ParseResult->Has("iam-endpoint")) {
+            profile->SetValue("iam-endpoint", config.ParseResult->Get("iam-endpoint"));
+        }
         if (config.ParseResult->Has("token-file")) {
             PutAuthMethod( profile, "token-file", config.ParseResult->Get("token-file"));
         } else if (config.ParseResult->Has("iam-token-file")) {

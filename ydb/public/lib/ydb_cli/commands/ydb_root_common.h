@@ -44,6 +44,7 @@ private:
 
     void ParseProfile();
     void ParseDatabase(TConfig& config);
+    void CheckForIamEndpoint(TConfig& config, std::shared_ptr<IProfile> profile);
 
     TString Database;
 

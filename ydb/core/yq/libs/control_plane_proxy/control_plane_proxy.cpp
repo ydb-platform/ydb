@@ -497,6 +497,8 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             }
         };
 
+        TDuration MetricsTtl = TDuration::Days(1);
+
         using TScopeCounters = std::array<TRequestScopeCountersPtr, RTS_MAX>;
         using TScopeCountersPtr = std::shared_ptr<TScopeCounters>;
 
@@ -525,7 +527,13 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             { MakeIntrusive<TRequestCommonCounters>("DeleteBinding") },
         });
 
-        TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
+        struct TScopeValue {
+            TScopeCountersPtr Counters;
+            TInstant LastAccess;
+        };
+
+        TMap<TMetricsScope, TScopeValue> ScopeCounters;
+        TMap<TInstant, TSet<TMetricsScope>> LastAccess;
         ::NMonitoring::TDynamicCounterPtr Counters;
 
     public:
@@ -537,6 +545,17 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             }
         }
 
+        void CleanupByTtl() {
+            auto now = TInstant::Now();
+            auto it = LastAccess.begin();
+            for (; it != LastAccess.end() && (now - it->first) > MetricsTtl; ++it) {
+                for (const auto& scope: it->second) {
+                    ScopeCounters.erase(scope);
+                }
+            }
+            LastAccess.erase(LastAccess.begin(), it);
+        }
+
         TRequestCounters GetCounters(const TString& cloudId, const TString& scope, ERequestTypeScope scopeType, ERequestTypeCommon commonType) {
             return {GetScopeCounters(cloudId, scope, scopeType), GetCommonCounters(commonType)};
         }
@@ -546,10 +565,19 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
         }
 
         TRequestScopeCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
+            CleanupByTtl();
             TMetricsScope key{cloudId, scope};
             auto it = ScopeCounters.find(key);
             if (it != ScopeCounters.end()) {
-                return (*it->second)[type];
+                auto& value = it->second;
+                auto& l = LastAccess[value.LastAccess];
+                l.erase(key);
+                if (l.empty()) {
+                    LastAccess.erase(value.LastAccess);
+                }
+                value.LastAccess = TInstant::Now();
+                LastAccess[value.LastAccess].insert(key);
+                return (*value.Counters)[type];
             }
 
             auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestScopeCountersPtr>({
@@ -583,8 +611,9 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             for (auto& request: *scopeRequests) {
                 request->Register(scopeCounters);
             }
-
-            ScopeCounters[key] = scopeRequests;
+            auto now = TInstant::Now();
+            LastAccess[now].insert(key);
+            ScopeCounters[key] = TScopeValue{scopeRequests, now};
             return (*scopeRequests)[type];
         }
     };

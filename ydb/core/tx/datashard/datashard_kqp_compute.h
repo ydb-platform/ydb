@@ -100,7 +100,7 @@ private:
         const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
         NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
 
-    void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; }
+    void SetTabletNotReady() { TabletNotReady = true; }
 
 public:
     NTable::TDatabase* Database = nullptr;

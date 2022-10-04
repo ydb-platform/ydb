@@ -49,7 +49,7 @@ jump_fcontext:
     fnstcw   0x4(%rsp)  /* save x87 control-word */
 #endif
 
-#if defined(TLS_STACK_PROTECTOR)
+#if defined(BOOST_CONTEXT_TLS_STACK_PROTECTOR)
     movq  %fs:0x28, %rcx    /* read stack guard from TLS record */
     movq  %rcx, 0x8(%rsp)   /* save stack guard */
 #endif

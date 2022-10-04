@@ -216,7 +216,7 @@ TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& f
             return {};
         }
 
-        if (!IsSingleConsumerConnection(TDqConnection(cn), parentsMap, false)) {
+        if (!IsSingleConsumerConnection(TDqConnection(cn), parentsMap, true)) {
             return {};
         }
 

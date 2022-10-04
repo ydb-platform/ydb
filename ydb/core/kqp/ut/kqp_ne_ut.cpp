@@ -3571,6 +3571,35 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT(streamLookup.IsDefined());
         }
     }
+
+    Y_UNIT_TEST(FlatmapLambdaMutiusedConnections) {
+        auto settings = TKikimrSettings()
+            .SetEnablePredicateExtractForDataQueries(false);
+        TKikimrRunner kikimr{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            $values = SELECT Value2 AS Value FROM TwoShard;
+
+            $values_filtered = SELECT * FROM $values WHERE Value < 5;
+
+            SELECT Key FROM `/Root/EightShard`
+            WHERE Data IN $values_filtered OR Data = 0
+            ORDER BY Key;
+
+            SELECT * FROM $values
+            ORDER BY Value;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[101u]];[[202u]];[[303u]];[[401u]];[[502u]];[[603u]];[[701u]];[[802u]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[-1]];[[-1]];[[0]];[[0]];[[1]];[[1]]])",
+            FormatResultSetYson(result.GetResultSet(1)));
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -1,5 +1,8 @@
 Version | Release date | Link
 :--- | :--- | :---
+**v22.4**
+v.22.4.21 | 03.10.22 | [https://github.com/ydb-platform/ydb/tree/22.4.21](https://github.com/ydb-platform/ydb/tree/22.4.21)
+**v22.2**
 v.22.2.47 | 07.07.22 | [https://github.com/ydb-platform/ydb/tree/22.2.47](https://github.com/ydb-platform/ydb/tree/22.2.47)
 v.22.2.40 | 16.06.22 | [https://github.com/ydb-platform/ydb/tree/22.2.40](https://github.com/ydb-platform/ydb/tree/22.2.40)
 v.22.2.39 | 15.06.22 | [https://github.com/ydb-platform/ydb/tree/22.2.39](https://github.com/ydb-platform/ydb/tree/22.2.39)

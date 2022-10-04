@@ -33,10 +33,3 @@ The number of servers and disks is determined by the fault-tolerance requirement
 A {{ ydb-short-name }} server can run on servers with Linux kernel 4.4 or higher.
 
 MacOS and Windows operating systems are currently not supported.
-
-### Dynamic libraries {#dynamic-libraries}
-A {{ ydb-short-name }} required dynamic libraries:
-- libidn11 - [GNU libidn](https://www.gnu.org/software/libidn)
-- libaio1 - [libaio](https://pagure.io/libaio)
-
-Install it using your system package manager.

@@ -67,12 +67,6 @@ We don't recommend storing data on disks used by other processes (including the 
 
    If you plan to use more than one disk on each server, replace `ydb_disk_ssd_01` with a unique label for each one. You'll need to use these disks later in the configuration files.
 
-   {% note info %}
-
-   A {{ ydb-short-name }} stating from 22.4 required libaio and libidn dynamic libraries to run. Install it using your system package manager. See [{#T}](../../cluster/system-requirements.md#dynamic-libraries) for more information.
-
-   {% endnote %}
-
 1. Download and unpack an archive with the `ydbd` executable and the libraries required for {{ ydb-short-name }} to run:
 
    ```bash

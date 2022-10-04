@@ -50,13 +50,13 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 {% if feature_changefeed %}
 
-## Добавление или удаление потока данных {#changefeed}
+## Добавление или удаление потока изменений{#changefeed}
 
-`ADD CHANGEFEED <name> WITH (option = value[, ...])` — добавляет [поток данных](../../../../concepts/cdc) с указанным именем и параметрами.
+`ADD CHANGEFEED <name> WITH (option = value[, ...])` — добавляет [поток изменений (changefeed)](../../../../concepts/cdc) с указанным именем и параметрами.
 
-### Параметры Changefeed {#changefeed-options}
+**Параметры потока изменений**
 
-* `MODE` — режим работы. Указывает, что именно будет записано в changefeed при каждом изменении данных в таблице.
+* `MODE` — режим работы. Указывает, что именно будет записано в поток при каждом изменении данных в таблице.
   * `KEYS_ONLY` — будут записаны только компоненты первичного ключа и признак изменения.
   * `UPDATES` — будут записаны значения изменившихся столбцов, получившиеся в результате изменения.
   * `NEW_IMAGE` — будут записаны значения всех столбцов, получившиеся в результате изменения.
@@ -65,7 +65,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 * `FORMAT` — формат данных, в котором будут записаны данные.
   * `JSON` — структура записи приведена на странице [описания changefeed](../../../../concepts/cdc#record-structure).
 
-Приведенный ниже код добавит поток данных с именем `updates_feed`, в который будут выгружаться значения изменившихся столбцов таблицы в формате JSON:
+Приведенный ниже код добавит поток изменений с именем `updates_feed`, в который будут выгружаться значения изменившихся столбцов таблицы в формате JSON:
 
 ```sql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
@@ -74,7 +74,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 );
 ```
 
-`DROP CHANGEFEED` — удаляет поток данных с указанным именем. Приведенный ниже код удалит changefeed с именем `updates_feed`:
+`DROP CHANGEFEED` — удаляет поток изменений с указанным именем. Приведенный ниже код удалит changefeed с именем `updates_feed`:
 
 ```sql
 ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;

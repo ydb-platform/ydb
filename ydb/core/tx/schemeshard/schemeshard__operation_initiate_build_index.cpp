@@ -13,7 +13,7 @@ using namespace NSchemeShard;
 
 class TConfigureParts: public TSubOperationState {
 private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -114,13 +114,12 @@ public:
                                     << " at schemeshard: " << ssId);
 
 
-            THolder<TEvDataShard::TEvProposeTransaction> event =
-                THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
-                                                        context.SS->TabletID(),
-                                                        context.Ctx.SelfID,
-                                                        ui64(OperationId.GetTxId()),
-                                                        txBody,
-                                                        context.SS->SelectProcessingPrarams(txState->TargetPathId)));
+            auto event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+                NKikimrTxDataShard::TX_KIND_SCHEME,
+                context.SS->TabletID(), context.Ctx.SelfID,
+                ui64(OperationId.GetTxId()), txBody,
+                context.SS->SelectProcessingPrarams(txState->TargetPathId)
+            );
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx,  event.Release());
         }
@@ -130,10 +129,9 @@ public:
     }
 };
 
-
 class TPropose: public TSubOperationState {
 private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -145,7 +143,10 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages(DebugHint(), {
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvDataShard::TEvProposeTransactionResult::EventType,
+        });
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -215,11 +216,9 @@ public:
     }
 };
 
-
-
 class TCreateTxShards: public TSubOperationState {
 private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -255,13 +254,11 @@ public:
 
 
         NIceDb::TNiceDb db(context.GetDB());
-
         context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
 
         return true;
     }
 };
-
 
 class TInitializeBuildIndex: public TSubOperation {
     const TOperationId OperationId;
@@ -273,7 +270,7 @@ class TInitializeBuildIndex: public TSubOperation {
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
@@ -286,11 +283,10 @@ class TInitializeBuildIndex: public TSubOperation {
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return THolder(new TCreateTxShards(OperationId));
@@ -319,13 +315,13 @@ class TInitializeBuildIndex: public TSubOperation {
 public:
     TInitializeBuildIndex(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-          , Transaction(tx)
+        , Transaction(tx)
     {
     }
 
     TInitializeBuildIndex(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
-          , State(state)
+        , State(state)
     {
         SetState(SelectStateFunc(state));
     }
@@ -425,19 +421,25 @@ public:
             result->SetError(TEvSchemeShard::EStatus::StatusSchemeError, errStr);
             return result;
         }
+
         if (!context.SS->CheckInFlightLimit(TTxState::TxInitializeBuildIndex, errStr)) {
             result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, tablePathId);
+        context.MemChanges.GrabTableSnapshot(context.SS, tablePathId, OperationId.GetTxId());
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistTableSnapshot(tablePathId, OperationId.GetTxId());
+        context.DbChanges.PersistTxState(OperationId);
 
         pathEl->LastTxId = OperationId.GetTxId();
         pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxInitializeBuildIndex, tablePathId);
         txState.State = TTxState::CreateParts;
-        context.SS->PersistTxState(db, OperationId);
 
         TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
         for (auto splitTx: table->GetSplitOpsInFlight()) {
@@ -446,7 +448,6 @@ public:
 
         context.SS->TablesWithSnaphots.emplace(tablePathId, OperationId.GetTxId());
         context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePathId);
-        context.SS->PersistSnapshotTable(db, OperationId.GetTxId(), tablePathId);
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
 
         context.OnComplete.ActivateTx(OperationId);
@@ -456,8 +457,12 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TInitializeBuildIndex");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TInitializeBuildIndex AbortPropose"
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << context.SS->TabletID());
+        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -471,10 +476,9 @@ public:
     }
 };
 
-}
+} // anonymous namespace
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx) {
     return new TInitializeBuildIndex(id, tx);
@@ -485,5 +489,4 @@ ISubOperationBase::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTx
     return new TInitializeBuildIndex(id, state);
 }
 
-}
 }

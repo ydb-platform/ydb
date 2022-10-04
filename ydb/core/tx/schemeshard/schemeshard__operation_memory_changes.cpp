@@ -1,11 +1,9 @@
 #include "schemeshard__operation_memory_changes.h"
-
 #include "schemeshard_impl.h"
 
 #include <ydb/core/tx/tx_processing.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& op) {
     Y_VERIFY(!ss->TxInFlight.contains(op));
@@ -76,6 +74,12 @@ void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
     CdcStreams.emplace(pathId, nullptr);
 }
 
+void TMemoryChanges::GrabTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
+    Y_VERIFY(!ss->TablesWithSnaphots.contains(pathId));
+
+    TablesWithSnaphots.emplace(pathId, snapshotTxId);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -108,6 +112,21 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->CdcStreams.erase(id);
         }
         CdcStreams.pop();
+    }
+
+    while (TablesWithSnaphots) {
+        const auto& [id, snapshotTxId] = TablesWithSnaphots.top();
+
+        ss->TablesWithSnaphots.erase(id);
+        auto it = ss->SnapshotTables.find(snapshotTxId);
+        if (it != ss->SnapshotTables.end()) {
+            it->second.erase(id);
+            if (it->second.empty()) {
+                ss->SnapshotTables.erase(it);
+            }
+        }
+
+        TablesWithSnaphots.pop();
     }
 
     while (Tables) {
@@ -152,5 +171,4 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     }
 }
 
-}
 }

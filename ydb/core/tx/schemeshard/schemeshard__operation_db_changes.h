@@ -8,8 +8,7 @@
 
 #include <util/generic/ptr.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
@@ -17,6 +16,7 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> Pathes;
 
     TDeque<TPathId> Tables;
+    TDeque<std::pair<TPathId, TTxId>> TableSnapshots;
 
     TDeque<TShardIdx> Shards;
 
@@ -40,6 +40,10 @@ public:
 
     void PersistTable(const TPathId& pathId) {
         Tables.push_back(pathId);
+    }
+
+    void PersistTableSnapshot(const TPathId& pathId, TTxId snapshotTxId) {
+        TableSnapshots.emplace_back(pathId, snapshotTxId);
     }
 
     void PersistAlterUserAttrs(const TPathId& pathId) {
@@ -77,5 +81,4 @@ public:
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
 };
 
-}
 }

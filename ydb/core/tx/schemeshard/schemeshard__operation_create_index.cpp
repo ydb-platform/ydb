@@ -9,7 +9,7 @@ using namespace NTableIndex;
 
 class TPropose: public TSubOperationState {
 private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -82,7 +82,7 @@ class TCreateTableIndex: public TSubOperation {
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+        switch (state) {
         case TTxState::Propose:
             return TTxState::Done;
         default:
@@ -91,7 +91,7 @@ class TCreateTableIndex: public TSubOperation {
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+        switch (state) {
         case TTxState::Propose:
             return THolder(new TPropose(OperationId));
         case TTxState::Done:
@@ -113,13 +113,13 @@ class TCreateTableIndex: public TSubOperation {
 public:
     TCreateTableIndex(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-          , Transaction(tx)
+        , Transaction(tx)
     {
     }
 
     TCreateTableIndex(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
-          , State(state)
+        , State(state)
     {
         SetState(SelectStateFunc(state));
     }
@@ -230,6 +230,7 @@ public:
                 return result;
             }
         }
+
         if (!context.SS->CheckInFlightLimit(TTxState::TxCreateTableIndex, errStr)) {
             result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
@@ -298,11 +299,9 @@ public:
     }
 };
 
-}
+} // anonymous namespace
 
-
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, const TTxTransaction& tx) {
     return new TCreateTableIndex(id, tx);
@@ -312,5 +311,4 @@ ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState 
     return new TCreateTableIndex(id, state);
 }
 
-}
 }

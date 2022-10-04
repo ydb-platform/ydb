@@ -9,8 +9,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/stack.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
@@ -23,6 +22,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 
     using TCdcStreamState = std::pair<TPathId, TCdcStreamInfo::TPtr>;
     TStack<TCdcStreamState> CdcStreams;
+
+    using TTableSnapshotState = std::pair<TPathId, TTxId>;
+    TStack<TTableSnapshotState> TablesWithSnaphots;
 
     using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
     TStack<TTableState> Tables;
@@ -57,8 +59,9 @@ public:
 
     void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
 
+    void GrabTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId);
+
     void UnDo(TSchemeShard* ss);
 };
 
-}
 }

@@ -33,7 +33,7 @@ struct TTtlCacheSettings {
     }
 };
 
-template<typename TKey, typename TValue>
+template<typename TKey, typename TValue, template <typename... Args> class TContainer = THashMap>
 class TTtlCache {
 public:
     TTtlCache(const TTtlCacheSettings& config = TTtlCacheSettings())
@@ -110,7 +110,7 @@ private:
         typename TList<TKeyAndTime>::iterator Position;
         TList<TKeyAndTime>* Queue;
     };
-    THashMap<TKey, TCacheObject> Data;
+    TContainer<TKey, TCacheObject> Data;
 
     TTtlCacheSettings Config;
 };

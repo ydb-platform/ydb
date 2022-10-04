@@ -27,6 +27,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
 
+#include <ydb/core/yq/libs/common/cache.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
 #include <ydb/core/yq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/yq/libs/config/yq_issue.h>
@@ -272,6 +273,12 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             TString CloudId;
             TString Scope;
 
+            TMetricsScope() = default;
+
+            TMetricsScope(const TString& cloudId, const TString& scope)
+                : CloudId(cloudId), Scope(scope)
+            {}
+
             bool operator<(const TMetricsScope& right) const {
                 return std::make_pair(CloudId, Scope) < std::make_pair(right.CloudId, right.Scope);
             }
@@ -311,8 +318,8 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             { MakeIntrusive<TRequestCommonCounters>("PingTask") },
         });
 
-        TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
-        TMap<TMetricsScope, TFinalStatusCountersPtr> FinalStatusCounters;
+        TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
+        TTtlCache<TMetricsScope, TFinalStatusCountersPtr, TMap> FinalStatusCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
 
     public:
         ::NMonitoring::TDynamicCounterPtr Counters;
@@ -335,25 +342,27 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
         TFinalStatusCountersPtr GetFinalStatusCounters(const TString& cloudId, const TString& scope) {
             TMetricsScope key{cloudId, scope};
-            auto it = FinalStatusCounters.find(key);
-            if (it != FinalStatusCounters.end()) {
-                return it->second;
+            TMaybe<TFinalStatusCountersPtr> cacheVal;
+            FinalStatusCounters.Get(key, &cacheVal);
+            if (cacheVal) {
+                return *cacheVal;
             }
 
             auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)
                                     ->GetSubgroup("scope", scope);
 
             auto finalStatusCounters = MakeIntrusive<TFinalStatusCounters>(scopeCounters);
-
-            FinalStatusCounters[key] = finalStatusCounters;
+            cacheVal = finalStatusCounters;
+            FinalStatusCounters.Put(key, cacheVal);
             return finalStatusCounters;
         }
 
         TRequestScopeCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
             TMetricsScope key{cloudId, scope};
-            auto it = ScopeCounters.find(key);
-            if (it != ScopeCounters.end()) {
-                return (*it->second)[type];
+            TMaybe<TScopeCountersPtr> cacheVal;
+            ScopeCounters.Get(key, &cacheVal);
+            if (cacheVal) {
+                return (**cacheVal)[type];
             }
 
             auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestScopeCountersPtr>({
@@ -387,7 +396,8 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
                 request->Register(scopeCounters);
             }
 
-            ScopeCounters[key] = scopeRequests;
+            cacheVal = scopeRequests;
+            ScopeCounters.Put(key, cacheVal);
             return (*scopeRequests)[type];
         }
     };

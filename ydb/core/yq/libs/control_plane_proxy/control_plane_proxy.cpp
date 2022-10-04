@@ -3,12 +3,13 @@
 #include "utils.h"
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
+#include <ydb/core/yq/libs/common/cache.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/util.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
-#include <ydb/core/yq/libs/test_connection/test_connection.h>
 #include <ydb/core/yq/libs/test_connection/events/events.h>
+#include <ydb/core/yq/libs/test_connection/test_connection.h>
 #include <ydb/core/yq/libs/ydb/util.h>
 #include <ydb/core/yq/libs/ydb/ydb.h>
 
@@ -492,6 +493,13 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             TString CloudId;
             TString Scope;
 
+            TMetricsScope() = default;
+
+            TMetricsScope(const TString& cloudId, const TString& scope)
+                : CloudId(cloudId)
+                , Scope(scope)
+            {}
+
             bool operator<(const TMetricsScope& right) const {
                 return std::make_pair(CloudId, Scope) < std::make_pair(right.CloudId, right.Scope);
             }
@@ -527,13 +535,7 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             { MakeIntrusive<TRequestCommonCounters>("DeleteBinding") },
         });
 
-        struct TScopeValue {
-            TScopeCountersPtr Counters;
-            TInstant LastAccess;
-        };
-
-        TMap<TMetricsScope, TScopeValue> ScopeCounters;
-        TMap<TInstant, TSet<TMetricsScope>> LastAccess;
+        TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
         ::NMonitoring::TDynamicCounterPtr Counters;
 
     public:
@@ -545,17 +547,6 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             }
         }
 
-        void CleanupByTtl() {
-            auto now = TInstant::Now();
-            auto it = LastAccess.begin();
-            for (; it != LastAccess.end() && (now - it->first) > MetricsTtl; ++it) {
-                for (const auto& scope: it->second) {
-                    ScopeCounters.erase(scope);
-                }
-            }
-            LastAccess.erase(LastAccess.begin(), it);
-        }
-
         TRequestCounters GetCounters(const TString& cloudId, const TString& scope, ERequestTypeScope scopeType, ERequestTypeCommon commonType) {
             return {GetScopeCounters(cloudId, scope, scopeType), GetCommonCounters(commonType)};
         }
@@ -565,19 +556,11 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
         }
 
         TRequestScopeCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
-            CleanupByTtl();
             TMetricsScope key{cloudId, scope};
-            auto it = ScopeCounters.find(key);
-            if (it != ScopeCounters.end()) {
-                auto& value = it->second;
-                auto& l = LastAccess[value.LastAccess];
-                l.erase(key);
-                if (l.empty()) {
-                    LastAccess.erase(value.LastAccess);
-                }
-                value.LastAccess = TInstant::Now();
-                LastAccess[value.LastAccess].insert(key);
-                return (*value.Counters)[type];
+            TMaybe<TScopeCountersPtr> cacheVal;
+            ScopeCounters.Get(key, &cacheVal);
+            if (cacheVal) {
+                return (**cacheVal)[type];
             }
 
             auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestScopeCountersPtr>({
@@ -611,9 +594,8 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             for (auto& request: *scopeRequests) {
                 request->Register(scopeCounters);
             }
-            auto now = TInstant::Now();
-            LastAccess[now].insert(key);
-            ScopeCounters[key] = TScopeValue{scopeRequests, now};
+            cacheVal = scopeRequests;
+            ScopeCounters.Put(key, cacheVal);
             return (*scopeRequests)[type];
         }
     };

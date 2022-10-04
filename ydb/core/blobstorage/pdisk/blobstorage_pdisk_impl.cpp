@@ -1770,8 +1770,9 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     }
 
     TOwner owner;
-
     TVDiskID vDiskId = evYardInit.VDiskIdWOGeneration();
+
+    TGuard<TMutex> guard(StateMutex);
     auto it = VDiskOwners.find(vDiskId);
     if (it != VDiskOwners.end()) {
         // Owner is already known, but use next ownerRound to decrease probability of errors
@@ -1791,6 +1792,7 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     TOwnerData &ownerData = OwnerData[owner];
     ui64 prevOwnerRound = ownerData.OwnerRound;
     if (prevOwnerRound >= evYardInit.OwnerRound) {
+        guard.Release();
         TStringStream str;
         str << "requested OwnerRound# " << evYardInit.OwnerRound
             << " <= prevoiuslyUsedOwnerRound# " << prevOwnerRound
@@ -3220,19 +3222,24 @@ void TPDisk::ProcessPausedQueue() {
 void TPDisk::ProcessYardInitSet() {
     for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
         TOwnerData &data = OwnerData[owner];
-        if (data.LogReader && data.LogReader->GetIsReplied()) {
-            data.LogReader = nullptr;
+        if (data.LogReader) {
+            TGuard<TMutex> guard(StateMutex);
+            if (data.LogReader && data.LogReader->GetIsReplied()) {
+                data.LogReader = nullptr;
+            }
         }
     }
 
-
-    // Process pending queue
-    for (auto it = PendingYardInits.begin(); it != PendingYardInits.end();) {
-        if (!OwnerData[(*it)->Owner].HaveRequestsInFlight()) {
-            YardInitFinish(**it);
-            it = PendingYardInits.erase(it);
-        } else {
-            ++it;
+    if (!PendingYardInits.empty()) {
+        TGuard<TMutex> guard(StateMutex);
+        // Process pending queue
+        for (auto it = PendingYardInits.begin(); it != PendingYardInits.end();) {
+            if (!OwnerData[(*it)->Owner].HaveRequestsInFlight()) {
+                YardInitFinish(**it);
+                it = PendingYardInits.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
     *Mon.PendingYardInits = PendingYardInits.size();

@@ -474,8 +474,8 @@ private:
     ui32 ReadMetadataIndex;
     std::unique_ptr<TScanIteratorBase> ScanIterator;
 
-    TVector<std::pair<TString, NScheme::TTypeId>> ResultYqlSchema;
-    TVector<std::pair<TString, NScheme::TTypeId>> KeyYqlSchema;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> ResultYqlSchema;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> KeyYqlSchema;
     const TSerializedTableRange TableRange;
     const TSmallVec<bool> SkipNullKeys;
     const TInstant Deadline;
@@ -496,7 +496,7 @@ private:
 };
 
 static void FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::TKeyRange& keyRange,
-                                    const TVector<std::pair<TString, NScheme::TTypeId>>& ydbPk, ui64 tabletId) {
+                                    const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbPk, ui64 tabletId) {
     TSerializedTableRange range(keyRange);
 
     read.GreaterPredicate = std::make_shared<NOlap::TPredicate>();

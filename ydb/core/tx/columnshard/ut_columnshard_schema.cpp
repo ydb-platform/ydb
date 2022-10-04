@@ -11,7 +11,7 @@ using NWrappers::NTestHelpers::TS3Mock;
 
 namespace {
 
-static const TVector<std::pair<TString, TTypeId>> testYdbSchema = TTestSchema::YdbSchema();
+static const TVector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
 
 std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBatch> batch, TString columnName, i64 seconds) {
     std::string name(columnName.c_str(), columnName.size());

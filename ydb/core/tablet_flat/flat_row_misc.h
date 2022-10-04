@@ -13,7 +13,7 @@ namespace NFmt {
     struct TCells {
         using TReg = NScheme::TTypeRegistry;
         using TCellsRef = TArrayRef<const TCell>;
-        using TTypesRef = TArrayRef<const NScheme::TTypeId>;
+        using TTypesRef = TArrayRef<const NScheme::TTypeInfo>;
 
         TCells(TCellsRef cells, const NTable::TRemap &remap, const TReg *reg)
             : TCells(cells, remap.Types(), reg)

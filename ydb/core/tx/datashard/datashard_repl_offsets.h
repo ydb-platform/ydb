@@ -41,7 +41,7 @@ namespace NKikimr::NDataShard {
 
         struct TLessByKeyPrefix {
             // Points to vector in TReplicatedTableState
-            const TVector<NScheme::TTypeId>* KeyColumnTypes;
+            const TVector<NScheme::TTypeInfo>* KeyColumnTypes;
 
             using is_transparent = void;
 
@@ -72,7 +72,7 @@ namespace NKikimr::NDataShard {
                 const TPathId& pathId,
                 const ui64 id,
                 const TString& name,
-                const TVector<NScheme::TTypeId>* keyColumnTypes);
+                const TVector<NScheme::TTypeInfo>* keyColumnTypes);
 
         ui64 CalcStatBytes(const TOffsetState& state) const;
         void AddStatBytes(const TOffsetState& state);
@@ -99,14 +99,14 @@ namespace NKikimr::NDataShard {
     class TReplicatedTableState {
     public:
         const TPathId PathId;
-        TVector<NScheme::TTypeId> KeyColumnTypes;
+        TVector<NScheme::TTypeInfo> KeyColumnTypes;
         TMap<ui64, TReplicationSourceState> SourceById;
         THashMap<TString, TReplicationSourceState*> Sources;
         ui64 NextSourceId = 1;
 
         TReplicatedTableState(
                 const TPathId& pathId,
-                const TVector<NScheme::TTypeId>& keyColumnTypes);
+                const TVector<NScheme::TTypeInfo>& keyColumnTypes);
 
         TReplicationSourceState* FindSource(ui64 sourceId);
         TReplicationSourceState& LoadSource(ui64 sourceId, const TString& sourceName);

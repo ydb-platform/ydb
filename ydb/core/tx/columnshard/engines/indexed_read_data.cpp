@@ -128,11 +128,11 @@ std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan() cons
 }
 
 
-TVector<std::pair<TString, NScheme::TTypeId>> TReadStatsMetadata::GetResultYqlSchema() const {
+TVector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetResultYqlSchema() const {
     return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, ResultColumnIds);
 }
 
-TVector<std::pair<TString, NScheme::TTypeId>> TReadStatsMetadata::GetKeyYqlSchema() const {
+TVector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetKeyYqlSchema() const {
     return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, NColumnShard::PrimaryIndexStatsSchema.KeyColumns);
 }
 

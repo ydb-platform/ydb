@@ -9,6 +9,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/services.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage.h>
@@ -496,11 +497,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return false;
         }
 
-        std::vector<std::pair<i32, ui32>> columnOrderTypes; // {keyOrder, PType}
+        std::vector<std::pair<i32, NScheme::TTypeInfo>> columnOrderTypes; // {keyOrder, PType}
         columnOrderTypes.reserve(Scheme.GetColumns().size());
 
         for (const auto& column : Scheme.GetColumns()) {
-            columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), column.GetTypeId());
+            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(column.GetTypeId(),
+                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+            columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), typeInfo);
         }
 
         TVector<TCell> keys;
@@ -596,12 +599,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                     << ": name# " << column.GetName());
             }
 
-            const NScheme::TTypeId type = TableInfo.GetColumnType(column.GetName());
-            if (type != static_cast<NScheme::TTypeId>(column.GetTypeId())) {
+            const auto typeInfo = TableInfo.GetColumnType(column.GetName());
+            auto columnTypeInfo = NScheme::TypeInfoFromProtoColumnType(column.GetTypeId(),
+                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+            if (typeInfo != columnTypeInfo) {
                 return finish(TStringBuilder() << "Scheme mismatch: column type mismatch"
                     << ": name# " << column.GetName()
-                    << ", expected# " << type
-                    << ", got# " << static_cast<NScheme::TTypeId>(column.GetTypeId()));
+                    << ", expected# " << NScheme::TypeName(typeInfo)
+                    << ", got# " << NScheme::TypeName(columnTypeInfo));
             }
         }
 

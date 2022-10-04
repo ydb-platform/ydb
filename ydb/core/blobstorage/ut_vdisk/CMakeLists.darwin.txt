@@ -29,6 +29,7 @@ target_link_libraries(ydb-core-blobstorage-ut_vdisk PUBLIC
   ydb-core-erasure
   ydb-core-scheme
   udf-service-stub
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-blobstorage-ut_vdisk PRIVATE
   -Wl,-no_deduplicate

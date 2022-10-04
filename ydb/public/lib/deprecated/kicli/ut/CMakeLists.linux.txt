@@ -23,7 +23,7 @@ target_link_libraries(ydb-public-lib-deprecated-kicli-ut PUBLIC
   cpp-testing-unittest_main
   lib-deprecated-kicli
   ydb-core-client
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-public-lib-deprecated-kicli-ut PRIVATE
   -ldl

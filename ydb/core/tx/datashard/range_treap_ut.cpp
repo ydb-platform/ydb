@@ -9,10 +9,11 @@ namespace NDataShard {
 
 namespace {
 
-    TVector<NScheme::TTypeId> CreateSchema(size_t n) {
-        TVector<NScheme::TTypeId> schema;
+    TVector<NScheme::TTypeInfo> CreateSchema(size_t n) {
+        TVector<NScheme::TTypeInfo> schema;
+        auto type = NScheme::TTypeInfo(NScheme::NTypeIds::Uint64);
         for (size_t i = 0; i < n; ++i) {
-            schema.emplace_back(NScheme::NTypeIds::Uint64);
+            schema.emplace_back(type);
         }
         return schema;
     }

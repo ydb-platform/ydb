@@ -150,7 +150,7 @@ private:
     NPersQueue::TTopicConverterPtr TopicConverter;
     bool IsLocalDC;
     TString DCId;
-    TVector<NScheme::TTypeId> KeySchema;
+    TVector<NScheme::TTypeInfo> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;
 
     NKikimrPQ::ETabletState TabletState;

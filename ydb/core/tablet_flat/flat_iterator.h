@@ -360,7 +360,7 @@ private:
     };
 
     struct TComparator {
-        TComparator(TArrayRef<const NScheme::TTypeIdOrder> types)
+        TComparator(TArrayRef<const NScheme::TTypeInfoOrder> types)
             : Types(types)
         {}
 
@@ -379,7 +379,7 @@ private:
             return a.IteratorId.Epoch < b.IteratorId.Epoch;
         }
 
-        const TArrayRef<const NScheme::TTypeIdOrder> Types;
+        const TArrayRef<const NScheme::TTypeInfoOrder> Types;
     };
 
     static TIteratorIndex IteratorIndexFromSize(size_t size) {

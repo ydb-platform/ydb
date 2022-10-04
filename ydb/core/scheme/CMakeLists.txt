@@ -28,4 +28,6 @@ target_sources(ydb-core-scheme PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_tablecell.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_tabledefs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_types_defs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_type_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_types_proto.cpp
 )

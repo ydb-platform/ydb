@@ -23,7 +23,7 @@ namespace {
     class TTextFormatBuilder : public IBlockBuilder {
     public:
         bool Start(
-                const TVector<std::pair<TString, NScheme::TTypeId>>& columns,
+                const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
                 ui64 maxRowsInBlock,
                 ui64 maxBytesInBlock,
                 TString& err) override
@@ -65,7 +65,7 @@ namespace {
         }
 
     private:
-        TVector<std::pair<TString, NScheme::TTypeId>> Columns;
+        TVector<std::pair<TString, NScheme::TTypeInfo>> Columns;
         TString Buffer;
     };
 

@@ -24,7 +24,7 @@ target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
   library-cpp-getopt
   library-cpp-svnversion
   cpp-digest-md5
-  ydb-core-testlib
+  core-testlib-default
   ydb-library-aclib
   library-persqueue-topic_parser
   api-grpc

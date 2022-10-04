@@ -128,10 +128,10 @@ void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& type
             for (ui32 i = 0; i < row->Items; ++i) {
                 TTag colId = row->Ops()[i].Tag;
                 if (Scheme->ColInfo(colId)) {
-                    NScheme::TTypeId typeId = Scheme->ColInfo(colId)->TypeId;
+                    auto typeInfo = Scheme->ColInfo(colId)->TypeInfo;
                     auto &op = row->Ops()[i];
 
-                    str << EOpToStr(ECellOp(op.Op)) << " " << op.Tag << " " << DbgPrintCell(op.Value, typeId, typeRegistry);
+                    str << EOpToStr(ECellOp(op.Op)) << " " << op.Tag << " " << DbgPrintCell(op.Value, typeInfo, typeRegistry);
                 } else {
                     str << "unknown column " << colId;
                 }

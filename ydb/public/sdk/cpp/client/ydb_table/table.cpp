@@ -1036,6 +1036,16 @@ TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const TDeci
     return *this;
 }
 
+TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const TPgType& type, const TString& family) {
+    auto columnType = TTypeBuilder()
+        .BeginOptional()
+            .Pg(type)
+        .EndOptional()
+        .Build();
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family);
+    return *this;
+}
+
 TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family) {
     auto columnType = TTypeBuilder()
         .Primitive(type)
@@ -1048,6 +1058,15 @@ TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const EP
 TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const TDecimalType& type, const TString& family) {
     auto columnType = TTypeBuilder()
         .Decimal(type)
+        .Build();
+
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const TPgType& type, const TString& family) {
+    auto columnType = TTypeBuilder()
+        .Pg(type)
         .Build();
 
     TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family);

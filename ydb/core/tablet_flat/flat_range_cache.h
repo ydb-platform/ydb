@@ -40,7 +40,7 @@ class TKeyRangeEntryCompare {
 public:
     typedef void is_transparent;
 
-    explicit TKeyRangeEntryCompare(TArrayRef<const NScheme::TTypeIdOrder> keyTypes)
+    explicit TKeyRangeEntryCompare(TArrayRef<const NScheme::TTypeInfoOrder> keyTypes)
         : KeyTypes(keyTypes)
     { }
 
@@ -119,7 +119,7 @@ public:
     }
 
 private:
-    const TArrayRef<const NScheme::TTypeIdOrder> KeyTypes;
+    const TArrayRef<const NScheme::TTypeInfoOrder> KeyTypes;
 };
 
 struct TKeyRangeEntryLRU

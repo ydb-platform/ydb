@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-kesus-proxy-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-kesus-proxy
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-kesus-proxy-ut PRIVATE
   -ldl

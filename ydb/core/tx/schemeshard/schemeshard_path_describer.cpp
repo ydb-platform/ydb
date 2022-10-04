@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <util/stream/format.h>
 
@@ -907,8 +908,12 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
 
         auto colDescr = entry->AddColumns();
         colDescr->SetName(cinfo.Name);
-        colDescr->SetType(typeRegistry->GetTypeName(cinfo.PType));
-        colDescr->SetTypeId(cinfo.PType);
+        colDescr->SetType(typeRegistry->GetTypeName(cinfo.PType.GetTypeId())); // TODO: no pg type details in string type
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        colDescr->SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
+        }
         colDescr->SetId(cinfo.Id);
         colDescr->SetNotNull(cinfo.NotNull);
 
@@ -1121,8 +1126,8 @@ void TSchemeShard::FillTableBoundaries(const TTableInfo::TPtr tableInfo, google:
         auto boundary = boundaries.Add()->MutableKeyPrefix();
         for (ui32 ki = 0;  ki < endKey.GetCells().size(); ++ki){
             const auto& c = endKey.GetCells()[ki];
-            ui32 typeId = tableInfo->Columns[tableInfo->KeyColumnIds[ki]].PType;
-            bool ok = NMiniKQL::CellToValue(typeId, c, *boundary->AddTuple(), errStr);
+            auto type = tableInfo->Columns[tableInfo->KeyColumnIds[ki]].PType;
+            bool ok = NMiniKQL::CellToValue(type, c, *boundary->AddTuple(), errStr);
             Y_VERIFY(ok, "Failed to build key tuple at postition %" PRIu32 " error: %s", ki, errStr.data());
         }
     }

@@ -74,8 +74,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             });
         }
 
-        static TVector<NUdf::TDataTypeId> MakeKeyColumnTypes(const TNavigate::TEntry& entry) {
-            return MakeKeyColumnSmth<NUdf::TDataTypeId>(entry, [](auto column) {
+        static TVector<NScheme::TTypeInfo> MakeKeyColumnTypes(const TNavigate::TEntry& entry) {
+            return MakeKeyColumnSmth<NScheme::TTypeInfo>(entry, [](auto column) {
                 return column.PType;
             });
         }
@@ -87,7 +87,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         static THolder<TKeyDesc> MakeKeyDesc(const TNavigate::TEntry& entry) {
-            const TVector<NUdf::TDataTypeId> keyColumnTypes = MakeKeyColumnTypes(entry);
+            const TVector<NScheme::TTypeInfo> keyColumnTypes = MakeKeyColumnTypes(entry);
             return MakeHolder<TKeyDesc>(
                 entry.TableId,
                 GetFullRange(keyColumnTypes.size()).ToTableRange(),

@@ -42,7 +42,7 @@ private:
     bool WaitingResolveReply;
     bool Finished;
 
-    TVector<NScheme::TTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
     THolder<NKikimr::TKeyDesc> KeyRange;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
 
@@ -175,7 +175,13 @@ private:
         for (const auto& col : entry.Columns) {
             auto* colMeta = Result.add_columns();
             colMeta->set_name(col.second.Name);
-            colMeta->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id((Ydb::Type::PrimitiveTypeId)col.second.PType);
+            auto& typeInfo = col.second.PType;
+            auto* item = colMeta->mutable_type()->mutable_optional_type()->mutable_item();
+            if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+                item->mutable_pg_type()->set_oid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+            } else {
+                item->set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+            }
             if (col.second.KeyOrder == -1)
                 continue;
 

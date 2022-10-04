@@ -8,6 +8,9 @@
 
 
 add_executable(ydb-core-scheme-ut)
+target_compile_options(ydb-core-scheme-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_include_directories(ydb-core-scheme-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme
 )
@@ -17,6 +20,8 @@ target_link_libraries(ydb-core-scheme-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-scheme
+  udf-service-stub
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-scheme-ut PRIVATE
   -Wl,-no_deduplicate

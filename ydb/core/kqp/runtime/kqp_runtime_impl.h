@@ -19,7 +19,7 @@ NUdf::TDataTypeId UnwrapDataTypeFromStruct(const NMiniKQL::TStructType& structTy
 
 NYql::NDq::IDqOutputConsumer::TPtr CreateOutputRangePartitionConsumer(
     TVector<NYql::NDq::IDqOutput::TPtr>&& outputs, TVector<TKqpRangePartition>&& partitions,
-    TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
+    TVector<NScheme::TTypeInfo>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 
 NYql::NDq::IDqOutputConsumer::TPtr CreateKqpApplyEffectsConsumer(NUdf::IApplyContext* applyCtx);

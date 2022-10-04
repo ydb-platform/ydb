@@ -53,6 +53,8 @@ static constexpr TTypeId DyNumber = NYql::NProto::DyNumber;
 
 static constexpr TTypeId Decimal = NYql::NProto::Decimal;
 
+static constexpr TTypeId Pg = 0x3000;
+
 static constexpr TTypeId YqlIds[] = {
     Int32,
     Uint32,

@@ -42,8 +42,8 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     static constexpr TDuration MAX_TIMEOUT = TDuration::Minutes(5);
 
-    static TVector<NUdf::TDataTypeId> MakeKeyColumnTypes(const TNavigate::TEntry& entry) {
-        TVector<NUdf::TDataTypeId> result;
+    static TVector<NScheme::TTypeInfo> MakeKeyColumnTypes(const TNavigate::TEntry& entry) {
+        TVector<NScheme::TTypeInfo> result;
 
         for (const auto& [_, column] : entry.Columns) {
             if (column.KeyOrder < 0) {
@@ -67,7 +67,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
     }
 
     static THolder<TKeyDesc> MakeKeyDesc(const TNavigate::TEntry& entry) {
-        const TVector<NUdf::TDataTypeId> keyColumnTypes = MakeKeyColumnTypes(entry);
+        const TVector<NScheme::TTypeInfo> keyColumnTypes = MakeKeyColumnTypes(entry);
         return MakeHolder<TKeyDesc>(
             entry.TableId,
             GetFullRange(keyColumnTypes.size()).ToTableRange(),
@@ -290,7 +290,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
         TMaybe<TOwnedCellVec> prevKey;
         TMemoryPool pool(256);
 
-        std::vector<std::pair<i32, ui32>> columnOrderTypes; // {keyOrder, PType}
+        std::vector<std::pair<i32, NScheme::TTypeInfo>> columnOrderTypes; // {keyOrder, PType}
         columnOrderTypes.reserve(format.columns().size());
         for (const auto& column : format.columns()) {
             const auto* info = Columns.FindPtr(column);

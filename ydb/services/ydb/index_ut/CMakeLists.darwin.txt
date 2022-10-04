@@ -20,7 +20,7 @@ target_link_libraries(ydb-services-ydb-index_ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-services-ydb
-  ydb-core-testlib
+  core-testlib-default
   public-lib-idx_test
   public-lib-yson_value
   cpp-client-ydb_scheme

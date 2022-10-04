@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-cms-ut PUBLIC
   ydb-core-cms
   library-cpp-getopt
   library-cpp-svnversion
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-cms-ut PRIVATE
   -ldl

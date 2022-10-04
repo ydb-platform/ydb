@@ -167,6 +167,7 @@ struct Schema : NIceDb::Schema {
         struct ColId :          Column<2, NScheme::NTypeIds::Uint32> {};
         struct ColName :        Column<3, NScheme::NTypeIds::Utf8> {};
         struct ColType :        Column<4, NScheme::NTypeIds::Uint32> {};
+        struct ColTypeData :    Column<12, NScheme::NTypeIds::String> {};
         struct ColKeyOrder :    Column<5, NScheme::NTypeIds::Uint32> {};
         struct CreateVersion :  Column<6, NScheme::NTypeIds::Uint64> {};
         struct DeleteVersion :  Column<7, NScheme::NTypeIds::Uint64> {};
@@ -178,7 +179,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<TabId, ColId>;
         using TColumns = TableColumns<TabId,
                                       ColId, ColName, ColType, ColKeyOrder, CreateVersion, DeleteVersion,
-                                      Family, DefaultKind, DefaultValue, NotNull>;
+                                      Family, DefaultKind, DefaultValue, NotNull, ColTypeData>;
     };
 
     struct MigratedColumns : Table<55> {
@@ -188,6 +189,7 @@ struct Schema : NIceDb::Schema {
 
         struct ColName :        Column<4, NScheme::NTypeIds::Utf8> {};
         struct ColType :        Column<5, NScheme::NTypeIds::Uint32> {};
+        struct ColTypeData :    Column<13, NScheme::NTypeIds::String> {};
         struct ColKeyOrder :    Column<6, NScheme::NTypeIds::Uint32> {};
         struct CreateVersion :  Column<7, NScheme::NTypeIds::Uint64> {};
         struct DeleteVersion :  Column<8, NScheme::NTypeIds::Uint64> {};
@@ -199,7 +201,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<OwnerPathId, LocalPathId, ColId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ColId,
                                       ColName, ColType, ColKeyOrder, CreateVersion, DeleteVersion,
-                                      Family, DefaultKind, DefaultValue, NotNull>;
+                                      Family, DefaultKind, DefaultValue, NotNull, ColTypeData>;
     };
 
     struct ColumnAlters : Table<13> {
@@ -207,6 +209,7 @@ struct Schema : NIceDb::Schema {
         struct ColId :          Column<2, NScheme::NTypeIds::Uint32> {};
         struct ColName :        Column<3, NScheme::NTypeIds::Utf8> {};
         struct ColType :        Column<4, NScheme::NTypeIds::Uint32> {};
+        struct ColTypeData :    Column<12, NScheme::NTypeIds::String> {};
         struct ColKeyOrder :    Column<5, NScheme::NTypeIds::Uint32> {};
         struct CreateVersion :  Column<6, NScheme::NTypeIds::Uint64> {};
         struct DeleteVersion :  Column<7, NScheme::NTypeIds::Uint64> {};
@@ -217,7 +220,7 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<TabId, ColId>;
         using TColumns = TableColumns<TabId, ColId, ColName, ColType, ColKeyOrder, CreateVersion, DeleteVersion,
-                                      Family, DefaultKind, DefaultValue, NotNull>;
+                                      Family, DefaultKind, DefaultValue, NotNull, ColTypeData>;
     };
 
     struct MigratedColumnAlters : Table<63> {
@@ -227,6 +230,7 @@ struct Schema : NIceDb::Schema {
 
         struct ColName :        Column<4, NScheme::NTypeIds::Utf8> {};
         struct ColType :        Column<5, NScheme::NTypeIds::Uint32> {};
+        struct ColTypeData :    Column<13, NScheme::NTypeIds::String> {};
         struct ColKeyOrder :    Column<6, NScheme::NTypeIds::Uint32> {};
         struct CreateVersion :  Column<7, NScheme::NTypeIds::Uint64> {};
         struct DeleteVersion :  Column<8, NScheme::NTypeIds::Uint64> {};
@@ -237,7 +241,7 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<OwnerPathId, LocalPathId, ColId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ColId, ColName, ColType, ColKeyOrder, CreateVersion, DeleteVersion,
-                                      Family, DefaultKind, DefaultValue, NotNull>;
+                                      Family, DefaultKind, DefaultValue, NotNull, ColTypeData>;
     };
 
     struct Shards : Table<7> {

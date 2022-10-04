@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-sys_view-partition_stats-ut PUBLIC
   cpp-testing-unittest_main
   core-sys_view-partition_stats
   cpp-testing-unittest
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-sys_view-partition_stats-ut PRIVATE
   -ldl

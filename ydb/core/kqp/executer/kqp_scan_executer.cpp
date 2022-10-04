@@ -413,10 +413,11 @@ private:
                 if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
                     memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
                 }
+                // TODO: support pg types
                 YQL_ENSURE(memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
                     "Expected simple data types to be read from column shard");
                 auto memberDataType = static_cast<NKikimr::NMiniKQL::TDataType*>(memberType);
-                taskMeta.ReadInfo.ResultColumnsTypes.push_back(memberDataType->GetSchemeType());
+                taskMeta.ReadInfo.ResultColumnsTypes.push_back(NScheme::TTypeInfo(memberDataType->GetSchemeType()));
             }
         }
 
@@ -734,7 +735,13 @@ private:
                 const auto& tableInfo = TableKeys.GetTable(stageInfo.Meta.TableId);
                 for (const auto& keyColumnName : tableInfo.KeyColumns) {
                     const auto& keyColumn = tableInfo.Columns.at(keyColumnName);
-                    protoTaskMeta.AddKeyColumnTypes(keyColumn.Type);
+                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(keyColumn.Type);
+                    protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
+                    if (columnType.TypeInfo) {
+                        *protoTaskMeta.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
+                    } else {
+                        *protoTaskMeta.AddKeyColumnTypeInfos() = NKikimrProto::TTypeInfo();
+                    }
                 }
 
                 switch (tableInfo.TableKind) {
@@ -772,7 +779,11 @@ private:
                     for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
                         auto* protoResultColumn = protoTaskMeta.AddResultColumns();
                         protoResultColumn->SetId(0);
-                        protoResultColumn->SetType(columnType);
+                        auto protoColumnType = NScheme::ProtoColumnTypeFromTypeInfo(columnType);
+                        protoResultColumn->SetType(protoColumnType.TypeId);
+                        if (protoColumnType.TypeInfo) {
+                            *protoResultColumn->MutableTypeInfo() = *protoColumnType.TypeInfo;
+                        }
                     }
 
                     if (tableInfo.TableKind == ETableKind::Olap) {
@@ -791,7 +802,11 @@ private:
                     for (auto& column : task.Meta.Reads->front().Columns) {
                         auto* protoColumn = protoTaskMeta.AddColumns();
                         protoColumn->SetId(column.Id);
-                        protoColumn->SetType(column.Type);
+                        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+                        protoColumn->SetType(columnType.TypeId);
+                        if (columnType.TypeInfo) {
+                            *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                        }
                         protoColumn->SetName(column.Name);
                     }
                 }
@@ -804,7 +819,7 @@ private:
                     YQL_ENSURE((int) read.Columns.size() == protoTaskMeta.GetColumns().size());
                     for (ui64 i = 0; i < read.Columns.size(); ++i) {
                         YQL_ENSURE(read.Columns[i].Id == protoTaskMeta.GetColumns()[i].GetId());
-                        YQL_ENSURE(read.Columns[i].Type == protoTaskMeta.GetColumns()[i].GetType());
+                        YQL_ENSURE(read.Columns[i].Type.GetTypeId() == protoTaskMeta.GetColumns()[i].GetType());
                     }
 
                     nShardScans++;

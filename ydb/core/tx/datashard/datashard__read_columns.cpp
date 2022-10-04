@@ -42,7 +42,7 @@ class TReadColumnsScan : public INoTxScan {
     const TKeyBoundary From;
     const TKeyBoundary To;
     const TVector<NTable::TTag> ValueColumns;
-    const TVector<NScheme::TTypeId> ValueColumnTypes;
+    const TVector<NScheme::TTypeInfo> ValueColumnTypes;
     const ui64 RowsLimit = 100000;
     const ui64 BytesLimit = 1024*1024;
     const TKeyBoundary ShardEnd;
@@ -62,7 +62,7 @@ public:
     TReadColumnsScan(const TKeyBoundary& keyFrom,
                      const TKeyBoundary& keyTo,
                      const TVector<NTable::TTag>& valueColumns,
-                     const TVector<NScheme::TTypeId> valueColumnTypes,
+                     const TVector<NScheme::TTypeInfo> valueColumnTypes,
                      std::unique_ptr<IBlockBuilder>&& blockBuilder,
                      ui64 rowsLimit, ui64 bytesLimit,
                      const TKeyBoundary& shardEnd,
@@ -342,8 +342,8 @@ public:
         }
 
         TVector<NTable::TTag> valueColumns;
-        TVector<NScheme::TTypeId> valueColumnTypes;
-        TVector<std::pair<TString, NScheme::TTypeId>> columns;
+        TVector<NScheme::TTypeInfo> valueColumnTypes;
+        TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
 
         if (Ev->Get()->Record.GetColumns().empty()) {
             SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "Empty column list");

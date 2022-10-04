@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-engine-ut PUBLIC
   test-libs-table
   mkql_proto-ut-helpers
   udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-engine-ut PRIVATE
   -ldl

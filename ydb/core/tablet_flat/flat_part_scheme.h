@@ -41,7 +41,7 @@ namespace NTable {
 
             /* Data page key layout */
             TVector<TColumn> ColsKeyData;
-            TVector<NScheme::TTypeId> KeyTypes;
+            TVector<NScheme::TTypeInfo> KeyTypes;
 
             /* Index page layout settings */
             TPgSize IdxRecFixedSize;

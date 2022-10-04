@@ -12,6 +12,7 @@
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -114,8 +115,8 @@ private:
     std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
     TSerializedCellVec MinKey;
     TSerializedCellVec MaxKey;
-    TVector<NScheme::TTypeId> KeyColumnTypes;
-    TVector<NScheme::TTypeId> ValueColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> ValueColumnTypes;
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
     THashSet<TTabletId> ShardRepliesLeft;
     Ydb::StatusIds::StatusCode Status;
@@ -136,7 +137,7 @@ protected:
         ui32 ColId;
         TString ColName;
         ui32 PositionInStruct;
-        NScheme::TTypeId Type;
+        NScheme::TTypeInfo Type;
         bool NotNull = false;
     };
     TVector<TString> KeyColumnNames;
@@ -145,10 +146,10 @@ protected:
     TVector<TFieldDescription> ValueColumnPositions;
 
     // Additional schema info (for OLAP dst or source format)
-    TVector<std::pair<TString, NScheme::TTypeId>> SrcColumns; // source columns in CSV could have any order
-    TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> SrcColumns; // source columns in CSV could have any order
+    TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
-    THashMap<TString, NScheme::TTypeId> ColumnsToConvert;
+    THashMap<TString, NScheme::TTypeInfo> ColumnsToConvert;
 
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
@@ -271,7 +272,7 @@ private:
         }
     }
 
-    static bool SameDstType(NScheme::TTypeId type1, NScheme::TTypeId type2, bool allowConvert) {
+    static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
         bool res = (type1 == type2);
         if (!res && allowConvert) {
             res = NArrow::GetArrowType(type1)->id() == NArrow::GetArrowType(type2)->id();
@@ -333,7 +334,9 @@ private:
         } else if (reqColumns.empty()) {
             for (auto& [name, type] : SrcColumns) {
                 Ydb::Type ydbType;
-                ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)type);
+                // TODO: support pg types
+                Y_VERIFY(type.GetTypeId() != NScheme::NTypeIds::Pg);
+                ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)type.GetTypeId());
                 reqColumns.emplace_back(name, std::move(ydbType));
             }
         }
@@ -351,7 +354,7 @@ private:
             const auto& typeInProto = reqColumns[pos].second;
 
             if (typeInProto.type_id()) {
-                NScheme::TTypeId typeInRequest = typeInProto.type_id();
+                auto typeInRequest = NScheme::TTypeInfo(typeInProto.type_id());
                 bool ok = SameDstType(typeInRequest, ci.PType, GetSourceType() != EUploadSource::ProtoValues);
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
@@ -359,7 +362,7 @@ private:
                                            NScheme::TypeName(typeInRequest));
                     return false;
                 }
-            } else if (typeInProto.has_decimal_type() && ci.PType == NScheme::NTypeIds::Decimal) {
+            } else if (typeInProto.has_decimal_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
                 int precision = typeInProto.decimal_type().precision();
                 int scale = typeInProto.decimal_type().scale();
                 if (precision != NScheme::DECIMAL_PRECISION || scale != NScheme::DECIMAL_SCALE) {
@@ -370,8 +373,24 @@ private:
 
                     return false;
                 }
+            } else if (typeInProto.has_pg_type()) {
+                auto pgTypeId = typeInProto.pg_type().oid();
+                auto* typeDesc = NPg::TypeDescFromPgTypeId(pgTypeId);
+                if (!typeDesc) {
+                    errorMessage = Sprintf("Unknown pg type for column %s: %u",
+                                           name.c_str(), pgTypeId);
+                    return false;
+                }
+                auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                bool ok = SameDstType(typeInRequest, ci.PType, false);
+                if (!ok) {
+                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
+                                           name.c_str(), NScheme::TypeName(ci.PType),
+                                           NScheme::TypeName(typeInRequest));
+                    return false;
+                }
             } else {
-                errorMessage = Sprintf("Unexected type for column %s: expected %s",
+                errorMessage = Sprintf("Unexpected type for column %s: expected %s",
                                        name.c_str(), NScheme::TypeName(ci.PType));
                 return false;
             }
@@ -381,13 +400,12 @@ private:
                 notNullColumnsLeft.erase(ci.Name);
             }
 
-            NScheme::TTypeId typeId = (NScheme::TTypeId)ci.PType;
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, typeId, notNull};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, notNull};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, typeId, notNull});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, notNull});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }

@@ -21,7 +21,7 @@ target_link_libraries(ydb-core-client-minikql_result_lib-ut PUBLIC
   cpp-testing-unittest_main
   core-client-minikql_result_lib
   cpp-testing-unittest
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-client-minikql_result_lib-ut PRIVATE
   -Wl,-no_deduplicate

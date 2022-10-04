@@ -66,8 +66,8 @@ namespace NTable {
                 keyCount += (meta.KeyOrder == Max<TPos>() ? 0 : 1);
             }
 
-            TNullsCook<TKeyCellDefaults, NScheme::TTypeIdOrder> keys(keyCount);
-            TNullsCook<TRowCellDefaults, NScheme::TTypeId> vals(cols.size());
+            TNullsCook<TKeyCellDefaults, NScheme::TTypeInfoOrder> keys(keyCount);
+            TNullsCook<TRowCellDefaults, NScheme::TTypeInfo> vals(cols.size());
 
             TVector<TColInfo> info;
             info.reserve(cols.size());
@@ -82,15 +82,15 @@ namespace NTable {
                 Y_VERIFY(familyIt != families.end() && *familyIt == meta.Family);
 
                 col.Tag = meta.Id;
-                col.TypeId = meta.PType;
+                col.TypeInfo = meta.PType;
                 col.Key = meta.KeyOrder;
                 col.Pos = info.size() - 1;
                 col.Group = familyIt - families.begin();
 
-                vals.Set(col.Pos, col.TypeId, meta.Null);
+                vals.Set(col.Pos, col.TypeInfo, meta.Null);
 
                 if (col.IsKey())
-                    keys.Set(col.Key, col.TypeId, meta.Null);
+                    keys.Set(col.Key, col.TypeInfo, meta.Null);
             }
 
             return new TRowScheme(std::move(info), *keys, *vals, std::move(families));
@@ -128,7 +128,7 @@ namespace NTable {
                     Y_FAIL("Key column dropping ins't supported");
                 } else if (other == nullptr) {
                     /* It is ok to drop non-key columns */
-                } else if (col.TypeId != other->TypeId) {
+                } else if (col.TypeInfo != other->TypeInfo) {
                     Y_FAIL("Column type alteration is not supproted");
                 } else if (col.Key != other->Key) {
                     Y_FAIL("Cannot alter keys order or move col to keys");
@@ -142,8 +142,7 @@ namespace NTable {
 
                 } else {
                     auto &null = (*scheme.RowCellDefaults)[other->Pos];
-
-                    if (CompareTypedCells(null, (*RowCellDefaults)[col.Pos], col.TypeId))
+                    if (CompareTypedCells(null, (*RowCellDefaults)[col.Pos], col.TypeInfo))
                         Y_FAIL("Cannot alter existing columnt default value");
                 }
             }

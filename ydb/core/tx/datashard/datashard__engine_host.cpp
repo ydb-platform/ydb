@@ -26,7 +26,7 @@ using namespace NTabletFlatExecutor;
 namespace {
 
 NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
-                              const TVector<NScheme::TTypeId>& inType,
+                              const TVector<NScheme::TTypeInfo>& inType,
                               const THolderFactory& holderFactory) {
     NUdf::TUnboxedValue* rowItems = nullptr;
     auto row = holderFactory.CreateDirectArrayHolder(inRow.size(), rowItems);
@@ -43,10 +43,10 @@ NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
 ///
 struct ItemInfo {
     ui32 ColumnId;
-    NScheme::TTypeId SchemeType;
+    NScheme::TTypeInfo SchemeType;
     TOptionalType* OptType;
 
-    ItemInfo(ui32 colId, NScheme::TTypeId schemeType, TOptionalType* optType)
+    ItemInfo(ui32 colId, NScheme::TTypeInfo schemeType, TOptionalType* optType)
         : ColumnId(colId)
         , SchemeType(schemeType)
         , OptType(optType)
@@ -88,7 +88,7 @@ struct TRowResultInfo {
 
         // reorder columns
         TVector<TCell> outRow(Reserve(ItemInfos.size()));
-        TVector<NScheme::TTypeId> outTypes(Reserve(ItemInfos.size()));
+        TVector<NScheme::TTypeInfo> outTypes(Reserve(ItemInfos.size()));
         for (ui32 i = 0; i < ItemInfos.size(); ++i) {
             ui32 colId = ItemInfos[i].ColumnId;
             outRow.emplace_back(std::move(inRow[colId]));
@@ -96,93 +96,6 @@ struct TRowResultInfo {
         }
 
         return CreateRow(outRow, outTypes, holderFactory);
-    }
-};
-
-///
-struct TRangeResultInfo {
-    TStructType* ResultType;
-    TStructType* RowType;
-    TSmallVec<ItemInfo> ItemInfos;
-    mutable ui64 Bytes = 0;
-    TDefaultListRepresentation Rows;
-    TString FirstKey;
-
-    // optimisation: reuse vectors
-    TVector<TCell> TmpRow;
-    TVector<NScheme::TTypeId> TmpTypes;
-
-    TListType* RowsListType() const { return AS_TYPE(TListType, ResultType->GetMemberType(0)); }
-    TDataType* TruncType() const { return AS_TYPE(TDataType, ResultType->GetMemberType(1)); }
-
-    TRangeResultInfo(const TStructLiteral* columnIds, const THashMap<ui32, TSysTables::TTableColumnInfo>& columns,
-                     TStructType* returnType)
-    {
-        ResultType = AS_TYPE(TStructType, returnType);
-        Y_VERIFY_DEBUG(ResultType->GetMembersCount() == 2);
-        Y_VERIFY_DEBUG(ResultType->GetMemberName(0) == "List");
-        Y_VERIFY_DEBUG(ResultType->GetMemberName(1) == "Truncated");
-
-        RowType = AS_TYPE(TStructType, RowsListType()->GetItemType());
-
-        ItemInfos.reserve(columnIds->GetValuesCount());
-        for (ui32 i = 0; i < columnIds->GetValuesCount(); ++i) {
-            TOptionalType * optType = AS_TYPE(TOptionalType, RowType->GetMemberType(i));
-            TDataLiteral* literal = AS_VALUE(TDataLiteral, columnIds->GetValue(i));
-            ui32 colId = literal->AsValue().Get<ui32>();
-
-            const TSysTables::TTableColumnInfo * colInfo = columns.FindPtr(colId);
-            Y_VERIFY(colInfo && (colInfo->Id == colId), "No column info for column");
-            ItemInfos.emplace_back(ItemInfo(colId, colInfo->PType, optType));
-        }
-    }
-
-    static TString Serialize(const TVector<TCell>& row, const TVector<NScheme::TTypeId>& types) {
-        Y_VERIFY(row.size() == types.size());
-
-        ui32 count = row.size();
-        TString str((const char*)&count, sizeof(ui32));
-        str.append((const char*)&types[0], count * sizeof(NScheme::TTypeId));
-
-        TConstArrayRef<TCell> array(&row[0], row.size());
-        return str + TSerializedCellVec::Serialize(array);
-    }
-
-    void AppendRow(const TVector<TCell>& inRow, const THolderFactory& holderFactory) {
-        if (inRow.empty())
-            return;
-
-        Y_VERIFY(inRow.size() >= ItemInfos.size());
-
-        TmpRow.clear();
-        TmpTypes.clear();
-        TmpRow.reserve(ItemInfos.size());
-        TmpTypes.reserve(ItemInfos.size());
-
-        for (ui32 i = 0; i < ItemInfos.size(); ++i) {
-            ui32 colId = ItemInfos[i].ColumnId;
-            TmpRow.push_back(inRow[colId]);
-            TmpTypes.push_back(ItemInfos[i].SchemeType);
-        }
-
-        Bytes += 8; // per row overhead
-        Rows = Rows.Append(CreateRow(TmpRow, TmpTypes, holderFactory));
-
-        if (!FirstKey) {
-            FirstKey = Serialize(TmpRow, TmpTypes);
-        }
-    }
-
-    NUdf::TUnboxedValue CreateResult(const THolderFactory& holderFactory) {
-        NUdf::TUnboxedValue* resultItems = nullptr;
-        auto result = holderFactory.CreateDirectArrayHolder(4, resultItems);
-
-        resultItems[0] = holderFactory.CreateDirectListHolder(std::move(Rows));
-        resultItems[1] = NUdf::TUnboxedValuePod(false);
-        resultItems[2] = MakeString(FirstKey);
-        resultItems[3] = NUdf::TUnboxedValuePod(Bytes);
-
-        return std::move(result);
     }
 };
 
@@ -249,7 +162,7 @@ private:
     const TTableId TableId;
     TDataShard* Self;
     THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
-    TVector<ui32> KeyTypes;
+    TVector<NScheme::TTypeInfo> KeyTypes;
 };
 
 
@@ -797,7 +710,7 @@ TEngineBay::~TEngineBay() {
 }
 
 void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns,
-    const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit, bool reverse)
+    const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, ui64 itemsLimit, bool reverse)
 {
     TVector<TKeyDesc::TColumnOp> columnOps;
     columnOps.reserve(columns.size());
@@ -821,7 +734,7 @@ void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TCo
 }
 
 void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range,
-    const TVector<NScheme::TTypeId>& keyTypes, const TVector<TColumnWriteMeta>& columns,
+    const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns,
     bool isPureEraseOp)
 {
     TVector<TKeyDesc::TColumnOp> columnOps;

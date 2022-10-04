@@ -9,6 +9,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 namespace NKikimr {
@@ -2288,10 +2289,16 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
     for (auto col : tableInfo->Columns) {
         ui32 colId = col.first;
         const TTableInfo::TColumn& cinfo = col.second;
+        TString typeData;
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        if (columnType.TypeInfo) {
+            Y_VERIFY(columnType.TypeInfo->SerializeToString(&typeData));
+        }
         if (pathId.OwnerId == TabletID()) {
             db.Table<Schema::Columns>().Key(pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::Columns::ColName>(cinfo.Name),
-                NIceDb::TUpdate<Schema::Columns::ColType>((ui32)cinfo.PType),
+                NIceDb::TUpdate<Schema::Columns::ColType>((ui32)columnType.TypeId),
+                NIceDb::TUpdate<Schema::Columns::ColTypeData>(typeData),
                 NIceDb::TUpdate<Schema::Columns::ColKeyOrder>(cinfo.KeyOrder),
                 NIceDb::TUpdate<Schema::Columns::CreateVersion>(cinfo.CreateVersion),
                 NIceDb::TUpdate<Schema::Columns::DeleteVersion>(cinfo.DeleteVersion),
@@ -2304,7 +2311,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
         } else {
             db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::MigratedColumns::ColName>(cinfo.Name),
-                NIceDb::TUpdate<Schema::MigratedColumns::ColType>((ui32)cinfo.PType),
+                NIceDb::TUpdate<Schema::MigratedColumns::ColType>((ui32)columnType.TypeId),
+                NIceDb::TUpdate<Schema::MigratedColumns::ColTypeData>(typeData),
                 NIceDb::TUpdate<Schema::MigratedColumns::ColKeyOrder>(cinfo.KeyOrder),
                 NIceDb::TUpdate<Schema::MigratedColumns::CreateVersion>(cinfo.CreateVersion),
                 NIceDb::TUpdate<Schema::MigratedColumns::DeleteVersion>(cinfo.DeleteVersion),
@@ -2339,10 +2347,16 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
     for (auto col : alter->Columns) {
         ui32 colId = col.first;
         const TTableInfo::TColumn& cinfo = col.second;
+        TString typeData;
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(cinfo.PType);
+        if (columnType.TypeInfo) {
+            Y_VERIFY(columnType.TypeInfo->SerializeToString(&typeData));
+        }
         if (pathId.OwnerId == TabletID()) {
             db.Table<Schema::ColumnAlters>().Key(pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::ColumnAlters::ColName>(cinfo.Name),
-                NIceDb::TUpdate<Schema::ColumnAlters::ColType>((ui32)cinfo.PType),
+                NIceDb::TUpdate<Schema::ColumnAlters::ColType>((ui32)columnType.TypeId),
+                NIceDb::TUpdate<Schema::ColumnAlters::ColTypeData>(typeData),
                 NIceDb::TUpdate<Schema::ColumnAlters::ColKeyOrder>(cinfo.KeyOrder),
                 NIceDb::TUpdate<Schema::ColumnAlters::CreateVersion>(cinfo.CreateVersion),
                 NIceDb::TUpdate<Schema::ColumnAlters::DeleteVersion>(cinfo.DeleteVersion),
@@ -2353,7 +2367,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
         } else {
             db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::ColName>(cinfo.Name),
-                NIceDb::TUpdate<Schema::MigratedColumnAlters::ColType>((ui32)cinfo.PType),
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::ColType>((ui32)columnType.TypeId),
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::ColTypeData>(typeData),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::ColKeyOrder>(cinfo.KeyOrder),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::CreateVersion>(cinfo.CreateVersion),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DeleteVersion>(cinfo.DeleteVersion),
@@ -5715,12 +5730,20 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             auto descr = proto->AddDropColumns();
             descr->SetName(colInfo.Name);
             descr->SetId(colInfo.Id);
-            descr->SetTypeId(colInfo.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(colInfo.PType);
+            descr->SetTypeId(columnType.TypeId);
+            if (columnType.TypeInfo) {
+                *descr->MutableTypeInfo() = *columnType.TypeInfo;
+            }
         } else {
             auto descr = proto->AddColumns();
             descr->SetName(colInfo.Name);
             descr->SetId(colInfo.Id);
-            descr->SetTypeId(colInfo.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(colInfo.PType);
+            descr->SetTypeId(columnType.TypeId);
+            if (columnType.TypeInfo) {
+                *descr->MutableTypeInfo() = *columnType.TypeInfo;
+            }
             descr->SetFamily(colInfo.Family);
         }
     }
@@ -5742,7 +5765,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     return txBody;
 }
 
-bool TSchemeShard::FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeId>& keyColTypes,
+bool TSchemeShard::FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeInfo>& keyColTypes,
                                              const::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary> &boundaries,
                                              TString& errStr) {
     for (int i = 0; i < boundaries.size(); ++i) {
@@ -5899,7 +5922,7 @@ void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64
     FillTableSchemaVersion(schemaVersion, tableDescr);
 }
 
-bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeId firstKeyColType, ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr) {
+bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeInfo firstKeyColType, ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr) {
     if (partitionCount > 1) {
         // RangeEnd key will have first cell with non-NULL value and rest of the cells with NULLs
         TVector<TCell> rangeEnd(keySize);
@@ -5907,7 +5930,8 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
         ui32 valSz = 0;
 
         // Check that first key column has integer type
-        switch(firstKeyColType) {
+        auto typeId = firstKeyColType.GetTypeId();
+        switch(typeId) {
         case NScheme::NTypeIds::Uint32:
             maxVal = Max<ui32>();
             valSz = 4;
@@ -5917,7 +5941,7 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
             valSz = 8;
             break;
         default:
-            errStr = TStringBuilder() << "Unsupported first key column type " << typeRegistry->GetTypeName(firstKeyColType) << ", only Uint32 and Uint64 are supported";
+            errStr = TStringBuilder() << "Unsupported first key column type " << typeRegistry->GetTypeName(typeId) << ", only Uint32 and Uint64 are supported";
             return false;
         }
 

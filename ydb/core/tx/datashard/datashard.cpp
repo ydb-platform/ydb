@@ -2761,7 +2761,6 @@ void TDataShard::ResolveTablePath(const TActorContext &ctx)
 
 void TDataShard::SerializeHistogram(const TUserTable &tinfo,
                                            const NTable::THistogram &histogram,
-                                           const NScheme::TTypeRegistry &typeRegistry,
                                            NKikimrTxDataShard::TEvGetDataHistogramResponse::THistogram &hist)
 {
     for (auto &item : histogram) {
@@ -2770,15 +2769,13 @@ void TDataShard::SerializeHistogram(const TUserTable &tinfo,
 
         TSerializedCellVec key(item.EndKey);
         for (ui32 ki = 0; ki < tinfo.KeyColumnIds.size(); ++ki) {
-            NScheme::ITypeSP t = typeRegistry.GetType(tinfo.KeyColumnTypes[ki]);
-            DbgPrintValue(*rec.AddKeyValues(), key.GetCells()[ki], t.GetTypeId());
+            DbgPrintValue(*rec.AddKeyValues(), key.GetCells()[ki], tinfo.KeyColumnTypes[ki]);
         }
     }
 }
 
 void TDataShard::SerializeKeySample(const TUserTable &tinfo,
                                            const NTable::TKeyAccessSample &keySample,
-                                           const NScheme::TTypeRegistry &typeRegistry,
                                            NKikimrTxDataShard::TEvGetDataHistogramResponse::THistogram &hist)
 {
     THashMap<TString, ui64> accessCounts;
@@ -2794,8 +2791,7 @@ void TDataShard::SerializeKeySample(const TUserTable &tinfo,
 
         TSerializedCellVec key(item.first);
         for (ui32 ki = 0; ki < tinfo.KeyColumnIds.size() && ki < key.GetCells().size(); ++ki) {
-            NScheme::ITypeSP t = typeRegistry.GetType(tinfo.KeyColumnTypes[ki]);
-            DbgPrintValue(*rec.AddKeyValues(), key.GetCells()[ki], t.GetTypeId());
+            DbgPrintValue(*rec.AddKeyValues(), key.GetCells()[ki], tinfo.KeyColumnTypes[ki]);
         }
     }
     Sort(hist.MutableItems()->begin(), hist.MutableItems()->end(),
@@ -2867,7 +2863,6 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr &ev,
         }
     }
 
-    auto &reg = *AppData(ctx)->TypeRegistry;
     for (const auto &pr : TableInfos) {
         const auto &tinfo = *pr.second;
         const NTable::TStats &stats = tinfo.Stats.DataStats;
@@ -2876,9 +2871,9 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr &ev,
         hist.SetTableName(pr.second->Name);
         for (ui32 ki : tinfo.KeyColumnIds)
             hist.AddKeyNames(tinfo.Columns.FindPtr(ki)->Name);
-        SerializeHistogram(tinfo, stats.DataSizeHistogram, reg, *hist.MutableSizeHistogram());
-        SerializeHistogram(tinfo, stats.RowCountHistogram, reg, *hist.MutableCountHistogram());
-        SerializeKeySample(tinfo, tinfo.Stats.AccessStats, reg, *hist.MutableKeyAccessSample());
+        SerializeHistogram(tinfo, stats.DataSizeHistogram, *hist.MutableSizeHistogram());
+        SerializeHistogram(tinfo, stats.RowCountHistogram, *hist.MutableCountHistogram());
+        SerializeKeySample(tinfo, tinfo.Stats.AccessStats, *hist.MutableKeyAccessSample());
     }
 
     ctx.Send(ev->Sender, response);

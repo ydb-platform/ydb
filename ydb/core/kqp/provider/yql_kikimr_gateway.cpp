@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/utils/pg_types.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/core/base/table_index.h>
@@ -274,6 +275,14 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
 }
 
 void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) {
+    auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+    if (typeDesc) {
+        auto pg = notNull ? protoType.mutable_pg_type() :
+            protoType.mutable_optional_type()->mutable_item()->mutable_pg_type();
+        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+        return;
+    }
+
     NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
     if (dataSlot == NUdf::EDataSlot::Decimal) {
         auto decimal = notNull ? protoType.mutable_decimal_type() :

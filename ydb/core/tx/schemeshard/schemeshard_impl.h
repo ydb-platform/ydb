@@ -869,9 +869,9 @@ public:
         bool rangeBeginInclusive, bool rangeEndInclusive,
         bool newTable = false);
     void FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64 schemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr);
-    static bool FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeId firstKeyColType,
+    static bool FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeInfo firstKeyColType,
                                         ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr);
-    static bool FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeId>& keyColTypes,
+    static bool FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeInfo>& keyColTypes,
                                       const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries,
                                       TString& errStr);
 

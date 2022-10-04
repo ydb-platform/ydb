@@ -13,9 +13,9 @@ Y_UNIT_TEST_SUITE(SchemeBorders) {
     class THelper {
     public:
         explicit THelper(size_t keyCount) {
-            Types.resize(keyCount);
+            Types.reserve(keyCount);
             for (size_t i = 0; i < keyCount; ++i) {
-                Types[i] = NScheme::NTypeIds::Uint32;
+                Types.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32));
             }
         }
 
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(SchemeBorders) {
         }
 
     private:
-        TVector<NScheme::TTypeId> Types;
+        TVector<NScheme::TTypeInfo> Types;
         TVector<TCell> LeftKey;
         TVector<TCell> RightKey;
     };

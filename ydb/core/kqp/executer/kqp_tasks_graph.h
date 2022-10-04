@@ -86,9 +86,9 @@ struct TShardKeyRanges {
     bool IsFullRange() const { return FullRange.has_value(); }
     TVector<TSerializedPointOrRange>& GetRanges() { return Ranges; }
 
-    void MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeId>& keyTypes);
+    void MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeInfo>& keyTypes);
 
-    TString ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
+    TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta_TReadOpMeta* proto) const;
 
@@ -105,7 +105,7 @@ struct TTaskMeta {
 
     struct TColumn {
         ui32 Id = 0;
-        ui32 Type = 0;
+        NScheme::TTypeInfo Type;
         TString Name;
     };
 
@@ -130,7 +130,7 @@ struct TTaskMeta {
         bool Reverse = false;
         bool Sorted = false;
         TKqpOlapProgram OlapProgram;
-        TVector<NUdf::TDataTypeId> ResultColumnsTypes;
+        TVector<NScheme::TTypeInfo> ResultColumnsTypes;
     };
 
     struct TWriteInfo {
@@ -157,7 +157,7 @@ struct TTaskMeta {
     TMaybe<TVector<TShardReadInfo>> Reads;  // if not set -> no reads
     TMaybe<TWriteInfo> Writes;         // if not set -> no writes
 
-    TString ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
+    TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };
 
 using TStageInfo = NYql::NDq::TStageInfo<TStageInfoMeta>;

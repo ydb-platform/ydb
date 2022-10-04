@@ -7,6 +7,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
@@ -20,7 +21,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 using TColumnsTags = THashMap<TString, NTable::TTag>;
-using TColumnsTypes = THashMap<TString, NScheme::TTypeId>;
+using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 using TTypes = TVector<std::pair<TString, Ydb::Type>>;
 using TTags = TVector<NTable::TTag>;
@@ -62,6 +63,13 @@ static TTags BuildTags(const TColumnsTags& allTags, const TVector<TString>& inde
     return result;
 }
 
+static void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo typeInfo) {
+    if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+        type->mutable_pg_type()->set_oid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+    } else {
+        type->set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+    }
+}
 
 static std::shared_ptr<TTypes> BuildTypes(const TColumnsTypes& types, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
     auto result = std::make_shared<TTypes>();
@@ -69,13 +77,13 @@ static std::shared_ptr<TTypes> BuildTypes(const TColumnsTypes& types, const TVec
 
     for (const auto& colName: indexColumns) {
         Ydb::Type type;
-        type.set_type_id(static_cast<Ydb::Type_PrimitiveTypeId>(types.at(colName)));
+        ProtoYdbTypeFromTypeInfo(&type, types.at(colName));
         result->emplace_back(colName, type);
     }
 
     for (const auto& colName: dataColumns) {
         Ydb::Type type;
-        type.set_type_id(static_cast<Ydb::Type_PrimitiveTypeId>(types.at(colName)));
+        ProtoYdbTypeFromTypeInfo(&type, types.at(colName));
         result->emplace_back(colName, type);
     }
 
@@ -201,7 +209,7 @@ class TBuildIndexScan : public TActor<TBuildIndexScan>, public NTable::IScan {
     const ui32 TargetDataColumnPos; // positon of first data column in target table
 
     const TTags KeyColumnIds;
-    const TVector<NScheme::TTypeId> KeyTypes;
+    const TVector<NScheme::TTypeInfo> KeyTypes;
 
     const TSerializedTableRange TableRange;
     const TSerializedTableRange RequestedRange;

@@ -10,6 +10,7 @@ add_subdirectory(protos)
 add_subdirectory(test)
 add_subdirectory(ut)
 add_subdirectory(ut_large)
+add_subdirectory(ut_pg)
 
 add_library(ydb-core-tablet_flat)
 target_compile_options(ydb-core-tablet_flat PRIVATE

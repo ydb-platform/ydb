@@ -14,7 +14,7 @@ class TKqpComputeContextBase : public NYql::NDq::TDqComputeContextBase {
 public:
     struct TColumn {
         NTable::TTag Tag;
-        NScheme::TTypeId Type;
+        NScheme::TTypeInfo Type;
     };
 
     // used only at then building of a computation graph, to inject taskId in runtime nodes

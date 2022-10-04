@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-mind-address_classification-ut PUBLIC
   cpp-testing-unittest_main
   core-mind-address_classification
   cpp-actors-http
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-mind-address_classification-ut PRIVATE
   -ldl

@@ -361,7 +361,7 @@ public:
         auto itUserTables = userTables.find(msg->PathId.LocalPathId);
         Y_VERIFY(itUserTables != userTables.end());
         TUserTable::TCPtr tableInfo = itUserTables->second;
-        TConstArrayRef<NScheme::TTypeId> keyColumnTypes = tableInfo->KeyColumnTypes;
+        TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes = tableInfo->KeyColumnTypes;
 
         auto* replTable = Self->EnsureReplicatedTable(msg->PathId);
         Y_VERIFY(replTable);

@@ -72,7 +72,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
     // Prepare (id, Type) vector for value columns
     TVector<NTable::TTag> tagsForSelect;
-    TVector<std::pair<ui32, NScheme::TTypeId>> valueCols;
+    TVector<std::pair<ui32, NScheme::TTypeInfo>> valueCols;
     for (const auto& colId : record.GetRowScheme().GetValueColumnIds()) {
         if (readForTableShadow) {
             tagsForSelect.push_back(colId);
@@ -114,7 +114,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         ui64 keyBytes = 0;
         for (const auto& kt : tableInfo.KeyColumnTypes) {
             const TCell& c = keyCells.GetCells()[ki];
-            if (kt == NScheme::NTypeIds::Uint8 && !c.IsNull() && c.AsValue<ui8>() > 127) {
+            if (kt.GetTypeId() == NScheme::NTypeIds::Uint8 && !c.IsNull() && c.AsValue<ui8>() > 127) {
                 SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "Keys with Uint8 column values >127 are currently prohibited");
                 return true;
             }

@@ -16,9 +16,10 @@ namespace
 
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
+using TTypeInfo = NScheme::TTypeInfo;
 
-static const TVector<std::pair<TString, TTypeId>> testYdbSchema = TTestSchema::YdbSchema();
-static const TVector<std::pair<TString, TTypeId>> testYdbPkSchema = TTestSchema::YdbPkSchema();
+static const TVector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
+static const TVector<std::pair<TString, TTypeInfo>> testYdbPkSchema = TTestSchema::YdbPkSchema();
 
 bool DataHas(const TVector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range,
              bool requireUniq = false) {
@@ -210,7 +211,7 @@ bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& me
 }
 
 void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TVector<std::pair<TString, TTypeId>>& schema = TTestSchema::YdbSchema(),
+                 const TVector<std::pair<TString, TTypeInfo>>& schema = TTestSchema::YdbSchema(),
                  NOlap::TSnapshot snap = {10, 10}, TString codec = "") {
     bool ok = ProposeSchemaTx(runtime, sender,
                               TTestSchema::CreateTableTxBody(pathId, schema,
@@ -220,7 +221,7 @@ void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
     PlanSchemaTx(runtime, sender, snap);
 }
 
-void TestWrite(const TVector<std::pair<TString, TTypeId>>& ydbSchema) {
+void TestWrite(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -241,7 +242,7 @@ void TestWrite(const TVector<std::pair<TString, TTypeId>>& ydbSchema) {
     bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema));
     UNIT_ASSERT(ok);
 
-    TVector<std::pair<TString, TTypeId>> schema = ydbSchema;
+    TVector<std::pair<TString, TTypeInfo>> schema = ydbSchema;
 
     // no data
 
@@ -263,29 +264,29 @@ void TestWrite(const TVector<std::pair<TString, TTypeId>>& ydbSchema) {
     // TODO: better check (it probably does not work in general case)
 
     schema = ydbSchema;
-    schema[1].second = NTypeIds::Int32;
+    schema[1].second = TTypeInfo(NTypeIds::Int32);
     ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema));
     UNIT_ASSERT(!ok);
 
     schema = ydbSchema;
-    schema[1].second = NTypeIds::Utf8;
-    schema[5].second = NTypeIds::Int32;
+    schema[1].second = TTypeInfo(NTypeIds::Utf8);
+    schema[5].second = TTypeInfo(NTypeIds::Int32);
     ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema));
     UNIT_ASSERT(!ok);
 
     // reordered columns
 
     schema.resize(0);
-    schema.push_back({"level", NTypeIds::Int32 });
-    schema.push_back({"timestamp", NTypeIds::Timestamp });
-    schema.push_back({"uid", NTypeIds::Utf8 });
-    schema.push_back({"resource_id", NTypeIds::Utf8 });
-    schema.push_back({"resource_type", NTypeIds::Utf8 });
-    schema.push_back({"message", NTypeIds::Utf8 });
-    schema.push_back({"request_id", NTypeIds::Utf8 });
-    schema.push_back({"saved_at", NTypeIds::Timestamp });
-    schema.push_back({"ingested_at", NTypeIds::Timestamp });
-    schema.push_back({"json_payload", NTypeIds::Json });
+    schema.push_back({"level", TTypeInfo(NTypeIds::Int32) });
+    schema.push_back({"timestamp", TTypeInfo(NTypeIds::Timestamp) });
+    schema.push_back({"uid", TTypeInfo(NTypeIds::Utf8) });
+    schema.push_back({"resource_id", TTypeInfo(NTypeIds::Utf8) });
+    schema.push_back({"resource_type", TTypeInfo(NTypeIds::Utf8) });
+    schema.push_back({"message", TTypeInfo(NTypeIds::Utf8) });
+    schema.push_back({"request_id", TTypeInfo(NTypeIds::Utf8) });
+    schema.push_back({"saved_at", TTypeInfo(NTypeIds::Timestamp) });
+    schema.push_back({"ingested_at", TTypeInfo(NTypeIds::Timestamp) });
+    schema.push_back({"json_payload", TTypeInfo(NTypeIds::Json) });
 
     ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema));
     UNIT_ASSERT(!ok);
@@ -363,7 +364,7 @@ void TestWriteReadDup() {
     }
 }
 
-void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeId>>& ydbSchema = TTestSchema::YdbSchema(),
+void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = TTestSchema::YdbSchema(),
                    TString codec = "") {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1084,7 +1085,7 @@ NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(ui32 columnId, ui32 filterCo
     return ssa;
 }
 
-void TestReadWithProgram(const TVector<std::pair<TString, TTypeId>>& ydbSchema = TTestSchema::YdbSchema())
+void TestReadWithProgram(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = TTestSchema::YdbSchema())
 {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1219,7 +1220,7 @@ struct TReadAggregateResult {
     std::vector<int64_t> Counts = {100};
 };
 
-void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema, const TString& testDataBlob,
+void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, const TString& testDataBlob,
                        bool addProjection, const std::vector<ui32>& aggKeys = {},
                        const TReadAggregateResult& expectedResult = {},
                        const TReadAggregateResult& expectedFiltered = {1, {1}, {1}, {1}}) {
@@ -1266,8 +1267,8 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema, co
 
     ui32 prog = 0;
     for (ui32 i = 0; i < ydbSchema.size(); ++i, ++prog) {
-        if (intTypes.count(ydbSchema[i].second) ||
-            strTypes.count(ydbSchema[i].second)) {
+        if (intTypes.count(ydbSchema[i].second.GetTypeId()) ||
+            strTypes.count(ydbSchema[i].second.GetTypeId())) {
             checkResult.insert(prog);
         }
 
@@ -1283,8 +1284,8 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema, co
 
     for (ui32 i = 0; i < ydbSchema.size(); ++i, ++prog) {
         isFiltered.insert(prog);
-        if (intTypes.count(ydbSchema[i].second) ||
-            strTypes.count(ydbSchema[i].second)) {
+        if (intTypes.count(ydbSchema[i].second.GetTypeId()) ||
+            strTypes.count(ydbSchema[i].second.GetTypeId())) {
             checkResult.insert(prog);
         }
 
@@ -1445,7 +1446,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             Cerr << "-- group by key: " << key << "\n";
 
             // the type has the same values in test batch so result would be grouped in one row
-            if (sameValTypes.count(schema[key].second)) {
+            if (sameValTypes.count(schema[key].second.GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), {key}, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), {key}, resDefault, resFiltered);
@@ -1453,8 +1454,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         for (ui32 key = 0; key < schema.size() - 1; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << "\n";
-            if (sameValTypes.count(schema[key].second) &&
-                sameValTypes.count(schema[key + 1].second)) {
+            if (sameValTypes.count(schema[key].second.GetTypeId()) &&
+                sameValTypes.count(schema[key + 1].second.GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1}, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1}, resDefault, resFiltered);
@@ -1462,9 +1463,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         for (ui32 key = 0; key < schema.size() - 2; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << ", " << key + 2 << "\n";
-            if (sameValTypes.count(schema[key].second) &&
-                sameValTypes.count(schema[key + 1].second) &&
-                sameValTypes.count(schema[key + 1].second)) {
+            if (sameValTypes.count(schema[key].second.GetTypeId()) &&
+                sameValTypes.count(schema[key + 1].second.GetTypeId()) &&
+                sameValTypes.count(schema[key + 1].second.GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1, key + 2}, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1, key + 2}, resDefault, resFiltered);

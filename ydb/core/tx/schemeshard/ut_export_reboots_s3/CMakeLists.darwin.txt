@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_export_reboots_s3 PUBLIC
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
-  ydb-core-testlib
+  core-testlib-default
   ydb-core-tx
   tx-schemeshard-ut_helpers
   core-wrappers-ut_helpers

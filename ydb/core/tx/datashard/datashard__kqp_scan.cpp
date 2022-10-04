@@ -59,7 +59,7 @@ public:
     {
         if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) {
             BatchBuilder = MakeHolder<NArrow::TArrowBatchBuilder>();
-            TVector<std::pair<TString, NScheme::TTypeId>> schema;
+            TVector<std::pair<TString, NScheme::TTypeInfo>> schema;
             if (!Tags.empty()) {
                 Types.reserve(Tags.size());
                 schema.reserve(Tags.size());
@@ -511,7 +511,7 @@ private:
     const TSmallVec<TSerializedTableRange> TableRanges;
     ui32 CurrentRange;
     const TSmallVec<NTable::TTag> Tags;
-    TSmallVec<NScheme::TTypeId> Types;
+    TSmallVec<NScheme::TTypeInfo> Types;
     const TSmallVec<bool> SkipNullKeys;
     const NYql::NDqProto::EDqStatsMode StatsMode;
     const TInstant Deadline;
@@ -575,7 +575,6 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
         return;
     }
 
-
     for (int i = 0; i < request.GetColumnTags().size(); ++i) {
         auto* column = tableColumns.FindPtr(request.GetColumnTags(i));
         if (!column) {
@@ -585,7 +584,8 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
             return;
         }
 
-        if (column->Type != request.GetColumnTypes(i)) {
+        // TODO: support pg types
+        if (column->Type.GetTypeId() != request.GetColumnTypes(i)) {
             reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " type mismatch at " << TabletID());

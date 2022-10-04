@@ -14,7 +14,8 @@ namespace {
 
     inline
     ui32 GetType(const TOlapSchema::TColumn& col) {
-        return col.TypeId;
+        Y_VERIFY(col.Type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+        return col.Type.GetTypeId();
     }
 
     inline
@@ -24,7 +25,8 @@ namespace {
 
     inline
     ui32 GetType(const TTableInfo::TColumn& col) {
-        return col.PType;
+        Y_VERIFY(col.PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+        return col.PType.GetTypeId();
     }
 }
 
@@ -144,7 +146,7 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
     }
 
     // TODO: Support TTL for types other than Timestamp
-    if (alterColumns.FindPtr(colId)->TypeId != NScheme::NTypeIds::Timestamp) {
+    if (alterColumns.FindPtr(colId)->Type.GetTypeId() != NScheme::NTypeIds::Timestamp) {
         errStr = "Currently TTL is only supported on columns of Timestamp type";
         return false;
     }

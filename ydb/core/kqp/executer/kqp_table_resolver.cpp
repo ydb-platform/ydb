@@ -123,7 +123,7 @@ private:
             for (auto& [columnName, columnKey] : table->Columns) {
                 if (auto* systemColumn = sysColumns.FindPtr(columnName)) {
                     columnKey.Id = systemColumn->ColumnId;
-                    columnKey.Type = systemColumn->TypeId;
+                    columnKey.Type = NScheme::TTypeInfo(systemColumn->TypeId);
                     continue;
                 }
 

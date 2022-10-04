@@ -16,7 +16,7 @@ using namespace NMiniKQL;
 using namespace NYql;
 using namespace NYql::NNodes;
 
-TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues)
 {
     TVector<TCell> key(keyColumnTypes.size());
@@ -47,7 +47,7 @@ TTableId MakeTableId(const NKqpProto::TKqpPhyTable& table) {
 }
 
 TVector<TPartitionWithRange> GetKeyRangePartitions(const TTableRange& range,
-    const TVector<TKeyDesc::TPartitionInfo>& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes)
+    const TVector<TKeyDesc::TPartitionInfo>& partitions, const TVector<NScheme::TTypeInfo>& keyColumnTypes)
 {
     auto it = std::lower_bound(partitions.begin(), partitions.end(), true,
         [&range, &keyColumnTypes](const auto& partition, bool) {

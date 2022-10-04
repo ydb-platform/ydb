@@ -409,7 +409,7 @@ void TShardKeyRanges::MakeFull(TSerializedPointOrRange&& pointOrRange) {
 }
 
 
-void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeId>& keyTypes) {
+void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeInfo>& keyTypes) {
 #ifdef DBG_TRACE
     Cerr << (TStringBuilder() << "-- merge " << ToString(keyTypes, *AppData()->TypeRegistry)
         << " with " << other.ToString(keyTypes, *AppData()->TypeRegistry) << Endl);
@@ -554,7 +554,7 @@ void TShardKeyRanges::MergeWritePoints(TShardKeyRanges&& other, const TVector<NS
 #endif
 }
 
-TString TShardKeyRanges::ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
+TString TShardKeyRanges::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
 {
     TStringBuilder sb;
     sb << "TShardKeyRanges{ ";
@@ -633,7 +633,7 @@ std::pair<const TSerializedCellVec*, bool> TShardKeyRanges::GetRightBorder() con
     return !lastRange.Point ? std::make_pair(&lastRange.To, lastRange.ToInclusive) : std::make_pair(&lastRange.From, true);
 }
 
-TString TTaskMeta::ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
+TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
 {
     TStringBuilder sb;
     sb << "TTaskMeta{ ShardId: " << ShardId << ", Params: [";

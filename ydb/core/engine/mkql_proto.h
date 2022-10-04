@@ -17,12 +17,12 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
 // NOTE: TCell's can reference memomry from tupleValue
 bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,
-                    const TConstArrayRef<NScheme::TTypeId>& expectedTypes,
+                    const TConstArrayRef<NScheme::TTypeInfo>& expectedTypes,
                     bool allowCastFromString,
                     TVector<TCell>& key,
                     TString& errStr);
 
-bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue& val, TString& errStr);
+bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue& val, TString& errStr);
 
 } // namspace NMiniKQL
 } // namspace NKikimr

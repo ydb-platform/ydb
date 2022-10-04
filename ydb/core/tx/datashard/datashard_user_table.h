@@ -232,13 +232,13 @@ struct TUserTable : public TThrRefBase {
     };
 
     struct TUserColumn {
-        NScheme::TTypeId Type;
+        NScheme::TTypeInfo Type;
         TString Name;
         bool IsKey;
         ui32 Family = 0;
         bool NotNull = false;
 
-        TUserColumn(NScheme::TTypeId type, TString name, bool isKey = false)
+        TUserColumn(NScheme::TTypeInfo type, TString name, bool isKey = false)
             : Type(type)
             , Name(name)
             , IsKey(isKey)
@@ -351,7 +351,7 @@ struct TUserTable : public TThrRefBase {
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;
-    TVector<NScheme::TTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<ui32> KeyColumnIds;
     TSerializedTableRange Range;
     bool IsBackup = false;

@@ -23,7 +23,7 @@ target_link_libraries(ydb-services-persqueue_cluster_discovery-ut PUBLIC
   cpp-testing-unittest_main
   ydb-services-persqueue_cluster_discovery
   cpp-actors-http
-  ydb-core-testlib
+  core-testlib-default
   api-grpc
 )
 target_link_options(ydb-services-persqueue_cluster_discovery-ut PRIVATE

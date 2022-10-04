@@ -5,6 +5,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
@@ -20,7 +21,7 @@ using NTable::EScan;
 
 //YdbOld and Ydb.v1 have same value representation
 template<typename TOutValue>
-Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeId type, const TCell &cell)
+Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell &cell)
 {
     auto &val = *row.add_items();
 
@@ -29,7 +30,7 @@ Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeId type, const TCell &
         return;
     }
 
-    switch (type) {
+    switch (type.GetTypeId()) {
     case NUdf::TDataType<bool>::Id:
         val.set_bool_value(cell.AsValue<bool>());
         break;
@@ -105,6 +106,10 @@ Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeId type, const TCell &
         val.set_text_value(*number);
         break;
     }
+    case NScheme::NTypeIds::Pg: {
+        val.set_bytes_value(cell.Data(), cell.Size());
+        break;
+    }
     default:
         val.set_bytes_value(cell.Data(), cell.Size());
     }
@@ -117,8 +122,11 @@ public:
         , ReservedSize(0)
         , ResultStream(ResultString)
     {
-        for (auto &col : request.GetColumns())
-            ColTypes.push_back(col.GetTypeId());
+        for (auto &col : request.GetColumns()) {
+            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+                col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+            ColTypes.push_back(typeInfo);
+        }
     }
 
     virtual ~TRowsToResult() = default;
@@ -170,7 +178,7 @@ private:
 
 protected:
     TStringOutput ResultStream;
-    TVector<NScheme::TTypeId> ColTypes;
+    TVector<NScheme::TTypeInfo> ColTypes;
     TVector<ui32> RowOffsets;
     TString ResultCommon;
 };
@@ -248,15 +256,26 @@ private:
         for (auto &col : request.GetColumns()) {
             auto *meta = res.add_columns();
             meta->set_name(col.GetName());
-            auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
-            if (id == NYql::NProto::Decimal) {
-                auto decimalType = meta->mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
-                //TODO: Pass decimal params here
-                decimalType->set_precision(22);
-                decimalType->set_scale(9);
+
+            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+                col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+
+            if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
+                auto pgType = meta->mutable_type()->mutable_optional_type()->mutable_item()
+                    ->mutable_pg_type();
+                pgType->set_oid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
             } else {
-                meta->mutable_type()->mutable_optional_type()->mutable_item()
+                auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
+                if (id == NYql::NProto::Decimal) {
+                    auto decimalType = meta->mutable_type()->mutable_optional_type()->mutable_item()
+                        ->mutable_decimal_type();
+                    //TODO: Pass decimal params here
+                    decimalType->set_precision(22);
+                    decimalType->set_scale(9);
+                } else {
+                    meta->mutable_type()->mutable_optional_type()->mutable_item()
                         ->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+                }
             }
         }
         res.set_truncated(true);

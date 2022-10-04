@@ -26,7 +26,8 @@ struct TFakeKeyComparator {
             if (bv.IsEmpty())
                 return false;
             Y_ASSERT(av.Type() == bv.Type());
-            int res = CompareTypedCells(TCell(&av), TCell(&bv), av.Type());
+            // pg types are not supported
+            int res = CompareTypedCells(TCell(&av), TCell(&bv), NScheme::TTypeInfo(av.Type(), {}));
             if (res)
                 return res < 0;
         }
@@ -76,10 +77,10 @@ class TFakeDbIterator : public ITestIterator {
     TFakeTable::const_iterator RowIt;
     TFakeTable::const_iterator RowEnd;
 
-    TVector<NScheme::TTypeId> KeyTypes;
+    TVector<NScheme::TTypeInfo> KeyTypes;
     TVector<TCell> KeyCells;
 
-    TVector<NScheme::TTypeId> ValueTypes;
+    TVector<NScheme::TTypeInfo> ValueTypes;
     TVector<TCell> ValueCells;
     bool First = true;
 

@@ -513,7 +513,7 @@ class TAsyncIndexChangeSenderMain: public TActorBootstrapped<TAsyncIndexChangeSe
         }
 
         TagMap.clear();
-        TVector<NYql::NUdf::TDataTypeId> keyColumnTypes;
+        TVector<NScheme::TTypeInfo> keyColumnTypes;
 
         for (const auto& [tag, column] : entry.Columns) {
             auto it = MainColumnToTag.find(column.Name);

@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-kqp-ut-spilling PUBLIC
   core-kqp-host
   core-kqp-provider
   kqp-ut-common
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-kqp-ut-spilling PRIVATE
   -Wl,-no_deduplicate

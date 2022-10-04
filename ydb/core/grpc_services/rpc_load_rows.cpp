@@ -25,9 +25,9 @@ using namespace Ydb;
 
 namespace {
 
-bool CheckValueData(NScheme::TTypeId type, const TCell& cell, TString& err) {
+bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     bool ok = true;
-    switch (type) {
+    switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
     case NScheme::NTypeIds::Int8:
     case NScheme::NTypeIds::Uint8:
@@ -82,8 +82,12 @@ bool CheckValueData(NScheme::TTypeId type, const TCell& cell, TString& err) {
         // DyNumber value was verified at parsing time
         break;
 
+    case NScheme::NTypeIds::Pg:
+        // no pg validation here
+        break;
+
     default:
-        err = Sprintf("Unexpected type %d", type);
+        err = Sprintf("Unexpected type %d", type.GetTypeId());
         return false;
     }
 
@@ -191,7 +195,7 @@ public:
     {}
 
 private:
-    static bool CellFromProtoVal(NScheme::TTypeId type, const Ydb::Value* vp,
+    static bool CellFromProtoVal(NScheme::TTypeInfo type, const Ydb::Value* vp,
                                   TCell& c, TString& err, TMemoryPool& valueDataPool)
     {
         if (vp->Hasnull_flag_value()) {
@@ -212,7 +216,7 @@ private:
                 break; \
             }
 
-        switch (type) {
+        switch (type.GetTypeId()) {
         EXTRACT_VAL(Bool, bool, ui8);
         EXTRACT_VAL(Int8, int32, i8);
         EXTRACT_VAL(Uint8, uint32, ui8);
@@ -267,8 +271,13 @@ private:
             c = TCell((const char*)&decimalVal, sizeof(decimalVal));
             break;
         }
+        case NScheme::NTypeIds::Pg : {
+            TString v = val.Getbytes_value();
+            c = TCell(v.data(), v.size());
+            break;
+        }
         default:
-            err = Sprintf("Unexpected type %d", type);
+            err = Sprintf("Unexpected type %d", type.GetTypeId());
             return false;
         };
 

@@ -384,7 +384,7 @@ public:
                       const TVector<const NTxProxy::TTableColumnInfo*>& keys, const THashMap<TString, const NTxProxy::TTableColumnInfo*>& columnByName, THashSet<TString> notNullColumns,
                       TVector<NMiniKQL::TRuntimeNode>& result) {
         TVector<NMiniKQL::TRuntimeNode> keyColumns;
-        TVector<ui32> keyTypes;
+        TVector<NScheme::TTypeInfo> keyTypes;
         keyTypes.reserve(keys.size());
         for (const NTxProxy::TTableColumnInfo* key : keys) {
             Y_VERIFY(key != nullptr);
@@ -395,8 +395,10 @@ public:
             keyColumns.reserve(keys.size());
             for (const NTxProxy::TTableColumnInfo* key : keys) {
                 NJson::TJsonValue jsonKey;
+                // TODO: support pg types
+                Y_VERIFY(key->PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
                 if (jsonWhere.GetValue(key->Name, &jsonKey)) {
-                    keyColumns.emplace_back(NewDataLiteral(pgmBuilder, jsonKey, key->PType));
+                    keyColumns.emplace_back(NewDataLiteral(pgmBuilder, jsonKey, key->PType.GetTypeId()));
                 } else {
                     throw yexception() << "Key \"" << key->Name << "\" was not specified";
                 }
@@ -451,7 +453,9 @@ public:
                 NMiniKQL::TTableRangeOptions tableRangeOptions = pgmBuilder.GetDefaultTableRangeOptions();
                 TVector<NMiniKQL::TRuntimeNode> keyFromColumns = keyColumns;
                 for (size_t i = keyColumns.size(); i < keyTypes.size(); ++i) {
-                    keyFromColumns.emplace_back(pgmBuilder.NewEmptyOptionalDataLiteral(keyTypes[i]));
+                    // TODO: support pg types
+                    Y_VERIFY(keyTypes[i].GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+                    keyFromColumns.emplace_back(pgmBuilder.NewEmptyOptionalDataLiteral(keyTypes[i].GetTypeId()));
                 }
                 tableRangeOptions.ToColumns = keyColumns;
                 tableRangeOptions.FromColumns = keyFromColumns;
@@ -467,7 +471,9 @@ public:
                 auto itCol = columnByName.find(itVal->first);
                 if (itCol != columnByName.end()) {
                     auto update = pgmBuilder.GetUpdateRowBuilder();
-                    update.SetColumn(itCol->second->Id, itCol->second->PType, pgmBuilder.NewOptional(NewDataLiteral(pgmBuilder, itVal->second, itCol->second->PType)));
+                    // TODO: support pg types
+                    Y_VERIFY(itCol->second->PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+                    update.SetColumn(itCol->second->Id, itCol->second->PType, pgmBuilder.NewOptional(NewDataLiteral(pgmBuilder, itVal->second, itCol->second->PType.GetTypeId())));
                     pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(tableInfo.TableId, keyTypes, keyColumns, update));
                 } else {
                     throw yexception() << "Column \"" << itVal->first << "\" not found";

@@ -21,7 +21,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_replica PUBLIC
   cpp-testing-unittest_main
   core-tx-scheme_board
   cpp-testing-unittest
-  core-testlib-basics
+  testlib-basics-default
 )
 target_link_options(ydb-core-tx-scheme_board-ut_replica PRIVATE
   -Wl,-no_deduplicate

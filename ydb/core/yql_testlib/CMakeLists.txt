@@ -25,7 +25,7 @@ target_link_libraries(ydb-core-yql_testlib PUBLIC
   ydb-core-keyvalue
   ydb-core-mind
   ydb-core-protos
-  ydb-core-testlib
+  core-testlib-default
   core-testlib-actors
   core-testlib-basics
   yql-core-facade

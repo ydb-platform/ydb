@@ -6,8 +6,8 @@ namespace NKikimr::NColumnShard {
 
 namespace {
 
-TVector<NScheme::TTypeId> ExtractTypes(const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
-    TVector<NScheme::TTypeId> types;
+TVector<NScheme::TTypeInfo> ExtractTypes(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+    TVector<NScheme::TTypeInfo> types;
     types.reserve(columns.size());
     for (auto& [name, type] : columns) {
         types.push_back(type);
@@ -15,13 +15,13 @@ TVector<NScheme::TTypeId> ExtractTypes(const TVector<std::pair<TString, NScheme:
     return types;
 }
 
-TString FromCells(const TConstArrayRef<TCell>& cells, const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
+TString FromCells(const TConstArrayRef<TCell>& cells, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     Y_VERIFY(cells.size() == columns.size());
     if (cells.empty()) {
         return {};
     }
 
-    TVector<NScheme::TTypeId> types = ExtractTypes(columns);
+    TVector<NScheme::TTypeInfo> types = ExtractTypes(columns);
 
     NArrow::TArrowBatchBuilder batchBuilder;
     batchBuilder.Reserve(1);
@@ -338,9 +338,9 @@ using EOperation = NArrow::EOperation;
 using TPredicate = NOlap::TPredicate;
 
 std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& range,
-                                                  const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
+                                                  const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     TVector<TCell> leftCells;
-    TVector<std::pair<TString, NScheme::TTypeId>> leftColumns;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> leftColumns;
     bool leftTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.From.GetCells();
@@ -360,7 +360,7 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
     }
 
     TVector<TCell> rightCells;
-    TVector<std::pair<TString, NScheme::TTypeId>> rightColumns;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> rightColumns;
     bool rightTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.To.GetCells();

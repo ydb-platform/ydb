@@ -48,12 +48,12 @@ static NJson::TJsonValue YsonToJson(TStringBuf in) {
     return result;
 }
 
-static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeId type) {
+static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeInfo type) {
     if (cell.IsNull()) {
         return NJson::TJsonValue(NJson::JSON_NULL);
     }
 
-    switch (type) {
+    switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
         return NJson::TJsonValue(cell.AsValue<bool>());
     case NScheme::NTypeIds::Int8:
@@ -100,6 +100,9 @@ static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeId type) {
         return StringToJson(NBinaryJson::SerializeToJson(cell.AsBuf()));
     case NScheme::NTypeIds::Yson:
         return YsonToJson(cell.AsBuf());
+    case NScheme::NTypeIds::Pg:
+        // TODO: support pg types
+        Y_FAIL("pg types are not supported");
     default:
         Y_FAIL("Unexpected type");
     }

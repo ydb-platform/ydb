@@ -3,6 +3,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_bio_events.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -198,7 +199,9 @@ void TTester::RegisterTableInResolver(const TString& schemeText)
                 keyIdx = ki;
             }
         }
-        table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, c.GetTypeId(), 0, EColumnTypeConstraint::Nullable}));
+        auto typeInfo = NScheme::TypeInfoFromProtoColumnType(c.GetTypeId(),
+            c.HasTypeInfo() ? &c.GetTypeInfo() : nullptr);
+        table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, typeInfo, 0, EColumnTypeConstraint::Nullable}));
     }
     DbSchemeResolver.AddTable(table);
 }

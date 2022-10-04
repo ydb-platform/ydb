@@ -23,14 +23,14 @@ class TKqpTableKeys {
 public:
     struct TColumn {
         ui32 Id;
-        ui32 Type;
+        NScheme::TTypeInfo Type;
     };
 
     struct TTable {
         TString Path;
         TMap<TString, TColumn> Columns;
         TVector<TString> KeyColumns;
-        TVector<NUdf::TDataTypeId> KeyColumnTypes;
+        TVector<NScheme::TTypeInfo> KeyColumnTypes;
         ETableKind TableKind = ETableKind::Unknown;
     };
 
@@ -72,12 +72,12 @@ private:
     THashMap<TTableId, TTable> TablesById;
 };
 
-TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues);
 
 template<typename TList, typename TRangeFunc>
 size_t FindKeyPartitionIndex(const TVector<TCell>& key, const TList& partitions,
-    const TVector<NUdf::TDataTypeId>& keyColumnTypes, const TRangeFunc& rangeFunc)
+    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TRangeFunc& rangeFunc)
 {
     auto it = std::lower_bound(partitions.begin(), partitions.end(), key,
         [&keyColumnTypes, &rangeFunc](const auto& partition, const auto& key) {
@@ -95,7 +95,7 @@ size_t FindKeyPartitionIndex(const TVector<TCell>& key, const TList& partitions,
 
 template<typename TList, typename TRangeFunc>
 size_t FindKeyPartitionIndex(const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NUdf::TUnboxedValue& value,
-     const TList& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes, const TVector<ui32>& keyColumnIndices,
+     const TList& partitions, const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TVector<ui32>& keyColumnIndices,
      const TRangeFunc& rangeFunc)
 {
     auto key = MakeKeyCells(value, keyColumnTypes, keyColumnIndices, typeEnv, /* copyValues */ true);
@@ -115,10 +115,10 @@ struct TPartitionWithRange {
 };
 
 TVector<TPartitionWithRange> GetKeyRangePartitions(const TTableRange& range,
-    const TVector<TKeyDesc::TPartitionInfo>& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes);
+    const TVector<TKeyDesc::TPartitionInfo>& partitions, const TVector<NScheme::TTypeInfo>& keyColumnTypes);
 
 template<typename TList, typename TRangeFunc>
-void SortPartitions(TList& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes, const TRangeFunc& rangeFunc) {
+void SortPartitions(TList& partitions, const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TRangeFunc& rangeFunc) {
     std::sort(partitions.begin(), partitions.end(),
         [&keyColumnTypes, &rangeFunc](const auto& left, const auto& right) {
             const auto& leftRange = rangeFunc(left);

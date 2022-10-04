@@ -163,7 +163,7 @@ namespace NKikimr::NSysView {
                             const NProtoBuf::Descriptor *desc = m->GetDescriptor();
                             const NProtoBuf::FieldDescriptor *fdesc = desc->FindFieldByNumber(*it);
                             if (std::next(it) == path.end()) { // terminal entry
-                                cells.push_back(ExtractCell(m, fdesc, column.Type));
+                                cells.push_back(ExtractCell(m, fdesc, column.Type.GetTypeId()));
                             } else { // submessage
                                 Y_VERIFY(fdesc->type() == NProtoBuf::FieldDescriptor::TYPE_MESSAGE);
                                 m = &m->GetReflection()->GetMessage(*m, fdesc);

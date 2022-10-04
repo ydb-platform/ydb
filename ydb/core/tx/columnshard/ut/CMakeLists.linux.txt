@@ -25,7 +25,7 @@ target_link_libraries(ydb-core-tx-columnshard-ut PUBLIC
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
-  ydb-core-testlib
+  core-testlib-default
   ydb-core-tx
   public-lib-yson_value
 )

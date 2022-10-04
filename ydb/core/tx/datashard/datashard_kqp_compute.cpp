@@ -100,14 +100,14 @@ const NDataShard::TUserTable::TUserColumn& TKqpDatashardComputeContext::GetKeyCo
     return col;
 }
 
-THashMap<TString, NScheme::TTypeId> TKqpDatashardComputeContext::GetKeyColumnsMap(const TTableId &tableId) const {
+THashMap<TString, NScheme::TTypeInfo> TKqpDatashardComputeContext::GetKeyColumnsMap(const TTableId &tableId) const {
     MKQL_ENSURE_S(Shard);
     const NDataShard::TUserTable::TCPtr* tablePtr = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
     MKQL_ENSURE_S(tablePtr);
     const NDataShard::TUserTable::TCPtr table = *tablePtr;
     MKQL_ENSURE_S(table);
 
-    THashMap<TString, NScheme::TTypeId> columnsMap;
+    THashMap<TString, NScheme::TTypeInfo> columnsMap;
     for (size_t i = 0 ; i < table->KeyColumnTypes.size(); i++) {
         auto col = table->Columns.at(table->KeyColumnIds[i]);
         MKQL_ENSURE_S(col.IsKey);
@@ -425,7 +425,7 @@ bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, TArrayRef<con
 
     MKQL_ENSURE_S(columnTags.size() == dbRow.Size(), "Invalid local db row size.");
 
-    TVector<NScheme::TTypeId> types(columnTags.size());
+    TVector<NScheme::TTypeInfo> types(columnTags.size());
     for (size_t i = 0; i < columnTags.size(); ++i) {
         types[i] = tableInfo->Columns.at(columnTags[i]).PType;
     }

@@ -23,15 +23,17 @@ TType* ValidateColumns(
     rowTypeBuilder.Reserve(columns.size());
     tagsBuilder.Reserve(columns.size());
     for (auto& col : columns) {
-        MKQL_ENSURE(col.SchemeType != 0, "Null type is not allowed");
+        // TODO: support pg types
+        MKQL_ENSURE(col.SchemeType.GetTypeId() != 0, "Null type is not allowed");
+        MKQL_ENSURE(col.SchemeType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
         TType* dataType;
-        if (col.SchemeType == NYql::NProto::TypeIds::Decimal)
+        if (col.SchemeType.GetTypeId() == NYql::NProto::TypeIds::Decimal)
             dataType = TDataDecimalType::Create(
                 NScheme::DECIMAL_PRECISION,
                 NScheme::DECIMAL_SCALE,
                 builder->GetTypeEnvironment());
         else
-            dataType = TDataType::Create(col.SchemeType, builder->GetTypeEnvironment());
+            dataType = TDataType::Create(col.SchemeType.GetTypeId(), builder->GetTypeEnvironment());
 
         if (col.TypeConstraint == EColumnTypeConstraint::Nullable) {
             dataType = TOptionalType::Create(dataType, builder->GetTypeEnvironment());
@@ -103,24 +105,30 @@ TUpdateRowBuilder::TUpdateRowBuilder(const TTypeEnvironment& env)
 }
 
 void TUpdateRowBuilder::SetColumn(
-        ui32 columnId, ui32 expectedType,
+        ui32 columnId, NScheme::TTypeInfo expectedType,
         TRuntimeNode value)
 {
+    // TODO: support pg types
+    MKQL_ENSURE(expectedType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+
     bool isOptional;
-    value = DoRewriteNullType(value, expectedType, NullInternName, Env);
+    value = DoRewriteNullType(value, expectedType.GetTypeId(), NullInternName, Env);
     TDataType* dataType = UnpackOptionalData(value, isOptional);
-    MKQL_ENSURE(expectedType == dataType->GetSchemeType(),
-        "Mismatch of column type expectedType = " << expectedType
+
+    MKQL_ENSURE(expectedType.GetTypeId() == dataType->GetSchemeType(),
+        "Mismatch of column type expectedType = " << expectedType.GetTypeId()
         << " actual type = " << dataType->GetSchemeType());
     Builder.Add(ToString(columnId), value);
 }
 
 void TUpdateRowBuilder::InplaceUpdateColumn(
-        ui32 columnId, ui32 expectedType,
+        ui32 columnId, NScheme::TTypeInfo expectedType,
         TRuntimeNode value,
         EInplaceUpdateMode mode)
 {
-    MKQL_ENSURE(AS_TYPE(TDataType, value)->GetSchemeType() == expectedType,
+    // TODO: support pg types
+    MKQL_ENSURE(expectedType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+    MKQL_ENSURE(AS_TYPE(TDataType, value)->GetSchemeType() == expectedType.GetTypeId(),
             "Mismatch of column type");
     TDataType* byteType = TDataType::Create(NUdf::TDataType<ui8>::Id, Env);
     std::array<TType*, 2> elements;
@@ -199,19 +207,21 @@ TRuntimeNode TKikimrProgramBuilder::RewriteNullType(
 }
 
 TVector<TRuntimeNode> TKikimrProgramBuilder::FixKeysType(
-        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<NScheme::TTypeInfo>& keyTypes,
         const TKeyColumnValues& row) const
 {
     MKQL_ENSURE(!row.empty(), "Expected at least 1 key column");
     MKQL_ENSURE(keyTypes.size() == row.size(), "Mismatch of key types count");
     TVector<TRuntimeNode> tmp(row.size());
     for (ui32 i = 0; i < row.size(); ++i) {
-        tmp[i] = RewriteNullType(row[i], keyTypes[i]);
+        // TODO: support pg types
+        MKQL_ENSURE(keyTypes[i].GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+        tmp[i] = RewriteNullType(row[i], keyTypes[i].GetTypeId());
         bool isOptional;
         TDataType* dataType = UnpackOptionalData(tmp[i], isOptional);
-        MKQL_ENSURE(keyTypes[i] == dataType->GetSchemeType(),
+        MKQL_ENSURE(keyTypes[i].GetTypeId() == dataType->GetSchemeType(),
             "Mismatch of key column type, expected: "
-            << keyTypes[i] << ", but got: " << dataType->GetSchemeType());
+            << keyTypes[i].GetTypeId() << ", but got: " << dataType->GetSchemeType());
     }
     return tmp;
 }
@@ -223,7 +233,7 @@ TRuntimeNode TKikimrProgramBuilder::ReadTarget(const TReadTarget& target) {
 
 TRuntimeNode TKikimrProgramBuilder::SelectRow(
         const TTableId& tableId,
-        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<NScheme::TTypeInfo>& keyTypes,
         const TArrayRef<const TSelectColumn>& columns,
         const TKeyColumnValues& row, const TReadTarget& target)
 {
@@ -232,7 +242,7 @@ TRuntimeNode TKikimrProgramBuilder::SelectRow(
 
 TRuntimeNode TKikimrProgramBuilder::SelectRow(
         const TTableId& tableId,
-        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<NScheme::TTypeInfo>& keyTypes,
         const TArrayRef<const TSelectColumn>& columns,
         const TKeyColumnValues& row, TRuntimeNode readTarget)
 {
@@ -258,7 +268,7 @@ TRuntimeNode TKikimrProgramBuilder::SelectRow(
 
 TRuntimeNode TKikimrProgramBuilder::SelectRange(
         const TTableId& tableId,
-        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<NScheme::TTypeInfo>& keyTypes,
         const TArrayRef<const TSelectColumn>& columns,
         const TTableRangeOptions& options,
         const TReadTarget& target)
@@ -284,7 +294,7 @@ static bool AtLeastOneFlagSet(const TArrayRef<bool>& arr) {
 
 TRuntimeNode TKikimrProgramBuilder::SelectRange(
         const TTableId& tableId,
-        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<NScheme::TTypeInfo>& keyTypes,
         const TArrayRef<const TSelectColumn>& columns,
         const TTableRangeOptions& options,
         TRuntimeNode readTarget)
@@ -307,14 +317,16 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
         TDataType* dataFrom = nullptr;
         TDataType* dataTo = nullptr;
         if (i < options.FromColumns.size()) {
-            from[i] = RewriteNullType(options.FromColumns[i], keyTypes[i]);
+            MKQL_ENSURE(keyTypes[i].GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+            from[i] = RewriteNullType(options.FromColumns[i], keyTypes[i].GetTypeId());
 
             bool isOptionalFrom;
             dataFrom = UnpackOptionalData(from[i], isOptionalFrom);
         }
 
         if (i < options.ToColumns.size()) {
-            to[i] = RewriteNullType(options.ToColumns[i], keyTypes[i]);
+            MKQL_ENSURE(keyTypes[i].GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+            to[i] = RewriteNullType(options.ToColumns[i], keyTypes[i].GetTypeId());
 
             bool isOptionalTo;
             dataTo = UnpackOptionalData(to[i], isOptionalTo);
@@ -329,8 +341,8 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
         }
 
         ui32 dataType = dataFrom ? dataFrom->GetSchemeType() : dataTo->GetSchemeType();
-        MKQL_ENSURE(keyTypes[i] == dataType, "Mismatch of key column " << i
-            << " type, expected: " << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(keyTypes[i])).Name
+        MKQL_ENSURE(keyTypes[i].GetTypeId() == dataType, "Mismatch of key column " << i
+            << " type, expected: " << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(keyTypes[i].GetTypeId())).Name
             << ", but got: " << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(dataType)).Name);
     }
 
@@ -375,7 +387,7 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
 
 TRuntimeNode TKikimrProgramBuilder::UpdateRow(
         const TTableId& tableId,
-        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<NScheme::TTypeInfo>& keyTypes,
         const TKeyColumnValues& row,
         TUpdateRowBuilder& update)
 {
@@ -391,7 +403,7 @@ TRuntimeNode TKikimrProgramBuilder::UpdateRow(
 
 TRuntimeNode TKikimrProgramBuilder::EraseRow(
         const TTableId& tableId,
-        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<NScheme::TTypeInfo>& keyTypes,
         const TKeyColumnValues& row)
 {
     auto rows = FixKeysType(keyTypes, row);

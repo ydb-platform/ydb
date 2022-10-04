@@ -70,7 +70,7 @@ namespace NDataShard {
         }
 
     public:
-        void SetKeyTypes(const TVector<NScheme::TTypeId>& keyTypes) {
+        void SetKeyTypes(const TVector<NScheme::TTypeInfo>& keyTypes) {
             Y_VERIFY(keyTypes.size() >= KeyTypes.size(), "Number of key columns must not decrease over time");
             KeyTypes = keyTypes;
         }
@@ -109,7 +109,7 @@ namespace NDataShard {
     protected:
         size_t Size_ = 0;
         mutable TStats Stats_;
-        TVector<NScheme::TTypeId> KeyTypes;
+        TVector<NScheme::TTypeInfo> KeyTypes;
     };
 
 } // namespace NDataShard

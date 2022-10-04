@@ -97,6 +97,7 @@ TVector<TRawTypeValue> TIndexInfo::ExtractKey(const THashMap<ui32, TCell>& field
 
         const TCell& cell = it->second;
         Y_VERIFY(allowNulls || !cell.IsNull());
+
         key.emplace_back(TRawTypeValue(cell.AsRef(), column.PType));
     }
 

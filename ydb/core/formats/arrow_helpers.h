@@ -23,7 +23,7 @@ public:
     }
 };
 
-std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId);
+std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeInfo typeInfo);
 
 template <typename T>
 inline bool ArrayEqualValue(const std::shared_ptr<arrow::Array>& x, const std::shared_ptr<arrow::Array>& y) {
@@ -51,8 +51,8 @@ inline bool ArrayEqualView(const std::shared_ptr<arrow::Array>& x, const std::sh
 
 struct TSortDescription;
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeId>>& columns);
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString,  NScheme::TTypeId>>& columns);
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 
 TString SerializeSchema(const arrow::Schema& schema);
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);
@@ -154,7 +154,7 @@ class IRowWriter;
 // Converts an arrow batch into YDB rows feeding them IRowWriter one by one
 class TArrowToYdbConverter {
 private:
-    TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema; // Destination schema (allow shrink and reorder)
+    TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema; // Destination schema (allow shrink and reorder)
     IRowWriter& RowWriter;
 
     template <typename TArray>
@@ -191,8 +191,8 @@ private:
     }
 
 public:
-    static bool NeedDataConversion(const NScheme::TTypeId& colType) {
-        switch (colType) {
+    static bool NeedDataConversion(const NScheme::TTypeInfo& colType) {
+        switch (colType.GetTypeId()) {
             case NScheme::NTypeIds::DyNumber:
             case NScheme::NTypeIds::JsonDocument:
             case NScheme::NTypeIds::Decimal:
@@ -203,7 +203,7 @@ public:
         return false;
     }
 
-    TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeId>>& ydbSchema, IRowWriter& rowWriter)
+    TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter)
         : YdbSchema(ydbSchema)
         , RowWriter(rowWriter)
     {}
@@ -221,7 +221,7 @@ public:
 };
 
 std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                   const THashMap<TString, NScheme::TTypeId>& columnsToConvert);
+                                                   const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert);
 
 inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
     return column->null_bitmap_data();

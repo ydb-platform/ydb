@@ -163,7 +163,7 @@ public:
                         prefixColumns.GetCells().size()),
                 "Unexpected out of range key returned from iterator");
 
-            Y_VERIFY(currentKey.Types[pathColPos] == NScheme::NTypeIds::Utf8);
+            Y_VERIFY(currentKey.Types[pathColPos].GetTypeId() == NScheme::NTypeIds::Utf8);
             const TCell& pathCell = currentKey.Cells()[pathColPos];
             TString path = TString((const char*)pathCell.Data(), pathCell.Size());
 

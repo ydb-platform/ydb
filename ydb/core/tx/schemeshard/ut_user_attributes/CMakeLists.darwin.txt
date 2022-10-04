@@ -31,7 +31,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_user_attributes PUBLIC
   ydb-core-scheme
   ydb-core-tablet
   ydb-core-tablet_flat
-  ydb-core-testlib
+  core-testlib-default
   ydb-core-tx
   core-tx-datashard
   tx-schemeshard-ut_helpers

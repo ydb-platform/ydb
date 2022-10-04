@@ -5,8 +5,9 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-static bool IsIntegerType(NScheme::TTypeId typeId) {
-    switch (typeId) {
+static bool IsIntegerType(NScheme::TTypeInfo type) {
+    // TODO: support pg types
+    switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
 
     case NScheme::NTypeIds::Int8:
@@ -29,7 +30,7 @@ static bool IsIntegerType(NScheme::TTypeId typeId) {
     }
 }
 
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, const TConstArrayRef<NScheme::TTypeId> &keyColumnTypes) {
+TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, const TConstArrayRef<NScheme::TTypeInfo> &keyColumnTypes) {
     ui64 bucketsCount = histogram.BucketsSize();
     ui64 idxLo = bucketsCount * 0.33;
     ui64 idxMed = bucketsCount * 0.5;
@@ -42,7 +43,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
     TVector<TCell> splitKey(keyMed.GetCells().size());
 
     for (size_t i = 0; i < keyMed.GetCells().size(); ++i) {
-        NScheme::TTypeId columnType = keyColumnTypes[i];
+        auto columnType = keyColumnTypes[i];
 
         if (0 == CompareTypedCells(keyLo.GetCells()[i], keyHi.GetCells()[i], columnType)) {
             // lo == hi, so we add this value and proceed to the next column
@@ -88,7 +89,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
 }
 
 TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui64>>& keysHist,
-                                  const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes,
+                                  const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes,
                                   const size_t prefixSize)
 {
     ui64 total = keysHist.back().second;
@@ -123,7 +124,7 @@ TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui
     return TSerializedCellVec(TSerializedCellVec::Serialize(splitKey));
 }
 
-TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram& keySample, const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes) {
+TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram& keySample, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes) {
     TVector<std::pair<TSerializedCellVec, ui64>> keysHist;
     for (const auto& s : keySample.GetBuckets()) {
         keysHist.emplace_back(std::make_pair(TSerializedCellVec(s.GetKey()), s.GetValue()));
@@ -327,7 +328,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         return true;
     }
 
-    TSmallVec<NScheme::TTypeId> keyColumnTypes(table->KeyColumnIds.size());
+    TSmallVec<NScheme::TTypeInfo> keyColumnTypes(table->KeyColumnIds.size());
     for (size_t ki = 0; ki < table->KeyColumnIds.size(); ++ki) {
         keyColumnTypes[ki] = table->Columns.FindPtr(table->KeyColumnIds[ki])->PType;
     }

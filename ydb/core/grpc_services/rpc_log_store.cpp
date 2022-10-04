@@ -95,15 +95,15 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
     for (const auto& column : from.columns()) {
         auto* col = to.AddColumns();
         col->SetName(column.name());
-        ui32 typeId;
-        if (!ExtractColumnTypeId(typeId, column.type(), status, error)) {
+        NScheme::TTypeInfo typeInfo;
+        if (!ExtractColumnTypeInfo(typeInfo, column.type(), status, error)) {
             return false;
         }
-        auto typeName = NScheme::TypeName(typeId);
+        auto typeName = NScheme::TypeName(typeInfo);
         col->SetType(typeName);
 
         key.erase(column.name());
-        if (column.name() == firstKeyColumn && typeId != NYql::NProto::Timestamp) {
+        if (column.name() == firstKeyColumn && typeInfo.GetTypeId() != NYql::NProto::Timestamp) {
             error = "not supported first PK column type for LogStore. Only Timestamp columns are allowed for now.";
             return false;
         }

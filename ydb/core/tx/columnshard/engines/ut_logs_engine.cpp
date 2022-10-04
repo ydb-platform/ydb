@@ -8,6 +8,7 @@ namespace NKikimr {
 using namespace NOlap;
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
+using TTypeInfo = NScheme::TTypeInfo;
 
 namespace {
 
@@ -153,21 +154,21 @@ private:
     THashMap<ui32, TIndex> Indices;
 };
 
-static const TVector<std::pair<TString, TTypeId>> testColumns = {
+static const TVector<std::pair<TString, TTypeInfo>> testColumns = {
     // PK
-    {"timestamp", NTypeIds::Timestamp },
-    {"resource_type", NTypeIds::Utf8 },
-    {"resource_id", NTypeIds::Utf8 },
-    {"uid", NTypeIds::Utf8 },
+    {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
+    {"resource_type", TTypeInfo(NTypeIds::Utf8) },
+    {"resource_id", TTypeInfo(NTypeIds::Utf8) },
+    {"uid", TTypeInfo(NTypeIds::Utf8) },
     //
-    {"message", NTypeIds::Utf8 }
+    {"message", TTypeInfo(NTypeIds::Utf8) }
 };
 
-static const TVector<std::pair<TString, TTypeId>> testKey = {
-    {"timestamp", NTypeIds::Timestamp },
-    {"resource_type", NTypeIds::Utf8 },
-    {"resource_id", NTypeIds::Utf8 },
-    {"uid", NTypeIds::Utf8 }
+static const TVector<std::pair<TString, TTypeInfo>> testKey = {
+    {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
+    {"resource_type", TTypeInfo(NTypeIds::Utf8) },
+    {"resource_id", TTypeInfo(NTypeIds::Utf8) },
+    {"uid", TTypeInfo(NTypeIds::Utf8) }
 };
 
 TIndexInfo TestTableInfo() {

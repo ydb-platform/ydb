@@ -14,29 +14,30 @@ namespace {
 
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
+using TTypeInfo = NScheme::TTypeInfo;
 
 struct TDataRow {
-    static const constexpr TTypeId Types[20] = {
-        NTypeIds::Bool,
-        NTypeIds::Int8,
-        NTypeIds::Int16,
-        NTypeIds::Int32,
-        NTypeIds::Int64,
-        NTypeIds::Uint8,
-        NTypeIds::Uint16,
-        NTypeIds::Uint32,
-        NTypeIds::Uint64,
-        NTypeIds::Float,
-        NTypeIds::Double,
-        NTypeIds::String,
-        NTypeIds::Utf8,
-        NTypeIds::Json,
-        NTypeIds::Yson,
-        NTypeIds::Date,
-        NTypeIds::Datetime,
-        NTypeIds::Timestamp,
-        NTypeIds::Interval,
-        NTypeIds::JsonDocument,
+    static const constexpr TTypeInfo Types[20] = {
+        TTypeInfo(NTypeIds::Bool),
+        TTypeInfo(NTypeIds::Int8),
+        TTypeInfo(NTypeIds::Int16),
+        TTypeInfo(NTypeIds::Int32),
+        TTypeInfo(NTypeIds::Int64),
+        TTypeInfo(NTypeIds::Uint8),
+        TTypeInfo(NTypeIds::Uint16),
+        TTypeInfo(NTypeIds::Uint32),
+        TTypeInfo(NTypeIds::Uint64),
+        TTypeInfo(NTypeIds::Float),
+        TTypeInfo(NTypeIds::Double),
+        TTypeInfo(NTypeIds::String),
+        TTypeInfo(NTypeIds::Utf8),
+        TTypeInfo(NTypeIds::Json),
+        TTypeInfo(NTypeIds::Yson),
+        TTypeInfo(NTypeIds::Date),
+        TTypeInfo(NTypeIds::Datetime),
+        TTypeInfo(NTypeIds::Timestamp),
+        TTypeInfo(NTypeIds::Interval),
+        TTypeInfo(NTypeIds::JsonDocument),
         // TODO: DyNumber, Decimal
     };
 
@@ -114,29 +115,29 @@ struct TDataRow {
         return std::make_shared<arrow::Schema>(fields);
     }
 
-    static TVector<std::pair<TString, TTypeId>> MakeYdbSchema() {
-        TVector<std::pair<TString, TTypeId>> columns = {
-            {"bool", NTypeIds::Bool },
-            {"i8", NTypeIds::Int8 },
-            {"i16", NTypeIds::Int16 },
-            {"i32", NTypeIds::Int32 },
-            {"i64", NTypeIds::Int64 },
-            {"ui8", NTypeIds::Uint8 },
-            {"ui16", NTypeIds::Uint16 },
-            {"ui32", NTypeIds::Uint32 },
-            {"ui64", NTypeIds::Uint64 },
-            {"f32", NTypeIds::Float },
-            {"f64", NTypeIds::Double },
-            {"string", NTypeIds::String },
-            {"utf8", NTypeIds::Utf8 },
-            {"json", NTypeIds::Json },
-            {"yson", NTypeIds::Yson },
-            {"date", NTypeIds::Date },
-            {"datetime", NTypeIds::Datetime },
-            {"ts", NTypeIds::Timestamp },
-            {"ival", NTypeIds::Interval },
-            {"json_doc", NTypeIds::JsonDocument },
-            //{"dec", NTypeIds::Decimal }
+    static TVector<std::pair<TString, TTypeInfo>> MakeYdbSchema() {
+        TVector<std::pair<TString, TTypeInfo>> columns = {
+            {"bool", TTypeInfo(NTypeIds::Bool) },
+            {"i8", TTypeInfo(NTypeIds::Int8) },
+            {"i16", TTypeInfo(NTypeIds::Int16) },
+            {"i32", TTypeInfo(NTypeIds::Int32) },
+            {"i64", TTypeInfo(NTypeIds::Int64) },
+            {"ui8", TTypeInfo(NTypeIds::Uint8) },
+            {"ui16", TTypeInfo(NTypeIds::Uint16) },
+            {"ui32", TTypeInfo(NTypeIds::Uint32) },
+            {"ui64", TTypeInfo(NTypeIds::Uint64) },
+            {"f32", TTypeInfo(NTypeIds::Float) },
+            {"f64", TTypeInfo(NTypeIds::Double) },
+            {"string", TTypeInfo(NTypeIds::String) },
+            {"utf8", TTypeInfo(NTypeIds::Utf8) },
+            {"json", TTypeInfo(NTypeIds::Json) },
+            {"yson", TTypeInfo(NTypeIds::Yson) },
+            {"date", TTypeInfo(NTypeIds::Date) },
+            {"datetime", TTypeInfo(NTypeIds::Datetime) },
+            {"ts", TTypeInfo(NTypeIds::Timestamp) },
+            {"ival", TTypeInfo(NTypeIds::Interval) },
+            {"json_doc", TTypeInfo(NTypeIds::JsonDocument) },
+            //{"dec", TTypeInfo(NTypeIds::Decimal) }
         };
         return columns;
     }

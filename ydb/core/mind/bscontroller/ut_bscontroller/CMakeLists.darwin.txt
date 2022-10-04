@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-mind-bscontroller-ut_bscontroller PUBLIC
   blobstorage-dsproxy-mock
   core-mind-bscontroller
   ydb-core-protos
-  ydb-core-testlib
+  core-testlib-default
   core-testlib-basics
 )
 target_link_options(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE

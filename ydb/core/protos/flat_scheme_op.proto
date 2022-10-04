@@ -1,4 +1,5 @@
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/type_info.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/replication.proto";
@@ -76,6 +77,7 @@ message TColumnDescription {
     optional string Name = 1;
     optional string Type = 2;
     optional uint32 TypeId = 3;
+    optional NKikimrProto.TTypeInfo TypeInfo = 9;
     optional uint32 Id = 4;
     optional uint32 Family = 5; // On default place column to default(0) family
     optional string FamilyName = 6; // set Family by name (0 - "default")
@@ -372,6 +374,7 @@ message TOlapColumnDescription {
 
     optional string Type = 3;
     optional uint32 TypeId = 4; // TypeId cannot be set explicitly, use Type
+    optional NKikimrProto.TTypeInfo TypeInfo = 6;
 
     // TODO: Intermediate codecs such as Delta, DubleDelta, dictionary encoding, etc.
     //TCompressionOptions Compression = 5;

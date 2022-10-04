@@ -4,6 +4,7 @@
 
 #include <library/cpp/actors/core/actorid.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
+#include <ydb/library/yql/utils/pg_types.h>
 
 #include <util/stream/output.h>
 
@@ -53,11 +54,13 @@ class TStepOrderId : public IIntegerPair<ui64, ui64, NTypeIds::StepOrderId, NNam
 
 ////////////////////////////////////////////////////////
 
-inline ui32 GetFixedSize(NKikimr::NScheme::TTypeId typeId) {
-    switch (typeId) {
+inline ui32 GetFixedSize(TTypeInfo typeInfo) {
+    switch (typeInfo.GetTypeId()) {
 #define KIKIMR_TYPE_MACRO(typeEnum, typeType, ...) case NTypeIds::typeEnum: return typeType::GetFixedSize();
     KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
 #undef KIKIMR_TYPE_MACRO
+    case NTypeIds::Pg:
+        return NPg::TypeDescGetTypeLen(typeInfo.GetTypeDesc());
     default:
         return 0;
     }
@@ -75,7 +78,7 @@ inline ui32 GetFixedSize(NKikimr::NScheme::TTypeId typeId) {
  * 
  * Returns empty string on success or an error description in case of failure
  */
-::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, TTypeId typeId);
+::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, TTypeInfo typeInfo);
 
 } // namespace NScheme
 } // namespace NKikimr

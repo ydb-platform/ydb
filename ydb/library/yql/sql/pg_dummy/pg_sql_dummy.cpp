@@ -258,3 +258,53 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetPgFactory() {
 }
 
 } // NYql
+
+namespace NKikimr::NPg {
+
+ui32 PgTypeIdFromTypeDesc(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    return 0;
+}
+
+void* TypeDescFromPgTypeId(ui32 pgTypeId) {
+    Y_UNUSED(pgTypeId);
+    return {};
+}
+
+const char* PgTypeNameFromTypeDesc(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    return "";
+}
+
+void* TypeDescFromPgTypeName(const TStringBuf name) {
+    Y_UNUSED(name);
+    return {};
+}
+
+bool TypeDescIsComparable(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+ui32 TypeDescGetTypeLen(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, void* typeDesc) {
+    Y_UNUSED(dataL);
+    Y_UNUSED(sizeL);
+    Y_UNUSED(dataR);
+    Y_UNUSED(sizeR);
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc) {
+    Y_UNUSED(data);
+    Y_UNUSED(size);
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+} // namespace NKikimr::NPg

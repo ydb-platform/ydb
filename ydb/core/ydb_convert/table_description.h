@@ -4,6 +4,7 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 namespace NKikimr {
@@ -16,7 +17,7 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
 // in
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
-bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error);
+bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
 void FillTableBoundary(Ydb::Table::DescribeTableResult& out,

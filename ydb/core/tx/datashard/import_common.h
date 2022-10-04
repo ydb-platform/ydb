@@ -81,7 +81,7 @@ public:
         return ColumnNameIndex.contains(name);
     }
 
-    NScheme::TTypeId GetColumnType(const TString& name) const {
+    NScheme::TTypeInfo GetColumnType(const TString& name) const {
         auto it = ColumnNameIndex.find(name);
         Y_VERIFY(it != ColumnNameIndex.end());
         return it->second->second.Type;

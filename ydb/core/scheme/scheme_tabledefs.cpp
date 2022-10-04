@@ -2,11 +2,11 @@
 
 namespace NKikimr {
 
-bool TTableRange::IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const {
+bool TTableRange::IsEmptyRange(TConstArrayRef<const NScheme::TTypeInfo> types) const {
     if (Point)
         return false;
 
-    const int compares = CompareBorders<true, false>(To, From, InclusiveTo, InclusiveFrom, cellTypeIds);
+    const int compares = CompareBorders<true, false>(To, From, InclusiveTo, InclusiveFrom, types);
     return (compares < 0);
 }
 
@@ -74,9 +74,9 @@ const char* TTableRange::IsAmbiguousReason(size_t keyColumnsCount) const noexcep
     return nullptr;
 }
 
-bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const
+bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeInfo> types) const
 {
-    auto cmp = CompareBorders<true, false>(To.GetCells(), From.GetCells(), ToInclusive, FromInclusive, type);
+    auto cmp = CompareBorders<true, false>(To.GetCells(), From.GetCells(), ToInclusive, FromInclusive, types);
     return (cmp < 0);
 }
 

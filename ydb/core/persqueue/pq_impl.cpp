@@ -8,6 +8,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <library/cpp/json/json_writer.h>
@@ -633,7 +634,9 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         KeySchema.clear();
         KeySchema.reserve(Config.PartitionKeySchemaSize());
         for (const auto& component : Config.GetPartitionKeySchema()) {
-            KeySchema.push_back(component.GetTypeId());
+            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(component.GetTypeId(),
+                component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
+            KeySchema.push_back(typeInfo);
         }
 
         Y_VERIFY(TopicName.size(), "Need topic name here");
@@ -749,7 +752,9 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         KeySchema.clear();
         KeySchema.reserve(Config.PartitionKeySchemaSize());
         for (const auto& component : Config.GetPartitionKeySchema()) {
-            KeySchema.push_back(component.GetTypeId());
+            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(component.GetTypeId(),
+                component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
+            KeySchema.push_back(typeInfo);
         }
 
         ui32 cacheSize = CACHE_SIZE;

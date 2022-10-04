@@ -474,7 +474,7 @@ public:
 
     struct TSchema {
         THashMap<NTable::TTag, TSysTables::TTableColumnInfo> Columns;
-        TVector<NScheme::TTypeId> KeyColumnTypes;
+        TVector<NScheme::TTypeInfo> KeyColumnTypes;
     };
 
     virtual bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const = 0;

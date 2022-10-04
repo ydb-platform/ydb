@@ -12,8 +12,8 @@ namespace NTable {
 
     class TCellDefaults: public TAtomicRefCount<TCellDefaults, NUtil::TDtorDel<TCellDefaults>> {
     protected:
-        using TType = NScheme::TTypeId;
-        using TOrder = NScheme::TTypeIdOrder;
+        using TType = NScheme::TTypeInfo;
+        using TOrder = NScheme::TTypeInfoOrder;
 
         TCellDefaults(TArrayRef<const TType> types, TArrayRef<const TCell> defs)
             : Types(types)
@@ -154,7 +154,7 @@ namespace NTable {
             TStackVec<TType> types;
             types.reserve(order.size());
             for (TOrder typeOrder : order) {
-                types.push_back(typeOrder.GetTypeId());
+                types.push_back(NScheme::TTypeInfo(typeOrder.GetTypeId(), typeOrder.GetTypeDesc()));
             }
             return TCellDefaults::Make<TKeyCellDefaults>(types, order, defs);
         }

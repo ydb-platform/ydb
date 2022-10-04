@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-tx-tx_allocator-ut PUBLIC
   core-tx-tx_allocator
   cpp-testing-unittest
   ydb-core-mind
-  ydb-core-testlib
+  core-testlib-default
   ydb-core-tx
 )
 target_link_options(ydb-core-tx-tx_allocator-ut PRIVATE

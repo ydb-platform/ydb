@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-tx-time_cast-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-time_cast
-  ydb-core-testlib
+  core-testlib-default
   ydb-core-tx
 )
 target_link_options(ydb-core-tx-time_cast-ut PRIVATE

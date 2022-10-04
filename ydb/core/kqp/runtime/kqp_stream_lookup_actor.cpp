@@ -116,7 +116,7 @@ private:
 
     struct TTableScheme {
         TTableScheme(const THashMap<ui32, TSysTables::TTableColumnInfo>& columns) {
-            std::map<ui32, NKikimr::NScheme::TTypeId> keyColumnTypesByKeyOrder;
+            std::map<ui32, NScheme::TTypeInfo> keyColumnTypesByKeyOrder;
             for (const auto& [_, column] : columns) {
                 if (column.KeyOrder >= 0) {
                     keyColumnTypesByKeyOrder[column.KeyOrder] = column.PType;
@@ -132,7 +132,7 @@ private:
         }
 
         std::unordered_map<TString, TSysTables::TTableColumnInfo> ColumnsByName;
-        std::vector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+        std::vector<NScheme::TTypeInfo> KeyColumnTypes;
     };
 
 private:
@@ -337,7 +337,7 @@ private:
         batch.clear();
         batch.reserve(Results.size());
 
-        std::vector<NKikimr::NScheme::TTypeId> columnTypes;
+        std::vector<NKikimr::NScheme::TTypeInfo> columnTypes;
         columnTypes.reserve(Columns.size());
         for (const auto& column : Columns) {
             auto colIt = TableScheme->ColumnsByName.find(column);

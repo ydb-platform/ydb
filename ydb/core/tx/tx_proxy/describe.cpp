@@ -3,6 +3,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -102,8 +103,13 @@ class TDescribeReq : public TActor<TDescribeReq> {
         for (const auto& [id, column] : entry.Columns) {
             auto* col = table->AddColumns();
             col->SetName(column.Name);
-            col->SetType(AppData(ctx)->TypeRegistry->GetTypeName(column.PType));
-            col->SetTypeId(column.PType);
+            // TODO: support pg types (name)
+            col->SetType(AppData(ctx)->TypeRegistry->GetTypeName(column.PType.GetTypeId()));
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.PType);
+            col->SetTypeId(columnType.TypeId);
+            if (columnType.TypeInfo) {
+                *col->MutableTypeInfo() = *columnType.TypeInfo;
+            }
             col->SetId(id);
             if (column.KeyOrder >= 0) {
                 Y_VERIFY((size_t)column.KeyOrder < keyColumnIds.size());

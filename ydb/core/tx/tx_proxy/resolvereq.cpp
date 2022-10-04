@@ -19,7 +19,7 @@ namespace {
 
     bool ParseRangeKey(
             const NKikimrMiniKQL::TParams& proto,
-            TConstArrayRef<NScheme::TTypeId> keyTypes,
+            TConstArrayRef<NScheme::TTypeInfo> keyTypes,
             TSerializedCellVec& buf,
             EParseRangeKeyExp exp,
             TVector<TString>& unresolvedKeys)
@@ -182,7 +182,7 @@ namespace {
                 table.TableId = entry.TableId;
                 table.IsColumnTable = (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
-                TVector<NScheme::TTypeId> keyColumnTypes(entry.Columns.size());
+                TVector<NScheme::TTypeInfo> keyColumnTypes(entry.Columns.size());
                 TVector<TKeyDesc::TColumnOp> columns(entry.Columns.size());
                 size_t keySize = 0;
                 size_t no = 0;
@@ -202,7 +202,7 @@ namespace {
                 }
 
                 // Parse range.
-                TConstArrayRef<NScheme::TTypeId> keyTypes(keyColumnTypes.data(), keySize);
+                TConstArrayRef<NScheme::TTypeInfo> keyTypes(keyColumnTypes.data(), keySize);
 
                 const bool fromInclusive = table.KeyRange.GetFromInclusive();
                 const bool toInclusive = table.KeyRange.GetToInclusive();

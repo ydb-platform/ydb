@@ -126,7 +126,7 @@ TAsyncScanResult TScanClient::Scan(const TString& path, const TVector<TString>& 
     return Impl_->Scan(path, columns, maxRows, maxBytes, fromKey, fromKeyInclusive, settings);
 }
 
-bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes) {
+bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes) {
     if (lastReadKey.empty()) // +inf
         return true;
 
@@ -149,7 +149,7 @@ bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVec
 
 TScanIterator::TScanIterator(const TDriver& driver, const TString &database, const TString &endpoint, const TString &token, bool ssl, const TString& path,
                                            const TVector<TString>& columns,
-                                           const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+                                           const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes,
                                            ui64 maxRowsInRequest, ui64 maxBytesInRequest,
                                            const TString& keyFrom, const TString& keyTo,
                                            const TScanSettings& settings)
@@ -172,7 +172,7 @@ TScanIterator::TScanIterator(const TDriver& driver, const TString &database, con
 
 TScanIterator::TScanIterator(const TDriver& driver, const TString &database, const TString &token, const TString& path,
                                            const TVector<TString>& columns,
-                                           const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+                                           const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes,
                                            ui64 maxRowsInRequest, ui64 maxBytesInRequest,
                                            const TString& keyFrom, const TString& keyTo,
                                            const TScanSettings& settings)

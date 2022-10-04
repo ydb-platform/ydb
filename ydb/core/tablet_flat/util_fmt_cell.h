@@ -9,7 +9,7 @@ namespace NFmt {
 
 class TPrintableTypedCells {
 public:
-    TPrintableTypedCells(TArrayRef<const TCell> cells, TArrayRef<const NScheme::TTypeId> types)
+    TPrintableTypedCells(TArrayRef<const TCell> cells, TArrayRef<const NScheme::TTypeInfo> types)
         : Cells(cells)
         , Types(types)
     {
@@ -33,7 +33,7 @@ public:
 
 private:
     const TArrayRef<const TCell> Cells;
-    const TArrayRef<const NScheme::TTypeId> Types;
+    const TArrayRef<const NScheme::TTypeInfo> Types;
 };
 
 }

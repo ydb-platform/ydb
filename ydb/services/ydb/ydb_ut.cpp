@@ -3568,7 +3568,7 @@ void CheckTablePartitions(const TKikimrWithGrpcAndRootSchema &server,
             ui32 typeId = type.optional_type().item().type_id();
 
             TString cellStr;
-            DbgPrintValue(cellStr, cell, typeId);
+            DbgPrintValue(cellStr, cell, NScheme::TTypeInfo(typeId));
 
             TString valStr;
             switch (typeId) {

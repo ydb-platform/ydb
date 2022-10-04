@@ -3977,7 +3977,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                             TABLER() {
                                 TABLED() {str << col.Name;}
                                 TABLED() {str << col.Id;}
-                                TABLED() {str << tr.GetTypeName(col.PType);}
+                                TABLED() {str << tr.GetTypeName(col.PType.GetTypeId());}
                                 TABLED() {str << (isKey ? ToString(col.KeyOrder) : "");}
                             }
                         }

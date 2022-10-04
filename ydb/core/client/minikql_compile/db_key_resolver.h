@@ -42,7 +42,7 @@ public:
         struct TColumn {
             ui32 Column;
             i32 KeyPosition;
-            ui32 Type;
+            NKikimr::NScheme::TTypeInfo Type;
             ui32 AllowInplaceMode;
             NKikimr::EColumnTypeConstraint TypeConstraint;
         };

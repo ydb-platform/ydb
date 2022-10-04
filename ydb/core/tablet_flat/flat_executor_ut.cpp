@@ -2781,7 +2781,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
                 }
 
                 TString value;
-                DbgPrintValue(value, row.Get(0), NScheme::TString::TypeId);
+                DbgPrintValue(value, row.Get(0), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                 builder << "Key " << keyId << " = " << row.GetRowState()
                     << " value = " << NTable::ECellOp(row.GetCellOp(0)) << " " << value << Endl;
@@ -3039,10 +3039,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
                 const auto& row = it->Row();
 
                 TString key;
-                DbgPrintValue(key, row.Get(0), NScheme::TUint64::TypeId);
+                DbgPrintValue(key, row.Get(0), NScheme::TTypeInfo(NScheme::TUint64::TypeId));
 
                 TString value;
-                DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
+                DbgPrintValue(value, row.Get(1), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                 builder << "Key " << key << " = " << row.GetRowState()
                     << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value << Endl;
@@ -3352,10 +3352,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
                 const auto& row = it->Row();
 
                 TString key;
-                DbgPrintValue(key, row.Get(0), NScheme::TUint64::TypeId);
+                DbgPrintValue(key, row.Get(0), NScheme::TTypeInfo(NScheme::TUint64::TypeId));
 
                 TString value;
-                DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
+                DbgPrintValue(value, row.Get(1), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                 builder << "Key " << key << " = " << row.GetRowState()
                     << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value << Endl;
@@ -4129,13 +4129,13 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
                 const auto& row = it->Row();
 
                 TString key;
-                DbgPrintValue(key, row.Get(0), NScheme::TUint64::TypeId);
+                DbgPrintValue(key, row.Get(0), NScheme::TTypeInfo(NScheme::TUint64::TypeId));
 
                 TString value;
-                DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
+                DbgPrintValue(value, row.Get(1), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                 TString value2;
-                DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
+                DbgPrintValue(value2, row.Get(2), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                 builder << "Key " << key << " = " << row.GetRowState()
                     << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value
@@ -4181,13 +4181,13 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
                 const auto& row = it->Row();
 
                 TString key;
-                DbgPrintValue(key, row.Get(0), NScheme::TUint64::TypeId);
+                DbgPrintValue(key, row.Get(0), NScheme::TTypeInfo(NScheme::TUint64::TypeId));
 
                 TString value;
-                DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
+                DbgPrintValue(value, row.Get(1), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                 TString value2;
-                DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
+                DbgPrintValue(value2, row.Get(2), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                 builder << "Key " << key << " = " << row.GetRowState()
                     << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value
@@ -4230,13 +4230,13 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
                     const auto& row = it->Row();
 
                     TString key;
-                    DbgPrintValue(key, row.Get(0), NScheme::TUint64::TypeId);
+                    DbgPrintValue(key, row.Get(0), NScheme::TTypeInfo(NScheme::TUint64::TypeId));
 
                     TString value;
-                    DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
+                    DbgPrintValue(value, row.Get(1), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                     TString value2;
-                    DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
+                    DbgPrintValue(value2, row.Get(2), NScheme::TTypeInfo(NScheme::TString::TypeId));
 
                     builder << "Key " << key << " = " << row.GetRowState()
                         << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value

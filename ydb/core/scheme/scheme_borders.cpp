@@ -17,7 +17,7 @@ namespace NKikimr {
     }
 
     int ComparePrefixBorders(
-        TConstArrayRef<NScheme::TTypeId> keyTypes,
+        TConstArrayRef<NScheme::TTypeInfo> keyTypes,
         TConstArrayRef<TCell> left, EPrefixMode leftMode,
         TConstArrayRef<TCell> right, EPrefixMode rightMode)
     {

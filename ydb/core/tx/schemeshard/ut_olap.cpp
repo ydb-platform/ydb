@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace {
 
 namespace NTypeIds = NScheme::NTypeIds;
-using TTypeId = NScheme::TTypeId;
+using TTypeInfo = NScheme::TTypeInfo;
 
 static const TString defaultStoreSchema = R"(
     Name: "OlapStore"
@@ -28,9 +28,9 @@ static const TString defaultStoreSchema = R"(
     }
 )";
 
-static const TVector<std::pair<TString, TTypeId>> defaultYdbSchema = {
-    {"timestamp", NTypeIds::Timestamp },
-    {"data", NTypeIds::Utf8 }
+static const TVector<std::pair<TString, TTypeInfo>> defaultYdbSchema = {
+    {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
+    {"data", TTypeInfo(NTypeIds::Utf8) }
 };
 
 TString MakeTestBlob(std::pair<ui64, ui64> range) {
@@ -39,7 +39,10 @@ TString MakeTestBlob(std::pair<ui64, ui64> range) {
     batchBuilder.Start(defaultYdbSchema, 0, 0, err);
 
     TString str;
-    TVector<TTypeId> types = {NTypeIds::Timestamp, NTypeIds::Utf8};
+    TVector<TTypeInfo> types = {
+        TTypeInfo(NTypeIds::Timestamp),
+        TTypeInfo(NTypeIds::Utf8)
+    };
 
     for (size_t i = range.first; i < range.second; ++i) {
         str = ToString(i);

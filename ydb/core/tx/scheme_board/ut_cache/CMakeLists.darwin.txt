@@ -21,7 +21,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_cache PUBLIC
   cpp-testing-unittest_main
   core-tx-scheme_board
   cpp-testing-unittest
-  ydb-core-testlib
+  core-testlib-default
   core-tx-schemeshard
   tx-schemeshard-ut_helpers
 )

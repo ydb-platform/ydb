@@ -54,7 +54,7 @@ bool IsRetriable(::NYdb::EStatus status) {
     }
 }
 
-bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes) {
+bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes) {
     if (lastReadKey.empty())
         return true;
 
@@ -78,7 +78,7 @@ public:
         const TString& path,
         ::NYdb::TDriver driver,
         const NActors::TActorId& computeActorId,
-        const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+        const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes,
         ui64 maxRowsInRequest, ui64 maxBytesInRequest, const TString& keyFrom, const TString& keyTo
     )
         : InputIndex(inputIndex)
@@ -208,7 +208,7 @@ private:
 
     const TString Path;
     const TVector<TString> Columns;
-    const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+    const TVector<NKikimr::NScheme::TTypeInfo> KeyColumnTypes;
     const ui64 MaxRows;
     const ui64 MaxBytes;
     const TString EndKey;
@@ -253,10 +253,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateYdbReadActor(
     for (auto i = 0; i < params.GetColumns().size(); ++i)
         columns.emplace_back(params.GetColumns().Get(i));
 
-    TVector<NKikimr::NScheme::TTypeId> keyColumnTypes;
+    TVector<NKikimr::NScheme::TTypeInfo> keyColumnTypes;
     keyColumnTypes.reserve(params.GetKeyColumnTypes().size());
     for (auto i = 0; i < params.GetKeyColumnTypes().size(); ++i)
-        keyColumnTypes.emplace_back(params.GetKeyColumnTypes().Get(i));
+        // TODO support pg types
+        keyColumnTypes.emplace_back(NKikimr::NScheme::TTypeInfo(params.GetKeyColumnTypes().Get(i), nullptr));
 
     ui64 maxRowsInRequest = 0ULL;
     ui64 maxBytesInRequest = 0ULL;

@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/mind/hive/hive.h>
 
@@ -56,12 +57,24 @@ bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& sche
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
         const NScheme::IType* type = typeRegistry->GetType(typeName);
-        if (!type || !NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-            errStr = Sprintf("Type '%s' specified for column '%s' is not supported", colProto.GetType().c_str(), col.Name.c_str());
-            return false;
+        if (type) {
+            if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+                errStr = Sprintf("Type '%s' specified for column '%s' is not supported", colProto.GetType().c_str(), col.Name.c_str());
+                return false;
+            }
+            col.Type = NScheme::TTypeInfo(type->GetTypeId());
+        } else {
+            auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            if (!typeDesc) {
+                errStr = Sprintf("Type '%s' specified for column '%s' is not supported", colProto.GetType().c_str(), col.Name.c_str());
+            }
+            col.Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
         }
-        colProto.SetTypeId(type->GetTypeId());
-        col.TypeId = type->GetTypeId();
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(col.Type);
+        colProto.SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *colProto.MutableTypeInfo() = *columnType.TypeInfo;
+        }
 
         if (schema.ColumnsByName.contains(col.Name)) {
             errStr = Sprintf("Duplicate column '%s'", col.Name.c_str());

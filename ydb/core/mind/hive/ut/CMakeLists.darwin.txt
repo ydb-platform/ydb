@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-mind-hive-ut PUBLIC
   library-cpp-svnversion
   ydb-core-base
   ydb-core-mind
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-mind-hive-ut PRIVATE
   -Wl,-no_deduplicate

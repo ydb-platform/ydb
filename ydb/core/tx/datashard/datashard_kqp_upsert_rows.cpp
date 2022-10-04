@@ -63,11 +63,13 @@ public:
                 command.Operation = TKeyDesc::EColumnOperation::Set;
                 auto rowIndex = upsertColumn.RowIndex;
 
-                NUdf::TDataTypeId type = Owner.RowTypes[rowIndex];
+                NScheme::TTypeInfo type = Owner.RowTypes[rowIndex];
                 NUdf::TUnboxedValue value = Row.GetElement(rowIndex);
 
                 if (value) {
-                    auto slot = NUdf::GetDataSlot(type);
+                    // TODO: support pg types
+                    Y_VERIFY(type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+                    auto slot = NUdf::GetDataSlot(type.GetTypeId());
                     MKQL_ENSURE(IsValidValue(slot, value),
                         "Malformed value for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value);
                 }
@@ -127,7 +129,7 @@ public:
 
 public:
     TKqpUpsertRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TTableId& tableId, IComputationNode* rowsNode, TVector<NUdf::TDataTypeId>&& rowTypes,
+        const TTableId& tableId, IComputationNode* rowsNode, TVector<NScheme::TTypeInfo>&& rowTypes,
         TVector<ui32>&& keyIndices, TVector<TUpsertColumn>&& upsertColumns, const TTypeEnvironment& env)
         : TBase(mutables)
         , TableId(tableId)
@@ -147,7 +149,7 @@ private:
 private:
     TTableId TableId;
     IComputationNode* RowsNode;
-    TVector<NUdf::TDataTypeId> RowTypes;
+    TVector<NScheme::TTypeInfo> RowTypes;
     TVector<ui32> KeyIndices;
     TVector<TUpsertColumn> UpsertColumns;
     const TTypeEnvironment& Env;
@@ -176,11 +178,12 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
         "not enough columns in the runtime node");
 
     THashMap<TStringBuf, ui32> inputIndex;
-    TVector<NUdf::TDataTypeId> rowTypes(rowType->GetMembersCount());
+    TVector<NScheme::TTypeInfo> rowTypes(rowType->GetMembersCount());
     for (ui32 i = 0; i < rowTypes.size(); ++i) {
         const auto& name = rowType->GetMemberName(i);
         MKQL_ENSURE_S(inputIndex.emplace(name, i).second);
-        rowTypes[i] = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
+        // TODO: support pg types
+        rowTypes[i] = NScheme::TTypeInfo(NKqp::UnwrapDataTypeFromStruct(*rowType, i));
     }
 
     TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());
@@ -190,7 +193,8 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
         auto it = inputIndex.find(columnInfo.Name);
         MKQL_ENSURE_S(it != inputIndex.end());
         auto typeId = NKqp::UnwrapDataTypeFromStruct(*rowType, it->second);
-        MKQL_ENSURE_S(typeId == columnInfo.Type, "row key type missmatch with table key type");
+        // TODO: support pg types
+        MKQL_ENSURE_S(typeId == columnInfo.Type.GetTypeId(), "row key type missmatch with table key type");
         keyIndices[i] = it->second;
     }
 

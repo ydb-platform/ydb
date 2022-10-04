@@ -8,6 +8,8 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
@@ -34,7 +36,7 @@ private:
     bool WaitingResolveReply;
     bool Finished;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
-    TVector<NScheme::TTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TSysTables::TTableColumnInfo PathColumnInfo;
     TVector<TSysTables::TTableColumnInfo> CommonPrefixesColumns;
     TVector<TSysTables::TTableColumnInfo> ContentsColumns;
@@ -194,7 +196,7 @@ private:
 
         TString errStr;
         TVector<TCell> prefixCells;
-        TConstArrayRef<NScheme::TTypeId> prefixTypes(KeyColumnTypes.data(), KeyColumnTypes.size() - 1); // -1 for path column
+        TConstArrayRef<NScheme::TTypeInfo> prefixTypes(KeyColumnTypes.data(), KeyColumnTypes.size() - 1); // -1 for path column
         NMiniKQL::CellsFromTuple(&Request->GetKeyPrefix().GetType(), Request->GetKeyPrefix().GetValue(),
                                  prefixTypes, true, prefixCells, errStr);
         if (!errStr.empty()) {
@@ -208,7 +210,7 @@ private:
         ui32 pathColPos = prefixCells.size();
         Y_VERIFY(pathColPos < KeyColumnTypes.size());
         PathColumnInfo = entry.Columns[keyColumnIds[pathColPos]];
-        if (PathColumnInfo.PType != NScheme::NTypeIds::Utf8) {
+        if (PathColumnInfo.PType.GetTypeId() != NScheme::NTypeIds::Utf8) {
             ReplyWithError(MSTATUS_ERROR, NTxProxy::TResultStatus::EStatus::WrongRequest,
                            Sprintf("Value for path column '%s' has type %s, expected Utf8",
                                    PathColumnInfo.Name.data(), NScheme::TypeName(PathColumnInfo.PType)), ctx);
@@ -218,7 +220,7 @@ private:
         CommonPrefixesColumns.push_back(PathColumnInfo);
 
         TVector<TCell> suffixCells;
-        TConstArrayRef<NScheme::TTypeId> suffixTypes(KeyColumnTypes.data() + pathColPos, KeyColumnTypes.size() - pathColPos); // starts at path column
+        TConstArrayRef<NScheme::TTypeInfo> suffixTypes(KeyColumnTypes.data() + pathColPos, KeyColumnTypes.size() - pathColPos); // starts at path column
         NMiniKQL::CellsFromTuple(&Request->GetStartAfterKeySuffix().GetType(), Request->GetStartAfterKeySuffix().GetValue(),
                                  suffixTypes, true, suffixCells, errStr);
         if (!errStr.empty()) {
@@ -489,8 +491,7 @@ private:
         col->SetName(colInfo.Name);
         col->MutableType()->SetKind(NKikimrMiniKQL::Optional);
         auto* item = col->MutableType()->MutableOptional()->MutableItem();
-        item->SetKind(NKikimrMiniKQL::Data);
-        item->MutableData()->SetScheme(colInfo.PType);
+        NScheme::ProtoMiniKQLTypeFromTypeInfo(item, colInfo.PType);
     }
 
     void BuildResultType(NKikimrMiniKQL::TType& type) const {

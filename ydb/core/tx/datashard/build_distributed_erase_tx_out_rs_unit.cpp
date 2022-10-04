@@ -61,8 +61,7 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
         for (ui32 pos = 0; pos < expectedValue.size(); ++pos) {
             const auto& expected = expectedValue.at(pos);
             const auto& actual = actualValue.at(pos);
-
-            if (0 != CompareTypedCells(actual, expected.AsRef(), expected.Type())) {
+            if (0 != CompareTypedCells(actual, expected.AsRef(), expected.TypeInfo())) {
                 return false;
             }
         }
@@ -113,9 +112,8 @@ public:
 
             TVector<TRawTypeValue> key;
             for (ui32 pos = 0; pos < tableInfo.KeyColumnTypes.size(); ++pos) {
-                const NScheme::TTypeId type = tableInfo.KeyColumnTypes[pos];
+                const NScheme::TTypeInfo type = tableInfo.KeyColumnTypes[pos];
                 const TCell& cell = keyCells.GetCells()[pos];
-
                 key.emplace_back(TRawTypeValue(cell.AsRef(), type));
             }
 
@@ -130,7 +128,7 @@ public:
                     auto it = tableInfo.Columns.find(eraseTx->GetIndexColumnIds().Get(pos));
                     Y_VERIFY(it != tableInfo.Columns.end());
 
-                    const NScheme::TTypeId type = it->second.Type;
+                    const NScheme::TTypeInfo type = it->second.Type;
                     const TCell& cell = indexCells.GetCells()[pos];
 
                     indexTypedVals.emplace_back(TRawTypeValue(cell.AsRef(), type));

@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(RangeOps) {
         return TSerializedTableRange(from, to, fromInclusive, toInclusive);
     }
 
-    void CheckRange(TConstArrayRef<NScheme::TTypeId> types,
+    void CheckRange(TConstArrayRef<NScheme::TTypeInfo> types,
                     const TTableRange& first, const TTableRange& second) {
         if (first.IsEmptyRange(types)) {
             Y_ASSERT(second.IsEmptyRange(types));
@@ -56,8 +56,9 @@ Y_UNIT_TEST_SUITE(RangeOps) {
         auto typeRegistry = MakeHolder<NScheme::TKikimrTypeRegistry>();
         typeRegistry->CalculateMetadataEtag();
 
-        const TVector<NKikimr::NScheme::TTypeId> valueType = {NScheme::NTypeIds::Uint64};
-        const TVector<NKikimr::NScheme::TTypeId> pairType = {NScheme::NTypeIds::Uint64, NScheme::NTypeIds::Uint64};
+        auto typeInfoUi64 = NScheme::TTypeInfo(NScheme::NTypeIds::Uint64);
+        const TVector<NScheme::TTypeInfo> valueType = {typeInfoUi64};
+        const TVector<NScheme::TTypeInfo> pairType = {typeInfoUi64, typeInfoUi64};
 
         const auto emptyRange = MakeRange(
             MakePoint({20}), true,

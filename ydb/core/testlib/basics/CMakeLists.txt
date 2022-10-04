@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(default)
 
 add_library(core-testlib-basics)
 target_compile_options(core-testlib-basics PRIVATE
@@ -34,7 +35,6 @@ target_link_libraries(core-testlib-basics PUBLIC
   ydb-core-util
   yql-minikql-invoke_builtins
   udf-service-exception_policy
-  yql-sql-pg_dummy
 )
 target_sources(core-testlib-basics PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/appdata.cpp

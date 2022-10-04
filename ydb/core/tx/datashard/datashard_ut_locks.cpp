@@ -55,7 +55,7 @@ namespace NTest {
         void InitSchema() {
             TableInfos[EUserTableId].LocalTid = EUserTableId;
             TableInfos[EUserTableId].Name = "user____Table";
-            TableInfos[EUserTableId].KeyColumnTypes.push_back(NScheme::NTypeIds::Uint32);
+            TableInfos[EUserTableId].KeyColumnTypes.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32));
 
             NTable::TAlter delta;
 

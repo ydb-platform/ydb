@@ -408,12 +408,12 @@ public:
         return KeyColumnTypes.size();
     }
 
-    NScheme::TTypeId GetKeyColumnType(ui32 pos) const {
+    NScheme::TTypeInfo GetKeyColumnType(ui32 pos) const {
         Y_VERIFY(pos < KeyColumnTypes.size());
         return KeyColumnTypes[pos];
     }
 
-    void UpdateKeyColumnsTypes(const TVector<NScheme::TTypeId>& keyTypes) {
+    void UpdateKeyColumnsTypes(const TVector<NScheme::TTypeInfo>& keyTypes) {
         Y_VERIFY(KeyColumnTypes.size() <= keyTypes.size());
         if (KeyColumnTypes.size() < keyTypes.size()) {
             KeyColumnTypes = keyTypes;
@@ -433,7 +433,7 @@ public:
 
 private:
     const TPathId TableId;
-    TVector<NScheme::TTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TRangeTreap<TLockInfo*> Ranges;
     THashSet<TLockInfo*> ShardLocks;
     THashSet<TLockInfo*> WriteLocks;

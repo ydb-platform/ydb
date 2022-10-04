@@ -20,7 +20,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_async_index PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-schemeshard
-  ydb-core-testlib
+  core-testlib-default
   tx-schemeshard-ut_helpers
 )
 target_link_options(ydb-core-tx-schemeshard-ut_async_index PRIVATE

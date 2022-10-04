@@ -26,7 +26,7 @@ target_link_libraries(ydb-core-client-minikql_compile-ut PUBLIC
   core-client-scheme_cache_lib
   core-client-server
   ydb-core-tablet
-  ydb-core-testlib
+  core-testlib-default
   library-yql-minikql
   udf-service-exception_policy
 )

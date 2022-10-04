@@ -1456,7 +1456,11 @@ private:
                         for (auto& column : read.Columns) {
                             auto* protoColumn = protoReadMeta->AddColumns();
                             protoColumn->SetId(column.Id);
-                            protoColumn->SetType(column.Type);
+                            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+                            protoColumn->SetType(columnType.TypeId);
+                            if (columnType.TypeInfo) {
+                                *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                            }
                             protoColumn->SetName(column.Name);
                         }
                         protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
@@ -1475,7 +1479,11 @@ private:
 
                         auto& protoColumn = *protoColumnWrite.MutableColumn();
                         protoColumn.SetId(columnWrite.Column.Id);
-                        protoColumn.SetType(columnWrite.Column.Type);
+                        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(columnWrite.Column.Type);
+                        protoColumn.SetType(columnType.TypeId);
+                        if (columnType.TypeInfo) {
+                            *protoColumn.MutableTypeInfo() = *columnType.TypeInfo;
+                        }
                         protoColumn.SetName(columnWrite.Column.Name);
 
                         protoColumnWrite.SetMaxValueSizeBytes(columnWrite.MaxValueSizeBytes);
@@ -1494,7 +1502,11 @@ private:
                 const auto& tableInfo = TableKeys.GetTable(stageInfo.Meta.TableId);
                 for (const auto& keyColumnName : tableInfo.KeyColumns) {
                     const auto& keyColumn = tableInfo.Columns.at(keyColumnName);
-                    protoTaskMeta.AddKeyColumnTypes(keyColumn.Type);
+                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(keyColumn.Type);
+                    protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
+                    if (columnType.TypeInfo) {
+                        *protoTaskMeta.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
+                    }
                 }
 
                 for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
@@ -1507,7 +1519,11 @@ private:
                 for (auto& column : task.Meta.Reads->front().Columns) {
                     auto* protoColumn = protoTaskMeta.AddColumns();
                     protoColumn->SetId(column.Id);
-                    protoColumn->SetType(column.Type);
+                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+                    protoColumn->SetType(columnType.TypeId);
+                    if (columnType.TypeInfo) {
+                        *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                    }
                     protoColumn->SetName(column.Name);
                 }
 
@@ -1519,7 +1535,7 @@ private:
                     YQL_ENSURE((int) read.Columns.size() == protoTaskMeta.GetColumns().size());
                     for (ui64 i = 0; i < read.Columns.size(); ++i) {
                         YQL_ENSURE(read.Columns[i].Id == protoTaskMeta.GetColumns()[i].GetId());
-                        YQL_ENSURE(read.Columns[i].Type == protoTaskMeta.GetColumns()[i].GetType());
+                        YQL_ENSURE(read.Columns[i].Type.GetTypeId() == protoTaskMeta.GetColumns()[i].GetType());
                     }
                 }
 

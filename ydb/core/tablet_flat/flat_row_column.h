@@ -1,7 +1,7 @@
 #pragma once
 
 #include "flat_row_eggs.h"
-#include <ydb/core/scheme/scheme_type_id.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -42,7 +42,7 @@ namespace NTable {
             return Key != Max<TPos>();
         }
 
-        NScheme::TTypeId TypeId = 0;
+        NScheme::TTypeInfo TypeInfo;
         TTag Tag = Max<TTag>();
         TPos Pos = Max<TPos>(); /* Position in physical layout */
         TPos Key = Max<TPos>(); /* key column sequence number */

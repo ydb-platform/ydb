@@ -18,7 +18,7 @@ target_link_libraries(ydb-core-blobstorage-storagepoolmon-ut PUBLIC
   library-cpp-getopt
   library-cpp-svnversion
   core-blobstorage-storagepoolmon
-  ydb-core-testlib
+  core-testlib-default
   core-testlib-actors
   core-testlib-basics
 )

@@ -9,6 +9,7 @@
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 // TODO: Switch to public protobufs
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -182,17 +183,17 @@ struct TKikimrColumnMetadata {
     ui32 Id = 0;
     TString Type;
     bool NotNull = false;
-    ui32 TypeId = 0;
+    NKikimr::NScheme::TTypeInfo TypeInfo;
     TVector<TString> Families;
 
     TKikimrColumnMetadata() = default;
 
-    TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull, ui32 typeId = 0)
+    TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull, NKikimr::NScheme::TTypeInfo typeInfo = {})
         : Name(name)
         , Id(id)
         , Type(type)
         , NotNull(notNull)
-        , TypeId(typeId)
+        , TypeInfo(typeInfo)
     {}
 
     explicit TKikimrColumnMetadata(const NKikimrKqp::TKqpColumnMetadataProto* message)
@@ -200,16 +201,22 @@ struct TKikimrColumnMetadata {
         , Id(message->GetId())
         , Type(message->GetType())
         , NotNull(message->GetNotNull())
-        , TypeId(message->GetTypeId())
         , Families(message->GetFamily().begin(), message->GetFamily().end())
-    {}
+    {
+        TypeInfo = NKikimr::NScheme::TypeInfoFromProtoColumnType(message->GetTypeId(),
+            message->HasTypeInfo() ? &message->GetTypeInfo() : nullptr);
+    }
 
     void ToMessage(NKikimrKqp::TKqpColumnMetadataProto* message) const {
         message->SetName(Name);
         message->SetId(Id);
         message->SetType(Type);
         message->SetNotNull(NotNull);
-        message->SetTypeId(TypeId);
+        auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfo(TypeInfo);
+        message->SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *message->MutableTypeInfo() = *columnType.TypeInfo;
+        }
         for(auto& family: Families) {
             message->AddFamily(family);
         }

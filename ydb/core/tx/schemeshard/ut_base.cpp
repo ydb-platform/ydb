@@ -9669,13 +9669,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
 
-    class TSchemaHelpler {
+    class TSchemaHelper {
     private:
         NScheme::TTypeRegistry TypeRegistry;
-        const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+        const TVector<NKikimr::NScheme::TTypeInfo> KeyColumnTypes;
 
     public:
-        explicit TSchemaHelpler(const TArrayRef<NKikimr::NScheme::TTypeId>& keyColumnTypes)
+        explicit TSchemaHelper(const TArrayRef<NKikimr::NScheme::TTypeInfo>& keyColumnTypes)
             : KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
         {}
 
@@ -9694,7 +9694,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 if (tuple[i] == "NULL") {
                     cells.push_back(NKikimr::TCell());
                 } else {
-                    switch (KeyColumnTypes[i]) {
+                    switch (KeyColumnTypes[i].GetTypeId()) {
 #define ADD_CELL_FROM_STRING(ydbType, cppType) \
                     case NKikimr::NScheme::NTypeIds::ydbType: { \
                         cppType val = FromString<cppType>(tuple[i]); \
@@ -9750,13 +9750,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     };
 
     Y_UNIT_TEST(SplitKey) {
-        TSmallVec<NScheme::TTypeId> keyColumnTypes = {
-            NScheme::NTypeIds::Uint64,
-            NScheme::NTypeIds::Utf8,
-            NScheme::NTypeIds::Uint32
+        TSmallVec<NScheme::TTypeInfo> keyColumnTypes = {
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Utf8),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32)
         };
 
-        TSchemaHelpler schemaHelper(keyColumnTypes);
+        TSchemaHelper schemaHelper(keyColumnTypes);
 
         {
             TString splitKey = schemaHelper.FindSplitKey({

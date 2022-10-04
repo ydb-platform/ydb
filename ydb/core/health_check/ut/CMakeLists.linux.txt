@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-health_check-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-health_check
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-health_check-ut PRIVATE
   -ldl

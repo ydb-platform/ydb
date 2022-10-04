@@ -16,6 +16,9 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
+
+    using TTypeInfo = NScheme::TTypeInfo;
+
     TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
         return CreateDeterministicRandomProvider(1);
     }
@@ -91,7 +94,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<ui64>::Id),
+            TTypeInfo(NUdf::TDataType<char*>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2),
             keyTypes,
             keyColumns));
@@ -118,9 +125,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.To[2].Size() == 3);
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 0);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2].GetTypeId() == NUdf::TDataType<char*>::Id);
     }
 
     Y_UNIT_TEST(TestEraseRowPartialDynamicKey) {
@@ -135,7 +142,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34),
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         keyColumns.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe"));
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui64>::Id, NUdf::TDataType<ui32>::Id, NUdf::TDataType<char*>::Id });
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui64>::Id),
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<char*>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2),
             keyTypes,
             keyColumns));
@@ -160,9 +171,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.To[0].IsNull());
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 0);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2].GetTypeId() == NUdf::TDataType<char*>::Id);
     }
 
     Y_UNIT_TEST(TestEraseRowDynamicKey) {
@@ -177,7 +188,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         keyColumns.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe"));
 
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<char*>::Id });
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<char*>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2),
             keyTypes,
             keyColumns));
@@ -200,8 +214,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 0);
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 0);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<char*>::Id);
     }
 
     Y_UNIT_TEST(TestSelectRow) {
@@ -216,9 +230,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
         TVector<TSelectColumn> columnsToRead;
-        columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id, EColumnTypeConstraint::Nullable);
-        columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id, EColumnTypeConstraint::Nullable);
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
+        columnsToRead.emplace_back("column1", 34, TTypeInfo(NUdf::TDataType<ui32>::Id), EColumnTypeConstraint::Nullable);
+        columnsToRead.emplace_back("column2", 56, TTypeInfo(NUdf::TDataType<ui64>::Id), EColumnTypeConstraint::Nullable);
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<ui64>::Id),
+            TTypeInfo(NUdf::TDataType<char*>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
             pgmBuilder.SelectRow(TTableId(1, 2),
             keyTypes,
@@ -247,14 +265,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2].GetTypeId() == NUdf::TDataType<char*>::Id);
     }
 
     Y_UNIT_TEST(TestUpdateRowStaticKey) {
@@ -269,12 +287,16 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
         auto update = pgmBuilder.GetUpdateRowBuilder();
-        update.SetColumn(34, NUdf::TDataType<ui32>::Id,
+        update.SetColumn(34, TTypeInfo(NUdf::TDataType<ui32>::Id),
             pgmBuilder.NewOptional(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         update.EraseColumn(56);
-        update.InplaceUpdateColumn(78, NUdf::TDataType<ui64>::Id,
+        update.InplaceUpdateColumn(78, TTypeInfo(NUdf::TDataType<ui64>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), EInplaceUpdateMode::Sum);
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<ui64>::Id),
+            TTypeInfo(NUdf::TDataType<char*>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(TTableId(1, 2),
             keyTypes,
             keyColumns, update));
@@ -302,17 +324,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 3);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Set);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Set);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == 0);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == 0);
         UNIT_ASSERT(tableKeys[0]->Columns[2].Column == 78);
         UNIT_ASSERT(tableKeys[0]->Columns[2].Operation == TKeyDesc::EColumnOperation::InplaceUpdate);
-        UNIT_ASSERT(tableKeys[0]->Columns[2].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[2].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2].GetTypeId() == NUdf::TDataType<char*>::Id);
     }
 
     Y_UNIT_TEST(TestUpdateRowDynamicKey) {
@@ -329,12 +351,16 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
         auto update = pgmBuilder.GetUpdateRowBuilder();
-        update.SetColumn(34, NUdf::TDataType<ui32>::Id,
+        update.SetColumn(34, TTypeInfo(NUdf::TDataType<ui32>::Id),
             pgmBuilder.NewOptional(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         update.EraseColumn(56);
-        update.InplaceUpdateColumn(78, NUdf::TDataType<ui64>::Id,
+        update.InplaceUpdateColumn(78, TTypeInfo(NUdf::TDataType<ui64>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), EInplaceUpdateMode::Sum);
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<ui64>::Id),
+            TTypeInfo(NUdf::TDataType<char*>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(TTableId(1, 2),
             keyTypes,
             keyColumns, update));
@@ -359,18 +385,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 3);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Set);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Set);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == 0);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == 0);
         UNIT_ASSERT(tableKeys[0]->Columns[2].Column == 78);
         UNIT_ASSERT(tableKeys[0]->Columns[2].Operation == TKeyDesc::EColumnOperation::InplaceUpdate);
-        UNIT_ASSERT(tableKeys[0]->Columns[2].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[2].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[2].InplaceUpdateMode == (ui32)EInplaceUpdateMode::Sum);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 3);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2] == NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[2].GetTypeId() == NUdf::TDataType<char*>::Id);
     }
 
     Y_UNIT_TEST(TestSelectFromInclusiveRange) {
@@ -386,9 +412,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         options.FromColumns = from;
 
         TVector<TSelectColumn> columnsToRead;
-        columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id, EColumnTypeConstraint::Nullable);
-        columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id, EColumnTypeConstraint::Nullable);
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id });
+        columnsToRead.emplace_back("column1", 34, TTypeInfo(NUdf::TDataType<ui32>::Id), EColumnTypeConstraint::Nullable);
+        columnsToRead.emplace_back("column2", 56, TTypeInfo(NUdf::TDataType<ui64>::Id), EColumnTypeConstraint::Nullable);
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<ui64>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
             pgmBuilder.SelectRange(TTableId(1, 2),
             keyTypes,
@@ -411,15 +440,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 0);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
     }
 
     Y_UNIT_TEST(TestSelectFromExclusiveRange) {
@@ -436,9 +465,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeInitValue);
 
         TVector<TSelectColumn> columnsToRead;
-        columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id, EColumnTypeConstraint::Nullable);
-        columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id, EColumnTypeConstraint::Nullable);
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id });
+        columnsToRead.emplace_back("column1", 34, TTypeInfo(NUdf::TDataType<ui32>::Id), EColumnTypeConstraint::Nullable);
+        columnsToRead.emplace_back("column2", 56, TTypeInfo(NUdf::TDataType<ui64>::Id), EColumnTypeConstraint::Nullable);
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<ui64>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
             pgmBuilder.SelectRange(TTableId(1, 2),
             keyTypes,
@@ -461,15 +493,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.From[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 0);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
     }
 
     Y_UNIT_TEST(TestSelectToInclusiveRange) {
@@ -488,9 +520,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         options.ToColumns = to;
 
         TVector<TSelectColumn> columnsToRead;
-        columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id, EColumnTypeConstraint::Nullable);
-        columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id, EColumnTypeConstraint::Nullable);
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id });
+        columnsToRead.emplace_back("column1", 34, TTypeInfo(NUdf::TDataType<ui32>::Id), EColumnTypeConstraint::Nullable);
+        columnsToRead.emplace_back("column2", 56, TTypeInfo(NUdf::TDataType<ui64>::Id), EColumnTypeConstraint::Nullable);
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<ui64>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
             pgmBuilder.SelectRange(TTableId(1, 2),
             keyTypes,
@@ -515,15 +550,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4);
         UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
     }
 
     Y_UNIT_TEST(TestSelectToExclusiveRange) {
@@ -543,9 +578,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
 
         TVector<TSelectColumn> columnsToRead;
-        columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id, EColumnTypeConstraint::Nullable);
-        columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id, EColumnTypeConstraint::Nullable);
-        TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id });
+        columnsToRead.emplace_back("column1", 34, TTypeInfo(NUdf::TDataType<ui32>::Id), EColumnTypeConstraint::Nullable);
+        columnsToRead.emplace_back("column2", 56, TTypeInfo(NUdf::TDataType<ui64>::Id), EColumnTypeConstraint::Nullable);
+        TVector<TTypeInfo> keyTypes({
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
+            TTypeInfo(NUdf::TDataType<ui64>::Id)
+        });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
             pgmBuilder.SelectRange(TTableId(1, 2),
             keyTypes,
@@ -570,15 +608,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 4);
         UNIT_ASSERT(tableKeys[0]->Range.To[1].IsNull());
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 2);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<ui32>::Id);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1] == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[1].GetTypeId() == NUdf::TDataType<ui64>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
     }
 
     Y_UNIT_TEST(TestSelectBothFromInclusiveToInclusiveRange) {
@@ -596,9 +634,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         options.ToColumns = to;
 
         TVector<TSelectColumn> columnsToRead;
-        columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id, EColumnTypeConstraint::Nullable);
-        columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id, EColumnTypeConstraint::Nullable);
-        TVector<ui32> keyTypes({ NUdf::TDataType<char*>::Id });
+        columnsToRead.emplace_back("column1", 34, TTypeInfo(NUdf::TDataType<ui32>::Id), EColumnTypeConstraint::Nullable);
+        columnsToRead.emplace_back("column2", 56, TTypeInfo(NUdf::TDataType<ui64>::Id), EColumnTypeConstraint::Nullable);
+        TVector<TTypeInfo> keyTypes({ TTypeInfo(NUdf::TDataType<char*>::Id) });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
             pgmBuilder.SelectRange(TTableId(1, 2),
             keyTypes,
@@ -621,14 +659,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 1);
         UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 2);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 1);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<char*>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
     }
 
     Y_UNIT_TEST(TestSelectBothFromExclusiveToExclusiveRange) {
@@ -648,9 +686,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
             TReadRangeOptions::TFlags::ExcludeInitValue | TReadRangeOptions::TFlags::ExcludeTermValue);
 
         TVector<TSelectColumn> columnsToRead;
-        columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id, EColumnTypeConstraint::Nullable);
-        columnsToRead.emplace_back("column2", 56, (ui32)NUdf::TDataType<ui64>::Id, EColumnTypeConstraint::Nullable);
-        TVector<ui32> keyTypes({ NUdf::TDataType<char*>::Id });
+        columnsToRead.emplace_back("column1", 34, TTypeInfo(NUdf::TDataType<ui32>::Id), EColumnTypeConstraint::Nullable);
+        columnsToRead.emplace_back("column2", 56, TTypeInfo(NUdf::TDataType<ui64>::Id), EColumnTypeConstraint::Nullable);
+        TVector<TTypeInfo> keyTypes({ TTypeInfo(NUdf::TDataType<char*>::Id) });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("myRes",
             pgmBuilder.SelectRange(TTableId(1, 2),
             keyTypes,
@@ -673,14 +711,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Range.To.size() == 1);
         UNIT_ASSERT(tableKeys[0]->Range.To[0].Size() == 2);
         UNIT_ASSERT(tableKeys[0]->KeyColumnTypes.size() == 1);
-        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0] == NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT(tableKeys[0]->KeyColumnTypes[0].GetTypeId() == NUdf::TDataType<char*>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns.size() == 2);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Column == 34);
         UNIT_ASSERT(tableKeys[0]->Columns[0].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType == NUdf::TDataType<ui32>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[0].ExpectedType.GetTypeId() == NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Column == 56);
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
-        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
+        UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType.GetTypeId() == NUdf::TDataType<ui64>::Id);
     }
 
     Y_UNIT_TEST(TestAcquireLocks) {

@@ -464,8 +464,8 @@ static TIndexes GetIndexes(const NKikimrTxDataShard::TEvConditionalEraseRowsRequ
     return result;
 }
 
-static bool CheckUnit(NScheme::TTypeId type, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& error) {
-    switch (type) {
+static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& error) {
+    switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Date:
     case NScheme::NTypeIds::Datetime:
     case NScheme::NTypeIds::Timestamp:
@@ -496,7 +496,7 @@ static bool CheckUnit(NScheme::TTypeId type, NKikimrSchemeOp::TTTLSettings::EUni
         break;
 
     default:
-        error = TStringBuilder() << "Unsupported type: " << static_cast<ui32>(type);
+        error = TStringBuilder() << "Unsupported type: " << static_cast<ui32>(type.GetTypeId());
         return false;
     }
 }

@@ -13,7 +13,7 @@ namespace NKikimr::NFormats {
 
 struct TYdbDump {
     // Parse YdbDump-formatted line
-    static bool ParseLine(TStringBuf line, const std::vector<std::pair<i32, ui32>>& columnOrderTypes, TMemoryPool& pool,
+    static bool ParseLine(TStringBuf line, const std::vector<std::pair<i32, NScheme::TTypeInfo>>& columnOrderTypes, TMemoryPool& pool,
                           TVector<TCell>& keys, TVector<TCell>& values, TString& strError, ui64& numBytes);
 };
 
@@ -23,7 +23,7 @@ public:
 
     /// If header is true read column names from first line after skipRows. Parse columns as strings in this case.
     /// @note It's possible to skip header with skipRows and use typed columns instead.
-    TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeId>>& columns,
+    TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
               ui32 skipRows = 0, bool header = false, ui32 blockSize = DEFAULT_BLOCK_SIZE);
 
     std::shared_ptr<arrow::RecordBatch> ReadNext(const TString& csv, TString& errString);

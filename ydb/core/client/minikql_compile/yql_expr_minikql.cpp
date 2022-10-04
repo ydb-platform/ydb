@@ -392,15 +392,19 @@ private:
                 YQL_ENSURE(column);
                 typeConstraint = column->TypeConstraint;
 
+                // TODO: support pg types
+                auto columnTypeId = column->Type.GetTypeId();
+                YQL_ENSURE(columnTypeId != NScheme::NTypeIds::Pg, "pg types are not supported");
+
                 // Decimal type is transformed into parametrized Decimal(22, 9).
-                if (column->Type == NYql::NProto::TypeIds::Decimal) {
+                if (columnTypeId == NYql::NProto::TypeIds::Decimal) {
                     columnDataType = ctx.MakeType<TDataExprParamsType>(
-                        NUdf::GetDataSlot(column->Type),
+                        NUdf::GetDataSlot(columnTypeId),
                         ToString(NScheme::DECIMAL_PRECISION),
                         ToString(NScheme::DECIMAL_SCALE));
                 } else {
                     columnDataType = GetMkqlDataTypeAnnotation(
-                        TDataType::Create(column->Type, *MkqlCtx->TypeEnv),
+                        TDataType::Create(columnTypeId, *MkqlCtx->TypeEnv),
                         ctx);
                 }
             }
@@ -839,7 +843,8 @@ void FillColumnsToRead(IDbSchemeResolver::TTableResult* lookup, TExprNode* selec
         auto columnName = selectTuple->Child(i)->Content();
         const auto& systemColumn = GetSystemColumns().find(columnName);
         if (systemColumn != GetSystemColumns().end()) {
-            columnsToRead.emplace_back(columnName, systemColumn->second.ColumnId, systemColumn->second.TypeId, EColumnTypeConstraint::Nullable);
+            columnsToRead.emplace_back(columnName, systemColumn->second.ColumnId,
+                NScheme::TTypeInfo(systemColumn->second.TypeId), EColumnTypeConstraint::Nullable);
         } else {
             auto column = lookup->Columns.FindPtr(columnName);
             YQL_ENSURE(column);
@@ -921,7 +926,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 
             auto rowTuple = node.Child(1);
             TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
-            TVector<ui32> keyTypes(rowTuple->ChildrenSize());
+            TVector<NScheme::TTypeInfo> keyTypes(rowTuple->ChildrenSize());
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);
@@ -992,7 +997,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             }
 
             TTableRangeOptions options = mkqlContext->PgmBuilder->GetDefaultTableRangeOptions();
-            TVector<ui32> keyTypes(Max(fromComponents, toComponents));
+            TVector<NScheme::TTypeInfo> keyTypes(Max(fromComponents, toComponents));
             TVector<TRuntimeNode> from(fromComponents);
             TVector<TRuntimeNode> to(toComponents);
             ui32 keyIndex = 0;
@@ -1080,7 +1085,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 
             auto rowTuple = node.Child(1);
             TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
-            TVector<ui32> keyTypes(rowTuple->ChildrenSize());
+            TVector<NScheme::TTypeInfo> keyTypes(rowTuple->ChildrenSize());
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);
@@ -1131,7 +1136,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 
             auto rowTuple = node.Child(1);
             TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
-            TVector<ui32> keyTypes(rowTuple->ChildrenSize());
+            TVector<NScheme::TTypeInfo> keyTypes(rowTuple->ChildrenSize());
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);

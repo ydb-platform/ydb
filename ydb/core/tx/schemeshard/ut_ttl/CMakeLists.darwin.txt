@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_ttl PUBLIC
   core-tx-schemeshard
   kqp-ut-common
   tx-schemeshard-ut_helpers
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-tx-schemeshard-ut_ttl PRIVATE
   -Wl,-no_deduplicate

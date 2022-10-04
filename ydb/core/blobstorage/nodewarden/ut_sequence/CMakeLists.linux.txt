@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-blobstorage-nodewarden-ut_sequence PUBLIC
   core-blobstorage-crypto
   core-blobstorage-nodewarden
   core-blobstorage-pdisk
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-blobstorage-nodewarden-ut_sequence PRIVATE
   -ldl

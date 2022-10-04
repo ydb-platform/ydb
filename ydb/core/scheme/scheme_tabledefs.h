@@ -179,7 +179,7 @@ public:
         }
     }
 
-    bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const;
+    bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeInfo> types) const;
     bool IsFullRange(ui32 columnsCount) const;
 
     bool IsAmbiguous(size_t keyColumnsCount) const noexcept {
@@ -248,7 +248,7 @@ public:
         }
     }
 
-    bool IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const;
+    bool IsEmpty(TConstArrayRef<NScheme::TTypeInfo> types) const;
 
     TTableRange ToTableRange() const {
         return TTableRange(From.GetCells(), FromInclusive, To.GetCells(), ToInclusive, Point);
@@ -297,7 +297,7 @@ int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& 
 // of compared borders (or in other words upper range borders are compared).
 template<bool FirstLeft, bool SecondLeft>
 int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bool inclusiveFirst, bool inclusiveSecond,
-    TConstArrayRef<NScheme::TTypeId> cellTypes)
+    TConstArrayRef<NScheme::TTypeInfo> cellTypes)
 {
     const ui32 firstSize = first.size();
     const ui32 secondSize = second.size();
@@ -346,7 +346,7 @@ int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bo
 
 /// @note returns 0 on any overlap
 inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY,
-                         const TConstArrayRef<NScheme::TTypeId> types)
+                         const TConstArrayRef<NScheme::TTypeInfo> types)
 {
     Y_VERIFY(!rangeX.Point);
     Y_VERIFY(!rangeY.Point);
@@ -368,8 +368,8 @@ inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY,
 inline bool CheckRangesOverlap(
         const TTableRange& rangeX,
         const TTableRange& rangeY,
-        const TConstArrayRef<NScheme::TTypeId> typesX,
-        const TConstArrayRef<NScheme::TTypeId> typesY)
+        const TConstArrayRef<NScheme::TTypeInfo> typesX,
+        const TConstArrayRef<NScheme::TTypeInfo> typesY)
 {
     if (rangeX.Point && rangeY.Point) {
         // Works like ComparePointKeys
@@ -635,7 +635,7 @@ public:
     struct TColumnOp {
         ui32 Column;
         EColumnOperation Operation;
-        ui32 ExpectedType;
+        NScheme::TTypeInfo ExpectedType;
         ui32 InplaceUpdateMode;
         ui32 ImmediateUpdateSize;
     };
@@ -643,7 +643,7 @@ public:
     // one column info (out)
     struct TColumnInfo {
         ui32 Column;
-        ui32 Type;
+        NScheme::TTypeInfo Type;
         ui32 AllowInplaceMode;
         EStatus Status;
     };
@@ -679,7 +679,7 @@ public:
     const TOwnedTableRange Range;
     const TRangeLimits RangeLimits;
     const ERowOperation RowOperation;
-    const TVector<NScheme::TTypeId> KeyColumnTypes; // For SelectRange there can be not full key
+    const TVector<NScheme::TTypeInfo> KeyColumnTypes; // For SelectRange there can be not full key
     const TVector<TColumnOp> Columns;
     const bool Reverse;
     TReadTarget ReadTarget; // Set for Read row operation

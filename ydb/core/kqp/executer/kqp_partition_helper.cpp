@@ -2,6 +2,7 @@
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
@@ -122,8 +123,8 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
 
     const ui64 keyLen = table.KeyColumns.size();
 
-    TVector<NUdf::TDataTypeId> keyFullType{Reserve(keyLen)};
-    TVector<NUdf::TDataTypeId> keyPrefixType{Reserve(keyLen)};
+    TVector<NScheme::TTypeInfo> keyFullType{Reserve(keyLen)};
+    TVector<NScheme::TTypeInfo> keyPrefixType{Reserve(keyLen)};
     TVector<ui32> keyPrefixIndices{Reserve(keyLen)};
 
     for (const auto& keyColumn : table.KeyColumns) {
@@ -132,8 +133,9 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
             break;
         }
 
-        keyFullType.push_back(columnInfo->GetTypeId());
-        keyPrefixType.push_back(columnInfo->GetTypeId());
+        auto typeInfo = NScheme::TypeInfoFromMiniKQLType(columnInfo->Type);
+        keyFullType.push_back(typeInfo);
+        keyPrefixType.push_back(typeInfo);
         keyPrefixIndices.push_back(columnInfo->Index);
     }
 
@@ -187,7 +189,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
     return ret;
 }
 
-TVector<TCell> FillKeyValues(const TVector<NUdf::TDataTypeId>& keyColumnTypes, const NKqpProto::TKqpPhyKeyBound& bound,
+TVector<TCell> FillKeyValues(const TVector<NScheme::TTypeInfo>& keyColumnTypes, const NKqpProto::TKqpPhyKeyBound& bound,
     const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     YQL_ENSURE(bound.ValuesSize() <= keyColumnTypes.size());
@@ -243,7 +245,7 @@ TVector<TCell> FillKeyValues(const TVector<NUdf::TDataTypeId>& keyColumnTypes, c
 }
 
 TSerializedPointOrRange FillOneRange(NUdf::TUnboxedValue& begin, NUdf::TUnboxedValue& end,
-    const TVector<NUdf::TDataTypeId>& keyColumnTypes, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     const ui32 keyColumnsSize = keyColumnTypes.size();
 
@@ -345,7 +347,7 @@ TSerializedPointOrRange FillOneRange(NUdf::TUnboxedValue& begin, NUdf::TUnboxedV
     return range;
 }
 
-TVector<TSerializedPointOrRange> BuildFullRange(const TVector<NUdf::TDataTypeId>& keyColumnTypes) {
+TVector<TSerializedPointOrRange> BuildFullRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
     // Build range from NULL, NULL ... NULL to +inf, +inf ... +inf
     TVector<TCell> fromKeyValues(keyColumnTypes.size());
 
@@ -357,7 +359,7 @@ TVector<TSerializedPointOrRange> BuildFullRange(const TVector<NUdf::TDataTypeId>
     return {std::move(range)};
 }
 
-TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
@@ -397,7 +399,7 @@ TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NUdf::TDa
 }
 
 template <typename PhyOpReadRanges>
-TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const PhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
@@ -412,21 +414,21 @@ TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NUdf::TDat
 
 } // anonymous namespace
 
-TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyOpReadOlapRanges& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     return FillReadRangesInternal(keyColumnTypes, readRange, stageInfo, holderFactory, typeEnv);
 }
 
-TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyOpReadRanges& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     return FillReadRangesInternal(keyColumnTypes, readRange, stageInfo, holderFactory, typeEnv);
 }
 
-TSerializedTableRange MakeKeyRange(const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyKeyRange& range, const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
     const NMiniKQL::TTypeEnvironment& typeEnv)
 {
@@ -494,7 +496,7 @@ void FillFullRange(const TStageInfo& stageInfo, THashMap<ui64, TShardInfo>& shar
 }
 } // anonymous namespace
 
-TString TShardInfo::ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
+TString TShardInfo::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
 {
     TStringBuilder sb;
     sb << "TShardInfo{ ";

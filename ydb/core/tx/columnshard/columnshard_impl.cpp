@@ -1,5 +1,6 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
@@ -809,8 +810,9 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
     for (const auto& col : schema.GetColumns()) {
         const ui32 id = col.GetId();
         const TString& name = col.GetName();
-
-        indexInfo.Columns[id] = NTable::TColumn(name, id, col.GetTypeId());
+        auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+        indexInfo.Columns[id] = NTable::TColumn(name, id, typeInfo);
         indexInfo.ColumnNames[name] = id;
     }
 

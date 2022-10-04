@@ -626,7 +626,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
         for (const auto& col : columns) {
             ui32 id = schema.ColumnNames.at(col.first);
             UNIT_ASSERT_VALUES_EQUAL(schema.Columns.at(id).Name, col.first);
-            UNIT_ASSERT_VALUES_EQUAL(schema.Columns.at(id).PType, col.second);
+            UNIT_ASSERT_VALUES_EQUAL(schema.Columns.at(id).PType.GetTypeId(), col.second);
         }
     }
 }

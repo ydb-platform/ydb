@@ -22,7 +22,7 @@ namespace NKikimrTxDataShard {
 namespace NKikimr {
 namespace NMiniKQL {
 
-std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeId type);
+std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type);
 
 class IKqpTableReader : public TSimpleRefCount<IKqpTableReader> {
 public:

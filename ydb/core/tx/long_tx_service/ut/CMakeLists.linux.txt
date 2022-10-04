@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-tx-long_tx_service-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-long_tx_service
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-tx-long_tx_service-ut PRIVATE
   -ldl

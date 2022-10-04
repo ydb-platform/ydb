@@ -94,7 +94,7 @@ public:
 
 public:
     TKqpDeleteRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TTableId& tableId, IComputationNode* rowsNode, TVector<NUdf::TDataTypeId> rowTypes, TVector<ui32> keyIndices, const TTypeEnvironment& env)
+        const TTableId& tableId, IComputationNode* rowsNode, TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices, const TTypeEnvironment& env)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
@@ -112,7 +112,7 @@ private:
 private:
     TTableId TableId;
     IComputationNode* RowsNode;
-    const TVector<NUdf::TDataTypeId> RowTypes;
+    const TVector<NScheme::TTypeInfo> RowTypes;
     const TVector<ui32> KeyIndices;
     const TTypeEnvironment& Env;
     TKqpTableStats& ShardTableStats;
@@ -139,7 +139,7 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
         << ", actual: " << rowType->GetMembersCount());
 
     THashMap<TString, ui32> inputIndex;
-    TVector<NUdf::TDataTypeId> rowTypes(rowType->GetMembersCount());
+    TVector<NScheme::TTypeInfo> rowTypes(rowType->GetMembersCount());
     for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) {
         const auto& name = rowType->GetMemberName(i);
         MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second);
@@ -149,7 +149,8 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
             ? AS_TYPE(TDataType, AS_TYPE(TOptionalType, memberType)->GetItemType())->GetSchemeType()
             : AS_TYPE(TDataType, memberType)->GetSchemeType();
 
-        rowTypes[i] = typeId;
+        // TODO: support pg types
+        rowTypes[i] = NScheme::TTypeInfo(typeId);
     }
 
     TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());
@@ -160,8 +161,8 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
 
         MKQL_ENSURE_S(rowTypes[it->second] == columnInfo.Type, "Key type mismatch"
             << ", column: " << columnInfo.Name
-            << ", expected: " << columnInfo.Type
-            << ", actual: " << rowTypes[it->second]);
+            << ", expected: " << NScheme::TypeName(columnInfo.Type)
+            << ", actual: " << NScheme::TypeName(rowTypes[it->second]));
 
         keyIndices[i] = it->second;
     }

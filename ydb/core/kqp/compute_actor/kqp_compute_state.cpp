@@ -21,7 +21,7 @@ void TCommonRetriesState::ResetRetry() {
     ResolveAttempt = 0;
 }
 
-TString TShardState::PrintLastKey(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
+TString TShardState::PrintLastKey(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const {
     if (LastKey.empty()) {
         return "<none>";
     }
@@ -41,7 +41,7 @@ TDuration TCommonRetriesState::CalcRetryDelay() {
     return LastRetryDelay;
 }
 
-TString TShardState::ToString(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
+TString TShardState::ToString(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const {
     TStringBuilder sb;
     sb << "TShardState{ TabletId: " << TabletId << ", State: " << State
         << ", Gen: " << Generation << ", Last Key " << TShardState::PrintLastKey(keyTypes)
@@ -58,7 +58,7 @@ TString TShardState::ToString(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
     return sb;
 }
 
-const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
+const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const {
     // No any data read previously, return all ranges
     if (!LastKey.DataSize()) {
         return Ranges;

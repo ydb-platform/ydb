@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-quoter-ut PUBLIC
   cpp-testing-unittest_main
   ydb-core-quoter
   cpp-testing-gmock_in_unittest
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-quoter-ut PRIVATE
   -ldl

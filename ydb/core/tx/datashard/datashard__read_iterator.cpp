@@ -20,7 +20,7 @@ constexpr ui64 MinRowsPerCheck = 1000;
 class TCellBlockBuilder : public IBlockBuilder {
 public:
     bool Start(
-        const TVector<std::pair<TString,  NScheme::TTypeId>>& columns,
+        const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
         ui64 maxRowsInBlock,
         ui64 maxBytesInBlock,
         TString& err) override
@@ -49,7 +49,7 @@ public:
     TVector<TOwnedCellVec> FlushBatch() { return std::move(Rows); }
 
 private:
-    TVector<std::pair<TString,  NScheme::TTypeId>> Columns;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 
     TVector<TOwnedCellVec> Rows;
     ui64 BytesCount = 0;
@@ -61,10 +61,10 @@ private:
 
 struct TShortColumnInfo {
     NTable::TTag Tag;
-    NScheme::TTypeId Type;
+    NScheme::TTypeInfo Type;
     TString Name;
 
-    TShortColumnInfo(NTable::TTag tag, NScheme::TTypeId type, const TString& name)
+    TShortColumnInfo(NTable::TTag tag, NScheme::TTypeInfo type, const TString& name)
         : Tag(tag)
         , Type(type)
         , Name(name)
@@ -72,7 +72,8 @@ struct TShortColumnInfo {
 
     TString Dump() const {
         TStringStream ss;
-        ss << "{Tag: " << Tag << ", Type: " << Type << ", Name: " << Name << "}";
+        // TODO: support pg types
+        ss << "{Tag: " << Tag << ", Type: " << Type.GetTypeId() << ", Name: " << Name << "}";
         return ss.Str();
     }
 };
@@ -98,13 +99,13 @@ struct TShortTableInfo {
         KeyColumnCount = schema.Keys->Types.size();
         KeyColumnTypes.reserve(KeyColumnCount);
         for (auto type: schema.Keys->Types) {
-            KeyColumnTypes.push_back(type.GetTypeId());
+            KeyColumnTypes.push_back(type.ToTypeInfo());
         }
 
         // note that we don't have column names here, but
         // for cellvec we will not need them at all
         for (const auto& col: schema.Cols) {
-            Columns.emplace(col.Tag, TShortColumnInfo(col.Tag, col.TypeId, ""));
+            Columns.emplace(col.Tag, TShortColumnInfo(col.Tag, col.TypeInfo, ""));
         }
     }
 
@@ -123,15 +124,15 @@ struct TShortTableInfo {
     ui32 LocalTid = 0;
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
-    TVector<NScheme::TTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
 };
 
-TVector<std::pair<TString, NScheme::TTypeId>> GetNameTypeColumns(
+TVector<std::pair<TString, NScheme::TTypeInfo>> GetNameTypeColumns(
     const std::vector<NTable::TTag>& tags,
     const TShortTableInfo& tableInfo)
 {
-    TVector<std::pair<TString, NScheme::TTypeId>> result;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> result;
     for (auto tag: tags) {
         auto it = tableInfo.Columns.find(tag);
         if (it == tableInfo.Columns.end()) {
@@ -227,7 +228,7 @@ class TReader {
     const TShortTableInfo& TableInfo;
     TDataShard* Self;
 
-    std::vector<NKikimr::NScheme::TTypeId> ColumnTypes;
+    std::vector<NScheme::TTypeInfo> ColumnTypes;
 
     ui32 FirstUnprocessedQuery;
     TString LastProcessedKey;
@@ -1305,7 +1306,7 @@ private:
     void PrepareValidationInfo(const TActorContext&, const TReadIteratorState& state) {
         TTableId tableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion);
 
-        TVector<NScheme::TTypeId> keyTypes;
+        TVector<NScheme::TTypeInfo> keyTypes;
 
         TVector<TKeyDesc::TColumnOp> columnOps;
         columnOps.reserve(TableInfo.Columns.size());

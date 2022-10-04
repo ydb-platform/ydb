@@ -43,13 +43,13 @@ private:
 
     TAutoPtr<TKeyDesc> KeyRange;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
-    TVector<NScheme::TTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     // Positions of key and value fields in the request proto struct
     struct TFieldDescription {
         ui32 ColId;
         ui32 PositionInStruct;
-        NScheme::TTypeId Type;
+        NScheme::TTypeInfo Type;
     };
     TVector<TFieldDescription> KeyColumnPositions;
     TVector<TFieldDescription> ValueColumnPositions;
@@ -64,7 +64,7 @@ private:
 
     TActorId SysViewScanActor;
     std::unique_ptr<IBlockBuilder> BlockBuilder;
-    TVector<NScheme::TTypeId> ValueColumnTypes;
+    TVector<NScheme::TTypeInfo> ValueColumnTypes;
     ui64 SysViewMaxRows;
     ui64 SysViewMaxBytes;
     ui64 SysViewRowsReceived;
@@ -254,7 +254,7 @@ private:
             SysViewMaxBytes = maxBytes;
 
         // List of columns requested by user
-        TVector<std::pair<TString, NScheme::TTypeId>> valueColumnNamesAndTypes;
+        TVector<std::pair<TString, NScheme::TTypeInfo>> valueColumnNamesAndTypes;
 
         // This list of columns will be requested from sys view scan actor
         // It starts with all key columns followed by all the columns requested by user possibly including key columns again
@@ -270,7 +270,7 @@ private:
                     KeyColumnTypes[ci.second.KeyOrder] = ci.second.PType;
 
                     columns.resize(Max<size_t>(columns.size(), ci.second.KeyOrder + 1));
-                    columns[ci.second.KeyOrder] = {ci.second.Id, (NScheme::TTypeId)ci.second.PType};
+                    columns[ci.second.KeyOrder] = {ci.second.Id, ci.second.PType};
                 }
             }
 
@@ -283,10 +283,10 @@ private:
                 }
 
                 auto ci = entry.Columns.find(id->second);
-                columns.push_back({ci->second.Id, (NScheme::TTypeId)ci->second.PType});
+                columns.push_back({ci->second.Id, ci->second.PType});
 
-                valueColumnNamesAndTypes.push_back({ci->second.Name, (NScheme::TTypeId)ci->second.PType});
-                ValueColumnTypes.push_back((NScheme::TTypeId)ci->second.PType);
+                valueColumnNamesAndTypes.push_back({ci->second.Name, ci->second.PType});
+                ValueColumnTypes.push_back(ci->second.PType);
             }
         }
 
@@ -505,7 +505,7 @@ private:
         return true;
     }
 
-    bool CheckCellSizes(const TConstArrayRef<TCell>& cells, const TConstArrayRef<NScheme::TTypeId>& types) {
+    bool CheckCellSizes(const TConstArrayRef<TCell>& cells, const TConstArrayRef<NScheme::TTypeInfo>& types) {
         if (cells.size() > types.size())
             return false;
 

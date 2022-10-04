@@ -188,7 +188,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             const auto type = tableInfo.KeyColumnTypes.at(i);
             const auto& cell = KeyCells.GetCells().at(i);
 
-            if (type == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
+            if (type.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
                 AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                     NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
                     "Keys with Uint8 column values >127 are currently prohibited");

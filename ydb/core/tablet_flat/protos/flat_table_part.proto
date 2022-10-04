@@ -1,4 +1,5 @@
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/type_info.proto";
 
 package NKikimr.NTable.NProto;
 option java_package = "ru.yandex.kikimr.proto";
@@ -11,6 +12,7 @@ message TEvol {
 message TPartColumn {
     optional uint32 Tag = 1;
     optional uint32 Type = 2;
+    optional NKikimrProto.TTypeInfo TypeInfo = 5;
     optional uint32 Key = 3;
     optional uint32 Group = 4;
 }

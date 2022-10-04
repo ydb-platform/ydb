@@ -20,7 +20,7 @@ target_link_libraries(ydb-core-tx-balance_coverage-ut PUBLIC
   cpp-testing-unittest_main
   core-tx-balance_coverage
   cpp-testing-unittest
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-tx-balance_coverage-ut PRIVATE
   -ldl

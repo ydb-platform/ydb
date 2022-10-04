@@ -76,7 +76,7 @@ struct TRowWriter : public NArrow::IRowWriter {
 };
 
 std::vector<TOwnedCellVec> GetRows(
-    const TVector<std::pair<TString, NScheme::TTypeId>>& batchSchema,
+    const TVector<std::pair<TString, NScheme::TTypeInfo>>& batchSchema,
     const TEvDataShard::TEvReadResult& result)
 {
     UNIT_ASSERT(result.ArrowBatch);
@@ -94,7 +94,7 @@ std::vector<TOwnedCellVec> GetRows(
 void CheckRow(
     const TConstArrayRef<TCell>& row,
     const TCellVec& gold,
-    const std::vector<NScheme::TTypeIdOrder>& goldTypes)
+    const std::vector<NScheme::TTypeInfoOrder>& goldTypes)
 {
     UNIT_ASSERT_VALUES_EQUAL(row.size(), gold.size());
     for (size_t i: xrange(row.size())) {
@@ -107,7 +107,7 @@ template <typename TCellVecType>
 void CheckRows(
     const std::vector<TCellVecType>& rows,
     const std::vector<TCellVec>& gold,
-    const std::vector<NScheme::TTypeIdOrder>& goldTypes)
+    const std::vector<NScheme::TTypeInfoOrder>& goldTypes)
 {
     UNIT_ASSERT_VALUES_EQUAL(rows.size(), gold.size());
     for (size_t i: xrange(rows.size())) {
@@ -119,7 +119,7 @@ void CheckResultCellVec(
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
     const TEvDataShard::TEvReadResult& result,
     const std::vector<TCellVec>& gold,
-    const std::vector<NScheme::TTypeIdOrder>& goldTypes,
+    const std::vector<NScheme::TTypeInfoOrder>& goldTypes,
     std::vector<NTable::TTag> columns = {})
 {
     Y_UNUSED(userTable);
@@ -142,13 +142,13 @@ void CheckResultArrow(
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
     const TEvDataShard::TEvReadResult& result,
     const std::vector<TCellVec>& gold,
-    const std::vector<NScheme::TTypeIdOrder>& goldTypes,
+    const std::vector<NScheme::TTypeInfoOrder>& goldTypes,
     std::vector<NTable::TTag> columns = {})
 {
     UNIT_ASSERT(!gold.empty());
     UNIT_ASSERT(result.ArrowBatch);
 
-    TVector<std::pair<TString, NScheme::TTypeId>> batchSchema;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> batchSchema;
     const auto& description = userTable.GetDescription();
     if (columns.empty()) {
         batchSchema.reserve(description.ColumnsSize());
@@ -175,7 +175,7 @@ void CheckResult(
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
     const TEvDataShard::TEvReadResult& result,
     const std::vector<TCellVec>& gold,
-    const std::vector<NScheme::TTypeIdOrder>& goldTypes,
+    const std::vector<NScheme::TTypeInfoOrder>& goldTypes,
     std::vector<NTable::TTag> columns = {})
 {
     const auto& record = result.Record;
@@ -211,12 +211,12 @@ void CheckResult(
     const std::vector<std::vector<ui32>>& gold,
     std::vector<NTable::TTag> columns = {})
 {
-    std::vector<NScheme::TTypeIdOrder> types;
+    std::vector<NScheme::TTypeInfoOrder> types;
     if (!gold.empty() && !gold[0].empty()) {
         types.reserve(gold[0].size());
         for (auto i: xrange(gold[0].size())) {
             Y_UNUSED(i);
-            types.emplace_back(NScheme::NTypeIds::Uint32);
+            types.emplace_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32));
         }
     }
 

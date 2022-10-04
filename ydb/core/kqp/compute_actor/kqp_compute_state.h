@@ -83,15 +83,15 @@ struct TShardState: public TCommonRetriesState {
     TActorId ActorId;
     TOwnedCellVec LastKey;
 
-    TString PrintLastKey(TConstArrayRef<NScheme::TTypeId> keyTypes) const;
+    TString PrintLastKey(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
 
     TShardState(const ui64 tabletId, const ui32 scanIdx)
         : TabletId(tabletId)
         , ScannerIdx(scanIdx) {
     }
 
-    TString ToString(TConstArrayRef<NScheme::TTypeId> keyTypes) const;
-    const TSmallVec<TSerializedTableRange> GetScanRanges(TConstArrayRef<NScheme::TTypeId> keyTypes) const;
+    TString ToString(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
+    const TSmallVec<TSerializedTableRange> GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
     TString GetAddress() const;
 };
 }

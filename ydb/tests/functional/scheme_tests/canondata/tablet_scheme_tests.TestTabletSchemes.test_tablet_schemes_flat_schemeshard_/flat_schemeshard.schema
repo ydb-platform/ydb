@@ -435,6 +435,11 @@
                 "ColumnId": 11,
                 "ColumnName": "NotNull",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "ColTypeData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -451,7 +456,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -918,6 +924,11 @@
                 "ColumnId": 11,
                 "ColumnName": "NotNull",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "ColTypeData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -934,7 +945,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3539,6 +3551,11 @@
                 "ColumnId": 12,
                 "ColumnName": "NotNull",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "ColTypeData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3556,7 +3573,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4026,6 +4044,11 @@
                 "ColumnId": 12,
                 "ColumnName": "NotNull",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "ColTypeData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4043,7 +4066,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,

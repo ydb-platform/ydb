@@ -6,6 +6,7 @@ import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/services.proto";
+import "ydb/core/protos/type_info.proto";
 
 import "library/cpp/actors/protos/actors.proto";
 
@@ -299,6 +300,7 @@ message TPQTabletConfig {
     message TKeyComponentSchema {
         optional string Name = 1;
         optional uint32 TypeId = 2;
+        optional NKikimrProto.TTypeInfo TypeInfo = 3;
     }
     repeated TKeyComponentSchema PartitionKeySchema = 30;
 

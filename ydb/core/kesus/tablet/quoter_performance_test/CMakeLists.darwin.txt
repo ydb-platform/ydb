@@ -21,7 +21,7 @@ target_link_libraries(quoter_performance_test PUBLIC
   library-cpp-getopt
   cpp-testing-unittest
   core-kesus-tablet
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(quoter_performance_test PRIVATE
   -Wl,-no_deduplicate

@@ -1,5 +1,6 @@
 #include "schemeshard_impl.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/pb.h>
@@ -385,7 +386,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeId, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool> TColumnRec;
+    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool> TColumnRec;
     typedef TDeque<TColumnRec> TColumnRows;
 
     bool LoadColumns(NIceDb::TNiceDb& db, TColumnRows& columnRows) const {
@@ -401,6 +402,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 colId = rowSet.GetValue<Schema::Columns::ColId>();
                 TString colName = rowSet.GetValue<Schema::Columns::ColName>();
                 NScheme::TTypeId typeId = (NScheme::TTypeId)rowSet.GetValue<Schema::Columns::ColType>();
+                TString typeData = rowSet.GetValueOrDefault<Schema::Columns::ColTypeData>("");
                 ui32 keyOrder = rowSet.GetValue<Schema::Columns::ColKeyOrder>();
                 ui64 createVersion = rowSet.GetValueOrDefault<Schema::Columns::CreateVersion>(0);
                 ui64 deleteVersion = rowSet.GetValueOrDefault<Schema::Columns::DeleteVersion>(-1);
@@ -409,8 +411,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = rowSet.GetValue<Schema::Columns::DefaultValue>();
                 auto notNull = rowSet.GetValueOrDefault<Schema::Columns::NotNull>(false);
 
+                NScheme::TTypeInfo typeInfo;
+                if (typeData) {
+                    NKikimrProto::TTypeInfo protoType;
+                    Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
+                    typeInfo = NScheme::TypeInfoFromProtoColumnType(typeId, &protoType);
+                } else {
+                    typeInfo = NScheme::TTypeInfo(typeId);
+                }
+
                 columnRows.emplace_back(pathId, colId,
-                                        colName, typeId, keyOrder, createVersion, deleteVersion,
+                                        colName, typeInfo, keyOrder, createVersion, deleteVersion,
                                         family, defaultKind, defaultValue, notNull);
 
                 if (!rowSet.Next()) {
@@ -433,6 +444,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 colId = rowSet.GetValue<Schema::MigratedColumns::ColId>();
                 TString colName = rowSet.GetValue<Schema::MigratedColumns::ColName>();
                 NScheme::TTypeId typeId = (NScheme::TTypeId)rowSet.GetValue<Schema::MigratedColumns::ColType>();
+                TString typeData = rowSet.GetValueOrDefault<Schema::MigratedColumns::ColTypeData>("");
                 ui32 keyOrder = rowSet.GetValue<Schema::MigratedColumns::ColKeyOrder>();
                 ui64 createVersion = rowSet.GetValueOrDefault<Schema::MigratedColumns::CreateVersion>(0);
                 ui64 deleteVersion = rowSet.GetValueOrDefault<Schema::MigratedColumns::DeleteVersion>(-1);
@@ -441,8 +453,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = rowSet.GetValue<Schema::MigratedColumns::DefaultValue>();
                 auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumns::NotNull>(false);
 
+                NScheme::TTypeInfo typeInfo;
+                if (typeData) {
+                    NKikimrProto::TTypeInfo protoType;
+                    Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
+                    typeInfo = NScheme::TypeInfoFromProtoColumnType(typeId, &protoType);
+                } else {
+                    typeInfo = NScheme::TTypeInfo(typeId);
+                }
+
                 columnRows.emplace_back(pathId, colId,
-                                        colName, typeId, keyOrder, createVersion, deleteVersion,
+                                        colName, typeInfo, keyOrder, createVersion, deleteVersion,
                                         family, defaultKind, defaultValue, notNull);
 
                 if (!rowSet.Next()) {
@@ -467,6 +488,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 colId = rowSet.GetValue<Schema::ColumnAlters::ColId>();
                 TString colName = rowSet.GetValue<Schema::ColumnAlters::ColName>();
                 NScheme::TTypeId typeId = (NScheme::TTypeId)rowSet.GetValue<Schema::ColumnAlters::ColType>();
+                TString typeData = rowSet.GetValue<Schema::ColumnAlters::ColTypeData>();
                 ui32 keyOrder = rowSet.GetValue<Schema::ColumnAlters::ColKeyOrder>();
                 ui64 createVersion = rowSet.GetValueOrDefault<Schema::ColumnAlters::CreateVersion>(0);
                 ui64 deleteVersion = rowSet.GetValueOrDefault<Schema::ColumnAlters::DeleteVersion>(-1);
@@ -475,8 +497,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = rowSet.GetValue<Schema::ColumnAlters::DefaultValue>();
                 auto notNull = rowSet.GetValueOrDefault<Schema::ColumnAlters::NotNull>(false);
 
+                NScheme::TTypeInfo typeInfo;
+                if (typeData) {
+                    NKikimrProto::TTypeInfo protoType;
+                    Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
+                    typeInfo = NScheme::TypeInfoFromProtoColumnType(typeId, &protoType);
+                } else {
+                    typeInfo = NScheme::TTypeInfo(typeId);
+                }
+
                 columnRows.emplace_back(pathId, colId,
-                                        colName, typeId, keyOrder, createVersion, deleteVersion,
+                                        colName, typeInfo, keyOrder, createVersion, deleteVersion,
                                         family, defaultKind, defaultValue, notNull);
 
                 if (!rowSet.Next()) {
@@ -499,6 +530,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 colId = rowSet.GetValue<Schema::MigratedColumnAlters::ColId>();
                 TString colName = rowSet.GetValue<Schema::MigratedColumnAlters::ColName>();
                 NScheme::TTypeId typeId = (NScheme::TTypeId)rowSet.GetValue<Schema::MigratedColumnAlters::ColType>();
+                TString typeData = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::ColTypeData>("");
                 ui32 keyOrder = rowSet.GetValue<Schema::MigratedColumnAlters::ColKeyOrder>();
                 ui64 createVersion = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::CreateVersion>(0);
                 ui64 deleteVersion = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::DeleteVersion>(-1);
@@ -507,8 +539,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = rowSet.GetValue<Schema::MigratedColumnAlters::DefaultValue>();
                 auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::NotNull>(false);
 
+                NScheme::TTypeInfo typeInfo;
+                if (typeData) {
+                    NKikimrProto::TTypeInfo protoType;
+                    Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
+                    typeInfo = NScheme::TypeInfoFromProtoColumnType(typeId, &protoType);
+                } else {
+                    typeInfo = NScheme::TTypeInfo(typeId);
+                }
+
                 columnRows.emplace_back(pathId, colId,
-                                        colName, typeId, keyOrder, createVersion, deleteVersion,
+                                        colName, typeInfo, keyOrder, createVersion, deleteVersion,
                                         family, defaultKind, defaultValue, notNull);
 
                 if (!rowSet.Next()) {
@@ -1851,7 +1892,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TPathId pathId = std::get<0>(rec);
                 ui32 colId = std::get<1>(rec);
                 TString colName = std::get<2>(rec);
-                NScheme::TTypeId typeId = std::get<3>(rec);
+                NScheme::TTypeInfo typeInfo = std::get<3>(rec);
                 ui32 keyOrder = std::get<4>(rec);
                 ui64 createVersion = std::get<5>(rec);
                 ui64 deleteVersion = std::get<6>(rec);
@@ -1869,7 +1910,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                << ", columnId: " << colId
                                << ", NextColId: " << tableInfo->NextColumnId);
 
-                TTableInfo::TColumn colInfo(colName, colId, typeId);
+                TTableInfo::TColumn colInfo(colName, colId, typeInfo);
                 colInfo.KeyOrder = keyOrder;
                 colInfo.CreateVersion = createVersion;
                 colInfo.DeleteVersion = deleteVersion;
@@ -1903,7 +1944,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TPathId pathId = std::get<0>(rec);
                 ui32 colId = std::get<1>(rec);
                 TString colName = std::get<2>(rec);
-                NScheme::TTypeId typeId = std::get<3>(rec);
+                NScheme::TTypeInfo typeInfo = std::get<3>(rec);
                 ui32 keyOrder = std::get<4>(rec);
                 ui64 createVersion = std::get<5>(rec);
                 ui64 deleteVersion = std::get<6>(rec);
@@ -1923,7 +1964,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     tableInfo->AlterData->NextColumnId = colId + 1; // calc next NextColumnId
                 }
 
-                TTableInfo::TColumn colInfo(colName, colId, typeId);
+                TTableInfo::TColumn colInfo(colName, colId, typeInfo);
                 colInfo.KeyOrder = keyOrder;
                 colInfo.CreateVersion = createVersion;
                 colInfo.DeleteVersion = deleteVersion;

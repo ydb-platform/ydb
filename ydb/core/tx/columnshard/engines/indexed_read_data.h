@@ -56,8 +56,8 @@ struct TReadMetadataBase {
     bool IsSorted() const { return IsAscSorted() || IsDescSorted(); }
     void SetDescSorting() { Sorting = ESorting::DESC; }
 
-    virtual TVector<std::pair<TString, NScheme::TTypeId>> GetResultYqlSchema() const = 0;
-    virtual TVector<std::pair<TString, NScheme::TTypeId>> GetKeyYqlSchema() const = 0;
+    virtual TVector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
+    virtual TVector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
     virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan() const = 0;
     virtual void Dump(IOutputStream& out) const { Y_UNUSED(out); };
 
@@ -102,7 +102,7 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
         return IndexInfo.GetReplaceKey();
     }
 
-    TVector<std::pair<TString, NScheme::TTypeId>> GetResultYqlSchema() const override {
+    TVector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const override {
         TVector<NTable::TTag> columnIds;
         columnIds.reserve(ResultSchema->num_fields());
         for (const auto& field: ResultSchema->fields()) {
@@ -112,7 +112,7 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
         return IndexInfo.GetColumns(columnIds);
     }
 
-    TVector<std::pair<TString, NScheme::TTypeId>> GetKeyYqlSchema() const override {
+    TVector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override {
         return IndexInfo.GetPK();
     }
 
@@ -165,9 +165,9 @@ struct TReadStatsMetadata : public TReadMetadataBase, public std::enable_shared_
         : TabletId(tabletId)
     {}
 
-    TVector<std::pair<TString, NScheme::TTypeId>> GetResultYqlSchema() const override;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const override;
 
-    TVector<std::pair<TString, NScheme::TTypeId>> GetKeyYqlSchema() const override;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 
     std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan() const override;
 };

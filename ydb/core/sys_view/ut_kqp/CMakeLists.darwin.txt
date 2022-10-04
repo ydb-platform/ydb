@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-sys_view-ut_kqp PUBLIC
   cpp-testing-unittest
   cpp-yson-node
   kqp-ut-common
-  ydb-core-testlib
+  core-testlib-default
   cpp-client-draft
 )
 target_link_options(ydb-core-sys_view-ut_kqp PRIVATE

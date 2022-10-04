@@ -26,7 +26,7 @@ target_link_libraries(ydb-services-yq-ut_integration PUBLIC
   cpp-grpc-client
   cpp-regex-pcre
   library-cpp-svnversion
-  ydb-core-testlib
+  core-testlib-default
   yq-libs-control_plane_storage
   yq-libs-db_schema
   yq-libs-private_client
@@ -34,7 +34,6 @@ target_link_libraries(ydb-services-yq-ut_integration PUBLIC
   providers-common-db_id_async_resolver
   clickhouse_client_udf
   library-yql-utils
-  yql-sql-pg_dummy
 )
 target_link_options(ydb-services-yq-ut_integration PRIVATE
   -ldl

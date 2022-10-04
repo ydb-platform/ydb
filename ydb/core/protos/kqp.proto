@@ -3,6 +3,7 @@ option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
+import "ydb/core/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
 import "ydb/core/protos/query_stats.proto";
@@ -124,6 +125,7 @@ message TKqpColumnMetadataProto {
     optional uint32 Id = 2;
     optional string Type = 3;
     optional uint32 TypeId = 4;
+    optional NKikimrProto.TTypeInfo TypeInfo = 7;
     repeated string Family = 5;
     optional bool NotNull = 6 [default = false];
 };

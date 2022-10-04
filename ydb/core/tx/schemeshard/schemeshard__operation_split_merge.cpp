@@ -664,7 +664,7 @@ public:
         datashardInfo.BindedChannels = channels;
 
         // Build vector of key column types
-        TVector<NScheme::TTypeId> keyColTypeIds;
+        TVector<NScheme::TTypeInfo> keyColTypeIds;
         for (const auto& col : tableInfo->Columns) {
             if (!col.second.IsKey())
                 continue;

@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-kqp-runtime-ut PUBLIC
   cpp-testing-unittest_main
   core-kqp-runtime
   cpp-testing-unittest
-  core-testlib-basics
+  testlib-basics-default
   udf-service-exception_policy
 )
 target_link_options(ydb-core-kqp-runtime-ut PRIVATE

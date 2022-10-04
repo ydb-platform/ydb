@@ -5,6 +5,8 @@
 #include "scheme_type_order.h"
 #include "scheme_types_defs.h"
 
+#include <ydb/library/yql/utils/pg_types.h>
+
 #include <util/generic/hash.h>
 #include <util/system/unaligned_mem.h>
 
@@ -119,7 +121,7 @@ using TCellsRef = TConstArrayRef<const TCell>;
 
 // NULL is considered equal to another NULL and less than non-NULL
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
-inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrder type) {
+inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoOrder type) {
     using TPair = std::pair<ui64, ui64>;
     if (a.IsNull())
         return b.IsNull() ? 0 : -1;
@@ -188,6 +190,14 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
         return (va.second < vb.second) != type.IsDescending() ? -1 : 1;
     }
 
+    case NKikimr::NScheme::NTypeIds::Pg:
+    {
+        auto typeDesc = type.GetTypeDesc();
+        Y_VERIFY(typeDesc, "no pg type descriptor");
+        int result = NPg::PgNativeBinaryCompare(a.Data(), a.Size(), b.Data(), b.Size(), typeDesc);
+        return type.IsDescending() ? -result : result;
+    }
+
     default:
         Y_VERIFY_DEBUG(false, "Unknown type");
     };
@@ -225,11 +235,12 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
 }
 
 // TODO: use NYql ops when TCell and TUnboxedValuePod had merged
-inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
+inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     if (cell.IsNull())
         return 0;
 
-    const NYql::NProto::TypeIds yqlType = static_cast<NYql::NProto::TypeIds>(type);
+    auto typeId = info.GetTypeId();
+    const NYql::NProto::TypeIds yqlType = static_cast<NYql::NProto::TypeIds>(typeId);
     switch (yqlType) {
     case NYql::NProto::TypeIds::Bool:
         return ((*(const ui8 *)cell.Data()) == 0) ? THash<ui8>()((ui8)0) : THash<ui8>()((ui8)1);
@@ -273,17 +284,23 @@ inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
         return ComputeHash(TStringBuf{cell.Data(), cell.Size()});
 
     default:
-        Y_VERIFY_DEBUG(false, "Type not supported for user columns: %d", type);
         break;
     }
 
+    if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
+        auto typeDesc = info.GetTypeDesc();
+        Y_VERIFY(typeDesc, "no pg type descriptor");
+        return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
+    }
+
+    Y_VERIFY_DEBUG(false, "Type not supported for user columns: %d", typeId);
     return 0;
 }
 
 // Only references a vector of cells and corresponding types
 // Doesn't own the memory
 struct TDbTupleRef {
-    const NKikimr::NScheme::TTypeId* Types;
+    const NKikimr::NScheme::TTypeInfo* Types;
     const TCell* Columns;
     ui32 ColumnCount;
 
@@ -291,7 +308,7 @@ struct TDbTupleRef {
         return { Columns, ColumnCount };
     }
 
-    TDbTupleRef(const NScheme::TTypeId* types = nullptr, const TCell* storage = nullptr, ui32 colCnt = 0)
+    TDbTupleRef(const NScheme::TTypeInfo* types = nullptr, const TCell* storage = nullptr, ui32 colCnt = 0)
         : Types(types)
         , Columns(storage)
         , ColumnCount(colCnt)
@@ -523,8 +540,8 @@ private:
     TVector<TCell> Cells;
 };
 
-void DbgPrintValue(TString&, const TCell&, ui32 type);
-TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry& typeRegistry);
+void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);
+TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);
 
 }

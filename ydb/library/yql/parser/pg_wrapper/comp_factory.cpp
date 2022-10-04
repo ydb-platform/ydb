@@ -2903,3 +2903,264 @@ void get_type_io_data(Oid typid,
 }
 
 } // extern "C"
+
+namespace NKikimr::NPg {
+
+class TPgTypeDescriptor
+    : public NYql::NPg::TTypeDesc
+{
+public:
+    TPgTypeDescriptor()
+    {}
+
+    explicit TPgTypeDescriptor(const NYql::NPg::TTypeDesc& desc)
+        : NYql::NPg::TTypeDesc(desc)
+    {
+        // TODO: btarraycmp and hash_array for array types
+        if (CompareProcId) {
+            InitFunc(CompareProcId, &CompareProcInfo, 2, 2);
+        }
+        if (HashProcId) {
+            InitFunc(HashProcId, &HashProcInfo, 1, 1);
+        }
+        if (ReceiveFuncId) {
+            InitFunc(ReceiveFuncId, &ReceiveFuncInfo, 1, 3);
+        }
+        if (SendFuncId) {
+            InitFunc(SendFuncId, &SendFuncInfo, 1, 1);
+        }
+    }
+
+    int Compare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR) const {
+        NMiniKQL::TScopedAlloc alloc;
+        NMiniKQL::TPAllocScope scope;
+        PG_TRY();
+        {
+            Datum datumL, datumR;
+            if (PassByValue) {
+                datumL = ScalarDatumFromData(dataL, sizeL);
+                datumR = ScalarDatumFromData(dataR, sizeR);
+            } else {
+                datumL = Unpack(dataL, sizeL);
+                datumR = Unpack(dataR, sizeR);
+            }
+
+            LOCAL_FCINFO(callInfo, 2);
+            Zero(*callInfo);
+            callInfo->flinfo = (FmgrInfo*)&CompareProcInfo;
+            callInfo->nargs = 2;
+            callInfo->fncollation = DEFAULT_COLLATION_OID;
+            callInfo->isnull = false;
+            callInfo->args[0] = { datumL, false };
+            callInfo->args[1] = { datumR, false };
+
+            auto result = CompareProcInfo.fn_addr(callInfo);
+            Y_ENSURE(!callInfo->isnull);
+            if (!PassByValue) {
+                pfree((void*)datumL);
+                pfree((void*)datumR);
+            }
+            return DatumGetInt32(result);
+        }
+        PG_CATCH();
+        {
+            // TODO
+        }
+        PG_END_TRY();
+        return 0;
+    }
+
+    ui64 Hash(const char* data, size_t size) const {
+        NMiniKQL::TScopedAlloc alloc;
+        NMiniKQL::TPAllocScope scope;
+        PG_TRY();
+        {
+            Datum datum;
+            if (PassByValue) {
+                datum = ScalarDatumFromData(data, size);
+            } else {
+                datum = Unpack(data, size);
+            }
+
+            LOCAL_FCINFO(callInfo, 1);
+            Zero(*callInfo);
+            callInfo->flinfo = (FmgrInfo*)&HashProcInfo;
+            callInfo->nargs = 1;
+            callInfo->fncollation = DEFAULT_COLLATION_OID;
+            callInfo->isnull = false;
+            callInfo->args[0] = { datum, false };
+
+            auto result = HashProcInfo.fn_addr(callInfo);
+            Y_ENSURE(!callInfo->isnull);
+            if (!PassByValue) {
+                pfree((void*)datum);
+            }
+            return DatumGetUInt32(result);
+        }
+        PG_CATCH();
+        {
+            // TODO
+        }
+        PG_END_TRY();
+        return 0;
+    }
+
+private:
+    inline Datum ScalarDatumFromData(const char* data, size_t size) const {
+        switch (TypeId) {
+        case BOOLOID:
+            Y_ENSURE(size == sizeof(bool));
+            return BoolGetDatum(ReadUnaligned<bool>(data));
+        case CHAROID:
+            Y_ENSURE(size == sizeof(char));
+            return CharGetDatum(ReadUnaligned<char>(data));
+        case INT2OID:
+            Y_ENSURE(size == sizeof(i16));
+            return Int16GetDatum(ReadUnaligned<i16>(data));
+        case INT4OID:
+            Y_ENSURE(size == sizeof(i32));
+            return Int32GetDatum(ReadUnaligned<i32>(data));
+        case INT8OID:
+            Y_ENSURE(size == sizeof(i64));
+            return Int64GetDatum(ReadUnaligned<i64>(data));
+        case FLOAT4OID:
+            Y_ENSURE(size == sizeof(float));
+            return Float4GetDatum(ReadUnaligned<float>(data));
+        case FLOAT8OID:
+            Y_ENSURE(size == sizeof(double));
+            return Float8GetDatum(ReadUnaligned<double>(data));
+        default: {
+            Y_ENSURE(size <= sizeof(ui64));
+            ui64 val = 0;
+            std::memcpy(&val, data, size);
+            return (Datum)val;
+        }
+        }
+    }
+
+    Datum Unpack(const char* data, size_t size) const {
+        StringInfoData stringInfo;
+        stringInfo.data = (char*)data;
+        stringInfo.len = size;
+        stringInfo.maxlen = size;
+        stringInfo.cursor = 0;
+
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = (FmgrInfo*)&ReceiveFuncInfo;
+        callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)&stringInfo, false };
+        callInfo->args[1] = { ObjectIdGetDatum(NKikimr::NMiniKQL::MakeTypeIOParam(*this)), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
+
+        auto result = ReceiveFuncInfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return result;
+    }
+
+    static void InitFunc(ui32 funcId, FmgrInfo* info, ui32 argCountMin, ui32 argCountMax) {
+        Zero(*info);
+        Y_ENSURE(funcId);
+        fmgr_info(funcId, info);
+        Y_ENSURE(info->fn_addr);
+        Y_ENSURE(info->fn_nargs >= argCountMin && info->fn_nargs <= argCountMax);
+    }
+
+private:
+    FmgrInfo CompareProcInfo;
+    FmgrInfo HashProcInfo;
+    FmgrInfo ReceiveFuncInfo;
+    FmgrInfo SendFuncInfo;
+};
+
+class TPgTypeDescriptors {
+public:
+    static const TPgTypeDescriptors& Instance() {
+        return *Singleton<TPgTypeDescriptors>();
+    }
+
+    TPgTypeDescriptors() {
+        auto initType = [this] (ui32 pgTypeId, const NYql::NPg::TTypeDesc& type) {
+            this->InitType(pgTypeId, type);
+        };
+        NYql::NPg::EnumTypes(initType);
+    }
+
+    const TPgTypeDescriptor* Find(ui32 pgTypeId) const {
+        return PgTypeDescriptors.FindPtr(pgTypeId);
+    }
+
+    const TPgTypeDescriptor* Find(const TStringBuf name) const {
+        auto* id = ByName.FindPtr(name);
+        if (id) {
+            return Find(*id);
+        }
+        return {};
+    }
+
+private:
+    void InitType(ui32 pgTypeId, const NYql::NPg::TTypeDesc& type) {
+        if (type.TypeId == type.ArrayTypeId) { // TODO: support arrays
+            return;
+        }
+        PgTypeDescriptors[pgTypeId] = TPgTypeDescriptor(type);
+        ByName[type.Name] = pgTypeId;
+    }
+
+private:
+    THashMap<ui32, TPgTypeDescriptor> PgTypeDescriptors;
+    THashMap<TString, ui32> ByName;
+};
+
+ui32 PgTypeIdFromTypeDesc(void* typeDesc) {
+    if (!typeDesc) {
+        return 0;
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->TypeId;
+}
+
+void* TypeDescFromPgTypeId(ui32 pgTypeId) {
+    if (!pgTypeId) {
+        return {};
+    }
+    return (void*)TPgTypeDescriptors::Instance().Find(pgTypeId);
+}
+
+const char* PgTypeNameFromTypeDesc(void* typeDesc) {
+    if (!typeDesc) {
+        return "";
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->Name.data();
+}
+
+void* TypeDescFromPgTypeName(const TStringBuf name) {
+    return (void*)TPgTypeDescriptors::Instance().Find(name);
+}
+
+bool TypeDescIsComparable(void* typeDesc) {
+    if (!typeDesc) {
+        return false;
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->CompareProcId != 0;
+}
+
+ui32 TypeDescGetTypeLen(void* typeDesc) {
+    if (!typeDesc) {
+        return 0;
+    }
+    i32 res = static_cast<TPgTypeDescriptor*>(typeDesc)->TypeLen;
+    return res < 0 ? 0 : (ui32)res;
+}
+
+int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, void* typeDesc) {
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->Compare(dataL, sizeL, dataR, sizeR);
+}
+
+ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc) {
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->Hash(data, size);
+}
+
+} // namespace NKikimr::NPg
+

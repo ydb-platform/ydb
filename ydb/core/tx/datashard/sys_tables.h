@@ -10,12 +10,12 @@ struct TSysTables {
     struct TTableColumnInfo {
         TString Name;
         ui32 Id = 0;
-        ui32 PType = 0;
+        NScheme::TTypeInfo PType;
         i32 KeyOrder = -1;
 
         TTableColumnInfo() = default;
 
-        TTableColumnInfo(TString name, ui32 colId, ui32 type, i32 keyOrder = -1)
+        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type, i32 keyOrder = -1)
             : Name(name)
             , Id(colId)
             , PType(type)
@@ -113,12 +113,14 @@ struct TSysTables {
             return "";
         }
 
-        static void GetInfo(THashMap<ui32, TTableColumnInfo>& columns, TVector<ui32>& keyTypes, bool v2) {
+        static void GetInfo(THashMap<ui32, TTableColumnInfo>& columns, TVector<NScheme::TTypeInfo>& keyTypes, bool v2) {
             /// @warning Generation is uint32. Don't ask me why
-            auto type = NScheme::TUint64::TypeId;
+            auto type = NScheme::TTypeInfo(NScheme::TUint64::TypeId);
+            auto typeUi32 = NScheme::TTypeInfo(NScheme::TUint32::TypeId);
+
             columns[0] = TTableColumnInfo(GetColName(EColumns::LockId), (ui32)EColumns::LockId, type, 0);
             columns[1] = TTableColumnInfo(GetColName(EColumns::DataShard), (ui32)EColumns::DataShard, type, 1);
-            columns[2] = TTableColumnInfo(GetColName(EColumns::Generation), (ui32)EColumns::Generation, NScheme::TUint32::TypeId);
+            columns[2] = TTableColumnInfo(GetColName(EColumns::Generation), (ui32)EColumns::Generation, typeUi32);
             columns[3] = TTableColumnInfo(GetColName(EColumns::Counter), (ui32)EColumns::Counter, type);
 
             keyTypes.push_back(type);

@@ -502,7 +502,8 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         if (table.Columns.contains(colId)) {
             const TUserTable::TUserColumn &column = table.Columns.at(colId);
             Y_VERIFY(column.Name == col.GetName());
-            Y_VERIFY(column.Type == col.GetTypeId());
+            // TODO: support pg types
+            Y_VERIFY(column.Type.GetTypeId() == col.GetTypeId());
             Y_VERIFY(col.HasFamily());
         }
     }

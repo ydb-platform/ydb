@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
+
 namespace {
 
 using namespace NKikimr;
@@ -57,7 +59,9 @@ TColumnTableInfo::TPtr ParseParams(
         for (const auto& col : tableSchema->GetColumns()) {
             ui32 id = col.GetId();
             TString name = col.GetName();
-            columns[id] = TOlapSchema::TColumn{id, name, static_cast<NScheme::TTypeId>(col.GetTypeId()), Max<ui32>()};
+            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+                col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+            columns[id] = TOlapSchema::TColumn{id, name, typeInfo, Max<ui32>()};
             columnsByName[name] = id;
         }
 

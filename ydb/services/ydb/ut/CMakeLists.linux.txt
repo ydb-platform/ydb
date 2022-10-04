@@ -28,7 +28,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   cpp-regex-pcre
   library-cpp-svnversion
   kqp-ut-common
-  ydb-core-testlib
+  core-testlib-default
   yql-minikql-dom
   yql-minikql-jsonpath
   public-lib-experimental

@@ -20,7 +20,7 @@ target_link_libraries(ydb-core-ydb_convert-ut PUBLIC
   cpp-testing-unittest_main
   ydb-core-ydb_convert
   cpp-testing-unittest
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-ydb_convert-ut PRIVATE
   -ldl

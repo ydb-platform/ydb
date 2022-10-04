@@ -8,6 +8,8 @@
 
 add_subdirectory(actors)
 add_subdirectory(basics)
+add_subdirectory(default)
+add_subdirectory(pg)
 
 add_library(ydb-core-testlib)
 target_compile_options(ydb-core-testlib PRIVATE

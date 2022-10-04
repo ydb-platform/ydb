@@ -103,7 +103,7 @@ namespace {
         for (auto off : xrange(part.Scheme->Groups[0].KeyTypes.size())) {
             Out << (off ? ", " : "");
 
-            TName(part.Scheme->Groups[0].KeyTypes[off]);
+            TName(part.Scheme->Groups[0].KeyTypes[off].GetTypeId());
         }
 
         Out << ")" << Endl;
@@ -184,11 +184,11 @@ namespace {
 
                 if (op == ELargeObj::Inline) {
                     Out
-                        << DbgPrintCell(iter->Cell(info), info.TypeId, *Reg);
+                        << DbgPrintCell(iter->Cell(info), info.TypeInfo, *Reg);
                 } else {
                     const auto ref = iter->Cell(info).AsValue<ui64>();
 
-                    TName(info.TypeId);
+                    TName(info.TypeInfo.GetTypeId());
 
                     const auto frame = GetFrame(part, ref, op);
                     const auto blob = Env->Locate(&part, ref, op);

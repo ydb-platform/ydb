@@ -123,8 +123,8 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
 
-bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error) {
-    ui32 typeId;
+bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error) {
+    ui32 typeId = 0;
     auto itemType = inType.has_optional_type() ? inType.optional_type().item() : inType;
     switch (itemType.type_case()) {
         case Ydb::Type::kTypeId:
@@ -150,6 +150,17 @@ bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusId
             typeId = NYql::NProto::TypeIds::Decimal;
             break;
         }
+        case Ydb::Type::kPgType: {
+            ui32 pgTypeId = itemType.pg_type().oid();
+            auto* desc = NPg::TypeDescFromPgTypeId(pgTypeId);
+            if (!desc) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Invalid PG typeId: " << pgTypeId;
+                return false;
+            }
+            outTypeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, desc);
+            return true;
+        }
 
         default: {
             status = Ydb::StatusIds::BAD_REQUEST;
@@ -164,7 +175,7 @@ bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusId
         return false;
     }
 
-    outTypeId = typeId;
+    outTypeInfo = NScheme::TTypeInfo(typeId);
     return true;
 }
 
@@ -184,11 +195,11 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
             cd->SetNotNull(true);
         }
 
-        ui32 typeId;
-        if (!ExtractColumnTypeId(typeId, column.type(), status, error)) {
+        NScheme::TTypeInfo typeInfo;
+        if (!ExtractColumnTypeInfo(typeInfo, column.type(), status, error)) {
             return false;
         }
-        cd->SetType(NYql::NProto::TypeIds_Name(NYql::NProto::TypeIds(typeId)));
+        cd->SetType(NScheme::TypeName(typeInfo));
 
         if (!column.family().empty()) {
             cd->SetFamilyName(column.family());

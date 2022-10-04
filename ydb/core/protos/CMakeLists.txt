@@ -138,6 +138,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_proxy.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_scheme.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_sequenceshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/type_info.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/pdiskfit.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/pqconfig.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/auth.proto

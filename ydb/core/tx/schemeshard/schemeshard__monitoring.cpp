@@ -760,7 +760,7 @@ private:
 
             }
 
-            TVector<ui16> keyTypes;
+            TVector<NScheme::TTypeInfo> keyTypes;
             if (Self->Tables.contains(info->TablePathId)) {
                 TTableInfo::TPtr tableInfo = Self->Tables.at(info->TablePathId);
                 for (ui32 keyPos: tableInfo->KeyColumnIds) {

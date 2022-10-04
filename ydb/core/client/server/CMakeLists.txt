@@ -32,10 +32,12 @@ target_link_libraries(core-client-server PUBLIC
   core-engine-minikql
   ydb-core-grpc_services
   ydb-core-keyvalue
+  core-kqp-common
   ydb-core-node_whiteboard
   ydb-core-persqueue
   core-persqueue-writer
   ydb-core-protos
+  ydb-core-scheme
   ydb-core-ydb_convert
   core-ymq-actor
   ydb-library-aclib

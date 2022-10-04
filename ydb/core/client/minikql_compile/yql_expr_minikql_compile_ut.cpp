@@ -11,6 +11,8 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
+using TTypeInfo = NScheme::TTypeInfo;
+
 namespace {
     const TDuration TIME_LIMIT = TDuration::Seconds(60);
 
@@ -72,8 +74,8 @@ namespace {
         table.Table.ColumnNames = { "key", "value" };
         table.TableId.Reset(new TTableId(1, 2));
         table.KeyColumnCount = 1;
-        table.Columns.insert(std::make_pair("key", TColumn{ 34, 0, NUdf::TDataType<ui32>::Id, 0, EColumnTypeConstraint::Nullable }));
-        table.Columns.insert(std::make_pair("value", TColumn{ 56, -1, NUdf::TDataType<char*>::Id, (ui32)EInplaceUpdateMode::Min, EColumnTypeConstraint::Nullable }));
+        table.Columns.insert(std::make_pair("key", TColumn{ 34, 0, TTypeInfo(NUdf::TDataType<ui32>::Id), 0, EColumnTypeConstraint::Nullable }));
+        table.Columns.insert(std::make_pair("value", TColumn{ 56, -1, TTypeInfo(NUdf::TDataType<char*>::Id), (ui32)EInplaceUpdateMode::Min, EColumnTypeConstraint::Nullable }));
         services.DbSchemeResolver.AddTable(table);
 
         IDbSchemeResolver::TTableResult table2(IDbSchemeResolver::TTableResult::Ok);
@@ -81,8 +83,8 @@ namespace {
         table2.Table.ColumnNames = { "key", "value" };
         table2.TableId.Reset(new TTableId(10, 20));
         table2.KeyColumnCount = 1;
-        table2.Columns.insert(std::make_pair("key", TColumn{ 340, 0, NUdf::TDataType<ui32>::Id, 0, EColumnTypeConstraint::Nullable }));
-        table2.Columns.insert(std::make_pair("value", TColumn{ 560, -1, NUdf::TDataType<char*>::Id, (ui32)EInplaceUpdateMode::Min, EColumnTypeConstraint::Nullable }));
+        table2.Columns.insert(std::make_pair("key", TColumn{ 340, 0, TTypeInfo(NUdf::TDataType<ui32>::Id), 0, EColumnTypeConstraint::Nullable }));
+        table2.Columns.insert(std::make_pair("value", TColumn{ 560, -1, TTypeInfo(NUdf::TDataType<char*>::Id), (ui32)EInplaceUpdateMode::Min, EColumnTypeConstraint::Nullable }));
         services.DbSchemeResolver.AddTable(table2);
     }
 }
@@ -107,7 +109,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].Column, 56);
         UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].KeyPosition, -1);
         UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].AllowInplaceMode, (ui32)EInplaceUpdateMode::Min);
-        UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].Type, (ui32)NUdf::TDataType<char*>::Id);
+        UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].Type.GetTypeId(), (ui32)NUdf::TDataType<char*>::Id);
     }
 
     Y_UNIT_TEST(OnlyResult) {

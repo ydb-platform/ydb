@@ -35,7 +35,7 @@ public:
 
     const NDataShard::TUserTable::TUserColumn& GetKeyColumnInfo(
         const NDataShard::TUserTable& table, ui32 keyIndex) const;
-    THashMap<TString, NScheme::TTypeId> GetKeyColumnsMap(const TTableId &tableId) const;
+    THashMap<TString, NScheme::TTypeInfo> GetKeyColumnsMap(const TTableId &tableId) const;
 
     void SetHasPersistentChannels(bool value) { PersistentChannels = value; }
     bool HasPersistentChannels() const { return PersistentChannels; }

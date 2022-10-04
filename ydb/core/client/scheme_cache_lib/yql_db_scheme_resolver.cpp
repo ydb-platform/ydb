@@ -67,7 +67,7 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
                         if (systemColumn != GetSystemColumns().end()) {
                             reply.Columns.insert({
                                 column,
-                                {systemColumn->second.ColumnId, -1, systemColumn->second.TypeId, 0, EColumnTypeConstraint::Nullable}
+                                {systemColumn->second.ColumnId, -1, NScheme::TTypeInfo(systemColumn->second.TypeId), 0, EColumnTypeConstraint::Nullable}
                             });
                             continue;
                         }

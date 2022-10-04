@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-yq-libs-checkpointing-ut PUBLIC
   yq-libs-checkpointing
   cpp-testing-unittest
   core-testlib-actors
-  core-testlib-basics
+  testlib-basics-default
 )
 target_link_options(ydb-core-yq-libs-checkpointing-ut PRIVATE
   -ldl

@@ -9,30 +9,31 @@ namespace NKikimr::NMiniKQL {
 namespace {
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
+using TTypeInfo = NScheme::TTypeInfo;
 
 struct TDataRow {
     TSmallVec<TKqpComputeContextBase::TColumn> Columns() {
         return {
-            {0, NTypeIds::Bool},
-            {1, NTypeIds::Int8},
-            {2, NTypeIds::Int16},
-            {3, NTypeIds::Int32},
-            {4, NTypeIds::Int64},
-            {5, NTypeIds::Uint8},
-            {6, NTypeIds::Uint16},
-            {7, NTypeIds::Uint32},
-            {8, NTypeIds::Uint64},
-            {9, NTypeIds::Float},
-            {10, NTypeIds::Double},
-            {11, NTypeIds::String},
-            {12, NTypeIds::Utf8},
-            {13, NTypeIds::Json},
-            {14, NTypeIds::Yson},
-            {15, NTypeIds::Date},
-            {16, NTypeIds::Datetime},
-            {17, NTypeIds::Timestamp},
-            {18, NTypeIds::Interval},
-            {19, NTypeIds::Decimal},
+            {0, TTypeInfo(NTypeIds::Bool)},
+            {1, TTypeInfo(NTypeIds::Int8)},
+            {2, TTypeInfo(NTypeIds::Int16)},
+            {3, TTypeInfo(NTypeIds::Int32)},
+            {4, TTypeInfo(NTypeIds::Int64)},
+            {5, TTypeInfo(NTypeIds::Uint8)},
+            {6, TTypeInfo(NTypeIds::Uint16)},
+            {7, TTypeInfo(NTypeIds::Uint32)},
+            {8, TTypeInfo(NTypeIds::Uint64)},
+            {9, TTypeInfo(NTypeIds::Float)},
+            {10, TTypeInfo(NTypeIds::Double)},
+            {11, TTypeInfo(NTypeIds::String)},
+            {12, TTypeInfo(NTypeIds::Utf8)},
+            {13, TTypeInfo(NTypeIds::Json)},
+            {14, TTypeInfo(NTypeIds::Yson)},
+            {15, TTypeInfo(NTypeIds::Date)},
+            {16, TTypeInfo(NTypeIds::Datetime)},
+            {17, TTypeInfo(NTypeIds::Timestamp)},
+            {18, TTypeInfo(NTypeIds::Interval)},
+            {19, TTypeInfo(NTypeIds::Decimal)},
         };
     }
 
@@ -234,7 +235,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         };
 
         for (auto& testCase: cases) {
-            auto sizes = GetUnboxedValueSizeForTests(testCase.Value, testCase.Type);
+            auto sizes = GetUnboxedValueSizeForTests(testCase.Value, NScheme::TTypeInfo(testCase.Type));
             UNIT_ASSERT_EQUAL_C(sizes, testCase.ExpectedSizes, "Wrong size for type " << NScheme::TypeName(testCase.Type));
         }
     }
@@ -293,7 +294,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         TSmallVec<TKqpComputeContextBase::TColumn> resultCols;
         auto resCol = TKqpComputeContextBase::TColumn {
-            .Type = NTypeIds::Int8
+            .Type = TTypeInfo(NTypeIds::Int8)
         };
         resultCols.push_back(resCol);
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, {}, resultCols);

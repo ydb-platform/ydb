@@ -25,7 +25,7 @@ target_link_libraries(ydb-core-client-server-ut PUBLIC
   cpp-testing-gmock_in_unittest
   ydb-core-persqueue
   ydb-core-tablet_flat
-  ydb-core-testlib
+  core-testlib-default
   core-testlib-actors
 )
 target_link_options(ydb-core-client-server-ut PRIVATE

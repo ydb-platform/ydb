@@ -52,7 +52,7 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
     return AppendCell(*builder.GetFieldAs<TBuilderType>(colNum), cell);
 }
 
-arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum, NScheme::TTypeId type) {
+arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum, NScheme::TTypeInfo type) {
     arrow::Status result;
     auto callback = [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
@@ -196,7 +196,7 @@ TArrowBatchBuilder::TArrowBatchBuilder(arrow::Compression::type codec)
     WriteOptions.use_threads = false;
 }
 
-bool TArrowBatchBuilder::Start(const TVector<std::pair<TString, NScheme::TTypeId>>& ydbColumns) {
+bool TArrowBatchBuilder::Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
     YdbSchema = ydbColumns;
     auto schema = MakeArrowSchema(ydbColumns);
     auto status = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), RowsToReserve, &BatchBuilder);
@@ -206,7 +206,7 @@ bool TArrowBatchBuilder::Start(const TVector<std::pair<TString, NScheme::TTypeId
 
 void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
     NumBytes += cell.Size();
-    const ui32 ydbType = YdbSchema[colNum].second;
+    auto ydbType = YdbSchema[colNum].second;
     auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
     Y_VERIFY(status.ok());
 }
@@ -216,7 +216,7 @@ void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value
 
     auto fnAppendTuple = [&] (const TDbTupleRef& tuple, size_t offsetInRow) {
         for (size_t i = 0; i < tuple.ColumnCount; ++i) {
-            const ui32 ydbType = tuple.Types[i];
+            auto ydbType = tuple.Types[i];
             const ui32 colNum =  offsetInRow + i;
             Y_VERIFY(ydbType == YdbSchema[colNum].second);
             auto& cell = tuple.Columns[i];

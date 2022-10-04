@@ -675,7 +675,7 @@ public:
                 if (shardStatus.LastKeyAck) {
                     //check that all LastKeyAcks are monotonously increase
                     TTableInfo::TPtr tableInfo = Self->Tables.at(buildInfo->TablePathId);
-                    TVector<ui16> keyTypes;
+                    TVector<NScheme::TTypeInfo> keyTypes;
                     for (ui32 keyPos: tableInfo->KeyColumnIds) {
                         keyTypes.push_back(tableInfo->Columns.at(keyPos).PType);
                     }

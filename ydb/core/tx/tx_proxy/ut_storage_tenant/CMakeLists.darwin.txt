@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-tx-tx_proxy-ut_storage_tenant PUBLIC
   library-cpp-svnversion
   cpp-testing-unittest
   ydb-core-blobstorage
-  ydb-core-testlib
+  core-testlib-default
   ydb-core-tx
   udf-service-exception_policy
 )

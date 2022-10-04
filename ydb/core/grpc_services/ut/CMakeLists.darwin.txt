@@ -21,7 +21,7 @@ target_link_libraries(ydb-core-grpc_services-ut PUBLIC
   cpp-regex-pcre
   library-cpp-svnversion
   core-client-scheme_cache_lib
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-grpc_services-ut PRIVATE
   -Wl,-no_deduplicate

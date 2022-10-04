@@ -15,7 +15,7 @@ namespace NKikimr::NColumnShard {
 using NOlap::TWriteId;
 
 std::pair<NOlap::TPredicate, NOlap::TPredicate>
-RangePredicates(const TSerializedTableRange& range, const TVector<std::pair<TString, NScheme::TTypeId>>& columns);
+RangePredicates(const TSerializedTableRange& range, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 
 class IColumnResolver {
 public:

@@ -15,6 +15,8 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+    using TTypeInfo = NScheme::TTypeInfo;
+
     const ui64 Shard1 = 100;
     const ui64 Shard2 = 101;
     //const ui64 Shard3 = 102;
@@ -306,15 +308,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
         TRuntimeNode value = TRuntimeNode())
     {
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)TKey;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(TKey);
         TRuntimeNode::TList row(1);
         row[0] = key ? key : pgmBuilder.NewNull();
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
 
         update.SetColumn(columnId,
-            TValue,
+            TTypeInfo(TValue),
             value ? value : pgmBuilder.NewNull());
 
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id),
@@ -330,13 +332,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
         TDriver& driver)
     {
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)TKey;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(TKey);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.NewNull();
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row);
 
@@ -420,8 +422,8 @@ Value {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42);
         TVector<TSelectColumn> columns;
@@ -477,8 +479,8 @@ Value {
         }
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
         TVector<TSelectColumn> columns;
@@ -536,12 +538,12 @@ Value {
         }
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
@@ -685,8 +687,8 @@ Value {
         }
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
@@ -727,8 +729,8 @@ Value {
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>("qwe"));
         }
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.NewNull();
 
@@ -800,8 +802,8 @@ Value {
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
@@ -838,8 +840,8 @@ Value {
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
@@ -848,7 +850,7 @@ Value {
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
         update.SetColumn(columnId,
-            NUdf::TDataType<NUdf::TUtf8>::Id,
+            TTypeInfo(NUdf::TDataType<NUdf::TUtf8>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>("qwe"));
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id),
             keyTypes, row, update)));
@@ -910,8 +912,8 @@ Value {
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
@@ -960,8 +962,8 @@ Value {
         }
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
@@ -970,7 +972,7 @@ Value {
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
         update.SetColumn(columnId,
-            NUdf::TDataType<NUdf::TUtf8>::Id,
+            TTypeInfo(NUdf::TDataType<NUdf::TUtf8>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>("qwe"));
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id),
             keyTypes, row, update)));
@@ -1013,8 +1015,8 @@ Value {
         }
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
@@ -1054,8 +1056,8 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -1125,8 +1127,8 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewNull();
         options.FromColumns = rowFrom;
@@ -1210,12 +1212,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -1329,11 +1331,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -1440,11 +1442,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewNull();
         options.FromColumns = rowFrom;
@@ -1554,12 +1556,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -1676,11 +1678,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
 
@@ -1798,11 +1800,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
 
@@ -1915,11 +1917,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         TRuntimeNode::TList rowTo(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
@@ -2040,11 +2042,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         TRuntimeNode::TList rowTo(1);
         rowFrom[0] = pgmBuilder.NewNull();
@@ -2151,11 +2153,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         TRuntimeNode::TList rowTo(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
@@ -2272,11 +2274,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         TRuntimeNode::TList rowTo(1);
         rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
@@ -2402,11 +2404,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         TRuntimeNode::TList rowTo(1);
         rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
@@ -2525,11 +2527,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         TRuntimeNode::TList rowTo(1);
         rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
@@ -2648,11 +2650,11 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         TRuntimeNode::TList rowTo(1);
         rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
@@ -2766,22 +2768,22 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
 
-        TVector<ui32> keyTypes1(1);
-        keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes1(1);
+        keyTypes1[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row1(1);
         TVector<TSelectColumn> columns1;
-        columns1.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns1.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
         auto value1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes1, columns1, row1);
 
-        TVector<ui32> keyTypes2(1);
-        keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
+        TVector<TTypeInfo> keyTypes2(1);
+        keyTypes2[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
         TRuntimeNode::TList row2(1);
         row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11);
         TVector<TSelectColumn> columns2;
-        columns2.emplace_back("4", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType,
+        columns2.emplace_back("4", (ui32)Schema2::Table2::Value::ColumnId, TTypeInfo(Schema2::Table2::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto value2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table2Id), keyTypes2, columns2, row2);
@@ -2917,14 +2919,14 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
 
-        TVector<ui32> keyTypes1(1);
-        keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes1(1);
+        keyTypes1[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row1(1);
         row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
         auto value1 = pgmBuilder.EraseRow(TTableId(OwnerId, Table1Id), keyTypes1, row1);
 
-        TVector<ui32> keyTypes2(1);
-        keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
+        TVector<TTypeInfo> keyTypes2(1);
+        keyTypes2[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
         TRuntimeNode::TList row2(1);
         row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11);
 
@@ -2973,27 +2975,27 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
 
-        TVector<ui32> keyTypes1(1);
-        keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes1(1);
+        keyTypes1[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row1(1);
         row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
         auto update1 = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId1 = (ui32)Schema1::Table1::Value::ColumnId;
         update1.SetColumn(columnId1,
-            NUdf::TDataType<NUdf::TUtf8>::Id,
+            TTypeInfo(NUdf::TDataType<NUdf::TUtf8>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>("qwe"));
 
         auto value1 = pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id), keyTypes1, row1, update1);
 
-        TVector<ui32> keyTypes2(1);
-        keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
+        TVector<TTypeInfo> keyTypes2(1);
+        keyTypes2[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
         TRuntimeNode::TList row2(1);
         row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11);
 
         auto update2 = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId2 = (ui32)Schema2::Table2::Value::ColumnId;
         update2.SetColumn(columnId2,
-            NUdf::TDataType<ui32>::Id,
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(21));
 
         auto value2 = pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), keyTypes2, row2, update2);
@@ -3065,36 +3067,36 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
 
-        TVector<ui32> keyTypes1(1);
-        keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes1(1);
+        keyTypes1[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row1(1);
         row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
         auto update1 = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId1 = (ui32)Schema1::Table1::Value::ColumnId;
         update1.SetColumn(columnId1,
-            NUdf::TDataType<NUdf::TUtf8>::Id,
+            TTypeInfo(NUdf::TDataType<NUdf::TUtf8>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>("asd"));
 
         TVector<TSelectColumn> columns1;
-        columns1.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns1.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto oldRow1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes1, columns1, row1);
         auto value1 = pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id), keyTypes1, row1, update1);
 
-        TVector<ui32> keyTypes2(1);
-        keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
+        TVector<TTypeInfo> keyTypes2(1);
+        keyTypes2[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
         TRuntimeNode::TList row2(1);
         row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11);
 
         auto update2 = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId2 = (ui32)Schema2::Table2::Value::ColumnId;
         update2.SetColumn(columnId2,
-            NUdf::TDataType<ui32>::Id,
+            TTypeInfo(NUdf::TDataType<ui32>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(32));
 
         TVector<TSelectColumn> columns2;
-        columns2.emplace_back("4", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType,
+        columns2.emplace_back("4", (ui32)Schema2::Table2::Value::ColumnId, TTypeInfo(Schema2::Table2::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto oldRow2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table2Id), keyTypes2, columns2, row2);
@@ -3189,12 +3191,12 @@ Value {
         }
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
@@ -3268,12 +3270,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -3358,8 +3360,8 @@ Value {
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
@@ -3368,7 +3370,7 @@ Value {
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
         update.SetColumn(columnId,
-            NUdf::TDataType<NUdf::TUtf8>::Id,
+            TTypeInfo(NUdf::TDataType<NUdf::TUtf8>::Id),
             pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>("qwe"));
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id),
             keyTypes, row, update)));
@@ -3409,8 +3411,8 @@ Value {
         }
 
         auto& pgmBuilder = driver.PgmBuilder;
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList row(1);
         row[0] = pgmBuilder.Add(
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
@@ -3466,12 +3468,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -3592,12 +3594,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -3722,12 +3724,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -3856,12 +3858,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -4003,12 +4005,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -4130,12 +4132,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -4264,12 +4266,12 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -4767,14 +4769,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -4845,14 +4847,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -4915,21 +4917,21 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::IncludeTermValue);
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
-        auto mapped = pgmBuilder.Map(list, [&pgmBuilder, keyTypes, columns](TRuntimeNode item) {
+        auto mapped = pgmBuilder.Map(list, [&pgmBuilder, &keyTypes, &columns](TRuntimeNode item) {
             TRuntimeNode::TList row(1);
             row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3);
 
@@ -4979,14 +4981,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -5067,14 +5069,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -5087,15 +5089,15 @@ Value {
         });
 
         auto write = pgmBuilder.Map(mapped, [&pgmBuilder](TRuntimeNode item) {
-            TVector<ui32> keyTypes(1);
-            keyTypes[0] = (ui32)NUdf::TDataType<ui64>::Id;
+            TVector<TTypeInfo> keyTypes(1);
+            keyTypes[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
 
             TRuntimeNode::TList row(1);
             row[0] = pgmBuilder.Convert(pgmBuilder.Member(item, "ID"), pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)));
 
             auto update = pgmBuilder.GetUpdateRowBuilder();
             ui32 columnId = (ui32)Schema2::Table2::Value::ColumnId;
-            update.SetColumn(columnId, NUdf::TDataType<ui32>::Id, pgmBuilder.Member(item, "ID"));
+            update.SetColumn(columnId, TTypeInfo(NUdf::TDataType<ui32>::Id), pgmBuilder.Member(item, "ID"));
             return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), keyTypes, row, update);
         });
 
@@ -5112,14 +5114,14 @@ Value {
 
         {
             TVector<TSelectColumn> columns;
-            columns.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType,
+            columns.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, TTypeInfo(Schema2::Table2::ID::ColumnType),
                 EColumnTypeConstraint::Nullable);
-            columns.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType,
+            columns.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, TTypeInfo(Schema2::Table2::Value::ColumnType),
                 EColumnTypeConstraint::Nullable);
 
             auto options = pgmBuilder.GetDefaultTableRangeOptions();
-            TVector<ui32> keyTypes(1);
-            keyTypes[0] = (ui32)NUdf::TDataType<ui64>::Id;
+            TVector<TTypeInfo> keyTypes(1);
+            keyTypes[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
             TRuntimeNode::TList rowFrom(1);
             rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
             options.FromColumns = rowFrom;
@@ -5176,13 +5178,13 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns1;
-        columns1.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns1.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns1.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns1.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes1(1);
-        keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes1(1);
+        keyTypes1[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom1(1);
         rowFrom1[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options1.FromColumns = rowFrom1;
@@ -5191,13 +5193,13 @@ Value {
         auto list1 = pgmBuilder.Member(range1, "List");
 
         TVector<TSelectColumn> columns2;
-        columns2.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType,
+        columns2.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, TTypeInfo(Schema2::Table2::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns2.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType,
+        columns2.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, TTypeInfo(Schema2::Table2::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes2(1);
-        keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
+        TVector<TTypeInfo> keyTypes2(1);
+        keyTypes2[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
         TRuntimeNode::TList rowFrom2(1);
         rowFrom2[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
         options2.FromColumns = rowFrom2;
@@ -5270,13 +5272,13 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns1;
-        columns1.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns1.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns1.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns1.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes1(1);
-        keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes1(1);
+        keyTypes1[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom1(1);
         rowFrom1[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options1.FromColumns = rowFrom1;
@@ -5285,13 +5287,13 @@ Value {
         auto list1 = pgmBuilder.Member(range1, "List");
 
         TVector<TSelectColumn> columns2;
-        columns2.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType,
+        columns2.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, TTypeInfo(Schema2::Table2::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns2.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType,
+        columns2.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, TTypeInfo(Schema2::Table2::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
         auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes2(1);
-        keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
+        TVector<TTypeInfo> keyTypes2(1);
+        keyTypes2[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
         TRuntimeNode::TList rowFrom2(1);
         rowFrom2[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
         options2.FromColumns = rowFrom2;
@@ -5377,14 +5379,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -5493,14 +5495,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -5604,14 +5606,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -5688,14 +5690,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -5766,14 +5768,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -5847,14 +5849,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -5936,14 +5938,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -6023,14 +6025,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -6114,14 +6116,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -6209,14 +6211,14 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType,
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -6284,8 +6286,8 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
@@ -6360,16 +6362,17 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         TVector<TSelectColumn> columns1 {
-            {"ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType, EColumnTypeConstraint::Nullable},
-            {"Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType, EColumnTypeConstraint::Nullable}
+            {"ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType), EColumnTypeConstraint::Nullable},
+            {"Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType), EColumnTypeConstraint::Nullable}
         };
 
         TRuntimeNode::TList fromColumns1{pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id)};
         auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
         options1.FromColumns = fromColumns1;
         options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::IncludeTermValue);
-        auto range1 = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), {(ui32)NUdf::TDataType<ui32>::Id},
-            columns1, options1);
+        TVector<TTypeInfo> keyTypes1(1);
+        keyTypes1[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
+        auto range1 = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes1, columns1, options1);
         auto list1 = pgmBuilder.Member(range1, "List");
 
         const TString filterValue = "Value6";
@@ -6383,16 +6386,17 @@ Value {
         auto take1 = pgmBuilder.Take(filtered1, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
 
         TVector<TSelectColumn> columns2 {
-            {"ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType, EColumnTypeConstraint::Nullable},
-            {"Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType, EColumnTypeConstraint::Nullable}
+            {"ID", (ui32)Schema2::Table2::ID::ColumnId, TTypeInfo(Schema2::Table2::ID::ColumnType), EColumnTypeConstraint::Nullable},
+            {"Value", (ui32)Schema2::Table2::Value::ColumnId, TTypeInfo(Schema2::Table2::Value::ColumnType), EColumnTypeConstraint::Nullable}
         };
 
         TRuntimeNode::TList fromColumns2{pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id)};
         auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
         options2.FromColumns = fromColumns2;
         options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::IncludeTermValue);
-        auto range2 = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), {(ui32)NUdf::TDataType<ui64>::Id},
-            columns2, options2);
+        TVector<TTypeInfo> keyTypes2(1);
+        keyTypes2[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
+        auto range2 = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), keyTypes2, columns2, options2);
         auto list2 = pgmBuilder.Member(range2, "List");
 
         auto mapped2 = pgmBuilder.Map(list2, [&pgmBuilder](TRuntimeNode item) {
@@ -6435,10 +6439,10 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
 
         TRuntimeNode::TList row1(1);
@@ -6484,14 +6488,14 @@ Value {
 
         auto& pgmBuilder = driver.PgmBuilder;
 
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        TVector<TTypeInfo> keyTypes(1);
+        keyTypes[0] = TTypeInfo(NUdf::TDataType<ui32>::Id);
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType,
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType),
             EColumnTypeConstraint::Nullable);
 
-        TVector<ui32> key2Types(1);
-        key2Types[0] = (ui32)NUdf::TDataType<ui64>::Id;
+        TVector<TTypeInfo> key2Types(1);
+        key2Types[0] = TTypeInfo(NUdf::TDataType<ui64>::Id);
 
         TRuntimeNode::TList row1(1);
         row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(1);

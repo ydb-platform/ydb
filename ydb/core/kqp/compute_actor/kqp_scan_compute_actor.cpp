@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/runtime/kqp_channel_storage.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/core/tx/datashard/datashard_kqp_compute.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -132,7 +133,10 @@ public:
         YQL_ENSURE(!Meta.GetReads().empty());
         YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
 
-        KeyColumnTypes.assign(Meta.GetKeyColumnTypes().begin(), Meta.GetKeyColumnTypes().end());
+        KeyColumnTypes.reserve(Meta.GetKeyColumnTypes().size());
+        for (auto typeId : Meta.GetKeyColumnTypes()) {
+            KeyColumnTypes.push_back(NScheme::TTypeInfo((NScheme::TTypeId)typeId));
+        }
     }
 
     void DoBootstrap() {
@@ -282,9 +286,15 @@ private:
     THolder<TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const {
         auto ev = MakeHolder<TEvDataShard::TEvKqpScan>();
         ev->Record.SetLocalPathId(ScanData->TableId.PathId.LocalPathId);
-        for (auto& column : ScanData->GetColumns()) {
+        for (auto& column: ScanData->GetColumns()) {
             ev->Record.AddColumnTags(column.Tag);
-            ev->Record.AddColumnTypes(column.Type);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+            ev->Record.AddColumnTypes(columnType.TypeId);
+            if (columnType.TypeInfo) {
+                *ev->Record.AddColumnTypeInfos() = *columnType.TypeInfo;
+            } else {
+                *ev->Record.AddColumnTypeInfos() = NKikimrProto::TTypeInfo();
+            }
         }
         ev->Record.MutableSkipNullKeys()->CopyFrom(Meta.GetSkipNullKeys());
 
@@ -1204,7 +1214,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     TScannedDataStats Stats;
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
-    TVector<NScheme::TTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
     std::deque<std::pair<TEvKqpCompute::TEvScanData::TPtr, TInstant>> PendingScanData;
     std::deque<TShardState> PendingShards;

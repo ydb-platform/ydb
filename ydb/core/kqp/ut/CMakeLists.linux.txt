@@ -8,6 +8,7 @@
 
 add_subdirectory(common)
 add_subdirectory(fat)
+add_subdirectory(pg)
 add_subdirectory(spilling)
 
 add_executable(ydb-core-kqp-ut)
@@ -33,6 +34,7 @@ target_link_libraries(ydb-core-kqp-ut PUBLIC
   kqp-ut-common
   cpp-client-draft
   cpp-client-ydb_proto
+  yql-sql-pg_dummy
   re2_udf
 )
 target_link_options(ydb-core-kqp-ut PRIVATE

@@ -26,7 +26,7 @@ target_link_libraries(ydb-services-cms-ut PUBLIC
   cpp-grpc-client
   cpp-regex-pcre
   library-cpp-svnversion
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-services-cms-ut PRIVATE
   -ldl

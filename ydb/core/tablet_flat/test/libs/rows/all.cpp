@@ -19,7 +19,7 @@ const NScheme::TTypeRegistry* DbgRegistry()
 
 TString PrintValue(const TCell& r, NScheme::TTypeId typeId)
 {
-    return DbgPrintCell(r, typeId, TypeRegistry);
+    return DbgPrintCell(r, NScheme::TTypeInfo(typeId), TypeRegistry);
 }
 
 }

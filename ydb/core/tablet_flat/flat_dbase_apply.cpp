@@ -32,8 +32,9 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             null = TCell(raw.data(), raw.size());
         }
 
-        changes = AddColumn(table, delta.GetColumnName(), delta.GetColumnId(),
-                     delta.GetColumnType(), delta.GetNotNull(), null);
+        ui32 pgTypeId = delta.HasColumnTypeInfo() ? delta.GetColumnTypeInfo().GetPgTypeId() : 0;
+        changes = AddPgColumn(table, delta.GetColumnName(), delta.GetColumnId(),
+            delta.GetColumnType(), pgTypeId, delta.GetNotNull(), null);
     } else if (action == TAlterRecord::DropColumn) {
         changes = DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {
@@ -222,10 +223,26 @@ bool TSchemeModifier::DropTable(ui32 id)
 
 bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
+    Y_VERIFY(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
+    return AddPgColumn(tid, name, id, type, 0, notNull, null);
+}
+
+bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 type, ui32 pgType, bool notNull, TCell null)
+{
     auto *table = Table(tid);
 
     auto it = table->Columns.find(id);
     auto itName = table->ColumnNames.find(name);
+
+    NScheme::TTypeInfo typeInfo;
+    if (pgType != 0) {
+        Y_VERIFY((NScheme::TTypeId)type == NScheme::NTypeIds::Pg);
+        auto* typeDesc = NPg::TypeDescFromPgTypeId(pgType);
+        Y_VERIFY(typeDesc);
+        typeInfo = NScheme::TTypeInfo(type, typeDesc);
+    } else {
+        typeInfo = NScheme::TTypeInfo(type);
+    }
 
     // We verify ids and types match when column with the same name already exists
     if (itName != table->ColumnNames.end()) {
@@ -242,8 +259,9 @@ bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 typ
         Y_VERIFY_S(itName->second == id, describeFailure());
         // Sanity check that this column exists and types match
         Y_VERIFY(it != table->Columns.end() && it->second.Name == name);
-        Y_VERIFY_S(it->second.PType == type,
-            "Table " << tid << " '" << table->Name << "' column " << id << " '" << name << "' expected type " << type << ", existing type " << it->second.PType);
+        Y_VERIFY_S(it->second.PType == typeInfo,
+            "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
+            << "' expected type " << NScheme::TypeName(typeInfo) << ", existing type " << NScheme::TypeName(it->second.PType));
         return false;
     }
 
@@ -251,16 +269,16 @@ bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 typ
 
     // We assume column is renamed when the same id already exists
     if (it != table->Columns.end()) {
-        Y_VERIFY_S(it->second.PType == type,
+        Y_VERIFY_S(it->second.PType == typeInfo,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << it->second.Name << "' renamed to '" << name << "'"
-            << " with type " << type << ", existing type " << it->second.PType);
+            << " with type " << NScheme::TypeName(typeInfo) << ", existing type " << NScheme::TypeName(it->second.PType));
         table->ColumnNames.erase(it->second.Name);
         it->second.Name = name;
         table->ColumnNames.emplace(name, id);
         return true;
     }
 
-    auto pr = table->Columns.emplace(id, TColumn(name, id, type, notNull));
+    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, notNull));
     Y_VERIFY(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);

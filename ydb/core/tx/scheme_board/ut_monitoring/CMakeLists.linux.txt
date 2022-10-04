@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_monitoring PUBLIC
   core-tx-scheme_board
   cpp-actors-core
   cpp-testing-unittest
-  core-testlib-basics
+  testlib-basics-default
 )
 target_link_options(ydb-core-tx-scheme_board-ut_monitoring PRIVATE
   -ldl

@@ -5,6 +5,8 @@
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
+#include <ydb/core/kqp/common/kqp_types.h>
+
 namespace NKikimr {
 
 namespace NKqp {
@@ -52,7 +54,8 @@ static TCell BuildKeyTupleCell(const TType* type, const TUnboxedValue& value, co
         keyValue = value.GetOptionalValue();
     }
 
-    return MakeCell(AS_TYPE(TDataType, keyType)->GetSchemeType(), keyValue, env, true);
+    auto typeInfo = NScheme::TypeInfoFromMiniKQLType(keyType);
+    return MakeCell(typeInfo, keyValue, env, true);
 }
 
 void BuildKeyTupleCells(const TTupleType* tupleType, const TUnboxedValue& tupleValue, TVector<TCell>& cells,
@@ -72,7 +75,7 @@ void BuildKeyTupleCells(const TTupleType* tupleType, const TUnboxedValue& tupleV
 void ParseReadColumns(const TType* readType, const TRuntimeNode& tagsNode,
     TSmallVec<NTable::TTag>& columns, TSmallVec<NTable::TTag>& systemColumns)
 {
-    MKQL_ENSURE_S(readType);		
+    MKQL_ENSURE_S(readType);
     MKQL_ENSURE_S(readType->GetKind() == TType::EKind::Flow);
 
     auto tags = AS_VALUE(TStructLiteral, tagsNode);

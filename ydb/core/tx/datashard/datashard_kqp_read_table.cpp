@@ -16,16 +16,18 @@ using namespace NUdf;
 
 namespace {
 
-void ValidateKeyType(const TType* keyType, NScheme::TTypeId expectedType) {
+void ValidateKeyType(const TType* keyType, NScheme::TTypeInfo expectedType) {
     auto type = keyType;
 
     if (type->IsOptional()) {
         type = AS_TYPE(TOptionalType, type)->GetItemType();
     }
 
+    // TODO: support pg types
+    MKQL_ENSURE_S(type->GetKind() != TType::EKind::Pg, "pg types are not supported");
     auto dataType = AS_TYPE(TDataType, type)->GetSchemeType();
 
-    MKQL_ENSURE_S(dataType == expectedType);
+    MKQL_ENSURE_S(dataType == expectedType.GetTypeId());
 }
 
 void ValidateKeyTuple(const TTupleType* tupleType, const NDataShard::TUserTable& tableInfo,
@@ -116,7 +118,10 @@ TSerializedTableRange BuildRange(const TTupleType* fromType, const NUdf::TUnboxe
                 }
             }
 
-            cells.emplace_back(MakeCell(AS_TYPE(TDataType, type)->GetSchemeType(), value, typeEnv, /* copy */ true));
+            // TODO: support pg types
+            MKQL_ENSURE_S(type->GetKind() != TType::EKind::Pg, "pg types are not supported");
+            auto typeInfo = NScheme::TTypeInfo(AS_TYPE(TDataType, type)->GetSchemeType());
+            cells.emplace_back(MakeCell(typeInfo, value, typeEnv, /* copy */ true));
         }
 
         return cells;

@@ -131,7 +131,8 @@ public:
         Pos = remapPos.GetOrElse(columnInfo->Pos);
         Y_VERIFY(Pos < scheme->Tags().size());
 
-        Type = columnInfo->TypeId;
+        Type = columnInfo->TypeInfo.GetTypeId();
+        Y_VERIFY(Type != NScheme::NTypeIds::Pg, "pg types are not supported");
     }
 
     bool Check(const NTable::TRowState& row) const override {

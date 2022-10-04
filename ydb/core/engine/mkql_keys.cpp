@@ -48,7 +48,7 @@ TCell MakeCell(const NUdf::TUnboxedValuePod& value) {
 THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
     const TVector<TKeyDesc::TColumnOp>& columns,
     TKeyDesc::ERowOperation rowOperation, bool requireStaticKey, const TTypeEnvironment& env) {
-    TVector<ui32> keyColumnTypes(tuple->GetValuesCount());
+    TVector<NScheme::TTypeInfo> keyColumnTypes(tuple->GetValuesCount());
     TVector<TCell> fromValues(tuple->GetValuesCount());
     TVector<TCell> toValues(tuple->GetValuesCount());
     bool inclusiveFrom = true;
@@ -59,7 +59,8 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
         auto type = tuple->GetType()->GetElementType(i);
         bool isOptional;
         auto dataType = UnpackOptionalData(type, isOptional);
-        keyColumnTypes[i] = dataType->GetSchemeType();
+        // TODO: support pg types
+        keyColumnTypes[i] = NScheme::TTypeInfo(dataType->GetSchemeType());
         if (i != staticComponents) {
             continue;
         }
@@ -74,6 +75,8 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
         }
 
         ++staticComponents;
+        // TODO: support pg types
+        Y_VERIFY(keyColumnTypes[i].GetTypeId() != NScheme::NTypeIds::Pg);
         fromValues[i] = toValues[i] = MakeCell(keyColumnTypes[i], data, env);
     }
 
@@ -92,8 +95,11 @@ void ExtractReadColumns(TStructType* columnsType, TStructLiteral* tags, TVector<
         op.Column = columnId;
         op.Operation = TKeyDesc::EColumnOperation::Read;
         bool isOptional;
-        op.ExpectedType = UnpackOptionalData(columnsType->GetMemberType(i), isOptional)->GetSchemeType();
-        MKQL_ENSURE(op.ExpectedType != 0, "Null type is not allowed");
+        auto dataType = UnpackOptionalData(columnsType->GetMemberType(i), isOptional);
+        auto expectedType = (NScheme::TTypeId)dataType->GetSchemeType();
+        MKQL_ENSURE(expectedType != 0, "Null type is not allowed");
+        // TODO: support pg types
+        op.ExpectedType = NScheme::TTypeInfo(expectedType);
     }
 }
 
@@ -130,7 +136,7 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
     ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>();
     ui64 bytesLimit = AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui64>();
 
-    TVector<ui32> keyColumnTypes(Max(fromTuple->GetValuesCount(), toTuple->GetValuesCount()));
+    TVector<NScheme::TTypeInfo> keyColumnTypes(Max(fromTuple->GetValuesCount(), toTuple->GetValuesCount()));
     TVector<TCell> fromValues(keyColumnTypes.size()); // padded with NULLs
     TVector<TCell> toValues(toTuple->GetValuesCount());
     bool inclusiveFrom = !(flags & TReadRangeOptions::TFlags::ExcludeInitValue);
@@ -140,7 +146,9 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
         auto type = fromTuple->GetType()->GetElementType(i);
         bool isOptional;
         auto dataType = UnpackOptionalData(type, isOptional);
-        keyColumnTypes[i] = dataType->GetSchemeType();
+        auto keyType = (NScheme::TTypeId)dataType->GetSchemeType();
+        // TODO: support pg types
+        keyColumnTypes[i] = NScheme::TTypeInfo(keyType);
         auto valueNode = fromTuple->GetValue(i);
         NUdf::TUnboxedValue data;
         bool hasImmediateData = ExtractKeyData(valueNode, isOptional, data);
@@ -152,7 +160,9 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
         auto type = toTuple->GetType()->GetElementType(i);
         bool isOptional;
         auto dataType = UnpackOptionalData(type, isOptional);
-        keyColumnTypes[i] = dataType->GetSchemeType();
+        auto keyType = (NScheme::TTypeId)dataType->GetSchemeType();
+        // TODO: support pg types
+        keyColumnTypes[i] = NScheme::TTypeInfo(keyType);
         auto valueNode = toTuple->GetValue(i);
         NUdf::TUnboxedValue data;
         bool hasImmediateData = ExtractKeyData(valueNode, isOptional, data);
@@ -191,7 +201,7 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
         if (cmd.GetStaticType()->IsVoid()) {
             // erase
             op.Operation = TKeyDesc::EColumnOperation::Set;
-            op.ExpectedType = 0;
+            op.ExpectedType = NScheme::TTypeInfo(0);
         } else if (cmd.GetStaticType()->IsTuple()) {
             // inplace update
             TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, cmd);
@@ -203,7 +213,9 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
             auto valueNode = tuple->GetValue(1);
             op.Operation = TKeyDesc::EColumnOperation::InplaceUpdate;
             bool isOptional;
-            op.ExpectedType = UnpackOptionalData(valueNode, isOptional)->GetSchemeType();
+            auto keyType = (NScheme::TTypeId)UnpackOptionalData(valueNode, isOptional)->GetSchemeType();
+            // TODO: support pg types
+            op.ExpectedType = NScheme::TTypeInfo(keyType);
             MKQL_ENSURE(!isOptional, "Expected data type for inplace update, not an optional");
             op.InplaceUpdateMode = mode;
 
@@ -214,10 +226,12 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
         }
         else {
              // update
-             op.Operation = TKeyDesc::EColumnOperation::Set;
-             bool isOptional;
-             op.ExpectedType = UnpackOptionalData(cmd, isOptional)->GetSchemeType();
-             MKQL_ENSURE(op.ExpectedType != 0, "Null type is not allowed");
+            op.Operation = TKeyDesc::EColumnOperation::Set;
+            bool isOptional;
+            auto keyType = (NScheme::TTypeId)UnpackOptionalData(cmd, isOptional)->GetSchemeType();
+            // TODO: support pg types
+            op.ExpectedType = NScheme::TTypeInfo(keyType);
+            MKQL_ENSURE(op.ExpectedType.GetTypeId() != 0, "Null type is not allowed");
 
             NUdf::TUnboxedValue data;
             if (ExtractKeyData(cmd, isOptional, data)) {
@@ -243,11 +257,14 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
 #define MAKE_PRIMITIVE_TYPE_CELL(type, layout) \
     case NUdf::TDataType<type>::Id: return MakeCell<layout>(value);
 
-TCell MakeCell(NUdf::TDataTypeId typeId, const NUdf::TUnboxedValuePod& value, const TTypeEnvironment& env, bool copy) {
+TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value, const TTypeEnvironment& env, bool copy) {
     if (!value)
         return TCell();
 
-    switch(typeId) {
+    // TODO: support pg types
+    Y_VERIFY(type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+
+    switch(type.GetTypeId()) {
         KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_CELL)
     case NUdf::TDataType<NUdf::TDecimal>::Id:
         {
@@ -336,7 +353,7 @@ TTableId ExtractTableId(const TRuntimeNode& node) {
 }
 
 void FillKeyTupleValue(const NUdf::TUnboxedValue& row, const TVector<ui32>& rowIndices,
-    const TVector<NUdf::TDataTypeId>& rowTypes, TVector<TCell>& cells, const TTypeEnvironment& env)
+    const TVector<NScheme::TTypeInfo>& rowTypes, TVector<TCell>& cells, const TTypeEnvironment& env)
 {
     for (ui32 i = 0; i < rowIndices.size(); ++i) {
         auto rowIndex = rowIndices[i];

@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-tx-coordinator-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-coordinator
-  ydb-core-testlib
+  core-testlib-default
   ydb-core-tx
 )
 target_link_options(ydb-core-tx-coordinator-ut PRIVATE

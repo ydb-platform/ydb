@@ -5,6 +5,7 @@
 
 #include <ydb/core/formats/arrow_batch_builder.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -21,6 +22,7 @@ public:
 
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
+using TTypeInfo = NScheme::TTypeInfo;
 
 struct TTestSchema {
     static const constexpr char * DefaultTtlColumn = "saved_at";
@@ -87,93 +89,97 @@ struct TTestSchema {
     };
 
     static auto YdbSchema() {
-        TVector<std::pair<TString, TTypeId>> schema = {
+        TVector<std::pair<TString, TTypeInfo>> schema = {
             // PK
-            {"timestamp", NTypeIds::Timestamp },
-            {"resource_type", NTypeIds::Utf8 },
-            {"resource_id", NTypeIds::Utf8 },
-            {"uid", NTypeIds::Utf8 },
+            {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
+            {"resource_type", TTypeInfo(NTypeIds::Utf8) },
+            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
+            {"uid", TTypeInfo(NTypeIds::Utf8) },
             //
-            {"level", NTypeIds::Int32 },
-            {"message", NTypeIds::Utf8 },
-            {"json_payload", NTypeIds::Json },
-            {"ingested_at", NTypeIds::Timestamp },
-            {"saved_at", NTypeIds::Timestamp },
-            {"request_id", NTypeIds::Utf8 }
+            {"level", TTypeInfo(NTypeIds::Int32) },
+            {"message", TTypeInfo(NTypeIds::Utf8) },
+            {"json_payload", TTypeInfo(NTypeIds::Json) },
+            {"ingested_at", TTypeInfo(NTypeIds::Timestamp) },
+            {"saved_at", TTypeInfo(NTypeIds::Timestamp) },
+            {"request_id", TTypeInfo(NTypeIds::Utf8) }
         };
         return schema;
     };
 
     static auto YdbExoticSchema() {
-        TVector<std::pair<TString, TTypeId>> schema = {
+        TVector<std::pair<TString, TTypeInfo>> schema = {
             // PK
-            {"timestamp", NTypeIds::Timestamp },
-            {"resource_type", NTypeIds::Utf8 },
-            {"resource_id", NTypeIds::Utf8 },
-            {"uid", NTypeIds::Utf8 },
+            {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
+            {"resource_type", TTypeInfo(NTypeIds::Utf8) },
+            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
+            {"uid", TTypeInfo(NTypeIds::Utf8) },
             //
-            {"level", NTypeIds::Int32 },
-            {"message", NTypeIds::String4k },
-            {"json_payload", NTypeIds::JsonDocument },
-            {"ingested_at", NTypeIds::Timestamp },
-            {"saved_at", NTypeIds::Timestamp },
-            {"request_id", NTypeIds::Yson }
+            {"level", TTypeInfo(NTypeIds::Int32) },
+            {"message", TTypeInfo(NTypeIds::String4k) },
+            {"json_payload", TTypeInfo(NTypeIds::JsonDocument) },
+            {"ingested_at", TTypeInfo(NTypeIds::Timestamp) },
+            {"saved_at", TTypeInfo(NTypeIds::Timestamp) },
+            {"request_id", TTypeInfo(NTypeIds::Yson) }
         };
         return schema;
     };
 
     static auto YdbPkSchema() {
-        TVector<std::pair<TString, TTypeId>> schema = {
-            {"timestamp", NTypeIds::Timestamp },
-            {"resource_type", NTypeIds::Utf8 },
-            {"resource_id", NTypeIds::Utf8 },
-            {"uid", NTypeIds::Utf8 }
+        TVector<std::pair<TString, TTypeInfo>> schema = {
+            {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
+            {"resource_type", TTypeInfo(NTypeIds::Utf8) },
+            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
+            {"uid", TTypeInfo(NTypeIds::Utf8) }
         };
         return schema;
     }
 
     static auto YdbAllTypesSchema() {
-        TVector<std::pair<TString, TTypeId>> schema = {
-            { "ts", NTypeIds::Timestamp },
+        TVector<std::pair<TString, TTypeInfo>> schema = {
+            { "ts", TTypeInfo(NTypeIds::Timestamp) },
 
-            { "i8", NTypeIds::Int8 },
-            { "i16", NTypeIds::Int16 },
-            { "i32", NTypeIds::Int32 },
-            { "i64", NTypeIds::Int64 },
-            { "u8", NTypeIds::Uint8 },
-            { "u16", NTypeIds::Uint16 },
-            { "u32", NTypeIds::Uint32 },
-            { "u64", NTypeIds::Uint64 },
-            { "float", NTypeIds::Float },
-            { "double", NTypeIds::Double },
+            { "i8", TTypeInfo(NTypeIds::Int8) },
+            { "i16", TTypeInfo(NTypeIds::Int16) },
+            { "i32", TTypeInfo(NTypeIds::Int32) },
+            { "i64", TTypeInfo(NTypeIds::Int64) },
+            { "u8", TTypeInfo(NTypeIds::Uint8) },
+            { "u16", TTypeInfo(NTypeIds::Uint16) },
+            { "u32", TTypeInfo(NTypeIds::Uint32) },
+            { "u64", TTypeInfo(NTypeIds::Uint64) },
+            { "float", TTypeInfo(NTypeIds::Float) },
+            { "double", TTypeInfo(NTypeIds::Double) },
 
-            { "byte", NTypeIds::Byte },
-            //{ "bool", NTypeIds::Bool },
-            //{ "decimal", NTypeIds::Decimal },
-            //{ "dynum", NTypeIds::DyNumber },
+            { "byte", TTypeInfo(NTypeIds::Byte) },
+            //{ "bool", TTypeInfo(NTypeIds::Bool) },
+            //{ "decimal", TTypeInfo(NTypeIds::Decimal) },
+            //{ "dynum", TTypeInfo(NTypeIds::DyNumber) },
 
-            { "date", NTypeIds::Date },
-            { "datetime", NTypeIds::Datetime },
-            //{ "interval", NTypeIds::Interval },
+            { "date", TTypeInfo(NTypeIds::Date) },
+            { "datetime", TTypeInfo(NTypeIds::Datetime) },
+            //{ "interval", TTypeInfo(NTypeIds::Interval) },
 
-            {"text", NTypeIds::Text },
-            {"bytes", NTypeIds::Bytes },
-            {"yson", NTypeIds::Yson },
-            {"json", NTypeIds::Json },
-            {"jsondoc", NTypeIds::JsonDocument }
+            {"text", TTypeInfo(NTypeIds::Text) },
+            {"bytes", TTypeInfo(NTypeIds::Bytes) },
+            {"yson", TTypeInfo(NTypeIds::Yson) },
+            {"json", TTypeInfo(NTypeIds::Json) },
+            {"jsondoc", TTypeInfo(NTypeIds::JsonDocument) }
         };
         return schema;
     };
 
-    static NKikimrSchemeOp::TOlapColumnDescription CreateColumn(ui32 id, const TString& name, TTypeId type) {
+    static NKikimrSchemeOp::TOlapColumnDescription CreateColumn(ui32 id, const TString& name, TTypeInfo type) {
         NKikimrSchemeOp::TOlapColumnDescription col;
         col.SetId(id);
         col.SetName(name);
-        col.SetTypeId(type);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(type);
+        col.SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *col.MutableTypeInfo() = *columnType.TypeInfo;
+        }
         return col;
     }
 
-    static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeId>>& columns,
+    static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
                                      const TTableSpecials& specials = {}) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableEnsureTables()->AddTables();
@@ -310,7 +316,7 @@ struct TTestSchema {
         return txBody;
     }
 
-    static TVector<TString> ExtractNames(const TVector<std::pair<TString, TTypeId>>& columns) {
+    static TVector<TString> ExtractNames(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
         TVector<TString> out;
         out.reserve(columns.size());
         for (auto& col : columns) {
@@ -319,8 +325,8 @@ struct TTestSchema {
         return out;
     }
 
-    static TVector<TTypeId> ExtractTypes(const TVector<std::pair<TString, TTypeId>>& columns) {
-        TVector<TTypeId> types;
+    static TVector<NScheme::TTypeInfo> ExtractTypes(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+        TVector<NScheme::TTypeInfo> types;
         types.reserve(columns.size());
         for (auto& [name, type] : columns) {
             types.push_back(type);
@@ -344,9 +350,9 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planSt
     PlanCommit(runtime, sender, planStep, ids);
 }
 
-TString MakeTestBlob(std::pair<ui64, ui64> range, const TVector<std::pair<TString, TTypeId>>& columns,
+TString MakeTestBlob(std::pair<ui64, ui64> range, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
                      const THashSet<TString>& nullColumns = {});
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,
-                                    const TVector<std::pair<TString, TTypeId>>& columns);
+                                    const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 
 }

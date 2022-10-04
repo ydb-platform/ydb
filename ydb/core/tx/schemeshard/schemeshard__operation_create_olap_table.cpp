@@ -123,14 +123,21 @@ TColumnTableInfo::TPtr CreateColumnTable(
 
             auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
             const NScheme::IType* type = typeRegistry->GetType(typeName);
+            NScheme::TTypeInfo typeInfo;
             if (!type || !NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder()
-                    << "Type '" << colProto.GetType() << "' specified for column '" << colName << "' is not supported";
-                return nullptr;
+                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                if (!typeDesc) {
+                    status = NKikimrScheme::StatusSchemeError;
+                    errStr = TStringBuilder()
+                        << "Type '" << colProto.GetType() << "' specified for column '" << colName << "' is not supported";
+                    return nullptr;
+                }
+                typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+            } else {
+                typeInfo = NScheme::TTypeInfo(type->GetTypeId());
             }
 
-            if (type->GetTypeId() != col->TypeId) {
+            if (typeInfo != col->Type) {
                 status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder()
                     << "Type '" << colProto.GetType() << "' specified for column '" << colName

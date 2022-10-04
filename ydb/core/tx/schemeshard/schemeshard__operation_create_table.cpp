@@ -44,7 +44,7 @@ bool CheckColumnTypesConstraints(NKikimrSchemeOp::TTableDescription& desc, TStri
 bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
                       const NScheme::TTypeRegistry* typeRegistry,
                       const TVector<ui32>& keyColIds,
-                      const TVector<NScheme::TTypeId>& keyColTypeIds,
+                      const TVector<NScheme::TTypeInfo>& keyColTypeIds,
                       TString& errStr,
                       TVector<TTableShardInfo>& partitions,
                       const TSchemeLimits& limits) {
@@ -63,7 +63,7 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
     TVector<TString> rangeEnds;
     if (op.HasUniformPartitionsCount()) {
         Y_VERIFY(!keyColIds.empty());
-        NScheme::TTypeId firstKeyColType = keyColTypeIds[0];
+        auto firstKeyColType = keyColTypeIds[0];
         if (!TSchemeShard::FillUniformPartitioning(rangeEnds, keyColIds.size(), firstKeyColType, partitionCount, typeRegistry, errStr)) {
             return false;
         }
@@ -106,17 +106,17 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
         return false;
     }
 
-    TVector<NScheme::TTypeId> keyColTypeIds;
+    TVector<NScheme::TTypeInfo> keyColTypeIds;
     for (ui32 ki : keyColIds) {
-        NScheme::TTypeId typeId = tableInfo->Columns[ki].PType;
+        auto type = tableInfo->Columns[ki].PType;
 
-        if (!IsAllowedKeyType(typeId)) {
+        if (!IsAllowedKeyType(type)) {
             errStr = Sprintf("Column %s has wrong key type %s",
-                tableInfo->Columns[ki].Name.c_str(), NScheme::GetTypeName(typeId).c_str());
+                tableInfo->Columns[ki].Name.c_str(), NScheme::TypeName(type));
             return false;
         }
 
-        keyColTypeIds.push_back(typeId);
+        keyColTypeIds.push_back(type);
     }
 
     if (!InitPartitioning(op, typeRegistry, keyColIds, keyColTypeIds, errStr, partitions, limits)) {

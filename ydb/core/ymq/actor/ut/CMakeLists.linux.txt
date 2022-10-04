@@ -20,7 +20,7 @@ target_link_libraries(ydb-core-ymq-actor-ut PUBLIC
   cpp-testing-unittest_main
   contrib-libs-yaml-cpp
   core-mind-address_classification
-  ydb-core-testlib
+  core-testlib-default
   core-ymq-actor
   core-ymq-base
   core-ymq-http

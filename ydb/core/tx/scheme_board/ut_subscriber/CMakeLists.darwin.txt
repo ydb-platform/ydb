@@ -22,8 +22,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_subscriber PUBLIC
   core-tx-scheme_board
   cpp-actors-interconnect
   cpp-testing-unittest
-  core-testlib-basics
-  yql-sql-pg_dummy
+  testlib-basics-default
 )
 target_link_options(ydb-core-tx-scheme_board-ut_subscriber PRIVATE
   -Wl,-no_deduplicate

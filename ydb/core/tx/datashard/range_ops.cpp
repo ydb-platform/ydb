@@ -1,6 +1,6 @@
 #include "range_ops.h"
 
-NKikimr::TTableRange NKikimr::Intersect(TConstArrayRef<NScheme::TTypeId> types, const TTableRange& first, const TTableRange& second)
+NKikimr::TTableRange NKikimr::Intersect(TConstArrayRef<NScheme::TTypeInfo> types, const TTableRange& first, const TTableRange& second)
 {
     // all variants
     //=================
@@ -196,7 +196,7 @@ NKikimr::TTableRange NKikimr::Intersect(TConstArrayRef<NScheme::TTypeId> types, 
     }
 }
 
-TString NKikimr::DebugPrintRange(TConstArrayRef<NScheme::TTypeId> types, const NKikimr::TTableRange &range,
+TString NKikimr::DebugPrintRange(TConstArrayRef<NScheme::TTypeInfo> types, const NKikimr::TTableRange &range,
     const NScheme::TTypeRegistry& typeRegistry)
 {
     if (range.Point) {
@@ -211,7 +211,7 @@ TString NKikimr::DebugPrintRange(TConstArrayRef<NScheme::TTypeId> types, const N
             << (range.InclusiveTo ? "]" : ")");
 }
 
-TString NKikimr::DebugPrintRanges(TConstArrayRef<NScheme::TTypeId> types,
+TString NKikimr::DebugPrintRanges(TConstArrayRef<NScheme::TTypeInfo> types,
   const TSmallVec<TSerializedTableRange>& ranges, const NScheme::TTypeRegistry& typeRegistry)
 {
     auto out = TStringBuilder();
@@ -223,7 +223,7 @@ TString NKikimr::DebugPrintRanges(TConstArrayRef<NScheme::TTypeId> types,
     return out;
 }
 
-TString NKikimr::DebugPrintPoint(TConstArrayRef<NScheme::TTypeId> types, const TConstArrayRef<TCell> &point, const NScheme::TTypeRegistry& typeRegistry) {
+TString NKikimr::DebugPrintPoint(TConstArrayRef<NScheme::TTypeInfo> types, const TConstArrayRef<TCell> &point, const NScheme::TTypeRegistry& typeRegistry) {
     Y_VERIFY(types.size() >= point.size());
     TDbTupleRef pointRef(types.data(), point.data(), point.size());
 
@@ -231,7 +231,7 @@ TString NKikimr::DebugPrintPoint(TConstArrayRef<NScheme::TTypeId> types, const T
 }
 
 TString NKikimr::DebugPrintPartitionInfo(const TKeyDesc::TPartitionInfo& partition,
-    const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry)
+    const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry)
 {
     TStringBuilder range;
     if (partition.Range) {

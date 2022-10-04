@@ -8,6 +8,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/scheme/scheme_borders.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/engine/mkql_proto.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -52,7 +53,7 @@ namespace {
      * Note that range begin/end are treated as key prefixes if they are incomplete.
      */
     bool RangeEndBeginHasIntersection(
-        TConstArrayRef<NScheme::TTypeId> keyTypes,
+        TConstArrayRef<NScheme::TTypeInfo> keyTypes,
         TConstArrayRef<TCell> rangeEnd, bool rangeEndInclusive,
         TConstArrayRef<TCell> rangeBegin, bool rangeBeginInclusive)
     {
@@ -69,7 +70,7 @@ namespace {
     }
 
     int CompareRangeEnds(
-        TConstArrayRef<NScheme::TTypeId> keyTypes,
+        TConstArrayRef<NScheme::TTypeInfo> keyTypes,
         TConstArrayRef<TCell> left, bool leftInclusive,
         TConstArrayRef<TCell> right, bool rightInclusive)
     {
@@ -88,7 +89,7 @@ namespace {
 
     bool ParseRangeKey(
             const NKikimrMiniKQL::TParams& proto,
-            TConstArrayRef<NScheme::TTypeId> keyTypes,
+            TConstArrayRef<NScheme::TTypeInfo> keyTypes,
             TSerializedCellVec& buf,
             EParseRangeKeyExp exp,
             TVector<TString>& unresolvedKeys)
@@ -527,7 +528,7 @@ private:
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, ctx);
         }
 
-        TVector<NScheme::TTypeId> keyTypes(res.Columns.size());
+        TVector<NScheme::TTypeInfo> keyTypes(res.Columns.size());
         TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
         {
             size_t no = 0;
@@ -1432,7 +1433,11 @@ private:
             auto &c = *tx.AddColumns();
             c.SetId(col.Id);
             c.SetName(col.Name);
-            c.SetTypeId(col.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(col.PType);
+            c.SetTypeId(columnType.TypeId);
+            if (columnType.TypeInfo) {
+                *c.MutableTypeInfo() = *columnType.TypeInfo;
+            }
         }
 
         auto& txRange = *tx.MutableRange();

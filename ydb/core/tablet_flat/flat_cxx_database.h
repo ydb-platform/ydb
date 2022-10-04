@@ -2193,7 +2193,7 @@ struct TStaticSchemaFiller {
             schema.Columns[Column::ColumnId] = NTable::TColumn(
                 TTable::template TableColumns<Column>::GetColumnName(),
                 Column::ColumnId,
-                Column::ColumnType);
+                NScheme::TTypeInfo(Column::ColumnType));
         }
     };
 

@@ -270,9 +270,9 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
         TPartitionKeyRange KeyRange;
 
         struct TLess {
-            TConstArrayRef<NScheme::TTypeId> Schema;
+            TConstArrayRef<NScheme::TTypeInfo> Schema;
 
-            TLess(const TVector<NScheme::TTypeId>& schema)
+            TLess(const TVector<NScheme::TTypeInfo>& schema)
                 : Schema(schema)
             {
             }
@@ -323,7 +323,7 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
 
         }; // TPartitionInfo
 
-        TVector<NScheme::TTypeId> Schema;
+        TVector<NScheme::TTypeInfo> Schema;
         TVector<TPartitionInfo> Partitions;
 
     }; // TKeyDesc
@@ -550,7 +550,8 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
 
         KeyDesc->Schema.reserve(pqConfig.PartitionKeySchemaSize());
         for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
-            KeyDesc->Schema.push_back(keySchema.GetTypeId());
+            // TODO: support pg types
+            KeyDesc->Schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
         }
 
         TSet<TPQPartitionInfo, TPQPartitionInfo::TLess> partitions(KeyDesc->Schema);

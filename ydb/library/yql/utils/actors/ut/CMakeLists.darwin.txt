@@ -17,7 +17,7 @@ target_link_libraries(ydb-library-yql-utils-actors-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-utils-actors
-  core-testlib-basics
+  testlib-basics-default
 )
 target_link_options(ydb-library-yql-utils-actors-ut PRIVATE
   -Wl,-no_deduplicate

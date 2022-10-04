@@ -32,7 +32,7 @@ bool IsRetriable(NYdb::EStatus status) {
     }
 }
 
-bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes) {
+bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes) {
     if (lastReadKey.empty())
         return true;
 
@@ -72,7 +72,7 @@ using TBaseComputation = TMutableComputationNode<TKikScan<Async>>;
             using TPtr = std::shared_ptr<TAsyncState>;
             using TWeakPtr = std::weak_ptr<TAsyncState>;
 
-            static TPtr Make(const NYdb::TDriver& driver, const TString& database, const TString& endpoint, const TString& token, const TString& path, bool secure, const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+            static TPtr Make(const NYdb::TDriver& driver, const TString& database, const TString& endpoint, const TString& token, const TString& path, bool secure, const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes,
                 ui64 maxRowsInRequest, ui64 maxBytesInRequest, const TString& keyFrom, const TString& keyTo, const NYdb::NClickhouseInternal::TScanSettings& settings) {
                 const auto ptr = std::make_shared<TAsyncState>(driver, database, endpoint, token, path, secure, columns, keyColumnTypes, maxRowsInRequest, maxBytesInRequest, keyFrom, keyTo, settings);
                 ptr->SendRequest();
@@ -100,7 +100,7 @@ using TBaseComputation = TMutableComputationNode<TKikScan<Async>>;
                 return NUdf::EFetchStatus::Yield;
             }
 
-            TAsyncState(const NYdb::TDriver& driver, const TString& database, const TString& endpoint, const TString& token, const TString& path, bool secure, const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+            TAsyncState(const NYdb::TDriver& driver, const TString& database, const TString& endpoint, const TString& token, const TString& path, bool secure, const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes,
                 ui64 maxRowsInRequest, ui64 maxBytesInRequest, const TString& keyFrom, const TString& keyTo, const NYdb::NClickhouseInternal::TScanSettings& settings)
                 : ActorSystem(NActors::TActivationContext::ActorSystem())
                 , CurrentActorId(NActors::TActivationContext::AsActorContext().SelfID)
@@ -186,7 +186,7 @@ using TBaseComputation = TMutableComputationNode<TKikScan<Async>>;
 
             const TString Path;
             const TVector<TString> Columns;
-            const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+            const TVector<NKikimr::NScheme::TTypeInfo> KeyColumnTypes;
             const ui64 MaxRows;
             const ui64 MaxBytes;
             const TString EndKey;
@@ -208,7 +208,7 @@ using TBaseComputation = TMutableComputationNode<TKikScan<Async>>;
             TIssues Issues;
         };
     public:
-        TAsyncStream(TMemoryUsageInfo* memInfo, const NYdb::TDriver& driver, const TString& database, const TString& endpoint, const TString& token, const TString& path, bool secure, const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+        TAsyncStream(TMemoryUsageInfo* memInfo, const NYdb::TDriver& driver, const TString& database, const TString& endpoint, const TString& token, const TString& path, bool secure, const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes,
             ui64 maxRowsInRequest, ui64 maxBytesInRequest, const TString& keyFrom, const TString& keyTo, const NYdb::NClickhouseInternal::TScanSettings& settings)
             : TComputationValue<TAsyncStream>(memInfo), State(TAsyncState::Make(driver, database, endpoint, token, path, secure, columns, keyColumnTypes, maxRowsInRequest, maxBytesInRequest, keyFrom, keyTo, settings))
         {}
@@ -230,7 +230,7 @@ public:
         const std::string_view& snapshot,
         bool secure,
         TVector<TString>&& columns,
-        TVector<NKikimr::NScheme::TTypeId>&& keyColumnTypes,
+        TVector<NKikimr::NScheme::TTypeInfo>&& keyColumnTypes,
         const std::string_view& keyFrom,
         const std::string_view& keyTo,
         IComputationNode* rows
@@ -287,7 +287,7 @@ private:
     const TString Snapshot;
     const bool Secure;
     const TVector<TString> Columns;
-    const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+    const TVector<NKikimr::NScheme::TTypeInfo> KeyColumnTypes;
     const TString KeyFrom;
     const TString KeyTo;
     IComputationNode* const Rows;
@@ -312,7 +312,7 @@ IComputationNode* WrapKikScan(TCallable& callable, const TComputationNodeFactory
     }
 
     const auto keysNode = AS_VALUE(TTupleLiteral, callable.GetInput(6));
-    TVector<NKikimr::NScheme::TTypeId> keyColumnTypes;
+    TVector<NKikimr::NScheme::TTypeInfo> keyColumnTypes;
     keyColumnTypes.reserve(keysNode->GetValuesCount());
     for (ui32 i = 0; i < keysNode->GetValuesCount(); ++i) {
         keyColumnTypes.emplace_back(AS_VALUE(TDataLiteral, keysNode->GetValue(i))->AsValue().Get<ui16>());

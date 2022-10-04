@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-kqp-proxy-ut PUBLIC
   cpp-testing-unittest_main
   core-kqp-proxy
   kqp-ut-common
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-kqp-proxy-ut PRIVATE
   -ldl

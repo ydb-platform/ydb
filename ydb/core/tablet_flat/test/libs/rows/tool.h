@@ -123,7 +123,7 @@ namespace NTest {
                 } else if (val.Op == ECellOp::Empty || val.Op == ECellOp::Reset) {
                     if (ECellOp(val.Op) != state.GetCellOp(pos))
                         return false;
-                } else if (CompareTypedCells(val.Cell, cell, info->TypeId)) {
+                } else if (CompareTypedCells(val.Cell, cell, info->TypeInfo)) {
                     return false; /* Literal comparison has been failed */
                 }
 
@@ -172,11 +172,11 @@ namespace NTest {
 
             } else if (value.Cell.IsNull() && value.Type == 0) {
                 /* null values should be passed without type */
-            } else if (info->TypeId != value.Type) {
+            } else if (info->TypeInfo.GetTypeId() != value.Type) {
                 ythrow
                     yexception()
                         << "Col{" << info->Pos << ", Tag " << info->Tag
-                        << ", type " << info->TypeId << "}"
+                        << ", type " << info->TypeInfo.GetTypeId() << "}"
                         << ", got type " <<  value.Type << " { "
                         << PrintValue(value.Cell, value.Type) << " }";
             }

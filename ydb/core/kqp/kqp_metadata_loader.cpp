@@ -151,7 +151,9 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
         const auto& columnDesc = pair.second;
 
         TString typeName;
-        YQL_ENSURE(NScheme::TryGetTypeName(columnDesc.PType, typeName));
+        // TODO: support pg types
+        YQL_ENSURE(columnDesc.PType.GetTypeId() != NScheme::NTypeIds::Pg);
+        YQL_ENSURE(NScheme::TryGetTypeName(columnDesc.PType.GetTypeId(), typeName));
         auto notNull = entry.NotNullColumns.contains(columnDesc.Name);
         tableMeta->Columns.emplace(columnDesc.Name, NYql::TKikimrColumnMetadata(
             columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType));

@@ -49,7 +49,7 @@ public:
     }
     TTypeId GetTypeId() const override { return TypeId; }
     static TRawTypeValue ToRawTypeValue(const T& value) {
-        return TRawTypeValue((void*)&value, sizeof(T), TypeId);
+        return TRawTypeValue((void*)&value, sizeof(T), TTypeInfo(TypeId));
     }
 
     static const char* TypeName() {
@@ -151,7 +151,7 @@ public:
     }
 
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
-        return TRawTypeValue((const void*)value.data(), value.size(), TypeId);
+        return TRawTypeValue((const void*)value.data(), value.size(), TTypeInfo(TypeId));
     }
 };
 
@@ -198,7 +198,7 @@ public:
 
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
         Y_VERIFY(value.size() <= MaxSize);
-        return TRawTypeValue((const void*)value.data(), value.size(), TypeId);
+        return TRawTypeValue((const void*)value.data(), value.size(), TTypeInfo(TypeId));
     }
 };
 

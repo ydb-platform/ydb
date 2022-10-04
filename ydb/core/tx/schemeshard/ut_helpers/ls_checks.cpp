@@ -3,6 +3,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -397,11 +398,12 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
 
 void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     const NKikimrSchemeOp::TPathDescription& descr = record.GetPathDescription();
-    THashMap<ui32, NScheme::TTypeId> colTypes;
+    THashMap<ui32, NScheme::TTypeInfo> colTypes;
     for (const auto& col : descr.GetTable().GetColumns()) {
-        colTypes[col.GetId()] = col.GetTypeId();
+        colTypes[col.GetId()] = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
     }
-    TVector<NScheme::TTypeId> keyColTypes;
+    TVector<NScheme::TTypeInfo> keyColTypes;
     for (const auto& ki : descr.GetTable().GetKeyColumnIds()) {
         keyColTypes.push_back(colTypes[ki]);
     }

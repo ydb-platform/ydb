@@ -22,7 +22,7 @@ target_link_libraries(ydb-services-rate_limiter-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-services-rate_limiter
-  ydb-core-testlib
+  core-testlib-default
   cpp-client-ydb_coordination
   cpp-client-ydb_rate_limiter
 )

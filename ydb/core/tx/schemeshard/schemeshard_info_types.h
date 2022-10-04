@@ -313,7 +313,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         TString DefaultValue;
         bool NotNull = false;
 
-        TColumn(const TString& name, ui32 id, NScheme::TTypeId type)
+        TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type)
             : NTable::TScheme::TColumn(name, id, type)
             , CreateVersion(0)
             , DeleteVersion(Max<ui64>())
@@ -789,7 +789,7 @@ struct TOlapSchema {
     struct TColumn {
         ui32 Id = Max<ui32>();
         TString Name;
-        NScheme::TTypeId TypeId = 0;
+        NScheme::TTypeInfo Type;
         ui32 KeyOrder = Max<ui32>();
         // TODO: per-column ACL?
 
@@ -901,7 +901,7 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
 
 struct TPQShardInfo : TSimpleRefCount<TPQShardInfo> {
     using TPtr = TIntrusivePtr<TPQShardInfo>;
-    using TKeySchema = TVector<NScheme::TTypeId>;
+    using TKeySchema = TVector<NScheme::TTypeInfo>;
 
     struct TKeyRange {
         TMaybe<TString> FromBound;

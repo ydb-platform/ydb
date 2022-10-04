@@ -27,7 +27,8 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         auto columnData = table.Columns.FindPtr(name);
         if (columnData) {
             columnId = columnData->Id;
-            columnType = columnData->TypeId;
+            // TODO: support pg types
+            columnType = columnData->TypeInfo.GetTypeId();
             notNull = columnData->NotNull;
         } else if (allowSystemColumns) {
             auto systemColumn = GetSystemColumns().find(name);
@@ -90,9 +91,11 @@ void ValidateColumnsType(const TStreamExprType* streamType, const TKikimrTableMe
     for (auto* member : rowType->GetItems()) {
         auto columnData = tableMeta.Columns.FindPtr(member->GetName());
         YQL_ENSURE(columnData);
-        YQL_ENSURE(columnData->TypeId);
+        auto columnDataType = columnData->TypeInfo.GetTypeId();
+        // TODO: support pg types
+        YQL_ENSURE(columnDataType != 0 && columnDataType != NScheme::NTypeIds::Pg);
 
-        ValidateColumnType(member->GetItemType(), columnData->TypeId);
+        ValidateColumnType(member->GetItemType(), columnDataType);
     }
 }
 
@@ -103,9 +106,11 @@ void ValidateRangeBoundType(const TTupleExprType* keyTupleType, const TKikimrTab
     for (ui32 i = 0; i < tableMeta.KeyColumnNames.size(); ++i) {
         auto columnData = tableMeta.Columns.FindPtr(tableMeta.KeyColumnNames[i]);
         YQL_ENSURE(columnData);
-        YQL_ENSURE(columnData->TypeId);
+        auto columnDataType = columnData->TypeInfo.GetTypeId();
+        // TODO: support pg types
+        YQL_ENSURE(columnDataType != 0 && columnDataType != NScheme::NTypeIds::Pg);
 
-        ValidateColumnType(keyTupleType->GetItems()[i]->Cast<TOptionalExprType>()->GetItemType(), columnData->TypeId);
+        ValidateColumnType(keyTupleType->GetItems()[i]->Cast<TOptionalExprType>()->GetItemType(), columnDataType);
     }
 }
 
@@ -143,12 +148,14 @@ TKqpKeyRange MakeKeyRange(const TKqlReadTableBase& readTable, const TKqlCompileC
 
         auto columnData = tableMeta.Columns.FindPtr(keyColumn);
         YQL_ENSURE(columnData);
-        YQL_ENSURE(columnData->TypeId);
+        auto columnDataType = columnData->TypeInfo.GetTypeId();
+        // TODO: support pg types
+        YQL_ENSURE(columnDataType != 0 && columnDataType != NScheme::NTypeIds::Pg);
 
-        auto columnType = CreateColumnType(columnData->TypeId, ctx);
+        auto columnType = CreateColumnType(columnDataType, ctx);
 
         if (fromTuple.ArgCount() > i) {
-            ValidateColumnType(fromTuple.Arg(i).Ref().GetTypeAnn(), columnData->TypeId);
+            ValidateColumnType(fromTuple.Arg(i).Ref().GetTypeAnn(), columnDataType);
             fromValues.push_back(MkqlBuildExpr(fromTuple.Arg(i).Ref(), buildCtx));
         } else if (fromInclusive) {
             fromValues.push_back(ctx.PgmBuilder().NewEmptyOptional(
@@ -156,7 +163,7 @@ TKqpKeyRange MakeKeyRange(const TKqlReadTableBase& readTable, const TKqlCompileC
         }
 
         if (toTuple.ArgCount() > i) {
-            ValidateColumnType(toTuple.Arg(i).Ref().GetTypeAnn(), columnData->TypeId);
+            ValidateColumnType(toTuple.Arg(i).Ref().GetTypeAnn(), columnDataType);
             toValues.push_back(MkqlBuildExpr(toTuple.Arg(i).Ref(), buildCtx));
         } else if (!toInclusive) {
             toValues.push_back(ctx.PgmBuilder().NewEmptyOptional(

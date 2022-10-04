@@ -57,7 +57,7 @@ namespace NKikimr::NDataShard {
             const TPathId& pathId,
             const ui64 id,
             const TString& name,
-            const TVector<NScheme::TTypeId>* keyColumnTypes)
+            const TVector<NScheme::TTypeInfo>* keyColumnTypes)
         : PathId(pathId)
         , Id(id)
         , Name(name)
@@ -247,7 +247,7 @@ namespace NKikimr::NDataShard {
 
     TReplicatedTableState::TReplicatedTableState(
             const TPathId& pathId,
-            const TVector<NScheme::TTypeId>& keyColumnTypes)
+            const TVector<NScheme::TTypeInfo>& keyColumnTypes)
         : PathId(pathId)
         , KeyColumnTypes(keyColumnTypes)
     { }

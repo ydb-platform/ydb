@@ -2655,11 +2655,9 @@ protected:
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
     void SerializeHistogram(const TUserTable &tinfo,
                             const NTable::THistogram &histogram,
-                            const NScheme::TTypeRegistry &typeRegistry,
                             NKikimrTxDataShard::TEvGetDataHistogramResponse::THistogram &hist);
     void SerializeKeySample(const TUserTable &tinfo,
                             const NTable::TKeyAccessSample &keySample,
-                            const NScheme::TTypeRegistry &typeRegistry,
                             NKikimrTxDataShard::TEvGetDataHistogramResponse::THistogram &hist);
 
     bool ByKeyFilterDisabled() const;

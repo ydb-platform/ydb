@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include "scheme_type_info.h"
 
 #include <util/generic/array_ref.h>
 #include <util/string/builder.h>
@@ -17,23 +17,33 @@ public:
         , ValueType(0)
     {}
 
-    TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeId vtype)
-        : TRawTypeValue((void*)ref.data(), ref.size(), vtype)
-    {
-
-    }
-
-    TRawTypeValue(const void* buf, ui32 bufSize, NScheme::TTypeId vtype)
+    TRawTypeValue(const void* buf, ui32 bufSize, NScheme::TTypeInfo vtype)
         : Buffer(buf)
         , BufferSize(bufSize)
         , ValueType(vtype)
     {
-        Y_VERIFY_DEBUG(!buf || vtype);
+        Y_VERIFY_DEBUG(!buf || vtype.GetTypeId() != 0);
+    }
+
+    TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeInfo vtype)
+        : TRawTypeValue((void*)ref.data(), ref.size(), vtype)
+    {
+    }
+
+    TRawTypeValue(const void* buf, ui32 bufSize, NScheme::TTypeId typeId)
+        : TRawTypeValue(buf, bufSize, NScheme::TTypeInfo(typeId))
+    {
+    }
+
+    TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeId typeId)
+        : TRawTypeValue((void*)ref.data(), ref.size(), NScheme::TTypeInfo(typeId))
+    {
     }
 
     const void* Data() const { return Buffer; }
     ui32 Size() const { return BufferSize; }
-    NScheme::TTypeId Type() const { return ValueType; }
+    NScheme::TTypeId Type() const { return ValueType.GetTypeId(); }
+    NScheme::TTypeInfo TypeInfo() const { return ValueType; }
 
     // we must distinguish empty raw type value (nothing, buffer == nullptr)
     // and zero-length string (value exists, but zero-length)
@@ -42,7 +52,8 @@ public:
 
     TString ToString() const {
         TStringBuilder builder;
-        builder << "(type:" << ValueType;
+        // TODO: support pg types
+        builder << "(type:" << ValueType.GetTypeId();
         if (!IsEmpty()) {
             builder << ", value:" << TString((const char*)Buffer, BufferSize).Quote();
         }
@@ -61,7 +72,7 @@ public:
 private:
     const void* Buffer;
     ui32 BufferSize;
-    NScheme::TTypeId ValueType;
+    NScheme::TTypeInfo ValueType;
 };
 
 } // namspace NKikimr

@@ -205,7 +205,7 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
     return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
-std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId) {
+std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeInfo typeId) {
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchYqlTypeToArrowType(typeId, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
@@ -218,7 +218,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId) {
     return std::make_shared<arrow::NullType>();
 }
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columns.size());
     for (auto& [name, ydbType] : columns) {
@@ -228,7 +228,7 @@ std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pa
     return fields;
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString, NScheme::TTypeId>>& ydbColumns) {
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
     return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns));
 }
 
@@ -953,8 +953,8 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::Recor
     return Reorder(batch, sortPermutation);
 }
 
-static bool ConvertData(TCell& cell, const NScheme::TTypeId& colType, TMemoryPool& memPool, TString& errorMessage) {
-    switch (colType) {
+static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage) {
+    switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber: {
             const auto dyNumber = NDyNumber::ParseDyNumberString(cell.AsBuf());
             if (!dyNumber.Defined()) {
@@ -985,8 +985,8 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeId& colType, TMemoryPoo
 }
 
 static std::shared_ptr<arrow::Array> ConvertColumn(const std::shared_ptr<arrow::Array>& column,
-                                                   NScheme::TTypeId colType) {
-    if (colType == NScheme::NTypeIds::Decimal) {
+                                                   NScheme::TTypeInfo colType) {
+    if (colType.GetTypeId() == NScheme::NTypeIds::Decimal) {
         return {};
     }
 
@@ -999,7 +999,7 @@ static std::shared_ptr<arrow::Array> ConvertColumn(const std::shared_ptr<arrow::
     builder.Reserve(binaryArray.length()).ok();
     // TODO: ReserveData
 
-    switch (colType) {
+    switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
                 auto value = binaryArray.Value(i);
@@ -1030,7 +1030,7 @@ static std::shared_ptr<arrow::Array> ConvertColumn(const std::shared_ptr<arrow::
 }
 
 std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                   const THashMap<TString, NScheme::TTypeId>& columnsToConvert)
+                                                   const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert)
 {
     std::vector<std::shared_ptr<arrow::Array>> columns = batch->columns();
     for (i32 i = 0; i < batch->num_columns(); ++i) {
@@ -1076,6 +1076,9 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
     for (; row < rowsUnroll; row += unroll) {
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema) {
+            // TODO: support pg types
+            Y_VERIFY(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+
             auto& column = allColumns[col];
             bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
                 Y_UNUSED(typeHolder);
@@ -1091,7 +1094,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
             });
 
             if (!success) {
-                errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType)
+                errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType.GetTypeId())
                         << " at column '" << colName << "'";
                 return false;
             }
@@ -1123,6 +1126,9 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
 
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema) {
+            // TODO: support pg types
+            Y_VERIFY(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+
             auto& column = allColumns[col];
             auto& curCell = cells[0][col];
             if (column->IsNull(row)) {
@@ -1137,7 +1143,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
             });
 
             if (!success) {
-                errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType)
+                errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType.GetTypeId())
                         << " at column '" << colName << "'";
                 return false;
             }

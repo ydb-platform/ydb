@@ -26,7 +26,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_snapshot PUBLIC
   cpp-regex-pcre
   library-cpp-svnversion
   kqp-ut-common
-  ydb-core-testlib
+  core-testlib-default
   ydb-core-tx
   udf-service-exception_policy
   public-lib-yson_value

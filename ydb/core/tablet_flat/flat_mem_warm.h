@@ -36,7 +36,7 @@ namespace NMem {
     };
 
     struct TKeyCmp {
-        const NScheme::TTypeIdOrder* Types;
+        const NScheme::TTypeInfoOrder* Types;
         const ui32 Count;
 
         explicit TKeyCmp(const TRowScheme& rowScheme)
@@ -362,9 +362,9 @@ namespace NMem {
                      */
                 } else if (TCellOp::HaveNoPayload(ops[it].NormalizedCellOp())) {
                     /* Payloadless ECellOp types may have zero type value */
-                } else if (info->TypeId != ops[it].Value.Type()) {
+                } else if (info->TypeInfo.GetTypeId() != ops[it].Value.Type()) {
                     Y_FAIL("Got an unexpected column type %" PRIu16 " in cell update for tag %" PRIu32 " (expected %" PRIu16 ")",
-                        ops[it].Value.Type(), ops[it].Tag, info->TypeId);
+                        ops[it].Value.Type(), ops[it].Tag, info->TypeInfo.GetTypeId());
                 }
 
                 auto cell = ops[it].AsCell();

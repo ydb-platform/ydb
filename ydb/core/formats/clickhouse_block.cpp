@@ -440,13 +440,13 @@ public:
         return Types.at(name);
     }
 
-    TDataTypePtr GetByYdbType(NScheme::TTypeId t) const {
+    TDataTypePtr GetByYdbType(NScheme::TTypeInfo type) const {
 
     #define CONVERT(ydbType, chType) \
         case NScheme::NTypeIds::ydbType: \
             return Get(#chType);
 
-        switch (t) {
+        switch (type.GetTypeId()) {
         CONVERT(Bool,   UInt8);
 
         CONVERT(Int8,   Int8);
@@ -479,8 +479,12 @@ public:
         CONVERT(ActorId,        String);
         CONVERT(StepOrderId,    String);
 
+        case NScheme::NTypeIds::Pg:
+            // TODO: support pg types
+            throw yexception() << "Unsupported pg type";
+
         default:
-            throw yexception() << "Unsupported type: " << t;
+            throw yexception() << "Unsupported type: " << type.GetTypeId();
         }
     #undef CONVERT
     }
@@ -533,13 +537,16 @@ void AddDecimal(const TMutableColumnPtr& column, const TCell& cell) {
     }
 }
 
-size_t AddValue(const TMutableColumnPtr& column, const TCell& cell, ui32 ydbType) {
-    Y_UNUSED(ydbType);
+size_t AddValue(const TMutableColumnPtr& column, const TCell& cell, NScheme::TTypeInfo type) {
     size_t prevBytes = column->byteSize();
     if (cell.IsNull()) {
         AddNull(column);
     } else {
-        if (ydbType == NScheme::NTypeIds::Decimal) {
+        auto typeId = type.GetTypeId();
+        if (typeId == NScheme::NTypeIds::Pg) {
+            // TODO: support pg types
+            Y_VERIFY(false, "pg types are not supported");
+        } else if (typeId == NScheme::NTypeIds::Decimal) {
             AddDecimal(column, cell);
         } else {
             column->insertData(cell.Data(), cell.Size());
@@ -548,7 +555,7 @@ size_t AddValue(const TMutableColumnPtr& column, const TCell& cell, ui32 ydbType
     return column->byteSize() - prevBytes;
 }
 
-TTypesAndNames MakeColumns(const TDataTypeRegistryPtr& dataTypeRegistry, const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
+TTypesAndNames MakeColumns(const TDataTypeRegistryPtr& dataTypeRegistry, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     TTypesAndNames res;
     for (auto& c : columns) {
         TDataTypePtr dataType = dataTypeRegistry->GetByYdbType(c.second);
@@ -568,7 +575,7 @@ class TBlockBuilder : public NKikimr::IBlockBuilder {
 public:
     explicit TBlockBuilder(TDataTypeRegistryPtr dataTypeRegistry);
     ~TBlockBuilder();
-    bool Start(const TVector<std::pair<TString,  NScheme::TTypeId>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) override;
+    bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) override;
     void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override;
     TString Finish() override;
     size_t Bytes() const override;
@@ -587,7 +594,7 @@ private:
 class TBlockBuilder::TImpl {
     constexpr static ui32 DBMS_MIN_REVISION_WITH_CURRENT_AGGREGATION_VARIANT_SELECTION_METHOD = 54408;
 public:
-    TImpl(const TDataTypeRegistryPtr& dataTypeRegistry, const TVector<std::pair<TString, NScheme::TTypeId>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock)
+    TImpl(const TDataTypeRegistryPtr& dataTypeRegistry, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock)
         : MaxRowsInBlock(maxRowsInBlock)
         , MaxBytesInBlock(maxBytesInBlock)
         , BlockTemplate(MakeColumns(dataTypeRegistry, columns))
@@ -656,7 +663,7 @@ TBlockBuilder::TBlockBuilder(TDataTypeRegistryPtr dataTypeRegistry)
 TBlockBuilder::~TBlockBuilder() {
 }
 
-bool TBlockBuilder::Start(const TVector<std::pair<TString,  NScheme::TTypeId>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) {
+bool TBlockBuilder::Start(const TVector<std::pair<TString,  NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) {
     try {
         Impl.Reset(new TImpl(DataTypeRegistry, columns, maxRowsInBlock, maxBytesInBlock));
     } catch (std::exception& e) {

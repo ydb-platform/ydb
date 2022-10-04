@@ -26,7 +26,9 @@ namespace {
         }
 
         const auto literal = AS_VALUE(TDataLiteral, data);
-        return MakeCell(literal->GetType()->GetSchemeType(), literal->AsValue(), env, false);
+        // TODO: support pg types
+        auto typeInfo = NScheme::TTypeInfo(literal->GetType()->GetSchemeType());
+        return MakeCell(typeInfo, literal->AsValue(), env, false);
     }
 
     void ExtractRow(TVector<TCell>& row, TTupleLiteral* tupleNode, const TTypeEnvironment& env) {
@@ -45,7 +47,9 @@ namespace {
         const auto dataType = type->IsOptional()
             ? AS_TYPE(TDataType, AS_TYPE(TOptionalType, type)->GetItemType()) : AS_TYPE(TDataType, type);
 
-        return MakeCell(dataType->GetSchemeType(), value, env);
+        // TODO: support pg types
+        auto typeInfo = NScheme::TTypeInfo(dataType->GetSchemeType());
+        return MakeCell(typeInfo, value, env);
     }
 
     void ExtractRow(const NUdf::TUnboxedValue& row, TTupleType* rowType, TVector<TCell>& cells, const TTypeEnvironment& env) {
@@ -600,7 +604,7 @@ namespace {
 
         bool truncatedAny = false;
         ui32 keyColumnsCount = 0;
-        TVector<NUdf::TDataTypeId> types;
+        TVector<NScheme::TTypeInfo> types;
 
         using TPartKey = std::tuple<const TCell*, NUdf::TUnboxedValue, ui64, ui64, NUdf::TUnboxedValue, bool>;
 
@@ -632,17 +636,20 @@ namespace {
             ui32 typesSize = sizeof(ui32) + partKeyColumnsCount * sizeof(NUdf::TDataTypeId);
             MKQL_ENSURE(firstKey.size() >= typesSize, "Corrupted key");
             const char* partTypes = firstKey.data() + sizeof(ui32);
+
             if (!keyColumnsCount) {
                 keyColumnsCount = partKeyColumnsCount;
                 for (ui32 i = 0; i < partKeyColumnsCount; ++i) {
                     auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId));
-                    types.push_back(partType);
+                    // TODO: support pg types
+                    types.push_back(NScheme::TTypeInfo(partType));
                 }
             } else {
                 MKQL_ENSURE(keyColumnsCount == partKeyColumnsCount, "Mismatch of key columns count");
                 for (ui32 i = 0; i < keyColumnsCount; ++i) {
                     auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId));
-                    MKQL_ENSURE(partType == types[i], "Mismatch of key columns type");
+                    // TODO: support pg types
+                    MKQL_ENSURE(partType == types[i].GetTypeId(), "Mismatch of key columns type");
                 }
             }
 

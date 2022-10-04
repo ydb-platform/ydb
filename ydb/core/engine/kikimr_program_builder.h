@@ -13,12 +13,12 @@ static constexpr NUdf::TDataTypeId LegacyPairUi64Ui64 = 0x101;
 struct TSelectColumn {
     TStringBuf Label;
     ui32 ColumnId = 0;
-    NUdf::TDataTypeId SchemeType = 0;
+    NScheme::TTypeInfo SchemeType;
     EColumnTypeConstraint TypeConstraint = EColumnTypeConstraint::Nullable;
     TSelectColumn()
     {}
 
-    TSelectColumn(TStringBuf label, ui32 columnId, NUdf::TDataTypeId schemeType, EColumnTypeConstraint typeConstraint)
+    TSelectColumn(TStringBuf label, ui32 columnId, NScheme::TTypeInfo schemeType, EColumnTypeConstraint typeConstraint)
         : Label(label)
         , ColumnId(columnId)
         , SchemeType(schemeType)
@@ -91,10 +91,10 @@ public:
     TUpdateRowBuilder(const TUpdateRowBuilder&) = default;
     TUpdateRowBuilder& operator=(const TUpdateRowBuilder&) = default;
     // Supports Data or Optional of Data
-    void SetColumn(ui32 columnId, ui32 expectedType, TRuntimeNode value);
+    void SetColumn(ui32 columnId, NScheme::TTypeInfo expectedType, TRuntimeNode value);
     // Supports Data
     void InplaceUpdateColumn(
-            ui32 columnId, ui32 expectedType,
+            ui32 columnId, NScheme::TTypeInfo expectedType,
             TRuntimeNode value, EInplaceUpdateMode mode);
     void EraseColumn(ui32 columnId);
     TRuntimeNode Build();
@@ -138,14 +138,14 @@ public:
     // returns Optional of structType
     TRuntimeNode SelectRow(
             const TTableId& tableId,
-            const TArrayRef<const ui32>& keyTypes,
+            const TArrayRef<NScheme::TTypeInfo>& keyTypes,
             const TArrayRef<const TSelectColumn>& columns,
             const TKeyColumnValues& row,
             const TReadTarget& target = TReadTarget());
 
     TRuntimeNode SelectRow(
             const TTableId& tableId,
-            const TArrayRef<const ui32>& keyTypes,
+            const TArrayRef<NScheme::TTypeInfo>& keyTypes,
             const TArrayRef<const TSelectColumn>& columns,
             const TKeyColumnValues& row,
             TRuntimeNode readTarget);
@@ -158,14 +158,14 @@ public:
     // returns Struct with fields { List: List of structType, Truncated: Bool }
     TRuntimeNode SelectRange(
             const TTableId& tableId,
-            const TArrayRef<const ui32>& keyTypes,
+            const TArrayRef<NScheme::TTypeInfo>& keyTypes,
             const TArrayRef<const TSelectColumn>& columns,
             const TTableRangeOptions& options,
             const TReadTarget& target = TReadTarget());
 
     TRuntimeNode SelectRange(
             const TTableId& tableId,
-            const TArrayRef<const ui32>& keyTypes,
+            const TArrayRef<NScheme::TTypeInfo>& keyTypes,
             const TArrayRef<const TSelectColumn>& columns,
             const TTableRangeOptions& options,
             TRuntimeNode readTarget);
@@ -177,14 +177,14 @@ public:
     // returns Void
     TRuntimeNode UpdateRow(
             const TTableId& tableId,
-            const TArrayRef<const ui32>& keyTypes,
+            const TArrayRef<NScheme::TTypeInfo>& keyTypes,
             const TKeyColumnValues& row,
             TUpdateRowBuilder& update);
 
     // returns Void
     TRuntimeNode EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const ui32>& keyTypes,
+            const TArrayRef<NScheme::TTypeInfo>& keyTypes,
             const TKeyColumnValues& row);
 
     //-- parameters functions
@@ -236,7 +236,7 @@ private:
     TRuntimeNode NewDataLiteral(const std::pair<ui64, ui64>& data) const;
     TRuntimeNode BuildTableId(const TTableId& tableId) const;
     TVector<TRuntimeNode> FixKeysType(
-        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<NScheme::TTypeInfo>& keyTypes,
         const TKeyColumnValues& row) const;
     TRuntimeNode RewriteNullType(
         TRuntimeNode value,

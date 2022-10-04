@@ -19,6 +19,7 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/base/row_version.h>
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
@@ -91,9 +92,9 @@ class TKeySpace {
 public:
     TKeySpace();
 
-    void Initialize(bool ordered, TConstArrayRef<NScheme::TTypeId> keyTypes, const TTableRange &range);
+    void Initialize(bool ordered, TConstArrayRef<NScheme::TTypeInfo> keyTypes, const TTableRange &range);
 
-    const TVector<NScheme::TTypeId> &GetKeyTypes() { return KeyTypes; }
+    const TVector<NScheme::TTypeInfo> &GetKeyTypes() { return KeyTypes; }
 
     void AddRange(const NKikimrTx::TKeyRange &range, ui64 shard);
     bool IsFull() const;
@@ -126,7 +127,7 @@ private:
     void TryToMergeRange(TRanges::iterator it);
     bool TryToMergeWithPrev(TRanges::iterator it);
 
-    TVector<NScheme::TTypeId> KeyTypes;
+    TVector<NScheme::TTypeInfo> KeyTypes;
     TSerializedTableRange SpaceRange;
     TRanges Ranges;
     bool OrderedQueue;
@@ -173,7 +174,7 @@ struct TReadTableRequest : public TThrRefBase {
         , RequestVersion(tx.HasApiVersion() ? tx.GetApiVersion() : (ui32)NKikimrTxUserProxy::TReadTableTransaction::UNSPECIFIED)
     {
         for (auto &col : tx.GetColumns()) {
-            Columns.emplace_back(col, 0, 0);
+            Columns.emplace_back(col, 0, NScheme::TTypeInfo(0));
         }
 
         if (tx.HasSnapshotStep() && tx.HasSnapshotTxId()) {
@@ -444,7 +445,7 @@ private:
     void ProcessStreamClearance(bool cleared, const TActorContext &ctx);
 
     bool ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
-                          TConstArrayRef<NScheme::TTypeId> keyType,
+                          TConstArrayRef<NScheme::TTypeInfo> keyType,
                           TSerializedCellVec &buf,
                           EParseRangeKeyExp exp);
 
@@ -584,7 +585,7 @@ TKeySpace::TKeySpace()
 }
 
 void TKeySpace::Initialize(bool ordered,
-                           TConstArrayRef<NScheme::TTypeId> keyTypes,
+                           TConstArrayRef<NScheme::TTypeInfo> keyTypes,
                            const TTableRange &range)
 {
     SpaceRange.From.Parse(TSerializedCellVec::Serialize(range.From));
@@ -1161,7 +1162,11 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
             auto &c = *tx.AddColumns();
             c.SetId(col.Id);
             c.SetName(col.Name);
-            c.SetTypeId(col.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(col.PType);
+            c.SetTypeId(columnType.TypeId);
+            if (columnType.TypeInfo) {
+                *c.MutableTypeInfo() = *columnType.TypeInfo;
+            }
         }
         auto &range = *tx.MutableRange();
         ReadTableRequest->KeySpace.GetSpace().Serialize(range);
@@ -1499,7 +1504,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
         return Die(ctx);
     }
 
-    TVector<NScheme::TTypeId> keyColumnTypes(res.Columns.size());
+    TVector<NScheme::TTypeInfo> keyColumnTypes(res.Columns.size());
     TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
     size_t keySize = 0;
     size_t no = 0;
@@ -1540,7 +1545,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
     }
 
     // Parse range.
-    TConstArrayRef<NScheme::TTypeId> keyTypes(keyColumnTypes.data(), keySize);
+    TConstArrayRef<NScheme::TTypeInfo> keyTypes(keyColumnTypes.data(), keySize);
     // Fix KeyRanges
     bool fromInclusive = ReadTableRequest->Range.GetFromInclusive();
     EParseRangeKeyExp fromExpand = EParseRangeKeyExp::TO_NULL;
@@ -3013,7 +3018,7 @@ void TDataReq::ProcessStreamClearance(bool cleared, const TActorContext &ctx)
 }
 
 bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
-                             TConstArrayRef<NScheme::TTypeId> keyType,
+                             TConstArrayRef<NScheme::TTypeInfo> keyType,
                              TSerializedCellVec &buf,
                              EParseRangeKeyExp exp)
 {

@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-blobstorage-dsproxy-ut_fat PUBLIC
   core-blobstorage-pdisk
   core-blobstorage-vdisk
   blobstorage-vdisk-common
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-blobstorage-dsproxy-ut_fat PRIVATE
   -Wl,-no_deduplicate

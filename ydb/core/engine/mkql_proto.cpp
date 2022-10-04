@@ -156,36 +156,19 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
         return std::move(unboxedValue);
     }
 
+    case TType::EKind::Pg:
+        // TODO: support pg types
+        MKQL_ENSURE(false, "pg types are not supported");
+
     default:
         MKQL_ENSURE(false, TStringBuilder() << "Unknown kind: " << type->GetKindAsStr());
     }
 }
 
-
-template <typename ValType>
-class TAlmostDoneTypeValue : public TRawTypeValue {
-public:
-    TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, ValType value)
-        : TRawTypeValue(&Value, sizeof(Value), schemeType)
-        , Value(value)
-    {}
-
-protected:
-    ValType Value;
-};
-
-template <>
-class TAlmostDoneTypeValue<TString> : public TRawTypeValue {
-public:
-    TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, const TString& value)
-        : TRawTypeValue(value.data(), value.size(), schemeType)
-    {}
-};
-
 // NOTE: TCell's can reference memomry from tupleValue
 bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,
-                    const TConstArrayRef<NScheme::TTypeId>& types,
+                    const TConstArrayRef<NScheme::TTypeInfo>& types,
                     bool allowCastFromString,
                     TVector<TCell>& key,
                     TString& errStr)
@@ -209,9 +192,9 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             const auto& item = ti.GetOptional().GetItem();
             CHECK_OR_RETURN_ERROR(item.GetKind() == NKikimrMiniKQL::Data, "Element at index " + ToString(i) + " Item kind is not Data");
             const auto& typeId = item.GetData().GetScheme();
-            CHECK_OR_RETURN_ERROR(typeId == types[i] ||
+            CHECK_OR_RETURN_ERROR(typeId == types[i].GetTypeId() ||
                 allowCastFromString && (typeId == NScheme::NTypeIds::Utf8),
-                "Element at index " + ToString(i) + " has type " + ToString(typeId) + " but expected type is " + ToString(types[i]));
+                "Element at index " + ToString(i) + " has type " + ToString(typeId) + " but expected type is " + ToString(types[i].GetTypeId()));
         }
 
         CHECK_OR_RETURN_ERROR(tupleType->GetTuple().ElementSize() == tupleValue.TupleSize(),
@@ -256,7 +239,8 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                               Sprintf("Simple type is expected in tuple at position %" PRIu32, i));
 
         TCell c;
-        switch (types[i]) {
+        auto typeId = types[i].GetTypeId();
+        switch (typeId) {
 
 #define CASE_SIMPLE_TYPE(name, type, protoField) \
         case NScheme::NTypeIds::name: \
@@ -266,7 +250,7 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                 type val = v.Get##protoField(); \
                 c = TCell((const char*)&val, sizeof(val)); \
             } else if (allowCastFromString && v.HasText()) { \
-                const auto slot = NUdf::GetDataSlot(types[i]); \
+                const auto slot = NUdf::GetDataSlot(typeId); \
                 const auto out = NMiniKQL::ValueFromString(slot, v.GetText()); \
                 CHECK_OR_RETURN_ERROR(out, Sprintf("Cannot parse value of type " #name " from text '%s' in tuple at position %" PRIu32, v.GetText().data(), i)); \
                 const auto val = out.Get<type>(); \
@@ -321,8 +305,13 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             }
             break;
         }
+        case NScheme::NTypeIds::Pg:
+            // TODO: support pg types
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported pg type at position %" PRIu32, i));
+            break;
+
         default:
-            CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, types[i], i));
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, i));
             break;
         }
 
@@ -335,11 +324,12 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
     return true;
 }
 
-bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue& val, TString& errStr) {
+bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue& val, TString& errStr) {
     if (c.IsNull()) {
         return true;
     }
 
+    auto typeId = type.GetTypeId();
     switch (typeId) {
     case NScheme::NTypeIds::Int8:
         Y_VERIFY(c.Size() == sizeof(i8));
@@ -420,6 +410,12 @@ bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue
     case NScheme::NTypeIds::Utf8:
         val.MutableOptional()->SetText(c.Data(), c.Size());
         break;
+
+    case NScheme::NTypeIds::Pg:
+        // TODO: support pg types
+        errStr = "Unknown pg type";
+        return false;
+
     default:
         errStr = "Unknown type: " + ToString(typeId);
         return false;

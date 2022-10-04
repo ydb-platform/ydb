@@ -21,7 +21,7 @@ class TKqpOutputRangePartitionConsumer : public IDqOutputConsumer {
 public:
     TKqpOutputRangePartitionConsumer(const TTypeEnvironment& typeEnv,
         TVector<NYql::NDq::IDqOutput::TPtr>&& outputs, TVector<TKqpRangePartition>&& partitions,
-        TVector<TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
+        TVector<NScheme::TTypeInfo>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
         : TypeEnv(typeEnv)
         , Outputs(std::move(outputs))
         , Partitions(std::move(partitions))
@@ -59,7 +59,7 @@ private:
     const TTypeEnvironment& TypeEnv;
     TVector<NYql::NDq::IDqOutput::TPtr> Outputs;
     TVector<TKqpRangePartition> Partitions;
-    TVector<TDataTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<ui32> KeyColumnIndices;
 };
 
@@ -67,7 +67,7 @@ private:
 
 NYql::NDq::IDqOutputConsumer::TPtr CreateOutputRangePartitionConsumer(
     TVector<NYql::NDq::IDqOutput::TPtr>&& outputs, TVector<TKqpRangePartition>&& partitions,
-    TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
+    TVector<NScheme::TTypeInfo>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
     const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     return MakeIntrusive<TKqpOutputRangePartitionConsumer>(typeEnv, std::move(outputs), std::move(partitions),

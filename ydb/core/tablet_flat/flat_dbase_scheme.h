@@ -22,7 +22,6 @@ using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
 class TScheme {
 public:
-    using TTypeId = ui32;
     using ECache = NPage::ECache;
 
     enum EDefault {
@@ -248,6 +247,7 @@ public:
     TAlter& AddTable(const TString& name, ui32 id);
     TAlter& DropTable(ui32 id);
     TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
+    TAlter& AddPgColumn(ui32 table, const TString& name, ui32 id, ui32 type, ui32 pgType, bool notNull, TCell null = { });
     TAlter& DropColumn(ui32 table, ui32 id);
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);

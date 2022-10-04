@@ -21,14 +21,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-inline bool IsAllowedKeyType(NScheme::TTypeId typeId) {
-    switch (typeId) {
+inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
+    switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Json:
         case NScheme::NTypeIds::Yson:
         case NScheme::NTypeIds::Float:
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::JsonDocument:
             return false;
+        case NScheme::NTypeIds::Pg:
+            return NPg::TypeDescIsComparable(typeInfo.GetTypeDesc());
         default:
             return true;
     }
@@ -52,7 +54,7 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
 }
 
 TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram,
-                                  const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes);
+                                  const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
 
 class TShardDeleter {
     struct TPerHiveDeletions {
@@ -147,7 +149,7 @@ TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesrc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 
-using TColumnTypes = THashMap<TString, NScheme::TTypeId>;
+using TColumnTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesrc, TColumnTypes& columsTypes, TString& explain);
 TColumnTypes ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo);

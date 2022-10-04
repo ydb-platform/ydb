@@ -23,7 +23,7 @@ target_link_libraries(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PUBLIC
   cpp-testing-unittest_main
   cpp-client-ydb_persqueue_core
   cpp-testing-gmock_in_unittest
-  ydb-core-testlib
+  core-testlib-default
   public-lib-json_value
   public-lib-yson_value
   cpp-client-ydb_driver

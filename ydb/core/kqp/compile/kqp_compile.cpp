@@ -109,10 +109,14 @@ void FillColumns(const TCoAtomList& columns, const TKikimrTableMetadata& tableMe
 
 void FillLiteralKeyBound(const TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto) {
     auto type = literal.Ref().GetTypeAnn();
+
+    // TODO: support pg types
+    YQL_ENSURE(type->GetKind() != ETypeAnnotationKind::Pg, "pg types are not supported");
+
     auto slot = type->Cast<TDataExprType>()->GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
-    YQL_ENSURE(NScheme::NTypeIds::IsYqlType(typeId) && NSchemeShard::IsAllowedKeyType(typeId));
+    YQL_ENSURE(NScheme::NTypeIds::IsYqlType(typeId) && NSchemeShard::IsAllowedKeyType(NScheme::TTypeInfo(typeId)));
 
     auto& protoType = *proto.MutableType();
     auto& protoValue = *proto.MutableValue();

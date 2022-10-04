@@ -60,25 +60,32 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
     };
 }
 
-TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry &reg) {
-    NScheme::ITypeSP t = reg.GetType(typeId);
+TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry &reg) {
+    auto typeId = typeInfo.GetTypeId();
+    TString res;
 
-    if (!t.IsKnownType())
-        return Sprintf("Unknow typeId 0x%x", (ui32)typeId);
+    if (typeId == NScheme::NTypeIds::Pg) {
+        res = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+    } else {
+        NScheme::ITypeSP t = reg.GetType(typeId);
 
-    TString res = t->GetName();
+        if (!t.IsKnownType())
+            return Sprintf("Unknow typeId 0x%x", (ui32)typeId);
+
+        res = t->GetName();
+    }
+
     res += " : ";
-
-    DbgPrintValue(res, r, typeId);
+    DbgPrintValue(res, r, typeInfo);
 
     return res;
 }
 
-void DbgPrintValue(TString &res, const TCell &r, ui32 type) {
+void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
     if (r.IsNull()) {
         res += "NULL";
     } else {
-        switch (type) {
+        switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             res += r.AsValue<bool>() ? "true" : "false";
             break;
@@ -105,6 +112,9 @@ void DbgPrintValue(TString &res, const TCell &r, ui32 type) {
             break;
         case NScheme::NTypeIds::ActorId:
             res += ToString(r.AsValue<TActorId>());
+            break;
+        case NScheme::NTypeIds::Pg:
+            // TODO: support pg types
             break;
         default:
             res += EscapeC(r.Data(), r.Size());

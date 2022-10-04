@@ -25,7 +25,7 @@ target_link_libraries(ydb-core-persqueue-ut_slow PUBLIC
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-persqueue-ut_slow PRIVATE
   -ldl

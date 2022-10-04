@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-tx-replication-ydb_proxy-ut PUBLIC
   cpp-testing-unittest_main
   tx-replication-ydb_proxy
   cpp-testing-unittest
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
   -ldl

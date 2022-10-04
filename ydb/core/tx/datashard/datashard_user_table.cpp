@@ -1,6 +1,7 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -218,7 +219,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     for (const auto& col : descr.GetColumns()) {
         TUserColumn& column = Columns[col.GetId()];
         if (column.Name.empty()) {
-            column = TUserColumn(col.GetTypeId(), col.GetName());
+            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+                col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+            column = TUserColumn(typeInfo, col.GetName());
         }
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
@@ -289,7 +292,7 @@ void TUserTable::CheckSpecialColumns() {
         const ui32 colId = xpair.first;
         const auto &column = xpair.second;
 
-        if (column.IsKey || column.Type != NScheme::NTypeIds::Uint64)
+        if (column.IsKey || column.Type.GetTypeId() != NScheme::NTypeIds::Uint64)
             continue;
 
         if (column.Name == "__tablet")
@@ -331,7 +334,11 @@ void TUserTable::AlterSchema() {
         auto descr = schema.AddColumns();
         descr->SetName(column.Name);
         descr->SetId(col.first);
-        descr->SetTypeId(column.Type);
+        auto protoType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+        descr->SetTypeId(protoType.TypeId);
+        if (protoType.TypeInfo) {
+            *descr->MutableTypeInfo() = *protoType.TypeInfo;
+        }
         descr->SetFamily(column.Family);
         descr->SetNotNull(column.NotNull);
     }
@@ -390,7 +397,9 @@ void TUserTable::DoApplyCreate(
         ui32 columnId = col.first;
         const TUserColumn& column = col.second;
 
-        alter.AddColumn(tid, column.Name, columnId, column.Type, column.NotNull);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+        ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
+        alter.AddPgColumn(tid, column.Name, columnId, columnType.TypeId, pgTypeId, column.NotNull);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -492,7 +501,9 @@ void TUserTable::ApplyAlter(
 
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
-                alter.AddColumn(tid, column.Name, colId, column.Type, column.NotNull);
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+                ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
+                alter.AddPgColumn(tid, column.Name, colId, columnType.TypeId, pgTypeId, column.NotNull);
             }
         }
 

@@ -28,7 +28,8 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         for(const auto& it : itTable.second.Columns) {
             const auto &col = it.second;
 
-            delta.AddColumn(table, col.Name, it.first, col.PType, col.NotNull, col.Null);
+            delta.AddPgColumn(table, col.Name, it.first, col.PType.GetTypeId(),
+                NPg::PgTypeIdFromTypeDesc(col.PType.GetTypeDesc()), col.NotNull, col.Null);
             delta.AddColumnToFamily(table, it.first, col.Family);
         }
 
@@ -97,12 +98,21 @@ TAlter& TAlter::DropTable(ui32 id)
 
 TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null)
 {
+    Y_VERIFY(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
+    return AddPgColumn(table, name, id, type, 0, notNull, null);
+}
+
+TAlter& TAlter::AddPgColumn(ui32 table, const TString& name, ui32 id, ui32 type, ui32 pgType, bool notNull, TCell null)
+{
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumn);
     delta.SetColumnName(name);
     delta.SetTableId(table);
     delta.SetColumnId(id);
     delta.SetColumnType(type);
+    if (pgType != 0) {
+        delta.MutableColumnTypeInfo()->SetPgTypeId(pgType);
+    }
     delta.SetNotNull(notNull);
 
     if (!null.IsNull())

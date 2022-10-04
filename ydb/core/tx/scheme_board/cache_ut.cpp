@@ -428,7 +428,7 @@ TResolve::TEntry TCacheTest::TestResolve(const TTableId& tableId, TResolve::ESta
         tableId,
         TTableRange({}),
         TKeyDesc::ERowOperation::Unknown,
-        TVector<NScheme::TTypeId>(), TVector<TKeyDesc::TColumnOp>()
+        TVector<NScheme::TTypeInfo>(), TVector<TKeyDesc::TColumnOp>()
     );
     request->ResultSet.emplace_back(std::move(keyDesc));
 

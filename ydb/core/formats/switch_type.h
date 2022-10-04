@@ -108,8 +108,8 @@ bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
  * @return Result of execution of callback or false if the type typeId is not supported.
  */
 template <typename TFunc>
-bool SwitchYqlTypeToArrowType(NScheme::TTypeId typeId, TFunc&& callback) {
-    switch (typeId) {
+bool SwitchYqlTypeToArrowType(NScheme::TTypeInfo typeInfo, TFunc&& callback) {
+    switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             return callback(TTypeWrapper<arrow::BooleanType>());
         case NScheme::NTypeIds::Int8:
@@ -155,6 +155,9 @@ bool SwitchYqlTypeToArrowType(NScheme::TTypeId typeId, TFunc&& callback) {
         case NScheme::NTypeIds::ActorId:
         case NScheme::NTypeIds::StepOrderId:
             break; // Deprecated types
+
+        case NScheme::NTypeIds::Pg:
+            break; // TODO: support pg types
     }
     return false;
 }

@@ -3,7 +3,7 @@
 
 namespace NKikimr::NFormats {
 
-TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeId>>& columns, ui32 skipRows, bool header,
+TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui32 skipRows, bool header,
                      ui32 blockSize)
     : ReadOptions(arrow::csv::ReadOptions::Defaults())
     , ParseOptions(arrow::csv::ParseOptions::Defaults())

@@ -41,8 +41,8 @@ namespace {
             bld.AddFamily(TableId, GroupId1, StoreIdDef);
             bld.SetFamily(TableId, GroupId1, ECache::Ever, ECodec::LZ4);
             bld.AddFamily(TableId, GroupId2, StoreIdOut);
-            bld.AddColumn(TableId, "key", ColId1, NScheme::TSmallBoundedString::TypeId, { });
-            bld.AddColumn(TableId, "value", ColId2, NScheme::TUint32::TypeId, { });
+            bld.AddColumn(TableId, "key", ColId1, NScheme::TSmallBoundedString::TypeId, false);
+            bld.AddColumn(TableId, "value", ColId2, NScheme::TUint32::TypeId, false);
             bld.AddColumnToKey(TableId, ColId1);
             bld.AddColumnToFamily(TableId, ColId1, GroupId1);
             bld.AddColumnToFamily(TableId, ColId2, GroupId2);

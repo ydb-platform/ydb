@@ -119,7 +119,6 @@ public:
             for (size_t ki : xrange(tableInfo.KeyColumnTypes.size())) {
                 const auto& kt = tableInfo.KeyColumnTypes[ki];
                 const TCell& cell = keyCells.GetCells()[ki];
-
                 key.emplace_back(TRawTypeValue(cell.AsRef(), kt));
             }
 

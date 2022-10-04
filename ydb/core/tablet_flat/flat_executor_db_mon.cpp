@@ -78,7 +78,7 @@ public:
                                 break;
                             }
                             const auto& columnInfo = tableInfo->Columns.find(*itColumn)->second;
-                            auto type = columnInfo.PType;
+                            auto type = columnInfo.PType.GetTypeId();
                             switch (type) {
                             case NScheme::NTypeIds::Uint32:
                             {
@@ -150,7 +150,7 @@ public:
                                     if (data == nullptr) {
                                         str << "<i>&lt;null&gt;</i>";
                                     } else {
-                                        switch(tuple.Types[i]) {
+                                        switch(tuple.Types[i].GetTypeId()) {
                                         case NScheme::NTypeIds::Int8:
                                             str << *(i8*)data;
                                             break;
@@ -221,8 +221,12 @@ public:
                                             str << "(DyNumber) " << number;
                                             break;
                                         }
+                                        case NScheme::NTypeIds::Pg: {
+                                            str << "(Pg) " << NPg::PgTypeNameFromTypeDesc(tuple.Types[i].GetTypeDesc());
+                                            break;
+                                        }
                                         default:
-                                            str << "<i>unknown type " << tuple.Types[i] << "</i>";
+                                            str << "<i>unknown type " << tuple.Types[i].GetTypeId() << "</i>";
                                             break;
                                         }
                                     }

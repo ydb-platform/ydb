@@ -24,7 +24,7 @@ target_link_libraries(ydb-services-persqueue_v1-ut-new_schemecache_ut PUBLIC
   ydb-services-persqueue_v1
   library-cpp-getopt
   library-cpp-svnversion
-  ydb-core-testlib
+  core-testlib-default
   api-grpc
   cpp-client-resources
   ydb_persqueue_core-ut-ut_utils

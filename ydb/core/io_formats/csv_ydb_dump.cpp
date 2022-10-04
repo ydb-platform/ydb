@@ -164,12 +164,12 @@ namespace {
 
 } // anonymous
 
-bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeId type, TMemoryPool& pool) {
+bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPool& pool) {
     if (value == "null") {
         return true;
     }
 
-    switch (type) {
+    switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
         return TCellMaker<bool>::Make(cell, value, pool);
     case NScheme::NTypeIds::Int8:
@@ -213,17 +213,20 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeId type, TMemoryPool&
         return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value, pool, &DyNumberToStringBuf);
     case NScheme::NTypeIds::Decimal:
         return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, &Int128ToPair);
+    case NScheme::NTypeIds::Pg:
+        // TODO: support pg types
+        Y_VERIFY(false, "pg types are not supported");
     default:
         return false;
     }
 }
 
-bool CheckCellValue(const TCell& cell, NScheme::TTypeId type) {
+bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     if (cell.IsNull()) {
         return true;
     }
 
-    switch (type) {
+    switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
     case NScheme::NTypeIds::Int8:
     case NScheme::NTypeIds::Uint8:
@@ -257,12 +260,15 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeId type) {
         return NYql::NDom::IsValidJson(cell.AsBuf());
     case NScheme::NTypeIds::Decimal:
         return !NYql::NDecimal::IsError(cell.AsValue<NYql::NDecimal::TInt128>());
+    case NScheme::NTypeIds::Pg:
+        // TODO: support pg types
+        Y_VERIFY(false, "pg types are not supported");
     default:
         return false;
     }
 }
 
-bool TYdbDump::ParseLine(TStringBuf line, const std::vector<std::pair<i32, ui32>>& columnOrderTypes, TMemoryPool& pool,
+bool TYdbDump::ParseLine(TStringBuf line, const std::vector<std::pair<i32, NScheme::TTypeInfo>>& columnOrderTypes, TMemoryPool& pool,
                          TVector<TCell>& keys, TVector<TCell>& values, TString& strError, ui64& numBytes)
 {
     for (const auto& [keyOrder, pType] : columnOrderTypes) {

@@ -9,7 +9,7 @@ namespace NTable {
 
 struct TTableItOps {
     static inline int CompareKeys(
-            TArrayRef<const NScheme::TTypeIdOrder> types,
+            TArrayRef<const NScheme::TTypeInfoOrder> types,
             TArrayRef<const TCell> a,
             TArrayRef<const TCell> b) noexcept
     {
@@ -158,7 +158,7 @@ struct TTableItOps {
 
 struct TTableItReverseOps {
     static int CompareKeys(
-            TArrayRef<const NScheme::TTypeIdOrder> types,
+            TArrayRef<const NScheme::TTypeInfoOrder> types,
             TArrayRef<const TCell> a,
             TArrayRef<const TCell> b) noexcept
     {

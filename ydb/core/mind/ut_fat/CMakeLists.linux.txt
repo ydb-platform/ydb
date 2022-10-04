@@ -31,7 +31,7 @@ target_link_libraries(ydb-core-mind-ut_fat PUBLIC
   core-blobstorage-nodewarden
   core-blobstorage-pdisk
   blobstorage-vdisk-common
-  ydb-core-testlib
+  core-testlib-default
 )
 target_link_options(ydb-core-mind-ut_fat PRIVATE
   -ldl

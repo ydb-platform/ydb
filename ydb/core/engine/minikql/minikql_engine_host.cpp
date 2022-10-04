@@ -22,7 +22,8 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
     for (size_t keyIdx = 0; keyIdx < row.size(); keyIdx++) {
         const TCell& cell = row[keyIdx];
         ui32 keyCol = tableInfo->KeyColumns[keyIdx];
-        NScheme::TTypeId vtype = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
+        // TODO: support pg types
+        NScheme::TTypeId vtype = scheme.GetColumnInfo(tableInfo, keyCol)->PType.GetTypeId();
         if (cell.IsNull()) {
             key.emplace_back();
             bytes += 1;
@@ -75,7 +76,7 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
     // Specified keys types should be valid for any operation
     for (size_t keyIdx = 0; keyIdx < key.KeyColumnTypes.size(); keyIdx++) {
         ui32 keyCol = tableInfo->KeyColumns[keyIdx];
-        NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, keyCol)->PType;
+        auto vtype = Scheme.GetColumnInfo(tableInfo, keyCol)->PType;
         EH_VALIDATE(key.KeyColumnTypes[keyIdx] == vtype, TypeCheckFailed);
     }
 
@@ -93,7 +94,7 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
             }
             auto* cinfo = Scheme.GetColumnInfo(tableInfo, cop.Column);
             EH_VALIDATE(cinfo, TypeCheckFailed); // Unknown column
-            NScheme::TTypeId vtype = cinfo->PType;
+            auto vtype = cinfo->PType;
             EH_VALIDATE(cop.ExpectedType == vtype, TypeCheckFailed);
             EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Read, OperationNotSupported);
         }
@@ -103,8 +104,8 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
             const TKeyDesc::TColumnOp& cop = key.Columns[i];
             auto* cinfo = Scheme.GetColumnInfo(tableInfo, cop.Column);
             EH_VALIDATE(cinfo, TypeCheckFailed); // Unknown column
-            NScheme::TTypeId vtype = cinfo->PType;
-            EH_VALIDATE(!cop.ExpectedType || cop.ExpectedType == vtype, TypeCheckFailed);
+            auto vtype = cinfo->PType;
+            EH_VALIDATE(cop.ExpectedType.GetTypeId() == 0 || cop.ExpectedType == vtype, TypeCheckFailed);
             EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Set, OperationNotSupported); // TODO[serxa]: support inplace operations in IsValidKey
         }
     } else if (key.RowOperation == TKeyDesc::ERowOperation::Erase) {
@@ -286,7 +287,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     TSmallVec<NTable::TTag> systemColumnTags;
     AnalyzeRowType(columnIds, tags, systemColumnTags);
 
-    TSmallVec<NScheme::TTypeId> cellTypes;
+    TSmallVec<NScheme::TTypeInfo> cellTypes;
     cellTypes.reserve(tags.size());
     for (size_t i = 0; i < tags.size(); ++i)
         cellTypes.emplace_back(tableInfo->Columns.at(tags[i]).PType);
@@ -538,8 +539,16 @@ public:
                     TString firstKey;
                     firstKey.reserve(totalSize);
                     firstKey.AppendNoAlias((const char*)&tuple.ColumnCount, sizeof(ui32));
-                    firstKey.AppendNoAlias((const char*)tuple.Types, tuple.ColumnCount * sizeof(NScheme::TTypeId));
+                    TVector<NScheme::TTypeId> typeIds;
+                    typeIds.reserve(tuple.ColumnCount);
+                    for (ui32 i = 0; i < tuple.ColumnCount; ++i) {
+                        auto typeId = tuple.Types[i].GetTypeId();
+                        Y_ENSURE(typeId != NScheme::NTypeIds::Pg, "pg types are not supported");
+                        typeIds.push_back(typeId);
+                    }
+                    firstKey.AppendNoAlias((const char*)typeIds.data(), tuple.ColumnCount * sizeof(NScheme::TTypeId));
                     firstKey.AppendNoAlias(cells);
+                    // TODO: support pg types
 
                     if (List.FirstKey) {
                         Y_VERIFY_DEBUG(*List.FirstKey == firstKey);
@@ -879,7 +888,8 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     for (size_t i = 0; i < commands.size(); i++) {
         const TUpdateCommand& upd = commands[i];
         Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
-        NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
+        // TODO: support pg types
+        NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType.GetTypeId();
         ops.emplace_back(upd.Column, NTable::ECellOp::Set,
             upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtype));
         valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
@@ -996,12 +1006,12 @@ void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TS
     }
 }
 
-NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) {
+NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     if (cell.IsNull()) {
         return NUdf::TUnboxedValue();
     }
 
-    switch (type) {
+    switch (type.GetTypeId()) {
         case NYql::NProto::TypeIds::Bool:
             return NUdf::TUnboxedValuePod(cell.AsValue<bool>());
         case NYql::NProto::TypeIds::Int8:
@@ -1065,9 +1075,16 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) {
             return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
 
         default:
-            Y_VERIFY_DEBUG(false, "Unsupported type: %" PRIu16, type);
-            return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
+            break;
     }
+
+    if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
+        // TODO: support pg types
+        Y_VERIFY(false, "pg types are not supported");
+    }
+
+    Y_VERIFY_DEBUG(false, "Unsupported type: %" PRIu16, type.GetTypeId());
+    return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
 }
 
 }}

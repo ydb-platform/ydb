@@ -57,7 +57,7 @@ void TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             continue;
         }
 
-        switch (column.Type) {
+        switch (column.Type.GetTypeId()) {
         case NScheme::NTypeIds::Int32:
             out << cell.AsValue<i32>();
             break;
@@ -121,6 +121,9 @@ void TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
         case NScheme::NTypeIds::JsonDocument:
             out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
             break;
+        case NScheme::NTypeIds::Pg:
+            // TODO: support pg types
+            Y_FAIL("Unsupported pg type");
         default:
             Y_FAIL("Unsupported type");
         }

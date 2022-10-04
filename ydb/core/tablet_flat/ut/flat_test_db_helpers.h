@@ -146,7 +146,7 @@ public:
         Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
         const auto *colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
         Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
-        NScheme::TTypeId type = colInfo->PType;
+        NScheme::TTypeId type = colInfo->PType.GetTypeId();
         TagOps[*tagId] = FromVal(type, val);
         return *this;
     }
@@ -180,7 +180,7 @@ template <typename T, typename... Tt>
 void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple, T t, Tt... tt) {
     ui32 pos = tuple.size();
     ui32 tag = scheme.GetTableInfo(root)->KeyColumns[pos];
-    NScheme::TTypeId type = scheme.GetColumnInfo(root, tag)->PType;
+    NScheme::TTypeId type = scheme.GetColumnInfo(root, tag)->PType.GetTypeId();
     tuple.push_back(FromVal(type, t));
     AppendKeyColumn(root, scheme, tuple, tt...);
 }

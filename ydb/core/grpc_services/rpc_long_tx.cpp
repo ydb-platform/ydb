@@ -10,6 +10,7 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/formats/arrow_helpers.h>
 #include <ydb/core/formats/sharding.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -33,10 +34,12 @@ using TEvLongTxReadRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::LongTx
     Ydb::LongTx::ReadResponse>;
 
 std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    TVector<std::pair<TString,  NScheme::TTypeId>> columns;
+    TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
     for (auto& col : schema.GetColumns()) {
         Y_VERIFY(col.HasTypeId());
-        columns.emplace_back(col.GetName(), (NScheme::TTypeId)col.GetTypeId());
+        auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+        columns.emplace_back(col.GetName(), typeInfo);
     }
 
     return NArrow::MakeArrowSchema(columns);

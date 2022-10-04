@@ -2,6 +2,7 @@
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -22,12 +23,12 @@ struct TBytesStatistics {
 
 };
 
-TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::TTypeId type) {
+TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type) {
     namespace NTypeIds = NScheme::NTypeIds;
     if (!value) {
         return {sizeof(NUdf::TUnboxedValue), 8}; // Special value for NULL elements
     }
-    switch (type) {
+    switch (type.GetTypeId()) {
         case NTypeIds::Bool:
         case NTypeIds::Int8:
         case NTypeIds::Uint8:
@@ -48,12 +49,12 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::
         case NTypeIds::Interval:
         case NTypeIds::ActorId:
         case NTypeIds::StepOrderId: {
-            YQL_ENSURE(value.IsEmbedded(), "Passed wrong type: " << NScheme::TypeName(type));
+            YQL_ENSURE(value.IsEmbedded(), "Passed wrong type: " << NScheme::TypeName(type.GetTypeId()));
             return {sizeof(NUdf::TUnboxedValue), sizeof(i64)};
         }
         case NTypeIds::Decimal:
         {
-            YQL_ENSURE(value.IsEmbedded(), "Passed wrong type: " << NScheme::TypeName(type));
+            YQL_ENSURE(value.IsEmbedded(), "Passed wrong type: " << NScheme::TypeName(type.GetTypeId()));
             return {sizeof(NUdf::TUnboxedValue), sizeof(NYql::NDecimal::TInt128)};
         }
         case NTypeIds::String:
@@ -71,8 +72,12 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::
             }
         }
 
+        case NTypeIds::Pg:
+            // TODO: support pg types
+            YQL_ENSURE(false, "pg types are not supported");
+
         default:
-            Y_VERIFY_DEBUG_S(false, "Unsupported type " << NScheme::TypeName(type));
+            Y_VERIFY_DEBUG_S(false, "Unsupported type " << NScheme::TypeName(type.GetTypeId()));
             if (value.IsEmbedded()) {
                 return {sizeof(NUdf::TUnboxedValue), sizeof(NUdf::TUnboxedValue)};
             } else {
@@ -139,7 +144,7 @@ NUdf::TUnboxedValue MakeUnboxedValueFromDecimal128Array(arrow::Array* column, ui
 }
 
 TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
-    const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeId columnType)
+    const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeInfo columnType)
 {
     TBytesStatistics columnStats;
     // Hold pointer to column until function end
@@ -151,7 +156,7 @@ TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>&
         if (columnPtr->IsNull(rowIndex)) {
             rowItem = NUdf::TUnboxedValue();
         } else {
-            switch(columnType) {
+            switch(columnType.GetTypeId()) {
                 case NTypeIds::Bool: {
                     rowItem = MakeUnboxedValue<arrow::BooleanArray, bool>(columnPtr, rowIndex);
                     break;
@@ -228,12 +233,16 @@ TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>&
                 case NTypeIds::PairUi64Ui64:
                 case NTypeIds::ActorId:
                 case NTypeIds::StepOrderId: {
-                    Y_VERIFY_DEBUG_S(false, "Unsupported (deprecated) type: " << NScheme::TypeName(columnType));
+                    Y_VERIFY_DEBUG_S(false, "Unsupported (deprecated) type: " << NScheme::TypeName(columnType.GetTypeId()));
                     rowItem = MakeUnboxedValueFromFixedSizeBinaryData(columnPtr, rowIndex);
                     break;
                 }
+                case NTypeIds::Pg:
+                    // TODO: support pg types
+                    YQL_ENSURE(false, "Unsupported pg type at column " << columnIndex);
+
                 default:
-                    YQL_ENSURE(false, "Unsupported type: " << NScheme::TypeName(columnType) << " at column " << columnIndex);
+                    YQL_ENSURE(false, "Unsupported type: " << NScheme::TypeName(columnType.GetTypeId()) << " at column " << columnIndex);
             }
         }
         columnStats.AddStatistics(GetUnboxedValueSize(rowItem, columnType));
@@ -243,7 +252,7 @@ TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>&
 
 } // namespace
 
-std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeId type) {
+std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type) {
     auto sizes = GetUnboxedValueSize(value, type);
     return {sizes.AllocatedBytes, sizes.DataBytes};
 }
@@ -273,7 +282,8 @@ TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTrans
     for (const auto& column : meta.GetColumns()) {
         NMiniKQL::TKqpScanComputeContext::TColumn c;
         c.Tag = column.GetId();
-        c.Type = column.GetType();
+        c.Type = NScheme::TypeInfoFromProtoColumnType(column.GetType(),
+            column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
 
         if (!IsSystemColumn(c.Tag)) {
             Columns.emplace_back(std::move(c));
@@ -289,7 +299,8 @@ TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTrans
         for (const auto& resColumn : meta.GetResultColumns()) {
             NMiniKQL::TKqpScanComputeContext::TColumn c;
             c.Tag = resColumn.GetId();
-            c.Type = resColumn.GetType();
+            c.Type = NScheme::TypeInfoFromProtoColumnType(resColumn.GetType(),
+                resColumn.HasTypeInfo() ? &resColumn.GetTypeInfo() : nullptr);
 
             if (!IsSystemColumn(c.Tag)) {
                 ResultColumns.emplace_back(std::move(c));

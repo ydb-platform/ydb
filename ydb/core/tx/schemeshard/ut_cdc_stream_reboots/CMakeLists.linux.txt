@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_cdc_stream_reboots PUBLIC
   cpp-testing-unittest_main
   core-tx-schemeshard
   tx-schemeshard-ut_helpers
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-tx-schemeshard-ut_cdc_stream_reboots PRIVATE
   -ldl

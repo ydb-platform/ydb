@@ -4,6 +4,7 @@
 #include "util_basics.h"
 
 #include <ydb/core/util/pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/map.h>
@@ -52,7 +53,8 @@ TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bo
 
         cols.emplace_back();
         cols.back().Tag = one.GetTag();
-        cols.back().TypeId = one.GetType();
+        cols.back().TypeInfo = NScheme::TypeInfoFromProtoColumnType(one.GetType(),
+            one.HasTypeInfo() ? &one.GetTypeInfo() : nullptr);
         cols.back().Pos = cols.size() - 1;
         cols.back().Group = one.GetGroup();
 
@@ -96,10 +98,10 @@ void TPartScheme::FillKeySlots()
 void TPartScheme::FillHistoricSlots()
 {
     // Synthetic (rowid, step, txid) key used during history searches
-    TStackVec<NScheme::TTypeIdOrder, 3> types;
-    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Ascending);
-    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Descending);
-    types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Descending);
+    TStackVec<NScheme::TTypeInfoOrder, 3> types;
+    types.emplace_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::EOrder::Ascending);
+    types.emplace_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::EOrder::Descending);
+    types.emplace_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::EOrder::Descending);
     TStackVec<TCell, 3> defs;
     defs.resize(3);
     HistoryKeys = TKeyCellDefaults::Make(types, defs);
@@ -109,7 +111,7 @@ void TPartScheme::FillHistoricSlots()
     for (ui32 keyIdx = 0; keyIdx < HistoryKeys->Types.size(); ++keyIdx) {
         auto& col = HistoryGroup.Columns.emplace_back();
         col.Key = keyIdx;
-        col.TypeId = HistoryKeys->Types[keyIdx].GetTypeId();
+        col.TypeInfo = HistoryKeys->Types[keyIdx].ToTypeInfo();
     }
 
     // All non-key columns go after synthetic key
@@ -157,7 +159,7 @@ void TPartScheme::InitGroup(TGroupInfo& group)
         std::sort(group.ColsKeyData.begin(), group.ColsKeyData.end(), byKey);
 
         for (auto& col : group.ColsKeyData) {
-            group.KeyTypes.push_back(col.TypeId);
+            group.KeyTypes.push_back(col.TypeInfo);
         }
 
         group.ColsKeyIdx = group.ColsKeyData;
@@ -172,7 +174,7 @@ size_t TPartScheme::InitInfo(TVector<TColumn>& cols, TPgSize headerSize)
     size_t offset = 0;
 
     for (auto &col: cols) {
-        const ui32 fixed = NScheme::GetFixedSize(col.TypeId);
+        const ui32 fixed = NScheme::GetFixedSize(col.TypeInfo);
 
         col.Offset = offset;
         col.IsFixed = fixed > 0;
@@ -191,7 +193,11 @@ TSharedData TPartScheme::Serialize() const
     for (const auto& col : AllColumns) {
         auto* pb = proto.AddColumns();
         pb->SetTag(col.Tag);
-        pb->SetType(col.TypeId);
+        auto protoType = NScheme::ProtoColumnTypeFromTypeInfo(col.TypeInfo);
+        pb->SetType(protoType.TypeId);
+        if (protoType.TypeInfo) {
+            *pb->MutableTypeInfo() = *protoType.TypeInfo;
+        }
         pb->SetGroup(col.Group);
 
         if (col.IsKey()) {

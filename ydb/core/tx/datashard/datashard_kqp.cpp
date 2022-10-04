@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/datashard_locks.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -300,7 +301,9 @@ using TWriteOpMeta = NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta::TWriteO
 using TColumnMeta = NKikimrTxDataShard::TKqpTransaction::TColumnMeta;
 
 NTable::TColumn GetColumn(const TColumnMeta& columnMeta) {
-    return NTable::TColumn(columnMeta.GetName(), columnMeta.GetId(), columnMeta.GetType());
+    auto typeInfo = NScheme::TypeInfoFromProtoColumnType(columnMeta.GetType(),
+        columnMeta.HasTypeInfo() ? &columnMeta.GetTypeInfo() : nullptr);
+    return NTable::TColumn(columnMeta.GetName(), columnMeta.GetId(), typeInfo);
 }
 
 TVector<NTable::TColumn> GetColumns(const TReadOpMeta& readMeta) {
@@ -451,9 +454,11 @@ void KqpSetTxLocksKeys(const NKikimrTxDataShard::TKqpLocks& locks, const TSysLoc
     }
 
     static TTableId sysLocksTableId = TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2);
-    static TVector<NScheme::TTypeId> lockRowType = {
-        NScheme::TUint64::TypeId, NScheme::TUint64::TypeId,
-        NScheme::TUint64::TypeId, NScheme::TUint64::TypeId,
+    static TVector<NScheme::TTypeInfo> lockRowType = {
+        NScheme::TTypeInfo(NScheme::TUint64::TypeId),
+        NScheme::TTypeInfo(NScheme::TUint64::TypeId),
+        NScheme::TTypeInfo(NScheme::TUint64::TypeId),
+        NScheme::TTypeInfo(NScheme::TUint64::TypeId),
     };
 
     for (auto& lock : locks.GetLocks()) {

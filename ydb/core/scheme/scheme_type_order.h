@@ -1,6 +1,7 @@
 #pragma once
 
 #include "scheme_type_id.h"
+#include "scheme_type_info.h"
 
 namespace NKikimr {
 namespace NScheme {
@@ -48,6 +49,49 @@ public:
 private:
     ui16 TypeId_ : 15;
     ui16 Descending_ : 1;
+};
+
+struct TTypeInfoOrder {
+    TTypeInfoOrder()
+    {}
+
+    TTypeInfoOrder(TTypeIdOrder typeIdOrder, void* typeDesc = {})
+        : TypeIdOrder(typeIdOrder)
+        , TypeDesc(typeDesc)
+    {}
+
+    TTypeInfoOrder(TTypeInfo typeInfo, EOrder order = EOrder::Ascending)
+        : TypeIdOrder(typeInfo.GetTypeId(), order)
+        , TypeDesc(typeInfo.GetTypeDesc())
+    {}
+
+    TTypeId GetTypeId() const {
+        return TypeIdOrder.GetTypeId();
+    }
+
+    EOrder GetOrder() const {
+        return TypeIdOrder.GetOrder();
+    }
+
+    bool IsAscending() const {
+        return TypeIdOrder.IsAscending();
+    }
+
+    bool IsDescending() const {
+        return TypeIdOrder.IsDescending();
+    }
+
+    void* GetTypeDesc() const {
+        return TypeDesc;
+    }
+
+    TTypeInfo ToTypeInfo() const {
+        return TTypeInfo(GetTypeId(), GetTypeDesc());
+    }
+
+private:
+    TTypeIdOrder TypeIdOrder;
+    void* TypeDesc = {};
 };
 
 }

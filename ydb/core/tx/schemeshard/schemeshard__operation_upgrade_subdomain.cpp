@@ -4,6 +4,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace {
 
@@ -219,7 +220,11 @@ public:
             auto colDescr = descr.AddColumns();
             colDescr->SetId(columnId);
             colDescr->SetName(column.Name);
-            colDescr->SetColType(column.PType);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.PType);
+            colDescr->SetColType(columnType.TypeId);
+            if (columnType.TypeInfo) {
+                *colDescr->MutableColTypeInfo() = *columnType.TypeInfo;
+            }
             colDescr->SetColKeyOrder(column.KeyOrder);
             colDescr->SetCreateVersion(column.CreateVersion);
             colDescr->SetDeleteVersion(column.DeleteVersion);

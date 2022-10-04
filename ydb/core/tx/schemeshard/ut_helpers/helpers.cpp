@@ -2019,7 +2019,7 @@ namespace NSchemeShardUT_Private {
                         keyIdx = ki;
                     }
                 }
-                table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, c.GetTypeId(), 0,
+                table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, NScheme::TTypeInfo(c.GetTypeId()), 0,
                     EColumnTypeConstraint::Nullable}));
             }
             dbSchemeResolver.AddTable(table);
@@ -2036,17 +2036,16 @@ namespace NSchemeShardUT_Private {
             const auto& tdesc = pathDesc.GetTable();
 
             // Cout << pathDesc << Endl;
-            std::unordered_map<ui32, NScheme::TTypeId> columnId2Type;
+            std::unordered_map<ui32, NScheme::TTypeInfo> columnId2Type;
             for (size_t i = 0; i < tdesc.ColumnsSize(); ++i) {
                 ui32 id = tdesc.GetColumns(i).GetId();
-                ui16 typeId = tdesc.GetColumns(i).GetTypeId();
-                columnId2Type[id] = typeId;
+                auto typeInfo = NScheme::TTypeInfo(tdesc.GetColumns(i).GetTypeId());
+                columnId2Type[id] = typeInfo;
             }
 
             for (size_t i = 0; i < tdesc.KeyColumnIdsSize(); ++i) {
                 ui32 id = tdesc.GetKeyColumnIds(i);
-                NScheme::TTypeId typeId = columnId2Type[id];
-                TablePartitioningInfo.KeyColumnTypes.push_back(typeId);
+                TablePartitioningInfo.KeyColumnTypes.push_back(columnId2Type[id]);
             }
 
             for (size_t i = 0; i < pathDesc.TablePartitionsSize(); ++i) {

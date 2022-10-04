@@ -9,6 +9,9 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
     using namespace NKikimr;
 
+    namespace NTypeIds = NScheme::NTypeIds;
+    using TTypeInfo = NScheme::TTypeInfo;
+
     Y_UNIT_TEST(EmptyOwnedCellVec) {
         TOwnedCellVec empty;
         UNIT_ASSERT_VALUES_EQUAL(empty.size(), 0u);
@@ -68,32 +71,32 @@ Y_UNIT_TEST_SUITE(Scheme) {
         double doubleVal = -0.0025;
 
         TVector<TCell> cells;
-        TVector<NScheme::TTypeId> types;
+        TVector<TTypeInfo> types;
 
         cells.push_back(TCell((const char*)&doubleVal, sizeof(doubleVal)));
-        types.push_back(NScheme::NTypeIds::Double);
+        types.push_back(TTypeInfo(NTypeIds::Double));
         cells.push_back(TCell(smallStrVal, sizeof(smallStrVal)));
-        types.push_back(NScheme::NTypeIds::String);
+        types.push_back(TTypeInfo(NTypeIds::String));
         cells.push_back(TCell());
-        types.push_back(NScheme::NTypeIds::Utf8);
+        types.push_back(TTypeInfo(NTypeIds::Utf8));
         cells.push_back(TCell(smallStrVal, sizeof(smallStrVal)));
-        types.push_back(NScheme::NTypeIds::Utf8);
+        types.push_back(TTypeInfo(NTypeIds::Utf8));
         cells.push_back(TCell((const char*)&floatVal, sizeof(floatVal)));
-        types.push_back(NScheme::NTypeIds::Float);
+        types.push_back(TTypeInfo(NTypeIds::Float));
         cells.push_back(TCell());
-        types.push_back(NScheme::NTypeIds::Decimal);
+        types.push_back(TTypeInfo(NTypeIds::Decimal));
         cells.push_back(TCell((const char*)&intVal, sizeof(ui64)));
-        types.push_back(NScheme::NTypeIds::Uint64);
+        types.push_back(TTypeInfo(NTypeIds::Uint64));
         cells.push_back(TCell());
-        types.push_back(NScheme::NTypeIds::Decimal);
+        types.push_back(TTypeInfo(NTypeIds::Decimal));
         cells.push_back(TCell());
-        types.push_back(NScheme::NTypeIds::Uint8);
+        types.push_back(TTypeInfo(NTypeIds::Uint8));
         cells.push_back(TCell(bigStrVal, sizeof(bigStrVal)));
-        types.push_back(NScheme::NTypeIds::Utf8);
+        types.push_back(TTypeInfo(NTypeIds::Utf8));
         cells.push_back(TCell());
-        types.push_back(NScheme::NTypeIds::Double);
+        types.push_back(TTypeInfo(NTypeIds::Double));
         cells.push_back(TCell((const char*)&intVal, sizeof(i32)));
-        types.push_back(NScheme::NTypeIds::Int32);
+        types.push_back(TTypeInfo(NTypeIds::Int32));
 
         TSerializedCellVec vec(TSerializedCellVec::Serialize(cells));
 
@@ -210,10 +213,13 @@ Y_UNIT_TEST_SUITE(Scheme) {
     /**
      * CompareOrder test for cell1 < cell2 < cell3 given a type id
      */
-    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeId type) {
+    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeId typeId) {
         TCell nullCell;
 
-        NScheme::TTypeIdOrder typeDescending(type, NScheme::EOrder::Descending);
+        NScheme::TTypeIdOrder typeIdDescending(typeId, NScheme::EOrder::Descending);
+
+        NScheme::TTypeInfo type(typeId);
+        NScheme::TTypeInfoOrder typeDescending(typeIdDescending);
 
         // NULL is always equal to itself, both ascending and descending
         UNIT_ASSERT_EQUAL(CompareTypedCells(nullCell, nullCell, type), 0);
@@ -286,38 +292,39 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
         TArrayRef<const NScheme::TTypeId> yqlIds(NScheme::NTypeIds::YqlIds);
         for (NScheme::TTypeId typeId : yqlIds) {
+            NScheme::TTypeInfo typeInfo(typeId);
             switch (typeId) {
             case NScheme::NTypeIds::Int32:
-                GetValueHash(typeId, TCell(charArr, sizeof(i32)));
-                CompareTypedCells(TCell(charArr, sizeof(i32)), TCell(charArr, sizeof(i32)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(i32)));
+                CompareTypedCells(TCell(charArr, sizeof(i32)), TCell(charArr, sizeof(i32)), typeInfo);
                 break;
             case NScheme::NTypeIds::Uint32:
-                GetValueHash(typeId, TCell(charArr, sizeof(ui32)));
-                CompareTypedCells(TCell(charArr, sizeof(ui32)), TCell(charArr, sizeof(ui32)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui32)));
+                CompareTypedCells(TCell(charArr, sizeof(ui32)), TCell(charArr, sizeof(ui32)), typeInfo);
                 break;
             case NScheme::NTypeIds::Int64:
-                GetValueHash(typeId, TCell(charArr, sizeof(i64)));
-                CompareTypedCells(TCell(charArr, sizeof(i64)), TCell(charArr, sizeof(i64)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(i64)));
+                CompareTypedCells(TCell(charArr, sizeof(i64)), TCell(charArr, sizeof(i64)), typeInfo);
                 break;
             case NScheme::NTypeIds::Uint64:
-                GetValueHash(typeId, TCell(charArr, sizeof(ui64)));
-                CompareTypedCells(TCell(charArr, sizeof(ui64)), TCell(charArr, sizeof(ui64)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui64)));
+                CompareTypedCells(TCell(charArr, sizeof(ui64)), TCell(charArr, sizeof(ui64)), typeInfo);
                 break;
             case NScheme::NTypeIds::Byte:
-                GetValueHash(typeId, TCell(charArr, sizeof(ui8)));
-                CompareTypedCells(TCell(charArr, sizeof(ui8)), TCell(charArr, sizeof(ui8)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui8)));
+                CompareTypedCells(TCell(charArr, sizeof(ui8)), TCell(charArr, sizeof(ui8)), typeInfo);
                 break;
             case NScheme::NTypeIds::Bool:
-                GetValueHash(typeId, TCell(charArr, sizeof(ui8)));
-                CompareTypedCells(TCell(charArr, sizeof(ui8)), TCell(charArr, sizeof(ui8)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui8)));
+                CompareTypedCells(TCell(charArr, sizeof(ui8)), TCell(charArr, sizeof(ui8)), typeInfo);
                 break;
             case NScheme::NTypeIds::Double:
-                GetValueHash(typeId, TCell(charArr, sizeof(double)));
-                CompareTypedCells(TCell(charArr, sizeof(double)), TCell(charArr, sizeof(double)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(double)));
+                CompareTypedCells(TCell(charArr, sizeof(double)), TCell(charArr, sizeof(double)), typeInfo);
                 break;
             case NScheme::NTypeIds::Float:
-                GetValueHash(typeId, TCell(charArr, sizeof(float)));
-                CompareTypedCells(TCell(charArr, sizeof(float)), TCell(charArr, sizeof(float)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(float)));
+                CompareTypedCells(TCell(charArr, sizeof(float)), TCell(charArr, sizeof(float)), typeInfo);
                 break;
             case NScheme::NTypeIds::String:
             case NScheme::NTypeIds::Utf8:
@@ -325,28 +332,28 @@ Y_UNIT_TEST_SUITE(Scheme) {
             case NScheme::NTypeIds::Json:
             case NScheme::NTypeIds::JsonDocument:
             case NScheme::NTypeIds::DyNumber:
-                GetValueHash(typeId, TCell(charArr, 30));
-                CompareTypedCells(TCell(charArr, 30), TCell(charArr, 30), typeId);
+                GetValueHash(typeInfo, TCell(charArr, 30));
+                CompareTypedCells(TCell(charArr, 30), TCell(charArr, 30), typeInfo);
                 break;
             case NScheme::NTypeIds::Decimal:
-                GetValueHash(typeId, TCell(charArr, sizeof(ui64) * 2));
-                CompareTypedCells(TCell(charArr, sizeof(ui64) * 2), TCell(charArr, sizeof(ui64) * 2), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui64) * 2));
+                CompareTypedCells(TCell(charArr, sizeof(ui64) * 2), TCell(charArr, sizeof(ui64) * 2), typeInfo);
                 break;
             case NScheme::NTypeIds::Date:
-                GetValueHash(typeId, TCell(charArr, sizeof(ui16)));
-                CompareTypedCells(TCell(charArr, sizeof(ui16)), TCell(charArr, sizeof(ui16)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui16)));
+                CompareTypedCells(TCell(charArr, sizeof(ui16)), TCell(charArr, sizeof(ui16)), typeInfo);
                 break;
             case NScheme::NTypeIds::Datetime:
-                GetValueHash(typeId, TCell(charArr, sizeof(ui32)));
-                CompareTypedCells(TCell(charArr, sizeof(ui32)), TCell(charArr, sizeof(ui32)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui32)));
+                CompareTypedCells(TCell(charArr, sizeof(ui32)), TCell(charArr, sizeof(ui32)), typeInfo);
                 break;
             case NScheme::NTypeIds::Timestamp:
-                GetValueHash(typeId, TCell(charArr, sizeof(ui64)));
-                CompareTypedCells(TCell(charArr, sizeof(ui64)), TCell(charArr, sizeof(ui64)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui64)));
+                CompareTypedCells(TCell(charArr, sizeof(ui64)), TCell(charArr, sizeof(ui64)), typeInfo);
                 break;
             case NScheme::NTypeIds::Interval:
-                GetValueHash(typeId, TCell(charArr, sizeof(i64)));
-                CompareTypedCells(TCell(charArr, sizeof(i64)), TCell(charArr, sizeof(i64)), typeId);
+                GetValueHash(typeInfo, TCell(charArr, sizeof(i64)));
+                CompareTypedCells(TCell(charArr, sizeof(i64)), TCell(charArr, sizeof(i64)), typeInfo);
                 break;
             default:
                 UNIT_FAIL("undefined YQL type");

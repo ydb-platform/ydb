@@ -4,7 +4,7 @@
 #include <ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.pb.h>
 
 // TODO: Bad dependency???
-#include <ydb/core/scheme/scheme_type_id.h>
+#include <ydb/core/scheme/scheme_type_order.h>
 
 #include <util/generic/deque.h>
 
@@ -61,12 +61,12 @@ private:
 class TScanIterator {
 public:
     TScanIterator(const TDriver& driver, const TString &database, const TString &endpoint, const TString& token, bool ssl, const TString& path, const TVector<TString>& columns,
-                         const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+                         const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes,
                          ui64 maxRowsInRequest, ui64 maxBytesInRequest,
                          const TString& keyFrom = TString(), const TString& keyTo = TString(),
                          const TScanSettings& settings = TScanSettings());
     TScanIterator(const TDriver& driver, const TString &database, const TString& token, const TString& path, const TVector<TString>& columns,
-                         const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+                         const TVector<NKikimr::NScheme::TTypeInfo>& keyColumnTypes,
                          ui64 maxRowsInRequest, ui64 maxBytesInRequest,
                          const TString& keyFrom = TString(), const TString& keyTo = TString(),
                          const TScanSettings& settings = TScanSettings());
@@ -79,7 +79,7 @@ private:
 private:
     const TString Path;
     const TVector<TString> Columns;
-    const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+    const TVector<NKikimr::NScheme::TTypeInfo> KeyColumnTypes;
     const ui64 MaxRows;
     const ui64 MaxBytes;
     const TScanSettings Settings;

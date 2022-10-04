@@ -26,15 +26,17 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
 {
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kRangePartition: {
-            TVector<NUdf::TDataTypeId> keyColumnTypeIds;
-            keyColumnTypeIds.reserve(outputDesc.GetRangePartition().GetKeyColumns().size());
+            TVector<NScheme::TTypeInfo> keyColumnTypeInfos;
+            keyColumnTypeInfos.reserve(outputDesc.GetRangePartition().GetKeyColumns().size());
             TVector<TType*> keyColumnTypes;
             TVector<ui32> keyColumnIndices;
             GetColumnsInfo(type, outputDesc.GetRangePartition().GetKeyColumns(), keyColumnTypes, keyColumnIndices);
             YQL_ENSURE(!keyColumnTypes.empty());
-            std::transform(keyColumnTypes.begin(), keyColumnTypes.end(), back_inserter(keyColumnTypeIds), [](const auto& tyPtr) { 
+            std::transform(keyColumnTypes.begin(), keyColumnTypes.end(), back_inserter(keyColumnTypeInfos), [](const auto& tyPtr) {
+                // TODO: support pg types
                 YQL_ENSURE(tyPtr->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data);
-                return static_cast<NKikimr::NMiniKQL::TDataType&>(*tyPtr).GetSchemeType();
+                auto dataTypeId = static_cast<NKikimr::NMiniKQL::TDataType&>(*tyPtr).GetSchemeType();
+                return NScheme::TTypeInfo((NScheme::TTypeId)dataTypeId);
             });
 
             TVector<TKqpRangePartition> partitions;
@@ -51,7 +53,7 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
             }
 
             return CreateOutputRangePartitionConsumer(std::move(outputs), std::move(partitions),
-                std::move(keyColumnTypeIds), std::move(keyColumnIndices), typeEnv);
+                std::move(keyColumnTypeInfos), std::move(keyColumnIndices), typeEnv);
         }
 
         case NDqProto::TTaskOutput::kEffects: {

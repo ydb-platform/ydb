@@ -53,11 +53,11 @@ public:
             return true;
         }
 
-        TVector<NScheme::TTypeId> keyColumnTypes;
+        TVector<NScheme::TTypeInfo> keyColumnTypes;
         TSmallVec<TRawTypeValue> keyFrom;
         TSmallVec<TRawTypeValue> keyTo;
-        bool inclusiveFrom = Ev->Get()->Record.GetFromKeyInclusive();;
-        bool inclusiveTo = Ev->Get()->Record.GetToKeyInclusive();;
+        bool inclusiveFrom = Ev->Get()->Record.GetFromKeyInclusive();
+        bool inclusiveTo = Ev->Get()->Record.GetToKeyInclusive();
 
         // TODO: check schemas
         for (ui32 keyColId : tableInfo->KeyColumns) {
@@ -78,7 +78,7 @@ public:
         }
 
         TVector<NTable::TTag> valueColumns;
-        TVector<std::pair<TString, NScheme::TTypeId>> columns;
+        TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
         for (const auto& col : Ev->Get()->Record.GetColumns()) {
             const auto* colNameInfo = tableInfo->ColumnNames.FindPtr(col);
             if (!colNameInfo) {

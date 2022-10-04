@@ -14,6 +14,7 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/util/yverify_stream.h>
@@ -744,8 +745,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 auto& column = Columns[columnDesc.GetId()];
                 column.Id = columnDesc.GetId();
                 column.Name = columnDesc.GetName();
-                column.PType = columnDesc.GetTypeId();
-
+                column.PType = NScheme::TypeInfoFromProtoColumnType(columnDesc.GetTypeId(),
+                    columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());
                 }
@@ -805,7 +806,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 auto& column = Columns[columnDesc.GetId()];
                 column.Id = columnDesc.GetId();
                 column.Name = columnDesc.GetName();
-                column.PType = columnDesc.GetTypeId();
+                column.PType = NScheme::TypeInfoFromProtoColumnType(columnDesc.GetTypeId(),
+                    columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
                 nameToId[column.Name] = column.Id;
             }
 
@@ -1130,7 +1132,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     columns.BeginObject()
                         .WriteKey("Id").WriteULongLong(column.Id)
                         .WriteKey("Name").WriteString(column.Name)
-                        .WriteKey("Type").WriteULongLong(column.PType)
+                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId()) // TODO: support pg types
                         .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
                     .EndObject();
                 }
@@ -1313,9 +1315,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             PathId = TPathId(TSysTables::SysSchemeShard, v2 ? TSysTables::SysTableLocks2 : TSysTables::SysTableLocks);
             Path = v2 ? "/sys/locks2" : "/sys/locks";
 
-            TVector<ui32> keyColumnTypes;
+            TVector<NScheme::TTypeInfo> keyColumnTypes;
             TSysTables::TLocksTable::GetInfo(Columns, keyColumnTypes, v2);
-            for (ui32 type : keyColumnTypes) {
+            for (auto type : keyColumnTypes) {
                 KeyColumnTypes.push_back(type);
             }
 
@@ -1728,7 +1730,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
-            const TVector<NScheme::TTypeId>& keyColumnTypes,
+            const TVector<NScheme::TTypeInfo>& keyColumnTypes,
             const THashMap<ui32, TSysTables::TTableColumnInfo>& columns) const
         {
             TKeyDesc& keyDesc = *entry.KeyDescription;
@@ -1765,7 +1767,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     entry.Status = TResolve::EStatus::TypeCheckError;
                     keyDesc.Status = TKeyDesc::EStatus::TypeCheckFailed;
                     keyDesc.ColumnInfos.push_back({
-                        columnOp.Column, 0, 0, TKeyDesc::EStatus::NotExists
+                        columnOp.Column, NScheme::TTypeInfo(), 0, TKeyDesc::EStatus::NotExists
                     });
                     continue;
                 }
@@ -1963,7 +1965,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // table specific
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
-        TVector<NScheme::TTypeId> KeyColumnTypes;
+        TVector<NScheme::TTypeInfo> KeyColumnTypes;
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;

@@ -141,18 +141,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )", {NKikimrScheme::StatusSchemeError});
     }
 
-    void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType, bool enableTtlOnAsyncIndexedTables = false) {
-        const auto opts = TTestEnvOptions()
-            .EnableTtlOnAsyncIndexedTables(enableTtlOnAsyncIndexedTables);
-
+    void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, opts);
+        TTestEnv env(runtime);
         ui64 txId = 100;
-
-        const bool shouldSucceed = (indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync || enableTtlOnAsyncIndexedTables);
-        const auto status = shouldSucceed
-            ? NKikimrScheme::StatusAccepted
-            : NKikimrScheme::StatusPreconditionFailed;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
@@ -172,24 +164,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               KeyColumnNames: ["modified_at"]
               Type: %s
             }
-        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()), {status});
+        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
 
-        if (shouldSucceed) {
-            env.TestWaitNotification(runtime, txId);
-            CheckTTLSettings(runtime);
-        }
+        env.TestWaitNotification(runtime, txId);
+        CheckTTLSettings(runtime);
     }
 
     Y_UNIT_TEST(CreateTableShouldSucceedOnIndexedTable) {
         CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(CreateTableShouldFailOnAsyncIndexedTable) {
-        CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalAsync, false);
-    }
-
     Y_UNIT_TEST(CreateTableShouldSucceedAsyncOnIndexedTable) {
-        CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalAsync, true);
+        CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
     Y_UNIT_TEST(AlterTableShouldSuccess) {
@@ -292,12 +278,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )", {NKikimrScheme::StatusInvalidParameter});
     }
 
-    void AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType, bool enableTtlOnAsyncIndexedTables = false) {
-        const auto opts = TTestEnvOptions()
-            .EnableTtlOnAsyncIndexedTables(enableTtlOnAsyncIndexedTables);
-
+    void AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, opts);
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -315,11 +298,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
         env.TestWaitNotification(runtime, txId);
 
-        const bool shouldSucceed = (indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync || enableTtlOnAsyncIndexedTables);
-        const auto status = shouldSucceed
-            ? NKikimrScheme::StatusAccepted
-            : NKikimrScheme::StatusPreconditionFailed;
-
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
             TTLSettings {
@@ -328,32 +306,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ExpireAfterSeconds: 3600
               }
             }
-        )", {status});
+        )");
 
-        if (shouldSucceed) {
-            env.TestWaitNotification(runtime, txId);
-            CheckTTLSettings(runtime);
-        }
+        env.TestWaitNotification(runtime, txId);
+        CheckTTLSettings(runtime);
     }
 
     Y_UNIT_TEST(AlterTableShouldSucceedOnIndexedTable) {
         AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(AlterTableShouldFailOnAsyncIndexedTable) {
-        AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalAsync, false);
-    }
-
     Y_UNIT_TEST(AlterTableShouldSucceedOnAsyncIndexedTable) {
-        AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalAsync, true);
+        AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
-    void BuildIndex(NKikimrSchemeOp::EIndexType indexType, bool enableTtlOnAsyncIndexedTables = false) {
-        const auto opts = TTestEnvOptions()
-            .EnableTtlOnAsyncIndexedTables(enableTtlOnAsyncIndexedTables);
-
+    void BuildIndex(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, opts);
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -372,34 +341,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
         CheckTTLSettings(runtime);
 
-        const bool shouldSucceed = (indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync || enableTtlOnAsyncIndexedTables);
-        const auto status = shouldSucceed
-            ? Ydb::StatusIds::SUCCESS
-            : Ydb::StatusIds::PRECONDITION_FAILED;
-
         TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TTLEnabledTable",
-            TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}}, status);
+            TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}});
 
-        if (shouldSucceed) {
-            env.TestWaitNotification(runtime, txId);
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
-                NLs::PathExist,
-                NLs::Finished,
-                NLs::IndexesCount(1),
-            });
-        }
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
+            NLs::PathExist,
+            NLs::Finished,
+            NLs::IndexesCount(1),
+        });
     }
 
     Y_UNIT_TEST(BuildIndexShouldSucceed) {
         BuildIndex(NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(BuildAsyncIndexShouldFail) {
-        BuildIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync, false);
-    }
-
     Y_UNIT_TEST(BuildAsyncIndexShouldSucceed) {
-        BuildIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync, true);
+        BuildIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
     using TEvCondEraseReq = TEvDataShard::TEvConditionalEraseRowsRequest;

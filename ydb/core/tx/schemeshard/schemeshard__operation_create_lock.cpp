@@ -188,13 +188,6 @@ public:
 
         TTableInfo::TPtr tableInfo = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        if (tableInfo->IsTTLEnabled()) {
-            if (indexSchema.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync && !AppData()->FeatureFlags.GetEnableTtlOnAsyncIndexedTables()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Async indexes are not currently supported on tables with TTL");
-                return result;
-            }
-        }
-
         const ui64 aliveIndices = context.SS->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
         if (aliveIndices + 1 > tablePath.DomainInfo()->GetSchemeLimits().MaxTableIndices) {
             auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"

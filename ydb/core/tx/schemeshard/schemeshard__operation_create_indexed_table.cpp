@@ -117,18 +117,6 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
-        switch (indexDescription.GetType()) {
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-            if (baseTableDescription.HasTTLSettings() && !AppData()->FeatureFlags.GetEnableTtlOnAsyncIndexedTables()) {
-                TString msg = TStringBuilder() << "TTL is not currently supported on tables with async indices";
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
-            }
-            break;
-
-        default:
-            break;
-        }
-
         TIndexColumns indexKeys = ExtractInfo(indexDescription);
         if (indexKeys.KeyColumns.empty()) {
             TString msg = TStringBuilder() << "no key colums in index creation config";

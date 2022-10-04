@@ -575,11 +575,6 @@ public:
 
                 Y_VERIFY(context.SS->Indexes.contains(childPathId));
                 auto indexInfo = context.SS->Indexes.at(childPathId);
-
-                if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync && !AppData()->FeatureFlags.GetEnableTtlOnAsyncIndexedTables()) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "TTL is not currently supported on tables with async indices");
-                    return result;
-                }
             }
         }
 

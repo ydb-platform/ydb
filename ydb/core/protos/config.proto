@@ -697,7 +697,7 @@ message TFeatureFlags {
     optional bool EnableArrowFormatInChannels = 52 [default = false];
     optional bool EnableBackgroundCompactionServerless = 53 [default = false];
     optional bool EnableNotNullColumns = 54 [default = true];
-    optional bool EnableTtlOnAsyncIndexedTables = 55 [default = true];
+    optional bool EnableTtlOnAsyncIndexedTables = 55 [default = true]; // deprecated: always true
     optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = true];
     optional bool EnableNodeBrokerSingleDomainMode = 57 [default = true];
     reserved 58; // optional bool EnableKqpSessionActor = 58 [default = true];

@@ -362,6 +362,7 @@ private:
             }
             if (IsMatchesWildcard(filename, "monitoring*/resources/js/*")
             || IsMatchesWildcard(filename, "monitoring*/resources/css/*")
+            || IsMatchesWildcard(filename, "monitoring*/resources/media/*")
             || IsMatchesWildcard(filename, "monitoring*/resources/assets/fonts/*")
             || IsMatchesWildcard(filename, "monitoring*/resources/favicon.png")) {
                 auto resPos = filename.find("/resources/");

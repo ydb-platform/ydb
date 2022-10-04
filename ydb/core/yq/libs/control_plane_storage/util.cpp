@@ -95,6 +95,10 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
         config.SetTaskLeaseTtl("30s");
     }
 
+    if (!config.GetMetricsTtl()) {
+        config.SetMetricsTtl("1d");
+    }
+
     if (!config.HasTaskLeaseRetryPolicy()) {
         auto& taskLeaseRetryPolicy = *config.MutableTaskLeaseRetryPolicy();
         taskLeaseRetryPolicy.SetRetryCount(20);

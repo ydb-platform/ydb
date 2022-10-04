@@ -1,3 +1,4 @@
+#include "config.h"
 #include "control_plane_proxy.h"
 #include "probes.h"
 #include "utils.h"
@@ -206,7 +207,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
     using TBase::Become;
     using TBase::Register;
 
-    NConfig::TControlPlaneProxyConfig Config;
+    ::NYq::TControlPlaneProxyConfig Config;
     TActorId Sender;
     TRequestCommonCountersPtr Counters;
     TString FolderId;
@@ -219,7 +220,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
 
 public:
     TResolveFolderActor(const TRequestCommonCountersPtr& counters,
-                        TActorId sender, const NConfig::TControlPlaneProxyConfig& config,
+                        TActorId sender, const ::NYq::TControlPlaneProxyConfig& config,
                         const TString& folderId, const TString& token,
                         const std::function<void(const TDuration&, bool, bool)>& probe,
                         TEventRequest event,
@@ -240,7 +241,7 @@ public:
 
     void Bootstrap() {
         CPP_LOG_T("Resolve folder bootstrap. Folder id: " << FolderId << " Actor id: " << SelfId());
-        Become(&TResolveFolderActor::StateFunc, GetDuration(Config.GetRequestTimeout(), TDuration::Seconds(30)), new NActors::TEvents::TEvWakeup());
+        Become(&TResolveFolderActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
         auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest>();
         request->Request.set_folder_id(FolderId);
         request->Token = Token;
@@ -309,7 +310,7 @@ class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestP
     using TBase::PassAway;
     using TBase::Become;
 
-    NConfig::TControlPlaneProxyConfig Config;
+    ::NYq::TControlPlaneProxyConfig Config;
     TRequestProto RequestProto;
     TString Scope;
     TString FolderId;
@@ -328,7 +329,7 @@ class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestP
 public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
 
-    explicit TRequestActor(const NConfig::TControlPlaneProxyConfig& config,
+    explicit TRequestActor(const ::NYq::TControlPlaneProxyConfig& config,
                            TActorId sender, ui32 cookie,
                            const TString& scope, const TString& folderId, TRequestProto&& requestProto,
                            TString&& user, TString&& token, const TActorId& serviceId,
@@ -353,14 +354,13 @@ public:
         , Quotas(quotas)
     {
         Counters.IncInFly();
-        FillDefaultParameters(Config);
     }
 
 public:
 
     void Bootstrap() {
         CPP_LOG_T("Request actor. Actor id: " << SelfId());
-        Become(&TRequestActor::StateFunc, GetDuration(Config.GetRequestTimeout(), TDuration::Seconds(30)), new NActors::TEvents::TEvWakeup());
+        Become(&TRequestActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
         Send(ServiceId, new TRequest(Scope, RequestProto, User, Token, CloudId, Permissions, Quotas), 0, Cookie);
     }
 
@@ -419,20 +419,6 @@ public:
     virtual ~TRequestActor() {
         Counters.DecInFly();
         Counters.Common->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
-    }
-
-    TDuration GetDuration(const TString& value, const TDuration& defaultValue)
-    {
-        TDuration result = defaultValue;
-        TDuration::TryParse(value, result);
-        return result;
-    }
-
-    void FillDefaultParameters(NConfig::TControlPlaneProxyConfig& config)
-    {
-        if (!config.GetRequestTimeout()) {
-            config.SetRequestTimeout("30s");
-        }
     }
 };
 
@@ -504,8 +490,6 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
                 return std::make_pair(CloudId, Scope) < std::make_pair(right.CloudId, right.Scope);
             }
         };
-
-        TDuration MetricsTtl = TDuration::Days(1);
 
         using TScopeCounters = std::array<TRequestScopeCountersPtr, RTS_MAX>;
         using TScopeCountersPtr = std::shared_ptr<TScopeCounters>;
@@ -601,7 +585,7 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
     };
 
     TCounters Counters;
-    NConfig::TControlPlaneProxyConfig Config;
+    ::NYq::TControlPlaneProxyConfig Config;
     bool GetQuotas;
 
 public:
@@ -683,7 +667,7 @@ private:
     template<typename T>
     NYql::TIssues ValidatePermissions(T& ev, const TVector<TString>& requiredPermissions) {
         NYql::TIssues issues;
-        if (!Config.GetEnablePermissions()) {
+        if (!Config.Proto.GetEnablePermissions()) {
             return issues;
         }
 
@@ -1883,7 +1867,7 @@ private:
         HTML(str) {
             PRE() {
                 str << "Current config:" << Endl;
-                str << Config.DebugString() << Endl;
+                str << Config.Proto.DebugString() << Endl;
                 str << Endl;
             }
         }

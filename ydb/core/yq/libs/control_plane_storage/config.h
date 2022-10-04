@@ -26,6 +26,7 @@ struct TControlPlaneStorageConfig {
     THashMap<ui64, TRetryPolicyItem> RetryPolicies;
     TRetryPolicyItem TaskLeaseRetryPolicy;
     TDuration QuotaTtl;
+    TDuration MetricsTtl;
 
     TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NConfig::TCommonConfig& common);
 };

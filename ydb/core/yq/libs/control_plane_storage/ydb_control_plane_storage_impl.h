@@ -324,8 +324,10 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     public:
         ::NMonitoring::TDynamicCounterPtr Counters;
 
-        explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
-            : Counters(counters)
+        explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const ::NYq::TControlPlaneStorageConfig& config)
+            : ScopeCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
+            , FinalStatusCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
+            , Counters(counters)
         {
             for (auto& request: CommonRequests) {
                 request->Register(Counters);
@@ -402,9 +404,9 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         }
     };
 
-    TCounters Counters;
-
     ::NYq::TControlPlaneStorageConfig Config;
+
+    TCounters Counters;
 
     TYdbConnectionPtr YdbConnection;
 
@@ -430,8 +432,8 @@ public:
         const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const TString& tenantName)
-        : Counters(counters)
-        , Config(config, common)
+        : Config(config, common)
+        , Counters(counters, Config)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
         , TenantName(tenantName)

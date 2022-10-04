@@ -28,6 +28,8 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
     , AnalyticsRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1)))
     , StreamingRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1)))
     , TaskLeaseTtl(GetDuration(Proto.GetTaskLeaseTtl(), TDuration::Seconds(30)))
+    , QuotaTtl(GetDuration(Proto.GetQuotaTtl(), TDuration::Zero()))
+    , MetricsTtl(GetDuration(Proto.GetMetricsTtl(), TDuration::Days(1)))
 {
     for (const auto& availableConnection : Proto.GetAvailableConnection()) {
         AvailableConnections.insert(GetConnectionType(availableConnection));
@@ -51,8 +53,6 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
         TaskLeaseRetryPolicy.RetryCount = Proto.GetTaskLeaseRetryPolicy().GetRetryCount();
         TaskLeaseRetryPolicy.RetryPeriod = GetDuration(Proto.GetTaskLeaseRetryPolicy().GetRetryPeriod(), TDuration::Days(1));
     }
-
-    QuotaTtl = GetDuration(Proto.GetQuotaTtl(), TDuration::Zero());
 }
 
 } // NYq

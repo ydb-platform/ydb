@@ -10,4 +10,5 @@ message TControlPlaneProxyConfig {
     bool Enabled = 1;
     string RequestTimeout = 2;
     bool EnablePermissions = 3;
+    string MetricsTtl = 4;
 }

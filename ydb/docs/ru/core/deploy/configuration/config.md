@@ -194,7 +194,7 @@ State Storage (хранилище состояний) -- это независи
 
 При развертывании State Storage на кластерах, в которых прменяется несколько пулов хранения с возможным сочетанием режимов отказоустойчивости, рассмотрите возможность увеличения количества узлов с распространением их на разные пулы хранения, так как недоступность State Storage приводит к недоступности всего кластера.
 
-**Syntax**
+**Синтаксис**
 ``` yaml
 state_storage:
 - ring:
@@ -211,7 +211,7 @@ state_storage:
 
 [Режим аутентификации](../../concepts/auth.md) на кластере {{ ydb-short-name }} задается в разделе `domains_config.security_config`.
 
-Синтаксис:
+**Синтаксис**
 
 ``` yaml
 domains_config:
@@ -223,7 +223,7 @@ domains_config:
 
 Ключ | Описание
 --- | ---
-`enforce_user_token_requirement` | Требовать токен пользователя.</br>Допустимые значения:</br><ul><li>`false` — режим аутентификации анонимный, токен не требуется;</li><li>`true` — режим аутентификации по логину и паролю, для выполнения запроса требуется валидный токен пользователя.</li></ul>
+`enforce_user_token_requirement` | Требовать токен пользователя.</br>Допустимые значения:</br><ul><li>`false` — режим аутентификации анонимный, токен не требуется (применяется по умолчанию, если параметр не задан);</li><li>`true` — режим аутентификации по логину и паролю, для выполнения запроса требуется валидный токен пользователя.</li></ul>
 
 ### Примеры {#domains-examples}
 
@@ -251,6 +251,30 @@ domains_config:
         nto_select: 5
       ssid: 1
 
+- Block-4-2 + Auth
+
+  ``` yaml
+  domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: block-4-2
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node: [1, 2, 3, 4, 5, 6, 7, 8]
+        nto_select: 5
+      ssid: 1
+    security_config:
+      enforce_user_token_requirement: true
+
 - Mirror-3-dc
 
   ``` yaml
@@ -274,7 +298,7 @@ domains_config:
       ssid: 1
   ```
 
-- None
+- Без отказоустойчивости
 
   ``` yaml
   domains_config:

@@ -211,7 +211,7 @@ Odd numbers must be used for `nto_select` because using even numbers does not im
 
 The [authentication mode](../../concepts/auth.md) in the {{ ydb-short-name }} cluster is created in the `domains_config.security_config` section.
 
-Syntax:
+**Syntax**
 
 ``` yaml
 domains_config:
@@ -221,9 +221,9 @@ domains_config:
   ...
 ```
 
- Key | Description 
+Key | Description 
 --- | ---
- `enforce_user_token_requirement` | Require a user token.</br>Acceptable values:</br><ul><li>`false`: Anonymous authentication mode, no token needed.</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> 
+ `enforce_user_token_requirement` | Require a user token.</br>Acceptable values:</br><ul><li>`false`: Anonymous authentication mode, no token needed (default value, applied when the parameter is not specified).</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> 
 
 ### Examples {#domains-examples}
 
@@ -251,6 +251,29 @@ domains_config:
          nto_select: 5
        ssid: 1
 
+- Block-4-2 + Auth
+
+  ``` yaml
+  domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: block-4-2
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node: [1, 2, 3, 4, 5, 6, 7, 8]
+        nto_select: 5
+      ssid: 1
+    security_config:
+      enforce_user_token_requirement: true
 
 - Mirror-3-dc
 
@@ -275,7 +298,7 @@ domains_config:
        ssid: 1
    ```
 
-- None
+- No fault tolerance
 
    ``` yaml
    domains_config:

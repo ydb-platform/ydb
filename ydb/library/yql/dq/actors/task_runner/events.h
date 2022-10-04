@@ -334,6 +334,7 @@ struct TEvContinueRun
     TMaybe<TWatermarkRequest> WatermarkRequest = Nothing();
     TMaybe<TCheckpointRequest> CheckpointRequest = Nothing();
     bool CheckpointOnly = false;
+    TVector<ui32> SinkIds;
 };
 
 struct TEvAsyncInputPushFinished

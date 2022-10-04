@@ -796,6 +796,8 @@ private:
     }
 
     void AskContinueRun(std::unique_ptr<NTaskRunnerActor::TEvContinueRun> continueRunEvent) {
+        continueRunEvent->SinkIds = GetIds(SinksMap);
+
         if (!UseCpuQuota()) {
             Send(TaskRunnerActorId, continueRunEvent.release());
             return;

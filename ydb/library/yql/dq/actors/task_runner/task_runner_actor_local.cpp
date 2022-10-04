@@ -209,6 +209,18 @@ private:
             MemoryQuota->TryShrinkMemory(guard.GetMutex());
         }
 
+        {
+            auto st = MakeHolder<TEvStatistics>(std::move(ev->Get()->SinkIds));
+
+            TaskRunner->UpdateStats();
+            THashMap<ui32, const TDqAsyncOutputBufferStats*> sinkStats;
+            for (const auto sinkId : st->SinkIds) {
+                sinkStats[sinkId] = TaskRunner->GetSink(sinkId)->GetStats();
+            }
+            st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinkStats));
+            Send(ev->Sender, st.Release());
+        }
+
         Send(
             ev->Sender,
             new TEvTaskRunFinished(

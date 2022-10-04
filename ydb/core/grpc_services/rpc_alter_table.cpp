@@ -65,18 +65,6 @@ static std::pair<StatusIds::StatusCode, TString> CheckAddIndexDesc(const Ydb::Ta
         return {StatusIds::UNSUPPORTED, "Data column feature is not supported yet"};
     }
 
-    switch (desc.type_case()) {
-    case Table::TableIndex::kGlobalIndex:
-        break;
-    case Table::TableIndex::kGlobalAsyncIndex:
-        if (!AppData()->FeatureFlags.GetEnableAsyncIndexes()) {
-            return {StatusIds::UNSUPPORTED, "Async indexes are not supported yet"};
-        }
-        break;
-    default:
-        break;
-    }
-
     return {StatusIds::SUCCESS, ""};
 }
 

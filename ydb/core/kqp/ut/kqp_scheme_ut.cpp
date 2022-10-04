@@ -2121,34 +2121,26 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    void AlterTableAddIndex(EIndexTypeSql type, bool enableAsyncIndexes = false) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableAsyncIndexes(enableAsyncIndexes));
+    void AlterTableAddIndex(EIndexTypeSql type) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
 
         const auto typeStr = IndexTypeSqlString(type);
-        const auto expectedStatus = (type == EIndexTypeSql::GlobalAsync)
-            ? (enableAsyncIndexes ? EStatus::SUCCESS : EStatus::UNSUPPORTED)
-            : EStatus::SUCCESS;
 
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s ON (Name);
             )", typeStr.data())).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus, status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
         }
 
         {
             TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
-
-            if (expectedStatus != EStatus::SUCCESS) {
-                UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
-                return;
-            }
 
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "NameIndex");
@@ -2200,12 +2192,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         AlterTableAddIndex(EIndexTypeSql::GlobalSync);
     }
 
-    Y_UNIT_TEST(AlterTableAddAsyncIndexShouldFail) {
+    Y_UNIT_TEST(AlterTableAddExplicitAsyncIndex) {
         AlterTableAddIndex(EIndexTypeSql::GlobalAsync);
-    }
-
-    Y_UNIT_TEST(AlterTableAddAsyncIndexShouldSucceed) {
-        AlterTableAddIndex(EIndexTypeSql::GlobalAsync, true);
     }
 
     Y_UNIT_TEST(AlterTableRenameIndex) {

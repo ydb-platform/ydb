@@ -143,7 +143,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType, bool enableTtlOnAsyncIndexedTables = false) {
         const auto opts = TTestEnvOptions()
-            .EnableAsyncIndexes(true)
             .EnableTtlOnAsyncIndexedTables(enableTtlOnAsyncIndexedTables);
 
         TTestBasicRuntime runtime;
@@ -295,7 +294,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     void AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType, bool enableTtlOnAsyncIndexedTables = false) {
         const auto opts = TTestEnvOptions()
-            .EnableAsyncIndexes(true)
             .EnableTtlOnAsyncIndexedTables(enableTtlOnAsyncIndexedTables);
 
         TTestBasicRuntime runtime;
@@ -352,7 +350,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     void BuildIndex(NKikimrSchemeOp::EIndexType indexType, bool enableTtlOnAsyncIndexedTables = false) {
         const auto opts = TTestEnvOptions()
-            .EnableAsyncIndexes(true)
             .EnableTtlOnAsyncIndexedTables(enableTtlOnAsyncIndexedTables);
 
         TTestBasicRuntime runtime;

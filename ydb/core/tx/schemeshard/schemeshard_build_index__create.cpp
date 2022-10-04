@@ -39,22 +39,6 @@ public:
 
         auto response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
-        switch (request.GetSettings().index().type_case()) {
-        case Ydb::Table::TableIndex::kGlobalIndex:
-            break;
-        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-            if (!Self->EnableAsyncIndexes) {
-                return Reply(
-                    std::move(response),
-                    Ydb::StatusIds::UNSUPPORTED,
-                    TStringBuilder() << "Async indexes are not supported yet"
-                    );
-            }
-            break;
-        default:
-            break;
-        }
-
         const auto& dataColumns = request.GetSettings().index().data_columns();
 
         if (!dataColumns.empty() && !Self->AllowDataColumnForIndexTable) {

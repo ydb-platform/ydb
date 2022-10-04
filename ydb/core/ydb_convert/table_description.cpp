@@ -338,10 +338,6 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
 
         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-            if (!AppData()->FeatureFlags.GetEnableAsyncIndexes()) {
-                return returnError(Ydb::StatusIds::UNSUPPORTED, "Async indexes are not supported yet");
-            }
-
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
             break;
 

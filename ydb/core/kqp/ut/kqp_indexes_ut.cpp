@@ -3865,7 +3865,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     template <bool UseNewEngine>
-    void CreateTableWithIndexSQL(EIndexTypeSql type, bool enableAsyncIndexes = false) {
+    void CreateTableWithIndexSQL(EIndexTypeSql type) {
         auto kqpSetting = NKikimrKqp::TKqpSetting();
         kqpSetting.SetName("_KqpYqlSyntaxVersion");
         kqpSetting.SetValue("1");
@@ -3873,17 +3873,12 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto settings = TKikimrSettings()
                 .SetEnableMvcc(true)
                 .SetEnableMvccSnapshotReads(true)
-                .SetEnableAsyncIndexes(enableAsyncIndexes)
                 .SetKqpSettings({kqpSetting});
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         const auto typeStr = IndexTypeSqlString(type);
-        const auto expectedStatus = (type == EIndexTypeSql::GlobalAsync)
-            ? (enableAsyncIndexes ? EStatus::SUCCESS : EStatus::GENERIC_ERROR)
-            : EStatus::SUCCESS;
-
         const TString createTableSql = Sprintf("CREATE TABLE `/Root/TestTable` ("
                 "    Key Int32, IndexA Int32, IndexB Int32, IndexC String, Value String,"
                 "    PRIMARY KEY (Key),"
@@ -3893,7 +3888,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         {
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), expectedStatus);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         // Multiple create table requests with same scheme should be OK
@@ -3901,11 +3896,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), expectedStatus);
-        }
-
-        if (type == EIndexTypeSql::GlobalAsync && !enableAsyncIndexes) {
-            return;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         // Check we can use index (metadata is correct)
@@ -3937,20 +3928,12 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         {
             const TString indexImplTable = "/Root/TestTable/SecondaryIndex1/indexImplTable";
             const TString expected = R"([[[11];[111];[1]];[[22];[222];[2]];[[33];[333];[3]]])";
-            if (!enableAsyncIndexes) {
-                UNIT_ASSERT_VALUES_EQUAL(ReadTablePartToYson(session, indexImplTable), expected);
-            } else {
-                waitForAsyncIndexContent(indexImplTable, expected);
-            }
+            waitForAsyncIndexContent(indexImplTable, expected);
         }
         {
             const TString indexImplTable = "/Root/TestTable/SecondaryIndex2/indexImplTable";
             const TString expected = R"([[["a"];[1]];[["b"];[2]];[["c"];[3]]])";
-            if (!enableAsyncIndexes) {
-                UNIT_ASSERT_VALUES_EQUAL(ReadTablePartToYson(session, indexImplTable), expected);
-            } else {
-                waitForAsyncIndexContent(indexImplTable, expected);
-            }
+            waitForAsyncIndexContent(indexImplTable, expected);
         }
     }
 
@@ -3962,12 +3945,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::GlobalSync);
     }
 
-    Y_UNIT_TEST_TWIN(CreateTableWithAsyncIndexSQLShouldFail, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(CreateTableWithExplicitAsyncIndexSQL, UseNewEngine) {
         CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::GlobalAsync);
-    }
-
-    Y_UNIT_TEST_TWIN(CreateTableWithAsyncIndexSQLShouldSucceed, UseNewEngine) {
-        CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::GlobalAsync, true);
     }
 
     template <bool UseNewEngine>
@@ -3979,7 +3958,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto settings = TKikimrSettings()
                 .SetEnableMvcc(true)
                 .SetEnableMvccSnapshotReads(true)
-                .SetEnableAsyncIndexes(true)
                 .SetKqpSettings({kqpSetting});
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

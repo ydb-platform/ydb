@@ -1104,7 +1104,6 @@ public:
 
     // namespace NIndexBuilder {
     TControlWrapper AllowDataColumnForIndexTable;
-    TControlWrapper EnableAsyncIndexes;
 
     THashMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
     THashMap<TString, TIndexBuildInfo::TPtr> IndexBuildsByUid;

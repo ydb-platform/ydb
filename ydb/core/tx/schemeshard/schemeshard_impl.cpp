@@ -3780,7 +3780,6 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , BorrowedCompactionStarter(this)
     , ShardDeleter(info->TabletID)
     , AllowDataColumnForIndexTable(0, 0, 1)
-    , EnableAsyncIndexes(0, 0, 1)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -3905,9 +3904,6 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
     appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");
-
-    EnableAsyncIndexes = appData->FeatureFlags.GetEnableAsyncIndexes();
-    appData->Icb->RegisterSharedControl(EnableAsyncIndexes, "SchemeShard_EnableAsyncIndexes");
 
     for (const auto& sid : appData->MeteringConfig.GetSystemBackupSIDs()) {
         SystemBackupSIDs.insert(sid);

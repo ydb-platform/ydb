@@ -9873,7 +9873,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ListNotCreatedDirCase) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAsyncIndexes(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TVector<THolder<IEventHandle>> supressed;
@@ -9901,7 +9901,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ListNotCreatedIndexCase) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAsyncIndexes(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TVector<THolder<IEventHandle>> supressed;
@@ -9985,7 +9985,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ConsistentCopyAfterDropIndexes) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAsyncIndexes(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(

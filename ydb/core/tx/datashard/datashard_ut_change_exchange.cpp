@@ -35,8 +35,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         serverSettings
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableDataColumnForIndexTable(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -124,8 +123,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         serverSettings
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableDataColumnForIndexTable(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -195,8 +193,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         serverSettings
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableDataColumnForIndexTable(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -275,8 +272,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         serverSettings
             .SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableDataColumnForIndexTable(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -352,8 +348,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         serverSettings
             .SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableDataColumnForIndexTable(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -460,8 +455,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         serverSettings
             .SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableDataColumnForIndexTable(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -617,8 +611,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         serverSettings
             .SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableDataColumnForIndexTable(true);
         setLimit(serverSettings);
 
         TServer::TPtr server = new TServer(serverSettings);

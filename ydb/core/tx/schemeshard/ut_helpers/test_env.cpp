@@ -499,7 +499,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnablePersistentPartitionStats(opts.EnablePersistentPartitionStats_);
     app.SetEnableTtlOnAsyncIndexedTables(opts.EnableTtlOnAsyncIndexedTables_);
     app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_);
-    app.SetEnableAsyncIndexes(opts.EnableAsyncIndexes_);
     app.SetEnableNotNullColumns(opts.EnableNotNullColumns_);
     app.SetEnableOlapSchemaOperations(opts.EnableOlapSchemaOperations_);
     app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);
@@ -1012,7 +1011,6 @@ const NSchemeShardUT_Private::TTestEnvOptions& NSchemeShardUT_Private::TTestWith
 NSchemeShardUT_Private::TTestEnvOptions NSchemeShardUT_Private::TTestWithReboots::GetDefaultTestEnvOptions() {
     return TTestEnvOptions()
             .EnablePipeRetries(false)
-            .EnableAsyncIndexes(true)
             .EnableNotNullColumns(true)
             .EnableProtoSourceIdInfo(true)
             .DisableStatsBatching(true)

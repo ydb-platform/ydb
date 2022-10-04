@@ -6,14 +6,10 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
-    void CreateTable(bool enableAsyncIndexes) {
+    Y_UNIT_TEST(CreateTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAsyncIndexes(enableAsyncIndexes));
+        TTestEnv env(runtime);
         ui64 txId = 100;
-
-        const auto status = enableAsyncIndexes
-            ? NKikimrScheme::StatusAccepted
-            : NKikimrScheme::StatusPreconditionFailed;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -27,24 +23,13 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
               KeyColumnNames: ["indexed"]
               Type: EIndexTypeGlobalAsync
             }
-        )", {status});
-
-        if (enableAsyncIndexes) {
-            env.TestWaitNotification(runtime, txId);
-        }
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(CreateTableShouldSucceed) {
-        CreateTable(true);
-    }
-
-    Y_UNIT_TEST(CreateTableShouldFail) {
-        CreateTable(false);
-    }
-
-    void OnlineBuild(bool enableAsyncIndexes) {
+    Y_UNIT_TEST(OnlineBuild) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAsyncIndexes(enableAsyncIndexes));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -55,24 +40,9 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        const auto status = enableAsyncIndexes
-            ? Ydb::StatusIds::SUCCESS
-            : Ydb::StatusIds::UNSUPPORTED;
-
         TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
             "UserDefinedIndex", NKikimrSchemeOp::EIndexTypeGlobalAsync, {"indexed"}, {}
-        }, status);
-
-        if (enableAsyncIndexes) {
-            env.TestWaitNotification(runtime, txId);
-        }
-    }
-
-    Y_UNIT_TEST(OnlineBuildShouldSucceed) {
-        OnlineBuild(true);
-    }
-
-    Y_UNIT_TEST(OnlineBuildShouldFail) {
-        OnlineBuild(false);
+        });
+        env.TestWaitNotification(runtime, txId);
     }
 }

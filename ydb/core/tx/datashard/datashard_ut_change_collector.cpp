@@ -257,8 +257,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
         serverSettings
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableDataColumnForIndexTable(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -588,7 +587,6 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
             .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true)
             .SetCacheParams(cacheParams);
 
         TServer::TPtr server = new TServer(serverSettings);

@@ -25,7 +25,6 @@ public:
     FEATURE_FLAG_SETTER(AllowUpdateChannelsBindingOfSolomonPartitions)
     FEATURE_FLAG_SETTER(EnableDataColumnForIndexTable)
     FEATURE_FLAG_SETTER(EnableClockGettimeForUserCpuAccounting)
-    FEATURE_FLAG_SETTER(EnableAsyncIndexes)
     FEATURE_FLAG_SETTER(EnableOlapSchemaOperations)
     FEATURE_FLAG_SETTER(EnableMvccSnapshotReads)
     FEATURE_FLAG_SETTER(EnableBackgroundCompaction)

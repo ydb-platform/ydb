@@ -50,6 +50,18 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
     }
 
+    Y_UNIT_TEST(GetWithSpecifiedContentType) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nSome-Header: 32344\r\n\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+        UNIT_ASSERT_EQUAL(request->Method, "GET");
+        UNIT_ASSERT_EQUAL(request->URL, "/test");
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
+        UNIT_ASSERT_EQUAL(request->Version, "1.1");
+        UNIT_ASSERT_EQUAL(request->Host, "test");
+        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nContent-Type: application/json\r\nSome-Header: 32344\r\n\r\n");
+    }
+
     Y_UNIT_TEST(BasicParsingChunkedBodyRequest) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatWholeString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
@@ -60,6 +72,19 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
         UNIT_ASSERT_EQUAL(request->Version, "1.1");
         UNIT_ASSERT_EQUAL(request->TransferEncoding, "chunked");
+        UNIT_ASSERT_EQUAL(request->Body, "this is test.");
+    }
+
+    Y_UNIT_TEST(BasicPost) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatWholeString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nContent-Length: 13\r\n\r\nthis is test.");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+        UNIT_ASSERT_EQUAL(request->Method, "POST");
+        UNIT_ASSERT_EQUAL(request->URL, "/Url");
+        UNIT_ASSERT_EQUAL(request->Connection, "close");
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
+        UNIT_ASSERT_EQUAL(request->Version, "1.1");
+        UNIT_ASSERT_EQUAL(request->TransferEncoding, "");
         UNIT_ASSERT_EQUAL(request->Body, "this is test.");
     }
 

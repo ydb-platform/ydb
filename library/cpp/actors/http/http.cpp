@@ -69,7 +69,7 @@ bool THttpParser<THttpRequest, TSocketBuffer>::HaveBody() const {
     if (!Body.empty()) {
         return true;
     }
-    return (!ContentType.empty() || !ContentLength.empty() || !TransferEncoding.empty());
+    return !ContentLength.empty() || !TransferEncoding.empty();
 }
 
 template <>

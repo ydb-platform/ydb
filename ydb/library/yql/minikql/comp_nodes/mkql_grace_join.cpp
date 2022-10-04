@@ -387,7 +387,9 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     DataIntColumnsNum = TotalIntColumnsNum - KeyIntColumnsNum;
     DataStrColumnsNum = TotalStrColumnsNum - KeyStrColumnsNum;
 
-    TupleIntVals.resize(2 * totalIntColumnsNum );
+    NullsBitmapSize = (nColumns / (8 * sizeof(ui64)) + 1) ;
+
+    TupleIntVals.resize(2 * totalIntColumnsNum + NullsBitmapSize);
     TupleStrings.resize(totalStrColumnsNum);
     TupleStrSizes.resize(totalStrColumnsNum);
 
@@ -399,10 +401,10 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         {
             if (a.IsKeyColumn && !b.IsKeyColumn) return true;
             if (a.Bytes > b.Bytes) return true;
-            if (a.ColumnIdx > b.ColumnIdx ) return true;
+            if (a.ColumnIdx < b.ColumnIdx ) return true;
             return false;
         });
-
+    
     Offsets.resize(nColumns);
     PackedIdx.resize(nColumns);
     TupleHolder.resize(nColumns);
@@ -410,7 +412,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
     std::transform(TupleHolder.begin(), TupleHolder.end(), std::back_inserter(TuplePtrs), [](NUdf::TUnboxedValue& v) { return std::addressof(v); });
 
-    NullsBitmapSize = (nColumns / (8 * sizeof(ui64)) + 1) ;
     ui32 currIntOffset = NullsBitmapSize * sizeof(ui64) ;
     ui32 currStrOffset = 0;
     ui32 currIdx = 0;
@@ -618,7 +619,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
 
 
-             while (!*JoinCompleted) {
+            while (!*JoinCompleted) {
 
                 const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
                 const NKikimr::NMiniKQL::EFetchResult resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
@@ -653,14 +654,21 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 auto &valsLeft = LeftPacker->TupleHolder;
                 auto &valsRight = RightPacker->TupleHolder;
 
+
                 for (ui32 i = 0; i < LeftRenames.size() / 2; i++)
                 {
-                    *output[LeftRenames[2 * i + 1]] = valsLeft[LeftRenames[2 * i]];
+                    auto & valPtr = output[LeftRenames[2 * i + 1]];
+                    if ( valPtr ) {
+                        *valPtr = valsLeft[LeftRenames[2 * i]];
+                    }
                 }
 
                 for (ui32 i = 0; i < RightRenames.size() / 2; i++)
                 {
-                    *output[RightRenames[2 * i + 1]] = valsRight[RightRenames[2 * i]];
+                    auto & valPtr = output[RightRenames[2 * i + 1]];
+                    if ( valPtr ) {
+                        *valPtr = valsRight[RightRenames[2 * i]];
+                    }
                 }
 
                 return EFetchResult::One;

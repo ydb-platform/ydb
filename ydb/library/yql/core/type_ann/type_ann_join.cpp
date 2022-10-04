@@ -653,7 +653,7 @@ namespace NTypeAnnImpl {
         }
 
         const TTypeAnnotationNode* leftItemType = nullptr;
-        if (!EnsureNewSeqType<true>(input->Head(), ctx.Expr, &leftItemType)) {
+        if (!EnsureNewSeqType<true>(*input->Child(0), ctx.Expr, &leftItemType)) {
             return IGraphTransformer::TStatus::Error;
         }
 

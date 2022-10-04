@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 
 namespace NYql::NDq {
 
@@ -270,6 +271,7 @@ std::pair<TVector<TCoAtom>, TVector<TCoAtom>> GetJoinKeys(const TDqJoin& join, T
 
     return std::make_pair(std::move(leftJoinKeys), std::move(rightJoinKeys));
 }
+
 
 TDqPhyMapJoin DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, const TExprBase& rightInput,
     TExprContext& ctx)
@@ -690,6 +692,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     return newConnection.Cast();
 }
 
+
 TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
     auto joinType = join.JoinType().Value();
 
@@ -839,5 +842,251 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
 
     return join;
 }
+
+TExprBase DqBuildGraceJoin(const TDqJoin& join, TExprContext& ctx) {
+
+    static const std::set<std::string_view> supportedTypes = {
+        "Inner"sv,
+        "Left"sv,
+        "Cross"sv,
+        "LeftOnly"sv,
+        "LeftSemi"sv,
+        "Right"sv,
+        "RightOnly"sv,
+        "RightSemi"sv,
+        "Full"sv,
+        "Exclusion"sv
+    };
+
+    auto joinType = join.JoinType().Value();
+
+    if (!supportedTypes.contains(joinType)) {
+        return join;
+    }
+
+    auto buildShuffle = [&ctx, &join](const TExprBase& input, const TVector<TCoAtom>& keys) {
+        auto stage = Build<TDqStage>(ctx, join.Pos())
+            .Inputs()
+                .Add(input)
+                .Build()
+            .Program()
+                .Args({"stream"})
+                .Body("stream")
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
+            .Done();
+
+        return Build<TDqCnHashShuffle>(ctx, join.Pos())
+            .Output()
+                .Stage(stage)
+                .Index().Build("0")
+                .Build()
+            .KeyColumns()
+                .Add(keys)
+                .Build()
+            .Done();
+    };
+
+    TMaybeNode<TDqStage> joinStage;
+
+    auto leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
+    auto rightCn = join.RightInput().Cast<TDqCnUnionAll>();
+
+    const TStructExprType* leftStructType = nullptr;
+    auto leftSeqType = GetSequenceItemType(leftCn, false, ctx);
+    leftStructType = leftSeqType->Cast<TStructExprType>();
+
+    const TStructExprType* rightStructType = nullptr;
+    auto rightSeqType = GetSequenceItemType(rightCn, false, ctx);
+    rightStructType = rightSeqType->Cast<TStructExprType>();
+
+
+    const TVector<const TItemExprType*> & leftItems = leftStructType->GetItems();
+    const TVector<const TItemExprType*> & rightItems = rightStructType->GetItems();
+
+    std::map<TStringBuf, ui32> leftNames;
+    for (ui32 i = 0; i < leftItems.size(); i++) {
+        auto v = leftItems[i];
+        leftNames.emplace(v->GetName(), i);
+    }
+
+    std::map<TStringBuf, ui32> rightNames;
+    for (ui32 i = 0; i < rightItems.size(); i++) {
+        auto v = rightItems[i];
+        rightNames.emplace(v->GetName(), i);
+    }
+
+    auto [leftJoinKeys, rightJoinKeys] = GetJoinKeys(join, ctx);
+
+    auto leftJoinKeysVar = leftJoinKeys;
+    auto rightJoinKeysVar = rightJoinKeys;
+
+    auto rightShuffle = buildShuffle(rightCn, rightJoinKeys);
+    auto leftShuffle = buildShuffle(leftCn, leftJoinKeys);
+
+    TCoArgument leftInputArg{ctx.NewArgument(join.Pos(), "_dq_join_left")};
+    TCoArgument rightInputArg{ctx.NewArgument(join.Pos(), "_dq_join_right")};
+
+    auto leftWideFlow = ctx.Builder(join.Pos())
+            .Callable("ExpandMap")
+                .Add(0, leftInputArg.Ptr())
+                .Lambda(1)
+                    .Param("item")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (ui32 i = 0U; i < leftItems.size(); ++i) {
+                                parent.Callable(i, "Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, leftItems[i]->GetName())
+                                    .Seal();
+                            }
+                            return parent;
+                        })
+                .Seal()
+            .Seal()
+            .Build();
+
+    auto rightWideFlow = ctx.Builder(join.Pos())
+            .Callable("ExpandMap")
+                .Add(0, rightInputArg.Ptr())
+                .Lambda(1)
+                    .Param("item")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (ui32 i = 0U; i < rightItems.size(); ++i) {
+                                parent.Callable(i, "Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, rightItems[i]->GetName())
+                                    .Seal();
+                            }
+                            return parent;
+                        })
+                .Seal()
+            .Seal()
+            .Build();
+
+    auto graceJoin = ctx.Builder(join.Pos())
+            .Callable("GraceJoinCore")
+                .Add(0, leftWideFlow)            
+                .Add(1, rightWideFlow)
+                .Atom(2, joinType)
+                .List(3)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 0U; i < leftJoinKeysVar.size(); ++i) {
+                            parent.Atom(i, std::to_string(leftNames[leftJoinKeysVar[i]]) );
+                        }
+                        return parent;
+                    })
+                .Seal()
+                .List(4)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 0U; i < rightJoinKeysVar.size(); ++i) {
+                            parent.Atom(i, std::to_string(rightNames[rightJoinKeysVar[i]]) );
+                        }
+                        return parent;
+                    })
+                .Seal() 
+                .List(5)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 0U; i < leftNames.size(); ++i) {
+                            parent.Atom(2*i, std::to_string(i));
+                            parent.Atom(2*i + 1, std::to_string(i));
+                        }
+                        return parent;
+                    })
+                .Seal()
+                .List(6)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 colIndexStart = leftNames.size();
+                        for (ui32 i = 0U; i < rightNames.size(); ++i) {
+                            parent.Atom(2*i, std::to_string(i) );
+                            parent.Atom(2*i + 1, std::to_string(colIndexStart + i) );
+                        }
+                        return parent;
+                    })
+                .Seal() 
+            .Seal()
+            .Build();
+
+    TStringBuf leftTableName, rightTableName; 
+
+    if ( join.LeftLabel().Ref().IsAtom() ) {
+        leftTableName  = join.LeftLabel().Cast<TCoAtom>().Value();
+    }
+
+    if ( join.RightLabel().Ref().IsAtom() ) {
+        rightTableName  = join.RightLabel().Cast<TCoAtom>().Value();
+    }
+
+
+    TVector<TString> fullColNames;
+
+
+    for (const auto & v: leftNames ) {
+        auto name = FullColumnName(leftTableName, v.first);
+        if ( leftTableName.size() > 0) {
+            fullColNames.emplace_back(name);
+        } else {
+            fullColNames.emplace_back(v.first);
+        }
+    }
+
+    for (const auto & v: rightNames ) {
+        auto name = FullColumnName(rightTableName, v.first);
+        if ( rightTableName.size() > 0) {
+            fullColNames.emplace_back(name);
+        } else {
+            fullColNames.emplace_back(v.first);  
+        }
+    }
+
+
+    auto narrowMapJoin = ctx.Builder(join.Pos())
+            .Callable("NarrowMap")
+                .Add(0, graceJoin)
+                .Lambda(1)
+                    .Params("fields", fullColNames.size())
+                    .Callable("AsStruct")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            ui32 i = 0U;
+                            for (const auto& colName : fullColNames) {
+                                parent.List(i)
+                                    .Atom(0, colName)
+                                    .Arg(1, "fields", i)
+                                .Seal();
+                                ++i;
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        
+        joinStage = Build<TDqStage>(ctx, join.Pos())
+            .Inputs()
+                .Add(leftShuffle)
+                .Add(rightShuffle)
+                .Build()
+            .Program()
+                .Args({leftInputArg, rightInputArg})
+                .Body(narrowMapJoin)
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
+            .Done();
+
+        
+
+    if (joinStage) {
+        return Build<TDqCnUnionAll>(ctx, join.Pos())
+            .Output()
+                .Stage(joinStage.Cast())
+                .Index().Build("0")
+                .Build()
+            .Done();
+    }
+
+    return join;
+}
+
 
 } // namespace NYql::NDq

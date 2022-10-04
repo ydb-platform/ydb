@@ -71,7 +71,7 @@ struct TDqSettings {
     NCommon::TConfSetting<TString, false> _FallbackOnRuntimeErrors;
     NCommon::TConfSetting<bool, false> _EnablePrecompute;
     NCommon::TConfSetting<bool, false> EnableDqReplicate;
-    NCommon::TConfSetting<bool, false> _EnableGraceJoin;
+    NCommon::TConfSetting<bool, false> EnableGraceJoin;
     NCommon::TConfSetting<TString, false> WatermarksMode;
     NCommon::TConfSetting<ui64, false> WatermarksGranularityMs;
 
@@ -114,6 +114,7 @@ struct TDqSettings {
         SAVE_SETTING(WorkerFilter);
         SAVE_SETTING(ComputeActorType);
         SAVE_SETTING(WatermarksMode);
+        SAVE_SETTING(EnableGraceJoin);
         SAVE_SETTING(WatermarksGranularityMs);
 
 #undef SAVE_SETTING

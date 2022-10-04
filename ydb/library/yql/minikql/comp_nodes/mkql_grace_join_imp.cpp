@@ -367,7 +367,9 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
     char *strPtr = nullptr;
     if(NumberOfKeyStringColumns != 0) {
         keyStringsOffset = tb.StringsOffsets[stringsOffsetsIdx] + HeaderSize;
-        strPtr = reinterpret_cast<char *>(tb.KeyIntVals[keyStringsOffset]);
+
+        strPtr = reinterpret_cast<char *>(tb.KeyIntVals.data() + keyStringsOffset);
+        
         for (ui64 i = 0; i < NumberOfKeyStringColumns; ++i)
         {
             td.StrColumns[i] = strPtr;

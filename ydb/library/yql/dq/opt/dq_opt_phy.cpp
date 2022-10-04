@@ -2055,8 +2055,9 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
         .Done();
 }
 
+
 TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage)
+                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, bool useGraceJoin)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2077,6 +2078,10 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     }
 
     auto joinType = join.JoinType().Value();
+
+    if (useGraceJoin) {
+        return DqBuildGraceJoin(join, ctx);
+    }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {
         return DqBuildJoinDict(join, ctx);

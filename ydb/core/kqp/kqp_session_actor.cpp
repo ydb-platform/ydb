@@ -1224,10 +1224,12 @@ public:
     }
 
     void InvalidateQuery() {
-        auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
-            QueryState->CompileResult->Uid, Settings.DbCounters);
+        if (QueryState->CompileResult) {
+            auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
+                QueryState->CompileResult->Uid, Settings.DbCounters);
 
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
+            Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
+        }
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {

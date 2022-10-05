@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_double_indexed PUBLIC
   core-tx-scheme_board
   cpp-testing-unittest
   yql-sql-pg_dummy
+  udf-service-exception_policy
 )
 target_link_options(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   -ldl

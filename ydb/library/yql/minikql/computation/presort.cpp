@@ -5,6 +5,7 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <ydb/library/yql/utils/swap_bytes.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
 
 #include <util/system/unaligned_mem.h>

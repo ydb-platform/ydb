@@ -258,8 +258,5 @@ namespace NDetail {
     }
 }
 
-void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& output);
-NUdf::TUnboxedValue DecodePresortPGValue(TPgType* type, TStringBuf& input, TVector<ui8>& buffer);
-
 } // NMiniKQL
 } // NKikimr

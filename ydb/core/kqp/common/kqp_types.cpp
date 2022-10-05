@@ -1,7 +1,7 @@
 #include "kqp_types.h"
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/utils/pg_types.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr::NScheme {
 

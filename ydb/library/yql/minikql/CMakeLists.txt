@@ -37,6 +37,7 @@ target_link_libraries(library-yql-minikql PUBLIC
   ydb-library-dynumber
   yql-minikql-dom
   yql-parser-pg_catalog
+  parser-pg_wrapper-interface
   yql-public-udf
   public-udf-tz
   library-yql-utils

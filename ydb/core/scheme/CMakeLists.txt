@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-scheme PUBLIC
   ydb-core-scheme_types
   ydb-core-util
   ydb-library-aclib
+  parser-pg_wrapper-interface
   public-lib-scheme_types
 )
 target_sources(ydb-core-scheme PRIVATE

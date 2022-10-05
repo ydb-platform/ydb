@@ -29,6 +29,7 @@ target_link_libraries(core-kqp-provider PUBLIC
   yql-public-decimal
   public-lib-scheme_types
   yql-core-expr_nodes
+  parser-pg_wrapper-interface
   providers-common-codec
   providers-common-config
   providers-common-gateway

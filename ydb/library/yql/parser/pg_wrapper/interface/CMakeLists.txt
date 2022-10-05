@@ -7,15 +7,16 @@
 
 
 
-add_library(yql-sql-pg_dummy)
-target_compile_options(yql-sql-pg_dummy PRIVATE
+add_library(parser-pg_wrapper-interface)
+target_compile_options(parser-pg_wrapper-interface PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_link_libraries(yql-sql-pg_dummy PUBLIC
+target_link_libraries(parser-pg_wrapper-interface PUBLIC
   contrib-libs-cxxsupp
   yutil
-  parser-pg_wrapper-interface
+  library-yql-ast
+  yql-public-udf
 )
-target_sources(yql-sql-pg_dummy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg_dummy/pg_sql_dummy.cpp
+target_sources(parser-pg_wrapper-interface PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/interface.cpp
 )

@@ -6,6 +6,7 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <util/generic/strbuf.h>
@@ -80,7 +81,6 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, TInputBuf& buf);
 
 NKikimr::NUdf::TUnboxedValue ReadSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
-NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NCommon::TInputBuf& buf);
 extern "C" void ReadContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
     bool wrapOptional);
@@ -89,7 +89,6 @@ extern "C" void WriteYsonContainerValue(NKikimr::NMiniKQL::TType* type,
     const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
 
 void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
-void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
 
 void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);

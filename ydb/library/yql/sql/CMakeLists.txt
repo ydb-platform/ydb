@@ -17,6 +17,7 @@ target_link_libraries(library-yql-sql PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-deprecated-split
+  parser-pg_wrapper-interface
   yql-sql-settings
   yql-sql-v0
   sql-v0-lexer

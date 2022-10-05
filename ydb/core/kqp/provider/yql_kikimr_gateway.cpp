@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/utils/pg_types.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/core/base/table_index.h>

@@ -1,7 +1,7 @@
 #include "scheme_type_info.h"
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/library/yql/utils/pg_types.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr::NScheme {
 

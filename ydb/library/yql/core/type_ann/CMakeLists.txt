@@ -24,6 +24,7 @@ target_link_libraries(yql-core-type_ann PUBLIC
   core-issue-protos
   common-schema-expr
   yql-parser-pg_catalog
+  parser-pg_wrapper-interface
 )
 target_sources(yql-core-type_ann PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_blocks.cpp

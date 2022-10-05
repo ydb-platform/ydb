@@ -1,4 +1,4 @@
-#include "comp_factory.h"
+#include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
@@ -9,10 +9,10 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include <ydb/library/yql/core/yql_pg_utils.h>
 #include <ydb/library/yql/utils/fp_bits.h>
 #include <library/cpp/yson/detail.h>
 
@@ -2586,7 +2586,7 @@ class TPgHash : public NUdf::IHash {
 public:
     TPgHash(const NMiniKQL::TPgType* type)
         : Type(type)
-        , TypeDesc(NPg::LookupType(type->GetTypeId()))
+        , TypeDesc(NYql::NPg::LookupType(type->GetTypeId()))
     {
         Y_ENSURE(TypeDesc.HashProcId);
 
@@ -2619,7 +2619,7 @@ public:
 
 private:
     const NMiniKQL::TPgType* Type;
-    const NPg::TTypeDesc TypeDesc;
+    const NYql::NPg::TTypeDesc TypeDesc;
 
     FmgrInfo FInfoHash;
 };
@@ -2632,7 +2632,7 @@ class TPgCompare : public NUdf::ICompare {
 public:
     TPgCompare(const NMiniKQL::TPgType* type)
         : Type(type)
-        , TypeDesc(NPg::LookupType(type->GetTypeId()))
+        , TypeDesc(NYql::NPg::LookupType(type->GetTypeId()))
     {
         Y_ENSURE(TypeDesc.LessProcId);
         Y_ENSURE(TypeDesc.CompareProcId);
@@ -2714,7 +2714,7 @@ public:
 
 private:
     const NMiniKQL::TPgType* Type;
-    const NPg::TTypeDesc TypeDesc;
+    const NYql::NPg::TTypeDesc TypeDesc;
 
     FmgrInfo FInfoLess, FInfoCompare;
 };
@@ -2727,7 +2727,7 @@ class TPgEquate: public NUdf::IEquate {
 public:
     TPgEquate(const NMiniKQL::TPgType* type)
         : Type(type)
-        , TypeDesc(NPg::LookupType(type->GetTypeId()))
+        , TypeDesc(NYql::NPg::LookupType(type->GetTypeId()))
     {
         Y_ENSURE(TypeDesc.EqualProcId);
 
@@ -2771,7 +2771,7 @@ public:
 
 private:
     const NMiniKQL::TPgType* Type;
-    const NPg::TTypeDesc TypeDesc;
+    const NYql::NPg::TTypeDesc TypeDesc;
 
     FmgrInfo FInfoEquate;
 };

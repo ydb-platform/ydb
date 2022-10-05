@@ -22,6 +22,7 @@ target_link_libraries(yql-minikql-computation PUBLIC
   library-cpp-time_provider
   library-yql-minikql
   yql-minikql-arrow
+  parser-pg_wrapper-interface
   yql-public-udf
   library-yql-utils
   yql-minikql-codegen
@@ -63,6 +64,7 @@ target_link_libraries(yql-minikql-computation.global PUBLIC
   library-cpp-time_provider
   library-yql-minikql
   yql-minikql-arrow
+  parser-pg_wrapper-interface
   yql-public-udf
   library-yql-utils
   yql-minikql-codegen

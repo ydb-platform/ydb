@@ -3,6 +3,7 @@
 #include "mkql_node.h"
 
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/compare.h>
 
 #include <arrow/datum.h>
 
@@ -194,10 +195,6 @@ private:
 NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type);
 NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type);
 NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type);
-
-NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type);
-NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type);
-NUdf::IEquate::TPtr MakePgEquate(const NMiniKQL::TPgType* type);
 
 } // namespace NMiniKQL
 } // namespace Nkikimr

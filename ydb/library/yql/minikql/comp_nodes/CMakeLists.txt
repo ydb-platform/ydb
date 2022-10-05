@@ -20,6 +20,7 @@ target_link_libraries(yql-minikql-comp_nodes PUBLIC
   library-yql-minikql
   yql-minikql-arrow
   yql-minikql-invoke_builtins
+  parser-pg_wrapper-interface
   library-yql-utils
   yql-minikql-codegen
   llvm12-lib-IR

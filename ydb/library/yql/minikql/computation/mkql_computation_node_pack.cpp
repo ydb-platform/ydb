@@ -3,6 +3,7 @@
 #include "mkql_computation_node_holders.h"
 #include "presort.h"
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
 #include <ydb/library/yql/minikql/defs.h>

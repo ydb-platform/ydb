@@ -4,6 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <library/cpp/yson/node/node_io.h>
 
 #include <arrow/array/array_base.h>
@@ -11,10 +12,6 @@
 #include <arrow/c/bridge.h>
 
 #include <util/system/env.h>
-
-namespace NYql {
-    std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder();
-}
 
 namespace NKikimr {
 namespace NMiniKQL {

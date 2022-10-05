@@ -1,6 +1,7 @@
 #pragma once
 #include "aligned_page_pool.h"
 #include "mkql_mem_info.h"
+#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <util/system/defaults.h>
@@ -74,11 +75,6 @@ struct TAllocState : public TAlignedPagePool
 };
 
 extern Y_POD_THREAD(TAllocState*) TlsAllocState;
-
-void* PgInitializeMainContext();
-void PgDestroyMainContext(void* ctx);
-void PgAcquireThreadContext(void* ctx);
-void PgReleaseThreadContext(void* ctx);
 
 class TPAllocScope {
 public:

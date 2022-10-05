@@ -6,7 +6,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/comp_factory.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 

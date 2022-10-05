@@ -6,16 +6,14 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_pg_utils.h>
 #include <ydb/library/yql/core/yql_expr_csee.h>
 
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 
 #include <util/generic/set.h>
 
 namespace NYql {
-
-bool ParsePgIntervalModifier(const TString& str, i32& ret);
 
 namespace NTypeAnnImpl {
 

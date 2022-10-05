@@ -17,6 +17,7 @@ target_link_libraries(providers-common-codec PUBLIC
   yutil
   library-yql-minikql
   yql-minikql-computation
+  parser-pg_wrapper-interface
   providers-common-mkql
   cpp-yson-node
   library-cpp-yson

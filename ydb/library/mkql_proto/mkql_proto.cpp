@@ -6,8 +6,8 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 

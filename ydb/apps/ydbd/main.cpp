@@ -7,7 +7,7 @@
 #include <ydb/library/folder_service/mock/mock_folder_service.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/yql/parser/pg_wrapper/comp_factory.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/core/http_proxy/auth_factory.h>
 
 

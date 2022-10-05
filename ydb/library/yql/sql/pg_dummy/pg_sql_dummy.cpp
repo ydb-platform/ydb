@@ -1,11 +1,4 @@
-#include <ydb/library/yql/sql/pg_sql.h>
-#include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
-#include <ydb/library/yql/minikql/computation/presort_impl.h>
-#include <ydb/library/yql/core/yql_pg_utils.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
 
 namespace NSQLTranslationPG {
 
@@ -253,7 +246,9 @@ std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
     return std::make_unique<TPgDummyBuilder>();
 }
 
-NKikimr::NMiniKQL::TComputationNodeFactory GetPgFactory() {
+std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable&,
+    const NKikimr::NMiniKQL::TComputationNodeFactoryContext&)> GetPgFactory()
+{
     return {};
 }
 

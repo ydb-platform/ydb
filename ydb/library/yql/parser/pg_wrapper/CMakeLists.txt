@@ -8,6 +8,7 @@
 
 find_package(Iconv REQUIRED)
 find_package(OpenSSL REQUIRED)
+add_subdirectory(interface)
 add_subdirectory(ut)
 
 add_library(yql-parser-pg_wrapper)

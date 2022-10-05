@@ -146,7 +146,7 @@
 #include <ydb/library/folder_service/proto/config.pb.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/parser/pg_wrapper/comp_factory.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 
 #include <library/cpp/actors/protos/services_common.pb.h>
 

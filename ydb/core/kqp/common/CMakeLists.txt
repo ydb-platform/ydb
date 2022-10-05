@@ -23,6 +23,7 @@ target_link_libraries(core-kqp-common PUBLIC
   yql-core-issue
   yql-dq-actors
   yql-dq-common
+  parser-pg_wrapper-interface
   library-cpp-lwtrace
   tools-enum_parser-enum_serialization_runtime
 )

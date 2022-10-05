@@ -5,8 +5,6 @@
 #include "scheme_type_order.h"
 #include "scheme_types_defs.h"
 
-#include <ydb/library/yql/utils/pg_types.h>
-
 #include <util/generic/hash.h>
 #include <util/system/unaligned_mem.h>
 

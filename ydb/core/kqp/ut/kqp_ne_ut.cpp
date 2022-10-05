@@ -3600,6 +3600,25 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[[-1]];[[-1]];[[0]];[[0]];[[1]];[[1]]])",
             FormatResultSetYson(result.GetResultSet(1)));
     }
+
+    Y_UNIT_TEST(EmptyMapWithBroadcast) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            SELECT ts.Value1 AS c1, kv.Value AS c2, t.Name AS c3
+            FROM TwoShard AS ts
+            INNER JOIN KeyValue AS kv ON ts.Value2 = kv.Key
+            INNER JOIN Test AS t ON ts.Key = t.Group
+            WHERE ts.Key = 30;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -197,6 +197,10 @@ void BuildBroadcastChannels(TGraph& graph, const typename TGraph::TStageInfoType
     auto originTaskId = inputStageInfo.Tasks[0];
     auto& targetTasks = stageInfo.Tasks;
 
+    auto& originTask = graph.GetTask(originTaskId);
+    auto& taskOutput = originTask.Outputs[outputIndex];
+    taskOutput.Type = TTaskOutputType::Broadcast;
+
     for (size_t i = 0; i < targetTasks.size(); ++i) {
         auto targetTaskId = targetTasks[i];
 
@@ -207,14 +211,10 @@ void BuildBroadcastChannels(TGraph& graph, const typename TGraph::TStageInfoType
         channel.DstInputIndex = inputIndex;
         channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
 
-        auto& originTask = graph.GetTask(originTaskId);
         auto& targetTask = graph.GetTask(targetTaskId);
 
         auto& taskInput = targetTask.Inputs[inputIndex];
         taskInput.Channels.push_back(channel.Id);
-
-        auto& taskOutput = originTask.Outputs[outputIndex];
-        taskOutput.Type = TTaskOutputType::Broadcast;
         taskOutput.Channels.push_back(channel.Id);
 
         logFunc(channel.Id, originTaskId, targetTaskId, "Broadcast/Broadcast", !channel.InMemory);

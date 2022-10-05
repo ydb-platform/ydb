@@ -8,7 +8,7 @@
 #include <list>
 #include <functional>
 
-namespace NYql {
+namespace NThreading {
 
 class TAsyncSemaphore: public TThrRefBase {
 public:
@@ -26,7 +26,7 @@ public:
         }
         ~TAutoRelease();
 
-        std::function<void (const NThreading::TFuture<void>&)> DeferRelease();
+        std::function<void (const TFuture<void>&)> DeferRelease();
 
     private:
         TAsyncSemaphore::TPtr Sem;
@@ -34,7 +34,7 @@ public:
 
     static TPtr Make(size_t count);
 
-    NThreading::TFuture<TPtr> AcquireAsync();
+    TFuture<TPtr> AcquireAsync();
     void Release();
     void Cancel();
 
@@ -47,8 +47,9 @@ private:
 
 private:
     size_t Count_;
+    bool Cancelled_ = false;
     TAdaptiveLock Lock_;
-    std::list<NThreading::TPromise<TPtr>> Promises_;
+    std::list<TPromise<TPtr>> Promises_;
 };
 
-} // NYql
+} // namespace NThreading

@@ -3,7 +3,6 @@
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/threading/async_semaphore.h>
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -12,6 +11,7 @@
 #ifdef THROW
 #undef THROW
 #endif
+#include <library/cpp/threading/future/async_semaphore.h>
 #include <library/cpp/xml/document/xml-document.h>
 #include <util/string/builder.h>
 

@@ -1476,6 +1476,8 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
         switch (sKind) {
             case ETypeAnnotationKind::Void:
             case ETypeAnnotationKind::Null:
+            case ETypeAnnotationKind::EmptyList:
+            case ETypeAnnotationKind::EmptyDict:
                 return NUdf::ECastOptions::Complete;
             case ETypeAnnotationKind::Optional:
                 return CastResult<Strong>(source->Cast<TOptionalExprType>(), target->Cast<TOptionalExprType>());
@@ -1499,6 +1501,10 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
                 return CastResult<Strong>(source->Cast<TFlowExprType>(), target->Cast<TFlowExprType>());
             case ETypeAnnotationKind::Resource:
                 return source->Cast<TResourceExprType>()->GetTag() == target->Cast<TResourceExprType>()->GetTag() ? NUdf::ECastOptions::Complete : NUdf::ECastOptions::Impossible;
+            case ETypeAnnotationKind::Tagged:
+                return source->Cast<TTaggedExprType>()->GetTag() == target->Cast<TTaggedExprType>()->GetTag() ?
+                    CastResult<Strong>(source->Cast<TTaggedExprType>()->GetBaseType(), target->Cast<TTaggedExprType>()->GetBaseType()) :
+                    NUdf::ECastOptions::Impossible;
             default: break;
         }
     } else if (sKind == ETypeAnnotationKind::Null) {

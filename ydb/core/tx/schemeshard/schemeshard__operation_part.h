@@ -443,8 +443,8 @@ ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxSt
 ISubOperationBase::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateLock(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateLock(TOperationId id, TTxState::ETxState state);
 
 ISubOperationBase::TPtr DropLock(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr DropLock(TOperationId id, TTxState::ETxState state);

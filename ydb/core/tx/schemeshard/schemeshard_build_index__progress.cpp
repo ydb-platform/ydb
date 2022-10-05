@@ -14,23 +14,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-NKikimrSchemeOp::TIndexBuildConfig GetInitiateIndexBuildMessage(TSchemeShard* ss, const TIndexBuildInfo::TPtr buildInfo) {
-    NKikimrSchemeOp::TIndexBuildConfig message;
-
-    message.SetTable(TPath::Init(buildInfo->TablePathId, ss).PathString());
-    auto& index = *message.MutableIndex();
-    index.SetName(buildInfo->IndexName);
-    for (const auto& x: buildInfo->IndexColumns) {
-        *index.AddKeyColumnNames() = x;
-    }
-    for (const auto& x: buildInfo->DataColumns) {
-        *index.AddDataColumnNames() = x;
-    }
-    index.SetType(buildInfo->IndexType);
-
-    return message;
-}
-
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     TSchemeShard* ss, const TIndexBuildInfo::TPtr buildInfo)
 {
@@ -38,7 +21,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     propose->Record.SetFailOnExist(false);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLockForIndexBuild);
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLock);
     modifyScheme.SetInternal(true);
 
     TPath path = TPath::Init(buildInfo->TablePathId, ss);
@@ -47,7 +30,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     auto& lockConfig = *modifyScheme.MutableLockConfig();
     lockConfig.SetName(path.LeafName());
 
-    *modifyScheme.MutableInitiateIndexBuild() = GetInitiateIndexBuildMessage(ss, buildInfo);
+    *modifyScheme.MutableInitiateIndexBuild() = buildInfo->SerializeToProto(ss);
 
     return propose;
 }
@@ -66,7 +49,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
 
     modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo->LockTxId));
 
-    *modifyScheme.MutableInitiateIndexBuild() = GetInitiateIndexBuildMessage(ss, buildInfo);
+    *modifyScheme.MutableInitiateIndexBuild() = buildInfo->SerializeToProto(ss);
 
     return propose;
 }

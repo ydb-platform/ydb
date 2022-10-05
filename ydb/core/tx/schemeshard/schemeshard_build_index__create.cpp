@@ -1,19 +1,17 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_impl.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
+#include "schemeshard_impl.h"
+#include "schemeshard_utils.h"
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxBase {
-private:
     TEvIndexBuilder::TEvCreateRequest::TPtr Request;
 
 public:
@@ -28,7 +26,8 @@ public:
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        const NKikimrIndexBuilder::TEvCreateRequest& request = Request->Get()->Record;
+        const auto& request = Request->Get()->Record;
+        const auto& settings = request.GetSettings();
 
         LOG_N("TIndexBuilder::TTxCreate: DoExecute"
               << ", Database: " << request.GetDatabaseName()
@@ -39,37 +38,21 @@ public:
 
         auto response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
-        const auto& dataColumns = request.GetSettings().index().data_columns();
-
-        if (!dataColumns.empty() && !Self->AllowDataColumnForIndexTable) {
-            return Reply(
-                std::move(response),
-                Ydb::StatusIds::UNSUPPORTED,
-                TStringBuilder() << "Creating covered index is unsupported yet"
-                );
-        }
-
         const auto id = TIndexBuildId(request.GetTxId());
         if (Self->IndexBuilds.contains(id)) {
-            return Reply(
-                std::move(response),
-                Ydb::StatusIds::ALREADY_EXISTS,
-                TStringBuilder() << "Index build with id '" << id << "' already exists"
-                );
+            return Reply(std::move(response), Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
+                << "Index build with id '" << id << "' already exists");
         }
 
         const TString& uid = GetUid(request.GetOperationParams().labels());
         if (uid && Self->IndexBuildsByUid.contains(uid)) {
-            return Reply(
-                std::move(response),
-                Ydb::StatusIds::ALREADY_EXISTS,
-                TStringBuilder() << "Index build with uid '" << uid << "' already exists"
-                );
+            return Reply(std::move(response), Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
+                << "Index build with uid '" << uid << "' already exists");
         }
 
-        const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
+        const auto domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
         {
-            TPath::TChecker checks = domainPath.Check();
+            const auto checks = domainPath.Check();
             checks
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -80,37 +63,28 @@ public:
 
             if (!checks) {
                 TString explain;
-                auto status = checks.GetStatus(&explain);
-
-                return Reply(
-                    std::move(response),
-                    TranslateStatusCode(status),
-                    TStringBuilder() << "Failed database check: " << explain
-                    );
+                const auto status = checks.GetStatus(&explain);
+                return Reply(std::move(response), TranslateStatusCode(status), TStringBuilder()
+                    << "Failed database check: " << explain);
             }
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-
         auto subDomainPathId = domainPath.GetPathIdForDomain();
         auto subDomainInfo = domainPath.DomainInfo();
-        bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now());
+        const bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now());
 
+        NIceDb::TNiceDb db(txc.DB);
         // We need to persist updated/consumed quotas even if operation fails for other reasons
         Self->PersistSubDomainSchemeQuotas(db, subDomainPathId, *subDomainInfo);
 
         if (!quotaAcquired) {
-            return Reply(
-                std::move(response),
-                Ydb::StatusIds::OVERLOADED,
+            return Reply(std::move(response), Ydb::StatusIds::OVERLOADED,
                 "Request exceeded a limit on the number of schema operations, try again later.");
         }
 
-        const auto& settings = request.GetSettings();
-
-        const TPath path = TPath::Resolve(settings.source_path(), Self);
+        const auto tablePath = TPath::Resolve(settings.source_path(), Self);
         {
-            TPath::TChecker checks = path.Check();
+            const auto checks = tablePath.Check();
             checks
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -122,25 +96,65 @@ public:
 
             if (!checks) {
                 TString explain;
-                auto status = checks.GetStatus(&explain);
-
-                return Reply(
-                    std::move(response),
-                    TranslateStatusCode(status),
-                    TStringBuilder() << "Failed table check: " << explain
-                    );
+                const auto status = checks.GetStatus(&explain);
+                return Reply(std::move(response), TranslateStatusCode(status), TStringBuilder()
+                    << "Failed table check: " << explain);
             }
+        }
+
+        const auto indexPath = tablePath.Child(settings.index().name());
+        {
+            const auto checks = indexPath.Check();
+            checks
+                .IsAtLocalSchemeShard();
+
+            if (indexPath.IsResolved()) {
+                checks
+                    .IsResolved()
+                    .NotUnderDeleting()
+                    .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, false);
+            } else {
+                checks
+                    .NotEmpty()
+                    .NotResolved();
+            }
+
+            checks
+                .IsValidLeafName()
+                .PathsLimit(2) // index and impl-table
+                .DirChildrenLimit()
+                .ShardsLimit(1); // impl-table
+
+            if (!checks) {
+                TString explain;
+                const auto status = checks.GetStatus(&explain);
+                return Reply(std::move(response), TranslateStatusCode(status), TStringBuilder()
+                    << "Failed index check: " << explain);
+            }
+        }
+
+        auto tableInfo = Self->Tables.at(tablePath.Base()->PathId);
+        auto domainInfo = tablePath.DomainInfo();
+
+        const ui64 aliveIndices = Self->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
+        if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                << "indexes count has reached maximum value in the table"
+                << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
+                << ", intention to create new children: " << aliveIndices + 1);
         }
 
         TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo(id, uid);
 
         TString explain;
-        if (!Prepare(buildInfo, domainPath, path, settings, explain)) {
-            return Reply(
-                std::move(response),
-                Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << "Failed item check: " << explain
-                );
+        if (!Prepare(buildInfo, domainPath, tablePath, settings, explain)) {
+            return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "Failed item check: " << explain);
+        }
+
+        const auto indexDesc = buildInfo->SerializeToProto(Self).GetIndex();
+        if (!NTableIndex::CommonCheck(tableInfo, indexDesc, domainInfo->GetSchemeLimits(), explain)) {
+            return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, explain);
         }
 
         Y_VERIFY(buildInfo != nullptr);
@@ -231,5 +245,4 @@ ITransaction* TSchemeShard::CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TP
     return new TIndexBuilder::TTxCreate(this, ev);
 }
 
-} // NSchemeShard
-} // NKikimr
+}

@@ -33,6 +33,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+class TSchemeShard;
+
 struct TForceShardSplitSettings {
     ui64 ForceShardSplitDataSize;
     bool DisableForceShardSplit;
@@ -2782,6 +2784,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // No shards - no progress
         return 0.0;
     }
+
+    NKikimrSchemeOp::TIndexBuildConfig SerializeToProto(TSchemeShard* ss) const;
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

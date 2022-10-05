@@ -893,8 +893,8 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
             return CreateDropTableIndexAtMainTable(NextPartId(), txState);
         case TTxState::ETxType::TxUpdateMainTableOnIndexMove:
             return CreateUpdateMainTableOnIndexMove(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateLockForIndexBuild:
-            return CreateLockForIndexBuild(NextPartId(), txState);
+        case TTxState::ETxType::TxCreateLock:
+            return CreateLock(NextPartId(), txState);
         case TTxState::ETxType::TxDropLock:
             return DropLock(NextPartId(), txState);
         case TTxState::ETxType::TxAlterTableIndex:
@@ -1057,8 +1057,8 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
         return CreateUpgradeSubDomainDecision(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         Y_FAIL("multipart operations are handled before, also they require transaction details");
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLockForIndexBuild:
-        return CreateLockForIndexBuild(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
+        return CreateLock(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
         return DropLock(NextPartId(), tx);
 

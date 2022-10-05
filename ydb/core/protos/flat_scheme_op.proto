@@ -1176,7 +1176,7 @@ enum EOperationType {
     ESchemeOpUpgradeSubDomainDecision = 37;
     ESchemeOpCreateIndexBuild = 38;
     ESchemeOpInitiateBuildIndexMainTable = 39;
-    ESchemeOpCreateLockForIndexBuild = 40;
+    ESchemeOpCreateLock = 40;
     ESchemeOpApplyIndexBuild = 41;
     ESchemeOpFinalizeBuildIndexMainTable = 42;
     ESchemeOpAlterTableIndex = 43;

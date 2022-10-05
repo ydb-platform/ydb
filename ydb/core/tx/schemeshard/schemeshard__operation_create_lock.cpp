@@ -1,39 +1,36 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"
-
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
-using namespace NKikimr;
-using namespace NSchemeShard;
-
-
-class TCreateLockForIndexBuild: public TSubOperation {
+class TCreateLock: public TSubOperation {
     const TOperationId OperationId;
     const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
+    TTxState::ETxState State;
 
     TTxState::ETxState NextState() {
         return TTxState::Done;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+        switch (state) {
         case TTxState::Waiting:
             return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::Done:
             return THolder(new TDone(OperationId));
@@ -52,47 +49,38 @@ class TCreateLockForIndexBuild: public TSubOperation {
     }
 
 public:
-    TCreateLockForIndexBuild(TOperationId id, const TTxTransaction& tx)
+    explicit TCreateLock(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-          , Transaction(tx)
+        , Transaction(tx)
+        , State(TTxState::Invalid)
     {
     }
 
-    TCreateLockForIndexBuild(TOperationId id, TTxState::ETxState state)
+    explicit TCreateLock(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
-          , State(state)
+        , State(state)
     {
         SetState(SelectStateFunc(state));
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const TTabletId ssId = context.SS->SelfTabletId();
+        const auto& workingDir = Transaction.GetWorkingDir();
+        const auto& op = Transaction.GetLockConfig();
 
-        auto lockSchema = Transaction.GetLockConfig();
+        LOG_N("TCreateLock Propose"
+            << ": opId# " << OperationId
+            << ", path# " << workingDir << "/" << op.GetName());
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateLockForIndexBuild Propose"
-                         << ", path: " << parentPathStr << "/" << lockSchema.GetName()
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
-
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         if (!Transaction.HasLockConfig()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "no locking config present");
             return result;
         }
 
-        if (!Transaction.HasInitiateIndexBuild()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "no build index config present");
-            return result;
-        }
-
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        const auto parentPath = TPath::Resolve(workingDir, context.SS);
         {
-            NSchemeShard::TPath::TChecker checks = parentPath.Check();
+            const auto checks = parentPath.Check();
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
@@ -103,17 +91,16 @@ public:
                 .IsLikeDirectory();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent path fail checks"
-                                                   << ", path: " << parentPath.PathString();
-                auto status = checks.GetStatus(&explain);
+                TString explain = TStringBuilder() << "path checks failed, path: " << parentPath.PathString();
+                const auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
                 return result;
             }
         }
 
-        NSchemeShard::TPath tablePath = parentPath.Child(lockSchema.GetName());
+        const auto tablePath = parentPath.Child(op.GetName());
         {
-            NSchemeShard::TPath::TChecker checks = tablePath.Check();
+            const auto checks = tablePath.Check();
             checks
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -124,9 +111,8 @@ public:
                 .IsCommonSensePath();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "table path fail checks"
-                                                   << ", path: " << tablePath.PathString();
-                auto status = checks.GetStatus(&explain);
+                TString explain = TStringBuilder() << "path checks failed, path: " << tablePath.PathString();
+                const auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
                 if (tablePath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(tablePath.Base()->CreateTxId));
@@ -136,108 +122,13 @@ public:
             }
         }
 
-        auto buildIndexSchema = Transaction.GetInitiateIndexBuild();
-
-        if (buildIndexSchema.GetTable() != tablePath.PathString()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "table path in build index mismatch with locking path");
-            return result;
-        }
-
-        auto indexSchema = buildIndexSchema.GetIndex();
-
-        NSchemeShard::TPath indexPath = tablePath.Child(indexSchema.GetName());
-        {
-            NSchemeShard::TPath::TChecker checks = indexPath.Check();
-            checks
-                .IsAtLocalSchemeShard();
-
-            if (indexPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, false);
-            } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
-            }
-
-            checks
-                .IsValidLeafName()
-                .PathsLimit(2) // we are creating 2 pathes at next stages: index and table
-                .DirChildrenLimit()
-                .ShardsLimit(1) // we are creating 1 shard at next stages for index table
-                ;
-
-            if (!checks) {
-                TString explain = TStringBuilder() << "index path fail checks"
-                                                   << ", path: " << indexPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
-                if (indexPath.IsResolved()) {
-                    result->SetPathCreateTxId(ui64(indexPath.Base()->CreateTxId));
-                    result->SetPathId(indexPath.Base()->PathId.LocalPathId);
-                }
-                return result;
-            }
-        }
-
-        TPathElement::TPtr pathEl = tablePath.Base();
-        TPathId pathId = pathEl->PathId;
+        const auto pathId = tablePath.Base()->PathId;
         result->SetPathId(pathId.LocalPathId);
 
-        TTableInfo::TPtr tableInfo = context.SS->Tables.at(tablePath.Base()->PathId);
-
-        const ui64 aliveIndices = context.SS->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
-        if (aliveIndices + 1 > tablePath.DomainInfo()->GetSchemeLimits().MaxTableIndices) {
-            auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
-                                        << ", children limit for dir in domain: " << tablePath.DomainInfo()->GetSchemeLimits().MaxTableIndices
-                                        << ", intention to create new children: " << aliveIndices + 1;
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, msg);
-            return result;
-        }
-
-        {
-            NTableIndex::TIndexColumns indexKeys = NTableIndex::ExtractInfo(indexSchema);
-            if (indexKeys.KeyColumns.empty()) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "no key colums in index creation config");
-                return result;
-            }
-
-            NTableIndex::TTableColumns baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
-
-            TString explainErr;
-            if (!NTableIndex::IsCompatibleIndex(baseTableColumns, indexKeys, explainErr)) {
-                TString msg = TStringBuilder() << "IsCompatibleIndex fail with explain: " << explainErr;
-                result->SetError(NKikimrScheme::StatusInvalidParameter, msg);
-                return result;
-            }
-
-            NTableIndex::TTableColumns impTableColumns = NTableIndex::CalcTableImplDescription(baseTableColumns, indexKeys);
-
-            if (!NTableIndex::IsCompatibleKeyTypes(NTableIndex::ExtractTypes(tableInfo), impTableColumns, false, explainErr)) {
-                TString msg = TStringBuilder() << "IsCompatibleKeyTypes fail with explain: " << explainErr;
-                result->SetError(NKikimrScheme::StatusInvalidParameter, msg);
-                return result;
-            }
-
-            if (impTableColumns.Keys.size() > tablePath.DomainInfo()->GetSchemeLimits().MaxTableKeyColumns) {
-                TString msg = TStringBuilder()
-                    << "Too many key indexed, index table reaches the limit of the maximum keys colums count"
-                    << ": indexing colums: " << indexKeys.KeyColumns.size()
-                    << ": requested keys colums for index table: " << impTableColumns.Keys.size()
-                    << ". Limit: " << tablePath.DomainInfo()->GetSchemeLimits().MaxTableKeyColumns;
-                result->SetError(NKikimrScheme::StatusSchemeError, msg);
-                return result;
-            }
-        }
-
         if (tablePath.LockedBy() == OperationId.GetTxId()) {
-            TString explain = TStringBuilder()
-                << "dst path fail checks"
+            result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, TStringBuilder() << "path checks failed"
                 << ", path already locked by this operation"
-                << ", path: " << tablePath.PathString();
-            result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, explain);
+                << ", path: " << tablePath.PathString());
             return result;
         }
 
@@ -246,27 +137,24 @@ public:
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateLockForIndexBuild, errStr)) {
+
+        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateLock, errStr)) {
             result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
+        tablePath.Base()->LastTxId = OperationId.GetTxId();
+        tablePath.Base()->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
 
-        pathEl->LastTxId = OperationId.GetTxId();
-        pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
-
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLockForIndexBuild, pathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLock, pathId);
         txState.State = TTxState::Done;
 
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistTxState(db, OperationId);
 
-        if (pathEl->IsTable()) {
-            // wait all the splits
-            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
-            for (auto splitTx: table->GetSplitOpsInFlight()) {
-                context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
-            }
+        auto table = context.SS->Tables.at(pathId);
+        for (const auto& splitTx : table->GetSplitOpsInFlight()) {
+            context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
         context.SS->LockedPaths[pathId] = OperationId.GetTxId();
@@ -277,6 +165,7 @@ public:
 
         State = NextState();
         SetState(SelectStateFunc(State));
+
         return result;
     }
 
@@ -285,29 +174,22 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateLock AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
-
+        LOG_N("TCreateLock AbortUnsafe"
+            << ": opId# " << OperationId
+            << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
 };
 
+} // anonymous namespace
+
+ISubOperationBase::TPtr CreateLock(TOperationId id, const TTxTransaction& tx) {
+    return new TCreateLock(id, tx);
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
-
-ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, const TTxTransaction& tx) {
-    return new TCreateLockForIndexBuild(id, tx);
-}
-
-ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, TTxState::ETxState state) {
+ISubOperationBase::TPtr CreateLock(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TCreateLockForIndexBuild(id, state);
+    return new TCreateLock(id, state);
 }
 
-}
 }

@@ -498,14 +498,14 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesrc, TCol
     return true;
 }
 
-TColumnTypes ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo) {
-    TColumnTypes columsTypes;
-    for (auto& column: baseTableInfo->Columns) {
-        auto& columnName = column.second.Name;
-        columsTypes[columnName] = column.second.PType;
+bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columsTypes, TString& explain) {
+    Y_UNUSED(explain);
+
+    for (const auto& [_, column] : baseTableInfo->Columns) {
+        columsTypes[column.Name] = column.PType;
     }
 
-    return columsTypes;
+    return true;
 }
 
 bool IsCompatibleKeyTypes(

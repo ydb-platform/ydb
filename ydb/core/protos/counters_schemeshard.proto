@@ -79,7 +79,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxInitializeBuildIndex = 65     [(CounterOpts) = {Name: "InFlightOps/InitializeBuildIndex"}];
     COUNTER_SNAPSHOTS_COUNT = 66                          [(CounterOpts) = {Name: "Snapshots"}];
     COUNTER_LOCKS_COUNT = 67                              [(CounterOpts) = {Name: "Locks"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateLockForIndexBuild = 68  [(CounterOpts) = {Name: "InFlightOps/CreateLockForIndexBuild"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateLock = 68               [(CounterOpts) = {Name: "InFlightOps/CreateLock"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterTableIndex = 69          [(CounterOpts) = {Name: "InFlightOps/AlterTableIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxFinalizeBuildIndex = 70       [(CounterOpts) = {Name: "InFlightOps/FinalizeBuildIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterSolomonVolume = 71       [(CounterOpts) = {Name: "InFlightOps/AlterSolomonVolume"}];
@@ -212,7 +212,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxUpgradeSubDomain = 37          [(CounterOpts) = {Name: "FinishedOps/UpgradeSubDomain"}];
     COUNTER_FINISHED_OPS_TxUpgradeSubDomainDecision = 38  [(CounterOpts) = {Name: "FinishedOps/UpgradeSubDomainDecision"}];
     COUNTER_FINISHED_OPS_TxInitializeBuildIndex = 39      [(CounterOpts) = {Name: "FinishedOps/InitializeBuildIndex"}];
-    COUNTER_FINISHED_OPS_TxCreateLockForIndexBuild = 40   [(CounterOpts) = {Name: "FinishedOps/CreateLockForIndexBuild"}];
+    COUNTER_FINISHED_OPS_TxCreateLock = 40                [(CounterOpts) = {Name: "FinishedOps/CreateLock"}];
     COUNTER_FINISHED_OPS_TxAlterTableIndex = 41           [(CounterOpts) = {Name: "FinishedOps/AlterTableIndex"}];
     COUNTER_FINISHED_OPS_TxFinalizeBuildIndex = 42        [(CounterOpts) = {Name: "FinishedOps/FinalizeBuildIndex"}];
     COUNTER_FINISHED_OPS_TxAlterSolomonVolume = 43        [(CounterOpts) = {Name: "FinishedOps/AlterSolomonVolume"}];

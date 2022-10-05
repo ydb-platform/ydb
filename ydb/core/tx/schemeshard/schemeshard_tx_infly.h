@@ -81,7 +81,7 @@ struct TTxState {
         item(TxUpgradeSubDomain, 35) \
         item(TxUpgradeSubDomainDecision, 36) \
         item(TxInitializeBuildIndex, 37) \
-        item(TxCreateLockForIndexBuild, 38) \
+        item(TxCreateLock, 38) \
         item(TxAlterTableIndex, 39) \
         item(TxFinalizeBuildIndex, 40) \
         item(TxAlterSolomonVolume, 41) \
@@ -326,7 +326,7 @@ struct TTxState {
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
             return false;
-        case TxCreateLockForIndexBuild: //this is more like alter
+        case TxCreateLock: //this is more like alter
         case TxDropLock: //this is more like alter
             return false;
         case TxDropTable:
@@ -427,7 +427,7 @@ struct TTxState {
         case TxCreateReplication:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
-        case TxCreateLockForIndexBuild:
+        case TxCreateLock:
         case TxDropLock:
         case TxFinalizeBuildIndex:
         case TxDropTableIndexAtMainTable: // just increments schemaversion at main table
@@ -513,7 +513,7 @@ struct TTxState {
         case TxCreateReplication:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
-        case TxCreateLockForIndexBuild:
+        case TxCreateLock:
         case TxDropLock:
         case TxDropTableIndexAtMainTable:
         case TxDropCdcStreamAtTable:

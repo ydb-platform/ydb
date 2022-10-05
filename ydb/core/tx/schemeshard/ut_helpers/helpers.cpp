@@ -436,7 +436,7 @@ namespace NSchemeShardUT_Private {
     TEvSchemeShard::TEvModifySchemeTransaction* LockRequest(ui64 txId, const TString &parentPath, const TString& name) {
         THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
-        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateLockForIndexBuild);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
         transaction->SetWorkingDir(parentPath);
         auto op = transaction->MutableLockConfig();
         op->SetName(name);

@@ -211,8 +211,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
             Y_FAIL("no implementation for ESchemeOpInitiateBuildIndexMainTable");
 
-        case NKikimrSchemeOp::ESchemeOpCreateLockForIndexBuild:
-            Y_FAIL("no implementation for ESchemeOpCreateLockForIndexBuild");
+        case NKikimrSchemeOp::ESchemeOpCreateLock:
+            Y_FAIL("no implementation for ESchemeOpCreateLock");
 
         case NKikimrSchemeOp::ESchemeOpApplyIndexBuild:
             Y_FAIL("no implementation for ESchemeOpApplyIndexBuild");
@@ -712,7 +712,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
-        case NKikimrSchemeOp::ESchemeOpCreateLockForIndexBuild:
+        case NKikimrSchemeOp::ESchemeOpCreateLock:
         case NKikimrSchemeOp::ESchemeOpApplyIndexBuild:
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable:
         case NKikimrSchemeOp::ESchemeOpAlterTableIndex:

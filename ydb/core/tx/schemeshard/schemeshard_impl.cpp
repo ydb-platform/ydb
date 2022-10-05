@@ -1287,7 +1287,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterUserAttributes:
     case TTxState::TxInitializeBuildIndex:
     case TTxState::TxFinalizeBuildIndex:
-    case TTxState::TxCreateLockForIndexBuild:
+    case TTxState::TxCreateLock:
     case TTxState::TxDropLock:
     case TTxState::TxAlterTableIndex:
     case TTxState::TxAlterSolomonVolume:

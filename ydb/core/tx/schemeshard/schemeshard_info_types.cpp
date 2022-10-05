@@ -1,4 +1,5 @@
 #include "schemeshard_info_types.h"
+#include "schemeshard_path.h"
 #include "schemeshard_utils.h"
 
 #include <ydb/core/base/appdata.h>
@@ -1713,6 +1714,25 @@ TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
 {}
+
+NKikimrSchemeOp::TIndexBuildConfig TIndexBuildInfo::SerializeToProto(TSchemeShard* ss) const {
+    NKikimrSchemeOp::TIndexBuildConfig result;
+    result.SetTable(TPath::Init(TablePathId, ss).PathString());
+
+    auto& index = *result.MutableIndex();
+    index.SetName(IndexName);
+    index.SetType(IndexType);
+
+    for (const auto& x : IndexColumns) {
+        *index.AddKeyColumnNames() = x;
+    }
+
+    for (const auto& x : DataColumns) {
+        *index.AddDataColumnNames() = x;
+    }
+
+    return result;
+}
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
     : Container(container)

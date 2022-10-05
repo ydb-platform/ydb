@@ -86,7 +86,7 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
         return "BUILD INDEX";
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         return "ALTER TABLE BUILD INDEX INIT";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLockForIndexBuild:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         return "ALTER TABLE LOCK";
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         return "ALTER TABLE BUILD INDEX APPLY";
@@ -329,7 +329,7 @@ void TAuditLogFragment::FillPathes(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         Path = JoinPath({tx.GetWorkingDir(), tx.GetInitiateBuildIndexMainTable().GetTableName()});
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLockForIndexBuild:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         Path = JoinPath({tx.GetWorkingDir(), tx.GetLockConfig().GetName()});
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:

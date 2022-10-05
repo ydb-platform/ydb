@@ -1,24 +1,15 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"
 
-#include "schemeshard_impl.h"
-
-#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-namespace {
+namespace NKikimr::NSchemeShard {
 
-using namespace NKikimr;
-using namespace NSchemeShard;
 using namespace NTableIndex;
-
-}
-
-namespace NKikimr {
-namespace NSchemeShard {
 
 TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
@@ -35,6 +26,7 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             indexedTableShards += 1;
         }
     }
+
     ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
     ui32 shardsToCreate = baseShards + indexedTableShards;
@@ -117,46 +109,14 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
-        TIndexColumns indexKeys = ExtractInfo(indexDescription);
-        if (indexKeys.KeyColumns.empty()) {
-            TString msg = TStringBuilder() << "no key colums in index creation config";
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        TTableColumns implTableColumns;
+        NKikimrScheme::EStatus status;
+        TString errStr;
+        if (!CommonCheck(baseTableDescription, indexDescription, domainInfo->GetSchemeLimits(), uniformIndexTable, implTableColumns, status, errStr)) {
+            return {CreateReject(nextId, status, errStr)};
         }
 
-        if (!indexKeys.DataColumns.empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
-            TString msg = TStringBuilder() << "It is not allowed to create index with data column";
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
-        }
-
-        TString explainErr;
-        if (!IsCompatibleIndex(baseTableColumns, indexKeys, explainErr)) {
-            TString msg = TStringBuilder() << "IsCompatibleIndex fail with explain: " << explainErr;
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-        }
-
-        TTableColumns impTableColumns = CalcTableImplDescription(baseTableColumns, indexKeys);
-
-        TColumnTypes columnsTypes;
-        if (!ExtractTypes(baseTableDescription, columnsTypes, explainErr)) {
-            TString msg = TStringBuilder() << "ExtractTypes fail with explain: " << explainErr;
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-        }
-
-        if (!IsCompatibleKeyTypes(columnsTypes, impTableColumns, uniformIndexTable, explainErr)) {
-            TString msg = TStringBuilder() << "IsCompatibleKeyTypes fail with explain: " << explainErr;
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-        }
-
-        if (impTableColumns.Keys.size() > domainInfo->GetSchemeLimits().MaxTableKeyColumns) {
-            TString msg = TStringBuilder()
-                << "Too many key indexed, index table reaches the limit of the maximum keys colums count"
-                << ": indexing colums: " << indexKeys.KeyColumns.size()
-                << ": requested keys colums for index table: " << impTableColumns.Keys.size()
-                << ". Limit: " << domainInfo->GetSchemeLimits().MaxTableKeyColumns;
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
-        }
-
-        indexes.emplace(indexName, std::move(impTableColumns));
+        indexes.emplace(indexName, std::move(implTableColumns));
     }
 
     THashSet<TString> sequences;
@@ -265,12 +225,12 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
 
-            TTableColumns impTableColumns = indexes.at(indexDescription.GetName());
+            const auto& implTableColumns = indexes.at(indexDescription.GetName());
 
             auto& indexImplTableDescription = *scheme.MutableCreateTable();
             // This description provided by user to override partition policy
             const auto& userIndexDesc = indexDescription.GetIndexImplTableDescription();
-            indexImplTableDescription = CalcImplTableDesc(baseTableDescription, impTableColumns, userIndexDesc);
+            indexImplTableDescription = CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc);
 
             result.push_back(CreateNewTable(NextPartId(nextId, result), scheme));
         }
@@ -290,5 +250,4 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
     return result;
 }
 
-}
 }

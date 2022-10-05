@@ -46,6 +46,11 @@ public:
         DataShard.SysLocksTable().BreakAllLocks(fullTableId);
         txc.DB.CommitTx(tableInfo.LocalTid, writeTxId, versions.WriteVersion);
 
+        if (Pipeline.AddLockDependencies(op, guardLocks)) {
+            txc.Reschedule();
+            return EExecutionStatus::Restart;
+        }
+
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         DataShard.SysLocksTable().ApplyLocks();
         DataShard.SubscribeNewLocks(ctx);

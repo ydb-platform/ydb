@@ -316,6 +316,19 @@ public:
     void RestorePersistentRange(ui64 rangeId, const TPathId& tableId, ELockRangeFlags flags);
     void RestorePersistentConflict(TLockInfo* otherLock);
 
+    template<class TCallback>
+    void ForAllConflicts(TCallback&& callback) {
+        for (auto& pr : ConflictLocks) {
+            callback(pr.first);
+        }
+    }
+
+    ui64 GetLastOpId() const { return LastOpId; }
+    void SetLastOpId(ui64 opId) { LastOpId = opId; }
+
+    bool IsFrozen() const { return Frozen; }
+    void SetFrozen() { Frozen = true; }
+
 private:
     void MakeShardLock();
     bool AddShardLock(const TPathId& pathId);
@@ -355,13 +368,16 @@ private:
     // A set of locks we must break on commit
     THashMap<TLockInfo*, ELockConflictFlags> ConflictLocks;
     TVector<TPersistentRange> PersistentRanges;
+
+    ui64 LastOpId = 0;
+    bool Frozen = false;
 };
 
 struct TTableLocksReadListTag {};
 struct TTableLocksWriteListTag {};
 struct TTableLocksAffectedListTag {};
 struct TTableLocksBreakShardListTag {};
-struct TTableLocksBreakAllListTag {};
+struct TTableLocksBreakRangeListTag {};
 struct TTableLocksWriteConflictShardListTag {};
 
 ///
@@ -371,7 +387,7 @@ class TTableLocks
     , public TIntrusiveListItem<TTableLocks, TTableLocksWriteListTag>
     , public TIntrusiveListItem<TTableLocks, TTableLocksAffectedListTag>
     , public TIntrusiveListItem<TTableLocks, TTableLocksBreakShardListTag>
-    , public TIntrusiveListItem<TTableLocks, TTableLocksBreakAllListTag>
+    , public TIntrusiveListItem<TTableLocks, TTableLocksBreakRangeListTag>
     , public TIntrusiveListItem<TTableLocks, TTableLocksWriteConflictShardListTag>
 {
     friend class TSysLocks;
@@ -401,8 +417,6 @@ public:
     void RemoveShardLock(TLockInfo* lock);
     void RemoveRangeLock(TLockInfo* lock);
     void RemoveWriteLock(TLockInfo* lock);
-    bool BreakShardLocks(const TRowVersion& at);
-    bool BreakAllLocks(const TRowVersion& at);
 
     ui64 NumKeyColumns() const {
         return KeyColumnTypes.size();
@@ -429,6 +443,27 @@ public:
         Ranges.Clear();
         ShardLocks.clear();
         WriteLocks.clear();
+    }
+
+    template<class TCallback>
+    void ForEachRangeLock(TCallback&& callback) {
+        Ranges.EachRange([&callback](const TRangeTreeBase::TRange&, TLockInfo* lock) {
+            callback(lock);
+        });
+    }
+
+    template<class TCallback>
+    void ForEachShardLock(TCallback&& callback) {
+        for (TLockInfo* lock : ShardLocks) {
+            callback(lock);
+        }
+    }
+
+    template<class TCallback>
+    void ForEachWriteLock(TCallback&& callback) {
+        for (TLockInfo* lock : WriteLocks) {
+            callback(lock);
+        }
     }
 
 private:
@@ -480,8 +515,6 @@ public:
     ui64 BrokenLocksCount() const { return BrokenLocksCount_; }
 
     void BreakLocks(TIntrusiveList<TLockInfo, TLockInfoBreakListTag>& locks, const TRowVersion& at);
-    void BreakLocks(TIntrusiveList<TTableLocks, TTableLocksBreakShardListTag>& tables, const TRowVersion& at);
-    void BreakLocks(TIntrusiveList<TTableLocks, TTableLocksBreakAllListTag>& tables, const TRowVersion& at);
     void ForceBreakLock(ui64 lockId);
     void RemoveLock(ui64 lockTxId, ILocksDb* db);
 
@@ -609,7 +642,7 @@ struct TLocksUpdate {
 
     TIntrusiveList<TLockInfo, TLockInfoBreakListTag> BreakLocks;
     TIntrusiveList<TTableLocks, TTableLocksBreakShardListTag> BreakShardLocks;
-    TIntrusiveList<TTableLocks, TTableLocksBreakAllListTag> BreakAllLocks;
+    TIntrusiveList<TTableLocks, TTableLocksBreakRangeListTag> BreakRangeLocks;
 
     TIntrusiveList<TLockInfo, TLockInfoReadConflictListTag> ReadConflictLocks;
     TIntrusiveList<TLockInfo, TLockInfoWriteConflictListTag> WriteConflictLocks;
@@ -653,8 +686,23 @@ struct TLocksUpdate {
         BreakShardLocks.PushBack(table);
     }
 
-    void AddBreakAllLocks(TTableLocks* table) {
-        BreakAllLocks.PushBack(table);
+    void AddBreakRangeLocks(TTableLocks* table) {
+        BreakRangeLocks.PushBack(table);
+    }
+
+    void FlattenBreakLocks() {
+        while (BreakShardLocks) {
+            TTableLocks* table = BreakShardLocks.PopFront();
+            table->ForEachShardLock([this](TLockInfo* lock) {
+                BreakLocks.PushBack(lock);
+            });
+        }
+        while (BreakRangeLocks) {
+            TTableLocks* table = BreakRangeLocks.PopFront();
+            table->ForEachRangeLock([this](TLockInfo* lock) {
+                BreakLocks.PushBack(lock);
+            });
+        }
     }
 
     void AddReadConflictLock(TLockInfo* lock) {

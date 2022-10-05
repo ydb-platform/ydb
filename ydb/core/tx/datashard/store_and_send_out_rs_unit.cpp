@@ -57,6 +57,14 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
         // N.B. we copy access log to locks cache, so that future lock access is repeatable
         tx->LocksCache().Locks = tx->LocksAccessLog().Locks;
         tx->DbStoreLocksAccessLog(&DataShard, txc, ctx);
+        // Freeze persistent locks that we have cached
+        for (auto& pr : tx->LocksCache().Locks) {
+            ui64 lockId = pr.first;
+            auto lock = DataShard.SysLocksTable().GetRawLock(lockId);
+            if (lock && lock->IsPersistent()) {
+                lock->SetFrozen();
+            }
+        }
         tx->MarkLocksStored();
         newArtifact = true;
     }

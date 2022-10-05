@@ -58,6 +58,11 @@ public:
                 return EExecutionStatus::Restart;
             }
 
+            if (Pipeline.AddLockDependencies(op, guardLocks)) {
+                txc.Reschedule();
+                return EExecutionStatus::Restart;
+            }
+
             if (changeCollector) {
                 op->ChangeRecords() = std::move(changeCollector->GetCollected());
             }
@@ -77,6 +82,11 @@ public:
                     const bool ok = Execute(txc, request, presentRows.at(rs.Origin), DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows()), writeVersion);
                     Y_VERIFY(ok);
                 }
+            }
+
+            if (Pipeline.AddLockDependencies(op, guardLocks)) {
+                txc.Reschedule();
+                return EExecutionStatus::Restart;
             }
         } else {
             Y_FAIL_S("Invalid distributed erase tx: " << eraseTx->GetBody().ShortDebugString());

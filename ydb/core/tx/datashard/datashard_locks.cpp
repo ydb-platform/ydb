@@ -363,28 +363,6 @@ void TTableLocks::RemoveWriteLock(TLockInfo* lock) {
     WriteLocks.erase(lock);
 }
 
-bool TTableLocks::BreakShardLocks(const TRowVersion& at) {
-    bool broken = false;
-    for (TLockInfo* lock : ShardLocks) {
-        lock->SetBroken(at);
-        broken = true;
-    }
-    return broken;
-}
-
-bool TTableLocks::BreakAllLocks(const TRowVersion& at) {
-    bool broken = false;
-    for (TLockInfo* lock : ShardLocks) {
-        lock->SetBroken(at);
-        broken = true;
-    }
-    Ranges.EachRange([&](const TRangeTreeBase::TRange&, TLockInfo* lock) {
-        lock->SetBroken(at);
-        broken = true;
-    });
-    return broken;
-}
-
 // TLockLocker
 
 void TLockLocker::AddPointLock(const TLockInfo::TPtr& lock, const TPointKey& key) {
@@ -445,22 +423,6 @@ TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const
 void TLockLocker::BreakLocks(TIntrusiveList<TLockInfo, TLockInfoBreakListTag>& locks, const TRowVersion& at) {
     for (auto& lock : locks) {
         lock.SetBroken(at);
-    }
-
-    RemoveBrokenRanges();
-}
-
-void TLockLocker::BreakLocks(TIntrusiveList<TTableLocks, TTableLocksBreakShardListTag>& tables, const TRowVersion& at) {
-    for (auto& table : tables) {
-        table.BreakShardLocks(at);
-    }
-
-    RemoveBrokenRanges();
-}
-
-void TLockLocker::BreakLocks(TIntrusiveList<TTableLocks, TTableLocksBreakAllListTag>& tables, const TRowVersion& at) {
-    for (auto& table : tables) {
-        table.BreakAllLocks(at);
     }
 
     RemoveBrokenRanges();
@@ -679,7 +641,10 @@ void TLockLocker::ScheduleRemoveBrokenRanges(ui64 lockId, const TRowVersion& at)
 }
 
 void TLockLocker::RemoveSubscribedLock(ui64 lockId, ILocksDb* db) {
-    RemoveLock(lockId, db);
+    auto it = Locks.find(lockId);
+    if (it != Locks.end() && !it->second->IsFrozen()) {
+        RemoveLock(lockId, db);
+    }
 }
 
 void TLockLocker::SaveBrokenPersistentLocks(ILocksDb* db) {
@@ -704,7 +669,7 @@ TLocksUpdate::~TLocksUpdate() {
     cleanList(AffectedTables);
     cleanList(BreakLocks);
     cleanList(BreakShardLocks);
-    cleanList(BreakAllLocks);
+    cleanList(BreakRangeLocks);
     cleanList(ReadConflictLocks);
     cleanList(WriteConflictLocks);
     cleanList(WriteConflictShardLocks);
@@ -727,16 +692,9 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
     // TODO: move this somewhere earlier, like the start of a new update guard
     Locker.RemoveBrokenRanges();
 
+    Update->FlattenBreakLocks();
     if (Update->BreakLocks) {
         Locker.BreakLocks(Update->BreakLocks, breakVersion);
-    }
-
-    if (Update->BreakShardLocks) {
-        Locker.BreakLocks(Update->BreakShardLocks, breakVersion);
-    }
-
-    if (Update->BreakAllLocks) {
-        Locker.BreakLocks(Update->BreakAllLocks, breakVersion);
     }
 
     Locker.SaveBrokenPersistentLocks(Db);
@@ -1041,8 +999,11 @@ void TSysLocks::BreakAllLocks(const TTableId& tableId) {
         return;
 
     if (auto* table = Locker.FindTablePtr(tableId)) {
-        if (table->HasRangeLocks() || table->HasShardLocks()) {
-            Update->AddBreakAllLocks(table);
+        if (table->HasShardLocks()) {
+            Update->AddBreakShardLocks(table);
+        }
+        if (table->HasRangeLocks()) {
+            Update->AddBreakRangeLocks(table);
         }
     }
 }

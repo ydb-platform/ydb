@@ -1904,4 +1904,25 @@ bool TPipeline::MarkPlannedLogicallyIncompleteUpTo(const TRowVersion& version, T
     return hadWrites;
 }
 
+bool TPipeline::AddLockDependencies(const TOperation::TPtr& op, TLocksUpdate& guardLocks) {
+    bool addedDependencies = false;
+
+    guardLocks.FlattenBreakLocks();
+    for (auto& lock : guardLocks.BreakLocks) {
+        // We cannot break frozen locks
+        // Find their corresponding operations and reschedule
+        if (lock.IsFrozen()) {
+            if (auto conflictOp = FindOp(lock.GetLastOpId())) {
+                if (conflictOp != op) {
+                    // FIXME: make sure this op is not complete
+                    op->AddDependency(conflictOp);
+                    addedDependencies = true;
+                }
+            }
+        }
+    }
+
+    return addedDependencies;
+}
+
 }}

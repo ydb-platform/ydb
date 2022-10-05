@@ -105,6 +105,14 @@ public:
         GetTrackingLogic().RemoveOperation(op);
     }
 
+    TOperation::TPtr FindLastLockOp(ui64 lockTxId) const {
+        auto it = LastLockOps.find(lockTxId);
+        if (it != LastLockOps.end()) {
+            return it->second;
+        }
+        return nullptr;
+    }
+
 private:
     void ClearTmpRead() noexcept;
     void ClearTmpWrite() noexcept;

@@ -1491,6 +1491,10 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     struct TInjectLocks {
         NKikimrTxDataShard::TKqpLocks_ELocksOp Op = NKikimrTxDataShard::TKqpLocks::Commit;
         TVector<TLockInfo> Locks;
+
+        void AddLocks(const TVector<TLockInfo>& locks) {
+            Locks.insert(Locks.end(), locks.begin(), locks.end());
+        }
     };
 
     class TInjectLockSnapshotObserver {
@@ -1611,8 +1615,23 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     }
                     break;
                 }
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    if (BlockReadSets) {
+                        Cerr << "... blocked TEvReadSet" << Endl;
+                        BlockedReadSets.push_back(THolder(ev.Release()));
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
             }
             return PrevObserver(Runtime, ev);
+        }
+
+        void UnblockReadSets() {
+            BlockReadSets = false;
+            for (auto& ev : BlockedReadSets) {
+                Runtime.Send(ev.Release(), 0, true);
+            }
         }
 
     private:
@@ -1625,6 +1644,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TVector<TLockInfo> LastLocks;
         std::optional<TInjectLocks> InjectLocks;
         bool InjectClearTasks = false;
+        bool BlockReadSets = false;
+        TVector<THolder<IEventHandle>> BlockedReadSets;
     };
 
     Y_UNIT_TEST_TWIN(MvccSnapshotLockedWrites, UseNewEngine) {
@@ -2695,6 +2716,558 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto locks2 = observer.LastLocks;
         observer.Inject = {};
     }
+
+    Y_UNIT_TEST(LockedWriteDistributedCommitSuccess) {
+        constexpr bool UseNewEngine = true;
+
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to key 2 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 20 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 21)
+                )")),
+            "<empty>");
+        auto locks2 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Commit changes in tx 123
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace();
+        observer.InjectLocks->AddLocks(locks1);
+        observer.InjectLocks->AddLocks(locks2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (0, 0);
+                )")),
+            "<empty>");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        // Verify changes are now visible
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
+            "} Struct { Bool: false }");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-2`
+                WHERE key >= 10 AND key <= 30
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 10 } } Struct { Optional { Uint32: 1 } } } "
+            "List { Struct { Optional { Uint32: 20 } } Struct { Optional { Uint32: 21 } } } "
+            "} Struct { Bool: false }");
+    }
+
+    Y_UNIT_TEST(LockedWriteDistributedCommitAborted) {
+        constexpr bool UseNewEngine = true;
+
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to key 2 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 20 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 21)
+                )")),
+            "<empty>");
+        auto locks2 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write to key 20, it will break tx 123
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 22)
+                )")),
+            "<empty>");
+
+        // Commit changes in tx 123
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace();
+        observer.InjectLocks->AddLocks(locks1);
+        observer.InjectLocks->AddLocks(locks2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (0, 0);
+                )")),
+            "ERROR: ABORTED");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        // Verify changes are not visible
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-2`
+                WHERE key >= 10 AND key <= 30
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 10 } } Struct { Optional { Uint32: 1 } } } "
+            "List { Struct { Optional { Uint32: 20 } } Struct { Optional { Uint32: 22 } } } "
+            "} Struct { Bool: false }");
+    }
+
+    Y_UNIT_TEST(LockedWriteDistributedCommitFreeze) {
+        constexpr bool UseNewEngine = true;
+
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to key 2 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 20 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 21)
+                )")),
+            "<empty>");
+        auto locks2 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Commit changes in tx 123
+        observer.BlockReadSets = true;
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace();
+        observer.InjectLocks->AddLocks(locks1);
+        observer.InjectLocks->AddLocks(locks2);
+        auto commitSender = runtime.AllocateEdgeActor();
+        SendRequest(runtime, commitSender, MakeSimpleRequest(Q_(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (0, 0);
+            )")));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!observer.BlockedReadSets.empty());
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        auto writeSender = runtime.AllocateEdgeActor();
+        SendRequest(runtime, writeSender, MakeSimpleRequest(Q_(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 22)
+            )")));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Verify changes are not visible yet
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        observer.UnblockReadSets();
+
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(commitSender);
+            auto& response = ev->Get()->Record.GetRef();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        }
+
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(writeSender);
+            auto& response = ev->Get()->Record.GetRef();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(LockedWriteDistributedCommitCrossConflict) {
+        constexpr bool UseNewEngine = true;
+
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+        TLockHandle lock2handle(234, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to key 2 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 20 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 21)
+                )")),
+            "<empty>");
+        auto locks2 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 3 with tx 234
+        observer.Inject.LockId = 234;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 22)
+                )")),
+            "<empty>");
+        auto locks3 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 30 with tx 234
+        observer.Inject.LockId = 234;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (30, 22)
+                )")),
+            "<empty>");
+        auto locks4 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Commit changes in tx 123 (we expect locks to be ready for sending)
+        observer.BlockReadSets = true;
+        //observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace();
+        observer.InjectLocks->AddLocks(locks1);
+        observer.InjectLocks->AddLocks(locks2);
+        auto commitSender1 = runtime.AllocateEdgeActor();
+        SendRequest(runtime, commitSender1, MakeSimpleRequest(Q_(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 21);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (30, 21);
+            )")));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!observer.BlockedReadSets.empty());
+        //observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        // Commit changes in tx 234 (we expect it to be blocked and broken by 123)
+        observer.BlockReadSets = true;
+        //observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace();
+        observer.InjectLocks->AddLocks(locks3);
+        observer.InjectLocks->AddLocks(locks4);
+        auto commitSender2 = runtime.AllocateEdgeActor();
+        SendRequest(runtime, commitSender2, MakeSimpleRequest(Q_(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 22);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 22);
+            )")));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!observer.BlockedReadSets.empty());
+        //observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        // Verify changes are not visible yet
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        observer.UnblockReadSets();
+
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(commitSender1);
+            auto& response = ev->Get()->Record.GetRef();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        }
+
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(commitSender2);
+            auto& response = ev->Get()->Record.GetRef();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
+        }
+
+        // Verify only changes from commit 123 are visible
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
+            "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 21 } } } "
+            "} Struct { Bool: false }");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-2`
+                WHERE key >= 10 AND key <= 30
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 10 } } Struct { Optional { Uint32: 1 } } } "
+            "List { Struct { Optional { Uint32: 20 } } Struct { Optional { Uint32: 21 } } } "
+            "List { Struct { Optional { Uint32: 30 } } Struct { Optional { Uint32: 21 } } } "
+            "} Struct { Bool: false }");
+    }
+
 }
 
 } // namespace NKikimr

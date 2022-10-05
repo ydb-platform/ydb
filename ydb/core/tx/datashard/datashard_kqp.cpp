@@ -465,7 +465,12 @@ void KqpSetTxLocksKeys(const NKikimrTxDataShard::TKqpLocks& locks, const TSysLoc
         auto lockKey = MakeLockKey(lock);
         if (sysLocks.IsMyKey(lockKey)) {
             auto point = TTableRange(lockKey, true, {}, true, /* point */ true);
-            engineBay.AddReadRange(sysLocksTableId, {}, point, lockRowType);
+            if (NeedValidateLocks(locks.GetOp())) {
+                engineBay.AddReadRange(sysLocksTableId, {}, point, lockRowType);
+            }
+            if (NeedEraseLocks(locks.GetOp())) {
+                engineBay.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
+            }
         }
     }
 }

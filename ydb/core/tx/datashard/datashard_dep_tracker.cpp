@@ -619,7 +619,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     // First pass, gather all reads/writes expanded with locks, add lock based dependencies
     bool haveReads = false;
     bool haveWrites = false;
-    bool haveWriteLock = false;
+    bool commitWriteLock = false;
     if (haveKeys) {
         size_t keysCount = 0;
         const auto& keysInfo = op->GetKeysInfo();
@@ -666,6 +666,41 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
 
                 // Reading a lock means checking it for validity, i.e. "reading" those predicted keys
                 if (!vk.IsWrite) {
+                    auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId, readVersion);
+
+                    if (lock) {
+                        lock->SetLastOpId(op->GetTxId());
+                        if (locksCache.Locks.contains(lockTxId) && lock->IsPersistent()) {
+                            // This lock was cached before, and since we know
+                            // it's persistent, we know it was also frozen
+                            // during that lock caching. Restore the frozen
+                            // flag for this lock.
+                            lock->SetFrozen();
+                        }
+                    }
+
+                    if (lock && lock->IsWriteLock()) {
+                        commitWriteLock = true;
+                    }
+
+                    if (lock && !op->IsImmediate()) {
+                        // We must be careful not to reorder operations that we
+                        // know break each other on commit. These dependencies
+                        // are only needed between planned operations, and
+                        // always point one way (towards older operations), so
+                        // there are no deadlocks. Immediate operations will
+                        // detect breaking attempts at runtime and may decide
+                        // to add new dependencies dynamically, depending on
+                        // the real order between operations.
+                        lock->ForAllConflicts([&](auto* conflictLock) {
+                            if (auto conflictOp = Parent.FindLastLockOp(conflictLock->GetLockId())) {
+                                if (!conflictOp->IsImmediate()) {
+                                    op->AddDependency(conflictOp);
+                                }
+                            }
+                        });
+                    }
+
                     if (auto it = locksCache.Locks.find(lockTxId); it != locksCache.Locks.end()) {
                         // This transaction uses locks cache, so lock check
                         // outcome was persisted and restored. Unfortunately
@@ -684,7 +719,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                                 Parent.TmpRead.insert(Parent.TmpRead.end(), it->second.Keys.begin(), it->second.Keys.end());
                             }
                         }
-                    } else if (auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId, readVersion)) {
+                    } else if (lock) {
                         Y_ASSERT(!lock->IsBroken(readVersion));
                         haveReads = true;
                         if (!tooManyKeys && (keysCount += (lock->NumPoints() + lock->NumRanges())) > MAX_REORDER_TX_KEYS) {
@@ -702,12 +737,19 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                                 }
                             }
                         }
-                        if (lock->IsWriteLock()) {
-                            haveWriteLock = true;
-                        }
                     }
                 }
             }
+        }
+
+        // Distributed commits of some unknown keys are complicated, and mean
+        // there are almost certainly readsets involved and it's difficult to
+        // make it atomic, so we currently make them global writers to handle
+        // out-of-order execution issues. Immediate operations are atomic by
+        // their construction and will find conflicts dynamically. We may
+        // want to do something similar with distributed commits as well.
+        if (commitWriteLock && !op->IsImmediate()) {
+            isGlobalWriter = true;
         }
 
         if (tooManyKeys) {
@@ -735,7 +777,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     if (op->IsMvccSnapshotRead()) {
         snapshot = op->GetMvccSnapshot();
         snapshotRepeatable = op->IsMvccSnapshotRepeatable();
-    } else if (op->IsImmediate() && (op->IsReadTable() || op->IsDataTx() && !haveWrites && !isGlobalWriter && !haveWriteLock)) {
+    } else if (op->IsImmediate() && (op->IsReadTable() || op->IsDataTx() && !haveWrites && !isGlobalWriter && !commitWriteLock)) {
         snapshot = readVersion;
         op->SetMvccSnapshot(snapshot, /* repeatable */ false);
     }

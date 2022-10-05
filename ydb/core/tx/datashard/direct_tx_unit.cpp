@@ -40,6 +40,11 @@ public:
             return EExecutionStatus::Restart;
         }
 
+        if (Pipeline.AddLockDependencies(op, guardLocks)) {
+            txc.Reschedule();
+            return EExecutionStatus::Restart;
+        }
+
         op->ChangeRecords() = std::move(tx->GetCollectedChanges());
 
         DataShard.SysLocksTable().ApplyLocks();

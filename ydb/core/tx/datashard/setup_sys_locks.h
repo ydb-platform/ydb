@@ -14,9 +14,6 @@ struct TSetupSysLocks
     TSetupSysLocks(TDataShard& self, ILocksDb* db)
         : SysLocksTable(self.SysLocksTable())
     {
-        CheckVersion = TRowVersion::Max();
-        BreakVersion = TRowVersion::Min();
-
         SysLocksTable.SetupUpdate(this, db);
     }
 
@@ -25,8 +22,6 @@ struct TSetupSysLocks
     {
         LockTxId = lockTxId;
         LockNodeId = lockNodeId;
-        CheckVersion = TRowVersion::Max();
-        BreakVersion = TRowVersion::Min();
 
         SysLocksTable.SetupUpdate(this, db);
     }

@@ -24,8 +24,12 @@ public:
 
 private:
     void ExecuteDataTx(TOperation::TPtr op,
-                       const TActorContext& ctx);
+                       const TActorContext& ctx,
+                       TSetupSysLocks& guardLocks);
     void AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx);
+
+private:
+    class TRescheduleOpException : public yexception {};
 };
 
 TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard,
@@ -154,7 +158,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
     try {
         try {
-            ExecuteDataTx(op, ctx);
+            ExecuteDataTx(op, ctx, guardLocks);
         } catch (const TNotReadyTabletException&) {
             // We want to try pinning (actually precharging) all required pages
             // before restarting the transaction, to minimize future restarts.
@@ -186,6 +190,14 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         tx->ReleaseTxData(txc, ctx);
 
         return EExecutionStatus::Restart;
+    } catch (const TRescheduleOpException&) {
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
+            << " needs to reschedule " << *op << " for dependencies");
+
+        tx->ReleaseTxData(txc, ctx);
+
+        txc.Reschedule();
+        return EExecutionStatus::Restart;
     }
 
     DataShard.IncCounter(COUNTER_WAIT_EXECUTE_LATENCY_MS, waitExecuteLatency.MilliSeconds());
@@ -204,7 +216,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 }
 
 void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
-                                       const TActorContext& ctx) {
+                                       const TActorContext& ctx,
+                                       TSetupSysLocks& guardLocks)
+{
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     IEngineFlat* engine = tx->GetDataTx()->GetEngine();
 
@@ -232,6 +246,11 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     }
 
     IEngineFlat::EResult engineResult = engine->Execute();
+
+    if (Pipeline.AddLockDependencies(op, guardLocks)) {
+        throw TRescheduleOpException();
+    }
+
     if (engineResult != IEngineFlat::EResult::Ok) {
         TString errorMessage = TStringBuilder() << "Datashard execution error for " << *op << " at "
                                                 << DataShard.TabletID() << ": " << engine->GetErrors();

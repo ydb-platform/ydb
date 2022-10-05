@@ -256,6 +256,14 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             return OnTabletNotReady(*tx, *dataTx, txc, ctx);
         }
 
+        if (Pipeline.AddLockDependencies(op, guardLocks)) {
+            allocGuard.Release();
+            dataTx->ResetCollectedChanges();
+            tx->ReleaseTxData(txc, ctx);
+            txc.Reschedule();
+            return EExecutionStatus::Restart;
+        }
+
         Y_VERIFY(result);
         op->Result().Swap(result);
         op->SetKqpAttachedRSFlag();

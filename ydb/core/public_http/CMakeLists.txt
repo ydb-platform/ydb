@@ -7,6 +7,7 @@
 
 
 add_subdirectory(protos)
+add_subdirectory(ut)
 
 add_library(ydb-core-public_http)
 target_compile_options(ydb-core-public_http PRIVATE

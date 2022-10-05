@@ -1,0 +1,50 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-public_http-ut)
+target_compile_options(ydb-core-public_http-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-public_http-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/public_http
+)
+target_link_libraries(ydb-core-public_http-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-public_http
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+  ydb-services-kesus
+  ydb-services-persqueue_cluster_discovery
+)
+target_link_options(ydb-core-public_http-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
+target_sources(ydb-core-public_http-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_router_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-public_http-ut
+  COMMAND
+  ydb-core-public_http-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-public_http-ut)

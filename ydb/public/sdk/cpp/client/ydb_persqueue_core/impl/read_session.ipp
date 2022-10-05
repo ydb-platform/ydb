@@ -224,22 +224,27 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
         WaitingReadResponse = false;
         ServerMessage = std::make_shared<TServerMessage<UseMigrationProtocol>>();
         ++ConnectionGeneration;
-        if (RetryState) {
-            TMaybe<TDuration> nextDelay = RetryState->GetNextRetryDelay(status.Status);
-            if (nextDelay) {
-                delay = *nextDelay;
-                delayContext = ClientContext->CreateContext();
-                if (!delayContext) {
-                    return false;
-                }
-                Log.Write(TLOG_DEBUG, GetLogPrefix()
-                                          << "Reconnecting session to cluster " << ClusterName << " in " << delay);
-            } else {
-                return false;
-            }
-        } else {
+
+        ReadSizeBudget += ReadSizeServerDelta;
+        ReadSizeServerDelta = 0;
+
+        if (!RetryState) {
             RetryState = Settings.RetryPolicy_->CreateRetryState();
         }
+        if (!status.Ok()) {
+            TMaybe<TDuration> nextDelay = RetryState->GetNextRetryDelay(status.Status);
+            if (!nextDelay) {
+                return false;
+            }
+            delay = *nextDelay;
+            delayContext = ClientContext->CreateContext();
+            if (!delayContext) {
+                return false;
+            }
+        }
+
+        Log.Write(TLOG_DEBUG, GetLogPrefix() << "Reconnecting session to cluster " << ClusterName << " in " << delay);
+
         ++ConnectionAttemptsDone;
 
         // Set new context
@@ -350,7 +355,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
 
             if (st.Ok()) {
                 Processor = std::move(processor);
-                RetryState = nullptr;
                 ConnectionAttemptsDone = 0;
                 InitImpl(deferred);
                 return;
@@ -452,10 +456,12 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImp
         if constexpr (UseMigrationProtocol) {
             req.mutable_read();
         } else {
-            if (ReadSizeBudget == 0 || ReadSizeServerDelta <= 0) {
+            if (ReadSizeBudget <= 0 || ReadSizeServerDelta + ReadSizeBudget <= 0) {
                 return;
             }
             req.mutable_read_request()->set_bytes_size(ReadSizeBudget);
+            ReadSizeServerDelta += ReadSizeBudget;
+
             ReadSizeBudget = 0;
         }
 
@@ -826,8 +832,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NGrpc::TGrp
     }
     if (!errorStatus.Ok()) {
         ++*Settings.Counters_->Errors;
-        // Explicitly create retry state to determine whether we should connect to server again.
-        RetryState = Settings.RetryPolicy_->CreateRetryState();
+
         if (!Reconnect(errorStatus)) {
             ErrorHandler->AbortSession(std::move(errorStatus));
         }
@@ -842,6 +847,8 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Y_UNUSED(deferred);
 
     Log.Write(TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
+
+    RetryState = nullptr;
 
     // Successful init. Do nothing.
     ContinueReadingDataImpl();
@@ -1053,6 +1060,8 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::InitResponse&& msg,
     TDeferredActions<false>& deferred) { // Assumes that we're under lock.
     Y_UNUSED(deferred);
+
+    RetryState = nullptr;
 
     Log.Write(TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
 
@@ -1327,7 +1336,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
         }
         if constexpr (!UseMigrationProtocol) {
             ReadSizeBudget += serverBytesSize;
-            ReadSizeServerDelta += serverBytesSize;
         }
         ContinueReadingDataImpl();
         StartDecompressionTasksImpl(deferred);

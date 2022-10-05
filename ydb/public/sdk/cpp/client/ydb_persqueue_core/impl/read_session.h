@@ -1023,7 +1023,7 @@ public:
         , ClientContext(std::move(clientContext))
         , CookieMapping(ErrorHandler)
         , ReadSizeBudget(GetCompressedDataSizeLimit())
-        , ReadSizeServerDelta(GetCompressedDataSizeLimit())
+        , ReadSizeServerDelta(0)
     {
     }
 
@@ -1243,8 +1243,8 @@ private:
     bool Closing = false;
     std::function<void()> CloseCallback;
     std::atomic<int> DecompressionTasksInflight = 0;
-    ui64 ReadSizeBudget;
-    i64 ReadSizeServerDelta;
+    i64 ReadSizeBudget;
+    i64 ReadSizeServerDelta = 0;
 };
 
 // High level class that manages several read session impls.

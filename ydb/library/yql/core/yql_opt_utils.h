@@ -114,4 +114,7 @@ inline TStringBuf GetEmptyCollectionName(const TTypeAnnotationNode* type) {
 
 const TItemExprType* GetLightColumn(const TStructExprType& type);
 
+// returned value exists as long as lambda object exists
+TVector<TStringBuf> GetCommonKeysFromVariantSelector(const NNodes::TCoLambda& lambda);
+
 }

@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -41,10 +42,43 @@ TVector<TCoArgument> PrepareArgumentsReplacement(const TExprBase& node, const TV
 }
 
 namespace {
+TMaybeNode<TCoMux> ConvertMuxArgumentsToFlows(TCoMux node, TExprContext& ctx) {
+    auto mux = node.Cast<TCoMux>();
+    bool hasConnAsArg = false;
+    for (auto child: mux.Input().template Cast<TExprList>()) {
+        if (child.Maybe<TDqConnection>().IsValid()) {
+            hasConnAsArg = true;
+            break;
+        }
+    }
+    if (!hasConnAsArg) {
+        return {};
+    }
+    TVector<TExprBase> muxArgs;
+    for (auto child: mux.Input().template Cast<TExprList>()) {
+        if (child.Maybe<TDqConnection>().IsValid()) {
+            muxArgs.push_back(child);
+        }
+        else if (IsDqPureExpr(child)) {
+            muxArgs.push_back(Build<TCoToFlow>(ctx, node.Pos())
+                .Input(child)
+                .Done());
+        } else {
+            return {};
+        }
+    }
+    return Build<TCoMux>(ctx, node.Pos())
+        .Input<TExprList>()
+            .Add(muxArgs)
+            .Build()
+        .Done();
+}
 
 template <typename TPartition>
 TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap) {
-    if (!node.Maybe<TPartition>().Input().template Maybe<TDqCnUnionAll>()) {
+    auto partitionsInput = node.Maybe<TPartition>().Input();
+    const bool isMuxInput = partitionsInput.template Maybe<TCoMux>().IsValid();
+    if (!partitionsInput.template Maybe<TDqCnUnionAll>() && !isMuxInput) {
         return node;
     }
 
@@ -55,62 +89,128 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TP
     {
         return node;
     }
-    auto dqUnion = partition.Input().template Cast<TDqCnUnionAll>();
 
-    if (!IsSingleConsumerConnection(dqUnion, parentsMap)) {
+    // dq splits this type of lambda output into separate stage outputs
+    // thus it's impossible to maintain 'node' typing (muxing them ain't an option,
+    // cause the only purpose of this optimizer is to push original Mux to the stage)
+    if (const auto listItemType = GetItemType(*node.Ref().GetTypeAnn());
+        !listItemType || listItemType->GetKind() == ETypeAnnotationKind::Variant) {
         return node;
     }
 
-    auto keyLambda = partition.KeySelectorLambda();
-    TVector<TExprBase> keyElements;
-    if (auto maybeTuple = keyLambda.Body().template Maybe<TExprList>()) {
-        auto tuple = maybeTuple.Cast();
-        for (const auto& element : tuple) {
-            keyElements.push_back(element);
+    TVector<TCoArgument> inputArgs;
+    TVector<TExprBase> inputConns;
+    TExprNode::TPtr newPartitionsInput = nullptr;
+    if (isMuxInput) {
+        auto maybeMux = ConvertMuxArgumentsToFlows(node.Cast<TPartition>().Input().template Cast<TCoMux>(), ctx);
+        if (!maybeMux.IsValid()) {
+            return node;
         }
+        auto mux = maybeMux.Cast();
+        const auto keys = GetCommonKeysFromVariantSelector(partition.KeySelectorLambda());
+        TVector<TExprNode::TPtr> keyColumns;
+        keyColumns.reserve(keys.size());
+        for (const auto& key: keys) {
+            keyColumns.push_back(ctx.NewAtom(node.Pos(), key));
+        }
+        TVector<TExprBase> muxArgs;
+        for (auto child: mux.Input().template Cast<TExprList>()) {
+            auto conn = child.template Maybe<TDqConnection>();
+            if (!conn.IsValid()) {
+                muxArgs.push_back(child);
+                continue;
+            }
+            if (!IsSingleConsumerConnection(conn.Cast(), parentsMap)) {
+                return node;
+            }
+            TCoArgument programArg = Build<TCoArgument>(ctx, conn.Cast().Pos())
+                .Name("arg")
+                .Done();
+            auto newConnection = conn.Cast();
+            if (!keyColumns.empty()) {
+                newConnection = Build<TDqCnHashShuffle>(ctx, node.Pos())
+                    .Output()
+                        .Stage(conn.Cast().Output().Stage())
+                        .Index(conn.Cast().Output().Index())
+                        .Build()
+                    .KeyColumns()
+                        .Add(keyColumns)
+                        .Build()
+                    .Done();
+            } else if (!conn.template Maybe<TDqCnUnionAll>().IsValid()) {
+                return node;
+            }
+            inputConns.push_back(newConnection);
+            inputArgs.push_back(programArg);
+            muxArgs.push_back(programArg);
+        };
+        newPartitionsInput = Build<TCoMux>(ctx, node.Pos())
+            .template Input<TExprList>()
+                .Add(muxArgs)
+                .Build()
+            .Done().Ptr();
     } else {
-        keyElements.push_back(keyLambda.Body());
-    }
+        auto dqUnion = partition.Input().template Cast<TDqCnUnionAll>();
 
-    bool allKeysAreMembers = true;
-
-    TVector<TCoAtom> keyColumns;
-    keyColumns.reserve(keyElements.size());
-    for (auto& element : keyElements) {
-        if (!element.Maybe<TCoMember>()) {
-            allKeysAreMembers = false;
-            break;
-        }
-
-        auto member = element.Cast<TCoMember>();
-        if (member.Struct().Raw() != keyLambda.Args().Arg(0).Raw()) {
+        if (!IsSingleConsumerConnection(dqUnion, parentsMap)) {
             return node;
         }
 
-        keyColumns.push_back(member.Name());
-    }
+        auto keyLambda = partition.KeySelectorLambda();
+        TVector<TExprBase> keyElements;
+        if (auto maybeTuple = keyLambda.Body().template Maybe<TExprList>()) {
+            auto tuple = maybeTuple.Cast();
+            for (const auto& element : tuple) {
+                keyElements.push_back(element);
+            }
+        } else {
+            keyElements.push_back(keyLambda.Body());
+        }
 
-    TExprNode::TPtr newConnection;
+        bool allKeysAreMembers = true;
 
-    if (!keyColumns.empty() && allKeysAreMembers) {
-        newConnection = Build<TDqCnHashShuffle>(ctx, node.Pos())
+        TVector<TCoAtom> keyColumns;
+        keyColumns.reserve(keyElements.size());
+        for (auto& element : keyElements) {
+            if (!element.Maybe<TCoMember>()) {
+                allKeysAreMembers = false;
+                break;
+            }
+
+            auto member = element.Cast<TCoMember>();
+            if (member.Struct().Raw() != keyLambda.Args().Arg(0).Raw()) {
+                return node;
+            }
+
+            keyColumns.push_back(member.Name());
+        }
+
+        TDqConnection newConnection = Build<TDqCnUnionAll>(ctx, node.Pos())
             .Output()
                 .Stage(dqUnion.Output().Stage())
                 .Index(dqUnion.Output().Index())
                 .Build()
-            .KeyColumns()
-                .Add(keyColumns)
-                .Build()
-            .Done().Ptr();
-    } else if (keyColumns.empty()) {
-        newConnection = Build<TDqCnUnionAll>(ctx, node.Pos())
-            .Output()
-                .Stage(dqUnion.Output().Stage())
-                .Index(dqUnion.Output().Index())
-                .Build()
-            .Done().Ptr();
-    } else {
-        return node;
+            .Done();
+        if (!keyColumns.empty() && allKeysAreMembers) {
+            newConnection = Build<TDqCnHashShuffle>(ctx, node.Pos())
+                .Output()
+                    .Stage(dqUnion.Output().Stage())
+                    .Index(dqUnion.Output().Index())
+                    .Build()
+                .KeyColumns()
+                    .Add(keyColumns)
+                    .Build()
+                .Done();
+        } else if (!keyColumns.empty()) {
+            return node;
+        }
+
+        TCoArgument programArg = Build<TCoArgument>(ctx, node.Pos())
+            .Name("arg")
+            .Done();
+        inputConns.push_back(newConnection);
+        inputArgs.push_back(programArg);
+        newPartitionsInput = programArg.Ptr();
     }
 
     auto handler = partition.ListHandlerLambda();
@@ -136,12 +236,12 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TP
 
     auto partitionStage = Build<TDqStage>(ctx, node.Pos())
         .Inputs()
-            .Add(newConnection)
+            .Add(inputConns)
             .Build()
         .Program()
-            .Args({"rows"})
+            .Args(inputArgs)
             .Body<TPartition>()
-                .Input("rows")
+                .Input(newPartitionsInput)
                 .KeySelectorLambda(ctx.DeepCopyLambda(partition.KeySelectorLambda().Ref()))
                 .SortDirections(partition.SortDirections())
                 .SortKeySelectorLambda(partition.SortKeySelectorLambda().template Maybe<TCoLambda>()
@@ -624,6 +724,95 @@ TExprBase DqPushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationCont
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
     return DqPushBaseLMapToStage<TCoLMap>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
+}
+
+template <typename BaseLMap>
+TExprBase DqBuildLMapOverMuxStageStub(TExprBase node, TExprContext& ctx, NYql::IOptimizationContext&, const NYql::TParentsMap& parentsMap) {
+    if (!node.Maybe<BaseLMap>()) {
+        return node;
+    }
+    auto lmap = node.Cast<BaseLMap>();
+    auto maybeMux = lmap.Input().template Maybe<TCoMux>();
+    if (!maybeMux.IsValid()) {
+        return node;
+    }
+    maybeMux = ConvertMuxArgumentsToFlows(maybeMux.Cast(), ctx);
+    if (!maybeMux.IsValid()) {
+        return node;
+    }
+    auto mux = maybeMux.Cast();
+    const TTypeAnnotationNode* listItemType = GetItemType(*node.Ref().GetTypeAnn());
+    if (!listItemType) {
+        return node;
+    }
+    // dq splits this type of lambda output into separate stage outputs
+    // thus it's impossible to maintain 'node' typing (muxing them ain't an option, cause the only purpose of this optimizer is to push original Mux to the stage)
+    if (listItemType->GetKind() == ETypeAnnotationKind::Variant) {
+        return node;
+    }
+
+    if (!IsDqPureExpr(lmap.Lambda())) {
+        return node;
+    }
+
+    YQL_CLOG(DEBUG, CoreDq) << "DqBuildLMapOverMuxStage";
+    TVector<TCoArgument> inputArgs;
+    TVector<TExprBase> inputConns;
+    TVector<TExprBase> muxArgs;
+    for (auto child: mux.Input().template Cast<TExprList>()) {
+        auto conn = child.template Maybe<TDqConnection>();
+        if (!conn.IsValid()) {
+            muxArgs.push_back(child);
+            continue;
+        }
+        if (!IsSingleConsumerConnection(conn.Cast(), parentsMap)) {
+            return node;
+        }
+        TCoArgument programArg = Build<TCoArgument>(ctx, conn.Cast().Pos())
+            .Name("arg")
+            .Done();
+        inputConns.push_back(conn.Cast());
+        inputArgs.push_back(programArg);
+        muxArgs.push_back(programArg);
+    };
+
+    auto newMux = Build<TCoMux>(ctx, lmap.Input().Pos())
+            .template Input<TExprList>()
+            .Add(muxArgs)
+            .Build()
+        .Done().Ptr();
+    auto lmapLambda = ctx.DeepCopyLambda(lmap.Lambda().Ref());
+    Y_VERIFY(lmapLambda->Child(0)->ChildrenSize() == 1, "unexpected number of arguments in lmap lambda");
+    auto newBody = ctx.ReplaceNodes(lmapLambda->Child(1), {{lmapLambda->Child(0)->Child(0), newMux}});
+    auto lmapStage = Build<TDqStage>(ctx, lmap.Pos())
+        .Inputs()
+            .Add(inputConns)
+            .Build()
+        .Program()
+            .Args(inputArgs)
+            .Body(newBody)
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(lmapStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+TExprBase DqBuildOrderedLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap)
+{
+    return DqBuildLMapOverMuxStageStub<TCoOrderedLMap>(node, ctx, optCtx, parentsMap);
+}
+
+TExprBase DqBuildLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap)
+{
+    return DqBuildLMapOverMuxStageStub<TCoLMap>(node, ctx, optCtx, parentsMap);
 }
 
 TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,

@@ -1888,7 +1888,11 @@ private:
     }
 
     TStatus MuxWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        if (input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+        const TTypeAnnotationNode* listItemType = GetItemType(*input->GetTypeAnn());
+        if (!listItemType) {
+            return TStatus::Ok;
+        }
+        if (listItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
             if (input->Child(0)->IsList()) {
                 TMultiConstraintNode::TMapType items;
                 ui32 index = 0;

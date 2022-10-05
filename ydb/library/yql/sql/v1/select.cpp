@@ -1403,6 +1403,7 @@ public:
         const TVector<TNodePtr>& groupByExpr,
         const TVector<TNodePtr>& groupBy,
         bool compactGroupBy,
+        const TString& groupBySuffix,
         bool assumeSorted,
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
@@ -1420,6 +1421,7 @@ public:
         , GroupBy(groupBy)
         , AssumeSorted(assumeSorted)
         , CompactGroupBy(compactGroupBy)
+        , GroupBySuffix(groupBySuffix)
         , OrderBy(orderBy)
         , Having(having)
         , WinSpecs(winSpecs)
@@ -1473,6 +1475,7 @@ public:
         }
 
         src->SetCompactGroupBy(CompactGroupBy);
+        src->SetGroupBySuffix(GroupBySuffix);
 
         for (auto& term: Terms) {
             term->CollectPreaggregateExprs(ctx, *src, DistinctAggrExpr);
@@ -1763,7 +1766,7 @@ public:
             newSpecs.emplace(cur.first, cur.second->Clone());
         }
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
-                CloneContainer(GroupBy), CompactGroupBy, AssumeSorted, CloneContainer(OrderBy),
+                CloneContainer(GroupBy), CompactGroupBy, GroupBySuffix, AssumeSorted, CloneContainer(OrderBy),
                 SafeClone(Having), newSpecs, SafeClone(HoppingWindowSpec),
                 CloneContainer(Terms), Distinct, Without, SelectStream, Settings);
     }
@@ -2085,6 +2088,7 @@ private:
     TVector<TNodePtr> GroupBy;
     bool AssumeSorted = false;
     bool CompactGroupBy = false;
+    TString GroupBySuffix;
     TVector<TSortSpecificationPtr> OrderBy;
     TNodePtr Having;
     TWinSpecs WinSpecs;
@@ -2465,6 +2469,7 @@ TSourcePtr DoBuildSelectCore(
     const TVector<TNodePtr>& groupByExpr,
     const TVector<TNodePtr>& groupBy,
     bool compactGroupBy,
+    const TString& groupBySuffix,
     bool assumeSorted,
     const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
@@ -2477,14 +2482,14 @@ TSourcePtr DoBuildSelectCore(
     const TWriteSettings& settings
 ) {
     if (groupBy.empty() || !groupBy.front()->ContentListPtr()) {
-        return new TSelectCore(pos, std::move(source), groupByExpr, groupBy, compactGroupBy, assumeSorted,
+        return new TSelectCore(pos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted,
             orderBy, having, winSpecs, hoppingWindowSpec, terms, distinct, without, selectStream, settings);
     }
     if (groupBy.size() == 1) {
         /// actualy no big idea to use grouping function in this case (result allways 0)
         auto contentPtr = groupBy.front()->ContentListPtr();
         source = new TNestedProxySource(pos, *contentPtr, source);
-        return DoBuildSelectCore(ctx, pos, originalSource, source, groupByExpr, *contentPtr, compactGroupBy,
+        return DoBuildSelectCore(ctx, pos, originalSource, source, groupByExpr, *contentPtr, compactGroupBy, groupBySuffix,
             assumeSorted, orderBy, having, std::move(winSpecs),
             hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
     }
@@ -2512,7 +2517,7 @@ TSourcePtr DoBuildSelectCore(
         }
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
-            CloneContainer(*contentPtr), compactGroupBy, assumeSorted, orderBy, SafeClone(having), winSpecs,
+            CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), winSpecs,
             hoppingWindowSpec, terms, distinct, without, selectStream, settings);
         subselects.emplace_back(selectCore);
     }
@@ -2533,6 +2538,7 @@ TSourcePtr BuildSelectCore(
     const TVector<TNodePtr>& groupByExpr,
     const TVector<TNodePtr>& groupBy,
     bool compactGroupBy,
+    const TString& groupBySuffix,
     bool assumeSorted,
     const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
@@ -2544,7 +2550,7 @@ TSourcePtr BuildSelectCore(
     bool selectStream,
     const TWriteSettings& settings)
 {
-    return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, assumeSorted, orderBy,
+    return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy,
         having, std::move(winSpecs), hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
 }
 

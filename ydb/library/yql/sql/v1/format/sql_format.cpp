@@ -1482,6 +1482,23 @@ private:
         PopCurrentIndent();
     }
 
+    void VisitGroupByClause(const TRule_group_by_clause& msg) {
+        Visit(msg.GetToken1());
+        if (msg.HasBlock2()) {
+            Visit(msg.GetBlock2());
+        }
+
+        Visit(msg.GetToken3());
+        Visit(msg.GetRule_opt_set_quantifier4());
+        Visit(msg.GetRule_grouping_element_list5());
+        if (msg.HasBlock6()) {
+            NewLine();
+            PushCurrentIndent();
+            Visit(msg.GetBlock6());
+            PopCurrentIndent();
+        }
+    }
+
     void VisitWindowDefinitionList(const TRule_window_definition_list& msg) {
         NewLine();
         PushCurrentIndent();
@@ -1707,6 +1724,7 @@ TStaticData::TStaticData()
         {TRule_without_column_list::GetDescriptor(), MakeFunctor(&TVisitor::VisitWithoutColumnList)},
         {TRule_table_ref::GetDescriptor(), MakeFunctor(&TVisitor::VisitTableRef)},
         {TRule_grouping_element_list::GetDescriptor(), MakeFunctor(&TVisitor::VisitGroupingElementList)},
+        {TRule_group_by_clause::GetDescriptor(), MakeFunctor(&TVisitor::VisitGroupByClause)},
         {TRule_window_definition_list::GetDescriptor(), MakeFunctor(&TVisitor::VisitWindowDefinitionList)},
         {TRule_window_specification::GetDescriptor(), MakeFunctor(&TVisitor::VisitWindowSpecification)},
         {TRule_window_partition_clause::GetDescriptor(), MakeFunctor(&TVisitor::VisitWindowParitionClause)},

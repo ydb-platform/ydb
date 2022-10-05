@@ -3601,6 +3601,7 @@ public:
     TMap<TString, TNodePtr>& Aliases();
     THoppingWindowSpecPtr GetHoppingWindow() const;
     bool IsCompactGroupBy() const;
+    TString GetSuffix() const;
 
 private:
     TMaybe<TVector<TNodePtr>> MultiplyGroupingSets(const TVector<TNodePtr>& lhs, const TVector<TNodePtr>& rhs) const;
@@ -3624,6 +3625,7 @@ private:
     THoppingWindowSpecPtr HoppingWindowSpec; // stream queries
     static const TString AutogenerateNamePrefix;
     bool CompactGroupBy;
+    TString Suffix;
 };
 
 const TString TGroupByClause::AutogenerateNamePrefix = "group";
@@ -6710,6 +6712,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     TVector<TNodePtr> groupByExpr, groupBy;
     THoppingWindowSpecPtr hoppingWindowSpec;
     bool compactGroupBy = false;
+    TString groupBySuffix;
     if (node.HasBlock11()) {
         TGroupByClause clause(Ctx, Mode);
         if (!clause.Build(node.GetBlock11().GetRule_group_by_clause1(), source->IsStream())) {
@@ -6723,6 +6726,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         clause.SetFeatures("sql_features");
         hoppingWindowSpec = clause.GetHoppingWindow();
         compactGroupBy = clause.IsCompactGroupBy();
+        groupBySuffix = clause.GetSuffix();
     }
 
     TNodePtr having;
@@ -6810,7 +6814,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     if (!ValidateSelectColumns(terms)) {
         return nullptr;
     }
-    return BuildSelectCore(Ctx, startPos, std::move(source), groupByExpr, groupBy, compactGroupBy, assumeSorted, orderBy, having,
+    return BuildSelectCore(Ctx, startPos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy, having,
         std::move(windowSpec), hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
 }
 
@@ -7185,7 +7189,7 @@ bool TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVector<T
 }
 
 bool TGroupByClause::Build(const TRule_group_by_clause& node, bool stream) {
-    // group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list;
+    // group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list (WITH an_id)?;
     CompactGroupBy = node.HasBlock2();
     if (!CompactGroupBy) {
         auto hints = Ctx.PullHintForToken(Ctx.TokenPosition(node.GetToken1()));
@@ -7200,6 +7204,33 @@ bool TGroupByClause::Build(const TRule_group_by_clause& node, bool stream) {
     if (!ParseList(node.GetRule_grouping_element_list5(), EGroupByFeatures::Ordinary)) {
         return false;
     }
+
+    if (node.HasBlock6()) {
+        TString mode = Id(node.GetBlock6().GetRule_an_id2(), *this);
+        TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), mode);
+        if (!normalizeError.Empty()) {
+            Error() << normalizeError->Message;
+            Ctx.IncrementMonCounter("sql_errors", "NormalizeGroupByModeError");
+            return false;
+        }
+
+        if (mode == "combine") {
+            Suffix = "Combine";
+        } else if (mode == "combinestate") {
+            Suffix = "CombineState";
+        } else if (mode == "mergestate") {
+            Suffix = "MergeState";
+        } else if (mode == "finalize") {
+            Suffix = "Finalize";
+        } else if (mode == "mergefinalize") {
+            Suffix = "MergeFinalize";
+        } else {
+            Ctx.Error() << "Unsupported group by mode: " << mode;
+            Ctx.IncrementMonCounter("sql_errors", "GroupByModeUnknown");
+            return false;
+        }
+    }
+
     if (!ResolveGroupByAndGrouping()) {
         return false;
     }
@@ -7261,6 +7292,10 @@ THoppingWindowSpecPtr TGroupByClause::GetHoppingWindow() const {
 
 bool TGroupByClause::IsCompactGroupBy() const {
     return CompactGroupBy;
+}
+
+TString TGroupByClause::GetSuffix() const {
+    return Suffix;
 }
 
 TMaybe<TVector<TNodePtr>> TGroupByClause::MultiplyGroupingSets(const TVector<TNodePtr>& lhs, const TVector<TNodePtr>& rhs) const {
@@ -7846,6 +7881,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
         TVector<TNodePtr> groupByExpr;
         TVector<TNodePtr> groupBy;
         bool compactGroupBy = false;
+        TString groupBySuffix = "";
         TNodePtr having;
         TWinSpecs winSpecs;
         THoppingWindowSpecPtr hoppingWindowSpec;
@@ -7856,7 +7892,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
         TVector<TNodePtr> terms;
         terms.push_back(BuildColumn(unionPos, "*", ""));
 
-        result = BuildSelectCore(Ctx, unionPos, std::move(result), groupByExpr, groupBy, compactGroupBy,
+        result = BuildSelectCore(Ctx, unionPos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
             assumeOrderBy, orderBy, having, std::move(winSpecs), hoppingWindowSpec, std::move(terms),
             distinct, std::move(without), stream, settings);
     } else {

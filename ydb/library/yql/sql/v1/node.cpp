@@ -1339,6 +1339,10 @@ void ISource::SetCompactGroupBy(bool compactGroupBy) {
     CompactGroupBy = compactGroupBy;
 }
 
+void ISource::SetGroupBySuffix(const TString& suffix) {
+    GroupBySuffix = suffix;
+}
+
 bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions, EExprSeat exprSeat) {
     YQL_ENSURE(exprSeat < EExprSeat::Max);
     THashSet<TString> names;
@@ -1803,7 +1807,7 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
             Q(Y(BuildQuotedAtom(Pos, SessionWindow->GetLabel()), sessionWindow->BuildTraits(label))))));
     }
 
-    return Y("AssumeColumnOrderPartial", Y("Aggregate", label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple));
+    return Y("AssumeColumnOrderPartial", Y("Aggregate" + GroupBySuffix, label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple));
 }
 
 TMaybe<TString> ISource::FindColumnMistype(const TString& name) const {

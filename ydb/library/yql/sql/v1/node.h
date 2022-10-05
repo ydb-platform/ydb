@@ -826,6 +826,7 @@ namespace NSQLTranslationV1 {
         virtual bool AddFilter(TContext& ctx, TNodePtr filter);
         virtual bool AddGroupKey(TContext& ctx, const TString& column);
         virtual void SetCompactGroupBy(bool compactGroupBy);
+        virtual void SetGroupBySuffix(const TString& suffix);
         virtual TString MakeLocalName(const TString& name);
         virtual bool AddAggregation(TContext& ctx, TAggregationPtr aggr);
         virtual bool AddFuncOverWindow(TContext& ctx, TNodePtr expr);
@@ -905,6 +906,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, TString> GroupByColumnAliases;
         TVector<TNodePtr> Filters;
         bool CompactGroupBy = false;
+        TString GroupBySuffix;
         TSet<TString> GroupKeys;
         TVector<TString> OrderedGroupKeys;
         std::array<TVector<TNodePtr>, static_cast<unsigned>(EExprSeat::Max)> NamedExprs;
@@ -1287,6 +1289,7 @@ namespace NSQLTranslationV1 {
         const TVector<TNodePtr>& groupByExpr,
         const TVector<TNodePtr>& groupBy,
         bool compactGroupBy,
+        const TString& groupBySuffix,
         bool assumeSorted,
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,

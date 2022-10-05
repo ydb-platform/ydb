@@ -368,7 +368,7 @@ order_by_clause: ORDER BY sort_specification_list;
 
 ext_order_by_clause: ASSUME? order_by_clause;
 
-group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list;
+group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list (WITH an_id)?;
 
 grouping_element_list: grouping_element (COMMA grouping_element)*;
 

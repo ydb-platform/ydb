@@ -22,7 +22,7 @@
                                 "Node Type": "ConstantExpr"
                             }
                         ],
-                        "Node Type": "ResultSet_0_0",
+                        "Node Type": "ResultSet",
                         "PlanNodeType": "ResultSet"
                     }
                 ],

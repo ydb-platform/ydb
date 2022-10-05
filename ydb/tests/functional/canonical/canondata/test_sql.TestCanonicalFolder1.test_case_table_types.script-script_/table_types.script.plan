@@ -168,7 +168,7 @@
                                 "Node Type": "Limit"
                             }
                         ],
-                        "Node Type": "ResultSet_0_0",
+                        "Node Type": "ResultSet",
                         "PlanNodeType": "ResultSet"
                     }
                 ],

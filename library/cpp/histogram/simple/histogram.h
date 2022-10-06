@@ -46,6 +46,10 @@ namespace NSimpleHistogram {
             return Values_.size();
         }
 
+        void Reserve(size_t cnt) {
+            Values_.reserve(cnt);
+        }
+
         void RecordValue(T value) {
             Values_.push_back(value);
         }

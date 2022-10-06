@@ -9,6 +9,7 @@
 #include <library/cpp/actors/core/event.h>
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/labeled_counters.pb.h>
 #include <ydb/core/protos/tablet_counters_aggregator.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
@@ -63,7 +64,6 @@ struct TEvTabletCounters {
     };
 
     struct TEvTabletAddLabeledCounters : public TEventLocal<TEvTabletAddLabeledCounters, EvTabletAddLabeledCounters> {
-        //
         const ui64 TabletID;
         const TTabletTypes::EType TabletType;
         TAutoPtr<TTabletLabeledCountersBase> LabeledCounters;
@@ -98,10 +98,10 @@ struct TEvTabletCounters {
     };
 
     //
-    struct TEvTabletLabeledCountersRequest : public TEventPB<TEvTabletLabeledCountersRequest, NKikimrTabletCountersAggregator::TEvTabletLabeledCountersRequest, EvTabletLabeledCountersRequest> {
+    struct TEvTabletLabeledCountersRequest : public TEventPB<TEvTabletLabeledCountersRequest, NKikimrLabeledCounters::TEvTabletLabeledCountersRequest, EvTabletLabeledCountersRequest> {
     };
 
-    struct TEvTabletLabeledCountersResponse : public TEventPB<TEvTabletLabeledCountersResponse, NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse, EvTabletLabeledCountersResponse> {
+    struct TEvTabletLabeledCountersResponse : public TEventPB<TEvTabletLabeledCountersResponse, NKikimrLabeledCounters::TEvTabletLabeledCountersResponse, EvTabletLabeledCountersResponse> {
     };
 
     struct TEvRemoveDatabase : public TEventLocal<TEvRemoveDatabase, EvRemoveDatabase> {
@@ -112,6 +112,15 @@ struct TEvTabletCounters {
         {}
     };
 
+};
+
+struct TTabletLabeledCountersResponseContext {
+    NKikimrLabeledCounters::TEvTabletLabeledCountersResponse& Response;
+    THashMap<TStringBuf, ui32> NamesToId;
+
+    TTabletLabeledCountersResponseContext(NKikimrLabeledCounters::TEvTabletLabeledCountersResponse& response);
+
+    ui32 GetNameId(TStringBuf name);
 };
 
 ////////////////////////////////////////////
@@ -145,5 +154,4 @@ IActor* CreateClusterLabeledCountersAggregatorActor(
         ui32 version = 1,
         const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT);
 
-} // end of the NKikimr namespace
-
+} // namespace NKikimr

@@ -1,0 +1,37 @@
+package NKikimrLabeledCounters;
+
+option java_package = "ru.yandex.kikimr.proto";
+option cc_enable_arenas = true;
+
+import "ydb/core/protos/counters.proto";
+import "ydb/core/protos/tablet.proto";
+
+message TEvTabletLabeledCountersRequest {
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
+    optional string Group = 2;
+    optional uint64 LabeledCounterId = 3; // Version 1
+    optional uint32 Version = 4 [default = 1];
+}
+
+message TTabletLabeledCounter {
+    optional uint64 Value = 1;
+    optional uint64 Id = 2;
+    optional string Name = 3; // Version 1
+    optional NKikimr.TLabeledCounterOptions.EAggregateFunc AggregateFunc = 4;
+    optional NKikimr.TLabeledCounterOptions.ECounterType Type = 5;
+    optional uint32 NameId = 6; // Version 2
+}
+
+message TTabletLabeledCounters {
+    optional string Group = 1;
+    optional string GroupNames = 2; // Version 1
+    repeated TTabletLabeledCounter LabeledCounter = 3;
+
+    optional string Delimiter = 4;
+}
+
+message TEvTabletLabeledCountersResponse {
+    repeated TTabletLabeledCounters LabeledCountersByGroup = 1;
+    repeated uint32 Nodes = 2;
+    repeated string CounterNames = 3; // Version 2
+}

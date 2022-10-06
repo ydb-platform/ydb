@@ -47,7 +47,7 @@ public:
                     vdesc->full_name().c_str(), vdesc->number());
             TString nameString;
             if (IsHistogramAggregateSimpleName(cntName)) {
-                nameString = co.GetName();
+                nameString = cntName;
             } else {
                 nameString = GetFilePrefix(appDesc->file()) + cntName;
             }
@@ -269,6 +269,8 @@ public:
 protected:
     TVector<TString> NamesStrings;
     TVector<const char*> Names;
+    TVector<TString> ServerlessNamesStrings;
+    TVector<const char*> ServerlessNames;
     TVector<ui8> AggregateFuncs;
     TVector<ui8> Types;
     TVector<TString> GroupNamesStrings;
@@ -280,6 +282,8 @@ public:
         const NProtoBuf::EnumDescriptor* labeledCounterDesc = LabeledCountersDesc();
         NamesStrings.reserve(Size);
         Names.reserve(Size);
+        ServerlessNamesStrings.reserve(Size);
+        ServerlessNames.reserve(Size);
         AggregateFuncs.reserve(Size);
         Types.reserve(Size);
 
@@ -291,14 +295,17 @@ public:
             const TLabeledCounterOptions& co = vdesc->options().GetExtension(LabeledCounterOpts);
 
             NamesStrings.push_back(GetFilePrefix(labeledCounterDesc->file()) + co.GetName());
+            ServerlessNamesStrings.push_back(co.GetServerlessName());
             AggregateFuncs.push_back(co.GetAggrFunc());
             Types.push_back(co.GetType());
         }
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
-        for (const TString& s : NamesStrings) {
-            Names.push_back(s.data());
-        }
+        std::transform(NamesStrings.begin(), NamesStrings.end(),
+                  std::back_inserter(Names), [](auto string) { return string.data(); } );
+
+        std::transform(ServerlessNamesStrings.begin(), ServerlessNamesStrings.end(),
+                  std::back_inserter(ServerlessNames), [](auto string) { return string.data(); } );
 
         //parse types for counter groups;
         const TLabeledCounterGroupNamesOptions& gn = labeledCounterDesc->options().GetExtension(GlobalGroupNamesOpts);
@@ -309,9 +316,9 @@ public:
             GroupNamesStrings.push_back(gn.GetNames(i));
         }
 
-        for (const TString& s : GroupNamesStrings) {
-            GroupNames.push_back(s.data());
-        }
+        std::transform(GroupNamesStrings.begin(), GroupNamesStrings.end(),
+                  std::back_inserter(GroupNames), [](auto string) { return string.data(); } );
+
     }
     virtual ~TLabeledCounterParsedOpts()
     {}
@@ -319,6 +326,11 @@ public:
     const char* const * GetNames() const
     {
         return Names.begin();
+    }
+
+    const char* const * GetServerlessNames() const
+    {
+        return ServerlessNames.begin();
     }
 
     const ui8* GetCounterTypes() const
@@ -623,19 +635,26 @@ public:
         return NAux::GetLabeledCounterOpts<SimpleDesc>();
     }
 
-    TProtobufTabletLabeledCounters(const TString& group, const ui64 id,
-                                   const TMaybe<TString>& databasePath = Nothing())
+    TProtobufTabletLabeledCounters(const TString& group, const ui64 id)
         : TTabletLabeledCountersBase(
               SimpleOpts()->Size, SimpleOpts()->GetNames(), SimpleOpts()->GetCounterTypes(),
+              SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, Nothing())
+    {
+        TVector<TString> groups;
+        StringSplitter(group).Split('/').SkipEmpty().Collect(&groups);
+
+        Y_VERIFY(SimpleOpts()->GetGroupNamesSize() == groups.size());
+    }
+
+    TProtobufTabletLabeledCounters(const TString& group, const ui64 id,
+                                   const TString& databasePath)
+        : TTabletLabeledCountersBase(
+              SimpleOpts()->Size, SimpleOpts()->GetServerlessNames(), SimpleOpts()->GetCounterTypes(),
               SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, databasePath)
     {
         TVector<TString> groups;
-        // TODO: change here to "|"
-        if (databasePath.Defined()) {
-            StringSplitter(group).Split('|').SkipEmpty().Collect(&groups);
-        } else {
-            StringSplitter(group).Split('/').SkipEmpty().Collect(&groups);
-        }
+        StringSplitter(group).Split('|').SkipEmpty().Collect(&groups);
+
         Y_VERIFY(SimpleOpts()->GetGroupNamesSize() == groups.size());
     }
 };

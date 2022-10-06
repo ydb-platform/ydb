@@ -307,7 +307,7 @@ struct TUserInfo {
         if (AppData(ctx)->Counters) {
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
                 LabeledCounters.Reset(new TUserLabeledCounters(
-                    user + "|x|" + topicConverter->GetClientsideName(), partition, dbPath));
+                    user + "|$x|" + topicConverter->GetClientsideName(), partition, *dbPath));
 
                 if (DoInternalRead) {
                     SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), cloudId, dbId, folderId);

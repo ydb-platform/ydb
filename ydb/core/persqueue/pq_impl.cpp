@@ -772,8 +772,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
-            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter, IsLocalDC,
-                                        DCId, Config, *Counters, ctx, false)),
+            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
+                                        IsLocalDC, DCId, Config, *Counters, ctx, false)),
             GetPartitionKeyRange(partition),
             false,
             *Counters
@@ -2145,7 +2145,6 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
 }
 
 void TPersQueue::HandleWakeup(const TActorContext& ctx) {
-    // TIP: Send LabeledCounters here
     THashSet<TString> groups;
     for (auto& p : Partitions) {
         for (auto& m : p.second.LabeledCounters) {

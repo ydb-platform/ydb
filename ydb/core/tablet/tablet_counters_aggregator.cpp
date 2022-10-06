@@ -1,5 +1,8 @@
 #include "tablet_counters_aggregator.h"
 #include "tablet_counters_app.h"
+#include "labeled_counters_merger.h"
+#include "private/aggregated_counters.h"
+
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/mon/mon.h>
 #include <library/cpp/actors/core/mon.h>
@@ -30,15 +33,7 @@
 ////////////////////////////////////////////
 namespace NKikimr {
 
-TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower) {
-    if (!follower) {
-        char x[12] = {'t','a','b','l','c','o','u','n','t','a','g','g'};
-        return TActorId(node, TStringBuf(x, 12));
-    } else {
-        char x[12] ={'s','l','a','v','c','o','u','n','t','a','g','g'};
-        return TActorId(node, TStringBuf(x, 12));
-    }
-}
+const ui32 WAKEUP_TIMEOUT_SECONDS = 4;
 
 TStringBuf GetHistogramAggregateSimpleName(TStringBuf name) {
     TStringBuf buffer(name);
@@ -52,647 +47,29 @@ bool IsHistogramAggregateSimpleName(TStringBuf name) {
     return !GetHistogramAggregateSimpleName(name).empty();
 }
 
-////////////////////////////////////////////
-namespace {
+TTabletLabeledCountersResponseContext::TTabletLabeledCountersResponseContext(NKikimrLabeledCounters::TEvTabletLabeledCountersResponse& response)
+    : Response(response)
+{}
 
-const ui32 WAKEUP_TIMEOUT_SECONDS = 4;
-
-
-////////////////////////////////////////////
-using TCountersVector = TVector<::NMonitoring::TDynamicCounters::TCounterPtr>;
-
-struct THistogramCounter {
-    TVector<TTabletPercentileCounter::TRangeDef> Ranges;
-    TCountersVector Values;
-    NMonitoring::THistogramPtr Histogram;
-
-    THistogramCounter(
-        const TVector<TTabletPercentileCounter::TRangeDef>& ranges,
-        TCountersVector&& values,
-        NMonitoring::THistogramPtr histogram)
-        : Ranges(ranges)
-        , Values(std::move(values))
-        , Histogram(histogram)
-    {
-        Y_VERIFY(!Ranges.empty() && Ranges.size() == Values.size());
+ui32 TTabletLabeledCountersResponseContext::GetNameId(TStringBuf name) {
+    auto it = NamesToId.find(name);
+    if (it != NamesToId.end()) {
+        return it->second;
     }
+    Response.AddCounterNames(TString(name));
+    ui32 id = Response.CounterNamesSize() - 1;
+    NamesToId[name] = id;
+    return id;
+}
 
-    void Clear() {
-        for (const ::NMonitoring::TDynamicCounters::TCounterPtr& cnt : Values) {
-            *cnt = 0;
-        }
-
-        Histogram->Reset();
+TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower) {
+    if (!follower) {
+        char x[12] = {'t','a','b','l','c','o','u','n','t','a','g','g'};
+        return TActorId(node, TStringBuf(x, 12));
+    } else {
+        char x[12] ={'s','l','a','v','c','o','u','n','t','a','g','g'};
+        return TActorId(node, TStringBuf(x, 12));
     }
-
-    void IncrementFor(ui64 value) {
-        const size_t i = std::lower_bound(Ranges.begin(), Ranges.end(), value) - Ranges.begin();
-        Values[i]->Inc();
-
-        Histogram->Collect(value);
-    }
-};
-
-using THistogramVector = TVector<THolder<THistogramCounter>>;
-
-class TAggregatedSimpleCounters {
-public:
-    //
-    TAggregatedSimpleCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
-        : CounterGroup(counterGroup)
-    {}
-
-    void Reserve(size_t hint) {
-        CountersByTabletID.reserve(hint);
-        ChangedCounters.reserve(hint);
-        MaxSimpleCounters.reserve(hint);
-    }
-
-    void AddSimpleCounter(const char* name, THolder<THistogramCounter> percentileAggregate = THolder<THistogramCounter>()) {
-        auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-            auto counter = CounterGroup->GetCounter(name, false);
-            container.push_back(counter);
-        };
-
-        CountersByTabletID.push_back(TCountersByTabletIDMap());
-        ChangedCounters.push_back(true);
-        TString maxName = Sprintf("MAX(%s)", name);
-        TString sumName = Sprintf("SUM(%s)", name);
-
-        fnAddCounter(maxName.data(), MaxSimpleCounters);
-        fnAddCounter(sumName.data(), SumSimpleCounters);
-
-        HistSimpleCounters.emplace_back(std::move(percentileAggregate));
-    }
-
-    ui64 GetSum(ui32 counterIndex) const {
-        Y_VERIFY(counterIndex < SumSimpleCounters.size(),
-            "inconsistent sum simple counters, %u >= %lu", counterIndex, SumSimpleCounters.size());
-        return *SumSimpleCounters[counterIndex];
-    }
-
-    void SetSum(ui32 counterIndex, ui64 value) {
-        Y_VERIFY(counterIndex < SumSimpleCounters.size(),
-            "inconsistent sum simple counters, %u >= %lu", counterIndex, SumSimpleCounters.size());
-        *SumSimpleCounters[counterIndex] = value;
-    }
-
-    ui64 GetMax(ui32 counterIndex) const {
-        Y_VERIFY(counterIndex < MaxSimpleCounters.size(),
-            "inconsistent max simple counters, %u >= %lu", counterIndex, MaxSimpleCounters.size());
-        return *MaxSimpleCounters[counterIndex];
-    }
-
-    void SetMax(ui32 counterIndex, ui64 value) {
-        Y_VERIFY(counterIndex < MaxSimpleCounters.size(),
-            "inconsistent max simple counters, %u >= %lu", counterIndex, MaxSimpleCounters.size());
-        *MaxSimpleCounters[counterIndex] = value;
-    }
-
-    void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value, TTabletTypes::EType tabletType) {
-        Y_VERIFY(counterIndex < CountersByTabletID.size(),
-            "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-        TCountersByTabletIDMap::insert_ctx insertCtx;
-        auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
-        if (it != CountersByTabletID[counterIndex].end()) {
-            if (it->second != value) {
-                ChangedCounters[counterIndex] = true;
-                it->second = value;
-            }
-        } else {
-            CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, value), insertCtx);
-            ChangedCounters[counterIndex] = true;
-        }
-    }
-
-    void ForgetTablet(ui64 tabletId) {
-        for (ui32 idx : xrange(CountersByTabletID.size())) {
-            auto &counters = CountersByTabletID[idx];
-            if (counters.erase(tabletId) != 0)
-                ChangedCounters[idx] = true;
-        }
-    }
-
-    void RecalcAll() {
-        for (ui32 idx : xrange(CountersByTabletID.size())) {
-            if (ChangedCounters[idx])
-                Recalc(idx);
-            ChangedCounters[idx] = false;
-        }
-    }
-
-private:
-    //
-    ::NMonitoring::TDynamicCounterPtr CounterGroup;
-
-    TCountersVector MaxSimpleCounters;
-    TCountersVector SumSimpleCounters;
-    THistogramVector HistSimpleCounters;
-    using TCountersByTabletIDMap = THashMap<ui64, ui64>;
-
-    TVector<TCountersByTabletIDMap> CountersByTabletID;
-    TVector<bool> ChangedCounters;
-
-private:
-    void Recalc(ui32 idx) {
-        auto &counters = CountersByTabletID[idx];
-        THistogramCounter* histCounter = HistSimpleCounters[idx].Get();
-
-        ui64 maxVal = 0;
-        ui64 sumVal = 0;
-
-        if (histCounter) {
-            histCounter->Clear();
-        }
-
-        for (auto&& t : counters) {
-            ui64 tValue = t.second;
-            maxVal = Max(tValue, maxVal);
-            sumVal += tValue;
-            if (histCounter) {
-                histCounter->IncrementFor(tValue);
-            }
-        }
-
-        *MaxSimpleCounters[idx].Get() = maxVal;
-        *SumSimpleCounters[idx].Get() = sumVal;
-    }
-};
-
-class TAggregatedCumulativeCounters {
-public:
-    //
-    TAggregatedCumulativeCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
-        : CounterGroup(counterGroup)
-    {}
-
-    void Reserve(size_t hint) {
-        CountersByTabletID.reserve(hint);
-        ChangedCounters.reserve(hint);
-        MaxCumulativeCounters.reserve(hint);
-    }
-
-    void AddCumulativeCounter(const char* name, THolder<THistogramCounter> percentileAggregate = THolder<THistogramCounter>()) {
-        auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-            auto counter = CounterGroup->GetCounter(name, false);
-            container.push_back(counter);
-        };
-
-        CountersByTabletID.push_back(TCountersByTabletIDMap());
-        ChangedCounters.push_back(true);
-        TString maxName = Sprintf("MAX(%s)", name);
-
-        fnAddCounter(maxName.data(), MaxCumulativeCounters);
-
-        HistCumulativeCounters.emplace_back(std::move(percentileAggregate));
-    }
-
-    ui64 GetMax(ui32 counterIndex) const {
-        Y_VERIFY(counterIndex < MaxCumulativeCounters.size(),
-            "inconsistent max cumulative counters, %u >= %lu", counterIndex, MaxCumulativeCounters.size());
-        return *MaxCumulativeCounters[counterIndex];
-    }
-
-    void SetMax(ui32 counterIndex, ui64 value) {
-        Y_VERIFY(counterIndex < MaxCumulativeCounters.size(),
-            "inconsistent max cumulative counters, %u >= %lu", counterIndex, MaxCumulativeCounters.size());
-        *MaxCumulativeCounters[counterIndex] = value;
-    }
-
-    void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value, TTabletTypes::EType tabletType) {
-        Y_VERIFY(counterIndex < CountersByTabletID.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-        TCountersByTabletIDMap::insert_ctx insertCtx;
-        auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
-        if (it != CountersByTabletID[counterIndex].end()) {
-            if (it->second != value) {
-                ChangedCounters[counterIndex] = true;
-                it->second = value;
-            }
-        } else {
-            CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, value), insertCtx);
-            ChangedCounters[counterIndex] = true;
-        }
-    }
-
-    void ForgetTablet(ui64 tabletId) {
-        for (ui32 idx : xrange(CountersByTabletID.size())) {
-            auto &counters = CountersByTabletID[idx];
-            if (counters.erase(tabletId) != 0)
-                ChangedCounters[idx] = true;
-        }
-    }
-
-    void RecalcAll() {
-        for (ui32 idx : xrange(CountersByTabletID.size())) {
-            if (ChangedCounters[idx])
-                Recalc(idx);
-            ChangedCounters[idx] = false;
-        }
-    }
-
-private:
-    //
-    ::NMonitoring::TDynamicCounterPtr CounterGroup;
-
-    TCountersVector MaxCumulativeCounters;
-    THistogramVector HistCumulativeCounters;
-    using TCountersByTabletIDMap = THashMap<ui64, ui64>;
-
-    TVector<TCountersByTabletIDMap> CountersByTabletID;
-    TVector<bool> ChangedCounters;
-
-private:
-    void Recalc(ui32 idx) {
-        auto &counters = CountersByTabletID[idx];
-        THistogramCounter* histCounter = HistCumulativeCounters[idx].Get();
-
-        ui64 maxVal = 0;
-
-        if (histCounter) {
-            histCounter->Clear();
-        }
-
-        for (auto&& t : counters) {
-            ui64 tValue = t.second;
-            maxVal = Max(tValue, maxVal);
-            if (histCounter) {
-                histCounter->IncrementFor(tValue);
-            }
-        }
-
-        *MaxCumulativeCounters[idx].Get() = maxVal;
-    }
-};
-
-class TAggregatedHistogramCounters {
-public:
-    //
-
-    TAggregatedHistogramCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
-        : CounterGroup(counterGroup)
-    {}
-
-    void Reserve(size_t hint) {
-        PercentileCounters.reserve(hint);
-        Histograms.reserve(hint);
-        IsDerivative.reserve(hint);
-        BucketBounds.reserve(hint);
-        CountersByTabletID.reserve(hint);
-    }
-
-    void AddCounter(
-        const char* name,
-        const NKikimr::TTabletPercentileCounter& percentileCounter,
-        THashMap<TString, THolder<THistogramCounter>>& histogramAggregates)
-    {
-        // old style
-        PercentileCounters.push_back(TCountersVector());
-        auto& rangeCounters = PercentileCounters.back();
-
-        TStringBuf counterName(name);
-        TStringBuf simpleCounterName = GetHistogramAggregateSimpleName(counterName);
-        bool histogramAggregate = !simpleCounterName.empty();
-        bool isDerivative = !histogramAggregate && !percentileCounter.GetIntegral();
-        IsDerivative.push_back(isDerivative);
-
-        auto rangeCount = percentileCounter.GetRangeCount();
-        Y_VERIFY_DEBUG(rangeCount > 0);
-
-        for (ui32 r = 0; r < rangeCount; ++r) {
-            const char* rangeName = percentileCounter.GetRangeName(r);
-            auto subgroup = CounterGroup->GetSubgroup("range", rangeName);
-            auto counter = subgroup->GetCounter(name, isDerivative);
-            rangeCounters.push_back(counter);
-        }
-
-        // new style
-        // note that inf bucket in histogram description is implicit
-        NMonitoring::TBucketBounds bucketBounds;
-        bucketBounds.reserve(rangeCount);
-        for (auto i: xrange(rangeCount - 1)) {
-            bucketBounds.push_back(percentileCounter.GetRangeBound(i));
-        }
-
-        auto histogram = CounterGroup->GetHistogram(
-            name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative);
-
-        if (histogramAggregate) {
-            // either simple or cumulative aggregate will handle this histogram,
-            // it is a special case for hists name HIST(name), which have corresponding
-            // simple or cumulative counter updated by tablet (tablet doesn't update hist itself,
-            // hist is updated here by aggregated values)
-            histogramAggregates.emplace(simpleCounterName, new THistogramCounter(
-                percentileCounter.GetRanges(), std::move(rangeCounters), histogram));
-
-            // we need this hack to access PercentileCounters by index easily skipping
-            // hists we moved to simple/cumulative aggregates
-            TCountersVector().swap(rangeCounters);
-            BucketBounds.emplace_back();
-        } else {
-            // now save inf bound (note that in Percentile it is ui64, in Hist - double)
-            bucketBounds.push_back(Max<NMonitoring::TBucketBound>());
-            BucketBounds.emplace_back(std::move(bucketBounds));
-        }
-
-        // note that in case of histogramAggregate it will contain reference
-        // on the histogram updated outside
-        Histograms.push_back(histogram);
-
-        CountersByTabletID.emplace_back(TCountersByTabletIDMap());
-    }
-
-    void SetValue(
-        ui64 tabletID,
-        ui32 counterIndex,
-        const NKikimr::TTabletPercentileCounter& percentileCounter,
-        const char* name,
-        TTabletTypes::EType tabletType)
-    {
-        Y_VERIFY(counterIndex < CountersByTabletID.size(),
-            "inconsistent counters for tablet type %s, counter %s",
-            TTabletTypes::TypeToStr(tabletType),
-            name);
-
-        Y_VERIFY(counterIndex < PercentileCounters.size(),
-            "inconsistent counters for tablet type %s, counter %s",
-            TTabletTypes::TypeToStr(tabletType),
-            name);
-
-        auto& percentileRanges = PercentileCounters[counterIndex];
-
-        // see comment in AddCounter() related to histogramAggregate
-        if (percentileRanges.empty())
-            return;
-
-        // just sanity check, normally should not happen
-        const auto rangeCount = percentileCounter.GetRangeCount();
-        if (rangeCount == 0)
-            return;
-
-        Y_VERIFY(rangeCount <= percentileRanges.size(),
-            "inconsistent counters for tablet type %s, counter %s",
-            TTabletTypes::TypeToStr(tabletType),
-            name);
-
-        if (IsDerivative[counterIndex]) {
-            AddValues(counterIndex, percentileCounter);
-            return;
-        }
-
-        // integral histogram
-
-        TValuesVec newValues;
-        newValues.reserve(rangeCount);
-        for (auto i: xrange(rangeCount))
-            newValues.push_back(percentileCounter.GetRangeValue(i));
-
-        TCountersByTabletIDMap::insert_ctx insertCtx;
-        auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
-        if (it != CountersByTabletID[counterIndex].end()) {
-            auto& oldValues = it->second;
-            if (newValues != oldValues) {
-                SubValues(counterIndex, oldValues);
-                AddValues(counterIndex, newValues);
-            }
-            oldValues.swap(newValues);
-        } else {
-            AddValues(counterIndex, newValues);
-            CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, std::move(newValues)), insertCtx);
-        }
-    }
-
-    void ForgetTablet(ui64 tabletId) {
-        for (auto idx : xrange(CountersByTabletID.size())) {
-            auto &tabletToCounters = CountersByTabletID[idx];
-            auto it = tabletToCounters.find(tabletId);
-            if (it == tabletToCounters.end())
-                continue;
-
-            auto values = std::move(it->second);
-            tabletToCounters.erase(it);
-
-            if (IsDerivative[idx])
-                continue;
-
-            SubValues(idx, values);
-        }
-    }
-
-    NMonitoring::THistogramPtr GetHistogram(size_t i) {
-        Y_VERIFY(i < Histograms.size());
-        return Histograms[i];
-    }
-
-private:
-    using TValuesVec = TVector<ui64>;
-
-    void SubValues(size_t counterIndex, const TValuesVec& values) {
-        auto& percentileRanges = PercentileCounters[counterIndex];
-        auto& histogram = Histograms[counterIndex];
-        auto snapshot = histogram->Snapshot();
-        histogram->Reset();
-        for (auto i: xrange(values.size())) {
-            Y_VERIFY_DEBUG(static_cast<ui64>(*percentileRanges[i]) >= values[i]);
-            *percentileRanges[i] -= values[i];
-
-            ui64 oldValue = snapshot->Value(i);
-            ui64 negValue = 0UL - values[i];
-            ui64 newValue = oldValue + negValue;
-            histogram->Collect(BucketBounds[counterIndex][i], newValue);
-        }
-    }
-
-    void AddValues(size_t counterIndex, const TValuesVec& values) {
-        auto& percentileRanges = PercentileCounters[counterIndex];
-        auto& histogram = Histograms[counterIndex];
-        for (auto i: xrange(values.size())) {
-            *percentileRanges[i] += values[i];
-            histogram->Collect(BucketBounds[counterIndex][i], values[i]);
-        }
-    }
-
-    void AddValues(size_t counterIndex, const NKikimr::TTabletPercentileCounter& percentileCounter) {
-        auto& percentileRanges = PercentileCounters[counterIndex];
-        auto& histogram = Histograms[counterIndex];
-        for (auto i: xrange(percentileCounter.GetRangeCount())) {
-            auto value = percentileCounter.GetRangeValue(i);
-            *percentileRanges[i] += value;
-            histogram->Collect(BucketBounds[counterIndex][i], value);
-        }
-    }
-
-private:
-    ::NMonitoring::TDynamicCounterPtr CounterGroup;
-
-    // monitoring counters holders, updated only during recalculation
-    TVector<TCountersVector> PercentileCounters;    // old style (ranges)
-    TVector<NMonitoring::THistogramPtr> Histograms; // new style (bins)
-    TVector<bool> IsDerivative;
-
-    // per percentile counter bounds.
-    TVector<NMonitoring::TBucketBounds> BucketBounds;
-
-    // tabletId -> values
-    using TCountersByTabletIDMap = THashMap<ui64, TValuesVec>;
-
-    // counter values (not "real" monitoring counters)
-    TVector<TCountersByTabletIDMap> CountersByTabletID; // each index is map from tablet to counter value
-};
-
-struct TTabletLabeledCountersResponseContext {
-    NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse& Response;
-    THashMap<TStringBuf, ui32> NamesToId;
-
-    TTabletLabeledCountersResponseContext(NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse& response)
-        : Response(response)
-    {}
-
-    ui32 GetNameId(TStringBuf name) {
-        auto it = NamesToId.find(name);
-        if (it != NamesToId.end()) {
-            return it->second;
-        }
-        Response.AddCounterNames(TString(name));
-        ui32 id = Response.CounterNamesSize() - 1;
-        NamesToId[name] = id;
-        return id;
-    }
-};
-
-class TAggregatedLabeledCounters {
-public:
-    //
-    TAggregatedLabeledCounters(ui32 count, const ui8* aggrFunc, const char * const * names, const ui8* types, const TString& groupNames)
-        : AggrFunc(aggrFunc)
-        , Names(names)
-        , GroupNames(groupNames)
-        , Types(types)
-        , AggrCounters(count, 0)
-        , Ids(count, 0)
-        , Changed(false)
-        , CountersByTabletID(count)
-    {
-    }
-
-    void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value, ui64 id) {
-
-        CountersByTabletID[counterIndex][tabletID] = std::make_pair(value, id);
-        Changed = true;
-    }
-
-    bool ForgetTablet(ui64 tabletId) {
-        for (ui32 idx : xrange(CountersByTabletID.size())) {
-            auto &counters = CountersByTabletID[idx];
-            counters.erase(tabletId);
-        }
-        Changed = true;
-        return CountersByTabletID.size() == 0 || CountersByTabletID[0].size() == 0;
-    }
-
-    ui32 Size() const {
-        return AggrCounters.size();
-    }
-
-    ui64 GetValue(ui32 index) const {
-        return AggrCounters[index];
-    }
-
-    ui64 GetId(ui32 index) const {
-        return Ids[index];
-    }
-
-    void FillGetRequestV1(NKikimrTabletCountersAggregator::TTabletLabeledCounters& labeledCounters, const TString& group, ui32 start, ui32 end) const {
-        if (Changed) {
-            for (ui32 idx : xrange(CountersByTabletID.size())) {
-                Recalc(idx);
-            }
-            Changed = false;
-        }
-        Y_VERIFY(end >= start);
-        Y_VERIFY(end <= Size());
-        labeledCounters.SetGroupNames(GroupNames);
-        labeledCounters.SetGroup(group);
-        labeledCounters.SetDelimiter("/"); //TODO: change here to "|"
-        for (ui32 i = start; i < end; ++i) {
-            auto& labeledCounter = *labeledCounters.AddLabeledCounter();
-            labeledCounter.SetValue(GetValue(i));
-            labeledCounter.SetId(GetId(i));
-            labeledCounter.SetName(Names[i]);
-            labeledCounter.SetAggregateFunc(NKikimr::TLabeledCounterOptions::EAggregateFunc(AggrFunc[i]));
-            labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(Types[i]));
-        }
-    }
-
-    void FillGetRequestV2(TTabletLabeledCountersResponseContext& context, const TString& group) const {
-        if (Changed) {
-            for (ui32 idx : xrange(CountersByTabletID.size())) {
-                Recalc(idx);
-            }
-            Changed = false;
-        }
-        auto& labeledCounters = *context.Response.AddLabeledCountersByGroup();
-        labeledCounters.SetGroup(group);
-        labeledCounters.SetDelimiter("/"); //TODO: change here to "|"
-        for (ui32 i = 0; i < Size(); ++i) {
-            auto& labeledCounter = *labeledCounters.AddLabeledCounter();
-            labeledCounter.SetValue(GetValue(i));
-            labeledCounter.SetNameId(context.GetNameId(Names[i]));
-            labeledCounter.SetAggregateFunc(NKikimr::TLabeledCounterOptions::EAggregateFunc(AggrFunc[i]));
-            labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(Types[i]));
-        }
-    }
-
-
-private:
-    //
-    ::NMonitoring::TDynamicCounterPtr CounterGroup;
-    const ui8* AggrFunc;
-    const char* const * Names;
-    TString GroupNames;
-    const ui8* Types;
-
-    mutable TVector<ui64> AggrCounters;
-    mutable TVector<ui64> Ids;
-    mutable bool Changed;
-
-    using TCountersByTabletIDMap = THashMap<ui64, std::pair<ui64, ui64>>; //second pair is for counter and id
-    TVector<TCountersByTabletIDMap> CountersByTabletID;
-
-private:
-    void Recalc(ui32 idx) const {
-        Y_VERIFY(idx < Ids.size());
-        auto &counters = CountersByTabletID[idx];
-        ui8 aggrFunc = AggrFunc[idx];
-        std::pair<ui64, ui64> aggrVal{0,0};
-        ui64 cntCount = counters.size();
-
-        Y_VERIFY(cntCount > 0);
-        if (aggrFunc == TTabletLabeledCountersBase::EAF_MIN)
-            aggrVal = counters.begin()->second;
-
-        for (auto&& t : counters) {
-            const std::pair<ui64, ui64>& tValue = t.second;
-            switch (aggrFunc) {
-                case TTabletLabeledCountersBase::EAF_MIN:
-                    aggrVal = Min(tValue, aggrVal);
-                    break;
-                case TTabletLabeledCountersBase::EAF_MAX:
-                    aggrVal = Max(tValue, aggrVal);
-                    break;
-                case TTabletLabeledCountersBase::EAF_SUM:
-                    aggrVal.first += tValue.first;
-                    break;
-                default:
-                    Y_FAIL("bad aggrFunc value");
-            };
-        }
-        AggrCounters[idx] = aggrVal.first;
-        Ids[idx] = aggrVal.second;
-    }
-};
-
-
-
 }
 
 ////////////////////////////////////////////
@@ -756,7 +133,6 @@ public:
             return;
         }
 
-
         if (iterTabletType == LabeledCountersByTabletTypeAndGroup.end()) {
             TString tabletTypeStr = TTabletTypes::TypeToStr(tabletType);
             TString groupNames;
@@ -769,8 +145,11 @@ public:
             }
             iterTabletType = LabeledCountersByTabletTypeAndGroup.emplace(
                                             std::make_pair(tabletType, labeledCounters->GetGroup()),
-                                            new TAggregatedLabeledCounters(labeledCounters->GetCounters().Size(), labeledCounters->GetAggrFuncs(),
-                                                    labeledCounters->GetNames(), labeledCounters->GetTypes(), groupNames)
+                                            new NPrivate::TAggregatedLabeledCounters(
+                                                labeledCounters->GetCounters().Size(),
+                                                labeledCounters->GetAggrFuncs(),
+                                                labeledCounters->GetNames(),
+                                                labeledCounters->GetTypes(), groupNames)
                         ).first;
 
         }
@@ -872,7 +251,7 @@ public:
         }
     }
 
-    void QueryLabeledCounters(const NKikimrTabletCountersAggregator::TEvTabletLabeledCountersRequest& request, NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse& response, const TActorContext& ctx) {
+    void QueryLabeledCounters(const NKikimrLabeledCounters::TEvTabletLabeledCountersRequest& request, NKikimrLabeledCounters::TEvTabletLabeledCountersResponse& response, const TActorContext& ctx) {
 
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "got request v" << request.GetVersion());
 
@@ -892,7 +271,7 @@ public:
                 }
                 if (s >= iter->second->Size())
                     continue;
-                auto& labeledCountersByGroup = *response.AddLabeledCountersByGroup();
+                auto labeledCountersByGroup = response.AddLabeledCountersByGroup();
 
                 iter->second->FillGetRequestV1(labeledCountersByGroup, iter->first.second, s, e);
                 ++cc;
@@ -903,7 +282,7 @@ public:
             for (; iter != LabeledCountersByTabletTypeAndGroup.end()
                    && iter->first.first == tabletType; ++iter) {
                 if (group.empty() || IsMatchesWildcards(iter->first.second, group)) {
-                    iter->second->FillGetRequestV2(context, iter->first.second);
+                    iter->second->FillGetRequestV2(&context, iter->first.second);
                 }
                 ++cc;
             }
@@ -1042,7 +421,7 @@ private:
                 Y_VERIFY(!IsInitialized);
 
                 if (counters) {
-                    THashMap<TString, THolder<THistogramCounter>> histogramAggregates;
+                    THashMap<TString, THolder<NPrivate::THistogramCounter>> histogramAggregates;
 
                     // percentile counters
                     FullSizePercentile = counters->Percentile().Size();
@@ -1277,12 +656,10 @@ private:
             ui32 FullSizePercentile = 0;
             THashSet<ui32> DeprecatedPercentile;
             //
-            TAggregatedSimpleCounters AggregatedSimpleCounters;
-
-            TCountersVector CumulativeCounters;
-            TAggregatedCumulativeCounters AggregatedCumulativeCounters;
-
-            TAggregatedHistogramCounters AggregatedHistogramCounters;
+            NPrivate::TAggregatedSimpleCounters AggregatedSimpleCounters;
+            NPrivate::TCountersVector CumulativeCounters;
+            NPrivate::TAggregatedCumulativeCounters AggregatedCumulativeCounters;
+            NPrivate::TAggregatedHistogramCounters AggregatedHistogramCounters;
 
             THashMap<ui64, TInstant> LastAggregateUpdateTime;
 
@@ -1601,8 +978,7 @@ public:
 
         void Apply(ui64 tabletId, const TTabletCountersBase* executorCounters,
             const TTabletCountersBase* appCounters, TTabletTypes::EType type,
-            const TTabletCountersBase* limitedAppCounters)
-        {
+            const TTabletCountersBase* limitedAppCounters) {
             AllTypes.Apply(tabletId, executorCounters, nullptr, type);
             auto* tabletCounters = GetOrAddCountersByTabletType(type, CountersByTabletType, SolomonCounters);
             if (tabletCounters) {
@@ -1664,25 +1040,22 @@ private:
     }
 
 private:
-    //
     ::NMonitoring::TDynamicCounterPtr Counters;
     TTabletCountersForTabletType AllTypes;
     bool IsFollower = false;
 
     typedef THashMap<TPathId, TIntrusivePtr<TTabletCountersForDb>> TCountersByPathId;
     typedef TMap<TTabletTypes::EType, THolder<TTabletCountersBase>> TAppCountersByTabletType;
-
-    typedef TMap<std::pair<TTabletTypes::EType, TString>, TAutoPtr<TAggregatedLabeledCounters> > TLabeledCountersByTabletTypeAndGroup;
+    typedef TMap<std::pair<TTabletTypes::EType, TString>, TAutoPtr<NPrivate::TAggregatedLabeledCounters>> TLabeledCountersByTabletTypeAndGroup;
+    typedef THashMap<ui64, std::pair<TAutoPtr<TTabletCountersBase>, TAutoPtr<TTabletCountersBase>>> TQuietTabletCounters;
 
     TCountersByTabletType CountersByTabletType;
     TCountersByPathId CountersByPathId;
     TActorId DbWatcherActorId;
     TAppCountersByTabletType LimitedAppCounters; // without txs
-
     TYdbTabletCountersPtr YdbCounters;
-
     TLabeledCountersByTabletTypeAndGroup LabeledCountersByTabletTypeAndGroup;
-    THashMap<ui64, std::pair<TAutoPtr<TTabletCountersBase>, TAutoPtr<TTabletCountersBase>>> QuietTabletCounters;
+    TQuietTabletCounters QuietTabletCounters;
 };
 
 
@@ -1783,15 +1156,21 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounte
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddLabeledCounters::TPtr &ev, const TActorContext &ctx) {
     TEvTabletCounters::TEvTabletAddLabeledCounters* msg = ev->Get();
+    LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                "got labeledCounters " << msg->LabeledCounters.Get()->GetDatabasePath() << " " <<
+                msg->LabeledCounters.Get()->GetGroup() << " " <<
+                (msg->TabletType == TTabletTypes::PersQueue ? "PQ" : "different"));
     if (msg->LabeledCounters.Get()->GetDatabasePath()) {
         if (msg->TabletType == TTabletTypes::PersQueue) {
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
                         "got labeledCounters from db" << msg->LabeledCounters.Get()->GetDatabasePath());
+        } else {
+            return;
         }
-        return;
+    } else {
+        TabletMon->ApplyLabeledCounters(msg->TabletID, msg->TabletType, msg->LabeledCounters.Get());
     }
 
-    TabletMon->ApplyLabeledCounters(msg->TabletID, msg->TabletType, msg->LabeledCounters.Get());
     TabletTypeOfReceivedLabeledCounters.insert(msg->TabletType);
 }
 
@@ -1956,7 +1335,7 @@ TTabletCountersAggregatorActor::HandleWork(NMon::TEvHttpInfo::TPtr &ev, const TA
             return;
         }
     }
-    //reaching this point means that this is unknow tablet type, response with nothing
+    // reaching this point means that this tablet type is unknown, response with nothing
     TString html;
     for (const auto& tabletType: TabletTypeOfReceivedLabeledCounters) {
         TString tabletTypeStr = TTabletTypes::TypeToStr((TTabletTypes::EType)tabletType);
@@ -2041,6 +1420,7 @@ void PreProcessResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse* res
 
 
 class TClusterLabeledCountersAggregatorActorV1 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1> {
+private:
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1>;
     TActorId Initiator;
     TTabletTypes::EType TabletType;
@@ -2050,7 +1430,6 @@ class TClusterLabeledCountersAggregatorActorV1 : public TActorBootstrapped<TClus
     THashMap<ui32, TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     ui32 NumWorkers;
     ui32 WorkerId;
-
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -2173,7 +1552,6 @@ public:
         ReplyAndDie(ctx);
     }
 
-
     void ReplyAndDie(const TActorContext& ctx) {
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response(new TEvTabletCounters::TEvTabletLabeledCountersResponse);
 
@@ -2209,16 +1587,17 @@ public:
         for (auto& resp : PerNodeResponse) {
             if (!resp.second)
                 continue;
-            //TODO: labeledCounterByGroup must have as key group + groupToNames[group] - in case of aggregation (changing group to total/total/total)
+            // TODO: labeledCounterByGroup must have as key group + groupToNames[group] -
+            // in case of aggregation (changing group to total/total/total)
             // keys may be equal for different metrics types
             for (ui32 i = 0; i < resp.second->Record.LabeledCountersByGroupSize(); ++i) {
                 const auto& labeledCounterByGroup = resp.second->Record.GetLabeledCountersByGroup(i);
                 const TString& originalGroup = labeledCounterByGroup.GetGroup();
                 ui32 count = Min<ui32>(startPos[originalGroup].second, labeledCounterByGroup.LabeledCounterSize());
                 ui32 sp = startPos[originalGroup].first;
-                TAutoPtr<TTabletLabeledCountersBase> labeledCounters(new TTabletLabeledCountersBase(count, names.begin() + sp,
-                                                                            types.begin() + sp, aggrFuncs.begin() + sp,
-                                                                            originalGroup, nullptr, 0));
+                TAutoPtr<TTabletLabeledCountersBase> labeledCounters(
+                    new TTabletLabeledCountersBase(count, names.begin() + sp, types.begin() + sp,
+                                                   aggrFuncs.begin() + sp, originalGroup, nullptr, 0));
                 for (ui32 j = 0; j < count; ++j) {
                     const auto& labeledCounter = labeledCounterByGroup.GetLabeledCounter(j);
                     labeledCounters->GetCounters()[j] = labeledCounter.GetValue();
@@ -2309,40 +1688,41 @@ public:
     }
 };
 
+
 class TClusterLabeledCountersAggregatorActorV2 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2> {
+protected:
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2>;
+    THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> Response;
+    TTabletLabeledCountersResponseContext ResponseContext;
     TActorId Initiator;
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
     TVector<ui32> Nodes;
-    THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> Response;
-    TTabletLabeledCountersResponseContext ResponseContext;
     THashMap<ui32, THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
-    THashMap<TString, NKikimrTabletCountersAggregator::TTabletLabeledCounters*> IndexTabletLabeledCounters;
-    THashMap<std::pair<NKikimrTabletCountersAggregator::TTabletLabeledCounters*, ui32>, NKikimrTabletCountersAggregator::TTabletLabeledCounter*> IndexTabletLabeledCounter;
     TString Group;
     ui32 NumWorkers;
     ui32 WorkerId;
-    bool NewFormat;
+
+    TMerger Merger;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_COUNTERS_AGGREGATOR;
     }
 
-    //
-    TClusterLabeledCountersAggregatorActorV2(const TActorId& parentActor, const TTabletTypes::EType tabletType, const TString& group, ui32 numWorkers = 0, ui32 workerId = 0, bool newFormat = false)
-        : Initiator(parentActor)
+    TClusterLabeledCountersAggregatorActorV2(const TActorId& parentActor, const TTabletTypes::EType tabletType,
+                                             const TString& group, ui32 numWorkers = 0, ui32 workerId = 0)
+        : Response(new TEvTabletCounters::TEvTabletLabeledCountersResponse())
+        , ResponseContext(Response->Record)
+        , Initiator(parentActor)
         , TabletType(tabletType)
         , NodesRequested(0)
         , NodesReceived(0)
-        , Response(new TEvTabletCounters::TEvTabletLabeledCountersResponse())
-        , ResponseContext(Response->Record)
         , Group(group)
         , NumWorkers(numWorkers)
         , WorkerId(workerId)
-        , NewFormat(newFormat)
+        , Merger(Response, ResponseContext)
     {}
 
     void SendRequest(ui32 nodeId, const TActorContext &ctx) {
@@ -2352,95 +1732,12 @@ public:
         request->Record.SetTabletType(TabletType);
         if (!Group.empty()) {
             request->Record.SetGroup(Group);
-
         }
+        // TODO: what if it's empty
         ctx.Send(aggregatorServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         Nodes.emplace_back(nodeId);
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
         ++NodesRequested;
-    }
-
-    NKikimrTabletCountersAggregator::TTabletLabeledCounters* GetCounters(const TString& group) {
-        auto it = IndexTabletLabeledCounters.find(group);
-        if (it != IndexTabletLabeledCounters.end()) {
-            return it->second;
-        }
-        NKikimrTabletCountersAggregator::TTabletLabeledCounters* counters = Response->Record.AddLabeledCountersByGroup();
-        counters->SetGroup(group);
-        counters->SetDelimiter("/"); //TODO:change to "|"
-        IndexTabletLabeledCounters.emplace(group, counters);
-        return counters;
-    }
-
-    NKikimrTabletCountersAggregator::TTabletLabeledCounter* GetCounter(NKikimrTabletCountersAggregator::TTabletLabeledCounters* counters, ui32 nameId) {
-        auto key = std::make_pair(counters, nameId);
-        auto it = IndexTabletLabeledCounter.find(key);
-        if (it != IndexTabletLabeledCounter.end()) {
-            return it->second;
-        }
-        NKikimrTabletCountersAggregator::TTabletLabeledCounter* counter = counters->AddLabeledCounter();
-        counter->SetNameId(nameId);
-        IndexTabletLabeledCounter.emplace(key, counter);
-        return counter;
-    }
-
-    void Merge(NKikimrTabletCountersAggregator::TTabletLabeledCounter& target, const NKikimrTabletCountersAggregator::TTabletLabeledCounter& source) {
-        ui64 value(source.GetValue());
-        TLabeledCounterOptions::ECounterType type(source.GetType());
-        NKikimr::TLabeledCounterOptions::EAggregateFunc func(source.GetAggregateFunc());
-        if (type == TLabeledCounterOptions::CT_TIMELAG) {
-            type = TLabeledCounterOptions::CT_SIMPLE;
-            auto now = TInstant::Now().MilliSeconds();
-            value =  now > value ? now - value : 0;
-            switch (func) {
-            case NKikimr::TLabeledCounterOptions::EAF_MIN:
-                func = NKikimr::TLabeledCounterOptions::EAF_MAX;
-                break;
-            case NKikimr::TLabeledCounterOptions::EAF_MAX:
-                func = NKikimr::TLabeledCounterOptions::EAF_MIN;
-                break;
-            default:
-                break;
-            }
-        }
-        if (target.HasValue()) {
-            switch (func) {
-            case NKikimr::TLabeledCounterOptions::EAF_MIN:
-                target.SetValue(std::min(target.GetValue(), value));
-                break;
-            case NKikimr::TLabeledCounterOptions::EAF_MAX:
-                target.SetValue(std::max(target.GetValue(), value));
-                break;
-            case NKikimr::TLabeledCounterOptions::EAF_SUM:
-                target.SetValue(target.GetValue() + value);
-                break;
-            }
-        } else {
-            target.SetValue(value);
-            target.SetType(type);
-            target.SetAggregateFunc(func);
-        }
-    }
-
-    void Merge(const NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse& source) {
-        TVector<ui32> namesMapper;
-        namesMapper.reserve(source.CounterNamesSize());
-        for (const TString& name : source.GetCounterNames()) {
-            namesMapper.push_back(ResponseContext.GetNameId(name));
-        }
-        for (const NKikimrTabletCountersAggregator::TTabletLabeledCounters& srcCounters : source.GetLabeledCountersByGroup()) {
-            NKikimrTabletCountersAggregator::TTabletLabeledCounters* trgCounters = GetCounters(srcCounters.GetGroup());
-            for (const NKikimrTabletCountersAggregator::TTabletLabeledCounter& srcCounter : srcCounters.GetLabeledCounter()) {
-                ui32 nameId = 0;
-                if (srcCounter.HasName()) {
-                    nameId = ResponseContext.GetNameId(srcCounter.GetName());
-                } else {
-                    nameId = namesMapper[srcCounter.GetNameId()];
-                }
-                NKikimrTabletCountersAggregator::TTabletLabeledCounter* trgCounter = GetCounter(trgCounters, nameId);
-                Merge(*trgCounter, srcCounter);
-            }
-        }
     }
 
     void Die(const TActorContext& ctx) override {
@@ -2519,12 +1816,16 @@ public:
 
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                   "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
         PreProcessResponse(ev->Get());
-        auto it = PerNodeResponse.emplace(nodeId, ev->Release().Release());
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor merged response node " << nodeId << " " << ctx.SelfID);
-        if (it.second) {
-            Merge(it.first->second->Record);
+
+        auto [it, emplaced] = PerNodeResponse.emplace(nodeId, ev->Release().Release());
+        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                   "aggregator actor merged response node " << nodeId << " " << ctx.SelfID);
+
+        if (emplaced) {
+            Merger.Merge(it->second->Record);
             NodeResponseReceived(ctx);
         }
     }
@@ -2541,54 +1842,73 @@ public:
         ReplyAndDie(ctx);
     }
 
-    void ReplyAndDie(const TActorContext& ctx) {
+    virtual void ReplyAndDie(const TActorContext& ctx) {
+        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                   "aggregator request processed " << ctx.SelfID << " Initiator " << Initiator);
+        ui64 cookie = NumWorkers ? WorkerId : 0;
+        ctx.Send(Initiator, Response.Release(), 0, cookie);
+        TBase::Die(ctx);
+    }
+};
+
+class TClusterLabeledCountersAggregatorActorV3 : public TClusterLabeledCountersAggregatorActorV2 {
+public:
+    TClusterLabeledCountersAggregatorActorV3(const TActorId& parentActor, const TTabletTypes::EType tabletType,
+                                             const TString& group, ui32 numWorkers = 0, ui32 workerId = 0)
+            : TClusterLabeledCountersAggregatorActorV2(parentActor, tabletType, group, numWorkers, workerId)
+    {}
+
+    void ReplyAndDie(const TActorContext& ctx) override {
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator request processed " << ctx.SelfID << " Initiator " << Initiator);
         ui64 cookie = NumWorkers ? WorkerId : 0;
-        if (NewFormat) {
-            for (auto& counters : *Response->Record.MutableLabeledCountersByGroup()) {
-                TVector<TString> groups;
-                StringSplitter(counters.GetGroup()).SplitByString(counters.GetDelimiter()).SkipEmpty().Collect(&groups);
-                TStringBuf ff;
-                TString topic = "";
-                TString dc = "";
-                TString res;
-                if (groups.size() == 1) { //topic case
-                    ff = groups[0];
-                } else if (groups.size() == 3) { //client important topic
-                    res = NPersQueue::ConvertOldConsumerName(groups[0], ctx) + "|" + groups[1] + "|";
-                    ff = groups[2];
-                } else {
-                    continue;
-                }
-                if (ff.empty())
-                    continue;
-                TStringBuf tmp(ff.NextTok('.'));
-                if (tmp != "rt3")
-                    continue;
-                dc = TString(ff.NextTok("--"));
-                if (dc.empty())
-                    continue;
-                if (ff.empty())
-                    continue;
-                topic = NPersQueue::ConvertOldTopicName(TString(ff));
-                res += topic + "|" + dc;
-                counters.SetGroup(res);
-                counters.SetDelimiter("|");
+        for (auto& counters : *Response->Record.MutableLabeledCountersByGroup()) {
+            TVector<TString> groups;
+            StringSplitter(counters.GetGroup()).SplitByString(counters.GetDelimiter()).SkipEmpty().Collect(&groups);
+            TStringBuf ff;
+            TString topic = "";
+            TString dc = "";
+            TString res;
+            if (groups.size() == 1) { //topic case
+                ff = groups[0];
+            } else if (groups.size() == 3) { //client important topic
+                res = NPersQueue::ConvertOldConsumerName(groups[0], ctx) + "|" + groups[1] + "|";
+                ff = groups[2];
+            } else {
+                continue;
             }
+            if (ff.empty())
+                continue;
+            TStringBuf tmp(ff.NextTok('.'));
+            if (tmp != "rt3")
+                continue;
+            dc = TString(ff.NextTok("--"));
+            if (dc.empty())
+                continue;
+            if (ff.empty())
+                continue;
+            topic = NPersQueue::ConvertOldTopicName(TString(ff));
+            res += topic + "|" + dc;
+            counters.SetGroup(res);
+            counters.SetDelimiter("|");
         }
         ctx.Send(Initiator, Response.Release(), 0, cookie);
         TBase::Die(ctx);
     }
 };
 
-IActor* CreateClusterLabeledCountersAggregatorActor(const TActorId& parentActor, TTabletTypes::EType tabletType, ui32 version, const TString& group, const ui32 totalWorkersCount) {
+IActor* CreateClusterLabeledCountersAggregatorActor(const TActorId& parentActor,
+    TTabletTypes::EType tabletType, ui32 version, const TString& group, const ui32 totalWorkersCount) {
+    const auto numWorkers = totalWorkersCount == 0 ? 1 : 0;
     switch (version) {
     case 1:
-        return new TClusterLabeledCountersAggregatorActorV1(parentActor, tabletType, totalWorkersCount == 0 ? 1 : 0, totalWorkersCount);
+        return new TClusterLabeledCountersAggregatorActorV1(parentActor, tabletType, numWorkers,
+                                                            totalWorkersCount);
     case 2:
-        return new TClusterLabeledCountersAggregatorActorV2(parentActor, tabletType, group, totalWorkersCount == 0 ? 1 : 0, totalWorkersCount);
-    case 3: //new format
-        return new TClusterLabeledCountersAggregatorActorV2(parentActor, tabletType, group, totalWorkersCount == 0 ? 1 : 0, totalWorkersCount, true);
+        return new TClusterLabeledCountersAggregatorActorV2(parentActor, tabletType, group, numWorkers,
+                                                            totalWorkersCount);
+    case 3:
+        return new TClusterLabeledCountersAggregatorActorV3(parentActor, tabletType, group, numWorkers,
+                                                            totalWorkersCount);
     }
     return nullptr;
 }
@@ -2598,7 +1918,4 @@ TActorId CreateClusterLabeledCountersAggregator(const TActorId& parentActor, TTa
     return ctx.Register(CreateClusterLabeledCountersAggregatorActor(parentActor, tabletType, version, group, totalWorkersCount), TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
 }
 
-
-
-
-}
+} // namespace NKikimr

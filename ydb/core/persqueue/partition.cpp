@@ -490,11 +490,14 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
 
     TabletCounters.Populate(counters);
 
-    PartitionCountersLabeled = THolder<TPartitionLabeledCounters>(
-        new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition,
-            AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
-                ? TMaybe<TString>(config.GetYdbDatabasePath())
-                : Nothing()));
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        PartitionCountersLabeled.Reset(
+            new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition,
+                                          config.GetYdbDatabasePath()));
+    } else {
+        PartitionCountersLabeled.Reset(
+            new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition));
+    }
 }
 
 void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx) {
@@ -3183,7 +3186,7 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
     if (!PartitionCountersLabeled) {
         return;
     }
-    //per client counters
+    // per client counters
     const auto now = ctx.Now();
     for (auto& userInfoPair : UsersInfoStorage.GetAll()) {
         auto& userInfo = userInfoPair.second;

@@ -568,7 +568,7 @@ private:
 class TTabletLabeledCountersBase {
 public:
     //
-    enum EAggregateFunc {
+    enum class EAggregateFunc : ui8 {
         EAF_MAX = 1,
         EAF_MIN = 2,
         EAF_SUM = 3

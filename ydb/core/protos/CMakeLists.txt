@@ -90,6 +90,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_physical.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_stats.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/labeled_counters.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/local.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/long_tx_service.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/metrics.proto

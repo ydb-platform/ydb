@@ -28,7 +28,7 @@
 
 - Java
 
-  Добавьте зависимости в Maven-проект, как описано в пункте ["Install the SDK"](https://github.com/yandex-cloud/ydb-java-sdk#install-the-sdk) файла `readme.md` в репозитории исходного кода.
+  Добавьте зависимости в Maven-проект, как описано в пункте ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) файла `readme.md` в репозитории исходного кода.
 
 - PHP
 

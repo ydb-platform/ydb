@@ -289,15 +289,15 @@
 
     В {{ ydb-short-name }} Java SDK для логирования используется библиотека slf4j, которая позволяет использовать различные уровни логирования (`error`, `warn`, `info`, `debug`, `trace`) для одного или нескольких логгеров. В текущей реализации доступны следующие логгеры:
 
-    * Логгер `com.yandex.ydb.core.grpc` предоставляет информацию о внутренней реализации grpc протокола 
+    * Логгер `tech.ydb.core.grpc` предоставляет информацию о внутренней реализации grpc протокола 
     * уровень `debug` логирует все операции по протоколу grpc, рекомедуется использовать только для отладки
     * уровень `info` рекомендуется использовать по умолчанию
 
-    * Логгер `com.yandex.ydb.table.impl` на уровне `debug` позволяет отслеживать внутреннее состояние драйвера ydb, в частности работу пула сессий.
+    * Логгер `tech.ydb.table.impl` на уровне `debug` позволяет отслеживать внутреннее состояние драйвера ydb, в частности работу пула сессий.
 
-    * Логгер `com.yandex.ydb.table.SessionRetryContext` на уровне `debug` будет информировать о количестве ретраев, результатах выполненных запросов, времени выполнения отдельных ретраев и общем времени выполнения всей операции
+    * Логгер `tech.ydb.table.SessionRetryContext` на уровне `debug` будет информировать о количестве ретраев, результатах выполненных запросов, времени выполнения отдельных ретраев и общем времени выполнения всей операции
 
-    * Логгер `com.yandex.ydb.table.Session` на уровне `debug` предоставляет информацию о тексте запроса, статусе ответа и времени выполнения для различных операций сессии
+    * Логгер `tech.ydb.table.Session` на уровне `debug` предоставляет информацию о тексте запроса, статусе ответа и времени выполнения для различных операций сессии
 
 
     Включение и настройка логгеров Java SDK зависит от используемой реализации `slf4j-api`.
@@ -318,16 +318,16 @@
             <Logger name="io.grpc.netty" level="warn" additivity="false">
                 <AppenderRef ref="Console"/>
             </Logger>
-            <Logger name="com.yandex.ydb.core.grpc" level="info" additivity="false">
+            <Logger name="tech.ydb.core.grpc" level="info" additivity="false">
                 <AppenderRef ref="Console"/>
             </Logger>
-            <Logger name="com.yandex.ydb.table.impl" level="info" additivity="false">
+            <Logger name="tech.ydb.table.impl" level="info" additivity="false">
                 <AppenderRef ref="Console"/>
             </Logger>
-            <Logger name="com.yandex.ydb.table.SessionRetryContext" level="debug" additivity="false">
+            <Logger name="tech.ydb.table.SessionRetryContext" level="debug" additivity="false">
                 <AppenderRef ref="Console"/>
             </Logger>
-            <Logger name="com.yandex.ydb.table.Session" level="debug" additivity="false">
+            <Logger name="tech.ydb.table.Session" level="debug" additivity="false">
                 <AppenderRef ref="Console"/>
             </Logger>
 

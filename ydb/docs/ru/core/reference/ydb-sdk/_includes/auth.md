@@ -41,11 +41,11 @@
 
   Режим | Метод
   ----- | -----
-  Anonymous | [com.yandex.ydb.core.auth.NopAuthProvider.INSTANCE](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/anonymous_credentials)
-  Access Token | [com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(</br>yandex.cloud.sdk.auth.provider.IamTokenCredentialProvider</br>.builder()</br>.token(accessToken)</br>.build()</br>);](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/access_token_credentials)
-  Metadata | [com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(</br>yandex.cloud.sdk.auth.provider.ComputeEngineCredentialProvider</br>.builder()</br>.build()</br>);](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/metadata_credentials)
-  Service Account Key | [com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(</br>yandex.cloud.sdk.auth.provider.ApiKeyCredentialProvider</br>.builder()</br>.fromFile(Paths.get(saKeyFile))</br>.build()</br>);](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/service_account_credentials)
-  Определяется по переменным окружения | [com.yandex.ydb.auth.iam.CloudAuthHelper.getAuthProviderFromEnviron();](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/environ/src/main/java/com/yandex/ydb/example)
+  Anonymous | [tech.ydb.core.auth.NopAuthProvider.INSTANCE](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/anonymous_credentials) |
+  Access Token | [new tech.ydb.core.auth.TokenAuthProvider(accessToken);](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/access_token_credentials) |
+  Metadata | [tech.ydb.auth.iam.CloudAuthHelper.getMetadataAuthProvider();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/metadata_credentials) |
+  Service Account Key | [tech.ydb.auth.iam.CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyFile);](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/service_account_credentials) |
+  Определяется по переменным окружения | [tech.ydb.auth.iam.CloudAuthHelper.getAuthProviderFromEnviron();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/environ) |
 
 - Node.js
 

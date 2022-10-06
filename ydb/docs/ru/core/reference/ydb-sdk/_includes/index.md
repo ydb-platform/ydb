@@ -9,7 +9,7 @@
 {% endif %}
 - С# (.NET) [https://github.com/ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk)
 - Go [https://github.com/ydb-platform/ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk) (архивные версии [v1](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) и [v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2))
-- Java [https://github.com/yandex-cloud/ydb-java-sdk](https://github.com/yandex-cloud/ydb-java-sdk)
+- Java [https://github.com/ydb-platform/ydb-java-sdk](https://github.com/ydb-platform/ydb-java-sdk)
 - Node.js [https://github.com/ydb-platform/ydb-nodejs-sdk](https://github.com/ydb-platform/ydb-nodejs-sdk)
 - PHP [https://github.com/yandex-cloud/ydb-php-sdk](https://github.com/yandex-cloud/ydb-php-sdk)
 - Python [https://github.com/ydb-platform/ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk)

@@ -28,7 +28,7 @@ The build process using the source code is described in the source code reposito
 
 - Java
 
-  Add dependencies to the Maven project as described in the ["Install the SDK"](https://github.com/yandex-cloud/ydb-java-sdk#install-the-sdk) step of the `readme.md` file in the source code repository.
+  Add dependencies to the Maven project as described in the ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) step of the `readme.md` file in the source code repository.
 
 - PHP
 

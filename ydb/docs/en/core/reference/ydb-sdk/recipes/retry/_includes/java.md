@@ -19,20 +19,20 @@ When using the `SessionRetryContext` class, keep in mind that operation retries 
   {% cut "Snippet of code using SessionRetryContext.supplyStatus:" %}
 
     ```java
-    private void createTable(TableClient tableClient, String database, String tableName) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-        TableDescription pets = TableDescription.newBuilder()
-                .addNullableColumn("species", PrimitiveType.utf8())
-                .addNullableColumn("name", PrimitiveType.utf8())
-                .addNullableColumn("color", PrimitiveType.utf8())
-                .addNullableColumn("price", PrimitiveType.float32())
-                .setPrimaryKeys("species", "name")
-                .build();
-    
-        String tablePath = database + "/" + tableName;
-        retryCtx.supplyStatus(session -> session.createTable(tablePath, pets))
-                .join().expect("ok");
-    }
+      private void createTable(TableClient tableClient, String database, String tableName) {
+          SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+          TableDescription pets = TableDescription.newBuilder()
+                  .addNullableColumn("species", PrimitiveType.Text)
+                  .addNullableColumn("name", PrimitiveType.Text)
+                  .addNullableColumn("color", PrimitiveType.Text)
+                  .addNullableColumn("price", PrimitiveType.Float)
+                  .setPrimaryKeys("species", "name")
+                  .build();
+
+          String tablePath = database + "/" + tableName;
+          retryCtx.supplyStatus(session -> session.createTable(tablePath, pets))
+                  .join().expectSuccess();
+      }
     ```
 
   {% endcut %}
@@ -40,34 +40,34 @@ When using the `SessionRetryContext` class, keep in mind that operation retries 
   {% cut "Snippet of code using SessionRetryContext.supplyResult:" %}
 
     ```java
-    private void selectData(TableClient tableClient, String tableName) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-        String selectQuery
-                = "DECLARE $species AS Utf8;"
-                + "DECLARE $name AS Utf8;"
-                + "SELECT * FROM " + tableName + " "
-                + "WHERE species = $species AND name = $name;";
-    
-        Params params = Params.of(
-                "$species", PrimitiveValue.utf8("cat"),
-                "$name", PrimitiveValue.utf8("Tom")
-        );
-    
-        DataQueryResult data = retryCtx
-                .supplyResult(session -> session.executeDataQuery(selectQuery, TxControl.onlineRo(), params))
-                .join().expect("ok");
-    
-        ResultSetReader rsReader = data.getResultSet(0);
-        logger.info("Result of select query:");
-        while (rsReader.next()) {
-            logger.info("  species: {}, name: {}, color: {}, price: {}",
-                    rsReader.getColumn("species").getUtf8(),
-                    rsReader.getColumn("name").getUtf8(),
-                    rsReader.getColumn("color").getUtf8(),
-                    rsReader.getColumn("price").getFloat32()
-            );
-        }
-    }
+      private void selectData(TableClient tableClient, String tableName) {
+          SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+          String selectQuery
+                  = "DECLARE $species AS Text;"
+                  + "DECLARE $name AS Text;"
+                  + "SELECT * FROM " + tableName + " "
+                  + "WHERE species = $species AND name = $name;";
+
+          Params params = Params.of(
+                  "$species", PrimitiveValue.newText("cat"),
+                  "$name", PrimitiveValue.newText("Tom")
+          );
+
+          DataQueryResult data = retryCtx
+                  .supplyResult(session -> session.executeDataQuery(selectQuery, TxControl.onlineRo(), params))
+                  .join().getValue();
+
+          ResultSetReader rsReader = data.getResultSet(0);
+          logger.info("Result of select query:");
+          while (rsReader.next()) {
+              logger.info("  species: {}, name: {}, color: {}, price: {}",
+                      rsReader.getColumn("species").getText(),
+                      rsReader.getColumn("name").getText(),
+                      rsReader.getColumn("color").getText(),
+                      rsReader.getColumn("price").getFloat()
+              );
+          }
+      }
     ```
 
   {% endcut %}

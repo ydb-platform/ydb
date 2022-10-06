@@ -1,6 +1,6 @@
 # App in Java
 
-This page contains a detailed description of the code of a [test app](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/basic_example) that is available as part of the {{ ydb-short-name }} [Java SDK](https://github.com/yandex-cloud/ydb-java-sdk).
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-java-examples/tree/master/basic_example) that is available as part of the {{ ydb-short-name }} [Java SDK Examples](https://github.com/ydb-platform/ydb-java-examples).
 
 ## Downloading SDK Examples and running the example {#download}
 
@@ -9,13 +9,13 @@ The following execution scenario is based on [Git](https://git-scm.com/downloads
 Create a working directory and use it to run from the command line the command to clone the GitHub repository:
 
 ```bash
-git clone https://github.com/yandex-cloud/ydb-java-sdk
+git clone https://github.com/ydb-platform/ydb-java-examples
 ```
 
 Then build the SDK Examples
 
 ```bash
-( cd ydb-java-sdk/examples && mvn package )
+( cd ydb-java-examples && mvn package )
 ```
 
 Next, from the same working directory, run the command to start the test app. The command will differ depending on the database to connect to.
@@ -33,11 +33,10 @@ Main driver initialization parameters
 App code snippet for driver initialization:
 
 ```java
-GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+this.transport = GrpcTransport.forConnectionString(connectionString)
         .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
         .build();
-GrpcTableRpc rpc = GrpcTableRpc.ownTransport(transport);
-this.tableClient = TableClient.newClient(rpc).build();
+this.tableClient = TableClient.newClient(transport).build();
 ```
 
 We recommend that you use the `SessionRetryContext` helper class for all your operations with the YDB: it ensures proper retries in case the database becomes partially unavailable. Sample code to initialize the retry context:
@@ -48,48 +47,48 @@ this.retryCtx = SessionRetryContext.create(tableClient).build();
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
-To create tables, use the `Session.CreateTable()` method:
+To create tables, use the `Session.createTable()` method:
 
 ```java
 private void createTables() {
     TableDescription seriesTable = TableDescription.newBuilder()
-        .addNullableColumn("series_id", PrimitiveType.uint64())
-        .addNullableColumn("title", PrimitiveType.utf8())
-        .addNullableColumn("series_info", PrimitiveType.utf8())
-        .addNullableColumn("release_date", PrimitiveType.date())
+        .addNullableColumn("series_id", PrimitiveType.Uint64)
+        .addNullableColumn("title", PrimitiveType.Text)
+        .addNullableColumn("series_info", PrimitiveType.Text)
+        .addNullableColumn("release_date", PrimitiveType.Date)
         .setPrimaryKey("series_id")
         .build();
 
     retryCtx.supplyStatus(session -> session.createTable(database + "/series", seriesTable))
-            .join().expect("create table problem");
+            .join().expectSuccess("Can't create table /series");
 
     TableDescription seasonsTable = TableDescription.newBuilder()
-        .addNullableColumn("series_id", PrimitiveType.uint64())
-        .addNullableColumn("season_id", PrimitiveType.uint64())
-        .addNullableColumn("title", PrimitiveType.utf8())
-        .addNullableColumn("first_aired", PrimitiveType.date())
-        .addNullableColumn("last_aired", PrimitiveType.date())
+        .addNullableColumn("series_id", PrimitiveType.Uint64)
+        .addNullableColumn("season_id", PrimitiveType.Uint64)
+        .addNullableColumn("title", PrimitiveType.Text)
+        .addNullableColumn("first_aired", PrimitiveType.Date)
+        .addNullableColumn("last_aired", PrimitiveType.Date)
         .setPrimaryKeys("series_id", "season_id")
         .build();
 
     retryCtx.supplyStatus(session -> session.createTable(database + "/seasons", seasonsTable))
-            .join().expect("create table problem");
+            .join().expectSuccess("Can't create table /seasons");
 
     TableDescription episodesTable = TableDescription.newBuilder()
-        .addNullableColumn("series_id", PrimitiveType.uint64())
-        .addNullableColumn("season_id", PrimitiveType.uint64())
-        .addNullableColumn("episode_id", PrimitiveType.uint64())
-        .addNullableColumn("title", PrimitiveType.utf8())
-        .addNullableColumn("air_date", PrimitiveType.date())
+        .addNullableColumn("series_id", PrimitiveType.Uint64)
+        .addNullableColumn("season_id", PrimitiveType.Uint64)
+        .addNullableColumn("episode_id", PrimitiveType.Uint64)
+        .addNullableColumn("title", PrimitiveType.Text)
+        .addNullableColumn("air_date", PrimitiveType.Date)
         .setPrimaryKeys("series_id", "season_id", "episode_id")
         .build();
 
     retryCtx.supplyStatus(session -> session.createTable(database + "/episodes", episodesTable))
-            .join().expect("create table problem");
+            .join().expectSuccess("Can't create table /episodes");
 }
 ```
 
-You can use the `Session.DescribeTable()` method to view information about the table structure and make sure that it was properly created:
+You can use the `Session.describeTable()` method to view information about the table structure and make sure that it was properly created:
 
 ```java
 private void describeTables() {
@@ -98,7 +97,7 @@ private void describeTables() {
     Arrays.asList("series", "seasons", "episodes").forEach(tableName -> {
         String tablePath = database + '/' + tableName;
         TableDescription tableDesc = retryCtx.supplyResult(session -> session.describeTable(tablePath))
-                .join().expect("describe table problem");
+                .join().getValue();
 
         List<String> primaryKeys = tableDesc.getPrimaryKeys();
         logger.info(" table {}", tableName);
@@ -124,7 +123,7 @@ private void upsertSimple() {
 
     // Executes data query with specified transaction control settings.
     retryCtx.supplyResult(session -> session.executeDataQuery(query, txControl))
-        .join().expect("execute data query problem");
+        .join().getValue();
 }
 ```
 
@@ -146,7 +145,7 @@ private void selectSimple() {
 
     // Executes data query with specified transaction control settings.
     DataQueryResult result = retryCtx.supplyResult(session -> session.executeDataQuery(query, txControl))
-            .join().expect("execute data query");
+            .join().getValue();
 
     logger.info("--[ SelectSimple ]--");
 
@@ -154,7 +153,7 @@ private void selectSimple() {
     while (rs.next()) {
         logger.info("read series with id {}, title {} and release_date {}",
                 rs.getColumn("series_id").getUint64(),
-                rs.getColumn("title").getUtf8(),
+                rs.getColumn("title").getText(),
                 rs.getColumn("release_date").getDate()
         );
     }
@@ -186,20 +185,20 @@ private void selectWithParams(long seriesID, long seasonID) {
 
     // Type of parameter values should be exactly the same as in DECLARE statements.
     Params params = Params.of(
-            "$seriesId", PrimitiveValue.uint64(seriesID),
-            "$seasonId", PrimitiveValue.uint64(seasonID)
+            "$seriesId", PrimitiveValue.newUint64(seriesID),
+            "$seasonId", PrimitiveValue.newUint64(seasonID)
     );
 
     DataQueryResult result = retryCtx.supplyResult(session -> session.executeDataQuery(query, txControl, params))
-            .join().expect("execute data query");
+            .join().getValue();
 
     logger.info("--[ SelectWithParams ] -- ");
 
     ResultSetReader rs = result.getResultSet(0);
     while (rs.next()) {
         logger.info("read season with title {} for series {}",
-                rs.getColumn("season_title").getUtf8(),
-                rs.getColumn("series_title").getUtf8()
+                rs.getColumn("season_title").getText(),
+                rs.getColumn("series_title").getText()
         );
     }
 }
@@ -220,8 +219,8 @@ private void scanQueryWithParams(long seriesID, long seasonID) {
 
     // Type of parameter values should be exactly the same as in DECLARE statements.
     Params params = Params.of(
-            "$seriesId", PrimitiveValue.uint64(seriesID),
-            "$seasonId", PrimitiveValue.uint64(seasonID)
+            "$seriesId", PrimitiveValue.newUint64(seriesID),
+            "$seasonId", PrimitiveValue.newUint64(seasonID)
     );
 
     logger.info("--[ ExecuteScanQueryWithParams ]--");
@@ -230,13 +229,13 @@ private void scanQueryWithParams(long seriesID, long seasonID) {
         return session.executeScanQuery(query, params, settings, rs -> {
             while (rs.next()) {
                 logger.info("read episode {} of {} for {}",
-                        rs.getColumn("episode_title").getUtf8(),
-                        rs.getColumn("season_title").getUtf8(),
-                        rs.getColumn("series_title").getUtf8()
+                        rs.getColumn("episode_title").getText(),
+                        rs.getColumn("season_title").getText(),
+                        rs.getColumn("series_title").getText()
                 );
             }
         });
-    }).join().expect("scan query problem");
+    }).join().expectSuccess("scan query problem");
 }
 ```
 
@@ -253,7 +252,7 @@ private void multiStepTransaction(long seriesID, long seasonID) {
 
         // return success status to SessionRetryContext
         return CompletableFuture.completedFuture(Status.SUCCESS);
-    }).join().expect("multistep transaction problem");
+    }).join().expectSuccess("multistep transaction problem");
 }
 
 ```
@@ -272,9 +271,9 @@ The first step is to prepare and execute the first query:
     // after query execution.
     TxControl tx1 = TxControl.serializableRw().setCommitTx(false);
     DataQueryResult res1 = session.executeDataQuery(query1, tx1, Params.of(
-            "$seriesId", PrimitiveValue.uint64(seriesID),
-            "$seasonId", PrimitiveValue.uint64(seasonID)
-    )).join().expect("execute data query problem");
+            "$seriesId", PrimitiveValue.newUint64(seriesID),
+            "$seasonId", PrimitiveValue.newUint64(seasonID)
+    )).join().getValue();
 ```
 
 After that, we can process the resulting data on the client side:
@@ -312,16 +311,16 @@ The next step is to create the next query that uses the results of code executio
     // commits it at the end of second query execution.
     TxControl tx2 = TxControl.id(txId).setCommitTx(true);
     DataQueryResult res2 = session.executeDataQuery(query2, tx2, Params.of(
-        "$seriesId", PrimitiveValue.uint64(seriesID),
-        "$fromDate", PrimitiveValue.date(fromDate),
-        "$toDate", PrimitiveValue.date(toDate)
-    )).join().expect("execute data query problem");
+        "$seriesId", PrimitiveValue.newUint64(seriesID),
+        "$fromDate", PrimitiveValue.newDate(fromDate),
+        "$toDate", PrimitiveValue.newDate(toDate)
+    )).join().getValue();
 
     logger.info("--[ MultiStep ]--");
     ResultSetReader rs = res2.getResultSet(0);
     while (rs.next()) {
         logger.info("read episode {} with air date {}",
-                rs.getColumn("title").getUtf8(),
+                rs.getColumn("title").getText(),
                 rs.getColumn("air_date").getDate()
         );
     }
@@ -338,31 +337,31 @@ The given code snippets output the following text to the console at startup:
 
 {% include [transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
-Code snippet for `beginTransaction()` and `transaction.Commit()` calls:
+Code snippet for `beginTransaction()` and `transaction.commit()` calls:
 
 ```java
 private void tclTransaction() {
     retryCtx.supplyStatus(session -> {
-        Transaction transaction = session.beginTransaction(TransactionMode.SERIALIZABLE_READ_WRITE)
-            .join().expect("begin transaction problem");
+        Transaction transaction = session.beginTransaction(Transaction.Mode.SERIALIZABLE_READ_WRITE)
+            .join().getValue();
 
         String query
                 = "DECLARE $airDate AS Date; "
                 + "UPDATE episodes SET air_date = $airDate WHERE title = \"TBD\";";
 
-        Params params = Params.of("$airDate", PrimitiveValue.date(Instant.now()));
+        Params params = Params.of("$airDate", PrimitiveValue.newDate(Instant.now()));
 
         // Execute data query.
         // Transaction control settings continues active transaction (tx)
         TxControl txControl = TxControl.id(transaction).setCommitTx(false);
         DataQueryResult result = session.executeDataQuery(query, txControl, params)
-            .join().expect("execute date query problem");
+            .join().getValue();
 
         logger.info("get transaction {}", result.getTxId());
 
         // Commit active transaction (tx)
         return transaction.commit();
-    }).join().expect("tcl transaction problem");
+    }).join().expectSuccess("tcl transaction problem");
 }
 ```
 

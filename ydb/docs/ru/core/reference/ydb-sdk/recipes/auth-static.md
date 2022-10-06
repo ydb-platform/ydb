@@ -107,4 +107,24 @@
   }
   ```
 
+- Java
+
+  ```java
+  public void work(String connectionString, String username, String password) {
+      AuthProvider authProvider = new StaticCredentials(username, password);
+
+      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+              .withAuthProvider(authProvider)
+              .build());
+      
+      TableClient tableClient = TableClient.newClient(transport).build();
+
+      doWork(tableClient);
+
+      tableClient.close();
+      transport.close();
+  }
+  ```
+
+
 {% endlist %}

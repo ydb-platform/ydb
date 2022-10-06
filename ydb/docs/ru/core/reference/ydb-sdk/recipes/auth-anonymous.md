@@ -78,15 +78,14 @@
 
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
-              .build();
-
-      TableClient tableClient = TableClient
-          .newClient(GrpcTableRpc.ownTransport(transport))
-          .build());
+              .build());
+      
+      TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
 
       tableClient.close();
+      transport.close();
   }
   ```
 

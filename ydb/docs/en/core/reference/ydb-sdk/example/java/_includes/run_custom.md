@@ -5,7 +5,7 @@ If authentication is enabled in the database, you also need to select the [authe
 Run the command as follows:
 
 ```bash
-( cd ydb-java-sdk/examples/basic_example/target && \
+( cd ydb-java-examples/basic_example/target && \
 <auth_mode_var>="<auth_mode_value>" java -jar ydb-basic-example.jar <endpoint>?database=<database>)
 ```
 
@@ -19,7 +19,8 @@ where
 For example:
 
 ```bash
-YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." java -jar examples/basic_example/target/ydb-basic-example.jar grpcs://ydb.example.com:2135?database=/somepath/somelocation
+( cd ydb-java-examples/basic_example/target && \
+YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." java -jar ydb-basic-example.jar grpcs://ydb.example.com:2135?database=/somepath/somelocation)
 ```
 
 {% include [../../_includes/pars_from_profile_hint.md](../../_includes/pars_from_profile_hint.md) %}

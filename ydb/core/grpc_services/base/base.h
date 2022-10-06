@@ -21,6 +21,8 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/base/events.h>
 
+#include <util/stream/str.h>
+
 namespace NKikimrConfig {
     class TAppConfig;
 }
@@ -569,11 +571,38 @@ private:
     NYql::TIssueManager IssueManager_;
 };
 
-inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
-    if (vec.empty()) {
-        return {};
+namespace {
+
+    inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
+        if (vec.empty()) {
+            return {};
+        }
+        return TString{vec[0]};
     }
-    return TString{vec[0]};
+
+    inline const TMaybe<TString> ExtractYdbToken(const TVector<TStringBuf>& authHeadValues) {
+        if (authHeadValues.empty()) {
+            return {};
+        }
+        return TString{authHeadValues[0]};
+    }
+
+    inline const TMaybe<TString> ExtractDatabaseName(const TVector<TStringBuf>& dbHeaderValues) {
+        if (dbHeaderValues.empty()) {
+            return {};
+        }
+        return CGIUnescapeRet(dbHeaderValues[0]);
+    }
+
+    inline TString MakeAuthError(const TString& in, NYql::TIssueManager& issues) {
+        TStringStream out;
+        out << "unauthenticated"
+            << (in ? ", " : "") << in
+            << (issues.GetIssues() ? ": " : "");
+        issues.GetIssues().PrintTo(out, true /* one line */);
+        return out.Str();
+    }
+
 }
 
 template <ui32 TRpcId, typename TReq, typename TResp, TRateLimiterMode RlMode = TRateLimiterMode::Off>
@@ -601,29 +630,15 @@ public:
     }
 
     const TMaybe<TString> GetYdbToken() const override {
-        const auto& res = Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER);
-        if (res.empty()) {
-            return {};
-        }
-        return TString{res[0]};
+        return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
     bool HasClientCapability(const TString& capability) const override {
-        const auto& values = Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES);
-        for (const auto& value : values) {
-            if (value == capability)
-                return true;
-        }
-
-        return false;
+        return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        const auto& res = Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER);
-        if (res.empty()) {
-            return {};
-        }
-        return CGIUnescapeRet(res[0]);
+        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
     void UpdateAuthState(NGrpc::TAuthState::EAuthState state) override {
@@ -640,12 +655,7 @@ public:
     }
 
     void ReplyUnauthenticated(const TString& in) override {
-        TStringBuilder builder;
-        builder << (in.empty() ? TString("unauthenticated") : TString("unauthenticated, ")) << in;
-        for (const auto& issue : IssueManager_.GetIssues()) {
-            builder << " " << issue.Message;
-        }
-        Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, builder));
+        Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, MakeAuthError(in, IssueManager_)));
     }
 
     void ReplyUnavaliable() override {
@@ -872,29 +882,15 @@ public:
     { }
 
     const TMaybe<TString> GetYdbToken() const override {
-        const auto& res = Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER);
-        if (res.empty()) {
-            return {};
-        }
-        return TString{res[0]};
+        return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
     bool HasClientCapability(const TString& capability) const override {
-        const auto& values = Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES);
-        for (const auto& value : values) {
-            if (capability == value)
-                return true;
-        }
-
-        return false;
+        return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        const auto& res = Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER);
-        if (res.empty()) {
-            return {};
-        }
-        return CGIUnescapeRet(res[0]);
+        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
     void UpdateAuthState(NGrpc::TAuthState::EAuthState state) override {
@@ -911,12 +907,7 @@ public:
     }
 
     void ReplyUnauthenticated(const TString& in) override {
-        TStringBuilder builder;
-        builder << in;
-        for (const auto& issue : IssueManager.GetIssues()) {
-            builder << " " << issue.Message;
-        }
-        Ctx_->ReplyUnauthenticated(builder);
+        Ctx_->ReplyUnauthenticated(MakeAuthError(in, IssueManager));
     }
 
     void SetInternalToken(const TString& token) override {

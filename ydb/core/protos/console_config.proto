@@ -109,7 +109,7 @@ message TConfigItem {
         MeteringConfigItem = 45;
         HiveConfigItem = 46;
         DataShardConfigItem = 49;
-        YandexQueryConfigItem = 50;
+        FederatedQueryConfigItem = 50;
         PDiskKeyConfigItem = 51;
         CompactionConfigItem = 52;
         HttpProxyConfigItem = 53;

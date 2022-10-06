@@ -1,5 +1,5 @@
 #include "proxy_private.h"
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
 
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/shared_resources/db_pool.h>

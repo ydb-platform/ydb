@@ -2,7 +2,7 @@
 #include "db_pool.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>

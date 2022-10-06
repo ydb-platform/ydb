@@ -127,7 +127,7 @@ class KikimrConfigGenerator(object):
             enable_pqcd=True,
             enable_metering=False,
             grpc_tls_data_path=None,
-            yq_config_path=None,
+            fq_config_path=None,
             public_http_config_path=None,
             public_http_config=None,
             enable_datastreams=False,
@@ -270,8 +270,8 @@ class KikimrConfigGenerator(object):
         if auth_config_path:
             self.yaml_config["auth_config"] = _load_yaml_config(auth_config_path)
 
-        if yq_config_path:
-            self.yaml_config["yandex_query_config"] = _load_yaml_config(yq_config_path)
+        if fq_config_path:
+            self.yaml_config["yandex_query_config"] = _load_yaml_config(fq_config_path)  # TODO: rename to federated_query_config after migration
 
         if public_http_config:
             self.yaml_config["public_http_config"] = public_http_config

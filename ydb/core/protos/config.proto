@@ -26,7 +26,7 @@ import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/node_limits.proto";
-import "ydb/core/yq/libs/config/protos/yq_config.proto";
+import "ydb/core/yq/libs/config/protos/fq_config.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1627,13 +1627,15 @@ message TAppConfig {
     optional TMeteringConfig MeteringConfig = 45;
     optional THiveConfig HiveConfig = 46;
     optional TDataShardConfig DataShardConfig = 49;
-    optional NYq.NConfig.TConfig YandexQueryConfig = 50;
+    optional NYq.NConfig.TConfig FederatedQueryConfig = 58;
     optional TCompactionConfig CompactionConfig = 52;
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
     optional TTracingConfig TracingConfig = 55;
     optional TFailureInjectionConfig FailureInjectionConfig = 56;
     optional THttpProxyConfig PublicHttpConfig = 57;
+
+    optional NYq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

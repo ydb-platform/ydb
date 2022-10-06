@@ -24,6 +24,7 @@ target_proto_messages(libs-config-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/control_plane_proxy.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/control_plane_storage.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/db_pool.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/fq_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/gateways.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/health_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/issue_id.proto
@@ -39,7 +40,6 @@ target_proto_messages(libs-config-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/storage.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/test_connection.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/token_accessor.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/yq_config.proto
 )
 target_proto_addincls(libs-config-protos
   ./

@@ -199,7 +199,7 @@ namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
 
-ui32 TYandexQueryInitializer::IcPort = 0;
+ui32 TFederatedQueryInitializer::IcPort = 0;
 
 IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& runConfig)
     : Config(runConfig.AppConfig)
@@ -742,7 +742,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     setup->Interconnect.ProxyActors[destId] = TActorSetupCmd(new TInterconnectProxyTCP(destId, icCommon),
                         TMailboxType::ReadAsFilled, interconnectPoolId);
                 } else {
-                    TYandexQueryInitializer::SetIcPort(node.second.second);
+                    TFederatedQueryInitializer::SetIcPort(node.second.second);
                     icCommon->TechnicalSelfHostName = node.second.Host;
                     TString address;
                     if (node.second.first)
@@ -779,10 +779,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             }
 
             if (!IsServiceInitialized(setup, MakeInterconnectListenerActorId(false)) && !IsServiceInitialized(setup, MakeInterconnectListenerActorId(true))) {
-                if (Config.HasYandexQueryConfig() && Config.GetYandexQueryConfig().GetEnabled()) {
-                    auto& nodesManagerConfig = Config.GetYandexQueryConfig().GetNodesManager();
+                if (Config.HasFederatedQueryConfig() && Config.GetFederatedQueryConfig().GetEnabled()) {
+                    auto& nodesManagerConfig = Config.GetFederatedQueryConfig().GetNodesManager();
                     if (nodesManagerConfig.GetEnabled()) {
-                        TYandexQueryInitializer::SetIcPort(nodesManagerConfig.GetPort());
+                        TFederatedQueryInitializer::SetIcPort(nodesManagerConfig.GetPort());
                         icCommon->TechnicalSelfHostName = nodesManagerConfig.GetHost();
                         auto listener = new TInterconnectListenerTCP({}, nodesManagerConfig.GetPort(), icCommon);
                         if (int err = listener->Bind()) {
@@ -2312,19 +2312,19 @@ void THealthCheckInitializer::InitializeServices(TActorSystemSetup* setup, const
         TActorSetupCmd(NHealthCheck::CreateHealthCheckService(), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-TYandexQueryInitializer::TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources)
+TFederatedQueryInitializer::TFederatedQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , YqSharedResources(std::move(yqSharedResources))
 {
 }
 
-void TYandexQueryInitializer::SetIcPort(ui32 icPort) {
+void TFederatedQueryInitializer::SetIcPort(ui32 icPort) {
     IcPort = icPort;
 }
 
-void TYandexQueryInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) {
-    const auto& protoConfig = Config.GetYandexQueryConfig();
+void TFederatedQueryInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) {
+    const auto& protoConfig = Config.GetFederatedQueryConfig();
     if (!protoConfig.GetEnabled()) {
         return;
     }

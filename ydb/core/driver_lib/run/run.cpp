@@ -1041,7 +1041,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasBootstrapConfig()) {
-        AppData->BootstrapConfig = runConfig.AppConfig.GetBootstrapConfig(); 
+        AppData->BootstrapConfig = runConfig.AppConfig.GetBootstrapConfig();
     }
 
     // setup resource profiles
@@ -1474,10 +1474,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TYqlLogsInitializer(runConfig));
     }
 
-    if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetYandexQueryConfig().GetEnabled()) {
-        YqSharedResources = NYq::CreateYqSharedResources(runConfig.AppConfig.GetYandexQueryConfig(),
+    if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetFederatedQueryConfig().GetEnabled()) {
+        YqSharedResources = NYq::CreateYqSharedResources(runConfig.AppConfig.GetFederatedQueryConfig(),
             ModuleFactories->YdbCredentialProviderFactory, Counters->GetSubgroup("counters", "yq"));
-        sil->AddServiceInitializer(new TYandexQueryInitializer(runConfig, ModuleFactories, YqSharedResources));
+        sil->AddServiceInitializer(new TFederatedQueryInitializer(runConfig, ModuleFactories, YqSharedResources));
     }
 
     if (serviceMask.EnableSequenceProxyService) {

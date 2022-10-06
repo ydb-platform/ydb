@@ -1,4 +1,4 @@
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
 #include "proxy.h"
 
 #include <ydb/core/protos/services.pb.h>

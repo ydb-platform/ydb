@@ -227,7 +227,8 @@ protected:
         config.Opts->AddLongOption("cms-file", "CMS config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("yq-file", "Yandex Query config file (deprecated)").OptionalArgument("PATH");
+        config.Opts->AddLongOption("fq-file", "Federated Query config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH");
         config.Opts->AddLongOption("rb-file", "File with resource broker customizations").OptionalArgument("PATH");
         config.Opts->AddLongOption("metering-file", "File with metering config").OptionalArgument("PATH");
@@ -467,7 +468,8 @@ protected:
         OPTION("kqp-file", KQPConfig);
         OPTION("incrhuge-file", IncrHugeConfig);
         OPTION("alloc-file", AllocatorConfig);
-        OPTION("yq-file", YandexQueryConfig);
+        OPTION("yq-file", FederatedQueryConfig); // TODO: remove after migration (YQ-1467)
+        OPTION("fq-file", FederatedQueryConfig);
         OPTION(nullptr, TracingConfig);
         OPTION(nullptr, FailureInjectionConfig);
 
@@ -534,8 +536,8 @@ protected:
             RunConfig.NodeId = NodeId;
 
         if (NodeKind == NODE_KIND_YQ && InterconnectPort) {
-            auto& yqConfig = *AppConfig.MutableYandexQueryConfig();
-            auto& nmConfig = *yqConfig.MutableNodesManager();
+            auto& fqConfig = *AppConfig.MutableFederatedQueryConfig();
+            auto& nmConfig = *fqConfig.MutableNodesManager();
             nmConfig.SetPort(InterconnectPort);
             nmConfig.SetHost(HostName());
         }
@@ -655,8 +657,8 @@ protected:
         }
 
         if (config.ParseResult->Has("data-center")) {
-            if (AppConfig.HasYandexQueryConfig()) {
-                AppConfig.MutableYandexQueryConfig()->MutableNodesManager()->SetDataCenter(to_lower(DataCenter));
+            if (AppConfig.HasFederatedQueryConfig()) {
+                AppConfig.MutableFederatedQueryConfig()->MutableNodesManager()->SetDataCenter(to_lower(DataCenter));
             }
         }
 
@@ -810,6 +812,10 @@ protected:
                     reflection->SwapFields(&AppConfig, &parsedConfig, {fieldDescriptor});
                 }
             }
+        }
+        // TODO: remove after migration (YQ-1467)
+        if (AppConfig.HasYandexQueryConfig()) {
+            AppConfig.MutableFederatedQueryConfig()->MergeFrom(AppConfig.GetYandexQueryConfig());
         }
     }
 

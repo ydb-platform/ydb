@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/core/yq/libs/events/events.h>
 

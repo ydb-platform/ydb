@@ -492,9 +492,9 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TYandexQueryInitializer : public IKikimrServicesInitializer {
+class TFederatedQueryInitializer : public IKikimrServicesInitializer {
 public:
-    TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources);
+    TFederatedQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 

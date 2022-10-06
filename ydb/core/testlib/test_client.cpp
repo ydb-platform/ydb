@@ -748,7 +748,7 @@ namespace Tests {
             {
                 auto& controlPlaneStorageConfig = *protoConfig.MutableControlPlaneStorage();
                 controlPlaneStorageConfig.SetEnabled(true);
-                controlPlaneStorageConfig.SetUseInMemory(Settings->AppConfig.GetYandexQueryConfig().GetControlPlaneStorage().GetUseInMemory());
+                controlPlaneStorageConfig.SetUseInMemory(Settings->AppConfig.GetFederatedQueryConfig().GetControlPlaneStorage().GetUseInMemory());
                 auto& storage = *controlPlaneStorageConfig.MutableStorage();
                 storage.SetEndpoint(endpoint);
                 storage.SetTablePrefix(prefix);

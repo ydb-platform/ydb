@@ -172,6 +172,8 @@ public:
     bool HasCommittedTx(ui64 txId) const;
     bool HasRemovedTx(ui64 txId) const;
 
+    TVector<ui64> GetOpenTxs() const;
+
     TPartView GetPartView(const TLogoBlobID &bundle) const
     {
         auto *partView = Flatten.FindPtr(bundle);

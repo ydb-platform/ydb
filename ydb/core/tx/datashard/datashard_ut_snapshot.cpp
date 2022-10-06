@@ -3268,6 +3268,243 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "} Struct { Bool: false }");
     }
 
+    Y_UNIT_TEST(LockedWriteCleanupOnSplit) {
+        constexpr bool UseNewEngine = true;
+
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to key 2 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        // Check shard has some open transactions
+        {
+            auto checkSender = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shards.at(0), checkSender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
+            UNIT_ASSERT_C(!ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
+        }
+
+        // Split/merge would fail otherwise :(
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+
+        // Split table in two shards
+        {
+            //Cerr << "----Split Begin----" << Endl;
+            auto senderSplit = runtime.AllocateEdgeActor();
+            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(0), 3);
+            WaitTxNotification(server, senderSplit, txId);
+            //Cerr << "----Split End----" << Endl;
+        }
+
+        shards = GetTableShards(server, sender, "/Root/table-1");
+
+        // Check new shards don't have any open transactions
+        {
+            auto checkSender = runtime.AllocateEdgeActor();
+            for (auto shardId : shards) {
+                runtime.SendToPipe(shardId, checkSender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
+                UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shardId);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LockedWriteCleanupOnCopyTable) {
+        constexpr bool UseNewEngine = true;
+
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to key 2 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        // Check shard has some open transactions
+        {
+            auto checkSender = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shards.at(0), checkSender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
+            UNIT_ASSERT_C(!ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
+        }
+
+        // Copy table
+        {
+            auto senderCopy = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncCreateCopyTable(server, senderCopy, "/Root", "table-2", "/Root/table-1");
+            WaitTxNotification(server, senderCopy, txId);
+        }
+
+        auto shards2 = GetTableShards(server, sender, "/Root/table-2");
+        auto tableId2 = ResolveTableId(server, sender, "/Root/table-2");
+
+        // Check new shards don't have any open transactions
+        {
+            auto checkSender = runtime.AllocateEdgeActor();
+            for (auto shardId : shards2) {
+                runtime.SendToPipe(shardId, checkSender, new TEvDataShard::TEvGetOpenTxs(tableId2.PathId));
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
+                UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shardId);
+            }
+        }
+
+        // Commit changes in tx 123
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace().Locks = locks1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0)
+                )")),
+            "<empty>");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        // Check original table has those changes visible
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
+            "} Struct { Bool: false }");
+
+        // Check table copy does not have those changes
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-2`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+    }
+
 }
 
 } // namespace NKikimr

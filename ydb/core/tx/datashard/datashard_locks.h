@@ -595,6 +595,10 @@ public:
         PendingSubscribeLocks.clear();
     }
 
+    const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
+        return Locks;
+    }
+
 private:
     const THolder<TLocksDataShard> Self;
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
@@ -799,6 +803,7 @@ public:
     TVector<TLock> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
+    void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
     void CommitLock(const TArrayRef<const TCell>& syslockKey);
     void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
@@ -855,6 +860,10 @@ public:
     void UpdateCounters(ui64 counter);
 
     bool Load(ILocksDb& db);
+
+    const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
+        return Locker.GetLocks();
+    }
 
 private:
     THolder<TLocksDataShard> Self;

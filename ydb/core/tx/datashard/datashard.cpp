@@ -964,6 +964,11 @@ void TDataShard::AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersio
     SchemaSnapshotManager.AddSnapshot(txc.DB, key, TSchemaSnapshot(tableInfo, step, txId));
 }
 
+void TDataShard::PersistLastLoanTableTid(NIceDb::TNiceDb& db, ui32 localTid) {
+    LastLoanTableTid = localTid;
+    PersistSys(db, Schema::Sys_LastLoanTableTid, LastLoanTableTid);
+}
+
 TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
     const NKikimrSchemeOp::TTableDescription& tableScheme)
 {
@@ -3322,6 +3327,38 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
 
     return true;
 }
+
+class TDataShard::TTxGetOpenTxs : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxGetOpenTxs(TDataShard* self, TEvDataShard::TEvGetOpenTxs::TPtr&& ev)
+        : TTransactionBase(self)
+        , Ev(std::move(ev))
+    { }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        auto pathId = Ev->Get()->PathId;
+        auto it = pathId ? Self->GetUserTables().find(pathId.LocalPathId) : Self->GetUserTables().begin();
+        Y_VERIFY(it != Self->GetUserTables().end());
+
+        auto txs = txc.DB.GetOpenTxs(it->second->LocalTid);
+
+        Reply = MakeHolder<TEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(txs));
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
+    }
+
+private:
+    TEvDataShard::TEvGetOpenTxs::TPtr Ev;
+    THolder<TEvDataShard::TEvGetOpenTxsResult> Reply;
+};
+
+void TDataShard::Handle(TEvDataShard::TEvGetOpenTxs::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxGetOpenTxs(this, std::move(ev)), ctx);
+}
+
 
 } // NDataShard
 

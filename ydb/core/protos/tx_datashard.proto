@@ -306,6 +306,7 @@ message TSnapshotTransferReadSet {
     optional uint64 MvccLowWatermarkTxId = 9;
     optional uint64 MvccImmediateWriteEdgeStep = 10;
     optional uint64 MvccImmediateWriteEdgeTxId = 11;
+    optional bool WithOpenTxs = 12;
 }
 
 message TSnapshotTransferInfo {

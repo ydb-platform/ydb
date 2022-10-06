@@ -876,6 +876,13 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     return TLock();
 }
 
+void TSysLocks::EraseLock(ui64 lockId) {
+    Y_VERIFY(Update);
+    if (auto* lock = Locker.FindLockPtr(lockId)) {
+        Update->AddEraseLock(lock);
+    }
+}
+
 void TSysLocks::EraseLock(const TArrayRef<const TCell>& key) {
     Y_VERIFY(Update);
     if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {

@@ -51,15 +51,25 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
     Y_VERIFY(schemeTx.HasCreateTable());
 
+    const auto &createTableTx = schemeTx.GetCreateTable();
+
+    TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
+    if (createTableTx.HasPathId()) {
+        Y_VERIFY(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
+        tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
+    }
+
+    auto userTable = DataShard.FindUserTable(tableId);
+    Y_VERIFY(userTable);
+
     const bool mvcc = DataShard.IsMvccEnabled();
+
+    bool hasOpenTxs = false;
+    bool loanedTables = false;
 
     for (auto &pr : op->InReadSets()) {
         for (auto& rsdata : pr.second) {
             NKikimrTxDataShard::TSnapshotTransferReadSet rs;
-
-            // We currently support a single readset for a single user table
-            Y_VERIFY(DataShard.GetUserTables().size() == 1, "Support for more than 1 user table in a datashard is not implemented here");
-            ui32 localTableId = DataShard.GetUserTables().begin()->second->LocalTid;
 
             TString snapBody = rsdata.Body;
 
@@ -90,10 +100,22 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                     if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark)
                         DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark);
                 }
+
+                if (rs.GetWithOpenTxs()) {
+                    hasOpenTxs = true;
+                }
             }
 
-            txc.Env.LoanTable(localTableId, snapBody);
+            if (userTable->LocalTid != DataShard.GetLastLoanTableTid()) {
+                txc.Env.LoanTable(userTable->LocalTid, snapBody);
+                loanedTables = true;
+            }
         }
+    }
+
+    if (loanedTables) {
+        // We want to make sure we won't try to loan table again on restart
+        DataShard.PersistLastLoanTableTid(db, userTable->LocalTid);
     }
 
     Y_VERIFY(DataShard.GetSnapshotManager().GetSnapshots().empty(),
@@ -110,6 +132,14 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
         }
     }
 
+    if (hasOpenTxs && loanedTables) {
+        // We must wait for loan to complete, so ReceiveSnapshotCleanup would
+        // see open transactions that it needs to cleanup.
+        return EExecutionStatus::WaitComplete;
+    }
+
+    // Don't break compatibility with previous datashard versions
+    // Version 22-4 and below relied on all units finishing without interruptions
     return EExecutionStatus::ExecutedNoMoreRestarts;
 }
 

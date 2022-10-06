@@ -128,6 +128,13 @@ public:
     bool HasRemovedTx(ui32 table, ui64 txId) const;
 
     /**
+     * Returns a list of open transactions in the provided table. This only
+     * includes transactions with changes that are neither committed nor
+     * removed.
+     */
+    TVector<ui64> GetOpenTxs(ui32 table) const;
+
+    /**
      * Remove row versions [lower, upper) from the given table
      *
      * Once committed this cannot be undone. This is a hint to the underlying

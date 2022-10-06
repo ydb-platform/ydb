@@ -305,6 +305,9 @@ struct TEvDataShard {
         EvTestLoadResponse,
         EvTestLoadFinished,
 
+        EvGetOpenTxs, /* for tests */
+        EvGetOpenTxsResult, /* for tests */
+
         EvEnd
     };
 
@@ -1571,6 +1574,24 @@ struct TEvDataShard {
         explicit TEvReplicationSourceOffsetsCancel(ui64 readId) {
             Record.SetReadId(readId);
         }
+    };
+
+    struct TEvGetOpenTxs : public TEventLocal<TEvGetOpenTxs, EvGetOpenTxs> {
+        TPathId PathId;
+
+        TEvGetOpenTxs(const TPathId& pathId)
+            : PathId(pathId)
+        { }
+    };
+
+    struct TEvGetOpenTxsResult : public TEventLocal<TEvGetOpenTxsResult, EvGetOpenTxsResult> {
+        TPathId PathId;
+        TVector<ui64> OpenTxs;
+
+        TEvGetOpenTxsResult(const TPathId& pathId, TVector<ui64> openTxs)
+            : PathId(pathId)
+            , OpenTxs(std::move(openTxs))
+        { }
     };
 
 };

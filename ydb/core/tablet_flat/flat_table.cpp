@@ -911,6 +911,20 @@ bool TTable::HasRemovedTx(ui64 txId) const
     return RemovedTransactions.Contains(txId);
 }
 
+TVector<ui64> TTable::GetOpenTxs() const
+{
+    TVector<ui64> txs;
+
+    for (auto& pr : TxRefs) {
+        ui64 txId = pr.first;
+        if (!CommittedTransactions.Find(txId) && !RemovedTransactions.Contains(txId)) {
+            txs.push_back(txId);
+        }
+    }
+
+    return txs;
+}
+
 TMemTable& TTable::MemTable()
 {
     if (!Mutable) {

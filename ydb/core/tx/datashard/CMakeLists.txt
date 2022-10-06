@@ -220,6 +220,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_op_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_cleanup_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/remove_locks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_avl_tree.cpp

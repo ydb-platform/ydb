@@ -374,6 +374,11 @@ bool TDatabase::HasRemovedTx(ui32 table, ui64 txId) const
     return Require(table)->HasRemovedTx(txId);
 }
 
+TVector<ui64> TDatabase::GetOpenTxs(ui32 table) const
+{
+    return Require(table)->GetOpenTxs();
+}
+
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)
 {
     if (Y_LIKELY(lower < upper)) {

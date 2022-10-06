@@ -47,6 +47,7 @@ THolder<TExecutionUnit> CreateBackupUnit(TDataShard &dataShard, TPipeline &pipel
 THolder<TExecutionUnit> CreateRestoreUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateReceiveSnapshotUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateReceiveSnapshotCleanupUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateAlterMoveShadowUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateDropTableUnit(TDataShard &dataShard, TPipeline &pipeline);

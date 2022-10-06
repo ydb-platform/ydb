@@ -63,6 +63,9 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
     for (auto &snapshot : op->InputSnapshots()) {
+        auto* txSnapshot = dynamic_cast<TTxTableSnapshotContext*>(snapshot.Get());
+        Y_VERIFY(txSnapshot, "Unexpected input snapshot type");
+
         TString snapBody = DataShard.BorrowSnapshot(localTableId, *snapshot, { }, { }, targetTablet);
         txc.Env.DropSnapshot(snapshot);
 
@@ -84,7 +87,7 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
         TRowVersion lowWatermark = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark() :
                                    TRowVersion::Min();
 
-        if (minVersion || completeEdge || incompleteEdge || immediateWriteEdge || lowWatermark)
+        if (minVersion || completeEdge || incompleteEdge || immediateWriteEdge || lowWatermark || txSnapshot->HasOpenTxs())
             extended = true; // Must use an extended format
 
         if (extended) {
@@ -120,6 +123,10 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
             if (lowWatermark) {
                 rs.SetMvccLowWatermarkStep(lowWatermark.Step);
                 rs.SetMvccLowWatermarkTxId(lowWatermark.TxId);
+            }
+
+            if (txSnapshot->HasOpenTxs()) {
+                rs.SetWithOpenTxs(true);
             }
 
             rsBody.reserve(SnapshotTransferReadSetMagic.size() + rs.ByteSizeLong());

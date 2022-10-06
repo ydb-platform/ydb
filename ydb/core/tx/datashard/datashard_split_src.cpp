@@ -1,4 +1,6 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
+#include "setup_sys_locks.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/util/pb.h>
@@ -126,6 +128,27 @@ public:
         }
 
         Y_VERIFY(Self->TxInFly() == 0, "Currently split operation shouldn't start while there are in-flight transactions");
+
+        // We need to remove all locks first, making sure persistent uncommitted
+        // changes are not borrowed by new shards. Otherwise those will become
+        // unaccounted for.
+        if (!Self->SysLocksTable().GetLocks().empty()) {
+            auto countBefore = Self->SysLocksTable().GetLocks().size();
+            TDataShardLocksDb locksDb(*Self, txc);
+            TSetupSysLocks guardLocks(*Self, &locksDb);
+            for (auto& pr : Self->SysLocksTable().GetLocks()) {
+                Self->SysLocksTable().EraseLock(pr.first);
+                if (pr.second->IsPersistent()) {
+                    // Don't erase more than one persistent lock at a time
+                    break;
+                }
+            }
+            Self->SysLocksTable().ApplyLocks();
+            auto countAfter = Self->SysLocksTable().GetLocks().size();
+            Y_VERIFY(countAfter < countBefore, "Expected to erase at least one lock");
+            Self->Execute(Self->CreateTxStartSplit(), ctx);
+            return true;
+        }
 
         ui64 opId = Self->SrcSplitOpId;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " starting snapshot for split OpId " << opId);

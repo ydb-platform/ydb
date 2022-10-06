@@ -49,6 +49,7 @@ enum class EExecutionUnitKind : ui32 {
     Restore,
     CreateTable,
     ReceiveSnapshot,
+    ReceiveSnapshotCleanup,
     AlterMoveShadow,
     AlterTable,
     DropTable,

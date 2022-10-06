@@ -94,6 +94,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateCreateTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::ReceiveSnapshot:
         return CreateReceiveSnapshotUnit(dataShard, pipeline);
+    case EExecutionUnitKind::ReceiveSnapshotCleanup:
+        return CreateReceiveSnapshotCleanupUnit(dataShard, pipeline);
     case EExecutionUnitKind::AlterMoveShadow:
         return CreateAlterMoveShadowUnit(dataShard, pipeline);
     case EExecutionUnitKind::AlterTable:

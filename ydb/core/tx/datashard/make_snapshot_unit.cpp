@@ -59,8 +59,9 @@ EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
 
         Y_VERIFY(DataShard.GetUserTables().contains(tableId));
         ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
+        auto openTxs = txc.DB.GetOpenTxs(localTableId);
         TIntrusivePtr<TTableSnapshotContext> snapContext
-            = new TTxTableSnapshotContext(op->GetStep(), op->GetTxId(), {localTableId});
+            = new TTxTableSnapshotContext(op->GetStep(), op->GetTxId(), {localTableId}, !openTxs.empty());
         txc.Env.MakeSnapshot(snapContext);
 
         op->SetWaitingForSnapshotFlag();

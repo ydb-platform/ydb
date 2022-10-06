@@ -56,6 +56,11 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
 
+    if (DataShard.HasUserTable(tableId)) {
+        // Table already created, assume we restarted after a successful commit
+        return EExecutionStatus::Executed;
+    }
+
     const ui64 schemaVersion = createTableTx.HasTableSchemaVersion() ? createTableTx.GetTableSchemaVersion() : 0u;
 
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,

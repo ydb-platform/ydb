@@ -60,9 +60,10 @@ using NLongTxService::TEvLongTxService;
 // For CopyTable and MoveShadow
 class TTxTableSnapshotContext : public NTabletFlatExecutor::TTableSnapshotContext {
 public:
-    TTxTableSnapshotContext(ui64 step, ui64 txId, TVector<ui32>&& tables)
+    TTxTableSnapshotContext(ui64 step, ui64 txId, TVector<ui32>&& tables, bool hasOpenTxs = false)
         : StepOrder(step, txId)
         , Tables(tables)
+        , HasOpenTxs_(hasOpenTxs)
     {}
 
     const TStepOrder& GetStepOrder() const {
@@ -73,9 +74,14 @@ public:
         return Tables;
     }
 
+    bool HasOpenTxs() const {
+        return HasOpenTxs_;
+    }
+
 private:
     TStepOrder StepOrder;
     TVector<ui32> Tables;
+    bool HasOpenTxs_;
 };
 
 // For Split
@@ -207,6 +213,7 @@ class TDataShard
     class TTxCompactTable;
     class TTxPersistFullCompactionTs;
     class TTxRemoveLock;
+    class TTxGetOpenTxs;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -870,6 +877,8 @@ class TDataShard
             SysMvcc_ImmediateWriteEdgeStep, // 39 Maximum step of immediate writes with mvcc enabled
             SysMvcc_ImmediateWriteEdgeTxId, // 40 Maximum txId of immediate writes with mvcc enabled
 
+            Sys_LastLoanTableTid, // 41 Last tid that we used in LoanTable
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -882,6 +891,7 @@ class TDataShard
         static_assert(ESysTableKeys::SysMvcc_UnprotectedReads == 38, "SysMvcc_UnprotectedReads changed its value");
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeStep == 39, "SysMvcc_ImmediateWriteEdgeStep changed its value");
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeTxId == 40, "SysMvcc_ImmediateWriteEdgeTxId changed its value");
+        static_assert(ESysTableKeys::Sys_LastLoanTableTid == 41, "Sys_LastLoanTableTid changed its value");
 
         static constexpr ui64 MinLocalTid = TSysTables::SysTableMAX + 1; // 1000
 
@@ -1063,6 +1073,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvDataShard::TEvGetOpenTxs::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1246,6 +1258,18 @@ public:
     static const TString& GetUserTablePrefix() {
         static TString prefix = Schema::UserTablePrefix;
         return prefix;
+    }
+
+    bool HasUserTable(const TPathId& tableId) {
+        return TableInfos.contains(tableId.LocalPathId);
+    }
+
+    TUserTable::TCPtr FindUserTable(const TPathId& tableId) {
+        auto it = TableInfos.find(tableId.LocalPathId);
+        if (it != TableInfos.end()) {
+            return it->second;
+        }
+        return nullptr;
     }
 
     void RemoveUserTable(const TPathId& tableId) {
@@ -1489,6 +1513,9 @@ public:
     void DropUserTable(TTransactionContext& txc, ui64 tableId);
 
     ui32 GetLastLocalTid() const { return LastLocalTid; }
+    ui32 GetLastLoanTableTid() const { return LastLoanTableTid; }
+
+    void PersistLastLoanTableTid(NIceDb::TNiceDb& db, ui32 localTid);
 
     ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
@@ -2103,6 +2130,7 @@ private:
     // Sys table contents
     ui32 State;
     ui32 LastLocalTid;
+    ui32 LastLoanTableTid;
     ui64 LastSeqno;
     ui64 NextChangeRecordOrder;
     ui64 LastChangeRecordGroup;
@@ -2465,6 +2493,7 @@ protected:
             fFunc(TEvDataShard::EvReplicationSourceOffsetsAck, HandleByReplicationSourceOffsetsServer);
             fFunc(TEvDataShard::EvReplicationSourceOffsetsCancel, HandleByReplicationSourceOffsetsServer);
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
+            HFunc(TEvDataShard::TEvGetOpenTxs, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,

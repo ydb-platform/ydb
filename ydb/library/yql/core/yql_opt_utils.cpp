@@ -5,6 +5,7 @@
 #include "yql_type_helpers.h"
 
 #include <ydb/library/yql/ast/yql_constraint.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/generic/set.h>
@@ -1473,8 +1474,12 @@ ui8 GetTypeWeight(const TTypeAnnotationNode& type) {
 
                 default: return 32;
             }
-            case ETypeAnnotationKind::Optional: return 1 + GetTypeWeight(*type.Cast<TOptionalExprType>()->GetItemType());
-            default: return 255;
+        case ETypeAnnotationKind::Optional:
+            return 1 + GetTypeWeight(*type.Cast<TOptionalExprType>()->GetItemType());
+        case ETypeAnnotationKind::Pg:
+            return ui8(ClampVal(NPg::LookupType(type.Cast<TPgExprType>()->GetId()).TypeLen, 1, 255));
+        default:
+            return 255;
     }
 }
 
@@ -1484,11 +1489,13 @@ const TItemExprType* GetLightColumn(const TStructExprType& type) {
     ui8 weight = 255;
     const TItemExprType* field = nullptr;
     for (const auto& item : type.GetItems()) {
-
         if (const auto w = GetTypeWeight(*item->GetItemType()); w < weight) {
             weight = w;
             field = item;
         }
+    }
+    if (const auto& items = type.GetItems(); !items.empty() && !field) {
+        field = items[0];
     }
     return field;
 }

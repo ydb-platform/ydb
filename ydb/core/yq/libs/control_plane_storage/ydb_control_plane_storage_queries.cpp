@@ -248,6 +248,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
                 }
             }
 
+            TSet<TString> connectionIds;
             if (permissions.Check(TPermissions::CONNECTIONS_USE)) {
                 auto connections = GetEntitiesWithVisibilityPriority<YandexQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME);
                 for (const auto& [_, connection]: connections) {
@@ -255,6 +256,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
                         continue;
                     }
                     *queryInternal.add_connection() = connection;
+                    connectionIds.insert(connection.meta().id());
                 }
             }
 
@@ -270,6 +272,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
                     }
 
                     *queryInternal.add_binding() = binding;
+                    if (!connectionIds.contains(binding.content().connection_id())) {
+                        ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
+                    }
                 }
             }
         }
@@ -902,6 +907,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
                 }
             }
 
+            TSet<TString> connectionIds;
             if (permissions.Check(TPermissions::CONNECTIONS_USE)) {
                 auto connections = GetEntitiesWithVisibilityPriority<YandexQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME);
                 for (const auto& [_, connection]: connections) {
@@ -909,6 +915,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
                         continue;
                     }
                     *internal.add_connection() = connection;
+                    connectionIds.insert(connection.meta().id());
                 }
             }
 
@@ -924,6 +931,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
                     }
 
                     *internal.add_binding() = binding;
+                    if (!connectionIds.contains(binding.content().connection_id())) {
+                        ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
+                    }
                 }
             }
         }

@@ -4990,7 +4990,7 @@ namespace {
                         TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
                     return IGraphTransformer::TStatus::Error;
                 }
-                input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(sumResultType));
+                input->SetTypeAnn(sumResultType);
             } else if (IsNull(*lambda->GetTypeAnn())) {
                 input->SetTypeAnn(ctx.Expr.MakeType<TNullExprType>());
             } else {

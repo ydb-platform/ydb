@@ -28,9 +28,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonHiveInfo(IViewer* viewer, const TRequest& request)
+    TJsonHiveInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
-        , Event(request.Event)
+        , Event(ev)
     {}
 
     void Bootstrap() {

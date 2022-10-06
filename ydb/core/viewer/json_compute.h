@@ -51,9 +51,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonCompute(IViewer* viewer, const TRequest& request)
+    TJsonCompute(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
-        , Event(request.Event)
+        , Event(ev)
     {}
 
     TString GetDomainId(TPathId pathId) {

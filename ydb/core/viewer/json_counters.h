@@ -31,9 +31,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonCounters(IViewer* viewer, const TRequest& request)
+    TJsonCounters(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
-        , Event(request.Event)
+        , Event(ev)
         , Requested(0)
         , Received(0)
     {}

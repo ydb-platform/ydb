@@ -25,7 +25,6 @@
 #include "json_bsgroupinfo.h"
 #include "json_nodeinfo.h"
 #include "json_vdiskinfo.h"
-#include "http_router.h"
 
 
 namespace NKikimr {
@@ -118,13 +117,6 @@ public:
                 .UseAuth = true,
                 .AllowedSIDs = allowedSIDs,
             });
-            mon->RegisterActorPage({
-                .Title = "FederatedQuery",
-                .RelPath = "fq",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
-                .ActorId = ctx.SelfID,
-                .UseAuth = false,
-            });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
@@ -133,7 +125,6 @@ public:
 
             ViewerJsonHandlers.Init();
             VDiskJsonHandlers.Init();
-            FQJsonHandlers.Init();
 
             TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse>::InitMerger();
             TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::InitMerger();
@@ -178,8 +169,7 @@ public:
 private:
     TViewerJsonHandlers ViewerJsonHandlers;
     TVDiskJsonHandlers VDiskJsonHandlers;
-    TFQJsonHandlers FQJsonHandlers;
-
+    THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlers;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
@@ -215,22 +205,13 @@ private:
         json << "},";
         json << "\"basePath\": \"/\",";
         json << "\"schemes\": [\"" << protocol << "\"],";
-        json << R"___("securityDefinitions": {
-            "token": {
-                "type": "apiKey",
-                "in": "header",
-                "name": "authorization",
-                "description": "Authentication token"
-            }
-        },
-        "consumes": ["application/json"],
+        json << R"___("consumes": ["application/json"],
                   "produces": ["application/json"],
                   "paths": {)___";
+
         ViewerJsonHandlers.PrintForSwagger(json);
         json << ',';
         VDiskJsonHandlers.PrintForSwagger(json);
-        json << ',';
-        FQJsonHandlers.PrintForSwagger(json);
 
         json << R"___(},"definitions":{)___";
         json << R"___(}})___";
@@ -342,12 +323,7 @@ private:
                 VDiskJsonHandlers.Handle(this, ev, ctx);
                 return;
             }
-            if (filename.StartsWith("fq")) {
-                FQJsonHandlers.Handle(this, ev, ctx);
-                return;
-            }
         }
-
         if (filename.StartsWith("counters/hosts")) {
             ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
             return;

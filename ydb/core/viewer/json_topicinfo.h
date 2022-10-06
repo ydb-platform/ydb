@@ -29,9 +29,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonTopicInfo(IViewer* viewer, const TRequest& request)
+    TJsonTopicInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
-        , Event(request.Event)
+        , Event(ev)
     {}
 
     void Bootstrap(const TActorContext& ctx) {

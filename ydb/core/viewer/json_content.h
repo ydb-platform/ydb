@@ -29,10 +29,10 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonContent(IViewer* viewer, const TRequest& request)
+    TJsonContent(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
-        , Initiator(request.Event->Sender)
-        , Event(request.Event)
+        , Initiator(ev->Sender)
+        , Event(ev)
     {}
 
     STFUNC(StateWaitingBrowse) {

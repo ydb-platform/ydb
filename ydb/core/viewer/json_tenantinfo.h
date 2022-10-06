@@ -49,9 +49,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonTenantInfo(IViewer* viewer, const TRequest& request)
+    TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
-        , Event(request.Event)
+        , Event(ev)
     {}
 
     TString GetDomainId(TPathId pathId) {

@@ -84,10 +84,10 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonNodes(IViewer* viewer, const TRequest& request)
+    TJsonNodes(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
-        , Initiator(request.Event->Sender)
-        , Event(request.Event)
+        , Initiator(ev->Sender)
+        , Event(std::move(ev))
     {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);

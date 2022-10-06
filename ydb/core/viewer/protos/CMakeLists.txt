@@ -15,7 +15,6 @@ target_link_libraries(core-viewer-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(core-viewer-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/protos/fq.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/protos/viewer.proto
 )
 target_proto_addincls(core-viewer-protos

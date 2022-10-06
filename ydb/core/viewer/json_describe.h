@@ -28,9 +28,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonDescribe(IViewer* viewer, const TRequest& request)
+    TJsonDescribe(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
-        , Event(request.Event)
+        , Event(ev)
     {}
 
     void FillParams(NKikimrSchemeOp::TDescribePath* record, const TCgiParameters& params) {

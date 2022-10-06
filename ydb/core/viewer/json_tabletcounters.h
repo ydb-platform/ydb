@@ -33,9 +33,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonTabletCounters(IViewer* viewer, const TRequest& request)
+    TJsonTabletCounters(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
-        , Event(request.Event)
+        , Event(ev)
     {}
 
     static NTabletPipe::TClientConfig InitPipeClientConfig() {

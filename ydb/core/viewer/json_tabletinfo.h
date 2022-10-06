@@ -55,8 +55,8 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     using TThis = TJsonTabletInfo;
     TVector<ui64> Tablets;
 public:
-    TJsonTabletInfo(IViewer* viewer, const TRequest& request)
-        : TJsonWhiteboardRequest(viewer, request)
+    TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
+        : TJsonWhiteboardRequest(viewer, ev)
     {}
 
     static NTabletPipe::TClientConfig InitPipeClientConfig() {

@@ -108,6 +108,5 @@ Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(Swagger) {
         TestSwagger<TViewerJsonHandlers>();
         TestSwagger<TVDiskJsonHandlers>();
-        TestSwagger<TFQJsonHandlers>();
     }
 }

@@ -2,6 +2,7 @@
 
 #include <util/generic/size_literals.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include "output_queue_impl.h"
 
 namespace NYql {
 
@@ -52,6 +53,89 @@ bool TReadBuffer::nextImpl() {
         set(nullptr, 0ULL);
         return false;
     }
+}
+
+namespace {
+
+class TCompressor : public TOutputQueue<> {
+public:
+    TCompressor(int level)
+        : ZCtx_(::ZSTD_createCStream())
+    {
+        const auto ret = ::ZSTD_initCStream(ZCtx_, level);
+        YQL_ENSURE(!::ZSTD_isError(ret), "code: " << ret << ", error: " << ::ZSTD_getErrorName(ret));
+    }
+
+    ~TCompressor() {
+        ::ZSTD_freeCStream(ZCtx_);
+    }
+private:
+    void Push(TString&& item) override {
+        InputQueue.Push(std::move(item));
+        DoCompression();
+    }
+
+    void Seal() override {
+        InputQueue.Seal();
+        DoCompression();
+    }
+
+    size_t Size() const override {
+        return TOutputQueue::Size() + InputQueue.Size();
+    }
+
+    bool Empty() const override {
+        return TOutputQueue::Empty() && InputQueue.Empty();
+    }
+
+    size_t Volume() const override {
+        return TOutputQueue::Volume() + InputQueue.Volume();
+    }
+
+    void DoCompression() {
+        while (!InputQueue.Empty()) {
+            const auto& pop = InputQueue.Pop();
+            const bool done = InputQueue.IsSealed() && InputQueue.Empty();
+            if (pop.empty() && !done)
+                break;
+
+            if (const auto bound = ZSTD_compressBound(pop.size()); bound > OutputBufferSize)
+                OutputBuffer = std::make_unique<char[]>(OutputBufferSize = bound);
+
+            if (IsFirstBlock && done) {
+                const auto size = ::ZSTD_compress2(ZCtx_, OutputBuffer.get(), OutputBufferSize, pop.data(), pop.size());
+                YQL_ENSURE(!::ZSTD_isError(size), "code: " << size << ", error: " << ::ZSTD_getErrorName(size));
+                if (size)
+                    TOutputQueue::Push(TString(OutputBuffer.get(), size));
+            } else {
+                ::ZSTD_inBuffer zIn{pop.data(), pop.size(), 0ULL};
+                ::ZSTD_outBuffer zOut{OutputBuffer.get(), OutputBufferSize, 0ULL};
+                const auto code = ::ZSTD_compressStream2(ZCtx_, &zOut, &zIn, done ? ZSTD_e_end : ZSTD_e_continue);
+                YQL_ENSURE(!::ZSTD_isError(code), "code: " << code << ", error: " << ::ZSTD_getErrorName(code));
+
+                if (zOut.pos)
+                    TOutputQueue::Push(TString(OutputBuffer.get(), zOut.pos));
+            }
+
+            IsFirstBlock = false;
+            if (done)
+                return TOutputQueue::Seal();
+        };
+    }
+
+    std::size_t OutputBufferSize = 0ULL;
+    std::unique_ptr<char[]> OutputBuffer;
+
+    ::ZSTD_CStream *const ZCtx_;
+
+    TOutputQueue<0> InputQueue;
+    bool IsFirstBlock = true;
+};
+
+}
+
+IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
+    return std::make_unique<TCompressor>(cLevel.value_or(ZSTD_defaultCLevel()));
 }
 
 }

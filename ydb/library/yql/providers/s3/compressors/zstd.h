@@ -3,6 +3,7 @@
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #define ZSTD_STATIC_LINKING_ONLY
 #include <contrib/libs/zstd/include/zstd.h>
+#include "output_queue.h"
 
 namespace NYql {
 
@@ -21,6 +22,8 @@ private:
     size_t  Offset_;
     bool Finished_ = false;
 };
+
+IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel = {});
 
 }
 

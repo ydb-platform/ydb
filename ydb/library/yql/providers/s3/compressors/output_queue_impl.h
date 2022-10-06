@@ -19,18 +19,20 @@ public:
 
     void Push(TString&& item) override {
         YQL_ENSURE(!Sealed, "Queue is sealed.");
-        if (!Queue.empty() && Queue.back().size() < MinItemSize) {
-            if constexpr (MaxItemSize > 0ULL) {
-                if (Queue.back().size() + item.size() > MaxItemSize) {
-                    Queue.back().append(item.substr(0U, MaxItemSize - Queue.back().size()));
-                    item = item.substr(item.size() + Queue.back().size() - MaxItemSize);
+        if constexpr (MinItemSize > 0ULL) {
+            if (!Queue.empty() && Queue.back().size() < MinItemSize) {
+                if constexpr (MaxItemSize > 0ULL) {
+                    if (Queue.back().size() + item.size() > MaxItemSize) {
+                        Queue.back().append(item.substr(0U, MaxItemSize - Queue.back().size()));
+                        item = item.substr(item.size() + Queue.back().size() - MaxItemSize);
+                    } else {
+                        Queue.back().append(std::move(item));
+                        item.clear();
+                    }
                 } else {
                     Queue.back().append(std::move(item));
                     item.clear();
                 }
-            } else {
-                Queue.back().append(std::move(item));
-                item.clear();
             }
         }
 
@@ -47,7 +49,7 @@ public:
     }
 
     TString Pop() override {
-        if (Queue.empty() || !Sealed && Queue.front().size() < MinItemSize)
+        if (Queue.empty() || 1U == Queue.size() && !Sealed)
             return {};
 
         auto out = std::move(Queue.front());

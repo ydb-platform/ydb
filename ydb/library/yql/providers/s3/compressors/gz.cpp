@@ -98,7 +98,7 @@ private:
     }
 
     void DoCompression() {
-        while (true) {
+        while (!InputQueue.Empty()) {
             const auto& pop = InputQueue.Pop();
             const bool done = InputQueue.IsSealed() && InputQueue.Empty();
             if (pop.empty() && !done)
@@ -129,7 +129,7 @@ private:
 
     z_stream Z_;
 
-    TOutputQueue<6_MB, 6_MB> InputQueue;
+    TOutputQueue<0> InputQueue;
 };
 
 }

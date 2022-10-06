@@ -114,6 +114,10 @@ protected:
         return Factory;
     }
 
+    TNodePtr GetExtractor() const override {
+        return BuildLambda(Pos, Y("row"), Y("PersistableRepr", Expr));
+    }
+
     TNodePtr GetApply(const TNodePtr& type) const override {
         if (!Multi) {
             if (!DynamicFactory && !AggApplyName.empty()) {
@@ -126,7 +130,7 @@ protected:
 
         return Y("MultiAggregate",
             Y("ListItemType", type),
-            BuildLambda(Pos, Y("row"), Y("PersistableRepr", Expr)),
+            GetExtractor(),
             Factory);
     }
 
@@ -284,6 +288,10 @@ private:
         return new TKeyPayloadAggregationFactory(Pos, Name, Func, AggMode);
     }
 
+    TNodePtr GetExtractor() const final {
+        return BuildLambda(Pos, Y("row"), Payload);
+    }
+
     TNodePtr GetApply(const TNodePtr& type) const final {
         auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), Key), BuildLambda(Pos, Y("row"), Payload));
         AddFactoryArguments(apply);
@@ -376,6 +384,10 @@ private:
         return new TPayloadPredicateAggregationFactory(Pos, Name, Func, AggMode);
     }
 
+    TNodePtr GetExtractor() const final {
+        return BuildLambda(Pos, Y("row"), Payload);
+    }
+
     TNodePtr GetApply(const TNodePtr& type) const final {
         return Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), Payload), BuildLambda(Pos, Y("row"), Predicate));
     }
@@ -452,6 +464,10 @@ private:
 
     TNodePtr DoClone() const final {
         return new TTwoArgsAggregationFactory(Pos, Name, Func, AggMode);
+    }
+
+    TNodePtr GetExtractor() const final {
+        return BuildLambda(Pos, Y("row"), One);
     }
 
     TNodePtr GetApply(const TNodePtr& type) const final {
@@ -736,7 +752,7 @@ private:
         apply = L(apply, FactoryPercentile);
     }
 
-    TNodePtr AggregationTraits(const TNodePtr& type) const final {
+    TNodePtr AggregationTraits(const TNodePtr& type, bool overState) const final {
         if (Percentiles.empty())
             return TNodePtr();
 
@@ -751,7 +767,9 @@ private:
 
         const bool distinct = AggMode == EAggregateMode::Distinct;
         const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
-        return distinct ? Q(Y(names, GetApply(listType), BuildQuotedAtom(Pos, DistinctKey))) : Q(Y(names, GetApply(listType)));
+        return distinct ?
+            Q(Y(names, WrapIfOverState(GetApply(listType), overState), BuildQuotedAtom(Pos, DistinctKey))) :
+            Q(Y(names, WrapIfOverState(GetApply(listType), overState)));
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -858,7 +876,7 @@ private:
         apply = L(apply, TopFreqFactoryParams.first, TopFreqFactoryParams.second);
     }
 
-    TNodePtr AggregationTraits(const TNodePtr& type) const final {
+    TNodePtr AggregationTraits(const TNodePtr& type, bool overState) const final {
         if (TopFreqs.empty())
             return TNodePtr();
 
@@ -873,7 +891,9 @@ private:
 
         const bool distinct = AggMode == EAggregateMode::Distinct;
         const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
-        return distinct ? Q(Y(names, GetApply(listType), BuildQuotedAtom(Pos, DistinctKey))) : Q(Y(names, GetApply(listType)));
+        return distinct ?
+            Q(Y(names, WrapIfOverState(GetApply(listType), overState), BuildQuotedAtom(Pos, DistinctKey))) :
+            Q(Y(names, WrapIfOverState(GetApply(listType), overState)));
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {

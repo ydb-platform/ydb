@@ -2156,6 +2156,36 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Name", "Type": "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TCoAggApplyBase",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Extractor", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoAggApply",
+            "Base": "TCoAggApplyBase",
+            "Match": {"Type": "Callable", "Name": "AggApply"}
+        },
+        {
+            "Name": "TCoAggApplyState",
+            "Base": "TCoAggApplyBase",
+            "Match": {"Type": "Callable", "Name": "AggApplyState"}
+        },
+        {
+            "Name": "TCoAggOverState",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "AggOverState"},
+            "Children": [
+                {"Index": 0, "Name": "Extractor", "Type": "TCoLambda"},
+                {"Index": 1, "Name": "Trait", "Type": "TCoLambda"}
+            ]
         }
     ]
 }

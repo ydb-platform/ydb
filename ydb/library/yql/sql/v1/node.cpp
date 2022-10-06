@@ -1246,10 +1246,20 @@ TAstNode* IAggregation::Translate(TContext& ctx) const {
     return nullptr;
 }
 
-TNodePtr IAggregation::AggregationTraits(const TNodePtr& type) const {
+TNodePtr IAggregation::AggregationTraits(const TNodePtr& type, bool overState) const {
     const bool distinct = AggMode == EAggregateMode::Distinct;
     const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
-    return distinct ? Q(Y(Q(Name), GetApply(listType), BuildQuotedAtom(Pos, DistinctKey))): Q(Y(Q(Name), GetApply(listType)));
+    return distinct ?
+        Q(Y(Q(Name), WrapIfOverState(GetApply(listType), overState), BuildQuotedAtom(Pos, DistinctKey))) :
+        Q(Y(Q(Name), WrapIfOverState(GetApply(listType), overState)));
+}
+
+TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState) const {
+    if (!overState) {
+        return input;
+    }
+
+    return Y("AggOverState", GetExtractor(), BuildLambda(Pos, Y(), input));
 }
 
 void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
@@ -1776,13 +1786,15 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
 
     const auto listType = Y("TypeOf", label);
     auto aggrArgs = Y();
+    const bool overState = GroupBySuffix == "CombineState" || GroupBySuffix == "MergeState" || GroupBySuffix == "MergeFinalize";
     for (const auto& aggr: Aggregations) {
-        if (const auto traits = aggr->AggregationTraits(listType))
+        if (const auto traits = aggr->AggregationTraits(listType, overState)) {
             aggrArgs = L(aggrArgs, traits);
+        }
     }
 
     auto options = Y();
-    if (CompactGroupBy) {
+    if (CompactGroupBy || GroupBySuffix == "Finalize") {
         options = L(options, Q(Y(Q("compact"))));
     }
 

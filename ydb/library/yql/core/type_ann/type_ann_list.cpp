@@ -4344,7 +4344,6 @@ namespace {
     }
 
     IGraphTransformer::TStatus AggregationTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 8, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4359,12 +4358,13 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        auto status = ConvertToLambda(input->ChildRef(1), ctx.Expr, 1, 2);
-        status = status.Combine(ConvertToLambda(input->ChildRef(2), ctx.Expr, 2, 3));
-        status = status.Combine(ConvertToLambda(input->ChildRef(3), ctx.Expr, 1));
-        status = status.Combine(ConvertToLambda(input->ChildRef(4), ctx.Expr, 1));
-        status = status.Combine(ConvertToLambda(input->ChildRef(5), ctx.Expr, 2));
-        status = status.Combine(ConvertToLambda(input->ChildRef(6), ctx.Expr, 1));
+        IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
+        status = status.Combine(ConvertToLambda(input->ChildRef(1), ctx.Expr, 1, 2)); // init
+        status = status.Combine(ConvertToLambda(input->ChildRef(2), ctx.Expr, 2, 3)); // update
+        status = status.Combine(ConvertToLambda(input->ChildRef(3), ctx.Expr, 1)); // save
+        status = status.Combine(ConvertToLambda(input->ChildRef(4), ctx.Expr, 1)); // load
+        status = status.Combine(ConvertToLambda(input->ChildRef(5), ctx.Expr, 2)); // merge
+        status = status.Combine(ConvertToLambda(input->ChildRef(6), ctx.Expr, 1)); // finish
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -4373,6 +4373,9 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
+        auto& lambdaUpdate = input->ChildRef(2);
+        const bool overState = lambdaUpdate->Tail().IsCallable("Void");
+
         auto& lambdaInit = input->ChildRef(1);
 
         auto ui32Type = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32);
@@ -4380,8 +4383,7 @@ namespace {
             if (!UpdateLambdaAllArgumentsTypes(lambdaInit, { itemType }, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
-        }
-        else {
+        } else {
             if (!UpdateLambdaAllArgumentsTypes(lambdaInit, { itemType, ui32Type }, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -4396,61 +4398,96 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto& lambdaUpdate = input->ChildRef(2);
-        if (lambdaUpdate->Head().ChildrenSize() == 2U) {
-            if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, { itemType, combineStateType }, ctx.Expr)) {
+        if (!overState) {
+            if (lambdaUpdate->Head().ChildrenSize() == 2U) {
+                if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, { itemType, combineStateType }, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, { itemType, combineStateType, ui32Type }, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            if (!lambdaUpdate->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            if (!IsSameAnnotation(*lambdaUpdate->GetTypeAnn(), *combineStateType)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch update lambda result type, expected: "
+                    << *combineStateType << ", but got: " << *lambdaUpdate->GetTypeAnn()));
                 return IGraphTransformer::TStatus::Error;
             }
-        }
-        else {
-            if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, { itemType, combineStateType, ui32Type }, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
-        if (!lambdaUpdate->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!IsSameAnnotation(*lambdaUpdate->GetTypeAnn(), *combineStateType)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch update lambda result type, expected: "
-                << *combineStateType << ", but got: " << *lambdaUpdate->GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
         }
 
         auto& lambdaMerge = input->ChildRef(5);
         const bool noSaveLoad = lambdaMerge->Tail().IsCallable("Void");
-
-        auto& lambdaSave = input->ChildRef(3);
-        if (!UpdateLambdaAllArgumentsTypes(lambdaSave, { combineStateType }, ctx.Expr)) {
+        if (overState && noSaveLoad) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaMerge->Pos()), "Merge handler should be specified because of aggregation over states"));
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!lambdaSave->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
+        const TTypeAnnotationNode* reduceStateType = nullptr;
+        if (!overState) {
+            auto& lambdaSave = input->ChildRef(3);
+            if (!UpdateLambdaAllArgumentsTypes(lambdaSave, { combineStateType }, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!lambdaSave->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            auto savedType = lambdaSave->GetTypeAnn();
+            if (!noSaveLoad && !EnsurePersistableType(lambdaSave->Pos(), *savedType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto& lambdaLoad = input->ChildRef(4);
+            if (!UpdateLambdaAllArgumentsTypes(lambdaLoad, { savedType }, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!lambdaLoad->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            auto& lambdaUpdate = input->ChildRef(2);
+            if (!IsSameAnnotation(*lambdaUpdate->GetTypeAnn(), *lambdaLoad->GetTypeAnn())) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch state type after load, expected: "
+                    << *lambdaUpdate->GetTypeAnn() << ", but got: " << *lambdaLoad->GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            reduceStateType = lambdaLoad->GetTypeAnn();
+        } else {
+            auto& lambdaLoad = input->ChildRef(4);
+            if (!UpdateLambdaAllArgumentsTypes(lambdaLoad, { combineStateType }, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!lambdaLoad->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            reduceStateType = lambdaLoad->GetTypeAnn();
+
+            auto& lambdaSave = input->ChildRef(3);
+            if (!UpdateLambdaAllArgumentsTypes(lambdaSave, { reduceStateType }, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!lambdaSave->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            if (!IsSameAnnotation(*lambdaSave->GetTypeAnn(), *combineStateType)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaSave->Pos()), TStringBuilder() << "Mismatch serialized state type after save, expected: "
+                    << *combineStateType << ", but got: " << *lambdaSave->GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
-        auto savedType = lambdaSave->GetTypeAnn();
-        if (!noSaveLoad && !EnsurePersistableType(lambdaSave->Pos(), *savedType, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto& lambdaLoad = input->ChildRef(4);
-        if (!UpdateLambdaAllArgumentsTypes(lambdaLoad, { savedType }, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!lambdaLoad->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!IsSameAnnotation(*lambdaUpdate->GetTypeAnn(), *lambdaLoad->GetTypeAnn())) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch state type after load, expected: "
-                << *lambdaUpdate->GetTypeAnn() << ", but got: " << *lambdaLoad->GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto reduceStateType = lambdaLoad->GetTypeAnn();
         if (!UpdateLambdaAllArgumentsTypes(lambdaMerge, { reduceStateType, reduceStateType }, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4460,7 +4497,7 @@ namespace {
         }
 
         if (!noSaveLoad && !IsSameAnnotation(*lambdaMerge->GetTypeAnn(), *reduceStateType)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch merge lambda result type, expected: "
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaMerge->Pos()), TStringBuilder() << "Mismatch merge lambda result type, expected: "
                 << *reduceStateType << ", but got: " << *lambdaMerge->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
@@ -4531,6 +4568,8 @@ namespace {
     }
 
     IGraphTransformer::TStatus AggregateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        TStringBuf suffix = input->Content();
+        YQL_ENSURE(suffix.SkipPrefix("Aggregate"));
         if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4726,7 +4765,7 @@ namespace {
                 }
             }
 
-            const bool isAggApply = child->Child(1)->IsCallable("AggApply");
+            const bool isAggApply = child->Child(1)->IsCallable({ "AggApply", "AggApplyState" });
             const bool isTraits = child->Child(1)->IsCallable("AggregationTraits");
             if (!isAggApply && !isTraits) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Pos()), "Expected aggregation traits"));
@@ -4754,58 +4793,71 @@ namespace {
                 }
             }
 
-            auto finishType = isAggApply ? child->Child(1)->GetTypeAnn() : child->Child(1)->Child(6)->GetTypeAnn();
-            bool isOptional = finishType->GetKind() == ETypeAnnotationKind::Optional;
-            if (child->Head().IsList()) {
-                if (isOptional) {
-                    finishType = finishType->Cast<TOptionalExprType>()->GetItemType();
-                }
+            if (suffix == "" || suffix.EndsWith("Finalize")) {
+                auto finishType = isAggApply ? child->Child(1)->GetTypeAnn() : child->Child(1)->Child(6)->GetTypeAnn();
+                bool isOptional = finishType->GetKind() == ETypeAnnotationKind::Optional;
+                if (child->Head().IsList()) {
+                    if (isOptional) {
+                        finishType = finishType->Cast<TOptionalExprType>()->GetItemType();
+                    }
 
-                const auto tupleType = finishType->Cast<TTupleExprType>();
-                if (tupleType->GetSize() != child->Head().ChildrenSize()) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Child(6)->Pos()),
-                        TStringBuilder() << "Expected tuple type of size: " << child->Head().ChildrenSize() << ", but got: " << tupleType->GetSize()));
-                    return IGraphTransformer::TStatus::Error;
-                }
+                    const auto tupleType = finishType->Cast<TTupleExprType>();
+                    if (tupleType->GetSize() != child->Head().ChildrenSize()) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Child(6)->Pos()),
+                            TStringBuilder() << "Expected tuple type of size: " << child->Head().ChildrenSize() << ", but got: " << tupleType->GetSize()));
+                        return IGraphTransformer::TStatus::Error;
+                    }
 
-                for (ui32 index = 0; index < tupleType->GetSize(); ++index) {
-                    const auto item = tupleType->GetItems()[index];
-                    rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
-                        child->Head().Child(index)->Content(),
-                        (isOptional || (input->Child(1)->ChildrenSize() == 0 && !isHopping)) &&
-                            item->GetKind() != ETypeAnnotationKind::Optional ? ctx.Expr.MakeType<TOptionalExprType>(item) : item));
+                    for (ui32 index = 0; index < tupleType->GetSize(); ++index) {
+                        const auto item = tupleType->GetItems()[index];
+                        rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
+                            child->Head().Child(index)->Content(),
+                            (isOptional || (input->Child(1)->ChildrenSize() == 0 && !isHopping)) &&
+                                item->GetKind() != ETypeAnnotationKind::Optional ? ctx.Expr.MakeType<TOptionalExprType>(item) : item));
+                    }
+                } else {
+                    const TTypeAnnotationNode* defValType;
+                    bool isDefNull;
+                    if (isTraits) {
+                        auto defVal = child->Child(1)->Child(7);
+                        isDefNull = defVal->IsCallable("Null");
+                        defValType = defVal->GetTypeAnn();
+                    } else {
+                        auto name = child->Child(1)->Child(0)->Content();
+                        if (name == "count" || name == "count_all") {
+                            isDefNull = false;
+                            defValType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
+                        } else {
+                            isDefNull = true;
+                            defValType = ctx.Expr.MakeType<TNullExprType>();
+                        }
+                    }
+
+                    if (isDefNull && !isOptional && !isHopping && input->Child(1)->ChildrenSize() == 0) {
+                        if (finishType->GetKind() != ETypeAnnotationKind::Null &&
+                            finishType->GetKind() != ETypeAnnotationKind::Pg) {
+                            finishType = ctx.Expr.MakeType<TOptionalExprType>(finishType);
+                        }
+                    } else if (!isDefNull && defValType->GetKind() != ETypeAnnotationKind::Optional
+                        && finishType->GetKind() == ETypeAnnotationKind::Optional) {
+                        finishType = finishType->Cast<TOptionalExprType>()->GetItemType();
+                    } else if (!isDefNull && finishType->GetKind() == ETypeAnnotationKind::Null && input->Child(1)->ChildrenSize() == 0) {
+                        finishType = defValType;
+                    }
+
+                    rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(child->Head().Content(), finishType));
+                }
+            } else if (suffix == "Combine" || suffix == "CombineState" || suffix == "MergeState") {
+                auto stateType = isAggApply ? AggApplySerializedStateType(child->ChildPtr(1), ctx.Expr) : child->Child(1)->Child(3)->GetTypeAnn();
+                if (child->Head().IsList()) {
+                    for (const auto& x : child->Head().Children()) {
+                        rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(x->Content(), stateType));
+                    }
+                } else {
+                    rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(child->Head().Content(), stateType));
                 }
             } else {
-                const TTypeAnnotationNode* defValType;
-                bool isDefNull;
-                if (isTraits) {
-                    auto defVal = child->Child(1)->Child(7);
-                    isDefNull = defVal->IsCallable("Null");
-                    defValType = defVal->GetTypeAnn();
-                } else {
-                    auto name = child->Child(1)->Child(0)->Content();
-                    if (name == "count" || name == "count_all") {
-                        isDefNull = false;
-                        defValType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-                    } else {
-                        isDefNull = true;
-                        defValType = ctx.Expr.MakeType<TNullExprType>();
-                    }
-                }
-
-                if (isDefNull && !isOptional && !isHopping && input->Child(1)->ChildrenSize() == 0) {
-                    if (finishType->GetKind() != ETypeAnnotationKind::Null &&
-                        finishType->GetKind() != ETypeAnnotationKind::Pg) {
-                        finishType = ctx.Expr.MakeType<TOptionalExprType>(finishType);
-                    }
-                } else if (!isDefNull && defValType->GetKind() != ETypeAnnotationKind::Optional
-                    && finishType->GetKind() == ETypeAnnotationKind::Optional) {
-                    finishType = finishType->Cast<TOptionalExprType>()->GetItemType();
-                } else if (!isDefNull && finishType->GetKind() == ETypeAnnotationKind::Null && input->Child(1)->ChildrenSize() == 0) {
-                    finishType = defValType;
-                }
-
-                rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(child->Head().Content(), finishType));
+                YQL_ENSURE(false, "Unknown aggregation mode: " << suffix);
             }
         }
 
@@ -4818,6 +4870,70 @@ namespace {
             ? (const TTypeAnnotationNode*)ctx.Expr.MakeType<TStreamExprType>(rowType)
             : (const TTypeAnnotationNode*)ctx.Expr.MakeType<TListExprType>(rowType));
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus AggOverStateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto& lambda1 = input->ChildRef(0);
+        auto status = ConvertToLambda(lambda1, ctx.Expr, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto& lambda2 = input->ChildRef(1);
+        status = ConvertToLambda(lambda2, ctx.Expr, 0);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto root = lambda2->TailPtr();
+        if (root->IsCallable("AggApply")) {
+            if (!EnsureArgsCount(*root, 3, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // extractor for state, not initial value itself
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("AggApplyState")
+                    .Add(0, root->ChildPtr(0))
+                    .Add(1, root->ChildPtr(1))
+                    .Add(2, input->ChildPtr(0))
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (root->IsCallable("AggregationTraits")) {
+            // make Void update handler
+            if (!EnsureArgsCount(*root, 8, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("AggregationTraits")
+                    .Add(0, root->ChildPtr(0))
+                    .Add(1, input->ChildPtr(0)) // extractor for state, not initial value itself
+                    .Lambda(2)
+                        .Param("item")
+                        .Param("state")
+                        .Callable("Void")
+                        .Seal()
+                    .Seal()
+                    .Add(3, root->ChildPtr(3))
+                    .Add(4, root->ChildPtr(4))
+                    .Add(5, root->ChildPtr(5))
+                    .Add(6, root->ChildPtr(6))
+                    .Add(7, root->ChildPtr(7))
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(root->Pos()), "Expected aggregation traits"));
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     IGraphTransformer::TStatus SqlAggregateAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -4936,6 +5052,16 @@ namespace {
             input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(retStruct));
         }
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {
+        Y_UNUSED(ctx);
+        auto name = input->Child(0)->Content();
+        if (name == "count" || name == "count_all" || name == "sum") {
+            return input->GetTypeAnn();
+        } else {
+            YQL_ENSURE(false, "Unknown AggApply: " << name);
+        }
     }
 
     IGraphTransformer::TStatus AggApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

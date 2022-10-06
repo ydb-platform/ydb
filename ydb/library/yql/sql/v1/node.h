@@ -754,7 +754,7 @@ namespace NSQLTranslationV1 {
 
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 
-        virtual TNodePtr AggregationTraits(const TNodePtr& type) const;
+        virtual TNodePtr AggregationTraits(const TNodePtr& type, bool overState) const;
 
         virtual TNodePtr AggregationTraitsFactory() const = 0;
 
@@ -777,6 +777,8 @@ namespace NSQLTranslationV1 {
     protected:
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
         TAstNode* Translate(TContext& ctx) const override;
+        TNodePtr WrapIfOverState(const TNodePtr& input, bool overState) const;
+        virtual TNodePtr GetExtractor() const = 0;
 
         TString Name;
         TString Func;

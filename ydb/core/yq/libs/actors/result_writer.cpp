@@ -61,7 +61,7 @@ public:
 
     static constexpr char ActorName[] = "YQ_RESULT_WRITER";
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         LOG_I("Bootstrap");
         Become(&TResultWriter::StateFunc);
     }
@@ -69,11 +69,11 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
-        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
 
-        HFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData)
-        HFunc(TEvReadyState, OnReadyState);
-        HFunc(TEvQueryResponse, OnQueryResult);
+        hFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData)
+        hFunc(TEvReadyState, OnReadyState);
+        hFunc(TEvQueryResponse, OnQueryResult);
 
         hFunc(NFq::TEvInternalService::TEvWriteResultResponse, HandleResponse);
     )
@@ -91,7 +91,7 @@ private:
         NActors::IActor::PassAway();
     }
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext& ) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
         auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
         Send(ExecuterId, req.Release());
         HasError = true;
@@ -111,7 +111,7 @@ private:
         }
     }
 
-    void OnQueryResult(TEvQueryResponse::TPtr& ev, const TActorContext&) {
+    void OnQueryResult(TEvQueryResponse::TPtr& ev) {
         Finished = true;
         NYql::NDqProto::TQueryResponse queryResult(ev->Get()->Record);
 
@@ -125,7 +125,7 @@ private:
         Send(ExecuterId, new TEvQueryResponse(std::move(queryResult)));
     }
 
-    void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) { }
+    void OnReadyState(TEvReadyState::TPtr&) { }
 
     void HandleResponse(NFq::TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
         auto statusCode = ev->Get()->Result.status_code();
@@ -311,9 +311,7 @@ private:
         Cookie++;
     }
 
-    void OnChannelData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-
+    void OnChannelData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
         if (HasError) {
             StopChannel(ev);
             return;

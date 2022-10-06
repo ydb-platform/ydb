@@ -265,7 +265,7 @@ public:
 
 private:
     STRICT_STFUNC(State, {
-        HFunc(TEvents::TEvEndpointRequest, Handle);
+        hFunc(TEvents::TEvEndpointRequest, Handle);
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
     });
 
@@ -283,7 +283,7 @@ private:
             new TEvents::TEvEndpointResponse(NYql::TDbResolverResponse{std::move(ready), success, issues}));
     }
 
-    void Handle(TEvents::TEvEndpointRequest::TPtr ev, const TActorContext& ctx)
+    void Handle(TEvents::TEvEndpointRequest::TPtr ev)
     {
         TraceId = ev->Get()->TraceId;
         LOG_D("Start databaseId resolver for " << ev->Get()->DatabaseIds.size() << " ids");
@@ -347,7 +347,7 @@ private:
                     new TResponseProcessor(ev->Sender, Cache, ready, requests, TraceId, ev->Get()->MdbTransformHost, Parsers));
 
             for (const auto& [request, _] : requests) {
-                ctx.Send(new IEventHandle(HttpProxy, helper, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request)));
+                TActivationContext::Send(new IEventHandle(HttpProxy, helper, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request)));
             }
         } else {
             SendResponse(ev->Sender, std::move(ready));

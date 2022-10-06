@@ -43,13 +43,13 @@ public:
 
     static constexpr char ActorName[] = "YQ_PRIVATE_NODES_HEALTH_CHECK";
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev, const NActors::TActorContext& ctx) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_E("TNodesHealthCheckActor::OnUndelivered");
         auto res = MakeHolder<TEvents::TEvNodesHealthCheckResponse>();
         res->Status = Ydb::StatusIds::GENERIC_ERROR;
         res->Issues.AddIssue("UNDELIVERED");
-        ctx.Send(ev->Sender, res.Release());
-        Die(ctx);
+        Send(ev->Sender, res.Release());
+        PassAway();
     }
 
     void PassAway() final {
@@ -70,7 +70,7 @@ public:
         PassAway();
     }
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         Become(&TNodesHealthCheckActor::StateFunc);
         auto& req = Ev->Record;
         Tenant = req.tenant();
@@ -83,11 +83,11 @@ private:
     STRICT_STFUNC(
         StateFunc,
         CFunc(NActors::TEvents::TEvPoison::EventType, Die)
-        HFunc(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse, HandleResponse)
-        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        hFunc(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse, HandleResponse)
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
     )
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleResponse(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse::TPtr& ev) {
         auto res = MakeHolder<TEvents::TEvNodesHealthCheckResponse>();
         try {
             const auto& issues = ev->Get()->Issues;
@@ -97,8 +97,8 @@ private:
             res->Record.ConstructInPlace();
             res->Status = Ydb::StatusIds::SUCCESS;
             res->Record = ev->Get()->Record;
-            ctx.Send(Sender, res.Release());
-            Die(ctx);
+            Send(Sender, res.Release());
+            PassAway();
         } catch (...) {
             const auto msg = TStringBuilder() << "Can't do NodesHealthCheck: " << CurrentExceptionMessage();
             Fail(msg);

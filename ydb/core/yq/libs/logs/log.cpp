@@ -7,6 +7,15 @@
 
 #include <library/cpp/actors/core/log.h>
 
+#define LOG_C(stream) \
+    LOG_CRIT_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQL_PROXY, stream)
+
+#define LOG_E(stream) \
+    LOG_ERROR_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQL_PROXY, stream)
+
+#define LOG_D(stream) \
+    LOG_DEBUG_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQL_PROXY, stream)
+
 namespace NKikimr {
 
 using namespace NActors;
@@ -20,12 +29,12 @@ public:
         , LogConfig(logConfig)
     { }
 
-    void Bootstrap(const TActorContext& ctx) {
-        UpdateYqlLogLevels(ctx);
+    void Bootstrap() {
+        UpdateYqlLogLevels();
 
         // Subscribe for Logger config changes
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
-        ctx.Send(NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
                 {logConfigKind}),
             IEventHandle::FlagTrackDelivery);
@@ -34,68 +43,64 @@ public:
     }
 
 private:
-    STFUNC(MainState) {
+    STATEFN(MainState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvUndelivered, Handle);
-            HFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
-            HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         default:
             Y_FAIL("TYqlLogsUpdater: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
         }
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_CRIT_S(ctx, NKikimrServices::YQL_PROXY,
-                    "Failed to deliver subscription request to config dispatcher.");
+                LOG_C("Failed to deliver subscription request to config dispatcher.");
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_ERROR_S(ctx, NKikimrServices::YQL_PROXY, "Failed to deliver config notification response.");
+                LOG_E("Failed to deliver config notification response.");
                 break;
 
             default:
-                LOG_ERROR_S(ctx, NKikimrServices::YQL_PROXY,
-                    "Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
                 break;
         }
     }
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev) {
         Y_UNUSED(ev);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::YQL_PROXY, "Subscribed for config changes.");
+        LOG_D("Subscribed for config changes.");
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx) {
-        auto &event = ev->Get()->Record;
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        auto& event = ev->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::YQL_PROXY, "Updated table service config.");
+        LOG_D("Updated table service config.");
 
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
-        UpdateYqlLogLevels(ctx);
+        UpdateYqlLogLevels();
     }
 
-    void UpdateYqlLogLevels(const TActorContext& ctx) {
+    void UpdateYqlLogLevels() {
         const auto& kqpYqlName = NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL);
-        for (auto &entry : LogConfig.GetEntry()) {
+        for (auto& entry : LogConfig.GetEntry()) {
             if (entry.GetComponent() == kqpYqlName && entry.HasLevel()) {
                 auto yqlPriority = static_cast<NActors::NLog::EPriority>(entry.GetLevel());
                 NYql::NDq::SetYqlLogLevels(yqlPriority);
-                LOG_DEBUG_S(ctx, NKikimrServices::YQL_PROXY, "Updated YQL logs priority: "
-                    << (ui32)yqlPriority);
+                LOG_D("Updated YQL logs priority: " << (ui32)yqlPriority);
                 return;
             }
         }
 
         // Set log level based on current logger settings
-        ui8 currentLevel = ctx.LoggerSettings()->GetComponentSettings(NKikimrServices::KQP_YQL).Raw.X.Level;
+        ui8 currentLevel = TActivationContext::AsActorContext().LoggerSettings()->GetComponentSettings(NKikimrServices::KQP_YQL).Raw.X.Level;
         auto yqlPriority = static_cast<NActors::NLog::EPriority>(currentLevel);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::YQL_PROXY, "Updated YQL logs priority to current level: "
-            << (ui32)yqlPriority);
+        LOG_D("Updated YQL logs priority to current level: " << (ui32)yqlPriority);
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 

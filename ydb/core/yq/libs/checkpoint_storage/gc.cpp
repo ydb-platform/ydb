@@ -58,16 +58,16 @@ class TActorGC : public TActorBootstrapped<TActorGC> {
 public:
     TActorGC(const TCheckpointStoragePtr& checkpointStorage, const TStateStoragePtr& stateStorage);
 
-    void Bootstrap(const TActorContext& ctx);
+    void Bootstrap();
 
     static constexpr char ActorName[] = "YQ_GC_ACTOR";
 
 private:
     STRICT_STFUNC(StateFunc,
-        HFunc(TEvCheckpointStorage::TEvNewCheckpointSucceeded, Handle);
+        hFunc(TEvCheckpointStorage::TEvNewCheckpointSucceeded, Handle);
     )
 
-    void Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev);
 };
 
 TActorGC::TActorGC(const TCheckpointStoragePtr& checkpointStorage, const TStateStoragePtr& stateStorage)
@@ -76,14 +76,14 @@ TActorGC::TActorGC(const TCheckpointStoragePtr& checkpointStorage, const TStateS
 {
 }
 
-void TActorGC::Bootstrap(const TActorContext&)
+void TActorGC::Bootstrap()
 {
     Become(&TActorGC::StateFunc);
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped storage GC " << SelfId());
 }
 
-void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev, const NActors::TActorContext& ctx)
+void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
 {
     const auto* event = ev->Get();
     const auto& graphId = event->CoordinatorId.GraphId;
@@ -98,7 +98,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev,
     // 3. Delete marked checkpoints
 
     auto context = MakeIntrusive<TContext>(
-        ctx.ActorSystem(),
+        TActivationContext::ActorSystem(),
         CheckpointStorage,
         StateStorage,
         graphId,

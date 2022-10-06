@@ -49,7 +49,7 @@ public:
         NActors::IActor::PassAway();
     }
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         Become(&TYqlAnalyticsPrivateProxy::StateFunc);
         Counters->GetCounter("EvBootstrap", true)->Inc();
     }
@@ -70,7 +70,7 @@ private:
         return issues;
     }
 
-    void Handle(TEvents::TEvPingTaskRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvents::TEvPingTaskRequest::TPtr& ev) {
         Counters->GetCounter("EvPingTaskRequest", true)->Inc();
 
         NYql::TIssues issues = ValidatePermissions(ev);
@@ -84,10 +84,10 @@ private:
 
         Register(
             CreatePingTaskRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
+            NActors::TMailboxType::HTSwap, SelfId().PoolID());
     }
 
-    void Handle(TEvents::TEvGetTaskRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvents::TEvGetTaskRequest::TPtr& ev) {
         Counters->GetCounter("EvGetTaskRequest", true)->Inc();
 
         NYql::TIssues issues = ValidatePermissions(ev);
@@ -101,10 +101,10 @@ private:
 
         Register(
             CreateGetTaskRequestActor(ev->Sender, TokenAccessorConfig, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
+            NActors::TMailboxType::HTSwap, SelfId().PoolID());
     }
 
-    void Handle(TEvents::TEvWriteTaskResultRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvents::TEvWriteTaskResultRequest::TPtr& ev) {
         Counters->GetCounter("EvWriteTaskResultRequest", true)->Inc();
 
         NYql::TIssues issues = ValidatePermissions(ev);
@@ -118,10 +118,10 @@ private:
 
         Register(
             CreateWriteTaskResultRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
+            NActors::TMailboxType::HTSwap, SelfId().PoolID());
     }
 
-    void Handle(TEvents::TEvNodesHealthCheckRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvents::TEvNodesHealthCheckRequest::TPtr& ev) {
         Counters->GetCounter("EvNodesHealthCheckRequest", true)->Inc();
 
         NYql::TIssues issues = ValidatePermissions(ev);
@@ -135,7 +135,7 @@ private:
 
         Register(
             CreateNodesHealthCheckActor(ev->Sender, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
+            NActors::TMailboxType::HTSwap, SelfId().PoolID());
     }
 
     void Handle(TEvents::TEvCreateRateLimiterResourceRequest::TPtr& ev) {
@@ -176,16 +176,16 @@ private:
 
     STRICT_STFUNC(
         StateFunc,
-        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-        HFunc(TEvents::TEvPingTaskRequest, Handle)
-        HFunc(TEvents::TEvGetTaskRequest, Handle)
-        HFunc(TEvents::TEvWriteTaskResultRequest, Handle)
-        HFunc(TEvents::TEvNodesHealthCheckRequest, Handle)
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        hFunc(TEvents::TEvPingTaskRequest, Handle)
+        hFunc(TEvents::TEvGetTaskRequest, Handle)
+        hFunc(TEvents::TEvWriteTaskResultRequest, Handle)
+        hFunc(TEvents::TEvNodesHealthCheckRequest, Handle)
         hFunc(TEvents::TEvCreateRateLimiterResourceRequest, Handle)
         hFunc(TEvents::TEvDeleteRateLimiterResourceRequest, Handle)
         )
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext&) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
         LOG_E("TYqlAnalyticsPrivateProxy::OnUndelivered");
         Counters->GetCounter("OnUndelivered", true)->Inc();
     }

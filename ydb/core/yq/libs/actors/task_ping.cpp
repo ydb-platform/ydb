@@ -45,13 +45,13 @@ public:
 
     static constexpr char ActorName[] = "YQ_PRIVATE_PING_TASK";
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev, const NActors::TActorContext& ctx) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_E("TTaskPingRequestActor::OnUndelivered");
         auto res = MakeHolder<TEvents::TEvPingTaskResponse>();
         res->Status = Ydb::StatusIds::GENERIC_ERROR;
         res->Issues.AddIssue("UNDELIVERED");
-        ctx.Send(ev->Sender, res.Release());
-        Die(ctx);
+        Send(ev->Sender, res.Release());
+        PassAway();
     }
 
     void PassAway() final {
@@ -72,8 +72,7 @@ public:
         PassAway();
     }
 
-    void Bootstrap(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
+    void Bootstrap() {
         Become(&TTaskPingRequestActor::StateFunc);
         const auto& req = Ev->Record;
         OperationId = req.query_id().value();
@@ -95,9 +94,9 @@ public:
 private:
     STRICT_STFUNC(
         StateFunc,
-        CFunc(NActors::TEvents::TEvPoison::EventType, Die)
-        HFunc(NYq::TEvControlPlaneStorage::TEvPingTaskResponse, HandleResponse)
-        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+        hFunc(NYq::TEvControlPlaneStorage::TEvPingTaskResponse, HandleResponse)
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
     )
 
     std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> CreateControlPlaneEvent() {
@@ -105,7 +104,7 @@ private:
         return std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
     }
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleResponse(NYq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev) {
         LOG_D("Got CP::PingTaskResponse");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
@@ -117,8 +116,8 @@ private:
         auto response = MakeHolder<TEvents::TEvPingTaskResponse>();
         response->Status = Ydb::StatusIds::SUCCESS;
         response->Record.ConstructInPlace(ev->Get()->Record);
-        ctx.Send(Sender, response.Release());
-        Die(ctx);
+        Send(Sender, response.Release());
+        PassAway();
     }
 
 private:

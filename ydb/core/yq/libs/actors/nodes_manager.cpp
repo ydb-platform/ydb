@@ -73,11 +73,11 @@ public:
         NActors::IActor::PassAway();
     }
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         Become(&TNodesManagerActor::StateFunc);
         ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc();
         LOG_I("Bootstrap, InstanceId: " << InstanceId);
-        ResolveSelfAddress();        
+        ResolveSelfAddress();
     }
 
 private:

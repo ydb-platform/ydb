@@ -46,12 +46,12 @@ public:
 
     static constexpr char ActorName[] = "YQ_PRIVATE_WRITE_RESULT_TASK";
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev, const NActors::TActorContext& ctx) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_E("TWriteTaskRequestActor::OnUndelivered");
         Res->Status = Ydb::StatusIds::GENERIC_ERROR;
         Res->Issues.AddIssue("UNDELIVERED");
-        ctx.Send(ev->Sender, Res.Release());
-        Die(ctx);
+        Send(ev->Sender, Res.Release());
+        PassAway();
     }
 
     void PassAway() final {
@@ -71,7 +71,7 @@ public:
         PassAway();
     }
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         Become(&TWriteTaskRequestActor::StateFunc);
         auto request = Ev->Record;
         ResultId = request.result_id().value();
@@ -85,12 +85,12 @@ public:
 private:
     STRICT_STFUNC(
         StateFunc,
-        CFunc(NActors::TEvents::TEvPoison::EventType, Die)
-        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-        HFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, HandleResponse);
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        hFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, HandleResponse);
     )
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleResponse(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
         LOG_D("Got CP::WriteTaskResult Response");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
@@ -102,8 +102,8 @@ private:
         Res->Record->set_request_id(RequestId);
         Res->Issues.AddIssues(Issues);
         Res->Status = Ydb::StatusIds::SUCCESS;
-        ctx.Send(Sender, Res.Release());
-        Die(ctx);
+        Send(Sender, Res.Release());
+        PassAway();
     }
 
     const TActorId Sender;

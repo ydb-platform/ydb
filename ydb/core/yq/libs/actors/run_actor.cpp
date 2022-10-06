@@ -149,7 +149,7 @@ public:
     {
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         TProgramFactory progFactory(false, FunctionRegistry, NextUniqueId, DataProvidersInit, "yq");
         progFactory.SetModules(ModuleResolver);
         progFactory.SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry, nullptr));
@@ -162,12 +162,12 @@ public:
         {
             if (!Program->ParseSql(SqlSettings)) {
                 Issues.AddIssues(Program->Issues());
-                SendStatusAndDie(ctx, TProgram::TStatus::Error, "Failed to parse query");
+                SendStatusAndDie(TProgram::TStatus::Error, "Failed to parse query");
                 return;
             }
 
             if (ExecuteMode == YandexQuery::ExecuteMode::PARSE) {
-                SendStatusAndDie(ctx, TProgram::TStatus::Ok);
+                SendStatusAndDie(TProgram::TStatus::Ok);
                 return;
             }
         }
@@ -176,12 +176,12 @@ public:
         {
             if (!Program->Compile("")) {
                 Issues.AddIssues(Program->Issues());
-                SendStatusAndDie(ctx, TProgram::TStatus::Error, "Failed to compile query");
+                SendStatusAndDie(TProgram::TStatus::Error, "Failed to compile query");
                 return;
             }
 
             if (ExecuteMode == YandexQuery::ExecuteMode::COMPILE) {
-                SendStatusAndDie(ctx, TProgram::TStatus::Ok);
+                SendStatusAndDie(TProgram::TStatus::Ok);
                 return;
             }
         }
@@ -201,7 +201,7 @@ public:
             futureStatus = Program->RunAsync("");
             break;
         default:
-            SendStatusAndDie(ctx, TProgram::TStatus::Error, TStringBuilder() << "Unexpected execute mode " << static_cast<int>(ExecuteMode));
+            SendStatusAndDie(TProgram::TStatus::Error, TStringBuilder() << "Unexpected execute mode " << static_cast<int>(ExecuteMode));
             return;
         }
 
@@ -212,7 +212,7 @@ public:
         Become(&TProgramRunnerActor::StateFunc);
     }
 
-    void SendStatusAndDie(const TActorContext& ctx, NYql::TProgram::TStatus status, const TString& message = "") {
+    void SendStatusAndDie(NYql::TProgram::TStatus status, const TString& message = "") {
         TString expr;
         TString plan;
         if (Compiled) {
@@ -224,14 +224,14 @@ public:
         }
         Issues.AddIssues(Program->Issues());
         Send(RunActorId, new TEvPrivate::TEvProgramFinished(Issues, plan, expr, status, message));
-        Die(ctx);
+        PassAway();
     }
 
     STRICT_STFUNC(StateFunc,
-        HFunc(TEvents::TEvAsyncContinue, Handle);
+        hFunc(TEvents::TEvAsyncContinue, Handle);
     )
 
-    void Handle(TEvents::TEvAsyncContinue::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvents::TEvAsyncContinue::TPtr& ev) {
         NYql::TProgram::TStatus status = TProgram::TStatus::Error;
 
         const auto& f = ev->Get()->Future;
@@ -239,9 +239,7 @@ public:
             status = f.GetValue();
             if (status == TProgram::TStatus::Async) {
                 auto futureStatus = Program->ContinueAsync();
-                auto actorSystem = ctx.ActorSystem();
-                auto selfId = ctx.SelfID;
-                futureStatus.Subscribe([actorSystem, selfId](const TProgram::TFutureStatus& f) {
+                futureStatus.Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const TProgram::TFutureStatus& f) {
                     actorSystem->Send(selfId, new TEvents::TEvAsyncContinue(f));
                 });
                 return;
@@ -249,7 +247,7 @@ public:
         } catch (const std::exception& err) {
             Issues.AddIssue(ExceptionToIssue(err));
         }
-        SendStatusAndDie(ctx, status);
+        SendStatusAndDie(status);
     }
 
 private:
@@ -348,7 +346,7 @@ private:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvProgramFinished, Handle);
-        HFunc(TEvents::TEvAsyncContinue, Handle);
+        hFunc(TEvents::TEvAsyncContinue, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(TEvents::TEvGraphParams, Handle);
         hFunc(TEvents::TEvDataStreamsReadRulesCreationResult, Handle);
@@ -1714,7 +1712,7 @@ private:
         }
     }
 
-    void Handle(TEvents::TEvAsyncContinue::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvents::TEvAsyncContinue::TPtr& ev) {
         LOG_D("Compiling finished");
         NYql::TProgram::TStatus status = TProgram::TStatus::Error;
 
@@ -1723,9 +1721,7 @@ private:
             status = f.GetValue();
             if (status == TProgram::TStatus::Async) {
                 auto futureStatus = Program->ContinueAsync();
-                auto actorSystem = ctx.ActorSystem();
-                auto selfId = ctx.SelfID;
-                futureStatus.Subscribe([actorSystem, selfId](const TProgram::TFutureStatus& f) {
+                futureStatus.Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const TProgram::TFutureStatus& f) {
                     actorSystem->Send(selfId, new TEvents::TEvAsyncContinue(f));
                 });
                 return;

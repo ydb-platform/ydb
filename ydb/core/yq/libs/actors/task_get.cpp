@@ -53,13 +53,13 @@ public:
 
     static constexpr char ActorName[] = "YQ_PRIVATE_GET_TASK";
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev, const NActors::TActorContext& ctx) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_E("TGetTaskRequestActor::OnUndelivered");
         auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
         response->Status = Ydb::StatusIds::GENERIC_ERROR;
         response->Issues.AddIssue("UNDELIVERED");
-        ctx.Send(ev->Sender, response.Release());
-        Die(ctx);
+        Send(ev->Sender, response.Release());
+        PassAway();
     }
 
     void PassAway() final {
@@ -80,7 +80,7 @@ public:
         PassAway();
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         Become(&TGetTaskRequestActor::StateFunc);
         auto request = Ev->Record;
         LOG_D("Request CP::GetTask with size: " << request.ByteSize() << " bytes");
@@ -88,12 +88,12 @@ public:
         OwnerId = request.owner_id();
         Host = request.host();
         Tenant = request.tenant();
-        ctx.Send(NYq::ControlPlaneStorageServiceActorId(),
+        Send(NYq::ControlPlaneStorageServiceActorId(),
             new NYq::TEvControlPlaneStorage::TEvGetTaskRequest(std::move(request)));
     }
 
 private:
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev, const TActorContext& ctx) { // YQ
+    void HandleResponse(NYq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) { // YQ
         LOG_D("Got CP::GetTask Response");
 
         const auto& issues = ev->Get()->Issues;
@@ -120,8 +120,8 @@ private:
                     account.set_signature(signature);
                 }
             }
-            ctx.Send(Sender, response.Release());
-            Die(ctx);
+            Send(Sender, response.Release());
+            PassAway();
         } catch (...) {
             const auto msg = TStringBuilder() << "Can't do GetTask: " << CurrentExceptionMessage();
             Fail(msg);
@@ -131,9 +131,9 @@ private:
 private:
     STRICT_STFUNC(
         StateFunc,
-        CFunc(NActors::TEvents::TEvPoison::EventType, Die)
-        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-        HFunc(NYq::TEvControlPlaneStorage::TEvGetTaskResponse, HandleResponse)
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        hFunc(NYq::TEvControlPlaneStorage::TEvGetTaskResponse, HandleResponse)
     )
 
     const NConfig::TTokenAccessorConfig TokenAccessorConfig;

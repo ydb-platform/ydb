@@ -172,10 +172,10 @@ public:
     void Bootstrap() {
 
         if (Monitoring) {
-            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"), 
+            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
                 "fetcher", "Pending Fetcher", false, TActivationContext::ActorSystem(), SelfId());
         }
-        
+
         Become(&TPendingFetcher::StateFunc);
         DatabaseResolver = Register(CreateDatabaseResolver(MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
         Send(SelfId(), new NActors::TEvents::TEvWakeup());
@@ -184,7 +184,7 @@ public:
     }
 
 private:
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext&) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
         LOG_E("TYqlPendingFetcher::OnUndelivered");
 
         HasRunningRequest = false;
@@ -408,7 +408,7 @@ private:
 
     STRICT_STFUNC(StateFunc,
         hFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
-        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
         hFunc(TEvInternalService::TEvGetTaskResponse, Handle)
         hFunc(NActors::TEvents::TEvPoisonTaken, HandlePoisonTaken)
         hFunc(TEvPrivate::TEvCleanupCounters, HandleCleanupCounters)

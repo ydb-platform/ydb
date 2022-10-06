@@ -40,13 +40,11 @@ public:
 
 private:
     STRICT_STFUNC(Handler, {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-        });
+        hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+    });
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event,
-                const NActors::TActorContext& ctx)
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event)
     {
-        Y_UNUSED(ctx);
         auto request = event->Get()->Request;
         auto parameters = NHttp::TUrlParameters(request->URL);
         TString databaseId = parameters["databaseId"];

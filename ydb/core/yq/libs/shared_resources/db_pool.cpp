@@ -11,15 +11,25 @@
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 
-#define LOG_F(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, EMERG, STREAMS, logRecordStream)
-#define LOG_A(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, ALERT, STREAMS, logRecordStream)
-#define LOG_C(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, CRIT, STREAMS, logRecordStream)
-#define LOG_E(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, ERROR, STREAMS, logRecordStream)
-#define LOG_W(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, WARN, STREAMS, logRecordStream)
-#define LOG_N(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, NOTICE, STREAMS, logRecordStream)
-#define LOG_I(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, INFO, STREAMS, logRecordStream)
-#define LOG_D(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, DEBUG, STREAMS, logRecordStream)
-#define LOG_T(ctx, logRecordStream) LOG_STREAMS_IMPL_AS(ctx, TRACE, STREAMS, logRecordStream)
+#define LOG_F_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, EMERG, STREAMS, logRecordStream)
+#define LOG_A_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, ALERT, STREAMS, logRecordStream)
+#define LOG_C_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, CRIT, STREAMS, logRecordStream)
+#define LOG_E_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, ERROR, STREAMS, logRecordStream)
+#define LOG_W_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, WARN, STREAMS, logRecordStream)
+#define LOG_N_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, NOTICE, STREAMS, logRecordStream)
+#define LOG_I_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, INFO, STREAMS, logRecordStream)
+#define LOG_D_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, DEBUG, STREAMS, logRecordStream)
+#define LOG_T_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, TRACE, STREAMS, logRecordStream)
+
+#define LOG_F(logRecordStream) LOG_F_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
+#define LOG_A(logRecordStream) LOG_A_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
+#define LOG_C(logRecordStream) LOG_C_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
+#define LOG_E(logRecordStream) LOG_E_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
+#define LOG_W(logRecordStream) LOG_W_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
+#define LOG_N(logRecordStream) LOG_N_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
+#define LOG_I(logRecordStream) LOG_I_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
+#define LOG_D(logRecordStream) LOG_D_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
+#define LOG_T(logRecordStream) LOG_T_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
 
 namespace NYq {
 
@@ -41,30 +51,30 @@ public:
     static constexpr char ActorName[] = "YQ_DB_POOL";
 
     STRICT_STFUNC(WorkingState,
-        CFunc(NActors::TEvents::TEvPoison::EventType, Die)
-        HFunc(TEvents::TEvDbRequest, HandleRequest)
-        HFunc(TEvents::TEvDbResponse, HandleResponse)
-        HFunc(TEvents::TEvDbFunctionRequest, HandleRequest)
-        HFunc(TEvents::TEvDbFunctionResponse, HandleResponse)
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+        hFunc(TEvents::TEvDbRequest, HandleRequest)
+        hFunc(TEvents::TEvDbResponse, HandleResponse)
+        hFunc(TEvents::TEvDbFunctionRequest, HandleRequest)
+        hFunc(TEvents::TEvDbFunctionResponse, HandleResponse)
     )
 
-    void Die(const TActorContext& ctx) override {
+    void PassAway() override {
         NYql::TIssues issues;
         issues.AddIssue("DB connection closed");
         auto cancelled = NYdb::TStatus(NYdb::EStatus::CANCELLED, std::move(issues));
         for (const auto& x : Requests) {
             if (auto pRequest = std::get_if<TRequest>(&x)) {
-                ctx.Send(pRequest->Sender, new TEvents::TEvDbResponse(cancelled, {}));
+                Send(pRequest->Sender, new TEvents::TEvDbResponse(cancelled, {}));
             } else if (auto pRequest = std::get_if<TFunctionRequest>(&x)) {
-                ctx.Send(pRequest->Sender, new TEvents::TEvDbFunctionResponse(cancelled));
+                Send(pRequest->Sender, new TEvents::TEvDbFunctionResponse(cancelled));
             }
         }
 
         State.reset();
-        IActor::Die(ctx);
+        IActor::PassAway();
     }
 
-    void ProcessQueue(const TActorContext& ctx) {
+    void ProcessQueue() {
         QueueSize->Collect(Requests.size());
         if (Requests.empty() || RequestInProgress) {
             return;
@@ -75,12 +85,10 @@ public:
         RequestInProgressTimestamp = TInstant::Now();
         const auto& requestVariant = Requests.front();
 
-        LOG_T(ctx, "TDbPoolActor: ProcessQueue " << SelfId() << " Queue size = " << Requests.size());
+        LOG_T("TDbPoolActor: ProcessQueue " << SelfId() << " Queue size = " << Requests.size());
 
         if (auto pRequest = std::get_if<TRequest>(&requestVariant)) {
             auto& request = *pRequest;
-            auto actorSystem = ctx.ActorSystem();
-            auto selfId = ctx.SelfID;
             auto cookie = request.Cookie;
             auto sharedResult = std::make_shared<TVector<NYdb::TResultSet>>();
             NYdb::NTable::TRetryOperationSettings settings;
@@ -94,65 +102,63 @@ public:
                         return future;
                     });
             }, settings)
-            .Subscribe([state = std::weak_ptr<int>(State), sharedResult, actorSystem, cookie, selfId](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
+            .Subscribe([state = std::weak_ptr<int>(State), sharedResult, actorSystem = TActivationContext::ActorSystem(), cookie, selfId = SelfId()](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
                 if (state.lock()) {
                     actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbResponse(statusFuture.GetValue(), *sharedResult), 0, cookie));
                 } else {
-                    LOG_T(*actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
+                    LOG_T_AS(actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
                 }
             });
         } else if (auto pRequest = std::get_if<TFunctionRequest>(&requestVariant)) {
             auto& request = *pRequest;
-            auto selfId = ctx.SelfID;
             auto cookie = request.Cookie;
-            auto actorSystem = ctx.ActorSystem();
             TableClient.RetryOperation([request](NYdb::NTable::TSession session) {
                 return request.Handler(session);
             })
-            .Subscribe([state = std::weak_ptr<int>(State), actorSystem, selfId, cookie](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
+            .Subscribe([state = std::weak_ptr<int>(State), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), cookie](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
                 if (state.lock()) {
                     actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbFunctionResponse(statusFuture.GetValue()), 0, cookie));
                 } else {
-                    LOG_T(*actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
+                    LOG_T_AS(actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
                 }
             });
         }
     }
 
-    void HandleRequest(TEvents::TEvDbRequest::TPtr& ev, const TActorContext& ctx) {
-        LOG_D(ctx, "TDbPoolActor: TEvDbRequest " << SelfId() << " Queue size = " << Requests.size());
+    void HandleRequest(TEvents::TEvDbRequest::TPtr& ev) {
+        LOG_D("TDbPoolActor: TEvDbRequest " << SelfId() << " Queue size = " << Requests.size());
         auto request = ev->Get();
         Requests.emplace_back(TRequest{ev->Sender, ev->Cookie, request->Sql, std::move(request->Params), request->Idempotent});
-        ProcessQueue(ctx);
+        ProcessQueue();
     }
 
-    void PopFromQueueAndProcess(const TActorContext& ctx) {
+    void PopFromQueueAndProcess() {
         RequestInProgress = false;
         RequestsTime->Collect(TInstant::Now().MilliSeconds() - RequestInProgressTimestamp.MilliSeconds());
         Requests.pop_front();
         TotalInFlight->Dec();
-        ProcessQueue(ctx);
+        ProcessQueue();
     }
 
-    void HandleResponse(TEvents::TEvDbResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_T(ctx, "TDbPoolActor: TEvDbResponse " << SelfId() << " Queue size = " << Requests.size());
+    void HandleResponse(TEvents::TEvDbResponse::TPtr& ev) {
+        LOG_T("TDbPoolActor: TEvDbResponse " << SelfId() << " Queue size = " << Requests.size());
         const auto& request = Requests.front();
-        ctx.Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
-        PopFromQueueAndProcess(ctx);
+        TActivationContext::Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
+        PopFromQueueAndProcess();
     }
 
-    void HandleRequest(TEvents::TEvDbFunctionRequest::TPtr& ev, const TActorContext& ctx) {
-        LOG_T(ctx, "TDbPoolActor: TEvDbFunctionRequest " << SelfId() << " Queue size = " << Requests.size());
+    void HandleRequest(TEvents::TEvDbFunctionRequest::TPtr& ev) {
+        LOG_T("TDbPoolActor: TEvDbFunctionRequest " << SelfId() << " Queue size = " << Requests.size());
         auto request = ev->Get();
         Requests.emplace_back(TFunctionRequest{ev->Sender, ev->Cookie, std::move(request->Handler)});
-        ProcessQueue(ctx);
+        ProcessQueue();
     }
 
-    void HandleResponse(TEvents::TEvDbFunctionResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_T(ctx, "TDbPoolActor: TEvDbFunctionResponse " << SelfId() << " Queue size = " << Requests.size());
+    void HandleResponse(TEvents::TEvDbFunctionResponse::TPtr& ev) {
+        LOG_T("TDbPoolActor: TEvDbFunctionResponse " << SelfId() << " Queue size = " << Requests.size());
         const auto& request = Requests.front();
-        ctx.Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
-        PopFromQueueAndProcess(ctx);
+        TActivationContext::Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
+        PopFromQueueAndProcess();
     }
 
 private:

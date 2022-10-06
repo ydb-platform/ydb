@@ -198,7 +198,7 @@ TProgramPtr TProgramFactory::Create(
         CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
 
     TUdfIndex::TPtr udfIndex = UdfIndex_ ? UdfIndex_->Clone() : nullptr;
-    TUdfIndexPackageSet::TPtr udfIndexPackageSet = UdfIndexPackageSet_ ? UdfIndexPackageSet_->Clone() : nullptr;
+    TUdfIndexPackageSet::TPtr udfIndexPackageSet = (UdfIndexPackageSet_ && hiddenMode == EHiddenMode::Disable) ? UdfIndexPackageSet_->Clone() : nullptr;
     IModuleResolver::TPtr moduleResolver = Modules_ ? Modules_->CreateMutableChild() : nullptr;
     auto udfResolver = udfIndex ? NCommon::CreateUdfResolverWithIndex(udfIndex, UdfResolver_, FileStorage_) : UdfResolver_;
 
@@ -1007,7 +1007,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
             FallbackCounter ++;
             // don't execute recapture again
             ExprCtx_->Step.Done(TExprStep::Recapture);
-            BeforeFallback();
+            AbortHidden_();
             return AsyncTransformWithFallback(false);
         }
         if (status == IGraphTransformer::TStatus::Error && (TypeCtx_->DqFallbackPolicy == "never" || TypeCtx_->ForceDq)) {
@@ -1317,7 +1317,8 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             RandomProvider_,
             typeAnnotationContext,
             ProgressWriter_,
-            OperationOptions_
+            OperationOptions_,
+            AbortHidden_
         );
         if (HiddenMode_ != EHiddenMode::Disable && !dp.SupportsHidden) {
             continue;

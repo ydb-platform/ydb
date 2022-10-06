@@ -16,7 +16,8 @@ TDataProviderInitializer GetClickHouseDataProviderInitializer(
         TIntrusivePtr<IRandomProvider> randomProvider,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const TOperationProgressWriter& progressWriter,
-        const TYqlOperationOptions& operationOptions)
+        const TYqlOperationOptions& operationOptions,
+        THiddenQueryAborter)
     {
         Y_UNUSED(sessionId);
         Y_UNUSED(userName);

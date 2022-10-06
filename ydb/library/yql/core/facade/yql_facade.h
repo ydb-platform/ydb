@@ -296,8 +296,8 @@ public:
 
     IPlanBuilder& GetPlanBuilder();
 
-    void SetBeforeFallback(std::function<void()>&& func) {
-        BeforeFallback = std::move(func);
+    void SetAbortHidden(std::function<void()>&& func) {
+        AbortHidden_ = std::move(func);
     }
 
 private:
@@ -397,8 +397,8 @@ private:
     const bool EnableRangeComputeFor_;
     const IArrowResolver::TPtr ArrowResolver_;
     i64 FallbackCounter = 0;
-    std::function<void()> BeforeFallback = [](){};
     const EHiddenMode HiddenMode_ = EHiddenMode::Disable;
+    THiddenQueryAborter AbortHidden_ = [](){};
 };
 
 } // namspace NYql

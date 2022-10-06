@@ -231,6 +231,7 @@ struct TDataProviderInfo {
     std::function<TMaybe<TString>(const TString& url)> TokenResolver;
 };
 
+using THiddenQueryAborter = std::function<void()>; // aborts hidden query, which is running within a separate TProgram
 using TDataProviderInitializer = std::function<TDataProviderInfo(
     const TString& userName,
     const TString& sessionId,
@@ -239,6 +240,7 @@ using TDataProviderInitializer = std::function<TDataProviderInfo(
     TIntrusivePtr<IRandomProvider> randomProvider,
     TIntrusivePtr<TTypeAnnotationContext> typeCtx,
     const TOperationProgressWriter& progressWriter,
-    const TYqlOperationOptions& operationOptions)>;
+    const TYqlOperationOptions& operationOptions,
+    THiddenQueryAborter hiddenAborter)>;
 
 } // namespace NYql

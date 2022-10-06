@@ -52,6 +52,8 @@ public:
 
         if (State_->ExternalUser && !State_->Settings->_EnablePorto.Get().GetOrElse(TDqSettings::TDefault::EnablePorto)) {
             Statistics_["DqExternalUser"]++;
+            YQL_CLOG(DEBUG, ProviderDq) << "abort hidden";
+            State_->AbortHidden();
             return TStatus::Ok;
         }
 
@@ -69,6 +71,8 @@ public:
             }
 
             if (State_->TypeCtx->PureResultDataSource != DqProviderName || !State_->Settings->AnalyzeQuery.Get().GetOrElse(false)) {
+                YQL_CLOG(DEBUG, ProviderDq) << "abort hidden";
+                State_->AbortHidden();
                 return TStatus::Ok;
             }
 
@@ -93,6 +97,8 @@ public:
             }
 
             if (!good) {
+                YQL_CLOG(DEBUG, ProviderDq) << "abort hidden";
+                State_->AbortHidden();
                 YQL_CLOG(DEBUG, ProviderDq) << "good: " << good << " hasJoin: " << hasJoin << " dataSize: " << dataSize;
                 return TStatus::Ok;
             }

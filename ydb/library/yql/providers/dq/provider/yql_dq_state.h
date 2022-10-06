@@ -36,6 +36,8 @@ struct TDqState: public TThrRefBase {
     THashMap<ui32, TOperationStatistics> Statistics;
     std::atomic<ui32> MetricId = 1;
 
+    std::function<void()> AbortHidden = [](){};
+
     TDqState(
         const IDqGateway::TPtr& dqGateway,
         const TGatewaysConfig* gatewaysConfig,
@@ -51,7 +53,8 @@ struct TDqState: public TThrRefBase {
         const TFileStoragePtr& fileStorage,
         const TString& vanillaJobPath,
         const TString& vanillaJobMd5,
-        bool externalUser)
+        bool externalUser,
+        THiddenQueryAborter&& hiddenAborter)
         : DqGateway(dqGateway)
         , GatewaysConfig(gatewaysConfig)
         , FunctionRegistry(functionRegistry)
@@ -67,6 +70,7 @@ struct TDqState: public TThrRefBase {
         , VanillaJobPath(vanillaJobPath)
         , VanillaJobMd5(vanillaJobMd5)
         , ExternalUser(externalUser)
+        , AbortHidden(std::move(hiddenAborter))
     { }
 };
 

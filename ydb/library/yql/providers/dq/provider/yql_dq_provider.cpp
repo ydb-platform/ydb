@@ -31,7 +31,8 @@ TDataProviderInitializer GetDqDataProviderInitializer(
         TIntrusivePtr<IRandomProvider> randomProvider,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const TOperationProgressWriter& progressWriter,
-        const TYqlOperationOptions& operationOptions
+        const TYqlOperationOptions& operationOptions,
+        THiddenQueryAborter hiddenAborter
     ) {
         Y_UNUSED(userName);
 
@@ -54,7 +55,8 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             fileStorage,
             dqGateway ? dqGateway->GetVanillaJobPath() : "",
             dqGateway ? dqGateway->GetVanillaJobMd5() : "",
-            externalUser
+            externalUser,
+            std::move(hiddenAborter)
         );
 
         TDataProviderInfo info;

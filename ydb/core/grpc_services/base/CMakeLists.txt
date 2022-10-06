@@ -14,6 +14,7 @@ target_link_libraries(core-grpc_services-base INTERFACE
   cpp-grpc-server
   cpp-string_utils-quote
   ydb-core-base
+  core-grpc_services-counters
   ydb-core-grpc_streaming
   api-protos
   cpp-client-resources

@@ -1304,6 +1304,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         TCmsTestEnv env(options);
 
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+ 
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
         // 3dc disabled
         TFakeNodeWhiteboardService::Info[env.GetNodeId(7)].Connected = false;
         TFakeNodeWhiteboardService::Info[env.GetNodeId(4)].Connected = false;

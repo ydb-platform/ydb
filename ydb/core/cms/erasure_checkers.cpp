@@ -159,6 +159,7 @@ void TMirror3dcCounter::CountVDisk(const TVDiskInfo& vdisk,
         error.Reason = TStringBuilder() << "Issue in affected group " << GroupId 
                                         << ". " << err.Reason;
         error.Deadline = Max(error.Deadline, err.Deadline);
+        ++Locked;
         ++DataCenterDisabledNodes[vdisk.VDiskId.FailRealm];
     }
 }

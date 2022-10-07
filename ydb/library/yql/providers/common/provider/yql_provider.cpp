@@ -49,8 +49,9 @@ namespace {
         "bzip2"sv,
         "xz"sv
     };
-    constexpr std::array<std::string_view, 3> CompressionsForOutput = {
+    constexpr std::array<std::string_view, 4> CompressionsForOutput = {
         "gzip"sv,
+        "brotli"sv,
         "zstd"sv,
         "xz"sv
     };

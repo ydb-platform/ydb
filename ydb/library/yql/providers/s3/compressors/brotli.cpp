@@ -1,7 +1,9 @@
 #include "brotli.h"
+#include "output_queue_impl.h"
 
 #include <util/generic/size_literals.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <contrib/libs/brotli/include/brotli/encode.h>
 
 namespace NYql {
 
@@ -100,6 +102,92 @@ void TReadBuffer::InitDecoder() {
 
 void TReadBuffer::FreeDecoder() {
     BrotliDecoderDestroyInstance(DecoderState_);
+}
+
+namespace {
+
+class TCompressor : public TOutputQueue<> {
+public:
+    TCompressor(int quiality)
+        : EncoderState_(BrotliEncoderCreateInstance(&TAllocator::Allocate, &TAllocator::Deallocate, nullptr)), Quiality_(quiality) {
+        YQL_ENSURE(EncoderState_, "Brotli encoder initialization failed.");
+        YQL_ENSURE(BrotliEncoderSetParameter(EncoderState_, BROTLI_PARAM_QUALITY, Quiality_), "Failed to set quility: " << Quiality_);
+        YQL_ENSURE(BrotliEncoderSetParameter(EncoderState_, BROTLI_PARAM_LGWIN, BROTLI_DEFAULT_WINDOW), "Failed to set window bits.");
+        YQL_ENSURE(BrotliEncoderSetParameter(EncoderState_, BROTLI_PARAM_MODE, BROTLI_DEFAULT_MODE), "Failed to set mode.");
+    }
+
+    ~TCompressor() {
+        BrotliEncoderDestroyInstance(EncoderState_);
+    }
+private:
+    void Push(TString&& item) override {
+        InputQueue.Push(std::move(item));
+        DoCompression();
+    }
+
+    void Seal() override {
+        InputQueue.Seal();
+        DoCompression();
+    }
+
+    size_t Size() const override {
+        return TOutputQueue::Size() + InputQueue.Size();
+    }
+
+    bool Empty() const override {
+        return TOutputQueue::Empty() && InputQueue.Empty();
+    }
+
+    size_t Volume() const override {
+        return TOutputQueue::Volume() + InputQueue.Volume();
+    }
+
+    void DoCompression() {
+        while (!InputQueue.Empty()) {
+            const auto& pop = InputQueue.Pop();
+            const bool done = InputQueue.IsSealed() && InputQueue.Empty();
+            if (pop.empty() && !done)
+                break;
+
+            size_t input_size = pop.size();
+            auto input_data = reinterpret_cast<const uint8_t*>(pop.data());
+            if (const auto bound = BrotliEncoderMaxCompressedSize(input_size); bound > OutputBufferSize)
+                OutputBuffer = std::make_unique<char[]>(OutputBufferSize = bound);
+
+            auto output_data = reinterpret_cast<uint8_t*>(OutputBuffer.get());
+            auto output_size = OutputBufferSize;
+
+            if (IsFirstBlock && done) {
+                YQL_ENSURE(BrotliEncoderCompress(Quiality_, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE, input_size, input_data, &output_size, output_data), "Encode failed.");
+                if (output_size)
+                    TOutputQueue::Push(TString(OutputBuffer.get(), output_size));
+            } else {
+                size_t total_size = 0ULL;
+                YQL_ENSURE(BrotliEncoderCompressStream(EncoderState_, done ? BROTLI_OPERATION_FINISH : BROTLI_OPERATION_PROCESS, &input_size, &input_data, &output_size, &output_data, &total_size), "Encode failed.");
+                if (const auto size = OutputBufferSize - output_size)
+                    TOutputQueue::Push(TString(OutputBuffer.get(), size));
+
+            }
+
+            IsFirstBlock = false;
+            if (done)
+                return TOutputQueue::Seal();
+        };
+    }
+
+    std::size_t OutputBufferSize = 0ULL;
+    std::unique_ptr<char[]> OutputBuffer;
+
+    BrotliEncoderState *const EncoderState_;
+    const int Quiality_;
+
+    TOutputQueue<0> InputQueue;
+    bool IsFirstBlock = true;
+};
+
+}
+IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
+    return std::make_unique<TCompressor>(cLevel.value_or(BROTLI_DEFAULT_QUALITY));
 }
 
 }

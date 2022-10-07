@@ -29,6 +29,8 @@ std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& input, const 
 IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& compression) {
     if ("lz4" == compression)
         return NLz4::MakeCompressor();
+    if ("brotli" == compression)
+        return NBrotli::MakeCompressor();
     if ("zstd" == compression)
         return  NZstd::MakeCompressor();
     if ("xz" == compression)

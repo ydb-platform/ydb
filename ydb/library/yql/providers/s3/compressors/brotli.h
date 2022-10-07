@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #include <contrib/libs/brotli/include/brotli/decode.h>
+#include "output_queue.h"
 
 namespace NYql {
 
@@ -26,6 +27,8 @@ private:
     void InitDecoder();
     void FreeDecoder();
 };
+
+IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel = {});
 
 }
 

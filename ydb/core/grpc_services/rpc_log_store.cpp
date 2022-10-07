@@ -76,6 +76,34 @@ void ConvertCompressionFromInternalToPublic(const NKikimrSchemeOp::TCompressionO
     to.set_compression_level(from.GetCompressionLevel());
 }
 
+static bool IsAllowedFirstPkField(ui32 typeId) {
+    switch (typeId) {
+        //case NYql::NProto::Bool
+        case NYql::NProto::Uint8: // Byte
+        case NYql::NProto::Int32:
+        case NYql::NProto::Uint32:
+        case NYql::NProto::Int64:
+        case NYql::NProto::Uint64:
+        //case NYql::NProto::Float:
+        //case NYql::NProto::Double:
+        case NYql::NProto::String:
+        case NYql::NProto::Utf8:
+        //case NYql::NProto::Yson:
+        //case NYql::NProto::Json:
+        //case NYql::NProto::JsonDocument:
+        case NYql::NProto::Date:
+        case NYql::NProto::Datetime:
+        case NYql::NProto::Timestamp:
+        //case NYql::NProto::Interval:
+        //case NYql::NProto::Decimal:
+        //case NYql::NProto::DyNumber:
+            return true;
+        default:
+            break;
+    }
+    return false;
+}
+
 bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikimrSchemeOp::TColumnTableSchema& to,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
@@ -103,8 +131,8 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         col->SetType(typeName);
 
         key.erase(column.name());
-        if (column.name() == firstKeyColumn && typeInfo.GetTypeId() != NYql::NProto::Timestamp) {
-            error = "not supported first PK column type for LogStore. Only Timestamp columns are allowed for now.";
+        if (column.name() == firstKeyColumn && !IsAllowedFirstPkField(typeInfo.GetTypeId())) {
+            error = "not supported first PK column type for LogStore";
             return false;
         }
     }

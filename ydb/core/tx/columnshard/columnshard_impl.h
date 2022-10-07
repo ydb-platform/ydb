@@ -271,6 +271,8 @@ private:
     struct TAlterMeta {
         NKikimrTxColumnShard::TSchemaTxBody Body;
         THashSet<TActorId> NotifySubscribers;
+
+        bool Validate() const;
     };
 
     struct TCommitMeta {

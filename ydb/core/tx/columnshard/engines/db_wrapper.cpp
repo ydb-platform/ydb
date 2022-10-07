@@ -42,19 +42,19 @@ bool TDbWrapper::Load(THashMap<TWriteId, TInsertedData>& inserted,
     return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, inserted, committed, aborted, loadTime);
 }
 
-void TDbWrapper::WriteGranule(ui32 index, const TGranuleRecord& row) {
+void TDbWrapper::WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) {
     NIceDb::TNiceDb db(Database);
-    NColumnShard::Schema::IndexGranules_Write(db, index, row);
+    NColumnShard::Schema::IndexGranules_Write(db, index, engine, row);
 }
 
-void TDbWrapper::EraseGranule(ui32 index, const TGranuleRecord& row) {
+void TDbWrapper::EraseGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) {
     NIceDb::TNiceDb db(Database);
-    NColumnShard::Schema::IndexGranules_Erase(db, index, row);
+    NColumnShard::Schema::IndexGranules_Erase(db, index, engine, row);
 }
 
-bool TDbWrapper::LoadGranules(ui32 index, std::function<void(TGranuleRecord&&)> callback) {
+bool TDbWrapper::LoadGranules(ui32 index, const IColumnEngine& engine, std::function<void(TGranuleRecord&&)> callback) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexGranules_Load(db, index, callback);
+    return NColumnShard::Schema::IndexGranules_Load(db, index, engine, callback);
 }
 
 void TDbWrapper::WriteColumn(ui32 index, const TColumnRecord& row) {

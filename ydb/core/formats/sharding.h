@@ -8,56 +8,102 @@
 
 namespace NKikimr::NArrow {
 
-class THashSharding {
+class TShardingBase {
+protected:
+    static void AppendField(const std::shared_ptr<arrow::Array>& array, int row, std::string& concat) {
+        NArrow::SwitchType(array->type_id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using T = typename TWrap::T;
+            using TArray = typename arrow::TypeTraits<T>::ArrayType;
+
+            if (!array->IsNull(row)) {
+                auto& typedArray = static_cast<const TArray&>(*array);
+                auto value = typedArray.GetView(row);
+                if constexpr (arrow::has_string_view<T>()) {
+                    concat.append(value.data(), value.size());
+                } else if constexpr (arrow::has_c_type<T>()) {
+                    if constexpr (arrow::is_physical_integer_type<T>()) {
+                        concat.append(reinterpret_cast<const char*>(&value), sizeof(value));
+                    } else {
+                        // Do not use bool or floats for sharding
+                        static_assert(arrow::is_boolean_type<T>() || arrow::is_floating_type<T>());
+                    }
+                } else {
+                    static_assert(arrow::is_decimal_type<T>());
+                }
+            }
+            return true;
+        });
+    }
+};
+
+class THashSharding : public TShardingBase {
 public:
-    THashSharding(ui32 shardsCount)
+    THashSharding(ui32 shardsCount, ui64 seed = 0)
         : ShardsCount(shardsCount)
+        , Seed(seed)
     {}
 
     std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch,
                                    const TVector<TString>& shardingColumns) const
     {
-        if (shardingColumns.size() != 1) {
-            return {};
-        }
+        std::vector<std::shared_ptr<arrow::Array>> columns;
+        columns.reserve(shardingColumns.size());
 
-        auto array = batch->GetColumnByName(shardingColumns[0]);
-        if (!array) {
-            return {};
+        for (auto& colName : shardingColumns) {
+            auto array = batch->GetColumnByName(colName);
+            if (!array) {
+                return {};
+            }
+            columns.emplace_back(array);
         }
 
         std::vector<ui32> out(batch->num_rows());
 
-        SwitchType(array->type_id(), [&](const auto& type) {
-            using TWrap = std::decay_t<decltype(type)>;
-            using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+        if (columns.size() == 1) {
+            auto& array = columns[0];
+            SwitchType(array->type_id(), [&](const auto& type) {
+                using TWrap = std::decay_t<decltype(type)>;
+                using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
 
-            auto& column = static_cast<const TArray&>(*array);
+                auto& column = static_cast<const TArray&>(*array);
 
+                for (int row = 0; row < batch->num_rows(); ++row) {
+                    out[row] = ShardNo(column.GetView(row));
+                }
+                return true;
+            });
+        } else {
+            std::string concat;
             for (int row = 0; row < batch->num_rows(); ++row) {
-                out[row] = ShardNo(column.GetView(row));
+                concat.clear();
+                for (auto& column : columns) {
+                    AppendField(column, row, concat);
+                }
+
+                out[row] = ShardNo(concat);
             }
-            return true;
-        });
+        }
 
         return out;
     }
 
 private:
     ui32 ShardsCount;
+    ui64 Seed;
 
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
     ui32 ShardNo(T value) const {
-        return XXH64(&value, sizeof(value), 0) % ShardsCount;
+        return XXH64(&value, sizeof(value), Seed) % ShardsCount;
     }
 
     ui32 ShardNo(arrow::util::string_view value) const {
-        return XXH64(value.data(), value.size(), 0) % ShardsCount;
+        return XXH64(value.data(), value.size(), Seed) % ShardsCount;
     }
 };
 
 // KIKIMR-11529
-class TLogsSharding {
+class TLogsSharding : public TShardingBase {
 public:
     static constexpr ui32 DEFAULT_ACITVE_SHARDS = 10;
     static constexpr TDuration DEFAULT_CHANGE_PERIOD = TDuration::Minutes(5);
@@ -138,32 +184,6 @@ private:
     ui32 NumActive;
     ui64 TsMin;
     ui64 ChangePeriod;
-
-    static void AppendField(const std::shared_ptr<arrow::Array>& array, int row, std::string& concat) {
-        NArrow::SwitchType(array->type_id(), [&](const auto& type) {
-            using TWrap = std::decay_t<decltype(type)>;
-            using T = typename TWrap::T;
-            using TArray = typename arrow::TypeTraits<T>::ArrayType;
-
-            if (!array->IsNull(row)) {
-                auto& typedArray = static_cast<const TArray&>(*array);
-                auto value = typedArray.GetView(row);
-                if constexpr (arrow::has_string_view<T>()) {
-                    concat.append(value.data(), value.size());
-                } else if constexpr (arrow::has_c_type<T>()) {
-                    if constexpr (arrow::is_physical_integer_type<T>()) {
-                        concat.append(reinterpret_cast<const char*>(&value), sizeof(value));
-                    } else {
-                        // Do not use bool or floats for sharding
-                        static_assert(arrow::is_boolean_type<T>() || arrow::is_floating_type<T>());
-                    }
-                } else {
-                    static_assert(arrow::is_decimal_type<T>());
-                }
-            }
-            return true;
-        });
-    }
 };
 
 }

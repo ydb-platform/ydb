@@ -18,14 +18,18 @@ namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
-static const TVector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
-static const TVector<std::pair<TString, TTypeInfo>> testYdbPkSchema = TTestSchema::YdbPkSchema();
-
+template <typename TKey = ui64>
 bool DataHas(const TVector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range,
              bool requireUniq = false) {
-    THashMap<ui64, ui32> keys;
+    static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
+
+    THashMap<TKey, ui32> keys;
     for (size_t i = range.first; i < range.second; ++i) {
-        keys.emplace(i, 0);
+        if constexpr (isStrKey) {
+            keys.emplace(ToString(i), 0);
+        } else {
+            keys.emplace(i, 0);
+        }
     }
 
     auto schema = NArrow::DeserializeSchema(srtSchema);
@@ -35,10 +39,27 @@ bool DataHas(const TVector<TString>& blobs, const TString& srtSchema, std::pair<
 
         std::shared_ptr<arrow::Array> array = batch->GetColumnByName("timestamp");
         UNIT_ASSERT(array);
-        auto& ts = dynamic_cast<const arrow::NumericArray<arrow::TimestampType>&>(*array);
 
-        for (int i = 0; i < ts.length(); ++i) {
-            ui64 value = ts.Value(i);
+        for (int i = 0; i < array->length(); ++i) {
+            TKey value{};
+
+            NArrow::SwitchType(array->type_id(), [&](const auto& type) {
+                using TWrap = std::decay_t<decltype(type)>;
+                using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+
+                if constexpr (isStrKey && arrow::has_string_view<typename TWrap::T>()) {
+                    value = static_cast<const TArray&>(*array).GetString(i);
+                    return true;
+                }
+                if constexpr (!isStrKey && arrow::has_c_type<typename TWrap::T>()) {
+                    auto& column = static_cast<const TArray&>(*array);
+                    value = column.Value(i);
+                    return true;
+                }
+                UNIT_ASSERT(false);
+                return false;
+            });
+
             ++keys[value];
         }
     }
@@ -57,10 +78,17 @@ bool DataHas(const TVector<TString>& blobs, const TString& srtSchema, std::pair<
     return true;
 }
 
+template <typename TKey = ui64>
 bool DataHasOnly(const TVector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range) {
-    THashSet<ui64> keys;
+    static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
+
+    THashSet<TKey> keys;
     for (size_t i = range.first; i < range.second; ++i) {
-        keys.emplace(i);
+        if constexpr (isStrKey) {
+            keys.emplace(ToString(i));
+        } else {
+            keys.emplace(i);
+        }
     }
 
     auto schema = NArrow::DeserializeSchema(srtSchema);
@@ -70,10 +98,27 @@ bool DataHasOnly(const TVector<TString>& blobs, const TString& srtSchema, std::p
 
         std::shared_ptr<arrow::Array> array = batch->GetColumnByName("timestamp");
         UNIT_ASSERT(array);
-        auto& ts = dynamic_cast<const arrow::NumericArray<arrow::TimestampType>&>(*array);
 
-        for (int i = 0; i < ts.length(); ++i) {
-            ui64 value = ts.Value(i);
+        for (int i = 0; i < array->length(); ++i) {
+            ui64 value{};
+
+            NArrow::SwitchType(array->type_id(), [&](const auto& type) {
+                using TWrap = std::decay_t<decltype(type)>;
+                using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+
+                if constexpr (isStrKey && arrow::has_string_view<typename TWrap::T>()) {
+                    value = static_cast<const TArray&>(*array).GetView(i);
+                    return true;
+                }
+                if constexpr (!isStrKey && arrow::has_c_type<typename TWrap::T>()) {
+                    auto& column = static_cast<const TArray&>(*array);
+                    value = column.Value(i);
+                    return true;
+                }
+                UNIT_ASSERT(false);
+                return false;
+            });
+
             if (!keys.count(value)) {
                 Cerr << "Unexpected key: " << value << "\n";
                 return false;
@@ -86,10 +131,12 @@ bool DataHasOnly(const TVector<TString>& blobs, const TString& srtSchema, std::p
 
 template <typename TArrowType>
 bool CheckTypedIntValues(const std::shared_ptr<arrow::Array>& array, const std::vector<int64_t>& expected) {
+    using TArray = typename arrow::TypeTraits<TArrowType>::ArrayType;
+
     UNIT_ASSERT(array);
     UNIT_ASSERT_VALUES_EQUAL(array->length(), (int)expected.size());
 
-    auto& column = dynamic_cast<const arrow::NumericArray<TArrowType>&>(*array);
+    auto& column = dynamic_cast<const TArray&>(*array);
 
     for (int i = 0; i < column.length(); ++i) {
         auto value = column.Value(i);
@@ -98,12 +145,14 @@ bool CheckTypedIntValues(const std::shared_ptr<arrow::Array>& array, const std::
     return true;
 }
 
-template <typename TArrowArrayType>
+template <typename TArrowType>
 bool CheckTypedStrValues(const std::shared_ptr<arrow::Array>& array, const std::vector<std::string>& expected) {
+    using TArray = typename arrow::TypeTraits<TArrowType>::ArrayType;
+
     UNIT_ASSERT(array);
     UNIT_ASSERT_VALUES_EQUAL(array->length(), (int)expected.size());
 
-    auto& column = dynamic_cast<const TArrowArrayType&>(*array);
+    auto& column = dynamic_cast<const TArray&>(*array);
 
     for (int i = 0; i < column.length(); ++i) {
         auto value = column.GetString(i);
@@ -150,11 +199,11 @@ bool CheckIntValues(const std::shared_ptr<arrow::Array>& array, const std::vecto
             return CheckTypedIntValues<arrow::DoubleType>(array, expected);
 
         case arrow::Type::STRING:
-            return CheckTypedStrValues<arrow::StringArray>(array, expectedStr);
+            return CheckTypedStrValues<arrow::StringType>(array, expectedStr);
         case arrow::Type::BINARY:
-            return CheckTypedStrValues<arrow::BinaryArray>(array, expectedStr);
+            return CheckTypedStrValues<arrow::BinaryType>(array, expectedStr);
         case arrow::Type::FIXED_SIZE_BINARY:
-            return CheckTypedStrValues<arrow::FixedSizeBinaryArray>(array, expectedStr);
+            return CheckTypedStrValues<arrow::FixedSizeBinaryType>(array, expectedStr);
 
         default:
             Cerr << "type : " << array->type()->ToString() << "\n";
@@ -171,14 +220,37 @@ bool CheckOrdered(const TString& blob, const TString& srtSchema) {
 
     std::shared_ptr<arrow::Array> array = batch->GetColumnByName("timestamp");
     UNIT_ASSERT(array);
-    auto& ts = dynamic_cast<const arrow::NumericArray<arrow::TimestampType>&>(*array);
-    if (!ts.length()) {
+    if (!array->length()) {
         return true;
     }
 
-    ui64 prev = ts.Value(0);
-    for (int i = 1; i < ts.length(); ++i) {
-        ui64 value = ts.Value(i);
+    ui64 prev{};
+    for (int i = 0; i < array->length(); ++i) {
+        ui64 value{};
+
+        NArrow::SwitchType(array->type_id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+#if 0
+            if constexpr (isStrKey && arrow::has_string_view<typename TWrap::T>()) {
+                value = static_cast<const TArray&>(*array).GetView(i);
+                return true;
+            }
+#endif
+            if constexpr (/*!isStrKey && */arrow::has_c_type<typename TWrap::T>()) {
+                auto& column = static_cast<const TArray&>(*array);
+                value = column.Value(i);
+                return true;
+            }
+            UNIT_ASSERT(false);
+            return false;
+        });
+
+        if (!i) {
+            prev = value;
+            continue;
+        }
+
         if (prev > value) {
             Cerr << "Unordered: " << prev << " " << value << "\n";
             return false;
@@ -212,9 +284,11 @@ bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& me
 
 void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TVector<std::pair<TString, TTypeInfo>>& schema = TTestSchema::YdbSchema(),
-                 NOlap::TSnapshot snap = {10, 10}, TString codec = "") {
+                 const TVector<std::pair<TString, TTypeInfo>>& pk = TTestSchema::YdbPkSchema(),
+                 TString codec = "none") {
+    NOlap::TSnapshot snap = {10, 10};
     bool ok = ProposeSchemaTx(runtime, sender,
-                              TTestSchema::CreateTableTxBody(pathId, schema,
+                              TTestSchema::CreateTableTxBody(pathId, schema, pk,
                                                              TTestSchema::TTableSpecials().WithCodec(codec)),
                               snap);
     UNIT_ASSERT(ok);
@@ -260,13 +334,33 @@ void TestWrite(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema) {
     ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema));
     UNIT_ASSERT(!ok);
 
-    // wrong type
-    // TODO: better check (it probably does not work in general case)
+    // wrong first key column type (with supported layout: Int64 vs Timestamp)
+    // It fails only if we specify source schema. No way to detect it from serialized batch data.
 
     schema = ydbSchema;
-    schema[1].second = TTypeInfo(NTypeIds::Int32);
-    ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema));
+    schema[0].second = TTypeInfo(NTypeIds::Int64);
+    ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema),
+                   NArrow::MakeArrowSchema(schema));
     UNIT_ASSERT(!ok);
+
+    // wrong type (no additional schema - fails in case of wrong layout)
+
+    for (size_t i = 0; i < ydbSchema.size(); ++i) {
+        schema = ydbSchema;
+        schema[i].second = TTypeInfo(NTypeIds::Int8);
+        ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema));
+        UNIT_ASSERT(!ok);
+    }
+
+    // wrong type (with additional schema)
+
+    for (size_t i = 0; i < ydbSchema.size(); ++i) {
+        schema = ydbSchema;
+        schema[i].second = TTypeInfo(NTypeIds::Int64);
+        ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema),
+                       NArrow::MakeArrowSchema(schema));
+        UNIT_ASSERT(ok == (ydbSchema[i].second == TTypeInfo(NTypeIds::Int64)));
+    }
 
     schema = ydbSchema;
     schema[1].second = TTypeInfo(NTypeIds::Utf8);
@@ -276,17 +370,12 @@ void TestWrite(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema) {
 
     // reordered columns
 
+    THashMap<TString, TTypeInfo> remap(ydbSchema.begin(), ydbSchema.end());
+
     schema.resize(0);
-    schema.push_back({"level", TTypeInfo(NTypeIds::Int32) });
-    schema.push_back({"timestamp", TTypeInfo(NTypeIds::Timestamp) });
-    schema.push_back({"uid", TTypeInfo(NTypeIds::Utf8) });
-    schema.push_back({"resource_id", TTypeInfo(NTypeIds::Utf8) });
-    schema.push_back({"resource_type", TTypeInfo(NTypeIds::Utf8) });
-    schema.push_back({"message", TTypeInfo(NTypeIds::Utf8) });
-    schema.push_back({"request_id", TTypeInfo(NTypeIds::Utf8) });
-    schema.push_back({"saved_at", TTypeInfo(NTypeIds::Timestamp) });
-    schema.push_back({"ingested_at", TTypeInfo(NTypeIds::Timestamp) });
-    schema.push_back({"json_payload", TTypeInfo(NTypeIds::Json) });
+    for (auto& [name, typeInfo] : remap) {
+        schema.push_back({name, typeInfo});
+    }
 
     ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, schema));
     UNIT_ASSERT(!ok);
@@ -365,6 +454,7 @@ void TestWriteReadDup() {
 }
 
 void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = TTestSchema::YdbSchema(),
+                   const TVector<std::pair<TString, TTypeInfo>>& testYdbPk = TTestSchema::YdbPkSchema(),
                    TString codec = "") {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -408,7 +498,7 @@ void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& y
     ui64 writeId = 0;
     ui64 tableId = 1;
 
-    SetupSchema(runtime, sender, tableId, ydbSchema, {10, 10}, codec);
+    SetupSchema(runtime, sender, tableId, ydbSchema, testYdbPk, codec);
 
     // ----xx
     // -----xx..
@@ -683,7 +773,8 @@ void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& y
         UNIT_ASSERT(resRead.GetData().size() > 0);
         //UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
         //UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        if (resRead.GetFinished()) {
+        bool lastBach = resRead.GetFinished();
+        if (lastBach) {
             expected = resRead.GetBatch() + 1;
         }
         readData.push_back(resRead.GetData());
@@ -694,18 +785,20 @@ void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& y
         }
         UNIT_ASSERT(CheckOrdered(resRead.GetData(), schema));
 
-        UNIT_ASSERT(meta.HasReadStats());
-        auto& readStats = meta.GetReadStats();
+        if (lastBach) {
+            UNIT_ASSERT(meta.HasReadStats());
+            auto& readStats = meta.GetReadStats();
 
-        if (ydbSchema == TTestSchema::YdbSchema()) {
-            if (codec == "" || codec == "lz4") {
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 50);
-            } else if (codec == "none") {
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 75);
-            } else if (codec == "zstd") {
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 26);
-            } else {
-                UNIT_ASSERT(false);
+            if (ydbSchema == TTestSchema::YdbSchema()) {
+                if (codec == "" || codec == "lz4") {
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 50);
+                } else if (codec == "none") {
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 75);
+                } else if (codec == "zstd") {
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 26);
+                } else {
+                    UNIT_ASSERT(false);
+                }
             }
         }
     }
@@ -717,9 +810,9 @@ void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& y
 
     // read 11 (range predicate: closed interval)
     {
-        TSerializedTableRange range = MakeTestRange({10, 42}, true, true, testYdbPkSchema);
+        TSerializedTableRange range = MakeTestRange({10, 42}, true, true, testYdbPk);
         NOlap::TPredicate prGreater, prLess;
-        std::tie(prGreater, prLess) = RangePredicates(range, testYdbPkSchema);
+        std::tie(prGreater, prLess) = RangePredicates(range, testYdbPk);
 
         auto evRead = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, 24, txId, tableId);
         auto* greater = Proto(evRead.get()).MutableGreaterPredicate();
@@ -761,9 +854,9 @@ void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& y
 
     // read 12 (range predicate: open interval)
     {
-        TSerializedTableRange range = MakeTestRange({10, 42}, false, false, testYdbPkSchema);
+        TSerializedTableRange range = MakeTestRange({10, 42}, false, false, testYdbPk);
         NOlap::TPredicate prGreater, prLess;
-        std::tie(prGreater, prLess) = RangePredicates(range, testYdbPkSchema);
+        std::tie(prGreater, prLess) = RangePredicates(range, testYdbPk);
 
         auto evRead = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, 24, txId, tableId);
         auto* greater = Proto(evRead.get()).MutableGreaterPredicate();
@@ -805,7 +898,9 @@ void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& y
     UNIT_ASSERT(DataHasOnly(readData, schema, {11, 41 + 1}));
 }
 
-void TestCompactionInGranuleImpl(bool reboots) {
+void TestCompactionInGranuleImpl(bool reboots,
+                                 const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                                 const TVector<std::pair<TString, TTypeInfo>>& ydbPk) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -848,14 +943,14 @@ void TestCompactionInGranuleImpl(bool reboots) {
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, tableId);
+    SetupSchema(runtime, sender, tableId, ydbSchema, ydbPk);
     TAutoPtr<IEventHandle> handle;
 
     // Write same keys: merge on compaction
 
     static const ui32 triggerPortionSize = 75 * 1000;
     std::pair<ui64, ui64> triggerPortion = {0, triggerPortionSize};
-    TString triggerData = MakeTestBlob(triggerPortion, testYdbSchema);
+    TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
     UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
     UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::MAX_BLOB_SIZE);
 
@@ -870,7 +965,7 @@ void TestCompactionInGranuleImpl(bool reboots) {
         ids.reserve(numWrites);
         for (ui32 w = 0; w < numWrites; ++w, ++writeId, pos += portionSize) {
             std::pair<ui64, ui64> portion = {pos, pos + portionSize};
-            TString data = MakeTestBlob(portion, testYdbSchema);
+            TString data = MakeTestBlob(portion, ydbSchema);
 
             ids.push_back(writeId);
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, data));
@@ -923,8 +1018,13 @@ void TestCompactionInGranuleImpl(bool reboots) {
 
         TVector<TString> readData;
         readData.push_back(resRead.GetData());
-        UNIT_ASSERT(DataHas(readData, schema, triggerPortion, true));
-        UNIT_ASSERT(DataHas(readData, schema, smallWrites, true));
+        if (ydbPk[0].second == TTypeInfo(NTypeIds::String) || ydbPk[0].second == TTypeInfo(NTypeIds::Utf8)) {
+            UNIT_ASSERT(DataHas<std::string>(readData, schema, triggerPortion, true));
+            UNIT_ASSERT(DataHas<std::string>(readData, schema, smallWrites, true));
+        } else {
+            UNIT_ASSERT(DataHas(readData, schema, triggerPortion, true));
+            UNIT_ASSERT(DataHas(readData, schema, smallWrites, true));
+        }
 
         UNIT_ASSERT(meta.HasReadStats());
         auto& readStats = meta.GetReadStats();
@@ -1103,7 +1203,7 @@ void TestReadWithProgram(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, tableId);
+    SetupSchema(runtime, sender, tableId, ydbSchema);
 
     { // write some data
         bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema));
@@ -1240,7 +1340,9 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, 
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, tableId, ydbSchema);
+    auto pk = ydbSchema;
+    pk.resize(4);
+    SetupSchema(runtime, sender, tableId, ydbSchema, pk);
 
     { // write some data
         bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, testDataBlob);
@@ -1396,19 +1498,81 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(WriteReadNoCompression) {
-        TestWriteRead(true, TTestSchema::YdbSchema(), "none");
+        TestWriteRead(true, TTestSchema::YdbSchema(), TTestSchema::YdbPkSchema(), "none");
     }
 
     Y_UNIT_TEST(WriteReadZSTD) {
-        TestWriteRead(true, TTestSchema::YdbSchema(), "zstd");
+        TestWriteRead(true, TTestSchema::YdbSchema(), TTestSchema::YdbPkSchema(), "zstd");
     }
 
     Y_UNIT_TEST(CompactionInGranule) {
-        TestCompactionInGranuleImpl(false);
+        std::vector<TTypeId> types = {
+            NTypeIds::Timestamp,
+            //NTypeIds::Int16,
+            //NTypeIds::Uint16,
+            NTypeIds::Int32,
+            NTypeIds::Uint32,
+            NTypeIds::Int64,
+            NTypeIds::Uint64,
+            //NTypeIds::Date,
+            NTypeIds::Datetime
+            //NTypeIds::Interval
+        };
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+
+        for (auto& type : types) {
+            schema[0].second = TTypeInfo(type);
+            pk[0].second = TTypeInfo(type);
+            TestCompactionInGranuleImpl(false, schema, pk);
+        }
+    }
+#if 0
+    Y_UNIT_TEST(CompactionInGranuleFloatKey) {
+        std::vector<NScheme::TTypeId> types = {
+            NTypeIds::Float,
+            NTypeIds::Double
+        };
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+
+        for (auto& type : types) {
+            schema[0].second = TTypeInfo(type);
+            pk[0].second = TTypeInfo(type);
+            TestCompactionInGranuleImpl(false, schema, pk);
+        }
+    }
+#endif
+    Y_UNIT_TEST(CompactionInGranuleStrKey) {
+        std::vector<NScheme::TTypeId> types = {
+            NTypeIds::String,
+            NTypeIds::Utf8
+        };
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+
+        for (auto& type : types) {
+            schema[0].second = TTypeInfo(type);
+            pk[0].second = TTypeInfo(type);
+            TestCompactionInGranuleImpl(false, schema, pk);
+        }
     }
 
     Y_UNIT_TEST(RebootCompactionInGranule) {
-        TestCompactionInGranuleImpl(true);
+        // some of types
+        std::vector<NScheme::TTypeId> types = {
+            NTypeIds::Timestamp,
+            NTypeIds::Int32,
+            NTypeIds::String
+        };
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+
+        for (auto& type : types) {
+            schema[0].second = TTypeInfo(type);
+            pk[0].second = TTypeInfo(type);
+            TestCompactionInGranuleImpl(true, schema, pk);
+        }
     }
 
     Y_UNIT_TEST(ReadWithProgram) {
@@ -1473,7 +1637,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     }
 
-    Y_UNIT_TEST(CompactionSplitGranule) {
+    void TestCompactionSplitGranule(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                                    const TVector<std::pair<TString, TTypeInfo>>& ydbPk) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
@@ -1490,8 +1655,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 planStep = 100;
         ui64 txId = 100;
 
-        SetupSchema(runtime, sender, tableId);
+        SetupSchema(runtime, sender, tableId, ydbSchema, ydbPk, "lz4");
         TAutoPtr<IEventHandle> handle;
+
+        bool isStrPk0 = ydbPk[0].second == TTypeInfo(NTypeIds::String) || ydbPk[0].second == TTypeInfo(NTypeIds::Utf8);
 
         // Write different keys: grow on compatcion
 
@@ -1502,7 +1669,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             ui64 start = i * (triggerPortionSize - overlapSize);
             std::pair<ui64, ui64> triggerPortion = {start, start + triggerPortionSize};
-            TString triggerData = MakeTestBlob(triggerPortion, testYdbSchema);
+            TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
             UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
             UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::MAX_BLOB_SIZE);
 
@@ -1569,7 +1736,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT(num < 100);
             }
 
-            UNIT_ASSERT(DataHas(readData, schema, {0, numRows}, true));
+            if (isStrPk0) {
+                UNIT_ASSERT(DataHas<std::string>(readData, schema, {0, numRows}, true));
+            } else {
+                UNIT_ASSERT(DataHas(readData, schema, {0, numRows}, true));
+            }
+
             readData.clear();
 
             { // read with predicate (TO)
@@ -1577,9 +1749,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 Proto(read.get()).AddColumnNames("timestamp");
                 Proto(read.get()).AddColumnNames("message");
 
-                TSerializedTableRange range = MakeTestRange({0, 1000}, false, false, testYdbPkSchema);
+                TSerializedTableRange range = MakeTestRange({0, 1}, false, false, ydbPk);
                 NOlap::TPredicate prGreater, prLess;
-                std::tie(prGreater, prLess) = RangePredicates(range, testYdbPkSchema);
+                std::tie(prGreater, prLess) = RangePredicates(range, ydbPk);
 
                 auto* less = Proto(read.get()).MutableLessPredicate();
                 for (auto& name : prLess.ColumnNames()) {
@@ -1597,6 +1769,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT(event);
 
                 auto& resRead = Proto(event);
+                Cerr << "[" << __LINE__ << "] " << ydbPk[0].second.GetTypeId() << " "
+                    << resRead.GetBatch() << " " << resRead.GetData().size() << "\n";
+
                 UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
                 UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
                 UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
@@ -1619,6 +1794,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
+                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 1); // TODO: min-max index optimization?
                 }
 
                 // TODO: check data
@@ -1629,9 +1805,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 Proto(read.get()).AddColumnNames("timestamp");
                 Proto(read.get()).AddColumnNames("message");
 
-                TSerializedTableRange range = MakeTestRange({2000 * 1000, 1000 * 1000 * 1000}, false, false, testYdbPkSchema);
+                TSerializedTableRange range = MakeTestRange({numRows, numRows + 1000}, false, false, ydbPk);
+                if (isStrPk0) {
+                    range = MakeTestRange({99990, 99999}, false, false, ydbPk);
+                }
+
                 NOlap::TPredicate prGreater, prLess;
-                std::tie(prGreater, prLess) = RangePredicates(range, testYdbPkSchema);
+                std::tie(prGreater, prLess) = RangePredicates(range, ydbPk);
 
                 auto* greater = Proto(read.get()).MutableGreaterPredicate();
                 for (auto& name : prGreater.ColumnNames()) {
@@ -1649,6 +1829,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT(event);
 
                 auto& resRead = Proto(event);
+                Cerr << "[" << __LINE__ << "] " << ydbPk[0].second.GetTypeId() << " "
+                    << resRead.GetBatch() << " " << resRead.GetData().size() << "\n";
+
                 UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
                 UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
                 UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
@@ -1671,6 +1854,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
+                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 0); // TODO: min-max index optimization?
                 }
 
                 // TODO: check data
@@ -1706,20 +1890,63 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
                 ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
 
+                Cerr << "[" << __LINE__ << "] " << ydbPk[0].second.GetTypeId() << " "
+                    << pathId << " " << kind << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
+
                 if (pathId == tableId) {
                     if (kind == 2) {
                         UNIT_ASSERT_VALUES_EQUAL(numRows, (triggerPortionSize - overlapSize) * numWrites + overlapSize);
                         UNIT_ASSERT(numBytes > numRows);
-                        UNIT_ASSERT(numRawBytes > numBytes);
+                        //UNIT_ASSERT(numRawBytes > numBytes);
                     }
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(numRows, 0);
                     UNIT_ASSERT_VALUES_EQUAL(numBytes, 0);
                     UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
                 }
-
-                Cerr << pathId << " " << kind << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
             }
+        }
+    }
+
+    Y_UNIT_TEST(CompactionSplitGranule) {
+        std::vector<TTypeId> types = {
+            NTypeIds::Timestamp,
+            //NTypeIds::Int16,
+            //NTypeIds::Uint16,
+            NTypeIds::Int32,
+            NTypeIds::Uint32,
+            NTypeIds::Int64,
+            NTypeIds::Uint64,
+            //NTypeIds::Date,
+            NTypeIds::Datetime
+            //NTypeIds::Interval
+            //NTypeIds::Float
+            //NTypeIds::Double
+        };
+
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+
+        for (auto& type : types) {
+            schema[0].second = TTypeInfo(type);
+            pk[0].second = TTypeInfo(type);
+            TestCompactionSplitGranule(schema, pk);
+        }
+    }
+
+    Y_UNIT_TEST(CompactionSplitGranuleStrKey) {
+        std::vector<TTypeId> types = {
+            NTypeIds::String,
+            NTypeIds::Utf8
+        };
+
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+
+        for (auto& type : types) {
+            schema[0].second = TTypeInfo(type);
+            pk[0].second = TTypeInfo(type);
+            TestCompactionSplitGranule(schema, pk);
         }
     }
 
@@ -1740,13 +1967,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 planStep = 1000000;
         ui64 txId = 100;
 
-        SetupSchema(runtime, sender, tableId);
+        auto ydbSchema = TTestSchema::YdbSchema();
+        SetupSchema(runtime, sender, tableId, ydbSchema);
         TAutoPtr<IEventHandle> handle;
 
         // Write some test data to adavnce the time
         {
             std::pair<ui64, ui64> triggerPortion = {1, 1000};
-            TString triggerData = MakeTestBlob(triggerPortion, testYdbSchema);
+            TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
 
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
 
@@ -1827,7 +2055,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 writeId = 0;
         ui64 tableId = 1;
 
-        SetupSchema(runtime, sender, tableId);
+        auto ydbSchema = TTestSchema::YdbSchema();
+        SetupSchema(runtime, sender, tableId, ydbSchema);
         TAutoPtr<IEventHandle> handle;
 
         bool blockReadFinished = true;
@@ -1944,7 +2173,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         static const ui32 triggerPortionSize = 75 * 1000;
         std::pair<ui64, ui64> triggerPortion = {0, triggerPortionSize};
-        TString triggerData = MakeTestBlob(triggerPortion, testYdbSchema);
+        TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
         UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
         UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::MAX_BLOB_SIZE);
 
@@ -1962,7 +2191,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         // Do a small write that is not indexed so that we will get a committed blob in read request
         {
-            TString smallData = MakeTestBlob({0, 2}, testYdbSchema);
+            TString smallData = MakeTestBlob({0, 2}, ydbSchema);
             UNIT_ASSERT(smallData.size() < 100 * 1024);
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, smallData));
 

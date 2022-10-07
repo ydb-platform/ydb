@@ -10,82 +10,6 @@ namespace NKikimr::NOlap {
 const TString TIndexInfo::STORE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexStatsName;
 const TString TIndexInfo::TABLE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::TablePrimaryIndexStatsName;
 
-void ScalarToConstant(const arrow::Scalar& scalar, NKikimrSSA::TProgram_TConstant& value) {
-    switch (scalar.type->id()) {
-        case arrow::Type::BOOL:
-            value.SetBool(static_cast<const arrow::BooleanScalar&>(scalar).value);
-            break;
-        case arrow::Type::UINT8:
-            value.SetUint32(static_cast<const arrow::UInt8Scalar&>(scalar).value);
-            break;
-        case arrow::Type::UINT16:
-            value.SetUint32(static_cast<const arrow::UInt16Scalar&>(scalar).value);
-            break;
-        case arrow::Type::UINT32:
-            value.SetUint32(static_cast<const arrow::UInt32Scalar&>(scalar).value);
-            break;
-        case arrow::Type::UINT64:
-            value.SetUint64(static_cast<const arrow::UInt64Scalar&>(scalar).value);
-            break;
-        case arrow::Type::INT8:
-            value.SetInt32(static_cast<const arrow::Int8Scalar&>(scalar).value);
-            break;
-        case arrow::Type::INT16:
-            value.SetInt32(static_cast<const arrow::Int16Scalar&>(scalar).value);
-            break;
-        case arrow::Type::INT32:
-            value.SetInt32(static_cast<const arrow::Int32Scalar&>(scalar).value);
-            break;
-        case arrow::Type::INT64:
-            value.SetInt64(static_cast<const arrow::Int64Scalar&>(scalar).value);
-            break;
-        case arrow::Type::FLOAT:
-            value.SetFloat(static_cast<const arrow::FloatScalar&>(scalar).value);
-            break;
-        case arrow::Type::DOUBLE:
-            value.SetDouble(static_cast<const arrow::DoubleScalar&>(scalar).value);
-            break;
-        case arrow::Type::TIMESTAMP:
-            value.SetUint64(static_cast<const arrow::TimestampScalar&>(scalar).value);
-            break;
-        default:
-            Y_VERIFY(false, "Some types are not supported in min-max index yet"); // TODO
-    }
-}
-
-std::shared_ptr<arrow::Scalar> ConstantToScalar(const NKikimrSSA::TProgram_TConstant& value,
-                                                const std::shared_ptr<arrow::DataType>& type) {
-    switch (type->id()) {
-        case arrow::Type::BOOL:
-            return std::make_shared<arrow::BooleanScalar>(value.GetBool());
-        case arrow::Type::UINT8:
-            return std::make_shared<arrow::UInt8Scalar>(value.GetUint32());
-        case arrow::Type::UINT16:
-            return std::make_shared<arrow::UInt16Scalar>(value.GetUint32());
-        case arrow::Type::UINT32:
-            return std::make_shared<arrow::UInt32Scalar>(value.GetUint32());
-        case arrow::Type::UINT64:
-            return std::make_shared<arrow::UInt64Scalar>(value.GetUint64());
-        case arrow::Type::INT8:
-            return std::make_shared<arrow::Int8Scalar>(value.GetInt32());
-        case arrow::Type::INT16:
-            return std::make_shared<arrow::Int16Scalar>(value.GetInt32());
-        case arrow::Type::INT32:
-            return std::make_shared<arrow::Int32Scalar>(value.GetInt32());
-        case arrow::Type::INT64:
-            return std::make_shared<arrow::Int64Scalar>(value.GetInt64());
-        case arrow::Type::FLOAT:
-            return std::make_shared<arrow::FloatScalar>(value.GetFloat());
-        case arrow::Type::DOUBLE:
-            return std::make_shared<arrow::DoubleScalar>(value.GetDouble());
-        case arrow::Type::TIMESTAMP:
-            return std::make_shared<arrow::TimestampScalar>(value.GetUint64(), type);
-        default:
-            Y_VERIFY(false, "Some types are not supported in min-max index yet"); // TODO
-    }
-    return {};
-}
-
 TVector<TRawTypeValue> TIndexInfo::ExtractKey(const THashMap<ui32, TCell>& fields, bool allowNulls) const {
     TVector<TRawTypeValue> key;
     key.reserve(KeyColumns.size());
@@ -107,15 +31,16 @@ TVector<TRawTypeValue> TIndexInfo::ExtractKey(const THashMap<ui32, TCell>& field
 std::shared_ptr<arrow::RecordBatch> TIndexInfo::PrepareForInsert(const TString& data, const TString& metadata,
                                                                  TString& strError) const {
     std::shared_ptr<arrow::Schema> schema = ArrowSchema();
+    std::shared_ptr<arrow::Schema> differentSchema;
     if (metadata.size()) {
-        schema = NArrow::DeserializeSchema(metadata);
-        if (!schema) {
+        differentSchema = NArrow::DeserializeSchema(metadata);
+        if (!differentSchema) {
             strError = "DeserializeSchema() failed";
             return {};
         }
     }
 
-    auto batch = NArrow::DeserializeBatch(data, schema);
+    auto batch = NArrow::DeserializeBatch(data, (differentSchema ? differentSchema : schema));
     if (!batch) {
         strError = "DeserializeBatch() failed";
         return {};
@@ -124,28 +49,19 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::PrepareForInsert(const TString& 
         strError = "empty batch";
         return {};
     }
-    auto status = batch->ValidateFull();
-    if (!status.ok()) {
-        auto tmp = status.ToString();
-        strError = TString(tmp.data(), tmp.size());
-        return {};
-    }
-
-    // Require all the columns for now. It's possible to ommit some in future.
-    for (auto& field : schema->fields()) {
-        if (!batch->GetColumnByName(field->name())) {
-            strError = "missing column '" + field->name() + "'";
-            return {};
-        }
-    }
 
     // Correct schema
-    if (metadata.size()) {
+    if (differentSchema) {
         batch = NArrow::ExtractColumns(batch, ArrowSchema());
         if (!batch) {
             strError = "cannot correct schema";
             return {};
         }
+    }
+
+    if (!batch->schema()->Equals(ArrowSchema())) {
+        strError = "unexpected schema for insert batch: '" + batch->schema()->ToString() + "'";
+        return {};
     }
 
     // Check PK is NOT NULL
@@ -159,6 +75,13 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::PrepareForInsert(const TString& 
             strError = "PK column '" + field->name() + "' contains NULLs";
             return {};
         }
+    }
+
+    auto status = batch->ValidateFull();
+    if (!status.ok()) {
+        auto tmp = status.ToString();
+        strError = TString(tmp.data(), tmp.size());
+        return {};
     }
 
     Y_VERIFY(SortingKey);

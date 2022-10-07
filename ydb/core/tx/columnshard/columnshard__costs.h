@@ -98,7 +98,7 @@ private:
     const TIndexInfo& IndexInfo;
     bool AddMarkFromPredicate(const std::shared_ptr<NOlap::TPredicate>& p);
     void AddMarkFromGranule(const TGranuleRecord& record);
-    static ui64 ExtractKey(const TString& key);
+
 public:
     TKeyRangesBuilder(const TIndexInfo& indexInfo);
     void Reserve(const ui32 num) {

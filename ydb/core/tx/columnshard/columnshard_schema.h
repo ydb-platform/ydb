@@ -494,32 +494,34 @@ struct Schema : NIceDb::Schema {
 
     // IndexGranules activities
 
-    static void IndexGranules_Write(NIceDb::TNiceDb& db, ui32 index, const TGranuleRecord& row) {
-        db.Table<IndexGranules>().Key(index, row.PathId, row.IndexKey).Update(
+    static void IndexGranules_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
+                                    const TGranuleRecord& row) {
+        db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Update(
             NIceDb::TUpdate<IndexGranules::Granule>(row.Granule),
             NIceDb::TUpdate<IndexGranules::PlanStep>(row.CreatedAt.PlanStep),
             NIceDb::TUpdate<IndexGranules::TxId>(row.CreatedAt.TxId)
         );
     }
 
-    static void IndexGranules_Erase(NIceDb::TNiceDb& db, ui32 index, const TGranuleRecord& row) {
-        db.Table<IndexGranules>().Key(index, row.PathId, row.IndexKey).Delete();
+    static void IndexGranules_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
+                                    const TGranuleRecord& row) {
+        db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Delete();
     }
 
-    static bool IndexGranules_Load(NIceDb::TNiceDb& db, ui32 index, std::function<void(TGranuleRecord&&)> callback) {
+    static bool IndexGranules_Load(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
+                                   std::function<void(TGranuleRecord&&)> callback) {
         auto rowset = db.Table<IndexGranules>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;
 
         while (!rowset.EndOfSet()) {
-            TGranuleRecord row;
-            row.PathId = rowset.GetValue<IndexGranules::PathId>();
-            row.IndexKey = rowset.GetValue<IndexGranules::IndexKey>();
-            row.Granule = rowset.GetValue<IndexGranules::Granule>();
+            ui64 pathId = rowset.GetValue<IndexGranules::PathId>();
+            TString indexKey = rowset.GetValue<IndexGranules::IndexKey>();
+            ui64 granule = rowset.GetValue<IndexGranules::Granule>();
             ui64 planStep = rowset.GetValue<IndexGranules::PlanStep>();
             ui64 txId = rowset.GetValue<IndexGranules::TxId>();
-            row.CreatedAt = {planStep, txId};
 
+            TGranuleRecord row(pathId, granule, {planStep, txId}, engine.DeserializeMark(indexKey));
             callback(std::move(row));
 
             if (!rowset.Next())

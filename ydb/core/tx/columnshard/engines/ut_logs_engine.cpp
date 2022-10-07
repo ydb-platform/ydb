@@ -54,7 +54,7 @@ public:
         return true;
     }
 
-    void WriteGranule(ui32 index, const TGranuleRecord& row) override {
+    void WriteGranule(ui32 index, const IColumnEngine&, const TGranuleRecord& row) override {
         auto& granules = Indices[index].Granules[row.PathId];
 
         bool replaced = false;
@@ -70,7 +70,7 @@ public:
         }
     }
 
-    void EraseGranule(ui32 index, const TGranuleRecord& row) override {
+    void EraseGranule(ui32 index, const IColumnEngine&, const TGranuleRecord& row) override {
         auto& pathGranules = Indices[index].Granules[row.PathId];
 
         TVector<TGranuleRecord> filtered;
@@ -83,7 +83,7 @@ public:
         pathGranules.swap(filtered);
     }
 
-    bool LoadGranules(ui32 index, std::function<void(TGranuleRecord&&)> callback) override {
+    bool LoadGranules(ui32 index, const IColumnEngine&, std::function<void(TGranuleRecord&&)> callback) override {
         auto& granules = Indices[index].Granules;
         for (auto& [pathId, vec] : granules) {
             for (auto& rec : vec) {
@@ -171,31 +171,39 @@ static const TVector<std::pair<TString, TTypeInfo>> testKey = {
     {"uid", TTypeInfo(NTypeIds::Utf8) }
 };
 
-TIndexInfo TestTableInfo() {
+TIndexInfo TestTableInfo(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = testColumns,
+                         const TVector<std::pair<TString, TTypeInfo>>& key = testKey) {
     TIndexInfo indexInfo("", 0);
 
-    for (ui32 i = 0; i < testColumns.size(); ++i) {
+    for (ui32 i = 0; i < ydbSchema.size(); ++i) {
         ui32 id = i + 1;
-        auto& name = testColumns[i].first;
-        auto& type = testColumns[i].second;
+        auto& name = ydbSchema[i].first;
+        auto& type = ydbSchema[i].second;
 
         indexInfo.Columns[id] = NTable::TColumn(name, id, type);
         indexInfo.ColumnNames[name] = id;
     }
 
-    for (const auto& [keyName, keyType] : testKey) {
+    for (const auto& [keyName, keyType] : key) {
         indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
     }
 
-    indexInfo.AddTtlColumn(testColumns[0].first);
-
+    indexInfo.AddTtlColumn("timestamp");
     return indexInfo;
 }
 
+static NOlap::TTiersInfo MakeTtl(TInstant border) {
+    return NOlap::TTiersInfo("timestamp", border);
+}
+
+template <typename TKeyDataType>
 class TBuilder {
 public:
+    using TTraits = typename arrow::TypeTraits<TKeyDataType>;
+    using TCType = std::conditional_t<arrow::has_c_type<TKeyDataType>::value, typename TTraits::CType, std::string>;
+
     struct TRow {
-        ui64 Timestamp;
+        TCType Timestamp;
         std::string ResourceType;
         std::string ResourceId;
         std::string Uid;
@@ -211,7 +219,7 @@ public:
 
     bool AddRow(const TRow& row) {
         bool ok = true;
-        ok = ok && BatchBuilder->GetFieldAs<arrow::TypeTraits<arrow::TimestampType>::BuilderType>(0)->Append(row.Timestamp).ok();
+        ok = ok && BatchBuilder->GetFieldAs<typename TTraits::BuilderType>(0)->Append(row.Timestamp).ok();
         ok = ok && BatchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append(row.ResourceType).ok();
         ok = ok && BatchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(2)->Append(row.ResourceId).ok();
         ok = ok && BatchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(3)->Append(row.Uid).ok();
@@ -226,10 +234,6 @@ public:
         return batch;
     }
 
-    static NOlap::TTiersInfo MakeTtl(TInstant border) {
-        return NOlap::TTiersInfo(testColumns[0].first, border);
-    }
-
 private:
     std::shared_ptr<arrow::Schema> Schema = NArrow::MakeArrowSchema(testColumns);
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
@@ -240,11 +244,12 @@ TBlobRange MakeBlobRange(ui32 step, ui32 blobSize) {
     return TBlobRange(TUnifiedBlobId(11111, TLogoBlobID(100500, 42, step, 3, blobSize, 0)), 0, blobSize);
 }
 
-TString MakeTestBlob(ui64 start = 0, ui64 end = 100) {
-    TBuilder builder;
-    for (ui64 ts = start; ts < end; ++ts) {
+TString MakeTestBlob(i64 start = 0, i64 end = 100) {
+    TBuilder<arrow::TimestampType> builder;
+    for (i64 ts = start; ts < end; ++ts) {
         TString str = ToString(ts);
-        builder.AddRow({ts, str, str, str, str});
+        TString sortedStr = Sprintf("%05ld", (long)ts);
+        builder.AddRow({ts, sortedStr, str, str, str});
     }
     auto batch = builder.Finish();
     return NArrow::SerializeBatchNoCompression(batch);
@@ -289,9 +294,9 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     return engine.ApplyChanges(db, changes, snap);
 }
 
-bool Insert(TTestDbWrapper& db, TSnapshot snap,
+bool Insert(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap,
             TVector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
-    TColumnEngineForLogs engine(TestTableInfo(), 0, TestLimits());
+    TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
     engine.Load(db);
 
     return Insert(engine, db, snap, std::move(dataToIndex), blobs, step);
@@ -324,9 +329,9 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     return engine.ApplyChanges(db, changes, snap);
 }
 
-bool Compact(TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange, TString>&& blobs, ui32& step,
-             const TExpected& expected) {
-    TColumnEngineForLogs engine(TestTableInfo(), 0, TestLimits());
+bool Compact(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange,
+             TString>&& blobs, ui32& step, const TExpected& expected) {
+    TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
     engine.Load(db);
     return Compact(engine, db, snap, std::move(blobs), step, expected);
 }
@@ -361,12 +366,26 @@ std::shared_ptr<TPredicate> MakePredicate(int64_t ts, NArrow::EOperation op) {
     return p;
 }
 
+std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NArrow::EOperation op) {
+    auto p = std::make_shared<TPredicate>();
+    p->Operation = op;
+
+    auto type = arrow::utf8();
+    auto res = arrow::MakeArrayFromScalar(arrow::StringScalar(key), 1);
+
+    std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("resource_type", type) };
+    p->Batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), 1, {*res});
+    return p;
+}
+
 }
 
 
 Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
-    Y_UNIT_TEST(IndexWriteLoadRead) {
+    void WriteLoadRead(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                       const TVector<std::pair<TString, TTypeInfo>>& key) {
         TTestDbWrapper db;
+        TIndexInfo tableInfo = TestTableInfo(ydbSchema, key);
 
         TVector<ui64> paths = {1, 2};
 
@@ -389,11 +408,11 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         THashMap<TBlobRange, TString> blobs;
         blobs[blobRanges[0]] = testBlob;
         blobs[blobRanges[1]] = testBlob;
-        Insert(db, {1, 2}, std::move(dataToIndex), blobs, step);
+        Insert(tableInfo, db, {1, 2}, std::move(dataToIndex), blobs, step);
 
         // load
 
-        TColumnEngineForLogs engine(TestTableInfo(), 0);
+        TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0);
         engine.Load(db);
 
         // selects
@@ -440,8 +459,25 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
     }
 
-    Y_UNIT_TEST(IndexReadWithPredicates) {
+    Y_UNIT_TEST(IndexWriteLoadRead) {
+        WriteLoadRead(testColumns, testKey);
+    }
+
+    Y_UNIT_TEST(IndexWriteLoadReadStrPK) {
+        TVector<std::pair<TString, TTypeInfo>> key = {
+            {"resource_type", TTypeInfo(NTypeIds::Utf8) },
+            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
+            {"uid", TTypeInfo(NTypeIds::Utf8) },
+            {"timestamp", TTypeInfo(NTypeIds::Timestamp) }
+        };
+
+        WriteLoadRead(testColumns, key);
+    }
+
+    void ReadWithPredicates(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                            const TVector<std::pair<TString, TTypeInfo>>& key) {
         TTestDbWrapper db;
+        TIndexInfo tableInfo = TestTableInfo(ydbSchema, key);
 
         ui64 pathId = 1;
         ui32 step = 1000;
@@ -462,19 +498,19 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
-            bool ok = Insert(db, {planStep, txId}, std::move(dataToIndex), blobs, step);
+            bool ok = Insert(tableInfo, db, {planStep, txId}, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
         }
 
         // compact
         planStep = 2;
 
-        bool ok = Compact(db, TSnapshot{planStep, 1}, std::move(blobs), step, {20, 4, 4});
+        bool ok = Compact(tableInfo, db, TSnapshot{planStep, 1}, std::move(blobs), step, {20, 4, 4});
         UNIT_ASSERT(ok);
 
         // load
 
-        TColumnEngineForLogs engine(TestTableInfo(), 0, TestLimits());
+        TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
         engine.Load(db);
 
         // read
@@ -484,13 +520,13 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         planStep = 3;
 
         const TIndexInfo& indexInfo = engine.GetIndexInfo();
-        THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(testColumns[0].first) };
+        THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(key[0].first) };
 
         { // full scan
             ui64 txId = 1;
             auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, {}, {});
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 4);
         }
 
         // predicates
@@ -498,22 +534,44 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         {
             ui64 txId = 1;
             std::shared_ptr<TPredicate> gt10k = MakePredicate(10000, NArrow::EOperation::Greater);
+            if (key[0].second == TTypeInfo(NTypeIds::Utf8)) {
+                gt10k = MakeStrPredicate("10000", NArrow::EOperation::Greater);
+            }
             auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, gt10k, {});
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 2);
         }
 
         {
             ui64 txId = 1;
             std::shared_ptr<TPredicate> lt10k = MakePredicate(9999, NArrow::EOperation::Less); // TODO: better border checks
+            if (key[0].second == TTypeInfo(NTypeIds::Utf8)) {
+                lt10k = MakeStrPredicate("09999", NArrow::EOperation::Less);
+            }
             auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, 0, lt10k);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 2);
         }
+    }
+
+    Y_UNIT_TEST(IndexReadWithPredicates) {
+        ReadWithPredicates(testColumns, testKey);
+    }
+
+    Y_UNIT_TEST(IndexReadWithPredicatesStrPK) {
+        TVector<std::pair<TString, TTypeInfo>> key = {
+            {"resource_type", TTypeInfo(NTypeIds::Utf8) },
+            {"resource_id", TTypeInfo(NTypeIds::Utf8) },
+            {"uid", TTypeInfo(NTypeIds::Utf8) },
+            {"timestamp", TTypeInfo(NTypeIds::Timestamp) }
+        };
+
+        ReadWithPredicates(testColumns, key);
     }
 
     Y_UNIT_TEST(IndexWriteOverload) {
         TTestDbWrapper db;
+        TIndexInfo tableInfo = TestTableInfo();
 
         ui64 pathId = 1;
         ui32 step = 1000;
@@ -521,7 +579,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // inserts
         ui64 planStep = 1;
 
-        TColumnEngineForLogs engine(TestTableInfo(), 0, TestLimits());
+        TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
         engine.Load(db);
 
         THashMap<TBlobRange, TString> blobs;
@@ -551,7 +609,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         UNIT_ASSERT(overload);
 
         { // check it's overloaded after reload
-            TColumnEngineForLogs tmpEngine(TestTableInfo(), 0, TestLimits());
+            TColumnEngineForLogs tmpEngine(TIndexInfo(tableInfo), 0, TestLimits());
             tmpEngine.Load(db);
             UNIT_ASSERT(tmpEngine.GetOverloadedGranules(pathId));
         }
@@ -582,7 +640,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's not overloaded after reload
-            TColumnEngineForLogs tmpEngine(TestTableInfo(), 0, TestLimits());
+            TColumnEngineForLogs tmpEngine(TIndexInfo(tableInfo), 0, TestLimits());
             tmpEngine.Load(db);
             UNIT_ASSERT(!tmpEngine.GetOverloadedGranules(pathId));
         }
@@ -590,6 +648,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     Y_UNIT_TEST(IndexTtl) {
         TTestDbWrapper db;
+        TIndexInfo tableInfo = TestTableInfo();
 
         ui64 pathId = 1;
         ui32 step = 1000;
@@ -610,19 +669,19 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
-            bool ok = Insert(db, {planStep, txId}, std::move(dataToIndex), blobs, step);
+            bool ok = Insert(tableInfo, db, {planStep, txId}, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
         }
 
         // compact
         planStep = 2;
 
-        bool ok = Compact(db, TSnapshot{planStep, 1}, std::move(blobs), step, {20, 4, 4});
+        bool ok = Compact(tableInfo, db, TSnapshot{planStep, 1}, std::move(blobs), step, {20, 4, 4});
         UNIT_ASSERT(ok);
 
         // load
 
-        TColumnEngineForLogs engine(TestTableInfo(), 0, TestLimits());
+        TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
         engine.Load(db);
 
         // read
@@ -650,7 +709,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // TTL
         THashMap<ui64, NOlap::TTiersInfo> pathTtls;
-        pathTtls.emplace(pathId, TBuilder::MakeTtl(TInstant::MicroSeconds(10000)));
+        pathTtls.emplace(pathId, MakeTtl(TInstant::MicroSeconds(10000)));
         Ttl(engine, db, pathTtls, 2);
 
         // read + load + read

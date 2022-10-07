@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap::NCosts {
 
 void TKeyRangesBuilder::AddMarkFromGranule(const TGranuleRecord& record) {
-    Constructor.StartRecord(true).AddRecordValue(std::make_shared<arrow::UInt64Scalar>(ExtractKey(record.IndexKey)));
+    Constructor.StartRecord(true).AddRecordValue(record.Mark);
     Features.emplace_back(TMarkRangeFeatures());
 }
 
@@ -32,17 +32,12 @@ void TKeyRangesBuilder::FillRangeMarks(const std::shared_ptr<NOlap::TPredicate>&
         Y_VERIFY(!LeftBorderOpened);
         LeftBorderOpened = true;
     }
-    for (auto&& i : granuleRecords) {
-        AddMarkFromGranule(i);
+    for (auto&& rec : granuleRecords) {
+        AddMarkFromGranule(rec);
     }
     if (AddMarkFromPredicate(right)) {
         Features.back().SetIntervalSkipped(true);
     }
-}
-
-ui64 TKeyRangesBuilder::ExtractKey(const TString& key) {
-    Y_VERIFY(key.size() == 8);
-    return *reinterpret_cast<const ui64*>(key.data());
 }
 
 NKikimrKqp::TEvRemoteCostData::TCostInfo TKeyRanges::SerializeToProto() const {

@@ -10,6 +10,7 @@ namespace NKikimr::NOlap {
 struct TInsertedData;
 struct TColumnRecord;
 struct TGranuleRecord;
+class IColumnEngine;
 
 class IDbWrapper {
 public:
@@ -27,9 +28,9 @@ public:
                       THashMap<TWriteId, TInsertedData>& aborted,
                       const TInstant& loadTime) = 0;
 
-    virtual void WriteGranule(ui32 index, const TGranuleRecord& row) = 0;
-    virtual void EraseGranule(ui32 index, const TGranuleRecord& row) = 0;
-    virtual bool LoadGranules(ui32 index, std::function<void(TGranuleRecord&&)> callback) = 0;
+    virtual void WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) = 0;
+    virtual void EraseGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) = 0;
+    virtual bool LoadGranules(ui32 index, const IColumnEngine& engine, std::function<void(TGranuleRecord&&)> callback) = 0;
 
     virtual void WriteColumn(ui32 index, const TColumnRecord& row) = 0;
     virtual void EraseColumn(ui32 index, const TColumnRecord& row) = 0;
@@ -58,9 +59,9 @@ public:
               THashMap<TWriteId, TInsertedData>& aborted,
               const TInstant& loadTime) override;
 
-    void WriteGranule(ui32 index, const TGranuleRecord& row) override;
-    void EraseGranule(ui32 index, const TGranuleRecord& row) override;
-    bool LoadGranules(ui32 index, std::function<void(TGranuleRecord&&)> callback) override;
+    void WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) override;
+    void EraseGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) override;
+    bool LoadGranules(ui32 index, const IColumnEngine& engine, std::function<void(TGranuleRecord&&)> callback) override;
 
     void WriteColumn(ui32 index, const TColumnRecord& row) override;
     void EraseColumn(ui32 index, const TColumnRecord& row) override;

@@ -372,6 +372,9 @@ public:
     virtual const THashSet<ui64>* GetOverloadedGranules(ui64 /*pathId*/) const { return nullptr; }
     virtual bool HasOverloadedGranules() const { return false; }
 
+    virtual TString SerializeMark(const std::shared_ptr<arrow::Scalar>& scalar) const = 0;
+    virtual std::shared_ptr<arrow::Scalar> DeserializeMark(const TString& key) const = 0;
+
     virtual bool Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop = {}) = 0;
 
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,

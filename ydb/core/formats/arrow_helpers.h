@@ -103,6 +103,8 @@ ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
 // Return size in bytes *not* including size of bitmap mask
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
 
+i64 LowerBound(const std::shared_ptr<arrow::Array>& column, const arrow::Scalar& value, i64 offset = 0);
+
 enum class ECompareType {
     LESS = 1,
     LESS_OR_EQUAL,
@@ -124,28 +126,10 @@ bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
                        bool desc = false);
 bool HasAllColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& schema);
 
-template <typename TArr>
-std::shared_ptr<TArr> GetTypedColumn(const std::shared_ptr<arrow::RecordBatch>& batch, int pos) {
-    auto array = batch->column(pos);
-    Y_VERIFY(array);
-    //Y_VERIFY(array->type_id() == arrow::Type::TIMESTAMP); // TODO
-    auto column = std::static_pointer_cast<TArr>(array);
-    Y_VERIFY(column);
-    return column;
-}
-
-template <typename TArr>
-std::shared_ptr<TArr> GetTypedColumn(const std::shared_ptr<arrow::RecordBatch>& batch, const std::string& columnName) {
-    auto array = batch->GetColumnByName(columnName);
-    Y_VERIFY(array);
-    //Y_VERIFY(array->type_id() == arrow::Type::TIMESTAMP); // TODO
-    auto column = std::static_pointer_cast<TArr>(array);
-    Y_VERIFY(column);
-    return column;
-}
-
 std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& column);
+std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position);
+bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 

@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
+#include "scalars.h"
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
-#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/sys_view/common/schema.h>
 
 namespace arrow {
@@ -15,10 +15,6 @@ namespace NKikimr::NArrow {
 }
 
 namespace NKikimr::NOlap {
-
-void ScalarToConstant(const arrow::Scalar& scalar, NKikimrSSA::TProgram_TConstant& value);
-std::shared_ptr<arrow::Scalar> ConstantToScalar(const NKikimrSSA::TProgram_TConstant& value,
-                                                const std::shared_ptr<arrow::DataType>& type);
 
 template <typename T>
 static std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const T& ids) {

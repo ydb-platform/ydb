@@ -12,6 +12,7 @@ using NWrappers::NTestHelpers::TS3Mock;
 namespace {
 
 static const TVector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
+static const TVector<std::pair<TString, TTypeInfo>> testYdbPk = TTestSchema::YdbPkSchema();
 
 std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBatch> batch, TString columnName, i64 seconds) {
     std::string name(columnName.c_str(), columnName.size());
@@ -46,8 +47,8 @@ bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot s
     return (res.GetStatus() == NKikimrTxColumnShard::SUCCESS);
 }
 
-std::shared_ptr<arrow::TimestampArray> GetTimestampColumn(const TString& blob, const TString& srtSchema,
-                                                          const std::string& columnName)
+std::shared_ptr<arrow::Array> GetFirstPKColumn(const TString& blob, const TString& srtSchema,
+                                               const std::string& columnName)
 {
     auto schema = NArrow::DeserializeSchema(srtSchema);
     auto batch = NArrow::DeserializeBatch(blob, schema);
@@ -55,7 +56,7 @@ std::shared_ptr<arrow::TimestampArray> GetTimestampColumn(const TString& blob, c
 
     std::shared_ptr<arrow::Array> array = batch->GetColumnByName(columnName);
     UNIT_ASSERT(array);
-    return std::static_pointer_cast<arrow::TimestampArray>(array);
+    return array;
 }
 
 bool CheckSame(const TString& blob, const TString& srtSchema, ui32 expectedSize,
@@ -63,14 +64,14 @@ bool CheckSame(const TString& blob, const TString& srtSchema, ui32 expectedSize,
     auto expected = arrow::TimestampScalar(seconds * 1000 * 1000, arrow::timestamp(arrow::TimeUnit::MICRO));
     UNIT_ASSERT_VALUES_EQUAL(expected.value, seconds * 1000 * 1000);
 
-    auto tsCol = GetTimestampColumn(blob, srtSchema, columnName);
+    auto tsCol = GetFirstPKColumn(blob, srtSchema, columnName);
     UNIT_ASSERT(tsCol);
     UNIT_ASSERT_VALUES_EQUAL(tsCol->length(), expectedSize);
 
     for (int i = 0; i < tsCol->length(); ++i) {
-        i64 value = tsCol->Value(i);
-        if (value != expected.value) {
-            Cerr << "Unexpected: " << value << ", expected " << expected.value << "\n";
+        auto value = *tsCol->GetScalar(i);
+        if (!value->Equals(expected)) {
+            Cerr << "Unexpected: '" << value->ToString() << "', expected " << expected.value << "\n";
             return false;
         }
     }
@@ -96,6 +97,23 @@ std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui3
     data.emplace_back(NArrow::SerializeBatchNoCompression(batch1));
     data.emplace_back(NArrow::SerializeBatchNoCompression(batch2));
     return data;
+}
+
+bool TestCreateTable(const TString& txBody, ui64 planStep = 1000, ui64 txId = 100) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime,
+                           CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
+                           &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    //
+    return ProposeSchemaTx(runtime, sender, txBody, {++planStep, ++txId});
 }
 
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
@@ -135,7 +153,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         spec.SetTtl(ttlSec);
     }
     bool ok = ProposeSchemaTx(runtime, sender,
-                              TTestSchema::CreateTableTxBody(tableId, testYdbSchema, spec),
+                              TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk, spec),
                               {++planStep, ++txId});
     UNIT_ASSERT(ok);
     PlanSchemaTx(runtime, sender, {planStep, txId});
@@ -398,7 +416,7 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
 
     UNIT_ASSERT(specs.size() > 0);
     bool ok = ProposeSchemaTx(runtime, sender,
-                              TTestSchema::CreateTableTxBody(tableId, testYdbSchema, specs[0]),
+                              TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk, specs[0]),
                               {++planStep, ++txId});
     UNIT_ASSERT(ok);
     PlanSchemaTx(runtime, sender, {planStep, txId});
@@ -471,13 +489,15 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
         if (resRead.GetData().size()) {
             auto& meta = resRead.GetMeta();
             auto& schema = meta.GetSchema();
-            auto tsColumn = GetTimestampColumn(resRead.GetData(), schema, TTestSchema::DefaultTtlColumn);
-            UNIT_ASSERT(tsColumn);
+            auto pkColumn = GetFirstPKColumn(resRead.GetData(), schema, TTestSchema::DefaultTtlColumn);
+            UNIT_ASSERT(pkColumn);
+            UNIT_ASSERT(pkColumn->type_id() == arrow::Type::TIMESTAMP);
 
             UNIT_ASSERT(meta.HasReadStats());
             auto& readStats = meta.GetReadStats();
             ui64 numBytes = readStats.GetDataBytes(); // compressed bytes in storage
 
+            auto tsColumn = std::static_pointer_cast<arrow::TimestampArray>(pkColumn);
             resColumns.emplace_back(tsColumn, numBytes);
         } else {
             resColumns.emplace_back(nullptr, 0);
@@ -610,7 +630,7 @@ void TestDrop(bool reboots) {
     ui64 planStep = 1000000000; // greater then delays
     ui64 txId = 100;
 
-    bool ok = ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema),
+    bool ok = ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
                               {++planStep, ++txId});
     UNIT_ASSERT(ok);
     PlanSchemaTx(runtime, sender, {planStep, txId});
@@ -676,6 +696,77 @@ extern bool gAllowLogBatchingDefaultValue;
 }
 
 Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
+    Y_UNIT_TEST(CreateTable) {
+        ui64 tableId = 1;
+
+        TVector<TTypeId> intTypes = {
+            NTypeIds::Timestamp,
+            NTypeIds::Int8,
+            NTypeIds::Int16,
+            NTypeIds::Int32,
+            NTypeIds::Int64,
+            NTypeIds::Uint8,
+            NTypeIds::Uint16,
+            NTypeIds::Uint32,
+            NTypeIds::Uint64,
+            NTypeIds::Date,
+            NTypeIds::Datetime
+        };
+
+        auto schema = TTestSchema::YdbSchema({"k0", TTypeInfo(NTypeIds::Timestamp)});
+        auto pk = schema;
+        pk.resize(4);
+
+        for (auto& ydbType : intTypes) {
+            schema[0].second = TTypeInfo(ydbType);
+            pk[0].second = TTypeInfo(ydbType);
+            auto txBody = TTestSchema::CreateTableTxBody(tableId, schema, pk);
+            bool ok = TestCreateTable(txBody);
+            UNIT_ASSERT(ok);
+        }
+
+        // TODO: support float types
+        TVector<TTypeId> floatTypes = {
+            NTypeIds::Float,
+            NTypeIds::Double
+        };
+
+        for (auto& ydbType : floatTypes) {
+            schema[0].second = TTypeInfo(ydbType);
+            pk[0].second = TTypeInfo(ydbType);
+            auto txBody = TTestSchema::CreateTableTxBody(tableId, schema, pk);
+            bool ok = TestCreateTable(txBody);
+            UNIT_ASSERT(!ok);
+        }
+
+        TVector<TTypeId> strTypes = {
+            NTypeIds::String,
+            NTypeIds::Utf8
+        };
+
+        for (auto& ydbType : strTypes) {
+            schema[0].second = TTypeInfo(ydbType);
+            pk[0].second = TTypeInfo(ydbType);
+            auto txBody = TTestSchema::CreateTableTxBody(tableId, schema, pk);
+            bool ok = TestCreateTable(txBody);
+            UNIT_ASSERT(ok);
+        }
+
+        TVector<TTypeId> xsonTypes = {
+            NTypeIds::Yson,
+            NTypeIds::Json,
+            NTypeIds::JsonDocument
+        };
+
+        for (auto& ydbType : xsonTypes) {
+            schema[0].second = TTypeInfo(ydbType);
+            pk[0].second = TTypeInfo(ydbType);
+            auto txBody = TTestSchema::CreateTableTxBody(tableId, schema, pk);
+            bool ok = TestCreateTable(txBody);
+            UNIT_ASSERT(!ok);
+        }
+    }
+
     Y_UNIT_TEST(ExternalTTL) {
         TestTtl(false, false);
     }

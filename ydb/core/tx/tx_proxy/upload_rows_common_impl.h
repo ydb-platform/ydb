@@ -635,36 +635,19 @@ private:
 
         auto outputColumns = GetOutputColumns(ctx);
         if (!outputColumns.empty()) {
-            std::shared_ptr<arrow::RecordBatch> batch = Batch;
-            if (!batch) {
+            if (!Batch) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "No batch in bulk upsert data", ctx);
             }
-#if 1 // TODO: it's been checked in BuildSchema, remove if possible
-            for (auto& columnName : outputColumns) {
-                if (!batch->GetColumnByName(columnName)) {
-                    // TODO: upsert with implicit NULLs instead?
-                    return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                        "No column '" + columnName + "' in bulk upsert data", ctx);
-                }
-            }
-#endif
-            // reuse source serialized batch if it's present and OK
-            bool reuseData = false;
-            {
-                if (GetSourceType() == EUploadSource::ArrowBatch) {
-                    reuseData = (outputColumns.size() == (size_t)batch->num_columns());
-                }
 
-                // TODO: reuse batchData with reordered columns
-                for (int i = 0; i < batch->num_columns() && reuseData; ++i) {
-                    if (batch->column_name(i) != outputColumns[i]) {
-                        reuseData = false;
+            auto batch = NArrow::ExtractColumns(Batch, outputColumns);
+            if (!batch) {
+                for (auto& columnName : outputColumns) {
+                    if (Batch->schema()->GetFieldIndex(columnName) < 0) {
+                        return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
+                            "No column '" + columnName + "' in bulk upsert data", ctx);
                     }
                 }
-            }
-
-            if (!reuseData) {
-                batch = NArrow::ExtractColumns(batch, outputColumns);
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Cannot prepare bulk upsert data", ctx);
             }
 
             Y_VERIFY(batch);

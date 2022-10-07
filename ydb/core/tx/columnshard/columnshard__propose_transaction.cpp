@@ -36,6 +36,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
     auto txKind = record.GetTxKind();
     //ui64 ssId = record.GetSchemeShardId();
     ui64 txId = record.GetTxId();
+    auto& txBody = record.GetTxBody();
     auto status = NKikimrTxColumnShard::EResultStatus::ERROR;
     TString statusMessage;
 
@@ -45,9 +46,16 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
     switch (txKind) {
         case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
             TColumnShard::TAlterMeta meta;
-            if (!meta.Body.ParseFromString(record.GetTxBody())) {
+            if (!meta.Body.ParseFromString(txBody)) {
                 statusMessage = TStringBuilder()
                     << "Schema TxId# " << txId << " cannot be parsed";
+                break;
+            }
+
+            // Invalid body generated at a newer SchemeShard
+            if (!meta.Validate()) {
+                statusMessage = TStringBuilder()
+                    << "Schema TxId# " << txId << " cannot be proposed";
                 break;
             }
 
@@ -91,7 +99,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             txInfo.TxKind = txKind;
             txInfo.Source = Ev->Get()->GetSource();
             txInfo.Cookie = Ev->Cookie;
-            Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, record.GetTxBody(), txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
+            Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
 
             if (!Self->AltersInFlight.contains(txId)) {
                 Self->AltersInFlight.emplace(txId, std::move(meta));
@@ -113,7 +121,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             }
 
             NKikimrTxColumnShard::TCommitTxBody body;
-            if (!body.ParseFromString(record.GetTxBody())) {
+            if (!body.ParseFromString(txBody)) {
                 statusMessage = TStringBuilder()
                     << "Commit TxId# " << txId << " cannot be parsed";
                 break;
@@ -168,7 +176,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             txInfo.MaxStep = maxStep;
             txInfo.Source = Ev->Get()->GetSource();
             txInfo.Cookie = Ev->Cookie;
-            Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, record.GetTxBody(), txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
+            Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
 
             Self->CommitsInFlight.emplace(txId, std::move(meta));
 
@@ -185,7 +193,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             // TODO: make real tx: save and progress with tablets restart support
 
             NKikimrTxColumnShard::TTtlTxBody ttlBody;
-            if (!ttlBody.ParseFromString(record.GetTxBody())) {
+            if (!ttlBody.ParseFromString(txBody)) {
                 statusMessage = "TTL tx cannot be parsed";
                 status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
                 break;

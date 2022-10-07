@@ -7,13 +7,36 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 using namespace NYdb;
 
 namespace {
-std::vector<TString> testShardingVariants = {
+
+THashMap<EPrimitiveType, TString> allowedTypes = {
+    //EPrimitiveType::Bool,
+    {EPrimitiveType::Uint8, "Uint8"},
+    {EPrimitiveType::Int32, "Int32"},
+    {EPrimitiveType::Uint32, "Uint32"},
+    {EPrimitiveType::Int64, "Int64"},
+    {EPrimitiveType::Uint64, "Uint64"},
+    //{EPrimitiveType::Float, "Float"},
+    //{EPrimitiveType::Double, "Double"},
+    {EPrimitiveType::Date, "Date"},
+    {EPrimitiveType::Datetime, "Datetime"},
+    {EPrimitiveType::Timestamp, "Timestamp"},
+    //{EPrimitiveType::Interval, "Interval"},
+    {EPrimitiveType::String, "String"},
+    {EPrimitiveType::Utf8, "Utf8"}
+    //EPrimitiveType::Yson,
+    //EPrimitiveType::Json,
+    //EPrimitiveType::JsonDocument,
+    //EPrimitiveType::DyNumber,
+};
+
+static constexpr const char* testShardingVariants[] = {
     R"(["timestamp", "uid"])",
     R"(["timestamp", "resource_type", "resource_id", "uid"])"
 };
@@ -47,10 +70,16 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         return connection;
     }
 
-    void CreateOlapTable(const TServerSettings& settings, const TString& tableName, ui32 numShards = 2,
-                         const TString shardingColumns = R"(["timestamp", "uid"])")
+    struct TTestOlapTableOptions {
+        EPrimitiveType TsType = EPrimitiveType::Timestamp;
+        ui32 NumShards = 2;
+        TString Sharding = testShardingVariants[0];
+        TString HashFunction = "HASH_FUNCTION_CLOUD_LOGS";
+    };
+
+    void CreateOlapTable(const TServerSettings& settings, const TString& tableName, TTestOlapTableOptions opts = {})
     {
-        const char * tableDescr = R"(
+        TString tableDescr = Sprintf(R"(
             Name: "OlapStore"
             ColumnShardCount: 4
             SchemaPresets {
@@ -60,7 +89,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
                     Columns { Name: "json_payload" Type: "JsonDocument" }
                     Columns { Name: "resource_id" Type: "Utf8" }
                     Columns { Name: "uid" Type: "Utf8" }
-                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "timestamp" Type: "%s" }
                     Columns { Name: "resource_type" Type: "Utf8" }
                     Columns { Name: "level" Type: "Int32" }
                     Columns { Name: "ingested_at" Type: "Timestamp" }
@@ -70,7 +99,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
-        )";
+        )", allowedTypes[opts.TsType].c_str());
 
         TClient annoyingClient(settings);
         NMsgBusProxy::EResponseStatus status = annoyingClient.CreateOlapStore("/Root", tableDescr);
@@ -81,11 +110,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             ColumnShardCount : %d
             Sharding {
                 HashSharding {
-                    Function: HASH_FUNCTION_CLOUD_LOGS
+                    Function: %s
                     Columns: %s
                 }
             }
-        )", tableName.c_str(), numShards, shardingColumns.c_str()));
+        )", tableName.c_str(), opts.NumShards, opts.HashFunction.c_str(), opts.Sharding.c_str()));
 
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
@@ -112,16 +141,60 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     }
 
     NYdb::NTable::TAsyncBulkUpsertResult SendBatch(NYdb::NTable::TTableClient& client, const TString& tableName,
-        const ui64 batchSize, const ui32 baseUserId, i64& ts)
+        const ui64 batchSize, const ui32 baseUserId, std::pair<EPrimitiveType, i64>& value)
     {
+        i64 ts = value.second;
+
         TValueBuilder rows;
         rows.BeginList();
         for (ui64 i = 0; i < batchSize; ++i, ts += 1000) {
             const ui32 userId = baseUserId + (i % 100);
-            rows.AddListItem()
-                .BeginStruct()
-                    .AddMember("timestamp").Timestamp(TInstant::MicroSeconds(ts))
-                    .AddMember("resource_type").Utf8(i%2 ? "app" : "nginx")
+            auto& row = rows.AddListItem()
+                .BeginStruct();
+            switch (value.first) {
+                case EPrimitiveType::Uint8:
+                    row.AddMember("timestamp").Uint8(ts);
+                    break;
+                case EPrimitiveType::Int32:
+                    row.AddMember("timestamp").Int32(ts);
+                    break;
+                case EPrimitiveType::Uint32:
+                    row.AddMember("timestamp").Uint32(ts);
+                    break;
+                case EPrimitiveType::Int64:
+                    row.AddMember("timestamp").Int64(ts);
+                    break;
+                case EPrimitiveType::Uint64:
+                    row.AddMember("timestamp").Uint64(ts);
+                    break;
+                case EPrimitiveType::Float:
+                    row.AddMember("timestamp").Float(ts);
+                    break;
+                case EPrimitiveType::Double:
+                    row.AddMember("timestamp").Double(ts);
+                    break;
+                case EPrimitiveType::Timestamp:
+                    row.AddMember("timestamp").Timestamp(TInstant::MicroSeconds(ts % NYql::NUdf::MAX_TIMESTAMP));
+                    break;
+                case EPrimitiveType::Date:
+                    row.AddMember("timestamp").Date(TInstant::Days((ts / 1000) % NYql::NUdf::MAX_DATE));
+                    break;
+                case EPrimitiveType::Datetime:
+                    row.AddMember("timestamp").Datetime(TInstant::Seconds((ts / 1000) % NYql::NUdf::MAX_DATETIME));
+                    break;
+                case EPrimitiveType::Interval:
+                    row.AddMember("timestamp").Interval(ts);
+                    break;
+                case EPrimitiveType::String:
+                    row.AddMember("timestamp").String(ToString(ts));
+                    break;
+                case EPrimitiveType::Utf8:
+                    row.AddMember("timestamp").Utf8(ToString(ts));
+                    break;
+                default:
+                    UNIT_ASSERT(false);
+            }
+            row.AddMember("resource_type").Utf8(i%2 ? "app" : "nginx")
                     .AddMember("resource_id").Utf8("resource_" + ToString((i+13) % 7))
                     .AddMember("uid").Utf8(ToString(i % 23))
                     .AddMember("level").Int32(i % 10)
@@ -156,7 +229,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         NYdb::NTable::TTableClient client(connection, NYdb::NTable::TClientSettings().AuthToken(token));
 
         TInstant start = TInstant::Now();
-        i64 ts = startTs;
+        auto ts = std::make_pair<EPrimitiveType, i64>(EPrimitiveType::Timestamp, (i64)startTs);
 
         const ui32 baseUserId = 1000000;
         TVector<NYdb::NTable::TAsyncBulkUpsertResult> results;
@@ -208,7 +281,9 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     // Create OLTP and OLAP tables with the same set of columns and same PK
     void CreateTestTables(const TServerSettings& settings, const TString& tableName, const TString& sharding) {
-        CreateOlapTable(settings, tableName, 2, sharding);
+        TTestOlapTableOptions opts;
+        opts.Sharding = sharding;
+        CreateOlapTable(settings, tableName, opts);
         CreateTable(settings, "oltp_" + tableName);
     }
 
@@ -236,22 +311,27 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         return result;
     }
 
-    Y_UNIT_TEST(BulkUpsert) {
+    void TestBulkUpsert(EPrimitiveType pkFirstType) {
         NKikimrConfig::TAppConfig appConfig;
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
 
-        CreateOlapTable(*server.ServerSettings, "log1");
+        TTestOlapTableOptions opts;
+        opts.TsType = pkFirstType;
+        opts.HashFunction = "HASH_FUNCTION_MODULO_N";
+        CreateOlapTable(*server.ServerSettings, "log1", opts);
 
         TClient annoyingClient(*server.ServerSettings);
         annoyingClient.ModifyOwner("/Root/OlapStore", "log1", "alice@builtin");
 
         {
             NYdb::NTable::TTableClient client(connection, NYdb::NTable::TClientSettings().AuthToken("bob@builtin"));
-            i64 ts = 1000;
+
+            std::pair<EPrimitiveType, i64> ts(pkFirstType, 1000);
             auto res = SendBatch(client, "/Root/OlapStore/log1", 100, 1, ts).GetValueSync();
+            Cerr << __FILE__ << ":" << __LINE__ << " Issues: " << res.GetIssues().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::UNAUTHORIZED);
             UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(),
                 "Access denied for bob@builtin with access UpdateRow to table '/Root/OlapStore/log1'");
@@ -262,8 +342,9 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
         {
             NYdb::NTable::TTableClient client(connection, NYdb::NTable::TClientSettings().AuthToken("alice@builtin"));
-            i64 ts = 1000;
+            std::pair<EPrimitiveType, i64> ts(pkFirstType, 1000);
             auto res = SendBatch(client, "log1", 100, 1, ts).GetValueSync();
+            Cerr << __FILE__ << ":" << __LINE__ << " Issues: " << res.GetIssues().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
             UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Unknown database for table 'log1'");
 
@@ -273,12 +354,19 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
         {
             NYdb::NTable::TTableClient client(connection, NYdb::NTable::TClientSettings().AuthToken("alice@builtin"));
-            i64 ts = 1000;
+            std::pair<EPrimitiveType, i64> ts(pkFirstType, 1000);
             auto res = SendBatch(client, "/Root/OlapStore/log1", 100, 1, ts).GetValueSync();
+            Cerr << __FILE__ << ":" << __LINE__ << " Issues: " << res.GetIssues().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
 
             TString result = RunQuery(connection, "SELECT count(*) FROM `/Root/OlapStore/log1`;");
             UNIT_ASSERT_VALUES_EQUAL(result, "[[100u]]");
+        }
+    }
+
+    Y_UNIT_TEST(BulkUpsert) {
+        for (auto& [type, name] : allowedTypes) {
+            TestBulkUpsert(type);
         }
     }
 
@@ -327,7 +415,9 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         auto connection = ConnectToServer(server);
         NYdb::NTable::TTableClient client(connection);
 
-        CreateOlapTable(*server.ServerSettings, "log1", 2, sharding);
+        TTestOlapTableOptions opts;
+        opts.Sharding = sharding;
+        CreateOlapTable(*server.ServerSettings, "log1", opts);
 
         const ui64 batchCount = 100;
         const ui64 batchSize = 1000;

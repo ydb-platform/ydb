@@ -33,4 +33,5 @@ target_sources(tx-columnshard-engines PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/indexed_read_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/filter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portion_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scalars.cpp
 )

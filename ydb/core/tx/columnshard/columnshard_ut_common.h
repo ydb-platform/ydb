@@ -88,14 +88,13 @@ struct TTestSchema {
         }
     };
 
-    static auto YdbSchema() {
+    static auto YdbSchema(const std::pair<TString, TTypeInfo>& firstKeyItem = {"timestamp", TTypeInfo(NTypeIds::Timestamp) }) {
         TVector<std::pair<TString, TTypeInfo>> schema = {
             // PK
-            {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
+            firstKeyItem,
             {"resource_type", TTypeInfo(NTypeIds::Utf8) },
             {"resource_id", TTypeInfo(NTypeIds::Utf8) },
             {"uid", TTypeInfo(NTypeIds::Utf8) },
-            //
             {"level", TTypeInfo(NTypeIds::Int32) },
             {"message", TTypeInfo(NTypeIds::Utf8) },
             {"json_payload", TTypeInfo(NTypeIds::Json) },
@@ -179,7 +178,8 @@ struct TTestSchema {
         return col;
     }
 
-    static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+    static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeInfo>>& columns,
+                                     const TVector<std::pair<TString, TTypeInfo>>& pk,
                                      const TTableSpecials& specials = {}) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableEnsureTables()->AddTables();
@@ -199,9 +199,7 @@ struct TTestSchema {
                 *schema->MutableColumns()->Add() = CreateColumn(i + 1, columns[i].first, columns[i].second);
             }
 
-            auto pk = columns;
-            Y_VERIFY(pk.size() >= 4);
-            pk.resize(4);
+            Y_VERIFY(pk.size() == 4);
             for (auto& column : ExtractNames(pk)) {
                 schema->AddKeyColumnNames(column);
             }

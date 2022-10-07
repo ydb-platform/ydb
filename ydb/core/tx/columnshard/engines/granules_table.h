@@ -5,12 +5,21 @@ namespace NKikimr::NOlap {
 
 struct TGranuleRecord {
     ui64 PathId;
-    TString IndexKey;
     ui64 Granule;
     TSnapshot CreatedAt;
+    std::shared_ptr<arrow::Scalar> Mark;
+
+    TGranuleRecord(ui64 pathId, ui64 granule, const TSnapshot& createdAt, const std::shared_ptr<arrow::Scalar>& mark)
+        : PathId(pathId)
+        , Granule(granule)
+        , CreatedAt(createdAt)
+        , Mark(mark)
+    {
+        Y_VERIFY(Mark);
+    }
 
     bool operator == (const TGranuleRecord& rec) const {
-        return (PathId == rec.PathId) && (IndexKey == rec.IndexKey);
+        return (PathId == rec.PathId) && (Mark->Equals(*rec.Mark));
     }
 
     friend IOutputStream& operator << (IOutputStream& out, const TGranuleRecord& rec) {
@@ -25,23 +34,25 @@ struct TGranuleRecord {
 
 class TGranulesTable {
 public:
-    TGranulesTable(ui32 indexId)
-        : IndexId(indexId)
+    TGranulesTable(const IColumnEngine& engine, ui32 indexId)
+        : Engine(engine)
+        , IndexId(indexId)
     {}
 
     void Write(IDbWrapper& db, const TGranuleRecord& row) {
-        db.WriteGranule(IndexId, row);
+        db.WriteGranule(IndexId, Engine, row);
     }
 
     void Erase(IDbWrapper& db, const TGranuleRecord& row) {
-        db.EraseGranule(IndexId, row);
+        db.EraseGranule(IndexId, Engine, row);
     }
 
     bool Load(IDbWrapper& db, std::function<void(TGranuleRecord&&)> callback) {
-        return db.LoadGranules(IndexId, callback);
+        return db.LoadGranules(IndexId, Engine, callback);
     }
 
 private:
+    const IColumnEngine& Engine;
     ui32 IndexId;
 };
 

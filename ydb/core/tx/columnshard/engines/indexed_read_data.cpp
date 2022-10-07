@@ -12,6 +12,8 @@ namespace NKikimr::NOlap {
 
 namespace {
 
+using TMark = TColumnEngineForLogs::TMark;
+
 // Slices a batch into smaller batches and appends them to result vector (which might be non-empty already)
 void SliceBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                 const int64_t maxRowsInBatch,
@@ -61,14 +63,14 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
     TVector<TVector<std::shared_ptr<arrow::RecordBatch>>> rangesSlices; // rangesSlices[rangeNo][sliceNo]
     rangesSlices.reserve(batches.size());
     {
-        TMap<ui64, TVector<std::shared_ptr<arrow::RecordBatch>>> points;
+        TMap<TMark, TVector<std::shared_ptr<arrow::RecordBatch>>> points;
 
         for (auto& batch : batches) {
-            std::shared_ptr<arrow::TimestampArray> keyColumn = GetTimestampColumn(indexInfo, batch);
+            std::shared_ptr<arrow::Array> keyColumn = GetFirstPKColumn(indexInfo, batch);
             Y_VERIFY(keyColumn && keyColumn->length() > 0);
 
-            ui64 min = keyColumn->Value(0);
-            ui64 max = keyColumn->Value(keyColumn->length() - 1);
+            TMark min(*keyColumn->GetScalar(0));
+            TMark max(*keyColumn->GetScalar(keyColumn->length() - 1));
 
             points[min].push_back(batch); // insert start
             points[max].push_back({}); // insert end
@@ -146,6 +148,7 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
     Y_VERIFY(ReadMetadata->LoadSchema);
     Y_VERIFY(ReadMetadata->ResultSchema);
     Y_VERIFY(IndexInfo().GetSortingKey());
+    Y_VERIFY(IndexInfo().GetIndexKey() && IndexInfo().GetIndexKey()->num_fields());
 
     SortReplaceDescription = IndexInfo().SortReplaceDescription();
 
@@ -203,14 +206,14 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
 
     // Init split by granules structs
     for (auto& rec : ReadMetadata->SelectInfo->Granules) {
-        Y_VERIFY(rec.IndexKey.size() == 8);
-        ui64 ts = TColumnEngineForLogs::ExtractKey(rec.IndexKey); // TODO: support other engines
-        TsGranules.emplace(ts, rec.Granule);
+        TsGranules.emplace(rec.Mark, rec.Granule);
     }
-    if (!TsGranules.count(0)) {
+
+    TMark minMark(IndexInfo().GetIndexKey()->field(0)->type());
+    if (!TsGranules.count(minMark)) {
         // committed data before the first granule would be placed in fake (0,0) granule
         // committed data after the last granule would be placed into the last granule (or here if none)
-        TsGranules.emplace(0, 0);
+        TsGranules.emplace(minMark, 0);
     }
 
     auto& stats = ReadMetadata->ReadStats;

@@ -183,7 +183,8 @@ TVector<TCell> MakeTestCells(const TVector<TTypeInfo>& types, ui32 value, TVecto
             mem.push_back("{ \"a\" = [ { \"b\" = 1; } ]; }");
             const TString& str = mem.back();
             cells.push_back(TCell(str.data(), str.size()));
-        } else if (type == NTypeIds::Timestamp || type == NTypeIds::Uint64 || type == NTypeIds::Int64) {
+        } else if (type == NTypeIds::Timestamp || type == NTypeIds::Interval ||
+                    type == NTypeIds::Uint64 || type == NTypeIds::Int64) {
             cells.push_back(TCell::Make<ui64>(value));
         } else if (type == NTypeIds::Uint32 || type == NTypeIds::Int32 || type == NTypeIds::Datetime) {
             cells.push_back(TCell::Make<ui32>(value));

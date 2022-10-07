@@ -6,14 +6,15 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<arrow::TimestampArray> GetTimestampColumn(const TIndexInfo& indexInfo,
-                                                          const std::shared_ptr<arrow::RecordBatch>& batch) {
+std::shared_ptr<arrow::Array> GetFirstPKColumn(const TIndexInfo& indexInfo,
+                                               const std::shared_ptr<arrow::RecordBatch>& batch) {
     TString columnName = indexInfo.GetPK()[0].first;
-    std::string tsColumnName(columnName.data(), columnName.size());
-    return NArrow::GetTypedColumn<arrow::TimestampArray>(batch, tsColumnName);
+    return batch->GetColumnByName(std::string(columnName.data(), columnName.size()));
 }
 
 namespace {
+
+using TMark = TColumnEngineForLogs::TMark;
 
 arrow::ipc::IpcWriteOptions WriteOptions(const TCompression& compression) {
     auto& codec = compression.Codec;
@@ -36,17 +37,18 @@ arrow::ipc::IpcWriteOptions WriteOptions(const TCompression& compression) {
     return options;
 }
 
-ui64 ExtractTimestamp(const std::shared_ptr<TPredicate>& pkPredicate, const std::shared_ptr<arrow::Schema>& key) {
+std::shared_ptr<arrow::Scalar> ExtractFirstKey(const std::shared_ptr<TPredicate>& pkPredicate,
+                                               const std::shared_ptr<arrow::Schema>& key) {
     if (pkPredicate) {
         Y_VERIFY(pkPredicate->Good());
         Y_VERIFY(key->num_fields() == 1);
         Y_VERIFY(key->field(0)->Equals(pkPredicate->Batch->schema()->field(0)));
 
-        auto array = NArrow::GetTypedColumn<arrow::TimestampArray>(pkPredicate->Batch, 0);
+        auto array = pkPredicate->Batch->column(0);
         Y_VERIFY(array && array->length() == 1);
-        return array->Value(0);
+        return *array->GetScalar(0);
     }
-    return 0;
+    return {};
 }
 
 // Although source batches are ordered only by PK (sorting key) resulting pathBatches are ordered by extended key.
@@ -188,16 +190,17 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> PortionsToBatches(const TIndexI
     return batches;
 }
 
-bool InitInGranuleMerge(TVector<TPortionInfo>& portions, const TCompactionLimits& limits, const TSnapshot& snap,
-                        TMap<ui64, ui64>& borders) {
+bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portions, const TCompactionLimits& limits,
+                        const TSnapshot& snap, TMap<TMark, ui64>& borders) {
     ui64 oldTimePlanStep = snap.PlanStep - TDuration::Seconds(limits.InGranuleCompactSeconds).MilliSeconds();
     ui32 insertedCount = 0;
     ui32 insertedNew = 0;
 
     THashSet<ui64> filtered;
     THashSet<ui64> goodCompacted;
+    THashSet<ui64> nextToGood;
     {
-        TMap<ui64, TVector<const TPortionInfo*>> points;
+        TMap<TMark, TVector<const TPortionInfo*>> points;
 
         for (auto& portionInfo : portions) {
             if (portionInfo.IsInserted()) {
@@ -212,38 +215,46 @@ bool InitInGranuleMerge(TVector<TPortionInfo>& portions, const TCompactionLimits
             auto start = portionInfo.PkStart();
             auto end = portionInfo.PkEnd();
             Y_VERIFY(start && end);
-            ui64 min = static_cast<const arrow::TimestampScalar&>(*start).value;
-            ui64 max = static_cast<const arrow::TimestampScalar&>(*end).value;
 
-            points[min].push_back(&portionInfo); // insert start
-            points[max].push_back(nullptr); // insert end
+            points[TMark(start)].push_back(&portionInfo);
+            points[TMark(end)].push_back(nullptr);
         }
 
-        ui32 bucketCounter = 0;
+        ui32 countInBucket = 0;
+        ui64 bucketStartPortion = 0;
+        bool isGood = false;
         int sum = 0;
-        const TPortionInfo* lastPortion{};
         for (auto& [key, vec] : points) {
             for (auto& portionInfo : vec) {
                 if (portionInfo) {
                     ++sum;
-                    lastPortion = portionInfo;
-                    ++bucketCounter;
+                    ui64 currentPortion = portionInfo->Portion();
+                    if (!bucketStartPortion) {
+                        bucketStartPortion = currentPortion;
+                    }
+                    ++countInBucket;
+
+                    ui64 prevIsGood = isGood;
+                    isGood = goodCompacted.count(currentPortion);
+                    if (prevIsGood && !isGood) {
+                        nextToGood.insert(currentPortion);
+                    }
                 } else {
                     --sum;
                 }
             }
 
             if (!sum) { // count(start) == count(end), start new range
-                if (bucketCounter == 1) {
-                    Y_VERIFY(lastPortion);
+                Y_VERIFY(bucketStartPortion);
 
+                if (countInBucket == 1) {
                     // We do not want to merge big compacted portions with inserted ones if there's no intersections.
-                    ui64 maxBlobSize = lastPortion->BlobsSizes().second;
-                    if (!lastPortion->IsInserted() && maxBlobSize >= limits.GoodBlobSize) {
-                        filtered.insert(lastPortion->Portion());
+                    if (isGood) {
+                        filtered.insert(bucketStartPortion);
                     }
                 }
-                bucketCounter = 0;
+                countInBucket = 0;
+                bucketStartPortion = 0;
             }
         }
     }
@@ -261,27 +272,25 @@ bool InitInGranuleMerge(TVector<TPortionInfo>& portions, const TCompactionLimits
 
     // It's a map for SliceIntoGranules(). We use fake granule ids here to slice batch with borders.
     // We could merge inserted portions alltogether and slice result with filtered borders to prevent intersections.
-    borders[0] = 0;
+    borders[granuleMark] = 0;
 
     TVector<TPortionInfo> tmp;
     tmp.reserve(portions.size());
     for (auto& portionInfo : portions) {
+        ui64 curPortion = portionInfo.Portion();
+
         // Prevent merge of compacted portions with no intersections
-        if (filtered.count(portionInfo.Portion())) {
+        if (filtered.count(curPortion)) {
             auto start = portionInfo.PkStart();
             Y_VERIFY(start);
-            ui64 ts = static_cast<const arrow::TimestampScalar&>(*start).value;
-            borders[ts] = 0;
-            // No need to add its end
+            borders[TMark(start)] = 0;
         } else {
-            // Merge good compacted portion with intersections but prevent its unneeded growth
-            if (goodCompacted.count(portionInfo.Portion())) {
-                // Add "first after end" border but do not add start: allow to merge with older or intersected data.
-                // Do not add start to prevent [good] [small] [good] portions pattern.
-                auto end = portionInfo.PkEnd();
-                Y_VERIFY(end);
-                ui64 ts = static_cast<const arrow::TimestampScalar&>(*end).value + 1;
-                borders[ts] = 0;
+            // nextToGood borders potentially split good compacted portions into 2 parts:
+            // the first one without intersections and the second with them
+            if (goodCompacted.count(curPortion) || nextToGood.count(curPortion)) {
+                auto start = portionInfo.PkStart();
+                Y_VERIFY(start);
+                borders[TMark(start)] = 0;
             }
 
             tmp.emplace_back(std::move(portionInfo));
@@ -290,7 +299,7 @@ bool InitInGranuleMerge(TVector<TPortionInfo>& portions, const TCompactionLimits
     tmp.swap(portions);
 
     if (borders.size() == 1) {
-        Y_VERIFY(borders.begin()->first == 0);
+        Y_VERIFY(borders.begin()->first == granuleMark);
         borders.clear();
     }
 
@@ -319,30 +328,29 @@ inline THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SliceIntoGranulesImpl
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> out;
 
     if (tsGranules.size() == 1) {
-        Y_VERIFY(tsGranules.begin()->first == 0);
+        //Y_VERIFY(tsGranules.begin()->first.IsDefault());
         ui64 granule = tsGranules.begin()->second;
         out.emplace(granule, batch);
     } else {
-        std::shared_ptr<arrow::TimestampArray> keyColumn = GetTimestampColumn(indexInfo, batch);
+        auto keyColumn = GetFirstPKColumn(indexInfo, batch);
         Y_VERIFY(keyColumn && keyColumn->length() > 0);
 
-        TVector<i64> borders;
+        TVector<TMark> borders;
         borders.reserve(tsGranules.size());
         for (auto& [ts, granule] : tsGranules) {
             borders.push_back(ts);
         }
 
         ui32 i = 0;
-        int offset = 0;
+        i64 offset = 0;
         for (auto& [ts, granule] : tsGranules) {
-            int end = keyColumn->length();
+            i64 end = keyColumn->length();
             if (i < borders.size() - 1) {
-                i64 border = borders[i + 1];
-                const auto* ptr = keyColumn->raw_values();
-                end = std::lower_bound(ptr + offset, ptr + keyColumn->length(), border) - ptr;
+                TMark border = borders[i + 1];
+                end = NArrow::LowerBound(keyColumn, *border.Border, offset);
             }
 
-            int size = end - offset;
+            i64 size = end - offset;
             if (size) {
                 Y_VERIFY(size > 0);
                 Y_VERIFY(!out.count(granule));
@@ -359,17 +367,19 @@ inline THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SliceIntoGranulesImpl
 }
 
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
-SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const TMap<ui64, ui64>& tsGranules,
+SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
+                  const TMap<TMark, ui64>& markGranules,
                   const TIndexInfo& indexInfo)
 {
-    return SliceIntoGranulesImpl(batch, tsGranules, indexInfo);
+    return SliceIntoGranulesImpl(batch, markGranules, indexInfo);
 }
 
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
-SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::pair<ui64, ui64>>& tsGranules,
+SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
+                  const std::vector<std::pair<TMark, ui64>>& markGranules,
                   const TIndexInfo& indexInfo)
 {
-    return SliceIntoGranulesImpl(batch, tsGranules, indexInfo);
+    return SliceIntoGranulesImpl(batch, markGranules, indexInfo);
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits)
@@ -384,8 +394,12 @@ TColumnEngineForLogs::TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, con
     /// * apply PK predicate before REPLACE
     IndexInfo.SetAllKeys(IndexInfo.GetPK(), {0});
 
+    auto& indexKey = IndexInfo.GetIndexKey();
+    Y_VERIFY(indexKey->num_fields() == 1);
+    MarkType = indexKey->field(0)->type();
+
     ui32 indexId = IndexInfo.GetId();
-    GranulesTable = std::make_shared<TGranulesTable>(indexId);
+    GranulesTable = std::make_shared<TGranulesTable>(*this, indexId);
     ColumnsTable = std::make_shared<TColumnsTable>(indexId);
     CountersTable = std::make_shared<TCountersTable>(indexId);
 }
@@ -564,7 +578,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, const THashSet<ui64>& pathsToDro
         for (auto& emptyGranules : EmptyGranuleTracks(pathId)) {
             // keep first one => megre, keep nothing => drop.
             bool keepFirst = !pathsToDrop.count(pathId);
-            for (auto& [ts, granule] : emptyGranules) {
+            for (auto& [mark, granule] : emptyGranules) {
                 if (keepFirst) {
                     keepFirst = false;
                     continue;
@@ -574,7 +588,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, const THashSet<ui64>& pathsToDro
                 auto spg = Granules[granule];
                 Y_VERIFY(spg);
                 GranulesTable->Erase(db, spg->Record);
-                EraseGranule(pathId, granule, ts);
+                EraseGranule(pathId, granule, mark);
             }
         }
     }
@@ -627,7 +641,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(TVector<TInsertedData>&& dataToIndex) {
     Y_VERIFY(dataToIndex.size());
 
-    auto changes = std::make_shared<TChanges>(std::move(dataToIndex), Limits);
+    auto changes = std::make_shared<TChanges>(*this, std::move(dataToIndex), Limits);
     ui32 reserveGranules = 0;
 
     changes->InitSnapshot = LastSnapshot;
@@ -669,7 +683,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
                                                                             const TSnapshot& outdatedSnapshot) {
     Y_VERIFY(info);
 
-    auto changes = std::make_shared<TChanges>(std::move(info), Limits);
+    auto changes = std::make_shared<TChanges>(*this, std::move(info), Limits);
     changes->InitSnapshot = LastSnapshot;
 
     Y_VERIFY(changes->CompactionInfo->Granules.size() == 1);
@@ -697,17 +711,17 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
     ui64 pathId = spg->Record.PathId;
     Y_VERIFY(PathGranules.count(pathId));
 
-    for (const auto& [ts, pathGranule] : PathGranules[pathId]) {
+    for (const auto& [mark, pathGranule] : PathGranules[pathId]) {
         if (pathGranule == granule) {
-            changes->SrcGranule = {pathId, granule, ts};
+            changes->SrcGranule = TChanges::TSrcGranule(pathId, granule, mark);
             break;
         }
     }
-    Y_VERIFY(changes->SrcGranule.Good());
+    Y_VERIFY(changes->SrcGranule);
 
     if (changes->CompactionInfo->InGranule) {
         TSnapshot completedSnap = (outdatedSnapshot < LastSnapshot) ? LastSnapshot : outdatedSnapshot;
-        if (!InitInGranuleMerge(portions, Limits, completedSnap, changes->MergeBorders)) {
+        if (!InitInGranuleMerge(changes->SrcGranule->Mark, portions, Limits, completedSnap, changes->MergeBorders)) {
             return {};
         }
     } else {
@@ -720,7 +734,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
                                                                          THashSet<ui64>& pathsToDrop) {
-    auto changes = std::make_shared<TChanges>(snapshot, Limits);
+    auto changes = std::make_shared<TChanges>(*this, snapshot, Limits);
 
     // Add all portions from dropped paths
     THashSet<ui64> dropPortions;
@@ -773,7 +787,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
     }
 
     TSnapshot fakeSnapshot = {1, 1}; // TODO: better snapshot
-    auto changes = std::make_shared<TChanges>(TColumnEngineChanges::TTL, fakeSnapshot);
+    auto changes = std::make_shared<TChanges>(*this, TColumnEngineChanges::TTL, fakeSnapshot);
     ui64 evicttionSize = 0;
     bool allowEviction = true;
     ui64 dropBlobs = 0;
@@ -836,13 +850,13 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
     return changes;
 }
 
-TVector<TVector<std::pair<ui64, ui64>>> TColumnEngineForLogs::EmptyGranuleTracks(ui64 pathId) const {
+TVector<TVector<std::pair<TMark, ui64>>> TColumnEngineForLogs::EmptyGranuleTracks(ui64 pathId) const {
     Y_VERIFY(PathGranules.count(pathId));
     const auto& pathGranules = PathGranules.find(pathId)->second;
 
-    TVector<TVector<std::pair<ui64, ui64>>> emptyGranules;
+    TVector<TVector<std::pair<TMark, ui64>>> emptyGranules;
     ui64 emptyStart = 0;
-    for (const auto& [ts, granule]: pathGranules) {
+    for (const auto& [mark, granule]: pathGranules) {
         Y_VERIFY(Granules.count(granule));
         auto spg = Granules.find(granule)->second;
         Y_VERIFY(spg);
@@ -852,7 +866,7 @@ TVector<TVector<std::pair<ui64, ui64>>> TColumnEngineForLogs::EmptyGranuleTracks
                 emptyGranules.push_back({});
                 emptyStart = granule;
             }
-            emptyGranules.back().emplace_back(ts, granule);
+            emptyGranules.back().emplace_back(mark, granule);
         } else if (emptyStart) {
             emptyStart = 0;
         }
@@ -923,10 +937,10 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
 
     // Set x-snapshot to switched portions
     if (changes->IsCompaction()) {
-        Y_VERIFY(changes->SrcGranule.Good());
+        Y_VERIFY(changes->SrcGranule);
 
         /// @warning set granule not in split even if tx would be aborted later
-        GranulesInSplit.erase(changes->SrcGranule.Granule);
+        GranulesInSplit.erase(changes->SrcGranule->Granule);
 
         Y_VERIFY(changes->CompactionInfo);
         for (auto& portionInfo : changes->SwitchedPortions) {
@@ -973,7 +987,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
                 granules[portionInfo.Granule()] = {};
             }
         } else if (changes->IsCompaction() && !changes->CompactionInfo->InGranule) {
-            granules[changes->SrcGranule.Granule] = {};
+            granules[changes->SrcGranule->Granule] = {};
         } else {
             for (auto& portionInfo : changes->AppendedPortions) {
                 granules[portionInfo.Granule()] = {};
@@ -993,13 +1007,13 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
         if (changes.CompactionInfo->InGranule) {
 #if 0
             if (changes.SwitchedPortions.size() <= changes.AppendedPortions.size()) {
-                LOG_S_ERROR("Cannot compact granule " << changes.SrcGranule.Granule << " at tablet " << TabletId);
+                LOG_S_ERROR("Cannot compact granule " << changes.SrcGranule->Granule << " at tablet " << TabletId);
                 return false;
             }
 #endif
         } else {
             if (changes.NewGranules.empty()) {
-                LOG_S_ERROR("Cannot split granule " << changes.SrcGranule.Granule << " at tablet " << TabletId);
+                LOG_S_ERROR("Cannot split granule " << changes.SrcGranule->Granule << " at tablet " << TabletId);
                 return false;
             }
         }
@@ -1012,9 +1026,8 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
 
     for (auto& [granule, p] : changes.NewGranules) {
         ui64 pathId = p.first;
-        ui64 ts = p.second;
-        TString key((const char*)&ts, sizeof(ts));
-        TGranuleRecord rec{pathId, key, granule, snapshot};
+        TMark mark = p.second;
+        TGranuleRecord rec(pathId, granule, snapshot, mark.Border);
 
         if (!SetGranule(rec, apply)) {
             LOG_S_ERROR("Cannot insert granule " << rec << " at tablet " << TabletId);
@@ -1038,15 +1051,15 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
                 return false;
             }
 
-            ui64 granuleMinTs = ExtractKey(Granules[granule]->Record.IndexKey);
+            auto& granuleStart = Granules[granule]->Record.Mark;
 
             if (!apply) { // granule vs portion minPK
-                auto pkScalar = portionInfo.PkStart();
-                Y_VERIFY(pkScalar);
-                ui64 portionMinTs = ExtractKey(*pkScalar);
-                if (granuleMinTs > portionMinTs) {
-                    LOG_S_ERROR("Cannot update invalid portion " << portionInfo << " minTs: " << portionMinTs
-                        << " granule minTs: " << granuleMinTs << " at tablet " << TabletId);
+                auto portionStart = portionInfo.PkStart();
+                Y_VERIFY(portionStart);
+                if (TMark(portionStart) < TMark(granuleStart)) {
+                    LOG_S_ERROR("Cannot update invalid portion " << portionInfo
+                        << " start: " << portionStart->ToString()
+                        << " granule start: " << granuleStart->ToString() << " at tablet " << TabletId);
                     return false;
                 }
             }
@@ -1152,18 +1165,17 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             }
 
             // granule vs portion minPK
-            ui64 granuleMinTs = 0;
+            std::shared_ptr<arrow::Scalar> granuleStart;
             if (Granules.count(granule)) {
-                granuleMinTs = ExtractKey(Granules[granule]->Record.IndexKey);
+                granuleStart = Granules[granule]->Record.Mark;
             } else {
-                granuleMinTs = changes.NewGranules.find(granule)->second.second;
+                granuleStart = changes.NewGranules.find(granule)->second.second.Border;
             }
-            auto pkScalar = portionInfo.PkStart();
-            Y_VERIFY(pkScalar);
-            ui64 portionMinTs = ExtractKey(*pkScalar);
-            if (granuleMinTs > portionMinTs) {
-                LOG_S_ERROR("Cannot insert invalid portion " << portionInfo << " minTs: " << portionMinTs
-                    << " granule minTs: " << granuleMinTs << " at tablet " << TabletId);
+            auto portionStart = portionInfo.PkStart();
+            Y_VERIFY(portionStart);
+            if (TMark(portionStart) < TMark(granuleStart)) {
+                LOG_S_ERROR("Cannot insert invalid portion " << portionInfo << " start: " << portionStart->ToString()
+                    << " granule start: " << granuleStart->ToString() << " at tablet " << TabletId);
                 return false;
             }
         }
@@ -1201,33 +1213,33 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
 }
 
 bool TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec, bool apply) {
-    ui64 ts = ExtractKey(rec.IndexKey);
+    TMark mark(rec.Mark);
 
     if (!apply) {
         if (Granules.count(rec.Granule)) {
             return false;
         }
 
-        if (PathGranules.count(rec.PathId) && PathGranules[rec.PathId].count(ts)) {
+        if (PathGranules.count(rec.PathId) && PathGranules[rec.PathId].count(mark)) {
             return false;
         }
         return true;
     }
 
-    PathGranules[rec.PathId].emplace(ts, rec.Granule);
+    PathGranules[rec.PathId].emplace(mark, rec.Granule);
     auto& spg = Granules[rec.Granule];
     Y_VERIFY(!spg);
     spg = std::make_shared<TGranuleMeta>(rec);
     return true; // It must return true if (apply == true)
 }
 
-void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, ui64 ts) {
+void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& mark) {
     Y_VERIFY(PathGranules.count(pathId));
     Y_VERIFY(Granules.count(granule));
 
     Granules.erase(granule);
     EmptyGranules.erase(granule);
-    PathGranules[pathId].erase(ts);
+    PathGranules[pathId].erase(mark);
 }
 
 bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats) {
@@ -1362,21 +1374,21 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     out->Granules.reserve(pathGranules.size());
     // TODO: out.Portions.reserve()
 
-    ui64 tsFrom = ExtractTimestamp(from, GetIndexKey());
-    ui64 tsTo = ExtractTimestamp(to, GetIndexKey());
+    auto keyFrom = ExtractFirstKey(from, GetIndexKey());
+    auto keyTo = ExtractFirstKey(to, GetIndexKey());
 
     // Apply FROM
     auto it = pathGranules.begin();
-    if (tsFrom) {
-        it = pathGranules.upper_bound(tsFrom);
+    if (keyFrom) {
+        it = pathGranules.upper_bound(TMark(keyFrom));
         --it;
     }
     for (; it != pathGranules.end(); ++it) {
-        ui64 ts = it->first;
+        auto& mark = it->first;
         ui64 granule = it->second;
 
         // Apply TO
-        if (to && ts > tsTo) {
+        if (keyTo && TMark(keyTo) < mark) {
             break;
         }
 
@@ -1596,29 +1608,31 @@ static TVector<TString> CompactInGranule(const TIndexInfo& indexInfo,
 
 /// @return vec({ts, batch}). ts0 <= ts1 <= ... <= tsN
 /// @note We use ts from PK for split but there could be lots PK with the same ts.
-static TVector<std::pair<ui64, std::shared_ptr<arrow::RecordBatch>>>
-SliceGranuleBatches(const TIndexInfo& indexInfo, const TColumnEngineForLogs::TChanges& changes,
-                    std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches, i64 ts0) {
-    TVector<std::pair<ui64, std::shared_ptr<arrow::RecordBatch>>> out;
+static TVector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>>
+SliceGranuleBatches(const TIndexInfo& indexInfo,
+                    const TColumnEngineForLogs::TChanges& changes,
+                    std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches,
+                    const TMark& ts0) {
+    TVector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>> out;
 
     // Extract unique effective key (timestamp) and their counts
     i64 numRows = 0;
-    TMap<ui64, ui32> uniqKeyCount;
+    TMap<TMark, ui32> uniqKeyCount;
     for (auto& batch : batches) {
         numRows += batch->num_rows();
 
-        std::shared_ptr<arrow::TimestampArray> keyColumn = GetTimestampColumn(indexInfo, batch);
+        auto keyColumn = GetFirstPKColumn(indexInfo, batch);
         Y_VERIFY(keyColumn && keyColumn->length() > 0);
 
         for (int pos = 0; pos < keyColumn->length(); ++pos) {
-            ui64 ts = keyColumn->Value(pos);
+            TMark ts(*keyColumn->GetScalar(pos));
             ++uniqKeyCount[ts];
         }
     }
 
     Y_VERIFY(uniqKeyCount.size());
-    i64 minTs = uniqKeyCount.begin()->first;
-    i64 maxTs = uniqKeyCount.rbegin()->first;
+    auto minTs = uniqKeyCount.begin()->first;
+    auto maxTs = uniqKeyCount.rbegin()->first;
     Y_VERIFY(minTs >= ts0);
 
     // It's an estimation of needed count cause numRows calculated before key replaces
@@ -1638,7 +1652,7 @@ SliceGranuleBatches(const TIndexInfo& indexInfo, const TColumnEngineForLogs::TCh
     }
 
     // Make split borders from uniq keys
-    TVector<i64> borders;
+    TVector<TMark> borders;
     borders.reserve(numRows / rowsInGranule);
     {
         ui32 sumRows = 0;
@@ -1662,15 +1676,12 @@ SliceGranuleBatches(const TIndexInfo& indexInfo, const TColumnEngineForLogs::TCh
         auto& batchOffsets = offsets[i];
         batchOffsets.reserve(borders.size() + 1);
 
-        std::shared_ptr<arrow::TimestampArray> keyColumn = GetTimestampColumn(indexInfo, batch);
+        auto keyColumn = GetFirstPKColumn(indexInfo, batch);
         Y_VERIFY(keyColumn && keyColumn->length() > 0);
 
         batchOffsets.push_back(0);
-        for (i64 border : borders) {
-            const auto* start = keyColumn->raw_values() + batchOffsets.back();
-            const auto* end = keyColumn->raw_values() + keyColumn->length();
-            const auto* borderPos = std::lower_bound(start, end, border);
-            int offset = borderPos - keyColumn->raw_values();
+        for (auto& border : borders) {
+            int offset = NArrow::LowerBound(keyColumn, *border.Border, batchOffsets.back());
             Y_VERIFY(offset >= batchOffsets.back());
             batchOffsets.push_back(offset);
         }
@@ -1702,16 +1713,17 @@ SliceGranuleBatches(const TIndexInfo& indexInfo, const TColumnEngineForLogs::TCh
                 Y_VERIFY(slice->num_rows());
                 granuleNumRows += slice->num_rows();
 #if 1 // Check correctness
-                std::shared_ptr<arrow::TimestampArray> keyColumn = GetTimestampColumn(indexInfo, slice);
+                auto keyColumn = GetFirstPKColumn(indexInfo, slice);
                 Y_VERIFY(keyColumn && keyColumn->length() > 0);
 
-                i64 startKey = granuleNo ? borders[granuleNo - 1] : minTs;
-                Y_VERIFY(keyColumn->Value(0) >= startKey);
+                auto startKey = granuleNo ? borders[granuleNo - 1] : minTs;
+                Y_VERIFY(TMark(*keyColumn->GetScalar(0)) >= startKey);
+
                 if (granuleNo < borders.size() - 1) {
-                    i64 endKey = borders[granuleNo];
-                    Y_VERIFY(keyColumn->Value(keyColumn->length() - 1) < endKey);
+                    auto endKey = borders[granuleNo];
+                    Y_VERIFY(TMark(*keyColumn->GetScalar(keyColumn->length() - 1)) < endKey);
                 } else {
-                    Y_VERIFY(keyColumn->Value(keyColumn->length() - 1) <= maxTs);
+                    Y_VERIFY(TMark(*keyColumn->GetScalar(keyColumn->length() - 1)) <= maxTs);
                 }
 #endif
                 Y_VERIFY_DEBUG(NArrow::IsSorted(slice, indexInfo.GetReplaceKey()));
@@ -1727,14 +1739,14 @@ SliceGranuleBatches(const TIndexInfo& indexInfo, const TColumnEngineForLogs::TCh
         for (auto& batch : merged) {
             Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, indexInfo.GetReplaceKey()));
 
-            i64 startKey = ts0;
+            auto startKey = ts0;
             if (granuleNo) {
                 startKey = borders[granuleNo - 1];
             }
 #if 1 // Check correctness
-            std::shared_ptr<arrow::TimestampArray> keyColumn = GetTimestampColumn(indexInfo, batch);
+            auto keyColumn = GetFirstPKColumn(indexInfo, batch);
             Y_VERIFY(keyColumn && keyColumn->length() > 0);
-            Y_VERIFY(keyColumn->Value(0) >= startKey);
+            Y_VERIFY(TMark(*keyColumn->GetScalar(0)) >= startKey);
 #endif
             out.emplace_back(startKey, batch);
         }
@@ -1743,8 +1755,10 @@ SliceGranuleBatches(const TIndexInfo& indexInfo, const TColumnEngineForLogs::TCh
     return out;
 }
 
-static ui64 TryMovePortions(TVector<TPortionInfo>& portions, TMap<ui64, ui64>& tsIds,
-                            TVector<std::pair<TPortionInfo, ui64>>& toMove, i64 ts0) {
+static ui64 TryMovePortions(TVector<TPortionInfo>& portions,
+                            TMap<TMark, ui64>& tsIds,
+                            TVector<std::pair<TPortionInfo, ui64>>& toMove,
+                            const TMark& ts0) {
     std::vector<const TPortionInfo*> compacted;
     compacted.reserve(portions.size());
     std::vector<const TPortionInfo*> inserted;
@@ -1776,9 +1790,9 @@ static ui64 TryMovePortions(TVector<TPortionInfo>& portions, TMap<ui64, ui64>& t
     ui64 numRows = 0;
     ui32 counter = 0;
     for (auto* portionInfo : compacted) {
-        ui64 ts = ts0;
+        TMark ts = ts0;
         if (counter) {
-            ts = static_cast<const arrow::TimestampScalar&>(*portionInfo->PkStart()).value;
+            ts = TMark(portionInfo->PkStart());
         }
 
         ui32 rows = portionInfo->NumRows();
@@ -1801,12 +1815,12 @@ static ui64 TryMovePortions(TVector<TPortionInfo>& portions, TMap<ui64, ui64>& t
 
 static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
                                             std::shared_ptr<TColumnEngineForLogs::TChanges> changes) {
-    ui64 pathId = changes->SrcGranule.PathId;
-    //ui64 granule = changes->SrcGranule.Granule;
-    ui64 ts0 = changes->SrcGranule.Ts;
+    ui64 pathId = changes->SrcGranule->PathId;
+    //ui64 granule = changes->SrcGranule->Granule;
+    TMark ts0 = changes->SrcGranule->Mark;
     TVector<TPortionInfo>& portions = changes->SwitchedPortions;
 
-    TMap<ui64, ui64> tsIds;
+    TMap<TMark, ui64> tsIds;
     ui64 movedRows = TryMovePortions(portions, tsIds, changes->PortionsToMove, ts0);
     auto srcBatches = PortionsToBatches(indexInfo, portions, changes->Blobs, (bool)movedRows);
     Y_VERIFY(srcBatches.size() == portions.size());
@@ -1829,8 +1843,8 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
             ui32 rowsInGranule = numRows / numSplitInto;
             Y_VERIFY(rowsInGranule);
 
-            TMap<ui64, ui64> newTsIds;
-            ui64 lastTs = tsIds.rbegin()->first;
+            TMap<TMark, ui64> newTsIds;
+            auto lastTs = tsIds.rbegin()->first;
             ui32 tmpGranule = 0;
             ui32 sumRows = 0;
             ui32 i = 0;

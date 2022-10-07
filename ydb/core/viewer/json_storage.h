@@ -433,7 +433,7 @@ public:
                 json << '}';
             } else {
                 json << "{";
-                TProtoToJson::ProtoToJson(json, vSlotId, jsonSettings);
+                TProtoToJson::ProtoToJsonInline(json, vSlotId, jsonSettings);
                 json << "}";
             }
         }

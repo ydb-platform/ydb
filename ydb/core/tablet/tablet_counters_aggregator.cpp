@@ -78,7 +78,7 @@ public:
     //
     TTabletMon(::NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId)
         : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets"))
-        , AllTypes(Counters.Get(), "type", "all")
+        , AllTypes(MakeIntrusive<TTabletCountersForTabletType>(Counters.Get(), "type", "all"))
         , IsFollower(isFollower)
         , DbWatcherActorId(dbWatcherActorId)
     {
@@ -91,9 +91,9 @@ public:
         const TTabletCountersBase* executorCounters, const TTabletCountersBase* appCounters,
         const TActorContext& ctx)
     {
-        AllTypes.Apply(tabletID, executorCounters, nullptr, tabletType);
+        AllTypes->Apply(tabletID, executorCounters, nullptr, tabletType);
         //
-        auto* typeCounters = GetOrAddCountersByTabletType(tabletType, CountersByTabletType, Counters);
+        auto typeCounters = GetOrAddCountersByTabletType(tabletType, CountersByTabletType, Counters);
         if (typeCounters) {
             typeCounters->Apply(tabletID, executorCounters, appCounters, tabletType);
         }
@@ -162,7 +162,7 @@ public:
     }
 
     void ForgetTablet(ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId) {
-        AllTypes.Forget(tabletID);
+        AllTypes->Forget(tabletID);
         // and now erase from every other path
         auto iterTabletType = CountersByTabletType.find(tabletType);
         if (iterTabletType != CountersByTabletType.end()) {
@@ -291,13 +291,17 @@ public:
     }
 
     void RecalcAll() {
-        AllTypes.RecalcAll();
-        for (auto& c : CountersByTabletType) {
-            c.second->RecalcAll();
+        AllTypes->RecalcAll();
+        for (auto& [_, counters] : CountersByTabletType) {
+            counters->RecalcAll();
         }
 
         if (YdbCounters) {
-            YdbCounters->Initialize(Counters, CountersByTabletType);
+            auto hasDatashard = (bool)FindCountersByTabletType(
+                TTabletTypes::DataShard, CountersByTabletType);
+            auto hasSchemeshard = (bool)FindCountersByTabletType(
+                TTabletTypes::SchemeShard, CountersByTabletType);
+            YdbCounters->Initialize(Counters, hasDatashard, hasSchemeshard);
             YdbCounters->Transform();
         }
     }
@@ -308,7 +312,7 @@ public:
 
 private:
     // subgroups
-    class TTabletCountersForTabletType {
+    class TTabletCountersForTabletType : public TThrRefBase {
     public:
         //
         TTabletCountersForTabletType(::NMonitoring::TDynamicCounters* owner, const char* category, const char* name)
@@ -676,25 +680,26 @@ private:
         TSolomonCounters TabletAppCounters;
     };
 
-    typedef TMap<TTabletTypes::EType, TAutoPtr<TTabletCountersForTabletType> > TCountersByTabletType;
+    using TTabletCountersForTabletTypePtr = TIntrusivePtr<TTabletCountersForTabletType>;
+    typedef TMap<TTabletTypes::EType, TTabletCountersForTabletTypePtr> TCountersByTabletType;
 
-    static TTabletCountersForTabletType* FindCountersByTabletType(
+    static TTabletCountersForTabletTypePtr FindCountersByTabletType(
         TTabletTypes::EType tabletType,
         TCountersByTabletType& countersByTabletType)
     {
         auto iterTabletType = countersByTabletType.find(tabletType);
         if (iterTabletType != countersByTabletType.end()) {
-            return iterTabletType->second.Get();
+            return iterTabletType->second;
         }
         return {};
     }
 
-    static TTabletCountersForTabletType* GetOrAddCountersByTabletType(
+    static TTabletCountersForTabletTypePtr GetOrAddCountersByTabletType(
         TTabletTypes::EType tabletType,
         TCountersByTabletType& countersByTabletType,
         ::NMonitoring::TDynamicCounterPtr counters)
     {
-        auto* typeCounters = FindCountersByTabletType(tabletType, countersByTabletType);
+        auto typeCounters = FindCountersByTabletType(tabletType, countersByTabletType);
         if (!typeCounters) {
             TString tabletTypeStr = TTabletTypes::TypeToStr(tabletType);
             typeCounters = new TTabletCountersForTabletType(
@@ -820,14 +825,8 @@ private:
                 "table.datashard.used_core_percents", NMonitoring::LinearHistogram(12, 0, 10), false);
         };
 
-        void Initialize(
-            ::NMonitoring::TDynamicCounterPtr counters,
-            TCountersByTabletType& countersByTabletType)
-        {
-            auto datashard = FindCountersByTabletType(
-                TTabletTypes::DataShard, countersByTabletType);
-
-            if (datashard && !RowUpdates) {
+        void Initialize(::NMonitoring::TDynamicCounterPtr counters, bool hasDatashard, bool hasSchemeshard) {
+            if (hasDatashard && !RowUpdates) {
                 auto datashardGroup = counters->GetSubgroup("type", "DataShard");
                 auto appGroup = datashardGroup->GetSubgroup("category", "app");
 
@@ -851,10 +850,7 @@ private:
                 ConsumedCpuHistogram = execGroup->FindHistogram("HIST(ConsumedCPU)");
             }
 
-            auto schemeshard = FindCountersByTabletType(
-                TTabletTypes::SchemeShard, countersByTabletType);
-
-            if (schemeshard && !DiskSpaceTablesTotalBytes) {
+            if (hasSchemeshard && !DiskSpaceTablesTotalBytes) {
                 auto schemeshardGroup = counters->GetSubgroup("type", "SchemeShard");
                 auto appGroup = schemeshardGroup->GetSubgroup("category", "app");
 
@@ -929,7 +925,6 @@ public:
     public:
         TTabletCountersForDb()
             : SolomonCounters(new ::NMonitoring::TDynamicCounters)
-            , AllTypes(SolomonCounters.Get(), "type", "all")
         {}
 
         TTabletCountersForDb(::NMonitoring::TDynamicCounterPtr externalGroup,
@@ -937,30 +932,24 @@ public:
             THolder<TTabletCountersBase> executorCounters)
             : SolomonCounters(internalGroup)
             , ExecutorCounters(std::move(executorCounters))
-            , AllTypes(SolomonCounters.Get(), "type", "all")
         {
             YdbCounters = MakeIntrusive<TYdbTabletCounters>(externalGroup);
         }
 
         void ToProto(NKikimr::NSysView::TDbServiceCounters& counters) override {
-            auto* proto = counters.FindOrAddTabletCounters(TTabletTypes::Unknown);
-            AllTypes.ToProto(*proto);
-
-            for (auto& [type, tabletCounters] : CountersByTabletType) {
-                auto* proto = counters.FindOrAddTabletCounters(type);
-                tabletCounters->ToProto(*proto);
+            for (auto& bucket : CountersByTabletType.Buckets) {
+                TWriteGuard guard(bucket.GetLock());
+                for (auto& [type, tabletCounters] : bucket.GetMap()) {
+                    auto* proto = counters.FindOrAddTabletCounters(type);
+                    tabletCounters->ToProto(*proto);
+                }
             }
         }
 
         void FromProto(NKikimr::NSysView::TDbServiceCounters& counters) override {
             for (auto& proto : *counters.Proto().MutableTabletCounters()) {
                 auto type = proto.GetType();
-                TTabletCountersForTabletType* tabletCounters = {};
-                if (type == TTabletTypes::Unknown) {
-                    tabletCounters = &AllTypes;
-                } else {
-                    tabletCounters = GetOrAddCountersByTabletType(type, CountersByTabletType, SolomonCounters);
-                }
+                auto tabletCounters = GetOrAddCounters(type);
                 if (tabletCounters) {
                     if (!tabletCounters->IsInitialized()) {
                         Y_VERIFY(ExecutorCounters.Get());
@@ -971,33 +960,77 @@ public:
                 }
             }
             if (YdbCounters) {
-                YdbCounters->Initialize(SolomonCounters, CountersByTabletType);
+                auto hasDatashard = (bool)GetCounters(TTabletTypes::DataShard);
+                auto hasSchemeshard = (bool)GetCounters(TTabletTypes::SchemeShard);
+                YdbCounters->Initialize(SolomonCounters, hasDatashard, hasSchemeshard);
                 YdbCounters->Transform();
             }
         }
 
         void Apply(ui64 tabletId, const TTabletCountersBase* executorCounters,
             const TTabletCountersBase* appCounters, TTabletTypes::EType type,
-            const TTabletCountersBase* limitedAppCounters) {
-            AllTypes.Apply(tabletId, executorCounters, nullptr, type);
-            auto* tabletCounters = GetOrAddCountersByTabletType(type, CountersByTabletType, SolomonCounters);
-            if (tabletCounters) {
-                tabletCounters->Apply(tabletId, executorCounters, appCounters, type, limitedAppCounters);
+            const TTabletCountersBase* limitedAppCounters)
+        {
+            auto allTypes = GetOrAddCounters(TTabletTypes::Unknown);
+            {
+                TWriteGuard guard(CountersByTabletType.GetBucketForKey(TTabletTypes::Unknown).GetLock());
+                allTypes->Apply(tabletId, executorCounters, nullptr, type);
+            }
+            auto typeCounters = GetOrAddCounters(type);
+            {
+                TWriteGuard guard(CountersByTabletType.GetBucketForKey(type).GetLock());
+                typeCounters->Apply(tabletId, executorCounters, appCounters, type, limitedAppCounters);
             }
         }
 
         void Forget(ui64 tabletId, TTabletTypes::EType type) {
-            if (auto it = CountersByTabletType.find(type); it != CountersByTabletType.end()) {
-                it->second->Forget(tabletId);
+            auto allTypes = GetCounters(TTabletTypes::Unknown);
+            if (allTypes) {
+                TWriteGuard guard(CountersByTabletType.GetBucketForKey(TTabletTypes::Unknown).GetLock());
+                allTypes->Forget(tabletId);
             }
+            auto typeCounters = GetCounters(type);
+            if (typeCounters) {
+                TWriteGuard guard(CountersByTabletType.GetBucketForKey(type).GetLock());
+                typeCounters->Forget(tabletId);
+            }
+        }
+
+        void RecalcAll() {
+            for (auto& bucket : CountersByTabletType.Buckets) {
+                TWriteGuard guard(bucket.GetLock());
+                for (auto& [_, tabletCounters] : bucket.GetMap()) {
+                    tabletCounters->RecalcAll();
+                }
+            }
+        }
+
+    private:
+        TTabletCountersForTabletTypePtr GetCounters(TTabletTypes::EType tabletType) {
+            TTabletCountersForTabletTypePtr res;
+            CountersByTabletType.Get(tabletType, res);
+            return res;
+        }
+
+        TTabletCountersForTabletTypePtr GetOrAddCounters(TTabletTypes::EType tabletType) {
+            auto res = GetCounters(tabletType);
+            if (res) {
+                return res;
+            }
+            res = CountersByTabletType.InsertIfAbsentWithInit(tabletType, [this, tabletType] {
+                TString type = (tabletType == TTabletTypes::Unknown) ?
+                    "all" : TTabletTypes::TypeToStr(tabletType);
+                return MakeIntrusive<TTabletCountersForTabletType>(
+                    SolomonCounters.Get(), "type", type.data());
+            });
+            return res;
         }
 
     private:
         ::NMonitoring::TDynamicCounterPtr SolomonCounters;
         THolder<TTabletCountersBase> ExecutorCounters;
 
-        TTabletCountersForTabletType AllTypes;
-        TCountersByTabletType CountersByTabletType;
+        TConcurrentRWHashMap<TTabletTypes::EType, TTabletCountersForTabletTypePtr, 16> CountersByTabletType;
 
         TYdbTabletCountersPtr YdbCounters;
     };
@@ -1041,7 +1074,7 @@ private:
 
 private:
     ::NMonitoring::TDynamicCounterPtr Counters;
-    TTabletCountersForTabletType AllTypes;
+    TTabletCountersForTabletTypePtr AllTypes;
     bool IsFollower = false;
 
     typedef THashMap<TPathId, TIntrusivePtr<TTabletCountersForDb>> TCountersByPathId;

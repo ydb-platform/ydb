@@ -470,7 +470,7 @@ namespace NProtobufJson {
                 knownFields[GetFieldName(*field, config)] = 1;
             }
             for (const auto& f : json.GetMap()) {
-                Y_ENSURE(knownFields.contains(f.first), "unknown field " << f.first);
+                Y_ENSURE(knownFields.contains(f.first), "unknown field \"" << f.first << "\" for \"" << descriptor->full_name() << "\"");
             }
         }
     }

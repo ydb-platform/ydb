@@ -57,7 +57,6 @@ target_link_libraries(libs-apache-arrow PUBLIC
   contrib-libs-xxhash
   ZLIB::ZLIB
   contrib-libs-zstd
-  contrib-restricted-boost
   restricted-boost-multiprecision
   contrib-restricted-fast_float
   contrib-restricted-thrift

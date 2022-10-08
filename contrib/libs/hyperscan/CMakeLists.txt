@@ -23,9 +23,10 @@ target_include_directories(contrib-libs-hyperscan PRIVATE
 )
 target_link_libraries(contrib-libs-hyperscan PUBLIC
   contrib-libs-cxxsupp
-  contrib-restricted-boost
+  restricted-boost-dynamic_bitset
   restricted-boost-graph
   restricted-boost-icl
+  restricted-boost-multi_array
   restricted-boost-property_map
 )
 target_sources(contrib-libs-hyperscan PRIVATE

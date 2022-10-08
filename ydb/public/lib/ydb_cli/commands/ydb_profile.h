@@ -26,7 +26,20 @@ public:
     virtual int Run(TConfig& config) override;
 };
 
-class TCommandCreateProfile : public TClientCommand {
+class TCommandProfileCommon : public TClientCommand {
+public:
+    TCommandProfileCommon(const TString& name, const std::initializer_list<TString>& aliases =
+            std::initializer_list<TString>(), const TString& description = TString());
+    virtual void Config(TConfig& config) override;
+
+protected:
+    void ValidateAuth(TConfig& config);
+    bool AnyProfileOptionInCommandLine(TConfig& config);
+    TString ProfileName;
+    bool UseMetadataCredentials = false;
+};
+
+class TCommandCreateProfile : public TCommandProfileCommon {
 public:
     TCommandCreateProfile();
     virtual void Config(TConfig& config) override;
@@ -34,13 +47,6 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    void ValidateAuth(TConfig& config);
-    void PutAuthMethod(std::shared_ptr<IProfile> profile, const TString& id, const TString& value);
-    void PutAuthStatic(std::shared_ptr<IProfile> profile, const TString& user, const TString& pass);
-    void PutAuthMethodWithoutPars(std::shared_ptr<IProfile> profile, const TString& id);
-    bool AnyProfileOptionInCommandLine(TConfig& config);
-    TString ProfileName;
-    bool UseMetadataCredentials = false;
     bool Interactive;
 };
 
@@ -93,6 +99,29 @@ public:
 
 private:
     TString ProfileName;
+};
+
+class TCommandUpdateProfile : public TCommandProfileCommon {
+public:
+    TCommandUpdateProfile();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+private:
+    void ValidateNoOptions(TConfig& config);
+    void DropNoOptions(std::shared_ptr<IProfile> profile);
+    bool NoEndpoint = false;
+    bool NoDatabase = false;
+    bool NoAuth = false;
+    bool NoIamEndpoint = false;
+};
+
+class TCommandReplaceProfile : public TCommandProfileCommon {
+public:
+    TCommandReplaceProfile();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
 };
 
 }

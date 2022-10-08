@@ -22,6 +22,10 @@ public:
         return Name;
     }
 
+    bool IsEmpty() const override {
+        return YamlProfile.size() == 0;
+    }
+
     bool Has(const TString& key) const noexcept override {
         return YamlProfile[key];
     }
@@ -68,6 +72,11 @@ public:
 
     bool HasProfile(const TString& profileName) const override {
         return Config["profiles"] && Config["profiles"][profileName];
+    }
+
+    std::shared_ptr<IProfile> CreateProfile(const TString& profileName) override {
+        Config["profiles"][profileName] = YAML::Node();
+        return GetProfile(profileName);
     }
 
     std::shared_ptr<IProfile> GetProfile(const TString& profileName) override {

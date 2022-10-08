@@ -47,6 +47,8 @@ TCommandProfile::TCommandProfile()
     AddCommand(std::make_unique<TCommandDeactivateProfile>());
     AddCommand(std::make_unique<TCommandListProfiles>());
     AddCommand(std::make_unique<TCommandGetProfile>());
+    AddCommand(std::make_unique<TCommandUpdateProfile>());
+    AddCommand(std::make_unique<TCommandReplaceProfile>());
 }
 
 namespace {
@@ -152,7 +154,7 @@ namespace {
             if (config.ParseResult->Has(name)) {
                 profile->SetValue(name, config.ParseResult->Get(name));
                 return;
-            };
+            }
         }
         if (!interactive) {
             return;
@@ -444,54 +446,18 @@ int TCommandInit::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandCreateProfile::TCommandCreateProfile()
-    : TClientCommand("create", {}, "Create new configuration profile or re-configure existing one")
+TCommandProfileCommon::TCommandProfileCommon(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
+    : TClientCommand(name, aliases, description)
 {}
 
-void TCommandCreateProfile::Config(TConfig& config) {
-    TClientCommand::Config(config);
-
-    config.SetFreeArgsMax(1);
-    SetFreeArgTitle(0, "<name>", "Profile name");
-    NLastGetopt::TOpts& opts = *config.Opts;
-
-    opts.AddLongOption('e', "endpoint", "Endpoint to save in the profile").RequiredArgument("STRING");
-    opts.AddLongOption('d', "database", "Database to save in the profile").RequiredArgument("PATH");
-
-    opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH");
-    opts.AddLongOption("iam-token-file", "Access token file").RequiredArgument("PATH").Hidden();
-    if (config.UseIamAuth) {
-        opts.AddLongOption("yc-token-file", "YC OAuth refresh token file").RequiredArgument("PATH");
-        opts.AddLongOption("use-metadata-credentials", "Metadata service authentication").Optional().StoreTrue(&UseMetadataCredentials);
-        opts.AddLongOption("sa-key-file", "YC Service account key file").RequiredArgument("PATH");
-    }
-
-    if (config.UseStaticCredentials) {
-        opts.AddLongOption("user", "User name").RequiredArgument("STR");
-        opts.AddLongOption("password-file", "Password file").RequiredArgument("PATH");
-    }
-    if (config.UseIamAuth) {
-        opts.AddLongOption("iam-endpoint", "Endpoint of IAM service to refresh token in YC OAuth or YC Service account authentication modes").RequiredArgument("STR");
-    }
-
-}
-
-bool TCommandCreateProfile::AnyProfileOptionInCommandLine(TConfig& config) {
-    return (config.ParseResult->Has("endpoint") || config.ParseResult->Has("database") || 
-      config.ParseResult->Has("token-file") || config.ParseResult->Has("iam-token-file") || config.ParseResult->Has("yc-token-file") || 
-      config.ParseResult->Has("sa-key-file") || config.ParseResult->Has("use-metadata-credentials") ||
-      config.ParseResult->Has("user") || config.ParseResult->Has("password-file") ||
-      config.ParseResult->Has("iam-endpoint"));
-}
-
-void TCommandCreateProfile::ValidateAuth(TConfig& config) {
-    size_t authMethodCount = 
-        (size_t)(config.ParseResult->Has("token-file")) + 
-        (size_t)(config.ParseResult->Has("iam-token-file")) + 
-        (size_t)(config.ParseResult->Has("yc-token-file")) + 
-        (size_t)UseMetadataCredentials + 
-        (size_t)(config.ParseResult->Has("sa-key-file")) + 
-        (size_t)(config.ParseResult->Has("user") || config.ParseResult->Has("password-file"));
+void TCommandProfileCommon::ValidateAuth(TConfig& config) {
+    size_t authMethodCount =
+            (size_t)(config.ParseResult->Has("token-file")) +
+            (size_t)(config.ParseResult->Has("iam-token-file")) +
+            (size_t)(config.ParseResult->Has("yc-token-file")) +
+            (size_t)UseMetadataCredentials +
+            (size_t)(config.ParseResult->Has("sa-key-file")) +
+            (size_t)(config.ParseResult->Has("user") || config.ParseResult->Has("password-file"));
 
     if (authMethodCount > 1) {
         TStringBuilder str;
@@ -518,10 +484,52 @@ void TCommandCreateProfile::ValidateAuth(TConfig& config) {
             str << " Password file (" << config.ParseResult->Get("password-file") << ")";
         }
 
-        throw TMisuseException() << str << ". Choose exactly one of them";        
+        throw TMisuseException() << str << ". Choose exactly one of them";
+    }
+}
+
+bool TCommandProfileCommon::AnyProfileOptionInCommandLine(TConfig& config) {
+    return (config.ParseResult->Has("endpoint") || config.ParseResult->Has("database") ||
+            config.ParseResult->Has("token-file") || config.ParseResult->Has("iam-token-file") || config.ParseResult->Has("yc-token-file") ||
+            config.ParseResult->Has("sa-key-file") || config.ParseResult->Has("use-metadata-credentials") ||
+            config.ParseResult->Has("user") || config.ParseResult->Has("password-file") ||
+            config.ParseResult->Has("iam-endpoint"));
+}
+
+
+TCommandCreateProfile::TCommandCreateProfile()
+    : TCommandProfileCommon("create", {}, "Create new configuration profile or re-configure existing one")
+{}
+
+void TCommandProfileCommon::Config(TConfig& config) {
+    TClientCommand::Config(config);
+
+    config.SetFreeArgsMax(1);
+    SetFreeArgTitle(0, "<name>", "Profile name");
+    NLastGetopt::TOpts& opts = *config.Opts;
+
+    opts.AddLongOption('e', "endpoint", "Endpoint to save in the profile").RequiredArgument("STRING");
+    opts.AddLongOption('d', "database", "Database to save in the profile").RequiredArgument("PATH");
+
+    opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH");
+    opts.AddLongOption("iam-token-file", "Access token file").RequiredArgument("PATH").Hidden();
+    if (config.UseIamAuth) {
+        opts.AddLongOption("yc-token-file", "YC OAuth refresh token file").RequiredArgument("PATH");
+        opts.AddLongOption("use-metadata-credentials", "Metadata service authentication").Optional().StoreTrue(&UseMetadataCredentials);
+        opts.AddLongOption("sa-key-file", "YC Service account key file").RequiredArgument("PATH");
     }
 
+    if (config.UseStaticCredentials) {
+        opts.AddLongOption("user", "User name").RequiredArgument("STR");
+        opts.AddLongOption("password-file", "Password file").RequiredArgument("PATH");
+    }
+    if (config.UseIamAuth) {
+        opts.AddLongOption("iam-endpoint", "Endpoint of IAM service to refresh token in YC OAuth or YC Service account authentication modes").RequiredArgument("STR");
+    }
+}
 
+void TCommandCreateProfile::Config(TConfig& config) {
+    TCommandProfileCommon::Config(config);
 }
 
 void TCommandCreateProfile::Parse(TConfig& config) {
@@ -536,14 +544,20 @@ int TCommandCreateProfile::Run(TConfig& config) {
 //    Y_UNUSED(config);
     TString profileName = ProfileName;
     Interactive = !AnyProfileOptionInCommandLine(config) || !profileName;
+    auto profileManager = CreateYdbProfileManager(config.YdbDir);
     if (Interactive) {
         Cout << "Welcome! This command will take you through configuration profile creation process." << Endl;
+    }
+    else {
+        if (profileManager->HasProfile(ProfileName)) {
+            Cerr << "Profile \"" << ProfileName << "\" already exists. Consider using update, replace or delete command." << Endl;
+            return EXIT_FAILURE;
+        }
     }
     if (!profileName) {
         Cout << "Please enter configuration profile name to create or re-configure: ";
         Cin >> profileName;
     }
-    auto profileManager = CreateYdbProfileManager(config.YdbDir);
     ConfigureProfile(profileName, profileManager, config, Interactive, true);
     return EXIT_SUCCESS;
 }
@@ -832,6 +846,113 @@ int TCommandGetProfile::Run(TConfig& config) {
         }
     }
     PrintProfileContent(profileManager->GetProfile(ProfileName));
+    return EXIT_SUCCESS;
+}
+
+TCommandUpdateProfile::TCommandUpdateProfile()
+    : TCommandProfileCommon("update", {}, "Update existing configuration profile")
+{}
+
+void TCommandUpdateProfile::Config(TConfig& config) {
+    TCommandProfileCommon::Config(config);
+
+    config.SetFreeArgsMin(1);
+    NLastGetopt::TOpts& opts = *config.Opts;
+    opts.AddLongOption("no-endpoint", "Delete endpoint from the profile").StoreTrue(&NoEndpoint);
+    opts.AddLongOption("no-database", "Delete database from the profile").StoreTrue(&NoDatabase);
+    opts.AddLongOption("no-auth", "Delete authentication data from the profile").StoreTrue(&NoAuth);
+
+    if (config.UseIamAuth) {
+        opts.AddLongOption("no-iam-endpoint", "Delete endpoint of IAM service from the profile").StoreTrue(&NoIamEndpoint);
+    }
+}
+
+void TCommandUpdateProfile::ValidateNoOptions(TConfig& config) {
+    size_t authMethodCount =
+            (size_t)(config.ParseResult->Has("token-file")) +
+            (size_t)(config.ParseResult->Has("iam-token-file")) +
+            (size_t)(config.ParseResult->Has("yc-token-file")) +
+            (size_t)UseMetadataCredentials +
+            (size_t)(config.ParseResult->Has("sa-key-file")) +
+            (size_t)(config.ParseResult->Has("user") || config.ParseResult->Has("password-file"));
+    if (authMethodCount > 0 && ParseResult->Has("no-auth")) {
+        throw TMisuseException() << "You cannot enter authentication options and the \"--no-auth\" option at the same time";
+    }
+    TStringBuilder str;
+    if (config.ParseResult->Has("endpoint") && config.ParseResult->Has("no-endpoint")) {
+        str << "\"--endpoint\" and \"--no-endpoint\"";
+    } else {
+        if (config.ParseResult->Has("database") && config.ParseResult->Has("no-database")) {
+            str << "\"--database and \"--no-database\"";
+        } else {
+            if (config.ParseResult->Has("iam-endpoint") && config.ParseResult->Has("no-iam-endpoint")) {
+                str << "\"--iam-endpoint\" and \"--no-iam-endpoint\"";
+            }
+        }
+    }
+    if (!str.empty()) {
+        throw TMisuseException() << "Options " << str << " are mutually exclusive";
+    }
+}
+
+void TCommandUpdateProfile::DropNoOptions(std::shared_ptr<IProfile> profile) {
+    if (NoEndpoint) {
+        profile->RemoveValue("endpoint");
+    }
+    if (NoDatabase) {
+        profile->RemoveValue("database");
+    }
+    if (NoIamEndpoint) {
+        profile->RemoveValue("iam-endpoint");
+    }
+    if (NoAuth) {
+        profile->RemoveValue("authentication");
+    }
+}
+
+void TCommandUpdateProfile::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ProfileName = config.ParseResult->GetFreeArgs()[0];
+    ValidateAuth(config);
+    ValidateNoOptions(config);
+}
+
+int TCommandUpdateProfile::Run(TConfig& config) {
+    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    if (!profileManager->HasProfile(ProfileName)) {
+        Cerr << "No existing profile \"" << ProfileName << "\". "
+             << "Run \"ydb config profile list\" without arguments to see existing profiles" << Endl;
+        return EXIT_FAILURE;
+    }
+    DropNoOptions(profileManager->GetProfile(ProfileName));
+    if (profileManager->GetProfile(ProfileName)->IsEmpty()) {
+        profileManager->RemoveProfile(ProfileName);
+        profileManager->CreateProfile(ProfileName);
+    }
+    ConfigureProfile(ProfileName, profileManager, config, false, true);
+    return EXIT_SUCCESS;
+}
+
+TCommandReplaceProfile::TCommandReplaceProfile()
+            : TCommandProfileCommon("replace", {}, "Create new configuration profile or delete and re-configure existing one")
+{}
+
+void TCommandReplaceProfile::Config(TConfig& config) {
+    TCommandProfileCommon::Config(config);
+    config.SetFreeArgsMin(1);
+}
+
+void TCommandReplaceProfile::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ProfileName = config.ParseResult->GetFreeArgs()[0];
+    ValidateAuth(config);
+}
+
+int TCommandReplaceProfile::Run(TConfig& config) {
+    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    profileManager->RemoveProfile(ProfileName);
+    profileManager->CreateProfile(ProfileName);
+    ConfigureProfile(ProfileName, profileManager, config, false, true);
     return EXIT_SUCCESS;
 }
 

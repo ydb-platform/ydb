@@ -325,8 +325,7 @@ TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatu
     return promise.GetFuture();
 }
 
-std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlPlaneStorageActor::Read(
-    NActors::TActorSystem* actorSystem,
+std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TDbRequester::Read(
     const TString& query,
     const NYdb::TParams& params,
     const TRequestCounters& requestCounters,
@@ -334,6 +333,7 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
     TTxSettings transactionMode,
     bool retryOnTli)
 {
+    NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
     auto resultSet = std::make_shared<TVector<NYdb::TResultSet>>();
 
     std::shared_ptr<int> retryCount = std::make_shared<int>();
@@ -362,11 +362,11 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
     };
 
     TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    Register(new TDbRequest(DbPool, promise, handler));
+    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
     return {promise.GetFuture(), resultSet};
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::Validate(
+TAsyncStatus TDbRequester::Validate(
     NActors::TActorSystem* actorSystem,
     std::shared_ptr<TMaybe<TTransaction>> transaction,
     size_t item,
@@ -402,8 +402,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::Validate(
     });
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::Write(
-    NActors::TActorSystem* actorSystem,
+TAsyncStatus TDbRequester::Write(
     const TString& query,
     const NYdb::TParams& params,
     const TRequestCounters& requestCounters,
@@ -412,6 +411,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
     TTxSettings transactionMode,
     bool retryOnTli)
 {
+    NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto transaction = std::make_shared<TMaybe<TTransaction>>();
     auto writeHandler = [=, retryOnTli=retryOnTli] (TSession session) {
@@ -462,7 +462,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
         });
     };
     TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    Register(new TDbRequest(DbPool, promise, handler));
+    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
     return promise.GetFuture();
 }
 
@@ -474,7 +474,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
     const TVector<TValidationQuery>& validators,
     TTxSettings transactionMode)
 {
-    return ReadModifyWrite(NActors::TActivationContext::ActorSystem(), taskParams.ReadQuery, taskParams.ReadParams,
+    return ReadModifyWrite(taskParams.ReadQuery, taskParams.ReadParams,
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
             .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) {
                 const auto status = future.GetValue();
@@ -484,8 +484,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
             });
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
-    NActors::TActorSystem* actorSystem,
+TAsyncStatus TDbRequester::ReadModifyWrite(
     const TString& readQuery,
     const NYdb::TParams& readParams,
     const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
@@ -495,6 +494,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
     TTxSettings transactionMode,
     bool retryOnTli)
 {
+    NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto resultSets = std::make_shared<TVector<NYdb::TResultSet>>();
     auto transaction = std::make_shared<TMaybe<TTransaction>>();
@@ -599,7 +599,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
         });
     };
     TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    Register(new TDbRequest(DbPool, promise, handler));
+    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
     return promise.GetFuture();
 }
 

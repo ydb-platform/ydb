@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <ydb/public/lib/yq/scope.h>
+#include <ydb/core/yq/libs/control_plane_storage/request_actor.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
@@ -41,19 +42,60 @@ struct TEvPrivate {
 };
 
 template <class TRequest, class TResponse, class TDerived>
-class TRateLimiterRequestActor : public NActors::TActor<TDerived> {
-public:
-    using TResponseEvent = TResponse;
+class TRateLimiterRequestActor : public TControlPlaneRequestActor<TRequest, TResponse, TDerived> {
+    using TRequestActorBase = TControlPlaneRequestActor<TRequest, TResponse, TDerived>;
 
-    TRateLimiterRequestActor(TInstant startTime, typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo)
-        : NActors::TActor<TDerived>(&TDerived::StateFunc)
-        , Request(std::move(ev))
-        , RequestCounters(std::move(requestCounters))
-        , DebugInfo(std::move(debugInfo))
-        , QueryId(Request->Get()->Request.query_id().value())
-        , OwnerId(Request->Get()->Request.owner_id())
-        , StartTime(startTime)
+protected:
+    using TRequestActorBase::ReplyWithError;
+
+public:
+    TRateLimiterRequestActor(typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPool::TPtr dbPool, TYdbConnectionPtr ydbConnection)
+        : TRequestActorBase(std::move(ev), std::move(requestCounters), std::move(debugInfo), std::move(dbPool), std::move(ydbConnection))
+        , QueryId(this->Request->Get()->Request.query_id().value())
+        , OwnerId(this->Request->Get()->Request.owner_id())
     {
+    }
+
+    void Start() {
+        auto& request = this->Request->Get()->Request;
+        const TString& scope = request.scope();
+        const TString& tenant = request.tenant();
+
+        if (NYql::TIssues issues = ValidateCreateOrDeleteRateLimiterResource(QueryId, scope, tenant, OwnerId)) {
+            CPS_LOG_W(TDerived::RequestTypeName << "Request: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
+            ReplyWithError(issues);
+            return;
+        }
+
+        this->Become(&TDerived::StateFunc);
+
+        TSqlQueryBuilder readQueryBuilder(this->YdbConnection->TablePathPrefix, TDerived::RequestTypeName);
+        readQueryBuilder.AddString("query_id", QueryId);
+        readQueryBuilder.AddString("scope", scope);
+        readQueryBuilder.AddString("tenant", tenant);
+        TStringBuilder text;
+        text <<
+        "SELECT `" SCOPE_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "` FROM " PENDING_SMALL_TABLE_NAME
+            " WHERE `" TENANT_COLUMN_NAME "` = $tenant"
+                " AND `" SCOPE_COLUMN_NAME "` = $scope"
+                " AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+
+        "SELECT `" INTERNAL_COLUMN_NAME "`";
+        if constexpr (TDerived::IsCreateRequest) {
+            text << ", `" QUERY_COLUMN_NAME "`";
+        }
+        text << " FROM " QUERIES_TABLE_NAME
+            " WHERE `" SCOPE_COLUMN_NAME "` = $scope"
+                " AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n";
+        readQueryBuilder.AddText(text);
+
+        const auto query = readQueryBuilder.Build();
+        auto [readStatus, resultSets] = this->Read(query.Sql, query.Params, this->RequestCounters, this->DebugInfo);
+        readStatus.Subscribe(
+            [resultSets = resultSets, actorSystem = NActors::TActivationContext::ActorSystem(), selfId = this->SelfId()] (const TAsyncStatus& status) {
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvDbRequestResult(status, std::move(resultSets))));
+            }
+        );
     }
 
     void Handle(TEvPrivate::TEvDbRequestResult::TPtr& ev) {
@@ -121,47 +163,9 @@ public:
         }
     }
 
-    void ReplyWithError(const TString& msg) {
-        NYql::TIssues issues;
-        issues.AddIssue(msg);
-        ReplyWithError(issues);
-    }
-
-    void ReplyWithError(const NYql::TIssues& issues) {
-        SendResponseEventAndPassAway(std::make_unique<TResponse>(issues), false);
-    }
-
-    void Reply(const typename TResponse::TProto& proto) {
-        SendResponseEventAndPassAway(std::make_unique<TResponse>(proto), true);
-    }
-
-    void SendResponseEventAndPassAway(std::unique_ptr<TResponse> event, bool success) {
-        event->DebugInfo = std::move(DebugInfo);
-
-        RequestCounters.Common->ResponseBytes->Add(event->GetByteSize());
-        RequestCounters.IncInFly();
-        if (success) {
-            RequestCounters.IncOk();
-        } else {
-            RequestCounters.IncError();
-        }
-        const TDuration duration = TInstant::Now() - StartTime;
-        RequestCounters.Common->LatencyMs->Collect(duration.MilliSeconds());
-
-        TDerived::LwProbe(QueryId, duration, success);
-
-        this->Send(Request->Sender, event.release(), 0, Request->Cookie);
-
-        this->PassAway();
-    }
-
 protected:
-    const typename TRequest::TPtr Request;
-    TRequestCounters RequestCounters;
-    TDebugInfoPtr DebugInfo;
     const TString QueryId;
     const TString OwnerId;
-    const TInstant StartTime;
     TString CloudId;
     TString FolderId;
     TMaybe<double> QueryLimit;
@@ -208,12 +212,8 @@ public:
         }
     }
 
-    static void LwProbe(const TString& queryId, TInstant startTime, bool success) {
-        LwProbe(queryId, TInstant::Now() - startTime, success);
-    }
-
-    static void LwProbe(const TString& queryId, TDuration duration, bool success) {
-        LWPROBE(CreateRateLimiterResourceRequest, queryId, duration, success);
+    void LwProbe(bool success) {
+        LWPROBE(CreateRateLimiterResourceRequest, QueryId, GetRequestDuration(), success);
     }
 
     static const TString RequestTypeName;
@@ -253,12 +253,8 @@ public:
         }
     }
 
-    static void LwProbe(const TString& queryId, TInstant startTime, bool success) {
-        LwProbe(queryId, TInstant::Now() - startTime, success);
-    }
-
-    static void LwProbe(const TString& queryId, TDuration duration, bool success) {
-        LWPROBE(DeleteRateLimiterResourceRequest, queryId, duration, success);
+    void LwProbe(bool success) {
+        LWPROBE(DeleteRateLimiterResourceRequest, QueryId, GetRequestDuration(), success);
     }
 
     static const TString RequestTypeName;
@@ -271,59 +267,11 @@ const TString TRateLimiterDeleteRequest::RequestTypeName = "DeleteRateLimiterRes
 
 template <class TEventPtr, class TRequestActor, TYdbControlPlaneStorageActor::ERequestTypeCommon requestType>
 void TYdbControlPlaneStorageActor::HandleRateLimiterImpl(TEventPtr& ev) {
-    const TInstant startTime = TInstant::Now();
     TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(requestType)};
-    requestCounters.IncInFly();
-    requestCounters.Common->RequestBytes->Add(ev->Get()->GetByteSize());
-
-    auto& request = ev->Get()->Request;
-    const TString& queryId = request.query_id().value();
-    const TString& scope = request.scope();
-    const TString& tenant = request.tenant();
-    const TString& owner = request.owner_id();
-
-    CPS_LOG_T(TRequestActor::RequestTypeName << "Request: {" << request.DebugString() << "}");
-
-    NYql::TIssues issues = ValidateCreateOrDeleteRateLimiterResource(queryId, scope, tenant, owner);
-    if (issues) {
-        CPS_LOG_W(TRequestActor::RequestTypeName << "Request: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
-        const TDuration delta = TInstant::Now() - startTime;
-        SendResponseIssues<typename TRequestActor::TResponseEvent>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
-        TRequestActor::LwProbe(queryId, startTime, false);
-        return;
-    }
 
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
 
-    const NActors::TActorId requestActor = Register(new TRequestActor(startTime, std::move(ev), requestCounters, debugInfo));
-
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, TRequestActor::RequestTypeName);
-    readQueryBuilder.AddString("query_id", queryId);
-    readQueryBuilder.AddString("scope", scope);
-    readQueryBuilder.AddString("tenant", tenant);
-    TStringBuilder text;
-    text <<
-    "SELECT `" SCOPE_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "` FROM " PENDING_SMALL_TABLE_NAME
-        " WHERE `" TENANT_COLUMN_NAME "` = $tenant"
-            " AND `" SCOPE_COLUMN_NAME "` = $scope"
-            " AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
-
-    "SELECT `" INTERNAL_COLUMN_NAME "`";
-    if constexpr (TRequestActor::IsCreateRequest) {
-        text << ", `" QUERY_COLUMN_NAME "`";
-    }
-    text << " FROM " QUERIES_TABLE_NAME
-        " WHERE `" SCOPE_COLUMN_NAME "` = $scope"
-            " AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n";
-    readQueryBuilder.AddText(text);
-
-    const auto query = readQueryBuilder.Build();
-    auto [readStatus, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
-    readStatus.Subscribe(
-        [resultSets = resultSets, actorSystem = NActors::TActivationContext::ActorSystem(), requestActor] (const TAsyncStatus& status) {
-            actorSystem->Send(new IEventHandle(requestActor, requestActor, new TEvPrivate::TEvDbRequestResult(status, std::move(resultSets))));
-        }
-    );
+    const NActors::TActorId requestActor = Register(new TRequestActor(std::move(ev), std::move(requestCounters), std::move(debugInfo), DbPool, YdbConnection));
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr& ev) {

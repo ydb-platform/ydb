@@ -211,7 +211,58 @@ void InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const
 
 void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey);
 
-class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbControlPlaneStorageActor> {
+class TDbRequester {
+protected:
+    explicit TDbRequester(TDbPool::TPtr pool = nullptr, TYdbConnectionPtr ydbConnection = nullptr)
+        : DbPool(std::move(pool))
+        , YdbConnection(std::move(ydbConnection))
+    {
+    }
+
+    std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> Read(
+        const TString& query,
+        const NYdb::TParams& params,
+        const TRequestCounters& requestCounters,
+        TDebugInfoPtr debugInfo,
+        TTxSettings transactionMode = TTxSettings::SerializableRW(),
+        bool retryOnTli = true);
+
+    TAsyncStatus Validate(
+        NActors::TActorSystem* actorSystem,
+        std::shared_ptr<TMaybe<TTransaction>> transaction,
+        size_t item, const TVector<TValidationQuery>& validators,
+        TSession session,
+        std::shared_ptr<bool> successFinish,
+        TDebugInfoPtr debugInfo,
+        TTxSettings transactionMode = TTxSettings::SerializableRW());
+
+    TAsyncStatus Write(
+        const TString& query,
+        const NYdb::TParams& params,
+        const TRequestCounters& requestCounters,
+        TDebugInfoPtr debugInfo,
+        const TVector<TValidationQuery>& validators = {},
+        TTxSettings transactionMode = TTxSettings::SerializableRW(),
+        bool retryTli = true);
+
+    TAsyncStatus ReadModifyWrite(
+        const TString& readQuery,
+        const NYdb::TParams& readParams,
+        const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
+        const TRequestCounters& requestCounters,
+        TDebugInfoPtr debugInfo = {},
+        const TVector<TValidationQuery>& validators = {},
+        TTxSettings transactionMode = TTxSettings::SerializableRW(),
+        bool retryOnTli = true);
+
+protected:
+    TDbPool::TPtr DbPool;
+    TYdbConnectionPtr YdbConnection;
+};
+
+class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbControlPlaneStorageActor>,
+                                     public TDbRequester
+{
     enum ERequestTypeScope {
         RTS_CREATE_QUERY,
         RTS_LIST_QUERIES,
@@ -408,10 +459,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
     TCounters Counters;
 
-    TYdbConnectionPtr YdbConnection;
-
     ::NYq::TYqSharedResources::TPtr YqSharedResources;
-    TDbPool::TPtr DbPool;
 
     static constexpr int64_t InitialRevision = 1;
 
@@ -573,45 +621,6 @@ private:
     * Utility
     */
     bool IsSuperUser(const TString& user);
-
-    std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> Read(
-        NActors::TActorSystem* actorSystem,
-        const TString& query,
-        const NYdb::TParams& params,
-        const TRequestCounters& requestCounters,
-        TDebugInfoPtr debugInfo,
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryOnTli = true);
-
-    TAsyncStatus Validate(
-        NActors::TActorSystem* actorSystem,
-        std::shared_ptr<TMaybe<TTransaction>> transaction,
-        size_t item, const TVector<TValidationQuery>& validators,
-        TSession session,
-        std::shared_ptr<bool> successFinish,
-        TDebugInfoPtr debugInfo,
-        TTxSettings transactionMode = TTxSettings::SerializableRW());
-
-    TAsyncStatus Write(
-        NActors::TActorSystem* actorSystem,
-        const TString& query,
-        const NYdb::TParams& params,
-        const TRequestCounters& requestCounters,
-        TDebugInfoPtr debugInfo,
-        const TVector<TValidationQuery>& validators = {},
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryTli = true);
-
-    TAsyncStatus ReadModifyWrite(
-        NActors::TActorSystem* actorSystem,
-        const TString& readQuery,
-        const NYdb::TParams& readParams,
-        const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
-        const TRequestCounters& requestCounters,
-        TDebugInfoPtr debugInfo = {},
-        const TVector<TValidationQuery>& validators = {},
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryOnTli = true);
 
     template<class ResponseEvent, class Result, class RequestEventPtr>
     TFuture<bool> SendResponse(const TString& name,

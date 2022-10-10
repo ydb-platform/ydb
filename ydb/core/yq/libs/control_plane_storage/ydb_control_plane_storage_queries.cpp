@@ -348,7 +348,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
     const auto read = readQueryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    TAsyncStatus status = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), read.Sql, read.Params, prepareParams, requestCounters, debugInfo);
+    TAsyncStatus status = ReadModifyWrite(read.Sql, read.Params, prepareParams, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
     auto success = SendAuditResponse<TEvControlPlaneStorage::TEvCreateQueryResponse, YandexQuery::CreateQueryResult, TAuditDetails<YandexQuery::Query>>(
         "CreateQueryRequest - CreateQueryResult",
@@ -484,7 +484,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
 
     const auto read = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), read.Sql, read.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
@@ -574,7 +574,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     );
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
@@ -698,7 +698,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
 
     const auto read = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), read.Sql, read.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
@@ -1108,7 +1108,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
     const auto read = readQueryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto result = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), read.Sql, read.Params, prepareParams, requestCounters, debugInfo, validators);
+    auto result = ReadModifyWrite(read.Sql, read.Params, prepareParams, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
     auto success = SendAuditResponse<TEvControlPlaneStorage::TEvModifyQueryResponse, YandexQuery::ModifyQueryResult, TAuditDetails<YandexQuery::Query>>(
         "ModifyQueryRequest - ModifyQueryResult",
@@ -1223,7 +1223,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto result = Write(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo, validators);
+    auto result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
     auto success = SendAuditResponse<TEvControlPlaneStorage::TEvDeleteQueryResponse, YandexQuery::DeleteQueryResult, TAuditDetails<YandexQuery::Query>>(
         "DeleteQueryRequest - DeleteQueryResult",
@@ -1451,7 +1451,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
 
     const auto readQuery = readQueryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto result = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo, validators);
+    auto result = ReadModifyWrite(readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
     auto success = SendAuditResponse<TEvControlPlaneStorage::TEvControlQueryResponse, YandexQuery::ControlQueryResult, TAuditDetails<YandexQuery::Query>>(
         "ControlQueryRequest - ControlQueryRequest",
@@ -1527,7 +1527,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, resultSetIndex, user, permissions] {
         if (resultSets->size() != 2) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets->size() << ". Please contact internal support";
@@ -1685,7 +1685,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
@@ -1785,7 +1785,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
 
     auto prepare = [=, id=request.job_id(), resultSets=resultSets] {
         if (resultSets->size() != 1) {

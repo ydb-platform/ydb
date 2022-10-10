@@ -7224,6 +7224,8 @@ bool TGroupByClause::Build(const TRule_group_by_clause& node, bool stream) {
             Suffix = "Finalize";
         } else if (mode == "mergefinalize") {
             Suffix = "MergeFinalize";
+        } else if (mode == "mergemanyfinalize") {
+            Suffix = "MergeManyFinalize";
         } else {
             Ctx.Error() << "Unsupported group by mode: " << mode;
             Ctx.IncrementMonCounter("sql_errors", "GroupByModeUnknown");

@@ -1246,20 +1246,35 @@ TAstNode* IAggregation::Translate(TContext& ctx) const {
     return nullptr;
 }
 
-TNodePtr IAggregation::AggregationTraits(const TNodePtr& type, bool overState) const {
+std::pair<TNodePtr, bool> IAggregation::AggregationTraits(const TNodePtr& type, bool overState, bool many, TContext& ctx) const {
     const bool distinct = AggMode == EAggregateMode::Distinct;
     const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
-    return distinct ?
-        Q(Y(Q(Name), WrapIfOverState(GetApply(listType), overState), BuildQuotedAtom(Pos, DistinctKey))) :
-        Q(Y(Q(Name), WrapIfOverState(GetApply(listType), overState)));
+    auto apply = GetApply(listType, many, ctx);
+    if (!apply) {
+        return { nullptr, false };
+    }
+
+    auto wrapped = WrapIfOverState(apply, overState, many, ctx);
+    if (!wrapped) {
+        return { nullptr, false };
+    }
+
+    return { distinct ?
+        Q(Y(Q(Name), wrapped, BuildQuotedAtom(Pos, DistinctKey))) :
+        Q(Y(Q(Name), wrapped)), true };
 }
 
-TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState) const {
+TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const {
     if (!overState) {
         return input;
     }
 
-    return Y("AggOverState", GetExtractor(), BuildLambda(Pos, Y(), input));
+    auto extractor = GetExtractor(many, ctx);
+    if (!extractor) {
+        return nullptr;
+    }
+
+    return Y(ToString("AggOverState"), extractor, BuildLambda(Pos, Y(), input));
 }
 
 void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
@@ -1270,9 +1285,9 @@ std::vector<ui32> IAggregation::GetFactoryColumnIndices() const {
     return {0u};
 }
 
-TNodePtr IAggregation::WindowTraits(const TNodePtr& type) const {
+TNodePtr IAggregation::WindowTraits(const TNodePtr& type, TContext& ctx) const {
     YQL_ENSURE(AggMode == EAggregateMode::OverWindow, "Windows traits is unavailable");
-    return Q(Y(Q(Name), GetApply(type)));
+    return Q(Y(Q(Name), GetApply(type, false, ctx)));
 }
 
 ISource::ISource(TPosition pos)
@@ -1759,9 +1774,9 @@ bool ISource::SetSamplingRate(TContext& ctx, TNodePtr samplingRate) {
     return true;
 }
 
-TNodePtr ISource::BuildAggregation(const TString& label) {
+std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TContext& ctx) {
     if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource() && !HoppingWindowSpec) {
-        return nullptr;
+        return { nullptr, true };
     }
 
     auto keysTuple = Y();
@@ -1786,10 +1801,16 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
 
     const auto listType = Y("TypeOf", label);
     auto aggrArgs = Y();
-    const bool overState = GroupBySuffix == "CombineState" || GroupBySuffix == "MergeState" || GroupBySuffix == "MergeFinalize";
+    const bool overState = GroupBySuffix == "CombineState" || GroupBySuffix == "MergeState" ||
+        GroupBySuffix == "MergeFinalize" || GroupBySuffix == "MergeManyFinalize";
     for (const auto& aggr: Aggregations) {
-        if (const auto traits = aggr->AggregationTraits(listType, overState)) {
-            aggrArgs = L(aggrArgs, traits);
+        auto res = aggr->AggregationTraits(listType, overState, GroupBySuffix == "MergeManyFinalize", ctx);
+        if (!res.second) {
+           return { nullptr, false };
+        }
+
+        if (res.first) {
+            aggrArgs = L(aggrArgs, res.first);
         }
     }
 
@@ -1819,7 +1840,7 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
             Q(Y(BuildQuotedAtom(Pos, SessionWindow->GetLabel()), sessionWindow->BuildTraits(label))))));
     }
 
-    return Y("AssumeColumnOrderPartial", Y("Aggregate" + GroupBySuffix, label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple));
+    return { Y("AssumeColumnOrderPartial", Y("Aggregate" + GroupBySuffix, label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple)), true };
 }
 
 TMaybe<TString> ISource::FindColumnMistype(const TString& name) const {
@@ -1990,7 +2011,7 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
         YQL_ENSURE(frameType);
         auto callOnFrame = Y(frameType, BuildWindowFrame(*spec->Frame, spec->IsCompact));
         for (auto& agg : aggs) {
-            auto winTraits = agg->WindowTraits(listType);
+            auto winTraits = agg->WindowTraits(listType, ctx);
             callOnFrame = L(callOnFrame, winTraits);
         }
         for (auto& func : funcs) {

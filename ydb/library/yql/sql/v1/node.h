@@ -754,7 +754,7 @@ namespace NSQLTranslationV1 {
 
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 
-        virtual TNodePtr AggregationTraits(const TNodePtr& type, bool overState) const;
+        virtual std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, TContext& ctx) const;
 
         virtual TNodePtr AggregationTraitsFactory() const = 0;
 
@@ -762,7 +762,7 @@ namespace NSQLTranslationV1 {
 
         virtual void AddFactoryArguments(TNodePtr& apply) const;
 
-        virtual TNodePtr WindowTraits(const TNodePtr& type) const;
+        virtual TNodePtr WindowTraits(const TNodePtr& type, TContext& ctx) const;
 
         const TString& GetName() const;
 
@@ -772,13 +772,13 @@ namespace NSQLTranslationV1 {
         virtual void Join(IAggregation* aggr);
 
     private:
-        virtual TNodePtr GetApply(const TNodePtr& type) const = 0;
+        virtual TNodePtr GetApply(const TNodePtr& type, bool many, TContext& ctx) const = 0;
 
     protected:
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
         TAstNode* Translate(TContext& ctx) const override;
-        TNodePtr WrapIfOverState(const TNodePtr& input, bool overState) const;
-        virtual TNodePtr GetExtractor() const = 0;
+        TNodePtr WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const;
+        virtual TNodePtr GetExtractor(bool many, TContext& ctx) const = 0;
 
         TString Name;
         TString Func;
@@ -860,7 +860,7 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr BuildPreaggregatedMap(TContext& ctx);
         virtual TNodePtr BuildPreFlattenMap(TContext& ctx);
         virtual TNodePtr BuildPrewindowMap(TContext& ctx);
-        virtual TNodePtr BuildAggregation(const TString& label);
+        virtual std::pair<TNodePtr, bool> BuildAggregation(const TString& label, TContext& ctx);
         virtual TNodePtr BuildCalcOverWindow(TContext& ctx, const TString& label);
         virtual TNodePtr BuildSort(TContext& ctx, const TString& label);
         virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label);

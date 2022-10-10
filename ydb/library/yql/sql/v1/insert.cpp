@@ -51,9 +51,10 @@ public:
         return nullptr;
     }
 
-    TNodePtr BuildAggregation(const TString& label) override {
+    std::pair<TNodePtr, bool> BuildAggregation(const TString& label, TContext& ctx) override {
         Y_UNUSED(label);
-        return nullptr;
+        Y_UNUSED(ctx);
+        return { nullptr, true };
     }
 
 protected:

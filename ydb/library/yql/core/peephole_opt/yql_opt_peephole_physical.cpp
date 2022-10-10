@@ -6121,6 +6121,12 @@ struct TPeepHoleRules {
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> CommonStageExtRulesInit = {
         {"Aggregate", &ExpandAggregatePeephole},
+        {"AggregateCombine", &ExpandAggregatePeephole},
+        {"AggregateCombineState", &ExpandAggregatePeephole},
+        {"AggregateMergeState", &ExpandAggregatePeephole},
+        {"AggregateMergeFinalize", &ExpandAggregatePeephole},
+        {"AggregateMergeManyFinalize", &ExpandAggregatePeephole},
+        {"AggregateFinalize", &ExpandAggregatePeephole},
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {

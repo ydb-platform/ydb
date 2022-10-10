@@ -64,6 +64,9 @@ private:
     TExprNode::TPtr GeneratePostAggregateSavePhase();
     TExprNode::TPtr GeneratePostAggregateMergePhase();
 
+    std::function<TExprNodeBuilder& (TExprNodeBuilder&)> GetPartialAggArgExtractor(ui32 i, bool deserialize);
+    TExprNode::TPtr GetFinalAggStateExtractor(ui32 i);
+
 private:
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";
 
@@ -73,6 +76,7 @@ private:
     bool AllowPickle;
     bool ForceCompact;
     bool CompactForDistinct;
+    TStringBuf Suffix;
 
     TSessionWindowParams SessionWindowParams;
     TExprNode::TPtr AggList;

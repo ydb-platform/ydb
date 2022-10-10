@@ -4398,21 +4398,21 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (lambdaUpdate->Head().ChildrenSize() == 2U) {
+            if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, { itemType, combineStateType }, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, { itemType, combineStateType, ui32Type }, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        if (!lambdaUpdate->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         if (!overState) {
-            if (lambdaUpdate->Head().ChildrenSize() == 2U) {
-                if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, { itemType, combineStateType }, ctx.Expr)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else {
-                if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, { itemType, combineStateType, ui32Type }, ctx.Expr)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-            }
-
-            if (!lambdaUpdate->GetTypeAnn()) {
-                return IGraphTransformer::TStatus::Repeat;
-            }
-
             if (!IsSameAnnotation(*lambdaUpdate->GetTypeAnn(), *combineStateType)) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch update lambda result type, expected: "
                     << *combineStateType << ", but got: " << *lambdaUpdate->GetTypeAnn()));
@@ -4774,6 +4774,11 @@ namespace {
 
             const TTypeAnnotationNode* distinctColumnType = nullptr;
             if (child->ChildrenSize() == 3) {
+                if (suffix != "" && suffix != "Finalize") {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "DISTINCT aggregation is not supported for mode: " << suffix));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
                 if (!EnsureAtom(*child->Child(2), ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -5116,6 +5121,11 @@ namespace {
                         TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
                     return IGraphTransformer::TStatus::Error;
                 }
+
+                if (isOptional) {
+                    sumResultType = ctx.Expr.MakeType<TOptionalExprType>(sumResultType);
+                }
+
                 input->SetTypeAnn(sumResultType);
             } else if (IsNull(*lambda->GetTypeAnn())) {
                 input->SetTypeAnn(ctx.Expr.MakeType<TNullExprType>());

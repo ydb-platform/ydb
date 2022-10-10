@@ -11444,6 +11444,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AggregateMergeState"] = &AggregateWrapper;
         Functions["AggregateFinalize"] = &AggregateWrapper;
         Functions["AggregateMergeFinalize"] = &AggregateWrapper;
+        Functions["AggregateMergeManyFinalize"] = &AggregateWrapper;
         Functions["AggOverState"] = &AggOverStateWrapper;
         Functions["SqlAggregateAll"] = &SqlAggregateAllWrapper;
         Functions["CountedAggregateAll"] = &CountedAggregateAllWrapper;
@@ -11507,6 +11508,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgOr"] = &PgBoolOpWrapper;
         Functions["PgNot"] = &PgBoolOpWrapper;
         Functions["PgAggregationTraits"] = &PgAggregationTraitsWrapper;
+        Functions["PgAggregationTraitsOverState"] = &PgAggregationTraitsWrapper;
         Functions["PgWindowTraits"] = &PgAggregationTraitsWrapper;
         Functions["PgAggregationTraitsTuple"] = &PgAggregationTraitsWrapper;
         Functions["PgWindowTraitsTuple"] = &PgAggregationTraitsWrapper;

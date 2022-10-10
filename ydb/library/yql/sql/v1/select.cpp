@@ -242,9 +242,10 @@ public:
         return nullptr;
     }
 
-    TNodePtr BuildAggregation(const TString& label) override {
+    std::pair<TNodePtr, bool> BuildAggregation(const TString& label, TContext& ctx) override {
         Y_UNUSED(label);
-        return nullptr;
+        Y_UNUSED(ctx);
+        return { nullptr, true };
     }
 
     TPtr DoClone() const final {
@@ -1552,7 +1553,12 @@ public:
         }
 
         src->FinishColumns();
-        Aggregate = src->BuildAggregation("core");
+        auto aggRes = src->BuildAggregation("core", ctx);
+        if (!aggRes.second) {
+            return false;
+        }
+
+        Aggregate = aggRes.first;
         if (src->IsFlattenByColumns() || src->IsFlattenColumns()) {
             Flatten = src->IsFlattenByColumns() ?
                 src->BuildFlattenByColumns("row") :

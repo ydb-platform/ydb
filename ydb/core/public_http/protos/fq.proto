@@ -8,6 +8,7 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 import "ydb/public/api/protos/yq.proto";
 
 ////////////////////////////////////////////////////////////
@@ -30,7 +31,7 @@ message Column {
 
 message ResultSetMeta {
     int64 rows_count = 1 [(Ydb.value) = ">= 0"];
-    bool truncated = 2;
+    google.protobuf.BoolValue truncated = 2;
 }
 
 message CreateQueryRequest {

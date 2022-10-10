@@ -119,7 +119,8 @@ FQHttp::GetQueryResult::ComputeStatus RemapQueryStatus(YandexQuery::QueryMeta::C
 
 void FqConvert(const YandexQuery::ResultSetMeta& src, FQHttp::ResultSetMeta& dst) {
     SIMPLE_COPY_FIELD(rows_count);
-    SIMPLE_COPY_FIELD(truncated);
+    // this field should be present in json regardless of value
+    dst.mutable_truncated()->set_value(src.truncated());
 }
 
 void FqConvert(const YandexQuery::Query& src, FQHttp::GetQueryResult& dst) {

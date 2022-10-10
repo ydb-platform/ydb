@@ -6,6 +6,7 @@
 #include <util/stream/str.h>
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/timestamp.pb.h>
+#include <google/protobuf/wrappers.pb.h>
 #include <google/protobuf/util/time_util.h>
 #include "json.h"
 
@@ -79,6 +80,12 @@ void TProtoToJson::ProtoToJson(IOutputStream& to, const ::google::protobuf::Mess
     if (protoFrom.GetTypeName() == google::protobuf::Duration::descriptor()->full_name()) {
         auto& d = static_cast<const google::protobuf::Duration&>(protoFrom);
         to << '"' << google::protobuf::util::TimeUtil::ToString(d) << '"';
+        return;
+    }
+
+    if (protoFrom.GetTypeName() == google::protobuf::BoolValue::descriptor()->full_name()) {
+        auto& b = static_cast<const google::protobuf::BoolValue&>(protoFrom);
+        to << (b.value() ? "true"sv : "false"sv);
         return;
     }
 
@@ -469,6 +476,8 @@ void TProtoToJson::ProtoToJsonSchema(IOutputStream& to, const TJsonSettings& jso
                     to << "{\"type\":\"string\",\"format\":\"date-time\"}";
                 } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::Duration::descriptor()->full_name()) {
                     to << "{\"type\":\"string\", \"example\":\"3600s\"}";
+                } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::BoolValue::descriptor()->full_name()) {
+                    to << "{\"type\":\"boolean\"}";
                 } else if (descriptors.insert(descriptor).second) {
                     ProtoToJsonSchema(to, jsonSettings, fieldDescriptor->message_type(), descriptors);
                     descriptors.erase(descriptor);

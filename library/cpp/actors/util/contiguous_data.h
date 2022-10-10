@@ -11,6 +11,10 @@
 
 #include "shared_data.h"
 
+#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
+#include "shared_data_backtracing_owner.h"
+#endif
+
 namespace NContiguousDataDetails {
     template<typename TContainer>
     struct TContainerTraits {
@@ -701,8 +705,14 @@ public:
     }
 
     explicit TContiguousData(NActors::TSharedData s)
+#ifndef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
         : Backend(std::move(s))
+#endif
     {
+#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
+        TBackTracingOwner::FakeOwner(s, TBackTracingOwner::INFO_FROM_SHARED_DATA);
+        Backend = TBackend(std::move(s));
+#endif
         auto span = Backend.GetData();
         Begin = span.data();
         End = Begin + span.size();
@@ -746,14 +756,22 @@ public:
             return TContiguousData();
         }
         if (headroom == 0 && tailroom == 0) {
-            NActors::TSharedData res = NActors::TSharedData::Uninitialized(size + headroom + tailroom);
+#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
+            NActors::TSharedData res = TBackTracingOwner::Allocate(size, TBackTracingOwner::INFO_ALLOC_UNINITIALIZED);
+#else
+            NActors::TSharedData res = NActors::TSharedData::Uninitialized(size);
+#endif
             return TContiguousData(
                 OwnedSlice,
-                res.data() + headroom,
-                res.data() + res.size() - tailroom,
+                res.data(),
+                res.data() + res.size(),
                 TContiguousData(res));
         } else {
+#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
+            NActors::TSharedData res = TBackTracingOwner::Allocate(size + headroom + tailroom + TBackend::CookiesSize, TBackTracingOwner::INFO_ALLOC_UNINIT_ROOMS);
+#else
             NActors::TSharedData res = NActors::TSharedData::Uninitialized(size + headroom + tailroom + TBackend::CookiesSize);
+#endif
             return TContiguousData(
                 OwnedSlice,
                 res.data() + headroom,
@@ -874,6 +892,13 @@ public:
             Begin -= size;
             Backend.UpdateCookies(Begin, End);
         } else {
+#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
+            if (Backend.ContainsNativeType<NActors::TSharedData>()) {
+                Cerr << "GrowFront# " << size;
+                NActors::TSharedData data = GetRaw<NActors::TSharedData>();
+                TBackTracingOwner::UnsafePrintBackTrace(data);
+            }
+#endif
             if (strategy == EResizeStrategy::FailOnCopy && static_cast<bool>(Backend)) {
                 Y_FAIL("Fail on grow");
             }
@@ -891,6 +916,13 @@ public:
             End += size;
             Backend.UpdateCookies(Begin, End);
         } else {
+#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
+            if (Backend.ContainsNativeType<NActors::TSharedData>()) {
+                Cerr << "GrowBack# " << size;
+                NActors::TSharedData data = GetRaw<NActors::TSharedData>();
+                TBackTracingOwner::UnsafePrintBackTrace(data);
+            }
+#endif
             if (strategy == EResizeStrategy::FailOnCopy && static_cast<bool>(Backend)) {
                 Y_FAIL("Fail on grow");
             }

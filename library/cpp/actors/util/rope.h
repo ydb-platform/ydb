@@ -736,10 +736,10 @@ public:
         return false;
     }
 
-    void Compact() {
+    void Compact(size_t headroom = 0, size_t tailroom = 0) {
         if(!IsContiguous()) {
             // TODO(innokentii): use better container, when most outer users stop use TString
-            TContiguousData res = TContiguousData::Uninitialized(GetSize());
+            TContiguousData res = TContiguousData::Uninitialized(GetSize(), headroom, tailroom);
             Begin().ExtractPlainDataAndAdvance(res.UnsafeGetDataMut(), res.size());
             Erase(Begin(), End());
             Insert(End(), TRope(res));

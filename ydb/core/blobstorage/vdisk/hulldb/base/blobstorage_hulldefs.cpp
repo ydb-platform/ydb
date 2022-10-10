@@ -34,6 +34,7 @@ namespace NKikimr {
 
     TContiguousData TPutRecoveryLogRecOpt::SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
             TRope &&rope) {
+        rope.Compact(24);
         return SerializeZeroCopy(gtype, id, TContiguousData(rope));
     }
 

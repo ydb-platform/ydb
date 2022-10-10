@@ -552,8 +552,7 @@ public:
             partSet.Parts.resize(totalParts);
             if (Info->Type.ErasureFamily() != TErasureType::ErasureMirror) {
                 for (ui32 i = 0; i < totalParts; ++i) {
-                    partSet.Parts[i].UninitializedOwnedWhole(partSize);
-
+                    partSet.Parts[i].UninitializedOwnedWhole(partSize, 24);
                 }
             }
         }

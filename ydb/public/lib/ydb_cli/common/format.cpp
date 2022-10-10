@@ -314,8 +314,6 @@ TResultSetPrinter::~TResultSetPrinter() {
 void TResultSetPrinter::Print(const TResultSet& resultSet) {
     if (FirstPart) {
         BeginResultSet();
-    } else {
-        EndLineBeforeNextResult();
     }
     PrintedSomething = true;
 
@@ -344,6 +342,10 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
         break;
     default:
         throw TMisuseException() << "This command doesn't support " << Format << " output format";
+    }
+
+    if (FirstPart) {
+        FirstPart = false;
     }
 }
 
@@ -417,9 +419,10 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
     TResultSetParser parser(resultSet);
     bool firstRow = true;
     while (parser.TryNextRow()) {
-        if (!firstRow) {
+        if (!firstRow || !FirstPart) {
             EndLineBeforeNextResult();
-        } else {
+        }
+        if (firstRow) {
             firstRow = false;
         }
         NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, &Cout);

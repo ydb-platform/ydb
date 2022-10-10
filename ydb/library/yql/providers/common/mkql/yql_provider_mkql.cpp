@@ -1458,15 +1458,22 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         const auto leftTupleType = leftItemType->Cast<TMultiExprType>();
-        const auto rightTupleType = leftItemType->Cast<TMultiExprType>();
+        const auto rightTupleType = rightItemType->Cast<TMultiExprType>();
         const auto outputTupleType = outputItemType->Cast<TMultiExprType>();
 
-        node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetFieldPosition(*leftTupleType, child.Content())); });
-        node.Child(4)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetFieldPosition(*rightTupleType, child.Content())); });
+        node.Child(3)->ForEachChild([&](TExprNode& child){ 
+            leftKeyColumns.emplace_back(*GetFieldPosition(*leftTupleType, child.Content())); 
+            });
+        node.Child(4)->ForEachChild([&](TExprNode& child){ 
+            rightKeyColumns.emplace_back(*GetFieldPosition(*rightTupleType, child.Content())); });
         bool s = false;
-        node.Child(5)->ForEachChild([&](const TExprNode& child){ leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *leftTupleType : *outputTupleType, child.Content())); });
+        node.Child(5)->ForEachChild([&](TExprNode& child){ 
+            leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *leftTupleType : *outputTupleType, child.Content())); });
         s = false;
-        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightRenames.emplace_back(*GetFieldPosition((s = !s) ?  *rightTupleType : *outputTupleType, child.Content())); });
+        node.Child(6)->ForEachChild([&](TExprNode& child){
+            rightRenames.emplace_back(*GetFieldPosition((s = !s) ?  *rightTupleType : *outputTupleType, child.Content())); 
+            
+            });
 
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType);

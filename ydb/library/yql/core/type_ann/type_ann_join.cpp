@@ -591,7 +591,10 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            const auto columnType = GetFieldType(leftTupleType, *oldPos);
+            auto columnType = GetFieldType(leftTupleType, *oldPos);
+            if ((joinKind == "Right" || joinKind == "Full" || joinKind == "Exclusion") && !columnType->IsOptionalOrNull()) {
+                columnType = ctx.Expr.MakeType<TOptionalExprType>(columnType);
+            }
 
             if (ui32 index; !TryFromString(newName->Content(), index) || index >= resultItems.size()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), TStringBuilder() << "Invalid output field index: " << newName->Content()));
@@ -623,7 +626,7 @@ namespace NTypeAnnImpl {
             }
 
             auto columnType =  GetFieldType(rightTupleType, *oldPos);
-            if (joinKind == "Left" && !columnType->IsOptionalOrNull()) {
+            if ((joinKind == "Left" || joinKind == "Full" || joinKind == "Exclusion" ) && !columnType->IsOptionalOrNull()) {
                 columnType = ctx.Expr.MakeType<TOptionalExprType>(columnType);
             }
 

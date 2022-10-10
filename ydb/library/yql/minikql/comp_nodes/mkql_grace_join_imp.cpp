@@ -420,6 +420,8 @@ inline bool HasRightIdMatch(ui64 currId, ui64 & rightIdIter, const std::vector<u
 
     while ( rightIdIter < rightIds.size() && currId > rightIds[rightIdIter])  rightIdIter++;
 
+    if (rightIdIter >= rightIds.size()) return false;
+
     if (currId == rightIds[rightIdIter]) {
         return true;
     } else {

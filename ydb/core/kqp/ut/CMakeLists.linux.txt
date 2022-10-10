@@ -36,6 +36,7 @@ target_link_libraries(ydb-core-kqp-ut PUBLIC
   cpp-client-ydb_proto
   yql-sql-pg_dummy
   re2_udf
+  digest_udf
 )
 target_link_options(ydb-core-kqp-ut PRIVATE
   -ldl

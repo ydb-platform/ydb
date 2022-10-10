@@ -5,10 +5,12 @@
 #include "clock.h"
 #endif
 
-#ifdef _WIN32
-#   include <intrin.h>
-#else
-#   include <x86intrin.h>
+#if !defined(__arm__) && !defined(__aarch64__)
+#   ifdef _WIN32
+#       include <intrin.h>
+#   else
+#       include <x86intrin.h>
+#   endif
 #endif
 
 namespace NYT {
@@ -17,7 +19,11 @@ namespace NYT {
 
 inline TCpuInstant GetCpuInstant()
 {
+#if !defined(__arm__) && !defined(__aarch64__)
     return __rdtsc();
+#else
+    return MicroSeconds();
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////

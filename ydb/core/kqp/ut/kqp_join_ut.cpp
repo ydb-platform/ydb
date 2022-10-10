@@ -303,6 +303,106 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         AssertTableReads(result, "/Root/Join1_2", 3);
     }
 
+    Y_UNIT_TEST(JoinWithDuplicates) {
+        // TODO (fix the bug)
+        return;
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE ObjectParts (
+                Hash Uint64,
+                BucketName Utf8,
+                ObjectName Utf8,
+                UploadStartedUsec Uint64,
+                Id Uint32,
+                CreatedUsec Uint64,
+                DataSize Uint64,
+                DataMd5 Utf8,
+                DataSourceType String,
+                DataSource String,
+                PRIMARY KEY(Hash, BucketName, ObjectName, UploadStartedUsec, Id)
+            );
+
+            CREATE TABLE Objects (
+                Hash Uint64,
+                BucketName Utf8,
+                Name Utf8,
+                CreatedUsec Uint64,
+                StorageClass Uint8,
+                UploadStartedUsec Uint64,
+                DataSize Uint64,
+                DataMd5 Utf8,
+                MetadataType String,
+                Metadata String,
+                DataSourceType String,
+                DataSource String,
+                PartsCount Uint32,
+                ACL String,
+                CreatorId Utf8,
+                PRIMARY KEY(Hash, BucketName, Name)
+            );
+        )").GetValueSync());
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            $bucket_name = "bucket #1";
+            $object_name = "mpobject";
+            $upload_started_usec = 999;
+            $parts_count = 5;
+
+            UPSERT INTO Objects (Hash, BucketName, Name, UploadStartedUsec, PartsCount) VALUES
+                (5775455696462964606, $bucket_name, $object_name, $upload_started_usec, $parts_count);
+
+            UPSERT INTO ObjectParts (Hash, BucketName, ObjectName, UploadStartedUsec, Id, DataSize, DataMd5) VALUES
+                (5775455696462964606, $bucket_name, $object_name, $upload_started_usec, 1, 1, "hash-1"),
+                (5775455696462964606, $bucket_name, $object_name, $upload_started_usec, 2, 2, "hash-2"),
+                (5775455696462964606, $bucket_name, $object_name, $upload_started_usec, 3, 3, "hash-3"),
+                (5775455696462964606, $bucket_name, $object_name, $upload_started_usec, 4, 5, "hash-4"),
+                (5775455696462964606, $bucket_name, $object_name, $upload_started_usec, 5, 8, "hash-5"),
+                (5775455696462964606, $bucket_name, $object_name, $upload_started_usec + 1, 1, 1, "hash");
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto params = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$bucket_name").Utf8("bucket #1").Build()
+            .AddParam("$object_name").Utf8("mpobject").Build()
+            .Build();
+
+        result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            DECLARE $bucket_name AS Utf8;
+            DECLARE $object_name AS Utf8;
+
+            SELECT ObjectParts.Id, ObjectParts.DataSize, ObjectParts.DataMd5
+            FROM ObjectParts
+            JOIN Objects
+            ON Objects.Hash = ObjectParts.Hash
+                AND Objects.BucketName = ObjectParts.BucketName
+                AND Objects.Name = ObjectParts.ObjectName
+                AND Objects.UploadStartedUsec = ObjectParts.UploadStartedUsec
+            WHERE ObjectParts.Hash = Digest::CityHash($bucket_name || $object_name)
+                AND ObjectParts.BucketName = $bucket_name
+                AND ObjectParts.ObjectName = $object_name
+            ORDER BY ObjectParts.Id;
+        )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];[1u];["hash-1"]];
+            [[2u];[2u];["hash-2"]];
+            [[3u];[3u];["hash-3"]];
+            [[4u];[5u];["hash-4"]];
+            [[5u];[8u];["hash-5"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(IdxLookupSelf) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();

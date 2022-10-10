@@ -10,7 +10,6 @@
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/udfs/common/re2/re2_udf.cpp>
 
 namespace NKikimr {
 namespace NKqp {
@@ -56,7 +55,7 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     Y_UNUSED(typeRegistry);
     auto funcRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
     funcRegistry->AddModule("", "TestUdfs", new TTestUdfsModule());
-    funcRegistry->AddModule("re2_path", "Re2", new TRe2Module<true>());
+    NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
 

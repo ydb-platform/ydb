@@ -11,6 +11,8 @@
 #include <util/generic/set.h>
 #include <util/string/type.h>
 
+#include <limits>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -1440,7 +1442,10 @@ TStringBuf GetEmptyCollectionName(ETypeAnnotationKind kind) {
 
 namespace {
 
-ui8 GetTypeWeight(const TTypeAnnotationNode& type) {
+constexpr ui64 MaxWeight = std::numeric_limits<ui64>::max();
+constexpr ui64 UnknownWeight = std::numeric_limits<ui32>::max();
+
+ui64 GetTypeWeight(const TTypeAnnotationNode& type) {
     switch (type.GetKind()) {
         case ETypeAnnotationKind::Data:
             switch (type.Cast<TDataExprType>()->GetSlot()) {
@@ -1476,26 +1481,28 @@ ui8 GetTypeWeight(const TTypeAnnotationNode& type) {
             }
         case ETypeAnnotationKind::Optional:
             return 1 + GetTypeWeight(*type.Cast<TOptionalExprType>()->GetItemType());
-        case ETypeAnnotationKind::Pg:
-            return ui8(ClampVal(NPg::LookupType(type.Cast<TPgExprType>()->GetId()).TypeLen, 1, 255));
+        case ETypeAnnotationKind::Pg: {
+            const auto& typeDesc = NPg::LookupType(type.Cast<TPgExprType>()->GetId());
+            if (typeDesc.TypeLen > 0 && typeDesc.PassByValue) {
+                return typeDesc.TypeLen;
+            }
+            return UnknownWeight;
+        }
         default:
-            return 255;
+            return UnknownWeight;
     }
 }
 
 } // namespace
 
 const TItemExprType* GetLightColumn(const TStructExprType& type) {
-    ui8 weight = 255;
+    ui64 weight = MaxWeight;
     const TItemExprType* field = nullptr;
     for (const auto& item : type.GetItems()) {
         if (const auto w = GetTypeWeight(*item->GetItemType()); w < weight) {
             weight = w;
             field = item;
         }
-    }
-    if (const auto& items = type.GetItems(); !items.empty() && !field) {
-        field = items[0];
     }
     return field;
 }

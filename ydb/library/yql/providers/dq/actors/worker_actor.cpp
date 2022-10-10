@@ -138,6 +138,7 @@ private:
 
         hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
         hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+        IgnoreFunc(TEvStatistics);
     })
 
     void ExtractStats(::Ydb::Issue::IssueMessage* issue) {

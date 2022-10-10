@@ -6,9 +6,20 @@ Generates a pseudorandom number:
 * `RandomNumber()`: An integer from the complete Uint64 range.
 * `RandomUuid()`: [Uuid version 4](https://tools.ietf.org/html/rfc4122#section-4.4).
 
+**Signatures**
+```
+Random(T1[, T2, ...])->Double
+RandomNumber(T1[, T2, ...])->Uint64
+RandomUuid(T1[, T2, ...])->Uuid
+```
+
 No arguments are used for random number generation: they are only needed to control the time of the call. A new random number is returned at each call. Therefore:
 
+{% if ydb_non_deterministic_functions %}
+* If Random is called again within a **same query** and with a same set of arguments does not guarantee getting the same sets of random numbers. The values will be equal if the Random calls fall into the same execution phase.
+{% else %}
 * If Random is called again within a **same query** and with a same set of arguments, the same set of random numbers is returned. Keep in mind that we mean the arguments themselves (i.e., the text between parentheses) rather than their values.
+{% endif %}
 * Calling of Random with the same set of arguments in **different queries** returns different sets of random numbers.
 
 {% note warning %}
@@ -27,7 +38,6 @@ Use cases:
 * `SELECT RANDOM(some_column), RANDOM(some_column + 1) FROM table;` or `SELECT RANDOM(some_column), RANDOM(other_column) FROM table;`: Two columns, with different numbers in both.
 
 **Examples**
-
 ```yql
 SELECT
     Random(key) -- [0, 1)
@@ -54,4 +64,3 @@ SELECT
     RANDOM(column, 2) AS randAnd2 -- different from randAnd1
 FROM my_table;
 ```
-

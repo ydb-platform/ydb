@@ -296,17 +296,18 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
 
 void TClientCommandRootCommon::Validate(TConfig& config) {
     TClientCommandRootBase::Validate(config);
+    if (!config.NeedToConnect) {
+        return;
+    }
 
-    if (Address.empty() && config.NeedToConnect) {
+    if (Address.empty()) {
         throw TMisuseException()
             << "Missing required option 'endpoint'.";
     }
 
     if (Database.empty()) {
-        if (config.NeedToConnect) {
-            throw TMisuseException()
-                << "Missing required option 'database'.";
-        }
+        throw TMisuseException()
+            << "Missing required option 'database'.";
     } else if (!Database.StartsWith('/')) {
         throw TMisuseException() << "Path to a database \"" << Database
             << "\" is incorrect. It must be absolute and thus must begin with '/'.";

@@ -287,11 +287,11 @@ NDB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
             break;
         case EDataSlot::Datetime:
         case EDataSlot::TzDatetime:
-            ret = std::make_shared<NDB::DataTypeDateTime>();
+            ret = std::make_shared<NDB::DataTypeDateTime>("UTC");
             break;
         case EDataSlot::Timestamp:
         case EDataSlot::TzTimestamp:
-            ret = std::make_shared<NDB::DataTypeDateTime64>(6);
+            ret = std::make_shared<NDB::DataTypeDateTime64>(6, "UTC");
             break;
         case EDataSlot::Uuid:
             ret = std::make_shared<NDB::DataTypeUUID>();

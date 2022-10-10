@@ -872,10 +872,10 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializat
                 return std::make_shared<NDB::DataTypeDate>();
             case NUdf::EDataSlot::Datetime:
             case NUdf::EDataSlot::TzDatetime:
-                return std::make_shared<NDB::DataTypeDateTime>();
+                return std::make_shared<NDB::DataTypeDateTime>("UTC");
             case NUdf::EDataSlot::Timestamp:
             case NUdf::EDataSlot::TzTimestamp:
-                return std::make_shared<NDB::DataTypeDateTime64>(6);
+                return std::make_shared<NDB::DataTypeDateTime64>(6, "UTC");
             case NUdf::EDataSlot::Uuid:
                 return std::make_shared<NDB::DataTypeUUID>();
             case NUdf::EDataSlot::Interval:

@@ -3,7 +3,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -21,11 +24,15 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1650011781811,
+  "iteration": 1665500887386,
   "links": [],
   "liveNow": false,
   "panels": [
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -102,7 +109,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(kqp_Query_ExecPreparedLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))\r\n",
+          "expr": "sum by (le) (rate(kqp_Query_ExecPreparedLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))\r\n",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -113,6 +120,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -198,6 +209,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -273,7 +288,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (execpool) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (execpool) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{execpool}}",
           "refId": "A"
@@ -283,6 +298,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -358,7 +377,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"tablets_DataShard_.+Completed\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_DataShard_(.+)Completed\")[1m:]))",
+          "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"tablets_DataShard_.+Completed\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_DataShard_(.+)Completed\")[$__rate_interval:]))",
           "interval": "",
           "legendFormat": "{{name_label}}",
           "refId": "A"
@@ -368,6 +387,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -444,7 +467,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))\r\n",
+          "expr": "sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))\r\n",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -455,6 +478,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -540,6 +567,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -615,7 +646,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (host, pod) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[1m]))",
+          "expr": "sum by (host, pod) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{host}}{{pod}}",
           "refId": "A"
@@ -625,6 +656,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -700,7 +735,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"tablets_DataShard_.+_ExecuteCPUTime\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_DataShard_(.+)_ExecuteCPUTime\")[1m:]))",
+          "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"tablets_DataShard_.+_ExecuteCPUTime\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_DataShard_(.+)_ExecuteCPUTime\")[$__rate_interval:]))",
           "interval": "",
           "legendFormat": "{{name_label}}",
           "refId": "A"
@@ -710,6 +745,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -786,7 +825,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval])))",
           "format": "time_series",
           "interval": "",
           "legendFormat": "0.50",
@@ -798,7 +837,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m])))",
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval])))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -811,7 +850,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval])))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -824,7 +863,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(proxy_TxTotalTimesMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval])))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -836,6 +875,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -921,6 +964,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1006,6 +1053,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1078,6 +1129,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1153,7 +1208,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_DataShard_EngineHostRangeReadRows{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_DataShard_EngineHostRangeReadRows{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "rows",
           "refId": "A"
@@ -1163,6 +1218,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1238,7 +1297,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_DataShard_EngineHostRowReads{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_DataShard_EngineHostRowReads{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "rows",
           "refId": "A"
@@ -1248,6 +1307,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1333,6 +1396,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1430,6 +1497,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1505,7 +1576,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_DataShard_EngineHostRangeReadBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_DataShard_EngineHostRangeReadBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "bytes",
           "refId": "A"
@@ -1515,6 +1586,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1590,7 +1665,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_DataShard_EngineHostRowReadBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_DataShard_EngineHostRowReadBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "bytes",
           "refId": "A"
@@ -1600,6 +1675,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1672,6 +1751,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1757,6 +1840,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1832,7 +1919,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(tablets_DataShard_RangeReadRowsPerRequest_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (le) (rate(tablets_DataShard_RangeReadRowsPerRequest_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -1843,6 +1930,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1918,7 +2009,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(tablets_DataShard_SelectRowsPerRequest_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (le) (rate(tablets_DataShard_SelectRowsPerRequest_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -1929,6 +2020,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2014,6 +2109,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2099,6 +2198,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2184,6 +2287,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2259,7 +2366,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Transactions_Aborted{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Transactions_Aborted{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "transactions",
           "refId": "A"
@@ -2269,6 +2376,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2344,7 +2455,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"kqp_Issues_YQL:.+\"}, \"name_label\", \"$1\", \"__name__\", \"kqp_Issues_YQL:(.+)\")[1m:]))",
+          "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"kqp_Issues_YQL:.+\"}, \"name_label\", \"$1\", \"__name__\", \"kqp_Issues_YQL:(.+)\")[$__rate_interval:]))",
           "interval": "",
           "legendFormat": "{{name_label}}",
           "refId": "A"
@@ -2354,6 +2465,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2429,7 +2544,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Issues_YQL:KIKIMR_TEMPORARILY_UNAVAILABLE{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Issues_YQL:KIKIMR_TEMPORARILY_UNAVAILABLE{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "count",
           "refId": "A"
@@ -2439,6 +2554,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2514,7 +2633,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_DataShard_UploadRows{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_DataShard_UploadRows{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "rows",
           "refId": "A"
@@ -2524,6 +2643,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2599,7 +2722,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_DataShard_UploadRowsBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_DataShard_UploadRowsBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "bytes",
           "refId": "A"
@@ -2609,6 +2732,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2694,6 +2821,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2779,6 +2910,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2854,7 +2989,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_DataShard_ReadColumnsRows{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_DataShard_ReadColumnsRows{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "rows",
           "refId": "A"
@@ -2864,6 +2999,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2939,7 +3078,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_DataShard_ReadColumnsBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_DataShard_ReadColumnsBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "bytes",
           "refId": "A"
@@ -2949,6 +3088,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3035,6 +3178,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3120,6 +3267,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3205,6 +3356,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3280,7 +3435,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",activity=\"TX_COORDINATOR_ACTOR\"}[1m]))",
+          "expr": "sum(rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",activity=\"TX_COORDINATOR_ACTOR\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "cpu",
           "refId": "A"
@@ -3290,6 +3445,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3365,7 +3524,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",activity=\"TX_MEDIATOR_ACTOR\"}[1m]))",
+          "expr": "sum(rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",activity=\"TX_MEDIATOR_ACTOR\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "cpu",
           "refId": "A"
@@ -3375,6 +3534,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3460,6 +3623,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3535,7 +3702,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_CacheMissBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_CacheMissBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "bytes",
           "refId": "A"
@@ -3545,6 +3712,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3620,7 +3791,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_CacheMissPages{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_CacheMissPages{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "pages",
           "refId": "A"
@@ -3630,6 +3801,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3705,7 +3880,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_CacheHitBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_CacheHitBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "bytes",
           "refId": "A"
@@ -3715,6 +3890,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3790,7 +3969,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_CacheHitPages{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_CacheHitPages{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "pages",
           "refId": "A"
@@ -3800,6 +3979,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3876,7 +4059,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(ydb_table_query_execution_latency_milliseconds_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))\r\n",
+          "expr": "sum by (le) (rate(ydb_table_query_execution_latency_milliseconds_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))\r\n",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -3887,6 +4070,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3962,7 +4149,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(tablets_FollowerSyncLatency_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (le) (rate(tablets_FollowerSyncLatency_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -3973,6 +4160,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4070,6 +4261,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4145,7 +4340,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_SchemeShard_FinishedOps_SplitTablePartition{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_SchemeShard_FinishedOps_SplitTablePartition{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "splits",
           "refId": "A"
@@ -4156,7 +4351,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(tablets_SchemeShard_FinishedOps_MergeTablePartition{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(tablets_SchemeShard_FinishedOps_MergeTablePartition{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "hide": false,
           "interval": "",
           "legendFormat": "merges",
@@ -4167,6 +4362,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4242,7 +4441,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"PutTabletLog\"}[1m]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"PutTabletLog\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -4253,6 +4452,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4328,7 +4531,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"PutUserData\"}[1m]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"PutUserData\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -4339,6 +4542,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4414,7 +4621,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"PutAsync\"}[1m]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"PutAsync\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -4425,6 +4632,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4500,7 +4711,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"GetFast\"}[1m]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"GetFast\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -4511,6 +4722,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4586,7 +4801,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"GetDiscover\"}[1m]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"GetDiscover\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -4597,6 +4812,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4672,7 +4891,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"GetAsync\"}[1m]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{storagePool!=\"static\",database=\"$database\",container=\"ydb-dynamic\",handleClass=\"GetAsync\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -4684,13 +4903,17 @@
     }
   ],
   "refresh": false,
-  "schemaVersion": 35,
+  "schemaVersion": 36,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$ds"
+        },
         "definition": "label_values(database)",
         "hide": 0,
         "includeAll": false,

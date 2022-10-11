@@ -3,7 +3,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -21,12 +24,16 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1652707552053,
+  "iteration": 1665498399579,
   "links": [],
   "liveNow": false,
   "panels": [
     {
       "collapsed": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -39,6 +46,10 @@
       "type": "row"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -116,7 +127,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryExecute{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryExecute{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "interval": "",
           "legendFormat": "Execute",
@@ -128,7 +139,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryExecPrepared{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryExecPrepared{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -141,7 +152,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryPrepare{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryPrepare{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -154,7 +165,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryExplain{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryExplain{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -167,7 +178,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryValidate{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryValidate{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -180,7 +191,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryParse{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryParse{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -193,7 +204,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryBeginTx{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryBeginTx{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -206,7 +217,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryCommitTx{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryCommitTx{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -219,7 +230,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryRollbackTx{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryRollbackTx{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -232,7 +243,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_CreateSession{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_CreateSession{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -245,7 +256,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_PingSession{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_PingSession{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -258,7 +269,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_CloseSession{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_CloseSession{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -271,7 +282,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryOther{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryOther{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -283,6 +294,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -358,7 +373,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_Bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_Bytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "interval": "",
           "legendFormat": "total",
@@ -370,7 +385,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_ParametersBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_ParametersBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -383,7 +398,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Requests_QueryBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Requests_QueryBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -395,6 +410,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -472,7 +491,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"kqp_YdbResponses_.+\"}, \"name_label\", \"$1\", \"__name__\", \"kqp_YdbResponses_(.+)\")[1m:]))",
+          "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"kqp_YdbResponses_.+\"}, \"name_label\", \"$1\", \"__name__\", \"kqp_YdbResponses_(.+)\")[$__rate_interval:]))",
           "format": "time_series",
           "interval": "",
           "legendFormat": "{{name_label}}",
@@ -483,6 +502,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -558,7 +581,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Responses_Bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Responses_Bytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "interval": "",
           "legendFormat": "total",
@@ -570,7 +593,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(rate(kqp_Responses_QueryResultBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum(rate(kqp_Responses_QueryResultBytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "interval": "",
@@ -583,6 +606,10 @@
     },
     {
       "collapsed": true,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -592,6 +619,10 @@
       "id": 7,
       "panels": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -667,7 +698,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Workers_QueriesPerWorkerQ_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Workers_QueriesPerWorkerQ_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -678,6 +709,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -764,6 +799,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -839,7 +878,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Workers_LifeSpanMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Workers_LifeSpanMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -850,6 +889,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -925,7 +968,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(rate(kqp_Workers_Created{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum(rate(kqp_Workers_Created{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "interval": "",
               "legendFormat": "created",
@@ -937,7 +980,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(rate(kqp_Workers_ClosedIdle{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum(rate(kqp_Workers_ClosedIdle{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -950,7 +993,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(rate(kqp_Workers_ClosedError{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum(rate(kqp_Workers_ClosedError{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -963,7 +1006,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum(rate(kqp_Workers_ClosedRequest{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum(rate(kqp_Workers_ClosedRequest{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -980,6 +1023,10 @@
     },
     {
       "collapsed": true,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -989,6 +1036,10 @@
       "id": 9,
       "panels": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1066,7 +1117,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Query_ExecuteLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Query_ExecuteLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1077,6 +1128,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1154,7 +1209,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Query_BeginTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Query_BeginTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1165,6 +1220,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1243,7 +1302,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Query_ExecPreparedLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Query_ExecPreparedLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1254,6 +1313,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1331,7 +1394,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Query_CommitTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Query_CommitTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1342,6 +1405,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1419,7 +1486,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Query_PrepareLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Query_PrepareLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1430,6 +1497,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1507,7 +1578,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Query_RollbackTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Query_RollbackTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1518,6 +1589,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1595,7 +1670,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Query_ExplainLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Query_ExplainLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1606,6 +1681,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1683,7 +1762,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(kqp_Query_ValidateLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(kqp_Query_ValidateLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1699,13 +1778,17 @@
     }
   ],
   "refresh": false,
-  "schemaVersion": 35,
+  "schemaVersion": 36,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$ds"
+        },
         "definition": "label_values(database)",
         "hide": 0,
         "includeAll": false,

@@ -3,7 +3,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -21,11 +24,15 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1650550253540,
+  "iteration": 1665485204135,
   "links": [],
   "liveNow": false,
   "panels": [
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -78,7 +85,7 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 0
       },
@@ -103,7 +110,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (method) (rate(ydb_api_grpc_request_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_count{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "instant": false,
           "interval": "",
           "legendFormat": "{{method}}",
@@ -114,6 +121,103 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 50,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (status) (rate(ydb_api_grpc_response_count{database=\"$database\",container=\"ydb-dynamic\",status!=\"SUCCESS\"}[$__rate_interval]))",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Response errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -191,7 +295,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (method) (rate(ydb_api_grpc_request_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_bytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{method}}",
           "refId": "A"
@@ -201,6 +305,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -281,7 +389,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (method) (rate(ydb_api_grpc_response_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (method) (rate(ydb_api_grpc_response_bytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{method}}",
           "refId": "A"
@@ -291,6 +399,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -368,7 +480,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (method) (rate(ydb_api_grpc_request_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{method}}",
           "refId": "A"
@@ -378,6 +490,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -455,7 +571,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (method) (rate(ydb_api_grpc_response_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (method) (rate(ydb_api_grpc_response_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{method}}",
           "refId": "A"
@@ -465,6 +581,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -542,7 +662,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (method) (rate(ydb_api_grpc_request_inflight_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_inflight_count{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{method}}",
           "refId": "A"
@@ -552,6 +672,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -629,7 +753,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (method) (rate(ydb_api_grpc_request_inflight_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_inflight_bytes{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{method}}",
           "refId": "A"
@@ -639,13 +763,17 @@
       "type": "timeseries"
     }
   ],
-  "schemaVersion": 35,
+  "schemaVersion": 36,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$ds"
+        },
         "definition": "label_values(database)",
         "hide": 0,
         "includeAll": false,
@@ -683,7 +811,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "gRpc",
+  "title": "gRPC API",
   "uid": "grpc",
   "version": 1,
   "weekStart": ""

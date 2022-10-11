@@ -3,7 +3,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -21,11 +24,15 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1650447216606,
+  "iteration": 1665499911570,
   "links": [],
   "liveNow": false,
   "panels": [
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -103,7 +110,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (execpool) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "expr": "sum by (execpool) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{execpool}}",
           "refId": "A"
@@ -113,6 +120,10 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -201,6 +212,10 @@
     },
     {
       "collapsed": true,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -210,6 +225,10 @@
       "id": 8,
       "panels": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -248,8 +267,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -287,7 +305,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (host, pod) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[1m]))",
+              "expr": "sum by (host, pod) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[$__rate_interval]))",
               "interval": "",
               "legendFormat": "{{host}}{{pod}}",
               "refId": "A"
@@ -297,6 +315,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -335,8 +357,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -374,7 +395,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[1m]))",
+              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[$__rate_interval]))",
               "interval": "",
               "legendFormat": "{{activity}}",
               "refId": "A"
@@ -384,6 +405,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -422,8 +447,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -461,7 +485,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"System\"}[1m]))",
+              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"System\"}[$__rate_interval]))",
               "interval": "",
               "legendFormat": "{{activity}}",
               "refId": "A"
@@ -471,6 +495,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -509,8 +537,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -548,7 +575,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IO\"}[1m]))",
+              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IO\"}[$__rate_interval]))",
               "interval": "",
               "legendFormat": "{{activity}}",
               "refId": "A"
@@ -558,6 +585,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -596,8 +627,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -635,7 +665,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IC\"}[1m]))",
+              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IC\"}[$__rate_interval]))",
               "interval": "",
               "legendFormat": "{{activity}}",
               "refId": "A"
@@ -645,6 +675,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -683,8 +717,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -722,7 +755,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"Batch\"}[1m]))",
+              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"Batch\"}[$__rate_interval]))",
               "interval": "",
               "legendFormat": "{{activity}}",
               "refId": "A"
@@ -737,6 +770,10 @@
     },
     {
       "collapsed": true,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -746,6 +783,10 @@
       "id": 17,
       "panels": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -784,8 +825,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -823,7 +863,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (execpool) (rate(utils_EventProcessingCount{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (execpool) (rate(utils_EventProcessingCount{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "interval": "",
               "legendFormat": "{{execpool}}",
@@ -834,6 +874,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -872,8 +916,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -911,7 +954,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(utils_EventProcessingTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(utils_EventProcessingTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -922,6 +965,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -960,8 +1007,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -999,7 +1045,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(utils_ActivationTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(utils_ActivationTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1010,6 +1056,10 @@
           "type": "timeseries"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1048,8 +1098,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1087,7 +1136,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (le) (rate(utils_EventDeliveryTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+              "expr": "sum by (le) (rate(utils_EventDeliveryTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
@@ -1102,13 +1151,17 @@
       "type": "row"
     }
   ],
-  "schemaVersion": 35,
+  "schemaVersion": 36,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$ds"
+        },
         "definition": "label_values(database)",
         "hide": 0,
         "includeAll": false,

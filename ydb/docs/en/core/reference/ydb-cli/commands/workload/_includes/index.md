@@ -2,14 +2,14 @@
 
 You can use the `workload` command to run different types of workload against your DB.
 
-General command format:
+General format of the command:
 
 ```bash
 {{ ydb-cli }} [global options...] workload [subcommands...]
 ```
 
 * `global options`: [Global parameters](../../../commands/global-options.md).
-* `subcommands`: [Subcommands](#subcomands).
+* `subcommands`: The [subcommands](#subcomands).
 
 See the description of the command to run the data load:
 
@@ -20,6 +20,5 @@ See the description of the command to run the data load:
 ## Available subcommands {#subcommands}
 
 The following types of load tests are supported at the moment:
-
 * [Stock](../stock.md): An online store warehouse simulator.
 * [Key-value](../../../workload-kv.md): Key-Value load.

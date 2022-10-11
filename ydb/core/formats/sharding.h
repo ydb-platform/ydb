@@ -88,14 +88,14 @@ public:
         return out;
     }
 
-private:
-    ui32 ShardsCount;
-    ui64 Seed;
-
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
     ui32 ShardNo(T value) const {
         return XXH64(&value, sizeof(value), Seed) % ShardsCount;
     }
+
+private:
+    ui32 ShardsCount;
+    ui64 Seed;
 
     ui32 ShardNo(arrow::util::string_view value) const {
         return XXH64(value.data(), value.size(), Seed) % ShardsCount;

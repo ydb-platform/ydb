@@ -1,29 +1,29 @@
 # Releases
 
-## 20.09.2022 {#20-09-2022}
+## 20.09.2022 {#22-09-2022}
 
 {{ ydb-short-name }} CLI 2.0.0:
 
-* Added `ydb topic` commands for operating with YDB topics:
-  * `ydb topic create` — creates a topic with provided options;
-  * `ydb topic alter` — changes topic configuration with provided options;
-  * `ydb topic write` — writes data to provided topic;
-  * `ydb topic read` — reads data from provided topic;
-  * `ydb topic drop` drops provided topic.
+* Added the ability to work with topics:
+   * `ydb topic create`: Create a topic.
+   * `ydb topic alter`: Update a topic.
+   * `ydb topic write`: Write data to a topic.
+   * `ydb topic read`: Read data from a topic.
+   * `ydb topic drop`: Delete a topic.
 
-* Added a new load testing type `ydb workload kv`:
-  * `ydb workload kv init` — creates a table for kv load testing;
-  * `ydb workload kv run` — starts one of 3 load types: launches several sessions performing insertion using `UPSERT`, launches several sessions performing insertion using `INSERT` or launches several sessions that create GET-requests by primary key;
-  * `ydb workload kv clean` — drops the table created with init command.
+* Added a new type of load testing:
+   * `ydb workload kv init`: Create a table for kv load testing.
+   * `ydb workload kv run`: Apply one of three types of load: run multiple `UPSERT` sessions, run multiple `INSERT` sessions, or run multiple sessions of GET requests by primary key.
+   * `ydb workload kv clean`: Delete a test table.
 
-* Added `ydb config profile deactivate` command to deactivate current active profile.
-* Added `--force` option for `ydb config profile remove` command to remove profile without interactive confirmation.
-* Added changefeed support for `ydb scheme describe` command.
-* Added `ydb monitoring healthcheck` command to check current state of a database.
-* Added `ydb auth get-token` command to print auth info (token) that would be sent with requests to YDB with current auth settings.
-* `ydb import` commands can now read data from std input (i.e. via pipe) instead of a file.
-* Added `ydb import file json` command to import data in JSON format to YDB from file or std input.
-* Improved command processing. User input parsing and validation is now more precise.
+* Added the ability to disable current active profile (see the `ydb config profile deactivate` command).
+* Added the ability to delete a profile non-interactively with no commit (see the `--force` parameter under the `ydb config profile remove` command).
+* Added CDC support for the `ydb scheme describe` command.
+* Added the ability to view the current DB status (see the `ydb monitoring healthcheck` command).
+* Added the ability to view authentication information (token) to be sent with DB queries under the current authentication settings (see the `ydb auth get-token` command).
+* Added the ability for the `ydb import` command to read data from stdin.
+* Added the ability to import data in JSON format from a file or stdin (see the `ydb import file json` command).
+* Improved command processing. Improved the accuracy of user input parsing and validation.
 
 ## 25.06.2022 {#25-06-2022}
 

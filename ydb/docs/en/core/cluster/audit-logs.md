@@ -2,6 +2,28 @@
 
 All schema changes (successful and unsuccessful) and ACL changes are recorded in _audit logs_.
 
+## Enabling audit logs
+
+Audit logs are provided as part of YDB [component logging](./logs.md).
+
+To enable audit logs, you need to [change the logging level](../maintenance/embedded_monitoring/logs.md#change_log_level):
+
+1. Follow the link in the format
+
+   ```bash
+   http://<endpoint>:8765/cms
+   ```
+
+   The `Cluster Management System` page opens.
+
+1. On the **Configs** tab, click on the `LogConfigItems` line.
+
+1. Under `Component log settings`, find the `FLAT_TX_SCHEMESHARD` component. Set this component's logging level to `NOTICE` or higher.
+
+1. To save changes, click `Submit`
+
+Audit logs are written together with other YDB logs.
+
 ## Audit log format {#format}
 
 A log event consists of comma-separated `key: value` fields:
@@ -27,7 +49,7 @@ One event describes one transaction. An event can describe several operations pe
 ### Operation fields {#sub-operation-fields}
 
 * `operation`: (mandatory) The operation name.
-* `path`: (optional) The path to the change object.
+* `path`: (optional) The path to the change object. This field might change during a transaction.
 * `src path`: (optional) The path to the source object (for copy and move operations).
 * `dst path`: (optional) The path to the target object (for copy and move operations).
 * `no path`: (optional) If there is no change object, the value is `no path`.

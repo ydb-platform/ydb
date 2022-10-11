@@ -6,7 +6,7 @@
 
 Аудитный логи поставляются в рамках [логгирования компонентов](./logs.md) YDB.
 
-Чтобы подключить аудитных логи нужно [измененить уровни логирования](../maintenance/embedded_monitoring/logs.md#change_log_level):
+Чтобы подключить аудитные логи, нужно [изменить уровни логирования](../maintenance/embedded_monitoring/logs.md#change_log_level):
 
 1. Перейти по ссылке вида
 
@@ -18,7 +18,7 @@
     
 1. На вкладке **Configs** кликнуть на строку `LogConfigItems`. 
 
-1. В разделе `Component log settings` найти компонент `FLAT_TX_SCHEMESHARD`. Выставить у этого компонента уровень логирования не ниже чем `NOTICE`. 
+1. В разделе `Component log settings` найти компонент `FLAT_TX_SCHEMESHARD`. Выставить у этого компонента уровень логирования не ниже, чем `NOTICE`. 
 
 1. Сохранить изменения нажатием кнопки `Submit`
 

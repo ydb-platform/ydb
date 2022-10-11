@@ -182,7 +182,7 @@ private:
 
             NRm::TKqpNotEnoughResources resourcesResponse;
             if (!ResourceManager()->AllocateResources(txId, task.first, resourcesRequest, &resourcesResponse)) {
-                NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason failReason;
+                NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason failReason = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
                 TStringBuilder error;
 
                 if (resourcesResponse.ExecutionUnits()) {

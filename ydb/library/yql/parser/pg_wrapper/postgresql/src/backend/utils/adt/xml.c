@@ -1577,7 +1577,7 @@ xml_parse(text *data, XmlOptionType xmloption_arg, bool preserve_whitespace,
 			doc = xmlCtxtReadDoc(ctxt, utf8string,
 								 NULL,
 								 "UTF-8",
-								 XML_PARSE_NOENT | XML_PARSE_DTDATTR
+								 XML_PARSE_DTDATTR // XML_PARSE_NOENT removed to make coverity happy
 								 | (preserve_whitespace ? 0 : XML_PARSE_NOBLANKS));
 			if (doc == NULL || xmlerrcxt->err_occurred)
 			{

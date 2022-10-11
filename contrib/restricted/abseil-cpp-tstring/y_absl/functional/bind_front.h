@@ -175,7 +175,7 @@ Y_ABSL_NAMESPACE_BEGIN
 //   // Doesn't copy "hi".
 //   y_absl::bind_front(Print, y_absl::string_view(hi))("Chuk");
 //
-#if 0
+#if defined(__cpp_lib_bind_front) && __cpp_lib_bind_front >= 201907L
 using std::bind_front;
 #else   // defined(__cpp_lib_bind_front) && __cpp_lib_bind_front >= 201907L
 template <class F, class... BoundArgs>

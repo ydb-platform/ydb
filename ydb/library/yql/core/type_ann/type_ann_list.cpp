@@ -4637,6 +4637,7 @@ namespace {
 
         TVector<const TItemExprType*> rowColumns;
         TMaybe<TStringBuf> sessionColumnName;
+        TMaybe<TStringBuf> hoppingColumnName;
         for (const auto& setting : settings->Children()) {
             if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -4653,13 +4654,52 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (!setting->Child(1)->IsCallable("HoppingTraits")) {
+                auto value = setting->ChildPtr(1);
+                if (value->Type() == TExprNode::List) {
+                    if (!EnsureTupleSize(*value, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    auto hoppingOutputColumn = value->Child(0);
+                    if (!EnsureAtom(*hoppingOutputColumn, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (hoppingOutputColumn->Content().Empty()) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(hoppingOutputColumn->Pos()),
+                            TStringBuilder() << "Hopping output column name can not be empty"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    hoppingColumnName = hoppingOutputColumn->Content();
+
+                    auto traits = value->Child(1);
+                    if (!traits->IsCallable("HoppingTraits")) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(setting->Child(1)->Pos()),
+                            TStringBuilder() << "Expected HoppingTraits callable"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    bool seenAsKeyColumn = AnyOf(input->Child(1)->ChildrenList(), [&](const auto& keyColum) {
+                        return hoppingColumnName == keyColum->Content();
+                    });
+
+                    if (!seenAsKeyColumn) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(setting->Child(1)->Pos()),
+                            TStringBuilder() << "Hopping column " << *hoppingColumnName << " is not listed in key columns"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                } else if (setting->Child(1)->IsCallable("HoppingTraits")) {
+                    hoppingColumnName = "_yql_time"; // legacy hopping
+                } else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(setting->Child(1)->Pos()),
                         TStringBuilder() << "Expected HoppingTraits callable"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>("_yql_time",
-                    ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Timestamp))));
+
+                rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
+                        *hoppingColumnName,
+                        ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Timestamp))));
             } else if (settingName == "session") {
                 if (!EnsureTupleSize(*setting, 2, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
@@ -4718,7 +4758,7 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (sessionColumnName == child->Content()) {
+            if (sessionColumnName == child->Content() || hoppingColumnName == child->Content()) {
                 continue;
             }
 
@@ -5976,12 +6016,7 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        const TTypeAnnotationNode* timeType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Timestamp);
-
-        if (!IsSameAnnotation(*RemoveOptionalType(lambdaTimeExtractor->GetTypeAnn()), *timeType)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaTimeExtractor->Pos()), TStringBuilder()
-                << "Mismatch hopping window time extractor lambda output type, expected: "
-                << *timeType << ", but got: " << *lambdaTimeExtractor->GetTypeAnn()));
+        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
             return IGraphTransformer::TStatus::Error;
         }
 

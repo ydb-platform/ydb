@@ -1002,8 +1002,8 @@ TWindowSpecificationPtr TWindowSpecification::Clone() const {
     return res;
 }
 
-THoppingWindowSpecPtr THoppingWindowSpec::Clone() const {
-    auto res = MakeIntrusive<THoppingWindowSpec>();
+TLegacyHoppingWindowSpecPtr TLegacyHoppingWindowSpec::Clone() const {
+    auto res = MakeIntrusive<TLegacyHoppingWindowSpec>();
     res->TimeExtractor = TimeExtractor->Clone();
     res->Hop = Hop->Clone();
     res->Interval = Interval->Clone();
@@ -1423,6 +1423,14 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
                 }
                 SessionWindow = expr;
             }
+            if (auto hoppingWindow = dynamic_cast<THoppingWindow*>(expr.Get())) {
+                if (HoppingWindow) {
+                    ctx.Error(expr->GetPos()) << "Duplicate hopping window specification:";
+                    ctx.Error(HoppingWindow->GetPos()) << "Previous hopping window is declared here";
+                    return false;
+                }
+                HoppingWindow = expr;
+            }
         }
         Expressions(exprSeat).emplace_back(expr);
     }
@@ -1481,16 +1489,20 @@ const TVector<TString>& ISource::GetTmpWindowColumns() const {
     return TmpWindowColumns;
 }
 
-void ISource::SetHoppingWindowSpec(THoppingWindowSpecPtr spec) {
-    HoppingWindowSpec = spec;
+void ISource::SetLegacyHoppingWindowSpec(TLegacyHoppingWindowSpecPtr spec) {
+    LegacyHoppingWindowSpec = spec;
 }
 
-THoppingWindowSpecPtr ISource::GetHoppingWindowSpec() const {
-    return HoppingWindowSpec;
+TLegacyHoppingWindowSpecPtr ISource::GetLegacyHoppingWindowSpec() const {
+    return LegacyHoppingWindowSpec;
 }
 
 TNodePtr ISource::GetSessionWindowSpec() const {
     return SessionWindow;
+}
+
+TNodePtr ISource::GetHoppingWindowSpec() const {
+    return HoppingWindow;
 }
 
 TWindowSpecificationPtr ISource::FindWindowSpecification(TContext& ctx, const TString& windowName) const {
@@ -1708,6 +1720,9 @@ TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& e
         if (dynamic_cast<const TSessionWindow*>(exprNode.Get())) {
             continue;
         }
+        if (dynamic_cast<const THoppingWindow*>(exprNode.Get())) {
+            continue;
+        }
         structObj = structObj->Y("AddMember", structObj, structObj->Q(name), exprNode);
     }
     return structObj->Y("AsList", structObj);
@@ -1775,7 +1790,7 @@ bool ISource::SetSamplingRate(TContext& ctx, TNodePtr samplingRate) {
 }
 
 std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TContext& ctx) {
-    if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource() && !HoppingWindowSpec) {
+    if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource() && !LegacyHoppingWindowSpec) {
         return { nullptr, true };
     }
 
@@ -1819,15 +1834,15 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
         options = L(options, Q(Y(Q("compact"))));
     }
 
-    if (HoppingWindowSpec) {
+    if (LegacyHoppingWindowSpec) {
         auto hoppingTraits = Y(
             "HoppingTraits",
             Y("ListItemType", listType),
-            BuildLambda(Pos, Y("row"), HoppingWindowSpec->TimeExtractor),
-            HoppingWindowSpec->Hop,
-            HoppingWindowSpec->Interval,
-            HoppingWindowSpec->Delay,
-            HoppingWindowSpec->DataWatermarks ? Q("true") : Q("false"));
+            BuildLambda(Pos, Y("row"), LegacyHoppingWindowSpec->TimeExtractor),
+            LegacyHoppingWindowSpec->Hop,
+            LegacyHoppingWindowSpec->Interval,
+            LegacyHoppingWindowSpec->Delay,
+            LegacyHoppingWindowSpec->DataWatermarks ? Q("true") : Q("false"));
 
         options = L(options, Q(Y(Q("hopping"), hoppingTraits)));
     }
@@ -1838,6 +1853,14 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
         YQL_ENSURE(sessionWindow);
         options = L(options, Q(Y(Q("session"),
             Q(Y(BuildQuotedAtom(Pos, SessionWindow->GetLabel()), sessionWindow->BuildTraits(label))))));
+    }
+
+    if (HoppingWindow) {
+        YQL_ENSURE(HoppingWindow->GetLabel());
+        auto hoppingWindow = dynamic_cast<THoppingWindow*>(HoppingWindow.Get());
+        YQL_ENSURE(hoppingWindow);
+        options = L(options, Q(Y(Q("hopping"),
+            Q(Y(BuildQuotedAtom(Pos, HoppingWindow->GetLabel()), hoppingWindow->BuildTraits(label))))));
     }
 
     return { Y("AssumeColumnOrderPartial", Y("Aggregate" + GroupBySuffix, label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple)), true };

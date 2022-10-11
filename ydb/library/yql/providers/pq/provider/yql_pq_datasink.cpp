@@ -126,7 +126,9 @@ public:
             .World(write.World())
             .DataSink(write.DataSink().Ptr())
             .Topic(topicNode)
-            .Input(node->Child(3))
+            .Input<TCoRemoveSystemMembers>()
+                .Input(node->Child(3))
+                .Build()
             .Mode(settings.Mode.Cast())
             .Settings(settings.Other)
             .Done().Ptr();

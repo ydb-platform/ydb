@@ -17,7 +17,6 @@ using namespace NYql::NNodes;
 
 namespace {
 
-constexpr TStringBuf YQL_TIME = "_yql_time";
 
 TString BuildColumnName(const TExprBase column) {
     if (const auto columnName = column.Maybe<TCoAtom>()) {
@@ -35,6 +34,10 @@ TString BuildColumnName(const TExprBase column) {
 
     YQL_ENSURE(false, "Invalid node. Expected Atom or AtomList, but received: "
         << column.Ptr()->Dump());
+}
+
+bool IsLegacyHopping(const TExprNode::TPtr& hoppingSetting) {
+    return !hoppingSetting->Child(1)->IsList();
 }
 
 }
@@ -81,7 +84,7 @@ protected:
         auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
         if (input) {
             if (hopSetting) {
-                return RewriteAsHoppingWindow(node, ctx, input.Cast()).Cast();
+                return RewriteAsHoppingWindow(node, ctx, input.Cast());
             } else {
                 return DqRewriteAggregate(node, ctx, TypesCtx, true);
             }
@@ -141,8 +144,14 @@ private:
 
         EnsureNotDistinct(aggregate);
 
+        const auto maybeHopTraits = ExtractHopTraits(aggregate, ctx);
+        if (!maybeHopTraits) {
+            return nullptr;
+        }
+        const auto [hoppingColumn, hopTraits] = *maybeHopTraits;
+
         const auto aggregateInputType = GetSeqItemType(node.Ptr()->Head().GetTypeAnn())->Cast<TStructExprType>();
-        TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys());
+        TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hoppingColumn);
 
         if (keysDescription.NeedPickle()) {
             return Build<TCoMap>(ctx, pos)
@@ -157,20 +166,14 @@ private:
                 .Done();
         }
 
-        const auto maybeHopTraits = ExtractHopTraits(aggregate, ctx);
-        if (!maybeHopTraits) {
-            return nullptr;
-        }
-        const auto hopTraits = maybeHopTraits.Cast();
-
-        const auto keyLambda = BuildKeySelector(pos, *aggregateInputType, aggregate.Keys().Ptr(), ctx);
+        const auto keyLambda = keysDescription.GetKeySelector(ctx, pos, aggregateInputType);
         const auto timeExtractorLambda = BuildTimeExtractor(hopTraits, ctx);
         const auto initLambda = BuildInitHopLambda(aggregate, ctx);
         const auto updateLambda = BuildUpdateHopLambda(aggregate, ctx);
         const auto saveLambda = BuildSaveHopLambda(aggregate, ctx);
         const auto loadLambda = BuildLoadHopLambda(aggregate, ctx);
         const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
-        const auto finishLambda = BuildFinishHopLambda(aggregate, ctx);
+        const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hoppingColumn, ctx);
         const auto watermarkMode = BuildWatermarkMode(aggregate, ctx);
         if (!watermarkMode) {
             return nullptr;
@@ -215,7 +218,7 @@ private:
                 .Done();
         } else {
             auto wrappedInput = input.Ptr();
-            if (!aggregate.Keys().Empty()) {
+            if (!keysDescription.MemberKeys.empty()) {
                 // Shuffle input connection by keys
                 wrappedInput = WrapToShuffle(keysDescription, aggregate, input, ctx);
                 if (!wrappedInput) {
@@ -250,19 +253,27 @@ private:
         }
     }
 
-    TMaybeNode<TCoHoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprContext& ctx) {
+    TMaybe<std::pair<TString, TCoHoppingTraits>> ExtractHopTraits(const TCoAggregate& aggregate, TExprContext& ctx) {
         const auto pos = aggregate.Pos();
 
         const auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
         if (!hopSetting) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Aggregate over stream must have 'hopping' setting"));
-            return TMaybeNode<TCoHoppingTraits>();
+            return Nothing();
         }
 
-        const auto maybeTraits = TMaybeNode<TCoHoppingTraits>(hopSetting->Child(1));
+        const auto hoppingColumn = IsLegacyHopping(hopSetting)
+            ? "_yql_time"
+            : TString(hopSetting->Child(1)->Child(0)->Content());
+
+        const auto traitsNode = IsLegacyHopping(hopSetting)
+            ? hopSetting->Child(1)
+            : hopSetting->Child(1)->Child(1);
+
+        const auto maybeTraits = TMaybeNode<TCoHoppingTraits>(traitsNode);
         if (!maybeTraits) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Invalid 'hopping' setting in Aggregate"));
-            return TMaybeNode<TCoHoppingTraits>();
+            return Nothing();
         }
 
         const auto traits = maybeTraits.Cast();
@@ -285,40 +296,48 @@ private:
 
         const auto hop = checkIntervalParam(traits.Hop());
         if (!hop) {
-            return TMaybeNode<TCoHoppingTraits>();
+            return Nothing();
         }
         const auto interval = checkIntervalParam(traits.Interval());
         if (!interval) {
-            return TMaybeNode<TCoHoppingTraits>();
+            return Nothing();
         }
         const auto delay = checkIntervalParam(traits.Delay());
         if (!delay) {
-            return TMaybeNode<TCoHoppingTraits>();
+            return Nothing();
         }
 
         if (interval < hop) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Interval must be greater or equal then hop"));
-            return TMaybeNode<TCoHoppingTraits>();
+            return Nothing();
         }
         if (delay < hop) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Delay must be greater or equal then hop"));
-            return TMaybeNode<TCoHoppingTraits>();
+            return Nothing();
         }
 
-        return Build<TCoHoppingTraits>(ctx, aggregate.Pos())
+        const auto newTraits = Build<TCoHoppingTraits>(ctx, aggregate.Pos())
             .InitFrom(traits)
             .DataWatermarks(Config->AnalyticsHopping.Get().GetOrElse(false)
                 ? ctx.NewAtom(aggregate.Pos(), "false")
                 : traits.DataWatermarks().Ptr())
             .Done();
+
+        return std::make_pair(hoppingColumn, newTraits);
     }
 
     struct TKeysDescription {
         TVector<TString> PickleKeys;
         TVector<TString> MemberKeys;
+        TVector<TString> FakeKeys;
 
-        explicit TKeysDescription(const TStructExprType& rowType, const TCoAtomList& keys) {
+        explicit TKeysDescription(const TStructExprType& rowType, const TCoAtomList& keys, const TString& hoppingColumn) {
             for (const auto& key : keys) {
+                if (key.StringValue() == hoppingColumn) {
+                    FakeKeys.emplace_back(key.StringValue());
+                    continue;
+                }
+
                 const auto index = rowType.FindItem(key.StringValue());
                 Y_ENSURE(index);
 
@@ -405,8 +424,24 @@ private:
             return res;
         }
 
+        TVector<TString> GetActualGroupKeys() {
+            TVector<TString> result;
+            result.reserve(PickleKeys.size() + MemberKeys.size());
+            result.insert(result.end(), PickleKeys.begin(), PickleKeys.end());
+            result.insert(result.end(), MemberKeys.begin(), MemberKeys.end());
+            return result;
+        }
+
         bool NeedPickle() const {
             return !PickleKeys.empty();
+        }
+
+        TExprNode::TPtr GetKeySelector(TExprContext& ctx, TPositionHandle pos, const TStructExprType* rowType) {
+            auto builder = Build<TCoAtomList>(ctx, pos);
+            for (auto key : GetKeysList(ctx, pos)) {
+                builder.Add(std::move(key));
+            }
+            return BuildKeySelector(pos, *rowType, builder.Build().Value().Ptr(), ctx);
         }
     };
 
@@ -622,9 +657,13 @@ private:
             .Ptr();
     }
 
-    TExprNode::TPtr BuildFinishHopLambda(const TCoAggregate& aggregate, TExprContext& ctx) {
+    TExprNode::TPtr BuildFinishHopLambda(
+        const TCoAggregate& aggregate,
+        const TVector<TString>& actualGroupKeys,
+        const TString& hoppingColumn,
+        TExprContext& ctx)
+    {
         const auto pos = aggregate.Pos();
-        const auto keyColumns = aggregate.Keys();
         const auto aggregateHandlers = aggregate.Handlers();
 
         const auto finishKeyArg = Build<TCoArgument>(ctx, pos).Name("key").Done();
@@ -632,17 +671,17 @@ private:
         const auto finishTimeArg = Build<TCoArgument>(ctx, pos).Name("time").Done();
 
         TVector<TExprBase> structItems;
-        structItems.reserve(keyColumns.Size() + aggregateHandlers.Size() + 1);
+        structItems.reserve(actualGroupKeys.size() + aggregateHandlers.Size() + 1);
 
-        if (keyColumns.Size() == 1) {
+        if (actualGroupKeys.size() == 1) {
             structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
-                .Name(keyColumns.Item(0))
+                .Name().Build(actualGroupKeys[0])
                 .Value(finishKeyArg)
                 .Done());
         } else {
-            for (size_t i = 0; i < keyColumns.Size(); ++i) {
+            for (size_t i = 0; i < actualGroupKeys.size(); ++i) {
                 structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
-                    .Name(keyColumns.Item(i))
+                    .Name().Build(actualGroupKeys[i])
                     .Value<TCoNth>()
                         .Tuple(finishKeyArg)
                         .Index<TCoAtom>()
@@ -701,7 +740,7 @@ private:
         }
 
         structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(YQL_TIME)
+            .Name().Build(hoppingColumn)
             .Value(finishTimeArg)
             .Done());
 

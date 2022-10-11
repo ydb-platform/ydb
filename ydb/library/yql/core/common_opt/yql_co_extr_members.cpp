@@ -684,10 +684,21 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         sessionColumn = sessionSetting->Child(1)->Child(0)->Content();
     }
 
+    TMaybe<TStringBuf> hoppingColumn = "_yql_time";
+    const auto hoppingSetting = GetSetting(aggr.Settings().Ref(), "hopping");
+    if (hoppingSetting) {
+        auto hoppingSettingValue = hoppingSetting->Child(1);
+        bool isLegacyHopping = !hoppingSettingValue->IsList();
+        if (!isLegacyHopping) {
+            YQL_ENSURE(hoppingSettingValue->Child(0)->IsAtom());
+            hoppingColumn = hoppingSettingValue->Child(0)->Content();
+        }
+    }
+
     TSet<TStringBuf> usedFields;
-    // all actual (non-session) keys will be used
+    // all actual (non-session/non-hopping) keys will be used
     for (const auto& key : aggr.Keys()) {
-        if (key.Value() != sessionColumn) {
+        if (key.Value() != sessionColumn && key.Value() != hoppingColumn) {
             usedFields.insert(key.Value());
         }
     }
@@ -736,10 +747,12 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         }
     }
 
-    auto settings = aggr.Settings();
-    auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
     if (hoppingSetting) {
-        auto traits = TCoHoppingTraits(hoppingSetting->Child(1));
+        auto traitsNode = hoppingSetting->ChildPtr(1);
+        if (traitsNode->IsList()) {
+            traitsNode = traitsNode->ChildPtr(1);
+        }
+        auto traits = TCoHoppingTraits(traitsNode);
         auto timeExtractor = traits.TimeExtractor();
 
         auto usedType = traits.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -756,7 +769,6 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
     if (sessionSetting) {
         TCoSessionWindowTraits traits(sessionSetting->Child(1)->ChildPtr(1));
 
-        // TODO: same should be done for hopping
         auto usedType = traits.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->
             GetItemType()->Cast<TStructExprType>();
         for (const auto& item : usedType->GetItems()) {

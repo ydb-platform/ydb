@@ -23,7 +23,7 @@ namespace {
             }
         },
         {
-            "_yql_sys_write_time", [](const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
+            "_yql_sys_tsp_write_time", [](const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 using TDataType = NYql::NUdf::TDataType<NYql::NUdf::TTimestamp>;
                 return std::make_pair(
                     NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetWriteTime().MicroSeconds())),

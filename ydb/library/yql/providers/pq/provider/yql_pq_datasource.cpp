@@ -120,11 +120,16 @@ public:
             .Metadata().Add(sourceMetadata).Build()
             .Done();
 
+        auto format = topicKeyParser.GetFormat();
+        if (format.Empty()) {
+            format = "raw";
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
             .Topic(std::move(topicNode))
-            .Format().Value(topicKeyParser.GetFormat()).Build()
+            .Format().Value(format).Build()
             .Compression().Value(topicKeyParser.GetCompression()).Build();
 
         if (topicKeyParser.GetColumnOrder()) {

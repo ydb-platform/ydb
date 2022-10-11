@@ -2067,6 +2067,84 @@ private:
     TNodePtr Node;
 };
 
+THoppingWindow::THoppingWindow(TPosition pos, const TVector<TNodePtr>& args)
+    : INode(pos)
+    , Args(args)
+    , FakeSource(BuildFakeSource(pos))
+    , Valid(false)
+{}
+
+void THoppingWindow::MarkValid() {
+    YQL_ENSURE(!HasState(ENodeState::Initialized));
+    Valid = true;
+}
+
+TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
+    YQL_ENSURE(HasState(ENodeState::Initialized));
+
+    return Y(
+        "HoppingTraits",
+        Y("ListItemType", Y("TypeOf", label)),
+        BuildLambda(Pos, Y("row"), Y("Just", Y("SystemMetadata", Y("String", Q("write_time")), Y("DependsOn", "row")))),
+        Hop,
+        Interval,
+        Interval,
+        Q("true"));
+}
+
+bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
+    if (!src || src->IsFake()) {
+        ctx.Error(Pos) << "HoppingWindow requires data source";
+        return false;
+    }
+
+    if (!(Args.size() == 2)) {
+        ctx.Error(Pos) << "HoppingWindow requires two arguments";
+        return false;
+    }
+
+    if (!Valid) {
+        ctx.Error(Pos) << "HoppingWindow can only be used as a top-level GROUP BY expression";
+        return false;
+    }
+
+    auto hopExpr = Args[0];
+    auto intervalExpr = Args[1];
+    if (!(hopExpr->Init(ctx, FakeSource.Get()) && intervalExpr->Init(ctx, FakeSource.Get()))) {
+        return false;
+    }
+
+    Hop = ProcessIntervalParam(hopExpr);
+    Interval = ProcessIntervalParam(intervalExpr);
+
+    return true;
+}
+
+TAstNode* THoppingWindow::Translate(TContext&) const {
+    YQL_ENSURE(false, "Translate is called for HoppingWindow");
+    return nullptr;
+}
+
+void THoppingWindow::DoUpdateState() const {
+    State.Set(ENodeState::Const, false);
+}
+
+TNodePtr THoppingWindow::DoClone() const {
+    return new THoppingWindow(Pos, CloneContainer(Args));
+}
+
+TString THoppingWindow::GetOpName() const {
+    return "HoppingWindow";
+}
+
+TNodePtr THoppingWindow::ProcessIntervalParam(const TNodePtr& node) const {
+    auto literal = node->GetLiteral("String");
+    if (!literal) {
+        return Y("EvaluateExpr", node);
+    }
+
+    return new TYqlData(node->GetPos(), "Interval", {node});
+}
 
 TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr customUserType) {
     TVector<TNodePtr> argsTypeItems;
@@ -2414,22 +2492,31 @@ private:
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(ctx);
 
-        auto window = src->GetHoppingWindowSpec();
-        if (!window) {
+        auto legacySpec = src->GetLegacyHoppingWindowSpec();
+        auto spec = src->GetHoppingWindowSpec();
+        if (!legacySpec && !spec) {
             ctx.Error(Pos) << "No hopping window parameters in aggregation";
             return false;
         }
 
         Nodes.clear();
 
+        const auto fieldName = legacySpec
+            ? "_yql_time"
+            : spec->GetLabel();
+
+        const auto interval = legacySpec
+            ? legacySpec->Interval
+            : dynamic_cast<THoppingWindow*>(spec.Get())->Interval;
+
         if (!IsStart) {
-            Add("Member", "row", Q("_yql_time"));
+            Add("Member", "row", Q(fieldName));
             return true;
         }
 
         Add("Sub",
-            Y("Member", "row", Q("_yql_time")),
-            window->Interval);
+            Y("Member", "row", Q(fieldName)),
+            interval);
         return true;
     }
 
@@ -2929,6 +3016,9 @@ struct TBuiltinFuncData {
             {"sessionwindow", BuildSimpleBuiltinFactoryCallback<TSessionWindow>()},
             {"sessionstart", BuildSimpleBuiltinFactoryCallback<TSessionStart<true>>()},
             {"sessionstate", BuildSimpleBuiltinFactoryCallback<TSessionStart<false>>()},
+
+            // New hopping
+            {"hoppingwindow", BuildSimpleBuiltinFactoryCallback<THoppingWindow>()},
 
             // Hopping intervals time functions
             {"hopstart", BuildSimpleBuiltinFactoryCallback<THoppingTime<true>>()},

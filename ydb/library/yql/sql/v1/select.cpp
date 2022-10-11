@@ -1409,7 +1409,7 @@ public:
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
         TWinSpecs& winSpecs,
-        THoppingWindowSpecPtr hoppingWindowSpec,
+        TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
         const TVector<TNodePtr>& terms,
         bool distinct,
         const TVector<TNodePtr>& without,
@@ -1429,7 +1429,7 @@ public:
         , Terms(terms)
         , Without(without)
         , Distinct(distinct)
-        , HoppingWindowSpec(hoppingWindowSpec)
+        , LegacyHoppingWindowSpec(legacyHoppingWindowSpec)
         , SelectStream(selectStream)
         , Settings(settings)
     {
@@ -1493,6 +1493,10 @@ public:
                     return false;
                 }
                 sessionWindow->MarkValid();
+            }
+
+            if (auto hoppingWindow = dynamic_cast<THoppingWindow*>(expr.Get())) {
+                hoppingWindow->MarkValid();
             }
 
             // need to collect and Init() preaggregated exprs before calling Init() on GROUP BY expression
@@ -1773,7 +1777,7 @@ public:
         }
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
                 CloneContainer(GroupBy), CompactGroupBy, GroupBySuffix, AssumeSorted, CloneContainer(OrderBy),
-                SafeClone(Having), newSpecs, SafeClone(HoppingWindowSpec),
+                SafeClone(Having), newSpecs, SafeClone(LegacyHoppingWindowSpec),
                 CloneContainer(Terms), Distinct, Without, SelectStream, Settings);
     }
 
@@ -1808,11 +1812,11 @@ private:
             }
         }
 
-        if (HoppingWindowSpec) {
-            if (!HoppingWindowSpec->TimeExtractor->Init(ctx, src)) {
+        if (LegacyHoppingWindowSpec) {
+            if (!LegacyHoppingWindowSpec->TimeExtractor->Init(ctx, src)) {
                 hasError = true;
             }
-            src->SetHoppingWindowSpec(HoppingWindowSpec);
+            src->SetLegacyHoppingWindowSpec(LegacyHoppingWindowSpec);
         }
 
         for (auto& term: Terms) {
@@ -2109,7 +2113,7 @@ private:
     TVector<TNodePtr> Without;
     const bool Distinct;
     bool OrderByInit = false;
-    THoppingWindowSpecPtr HoppingWindowSpec;
+    TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec;
     const bool SelectStream;
     const TWriteSettings Settings;
 };
@@ -2480,7 +2484,7 @@ TSourcePtr DoBuildSelectCore(
     const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
     TWinSpecs&& winSpecs,
-    THoppingWindowSpecPtr hoppingWindowSpec,
+    TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
     TVector<TNodePtr>&& terms,
     bool distinct,
     TVector<TNodePtr>&& without,
@@ -2489,7 +2493,7 @@ TSourcePtr DoBuildSelectCore(
 ) {
     if (groupBy.empty() || !groupBy.front()->ContentListPtr()) {
         return new TSelectCore(pos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted,
-            orderBy, having, winSpecs, hoppingWindowSpec, terms, distinct, without, selectStream, settings);
+            orderBy, having, winSpecs, legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings);
     }
     if (groupBy.size() == 1) {
         /// actualy no big idea to use grouping function in this case (result allways 0)
@@ -2497,7 +2501,7 @@ TSourcePtr DoBuildSelectCore(
         source = new TNestedProxySource(pos, *contentPtr, source);
         return DoBuildSelectCore(ctx, pos, originalSource, source, groupByExpr, *contentPtr, compactGroupBy, groupBySuffix,
             assumeSorted, orderBy, having, std::move(winSpecs),
-            hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
+            legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
     }
     /// \todo some smart merge logic, generalize common part of grouping (expr, flatten, etc)?
     TIntrusivePtr<TCompositeSelect> compositeSelect = new TCompositeSelect(pos, std::move(source), originalSource->CloneSource(), settings);
@@ -2524,7 +2528,7 @@ TSourcePtr DoBuildSelectCore(
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
             CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), winSpecs,
-            hoppingWindowSpec, terms, distinct, without, selectStream, settings);
+            legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings);
         subselects.emplace_back(selectCore);
     }
     if (totalGroups > ctx.PragmaGroupByLimit) {
@@ -2549,7 +2553,7 @@ TSourcePtr BuildSelectCore(
     const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
     TWinSpecs&& winSpecs,
-    THoppingWindowSpecPtr hoppingWindowSpec,
+    TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
     TVector<TNodePtr>&& terms,
     bool distinct,
     TVector<TNodePtr>&& without,
@@ -2557,7 +2561,7 @@ TSourcePtr BuildSelectCore(
     const TWriteSettings& settings)
 {
     return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy,
-        having, std::move(winSpecs), hoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
+        having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
 }
 
 class TUnionAll: public IRealSource {

@@ -6,7 +6,7 @@
 namespace {
     const std::vector<NYql::TMetaFieldDescriptor> PqMetaFields = {
         NYql::TMetaFieldDescriptor("create_time", "_yql_sys_create_time", NYql::NUdf::EDataSlot::Timestamp),
-        NYql::TMetaFieldDescriptor("write_time", "_yql_sys_write_time", NYql::NUdf::EDataSlot::Timestamp),
+        NYql::TMetaFieldDescriptor("write_time", "_yql_sys_tsp_write_time", NYql::NUdf::EDataSlot::Timestamp),
         NYql::TMetaFieldDescriptor("partition_id", "_yql_sys_partition_id", NYql::NUdf::EDataSlot::Uint64),
         NYql::TMetaFieldDescriptor("offset", "_yql_sys_offset", NYql::NUdf::EDataSlot::Uint64),
         NYql::TMetaFieldDescriptor("message_group_id", "_yql_sys_message_group_id", NYql::NUdf::EDataSlot::String),

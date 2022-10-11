@@ -215,36 +215,36 @@ public:
 
         if (row->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
             auto structType = row->GetTypeAnn()->Cast<TStructExprType>();
-            if (auto pos = structType->FindItem(descriptor->SysColumn)) {
-                bool isOptional = false;
-                const TDataExprType* dataType = nullptr;
-                if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                if (!EnsureSpecificDataType(row->Pos(), *dataType, descriptor->Type, ctx)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                output = ctx.Builder(input->Pos())
-                    .Callable("Member")
-                        .Add(0, row)
-                        .Atom(1, descriptor->SysColumn, TNodeFlags::Default)
-                    .Seal()
-                    .Build();
-
-                if (isOptional) {
-                    output = ctx.Builder(input->Pos())
-                        .Callable("Coalesce")
-                            .Add(0, output)
-                            .Callable(1, "String")
-                                .Atom(0, "0", TNodeFlags::Default)
-                            .Seal()
-                        .Seal()
-                        .Build();
-                }
-                return IGraphTransformer::TStatus::Repeat;
+            auto pos = structType->FindItem(descriptor->SysColumn);
+            if (!pos && descriptor->Key == "write_time") {
+                // Allow user to specify column manually. It is required for analytics hopping now.
+                // In future it will be removed (when custom event_time will be implemented)
+                pos = structType->FindItem("_row_time");
             }
+
+            if (!pos) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Wrong place to use SystemMetadata"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            bool isOptional = false;
+            const TDataExprType* dataType = nullptr;
+            if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureSpecificDataType(row->Pos(), *dataType, descriptor->Type, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            output = ctx.Builder(input->Pos())
+                .Callable("Member")
+                    .Add(0, row)
+                    .Atom(1, structType->GetItems()[*pos]->GetName(), TNodeFlags::Default)
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         input->SetTypeAnn(ctx.MakeType<TDataExprType>(descriptor->Type));

@@ -137,7 +137,9 @@ public:
             .World(write.World())
             .DataSink(write.DataSink())
             .Shard<TCoAtom>().Value(tablePath->Content()).Build()
-            .Input(write.Arg(3))
+            .Input<TCoRemoveSystemMembers>()
+                .Input(write.Arg(3))
+                .Build()
             .Done().Ptr();
     }
 

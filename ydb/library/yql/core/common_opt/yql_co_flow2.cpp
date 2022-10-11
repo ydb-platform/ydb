@@ -33,9 +33,19 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         sessionColumn = sessionSetting->Child(1)->Child(0)->Content();
     }
 
+    TMaybe<TStringBuf> hoppingColumn;
+    auto hoppingSetting = GetSetting(node.Settings().Ref(), "hopping");
+    if (hoppingSetting) {
+        auto traitsNode = hoppingSetting->ChildPtr(1);
+        if (traitsNode->IsList()) {
+            YQL_ENSURE(traitsNode->Child(0)->IsAtom());
+            hoppingColumn = traitsNode->Child(0)->Content();
+        }
+    }
+
     TSet<TStringBuf> usedFields;
     for (const auto& x : node.Keys()) {
-        if (x.Value() != sessionColumn) {
+        if (x.Value() != sessionColumn && x.Value() != hoppingColumn) {
             usedFields.insert(x.Value());
         }
     }
@@ -71,10 +81,13 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         }
     }
 
-    auto settings = node.Settings();
-    auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
     if (hoppingSetting) {
-        auto traits = TCoHoppingTraits(hoppingSetting->Child(1));
+        auto traitsNode = hoppingSetting->ChildPtr(1);
+        if (traitsNode->IsList()) {
+            traitsNode = traitsNode->ChildPtr(1);
+        }
+        auto traits = TCoHoppingTraits(traitsNode);
+
         auto timeExtractor = traits.TimeExtractor();
 
         auto usedType = traits.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -83,10 +96,9 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         }
 
         TSet<TStringBuf> lambdaSubset;
-        if (!HaveFieldsSubset(timeExtractor.Body().Ptr(), *timeExtractor.Args().Arg(0).Raw(), lambdaSubset, parentsMap)) {
-            return node.Ptr();
+        if (HaveFieldsSubset(timeExtractor.Body().Ptr(), *timeExtractor.Args().Arg(0).Raw(), lambdaSubset, parentsMap)) {
+            usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
         }
-        usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
 
         if (usedFields.size() == structType->GetSize()) {
             return node.Ptr();

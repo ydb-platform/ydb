@@ -606,17 +606,17 @@ namespace NSQLTranslationV1 {
     };
     typedef TIntrusivePtr<TFrameSpecification> TFrameSpecificationPtr;
 
-    struct THoppingWindowSpec: public TSimpleRefCount<THoppingWindowSpec> {
+    struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec> {
         TNodePtr TimeExtractor;
         TNodePtr Hop;
         TNodePtr Interval;
         TNodePtr Delay;
         bool DataWatermarks;
 
-        TIntrusivePtr<THoppingWindowSpec> Clone() const;
-        ~THoppingWindowSpec() {}
+        TIntrusivePtr<TLegacyHoppingWindowSpec> Clone() const;
+        ~TLegacyHoppingWindowSpec() {}
     };
-    typedef TIntrusivePtr<THoppingWindowSpec> THoppingWindowSpecPtr;
+    typedef TIntrusivePtr<TLegacyHoppingWindowSpec> TLegacyHoppingWindowSpecPtr;
 
     struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
         TMaybe<TString> ExistingWindowName;
@@ -838,9 +838,10 @@ namespace NSQLTranslationV1 {
         virtual void AddWindowSpecs(TWinSpecs winSpecs);
         virtual bool AddAggregationOverWindow(TContext& ctx, const TString& windowName, TAggregationPtr func);
         virtual bool AddFuncOverWindow(TContext& ctx, const TString& windowName, TNodePtr func);
-        virtual void SetHoppingWindowSpec(THoppingWindowSpecPtr spec);
-        virtual THoppingWindowSpecPtr GetHoppingWindowSpec() const;
+        virtual void SetLegacyHoppingWindowSpec(TLegacyHoppingWindowSpecPtr spec);
+        virtual TLegacyHoppingWindowSpecPtr GetLegacyHoppingWindowSpec() const;
         virtual TNodePtr GetSessionWindowSpec() const;
+        virtual TNodePtr GetHoppingWindowSpec() const;
         virtual bool IsCompositeSource() const;
         virtual bool IsGroupByColumn(const TString& column) const;
         virtual bool IsFlattenByColumns() const;
@@ -916,8 +917,9 @@ namespace NSQLTranslationV1 {
         TMap<TString, TVector<TAggregationPtr>> AggregationOverWindow;
         TMap<TString, TVector<TNodePtr>> FuncOverWindow;
         TWinSpecs WinSpecs;
-        THoppingWindowSpecPtr HoppingWindowSpec;
+        TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec;
         TNodePtr SessionWindow;
+        TNodePtr HoppingWindow;
         TVector<ISource*> UsedSources;
         TString FlattenMode;
         bool FlattenColumns = false;
@@ -1042,6 +1044,28 @@ namespace NSQLTranslationV1 {
         void DoUpdateState() const override;
         TNodePtr DoClone() const override;
         TString GetOpName() const override;
+
+        TVector<TNodePtr> Args;
+        TSourcePtr FakeSource;
+        TNodePtr Node;
+        bool Valid;
+    };
+
+    class THoppingWindow final : public INode {
+    public:
+        THoppingWindow(TPosition pos, const TVector<TNodePtr>& args);
+        void MarkValid();
+        TNodePtr BuildTraits(const TString& label) const;
+    public:
+        TNodePtr Hop;
+        TNodePtr Interval;
+    private:
+        bool DoInit(TContext& ctx, ISource* src) override;
+        TAstNode* Translate(TContext&) const override;
+        void DoUpdateState() const override;
+        TNodePtr DoClone() const override;
+        TString GetOpName() const override;
+        TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
         TVector<TNodePtr> Args;
         TSourcePtr FakeSource;
@@ -1296,7 +1320,7 @@ namespace NSQLTranslationV1 {
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
         TWinSpecs&& windowSpec,
-        THoppingWindowSpecPtr hoppingWindowSpec,
+        TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
         TVector<TNodePtr>&& terms,
         bool distinct,
         TVector<TNodePtr>&& without,

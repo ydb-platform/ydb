@@ -5099,16 +5099,6 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {
-        Y_UNUSED(ctx);
-        auto name = input->Child(0)->Content();
-        if (name == "count" || name == "count_all" || name == "sum") {
-            return input->GetTypeAnn();
-        } else {
-            YQL_ENSURE(false, "Unknown AggApply: " << name);
-        }
-    }
-
     IGraphTransformer::TStatus AggApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {

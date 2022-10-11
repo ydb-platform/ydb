@@ -8,13 +8,15 @@ namespace NYql {
 
 class TAggregateExpander {
 public:
-    TAggregateExpander(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool forceCompact = false, bool compactForDistinct = false)
+    TAggregateExpander(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
+        bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false)
         : Node(node)
         , Ctx(ctx)
         , TypesCtx(typesCtx)
         , AllowPickle(allowPickle)
         , ForceCompact(forceCompact)
         , CompactForDistinct(compactForDistinct)
+        , UsePhases(usePhases)
         , AggregatedColumns(nullptr)
         , VoidNode(ctx.NewCallable(node->Pos(), "Void", {}))
         , HaveDistinct(false)
@@ -46,6 +48,7 @@ private:
     bool IsNeedPickle(const TVector<const TTypeAnnotationNode*>& keyItemTypes);
     TExprNode::TPtr GetKeyExtractor(bool needPickle);
     void CollectColumnsSpecs();
+    void BuildNothingStates();
 
     // Partial aggregate generation
     TExprNode::TPtr GeneratePartialAggregate(const TExprNode::TPtr keyExtractor, const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needPickle);
@@ -67,6 +70,8 @@ private:
     std::function<TExprNodeBuilder& (TExprNodeBuilder&)> GetPartialAggArgExtractor(ui32 i, bool deserialize);
     TExprNode::TPtr GetFinalAggStateExtractor(ui32 i);
 
+    TExprNode::TPtr GeneratePhases();
+
 private:
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";
 
@@ -76,6 +81,7 @@ private:
     bool AllowPickle;
     bool ForceCompact;
     bool CompactForDistinct;
+    bool UsePhases;
     TStringBuf Suffix;
 
     TSessionWindowParams SessionWindowParams;

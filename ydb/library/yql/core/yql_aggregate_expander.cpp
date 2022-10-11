@@ -16,9 +16,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
     AggregatedColumns = Node->Child(2);
     auto settings = Node->Child(3);
 
-    if (!CollectTraits()) {
-        return RebuildAggregate();
-    }
+    bool allTraitsCollected = CollectTraits();
     YQL_ENSURE(!HasSetting(*settings, "hopping"), "Aggregate with hopping unsupported here.");
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
@@ -50,6 +48,15 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
     auto keyExtractor = GetKeyExtractor(needPickle);
     CollectColumnsSpecs();
 
+    if (Suffix == "" && !HaveSessionSetting && !EffectiveCompact && UsePhases) {
+        return GeneratePhases();
+    }
+
+    if (!allTraitsCollected) {
+        return RebuildAggregate();
+    }
+
+    BuildNothingStates();
     if (Suffix == "MergeState" || Suffix == "MergeFinalize" || Suffix == "MergeManyFinalize") {
         return GeneratePostAggregate(AggList, keyExtractor);
     }
@@ -272,7 +279,12 @@ void TAggregateExpander::CollectColumnsSpecs()
         }
 
         InitialColumnNames.push_back(Ctx.NewAtom(FinalColumnNames.back()->Pos(), "_yql_agg_" + ToString(InitialColumnNames.size()), TNodeFlags::Default));
+    }
+}
 
+void TAggregateExpander::BuildNothingStates()
+{
+    for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
         auto trait = Traits[index];
         auto saveLambda = trait->Child(3);
         auto saveLambdaType = saveLambda->GetTypeAnn();
@@ -1728,6 +1740,105 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateMergePhase()
             .Seal()
         .Seal()
         .Build();
+}
+
+TExprNode::TPtr TAggregateExpander::GeneratePhases() {
+    TExprNode::TListType mergeTraits;
+    for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
+        auto originalTrait = AggregatedColumns->Child(index)->ChildPtr(1);
+        auto extractor = Ctx.Builder(Node->Pos())
+            .Lambda()
+                .Param("row")
+                .Callable("Member")
+                    .Arg(0, "row")
+                    .Add(1, InitialColumnNames[index])
+                .Seal()
+            .Seal()
+            .Build();
+
+        bool isAggApply = originalTrait->IsCallable("AggApply");
+        auto serializedStateType = isAggApply ? AggApplySerializedStateType(originalTrait, Ctx) : originalTrait->Child(3)->GetTypeAnn();
+        auto extractorTypeNode = Ctx.Builder(Node->Pos())
+            .Callable("StructType")
+                .List(0)
+                    .Add(0, InitialColumnNames[index])
+                    .Add(1, ExpandType(Node->Pos(), *serializedStateType, Ctx))
+                .Seal()
+            .Seal()
+            .Build();
+
+        if (isAggApply) {
+            mergeTraits.push_back(Ctx.Builder(Node->Pos())
+                .Callable("AggApplyState")
+                    .Add(0, originalTrait->ChildPtr(0))
+                    .Add(1, extractorTypeNode)
+                    .Add(2, extractor)
+                .Seal()
+                .Build());
+        } else {
+            YQL_ENSURE(originalTrait->IsCallable("AggregationTraits"));
+            mergeTraits.push_back(Ctx.Builder(Node->Pos())
+                .Callable("AggregationTraits")
+                    .Add(0, extractorTypeNode)
+                    .Add(1, extractor)
+                    .Lambda(2)
+                        .Param("item")
+                        .Param("state")
+                        .Callable("Void")
+                        .Seal()
+                    .Seal()
+                    .Add(3, originalTrait->ChildPtr(3))
+                    .Add(4, originalTrait->ChildPtr(4))
+                    .Add(5, originalTrait->ChildPtr(5))
+                    .Add(6, originalTrait->ChildPtr(6))
+                    .Add(7, originalTrait->ChildPtr(7))
+                .Seal()
+                .Build());
+        }
+    }
+
+    if (!HaveDistinct) {
+        // simple Combine + MergeFinalize
+        TExprNode::TListType combineColumns, finalizeColumns;
+        for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
+            combineColumns.push_back(Ctx.Builder(Node->Pos())
+                .List()
+                    .Add(0, InitialColumnNames[index])
+                    .Add(1, AggregatedColumns->Child(index)->ChildPtr(1))
+                .Seal()
+                .Build());
+
+            finalizeColumns.push_back(Ctx.Builder(Node->Pos())
+                .List()
+                    .Add(0, AggregatedColumns->Child(index)->ChildPtr(0))
+                    .Add(1, mergeTraits[index])
+                .Seal()
+                .Build());
+        }
+
+        auto combine = Ctx.Builder(Node->Pos())
+            .Callable("AggregateCombine")
+                .Add(0, AggList)
+                .Add(1, KeyColumns)
+                .Add(2, Ctx.NewList(Node->Pos(), std::move(combineColumns)))
+                .Add(3, Node->ChildPtr(3))
+            .Seal()
+            .Build();
+
+        auto mergeFinalize = Ctx.Builder(Node->Pos())
+            .Callable("AggregateMergeFinalize")
+                .Add(0, combine)
+                .Add(1, KeyColumns)
+                .Add(2, Ctx.NewList(Node->Pos(), std::move(finalizeColumns)))
+                .Add(3, Node->ChildPtr(3))
+            .Seal()
+            .Build();
+
+        return mergeFinalize;
+    }
+
+    // process with distincts
+    YQL_ENSURE(false, "TODO");
 }
 
 } // namespace NYql

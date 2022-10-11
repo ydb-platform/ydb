@@ -211,8 +211,6 @@ public:
         Functions["WideCombiner"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["WideCondense1"] = &TCallableConstraintTransformer::WideCondense1Wrap;
         Functions["Aggregate"] = &TCallableConstraintTransformer::AggregateWrap;
-        Functions["AggregateCombine"] = &TCallableConstraintTransformer::AggregateWrap;
-        Functions["AggregateCombineState"] = &TCallableConstraintTransformer::AggregateWrap;
         Functions["AggregateMergeState"] = &TCallableConstraintTransformer::AggregateWrap;
         Functions["AggregateMergeFinalize"] = &TCallableConstraintTransformer::AggregateWrap;
         Functions["AggregateMergeManyFinalize"] = &TCallableConstraintTransformer::AggregateWrap;

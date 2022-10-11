@@ -55,4 +55,10 @@ TString GetRateLimiterResourcePath(TStringBuf cloud, TStringBuf folder, TStringB
     return result;
 }
 
+TString GetRateLimiterResourcePath(TStringBuf cloud) {
+    TStringBuilder result;
+    AppendPath(result, cloud);
+    return result;
+}
+
 } // namespace NYq

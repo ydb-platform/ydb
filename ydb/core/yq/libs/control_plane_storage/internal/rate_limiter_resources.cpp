@@ -153,7 +153,20 @@ public:
             }
         }
 
+        if (!CheckPathComponent(CloudId, "Cloud id") || !CheckPathComponent(FolderId, "Folder id") || !CheckPathComponent(QueryId, "Query id")) {
+            return;
+        }
+
         static_cast<TDerived*>(this)->OnDbRequestSuccess();
+    }
+
+    bool CheckPathComponent(const TString& id, const TStringBuf& name) {
+        if (id.empty()) {
+            ReplyWithError(TStringBuilder() << name << " is empty");
+            return false;
+        }
+        // If id contains forbidden symbols, they will be replaced with "_" in futher methods.
+        return true;
     }
 
     void ParseScope(const TString& scope) {

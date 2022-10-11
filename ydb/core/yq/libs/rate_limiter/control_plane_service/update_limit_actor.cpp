@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/rate_limiter/utils/path.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -32,13 +33,18 @@ public:
     void Bootstrap() {
         Become(&TUpdateCloudRateLimitActor::StateFunc);
 
+        if (CloudId.empty()) {
+            SendResponseAndPassAway(NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, NYql::TIssues({NYql::TIssue("Cloud id is empty")})));
+            return;
+        }
+
         Register(
             MakeUpdateRateLimiterResourceActor(
                 SelfId(),
                 NKikimrServices::YQ_RATE_LIMITER,
                 Connection,
                 CoordinationNodePath,
-                CloudId,
+                GetRateLimiterResourcePath(CloudId),
                 Limit * 10,
                 RetryPolicy
             )
@@ -63,7 +69,7 @@ public:
                 NKikimrServices::YQ_RATE_LIMITER,
                 Connection,
                 CoordinationNodePath,
-                CloudId,
+                GetRateLimiterResourcePath(CloudId),
                 {Limit * 10}, // percent -> milliseconds
                 RetryPolicy
             )

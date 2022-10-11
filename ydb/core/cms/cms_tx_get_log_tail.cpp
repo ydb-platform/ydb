@@ -15,6 +15,8 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_GET_LOG_TAIL; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         auto &req = Request->Get()->Record;

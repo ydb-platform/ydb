@@ -2,6 +2,7 @@
 #include "info_collector.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -23,6 +24,7 @@ namespace NCms {
 
 using namespace NNodeWhiteboard;
 using namespace NKikimrWhiteboard;
+using namespace NConsole;
 
 class TInfoCollector: public TActorBootstrapped<TInfoCollector> {
 public:
@@ -34,6 +36,7 @@ public:
         : Client(client)
         , Timeout(timeout)
         , Info(new TClusterInfo)
+        , BootstrapConfigReceived(false)
         , BaseConfigReceived(false)
     {
     }
@@ -44,6 +47,7 @@ private:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvWakeup, ReplyAndDie);
+            hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
 
             // Nodes
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
@@ -76,6 +80,10 @@ private:
 
     // Nodes
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev);
+    
+    //Configs
+    void RequestBootstrapConfig();
+    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev);
 
     // BSC
     void RequestBaseConfig();
@@ -103,6 +111,7 @@ private:
 
     TClusterInfoPtr Info;
     TActorId BscPipe;
+    bool BootstrapConfigReceived;
     bool BaseConfigReceived;
     THashMap<ui32, TSet<ui32>> NodeEvents; // nodeId -> expected events
     THashMap<TPDiskID, TPDiskStateInfo, TPDiskIDHash> PDiskInfo;
@@ -112,7 +121,7 @@ private:
 
 void TInfoCollector::ReplyAndDie() {
     auto ev = MakeHolder<TCms::TEvPrivate::TEvClusterInfo>();
-    ev->Success = BaseConfigReceived;
+    ev->Success = BaseConfigReceived && BootstrapConfigReceived;
 
     if (BaseConfigReceived) {
         for (const auto& [id, info] : PDiskInfo) {
@@ -132,7 +141,7 @@ void TInfoCollector::ReplyAndDie() {
 }
 
 void TInfoCollector::MaybeReplyAndDie() {
-    if (!BaseConfigReceived) {
+    if (!BaseConfigReceived || !BootstrapConfigReceived) {
         return;
     }
 
@@ -160,6 +169,7 @@ void TInfoCollector::PassAway() {
 void TInfoCollector::Bootstrap() {
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
     Schedule(Timeout, new TEvents::TEvWakeup());
+    RequestBootstrapConfig();
     Become(&TThis::StateWork);
 }
 
@@ -170,6 +180,36 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         Info->AddNode(node, &TlsActivationContext->AsActorContext());
         SendNodeRequests(node.NodeId);
     }
+}
+
+void TInfoCollector::RequestBootstrapConfig() {
+    ui32 configKind = (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem;
+    Send(MakeConfigsDispatcherID(SelfId().NodeId()),
+         new TEvConfigsDispatcher::TEvGetConfigRequest(configKind));
+}
+
+void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev) {
+    auto &config  = ev->Get()->Config;
+    NKikimrConfig::TBootstrap bootstrap;
+
+    BootstrapConfigReceived = true;
+    if (!config->HasBootstrapConfig()){
+        LOG_I("Couldn't collect bootstrap config from Console. Taking the local config");
+        bootstrap.CopyFrom(AppData()->BootstrapConfig); 
+        return;
+    } else {
+        LOG_D("Got Bootstrap config"
+              << ": record# " <<  config->ShortDebugString());
+
+        if (!::google::protobuf::util::MessageDifferencer::Equals(AppData()->BootstrapConfig, config->GetBootstrapConfig())) {
+            LOG_D("Local Bootstrap config is different from the config from the console");
+            Info->IsLocalBootConfDiffersFromConsole = true;
+        }
+        bootstrap = config->GetBootstrapConfig();
+    }
+ 
+    Info->ApplySysTabletsInfo(bootstrap);
+    MaybeReplyAndDie();
 }
 
 void TInfoCollector::RequestBaseConfig() {
@@ -211,7 +251,6 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
             Info->AddBSGroup(group);
         }
 
-        Info->ChooseSysNodes();
         MaybeReplyAndDie();
     }
 }

@@ -14,6 +14,8 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_REMOVE_WALLE_TASK; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveWalleTask Execute");

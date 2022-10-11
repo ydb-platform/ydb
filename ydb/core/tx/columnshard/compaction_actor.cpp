@@ -19,6 +19,7 @@ public:
     {}
 
     void Handle(TEvPrivate::TEvCompaction::TPtr& ev, const TActorContext& /*ctx*/) {
+        LastActivationTime = TAppData::TimeProvider->Now();
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
         Y_VERIFY(TxEvent);
@@ -95,6 +96,7 @@ private:
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
     THashMap<TBlobRange, TString> Blobs;
     ui32 NumRead{0};
+    TInstant LastActivationTime;
 
     void Clear() {
         Blobs.clear();
@@ -124,6 +126,7 @@ private:
 
             TxEvent->Blobs = NOlap::TColumnEngineForLogs::CompactBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
         }
+        TxEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
         ui32 blobsSize = TxEvent->Blobs.size();
         ctx.Send(Parent, TxEvent.release());
 

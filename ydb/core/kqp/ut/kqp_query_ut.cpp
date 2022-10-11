@@ -86,6 +86,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST_NEW_ENGINE(QueryCacheTtl) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetCompileQueryCacheTTLSec(2);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(UseNewEngine);
 
         TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
@@ -747,6 +748,24 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(value != parser.ColumnParser(2).GetUint64());
     }
 
+    Y_UNIT_TEST_NEW_ENGINE(RandomUuid) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT CAST(YQL::RandomUuid() AS Utf8), CAST(YQL::RandomUuid() AS Utf8);
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+
+        auto value = parser.ColumnParser(0).GetUtf8();
+        UNIT_ASSERT(value == parser.ColumnParser(1).GetUtf8());
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(CurrentUtcTimestamp) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -963,6 +982,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableQueryLimits()->SetResultRowsLimit(6);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(UseNewEngine);
 
         TKikimrRunner kikimr(appConfig, {setting});
         auto db = kikimr.GetTableClient();

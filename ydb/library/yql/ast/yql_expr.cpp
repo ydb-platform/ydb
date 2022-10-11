@@ -2160,17 +2160,32 @@ EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, c
 }
 
 template<bool KeepTypeAnns>
-TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces,
-    TNodeMap<EChangeState>& changes, TNodeOnNodeOwnedMap& processed, TExprContext& ctx) {
-
+TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMap& replaces,
+    const TNodeOnNodeOwnedMap& argReplaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces,
+    TNodeMap<EChangeState>& changes, TNodeOnNodeOwnedMap& processed, TExprContext& ctx)
+{
     auto& target = processed[start.Get()];
     if (target) {
         return target;
     }
 
+    TMaybe<TExprNode::TPtr> replace;
     const auto it = replaces.find(start.Get());
     if (it != replaces.end()) {
-        return target = it->second ? it->second : start;
+        replace = it->second;
+    }
+    const auto argIt = argReplaces.find(start.Get());
+    if (argIt != argReplaces.end()) {
+        YQL_ENSURE(!replace.Defined());
+        replace = argIt->second;
+    }
+
+    if (replace.Defined()) {
+        if (*replace) {
+            return target = ctx.ReplaceNodes(std::move(*replace), argReplaces);
+        }
+
+        return target = start;
     }
 
     if (start->ChildrenSize() != 0) {
@@ -2179,26 +2194,27 @@ TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMa
         const bool isChanged = (changeIt->second & EChangeState::Changed) != 0;
         if (isChanged) {
             if (start->Type() == TExprNode::Lambda) {
-                TNodeOnNodeOwnedMap newReplaces = replaces;
+                TNodeOnNodeOwnedMap newArgReplaces = argReplaces;
                 const auto locIt = localReplaces.find(start.Get());
                 YQL_ENSURE(locIt != localReplaces.end(), "Missing local changes");
                 for (auto& r: locIt->second) {
-                    newReplaces[r.first] = r.second;
+                    newArgReplaces[r.first] = r.second;
                 }
 
                 const auto& args = start->Head();
                 TExprNode::TListType newArgsList;
                 newArgsList.reserve(args.ChildrenSize());
                 args.ForEachChild([&](const TExprNode& arg) {
-                    const auto argIt = newReplaces.find(&arg);
-                    YQL_ENSURE(argIt != newReplaces.end(), "Missing argument");
+                    const auto argIt = newArgReplaces.find(&arg);
+                    YQL_ENSURE(argIt != newArgReplaces.end(), "Missing argument");
                     processed.emplace(&arg, argIt->second);
                     newArgsList.emplace_back(argIt->second);
                 });
 
                 auto newBody = GetLambdaBody(*start);
                 std::for_each(newBody.begin(), newBody.end(), [&](TExprNode::TPtr& node) {
-                    node = DoReplace<KeepTypeAnns>(node, newReplaces, localReplaces, changes, processed, ctx);
+                    node = DoReplace<KeepTypeAnns>(node, replaces, newArgReplaces, localReplaces,
+                        changes, processed, ctx);
                 });
                 auto newArgs = ctx.NewArguments(start->Pos(), std::move(newArgsList));
                 if constexpr (KeepTypeAnns)
@@ -2212,7 +2228,8 @@ TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMa
                 TExprNode::TListType newChildren;
                 newChildren.reserve(start->ChildrenSize());
                 for (const auto& child : start->Children()) {
-                    auto newChild = DoReplace<KeepTypeAnns>(child, replaces, localReplaces, changes, processed, ctx);
+                    auto newChild = DoReplace<KeepTypeAnns>(child, replaces, argReplaces, localReplaces,
+                        changes, processed, ctx);
                     if (newChild != child)
                         replaced = true;
 
@@ -2297,7 +2314,7 @@ TExprNode::TPtr ReplaceNodesImpl(TExprNode::TPtr&& start, const TNodeOnNodeOwned
         }
     }
 
-    auto ret = DoReplace<KeepTypeAnns>(start, replaces, localReplaces, changes, processed, ctx);
+    auto ret = DoReplace<KeepTypeAnns>(start, replaces, {}, localReplaces, changes, processed, ctx);
     if (InternalDebug) {
         Cerr << "After\n" << ret->Dump() << "\n";
         EnsureNoBadReplaces(*ret, replaces);

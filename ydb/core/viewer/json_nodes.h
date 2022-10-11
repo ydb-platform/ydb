@@ -415,6 +415,8 @@ public:
         auto itPDiskInfo = PDiskInfo.find(pDiskId.first);
         if (itPDiskInfo == PDiskInfo.end()) {
             itPDiskInfo = PDiskInfo.insert({pDiskId.first, MakeHolder<TEvWhiteboard::TEvPDiskStateResponse>()}).first;
+        } else if (itPDiskInfo->second == nullptr) {
+            itPDiskInfo->second = MakeHolder<TEvWhiteboard::TEvPDiskStateResponse>();
         }
 
         for (auto& pDiskInfo : *itPDiskInfo->second->Record.mutable_pdiskstateinfo()) {

@@ -85,10 +85,12 @@ struct TKqpQueryState {
     TString UserToken;
 
     NLWTrace::TOrbit Orbit;
+    ETableReadType MaxReadType = ETableReadType::Other;
 
     TULID TxId; // User tx
     TString TxId_Human = "";
     bool Commit = false;
+    bool Commited = false;
 };
 
 struct TKqpCleanupCtx {
@@ -446,6 +448,7 @@ public:
 
     void HandleCompile(TEvKqp::TEvCompileResponse::TPtr& ev) {
         auto compileResult = ev->Get()->CompileResult;
+        QueryState->MaxReadType = compileResult->MaxReadType;
 
         YQL_ENSURE(compileResult);
         YQL_ENSURE(QueryState);
@@ -732,11 +735,27 @@ public:
         Cleanup(IsFatalError(record.GetYdbStatus()));
     }
 
+    IKqpGateway::TExecPhysicalRequest PreparePureRequest(TKqpQueryState *queryState) {
+        IKqpGateway::TExecPhysicalRequest request;
+        request.NeedTxId = false;
+        if (queryState) {
+            auto now = TAppData::TimeProvider->Now();
+            request.Timeout = queryState->QueryDeadlines.TimeoutAt - now;
+            if (auto cancelAt = queryState->QueryDeadlines.CancelAt) {
+                request.CancelAfter = cancelAt - now;
+            }
+
+            EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
+            request.StatsMode = GetStatsMode(statsMode);
+        }
+        return request;
+    }
+
     IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState) {
         IKqpGateway::TExecPhysicalRequest request;
 
-        auto now = TAppData::TimeProvider->Now();
         if (queryState) {
+            auto now = TAppData::TimeProvider->Now();
             request.Timeout = queryState->QueryDeadlines.TimeoutAt - now;
             if (auto cancelAt = queryState->QueryDeadlines.CancelAt) {
                 request.CancelAfter = cancelAt - now;
@@ -899,20 +918,26 @@ public:
     }
 
     void ExecuteOrDefer() {
-        if (!(QueryState->PreparedQuery
-            && QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()))
-        {
+        auto& txCtx = *QueryState->TxCtx;
+
+        bool haveWork = QueryState->PreparedQuery &&
+                QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()
+                    || QueryState->Commit && !QueryState->Commited;
+
+        if (!haveWork) {
             ReplySuccess();
             return;
         }
-        auto& txCtx = *QueryState->TxCtx;
+
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
-        auto tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
-                &phyQuery.GetTransactions(QueryState->CurrentTx));
+        std::shared_ptr<const NKqpProto::TKqpPhyTx> tx;
+        if (QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()) {
+            tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>( QueryState->PreparedQuery, &phyQuery.GetTransactions(QueryState->CurrentTx));
+        }
 
-        while (tx->GetHasEffects()) {
+        while (tx && tx->GetHasEffects()) {
             if (!txCtx.AddDeferredEffect(tx, CreateKqpValueMap(*tx))) {
                 ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST)
                     << "Failed to mix queries with old- and new- engines";
@@ -931,7 +956,7 @@ public:
             return;
         }
 
-        bool commit = QueryState->Commit && QueryState->CurrentTx == phyQuery.TransactionsSize() - 1;
+        bool commit = QueryState->Commit && QueryState->CurrentTx >= phyQuery.TransactionsSize() - 1;
         if (tx || commit) {
             bool replied = ExecutePhyTx(&phyQuery, std::move(tx), commit);
             if (!replied) {
@@ -944,9 +969,28 @@ public:
 
     bool ExecutePhyTx(const NKqpProto::TKqpPhyQuery* query, std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit) {
         auto& txCtx = *QueryState->TxCtx;
-        auto request = (query && query->GetType() == NKqpProto::TKqpPhyQuery::TYPE_SCAN)
-            ? PrepareScanRequest(QueryState.get())
-            : PreparePhysicalRequest(QueryState.get());
+
+        auto calcPure = [](const auto& tx) {
+            if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
+                return false;
+            }
+
+            for (const auto& stage : tx.GetStages()) {
+                if (stage.InputsSize() != 0) {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+        bool pure = tx && calcPure(*tx);
+
+        auto request = pure
+            ? PreparePureRequest(QueryState.get())
+            : (tx && tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCAN)
+                ? PrepareScanRequest(QueryState.get())
+                : PreparePhysicalRequest(QueryState.get())
+            ;
         LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " commit: " << commit
                 << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
 
@@ -971,7 +1015,11 @@ public:
             }
         }
 
-        if (commit) {
+        if (pure) {
+            ;
+        } else if (commit) {
+            QueryState->Commited = true;
+
             for (const auto& effect : txCtx.DeferredEffects) {
                 YQL_ENSURE(!effect.Node);
                 YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
@@ -1057,16 +1105,19 @@ public:
     }
 
     void InvalidateQuery() {
-        auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
-            QueryState->CompileResult->Uid, Settings.DbCounters);
+        if (QueryState->CompileResult) {
+            auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
+                QueryState->CompileResult->Uid, Settings.DbCounters);
 
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
+            Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
+        }
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         auto* response = ev->Get()->Record.MutableResponse();
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         LOG_D(SelfId() << " " << requestInfo << " TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
+            << "/" << (QueryState->PreparedQuery ? QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize() : 0)
             << " response.status: " << response->GetStatus() << " results.size: " << response->GetResult().ResultsSize());
         ExecuterId = TActorId{};
 
@@ -1124,7 +1175,7 @@ public:
             exec->Swap(txResult.MutableStats());
         }
 
-            ExecuteOrDefer();
+        ExecuteOrDefer();
     }
 
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
@@ -1311,15 +1362,13 @@ public:
 
         Counters->ReportQueryLatency(Settings.DbCounters, QueryState->Request.GetAction(), queryDuration);
 
-        auto& stats = QueryState->Stats;
-        auto plan = SerializeAnalyzePlan(stats);
-
-        auto maxReadType = ExtractMostHeavyReadType(plan);
-        if (maxReadType == ETableReadType::FullScan) {
+        if (QueryState->MaxReadType == ETableReadType::FullScan) {
             Counters->ReportQueryWithFullScan(Settings.DbCounters);
-        } else if (maxReadType == ETableReadType::Scan) {
+        } else if (QueryState->MaxReadType == ETableReadType::Scan) {
             Counters->ReportQueryWithRangeScan(Settings.DbCounters);
         }
+
+        auto& stats = QueryState->Stats;
 
         ui32 affectedShardsCount = 0;
         ui64 readBytesCount = 0;

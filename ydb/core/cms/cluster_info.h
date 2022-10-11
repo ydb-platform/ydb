@@ -11,6 +11,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/console.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -528,19 +529,6 @@ public:
         return nodes;
     }
 
-    void ChooseSysNodes() {
-        for (auto &[nodeId, node] : Nodes) {
-            if (!node->PDisks.size()) {
-                SysNodes.push_back(node.Get());
-            }
-        }
-    }
-
-    TVector<const TNodeInfo *> GetSysTabletNodes() const
-    {
-        return SysNodes;
-    }
-
     size_t NodesCount() const
     {
         return Nodes.size();
@@ -734,6 +722,8 @@ public:
     bool IsOutdated() const { return Outdated; }
     void SetOutdated(bool val) { Outdated = val; }
 
+    void ApplySysTabletsInfo(const NKikimrConfig::TBootstrap& config);
+
     static EGroupConfigurationType VDiskConfigurationType(const TVDiskID &vdId) {
         return TGroupID(vdId.GroupID).ConfigurationType();
     }
@@ -833,13 +823,16 @@ private:
     ui64 RollbackPoint = 0;
     bool HasTenantsInfo = false;
     bool Outdated = false;
-    
-    TVector<const TNodeInfo *> SysNodes; // nodes with sys tablets
 
     // Fast access structures.
     TMultiMap<TString, ui32> HostNameToNodeId;
     TMultiMap<TString, ui32> TenantToNodeId;
     THashMap<TString, TLockableItemPtr> LockableItems;
+public:
+
+    bool IsLocalBootConfDiffersFromConsole = false;
+    THashMap<NKikimrConfig::TBootstrap::ETabletType, TVector<ui32>> TabletTypeToNodes;
+    THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
 };
 
 inline bool ActionRequiresHost(NKikimrCms::TAction::EType type)

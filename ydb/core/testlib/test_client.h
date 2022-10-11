@@ -133,6 +133,11 @@ namespace Tests {
         std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
 
+        TServerSettings& SetEnableKqpSessionActor(bool enable) {
+            AppConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(enable);
+            return *this;
+        }
+
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }

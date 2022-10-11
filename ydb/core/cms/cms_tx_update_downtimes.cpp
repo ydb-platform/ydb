@@ -11,6 +11,8 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_UPDATE_DOWNTIMES; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS,

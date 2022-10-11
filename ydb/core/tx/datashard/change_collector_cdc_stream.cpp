@@ -165,6 +165,11 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     return true;
 }
 
+void TCdcStreamChangeCollector::Reset() {
+    TBaseChangeCollector::Reset();
+    RowsCache.Reset();
+}
+
 TMaybe<TRowState> TCdcStreamChangeCollector::GetCurrentState(ui32 tid, TArrayRef<const TRawTypeValue> key,
         TArrayRef<const TTag> keyTags, TArrayRef<const TTag> valueTags)
 {

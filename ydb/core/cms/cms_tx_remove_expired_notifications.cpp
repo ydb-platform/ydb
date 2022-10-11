@@ -13,6 +13,8 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_REMOVE_EXPIRED_NOTIFICATION; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveExpiredNotifications Execute");

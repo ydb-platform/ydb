@@ -19,6 +19,7 @@ public:
     void Handle(TEvPrivate::TEvIndexing::TPtr& ev, const TActorContext& ctx) {
         LOG_S_DEBUG("TEvIndexing at tablet " << TabletId << " (index)");
 
+        LastActivationTime = TAppData::TimeProvider->Now();
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
         Y_VERIFY(TxEvent);
@@ -102,6 +103,7 @@ private:
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
     THashMap<TUnifiedBlobId, ui32> BlobsToRead;
+    TInstant LastActivationTime;
 
     void SendReadRequest(const NBlobCache::TBlobRange& blobRange) {
         Y_VERIFY(blobRange.Size);
@@ -121,6 +123,7 @@ private:
             LOG_S_ERROR("Indexing failed at tablet " << TabletId);
         }
 
+        TxEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
         ctx.Send(Parent, TxEvent.release());
         //Die(ctx); // It's alive till tablet's death
     }

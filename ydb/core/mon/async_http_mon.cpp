@@ -90,6 +90,9 @@ public:
         if (Request->Method == "PUT") {
             return HTTP_METHOD_PUT;
         }
+        if (Request->Method == "DELETE") {
+            return HTTP_METHOD_DELETE;
+        }
         return HTTP_METHOD_UNDEFINED;
     }
 

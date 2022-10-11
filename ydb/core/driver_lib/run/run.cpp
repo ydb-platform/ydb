@@ -1014,6 +1014,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->MeteringConfig = runConfig.AppConfig.GetMeteringConfig();
     }
 
+    if (runConfig.AppConfig.HasBootstrapConfig()) {
+        AppData->BootstrapConfig = runConfig.AppConfig.GetBootstrapConfig(); 
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

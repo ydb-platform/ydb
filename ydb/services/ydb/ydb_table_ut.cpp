@@ -1761,15 +1761,27 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             CREATE TABLE `Root/Test` (
                 Key Uint64,
                 Value String,
+                SomeJson Json,
+                SomeYson Yson,
                 PRIMARY KEY (Key)
             );
         )___").ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         result = session.ExecuteDataQuery(R"___(
-            UPSERT INTO `Root/Test` (Key, Value) VALUES (1u, "One");
+            UPSERT INTO `Root/Test` (Key, Value, SomeJson, SomeYson) VALUES (1u, "One", "[1]", "[1]");
         )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        {
+            auto selectResult = session.ExecuteDataQuery(R"(
+                SELECT Key, Value, SomeJson, SomeYson FROM `Root/Test`;
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::SUCCESS);
+            auto text = FormatResultSetYson(selectResult.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL("[[[1u];[\"One\"];[\"[1]\"];[\"[1]\"]]]", text);
+        }
 
         {
             TValueBuilder valueFrom;
@@ -1821,11 +1833,23 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     auto columnParser1 = std::move(rsParser.ColumnParser(0));
                     columnParser1.OpenOptional();
                     auto key = columnParser1.GetUint64();
-                    UNIT_ASSERT_EQUAL(key, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(key, 1);
+
                     auto& columnParser2 = rsParser.ColumnParser(1);
                     columnParser2.OpenOptional();
                     auto val = columnParser2.GetString();
-                    UNIT_ASSERT_EQUAL(val, "One");
+                    UNIT_ASSERT_VALUES_EQUAL(val, "One");
+
+                    auto& columnParser3 = rsParser.ColumnParser(2);
+                    columnParser3.OpenOptional();
+                    auto json = columnParser3.GetJson();
+                    UNIT_ASSERT_VALUES_EQUAL(json, "[1]");
+
+                    auto& columnParser4 = rsParser.ColumnParser(3);
+                    columnParser4.OpenOptional();
+                    auto yson = columnParser4.GetYson();
+                    UNIT_ASSERT_VALUES_EQUAL(yson, "[1]");
+
                     read = true;
                 }
             }

@@ -34,10 +34,10 @@ public:
     FEATURE_FLAG_SETTER(EnableTtlOnAsyncIndexedTables)
     FEATURE_FLAG_SETTER(EnableBulkUpsertToAsyncIndexedTables)
     FEATURE_FLAG_SETTER(EnableChangefeeds)
-    FEATURE_FLAG_SETTER(EnableKqpSessionActor)
     FEATURE_FLAG_SETTER(EnableKqpScanQueryStreamLookup)
     FEATURE_FLAG_SETTER(EnableMoveIndex)
     FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
+    FEATURE_FLAG_SETTER(EnableArrowFormatAtDatashard)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

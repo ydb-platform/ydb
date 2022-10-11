@@ -7,13 +7,10 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/http/http_proxy.h>
-#include <library/cpp/cache/cache.h>
-#include <library/cpp/json/json_writer.h>
-
-#include <ydb/library/http_proxy/error/error.h>
 
 #include <util/stream/file.h>
 
+#include <ydb/library/http_proxy/error/error.h>
 
 namespace NKikimr::NHttpProxy {
 
@@ -93,8 +90,6 @@ namespace NKikimr::NHttpProxy {
                                     Driver.Get(),
                                     ServiceAccountCredentialsProvider);
 
-        context.ParseHeaders(context.Request->Headers);
-
         LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                       " incoming request from [" << context.SourceAddress << "]" <<
                       " request [" << context.MethodName << "]" <<
@@ -102,32 +97,13 @@ namespace NKikimr::NHttpProxy {
                       " database [" << context.DatabaseName << "]" <<
                       " requestId: " << context.RequestId);
 
-        const auto requestBody = context.RequestData.Parse(context.ContentType, context.Request->Body);
-        if (requestBody) {
-            context.RequestData.Body = requestBody.value();
-        } else {
-            context.SendBadRequest(NYdb::EStatus::BAD_REQUEST, "Can not parse request body", ctx);
+        try {
+            auto signature = context.GetSignature();
+            Processors->Execute(context.MethodName, std::move(context), std::move(signature), ctx);
+        } catch (NKikimr::NSQS::TSQSException& e) {
+            context.SendBadRequest(NYdb::EStatus::BAD_REQUEST, e.what(), ctx);
             return;
         }
-
-        THolder<NKikimr::NSQS::TAwsRequestSignV4> signature;
-        if (context.IamToken.empty()) {
-            try {
-                const TString fullRequest = TString(context.Request->Method) + " "
-                    + context.Request->URL + " " + context.Request->Protocol
-                    + "/" + context.Request->Version + "\r\n"
-                    + context.Request->Headers
-                    + context.Request->Content;
-                signature = MakeHolder<NKikimr::NSQS::TAwsRequestSignV4>(fullRequest);
-
-            } catch(NKikimr::NSQS::TSQSException& e) {
-                context.SendBadRequest(NYdb::EStatus::BAD_REQUEST,
-                                       TStringBuilder() << "Malformed signature: " << e.what(), ctx);
-                return;
-            }
-        }
-
-        Processors->Execute(context.MethodName, std::move(context), std::move(signature), ctx);
     }
 
     NActors::IActor* CreateHttpProxy(const THttpProxyConfig& config) {

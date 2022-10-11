@@ -124,6 +124,9 @@ enum ECumulativeCounters {
     COUNTER_FORGET_SUCCESS = 69                             [(CounterOpts) = {Name: "ForgetSuccess"}];
     COUNTER_FORGET_FAIL = 70                                [(CounterOpts) = {Name: "ForgetFail"}];
     COUNTER_WRITE_OVERLOAD = 71                             [(CounterOpts) = {Name: "WriteOverload"}];
+    COUNTER_WRITE_OVERLOAD_SHARD = 72                       [(CounterOpts) = {Name: "WriteOverloadShard"}];
+    COUNTER_INDEXING_TIME = 73                              [(CounterOpts) = {Name: "IndexingTime"}];
+    COUNTER_COMPACTION_TIME = 74                            [(CounterOpts) = {Name: "CompactionTime"}];
 }
 
 enum EPercentileCounters {

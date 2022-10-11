@@ -90,7 +90,7 @@ struct Schema : NIceDb::Schema {
         struct NextOperationLogIndex : Column<5, NScheme::NTypeIds::Uint64> {};
         struct DefaultMaxSlots : Column<6, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 16; };
         struct InstanceId : Column<7, NScheme::NTypeIds::String> {};
-        struct SelfHealEnable : Column<8, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct SelfHealEnable : Column<8, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct DonorModeEnable : Column<9, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct ScrubPeriodicity : Column<10, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 86400 * 30; };
         struct SerialManagementStage : Column<11, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TSerialManagementStage::E; };

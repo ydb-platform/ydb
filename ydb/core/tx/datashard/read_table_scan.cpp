@@ -64,9 +64,11 @@ Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeId type, const TCell &
         val.set_double_value(cell.AsValue<double>());
         break;
     case NUdf::TDataType<NUdf::TJson>::Id:
-    case NUdf::TDataType<NUdf::TYson>::Id:
     case NUdf::TDataType<NUdf::TUtf8>::Id:
         val.set_text_value(cell.Data(), cell.Size());
+        break;
+    case NUdf::TDataType<NUdf::TYson>::Id:
+        val.set_bytes_value(cell.Data(), cell.Size());
         break;
     case NUdf::TDataType<NUdf::TDecimal>::Id:
         {

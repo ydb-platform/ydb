@@ -84,7 +84,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_JAVASCRIPT, "application/javascript\0text/javascript\0", "js\0"},
     {MIME_EPUB, "application/epub+zip\0", "epub\0"},
     {MIME_TEX, "application/x-tex\0application/x-latex\0text/x-tex\0", "tex\0"},
-    {MIME_JSON, "application/json\0", "json\0"},
+    {MIME_JSON, "application/json\0application/x-amz-json-1.0\0application/x-amz-json-1.1\0", "json\0"},
     {MIME_APK, "application/vnd.android.package-archive\0", "apk\0"},
     {MIME_CSS, "text/css\0", "css\0"},
     {MIME_IMAGE_WEBP, "image/webp\0", "webp\0"},
@@ -99,6 +99,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_WOFF2, "font/woff2\0", "woff2\0"},
     {MIME_TTF, "font/ttf\0", "ttf\0"},
     {MIME_WEBMANIFEST, "application/manifest+json\0", "webmanifest\0"},
+    {MIME_CBOR, "application/cbor\0application/x-amz-cbor-1.1\0", "cbor\0"},
     {MIME_MAX, nullptr, nullptr},
 
     // Additional records

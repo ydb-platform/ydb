@@ -100,7 +100,9 @@ TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TKikimrQueryCo
                     param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
                     param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TUuid>::Id);
                     auto uuid = queryCtx.GetCachedRandom<TGUID>();
-                    param.MutableValue()->SetBytes(uuid.dw, sizeof(TGUID));
+                    const auto ptr = reinterpret_cast<ui8*>(uuid.dw);
+                    param.MutableValue()->SetLow128(*reinterpret_cast<ui64*>(ptr));
+                    param.MutableValue()->SetHi128(*reinterpret_cast<ui64*>(ptr + 8));
                     break;
                 }
                 default:

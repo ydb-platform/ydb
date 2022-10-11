@@ -52,12 +52,13 @@ struct TTableInfo {
 struct TSerializerCtx {
     TSerializerCtx(TExprContext& exprCtx, const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
-        const TKikimrConfiguration::TPtr config,
+        const TKikimrConfiguration::TPtr config, ui32 txCount,
         TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults)
         : ExprCtx(exprCtx)
         , Cluster(cluster)
         , TablesData(tablesData)
         , Config(config)
+        , TxCount(txCount)
         , PureTxResults(std::move(pureTxResults))
     {}
 
@@ -66,13 +67,13 @@ struct TSerializerCtx {
     TMap<TString, ui32> StageGuidToId;
     THashMap<ui32, TVector<std::pair<ui32, ui32>>> ParamBindings;
     THashSet<ui32> PrecomputePhases;
-    ui32 TxId = 0;
     ui32 PlanNodeId = 0;
 
     const TExprContext& ExprCtx;
     const TString& Cluster;
     const TIntrusivePtr<NYql::TKikimrTablesData> TablesData;
     const TKikimrConfiguration::TPtr Config;
+    const ui32 TxCount;
     TVector<TVector<NKikimrMiniKQL::TResult>> PureTxResults;
 };
 
@@ -298,13 +299,24 @@ public:
             auto res = Tx.Results().Item(resId);
             auto& planNode = AddPlanNode(phaseNode);
 
+            TStringBuilder typeName;
             if (SerializerCtx.PrecomputePhases.find(TxId) != SerializerCtx.PrecomputePhases.end()) {
-                planNode.TypeName = TStringBuilder() << "Precompute_" << TxId << "_" << resId;
+                typeName << "Precompute";
                 planNode.CteName = TStringBuilder() << "tx_result_binding_" << TxId << "_" << resId;
             } else {
-                planNode.TypeName = TStringBuilder() << "ResultSet_" << TxId << "_" << resId;
+                typeName << "ResultSet";
                 planNode.Type = EPlanNodeType::ResultSet;
             }
+
+            if (SerializerCtx.TxCount > 1) {
+                typeName << "_" << TxId;
+            }
+
+            if (Tx.Results().Size() > 1) {
+                typeName << "_" << resId;
+            }
+
+            planNode.TypeName = typeName;
 
             if (res.Maybe<TDqCnResult>()) {
                 Visit(res.Cast<TDqCnResult>().Output().Stage(), planNode);
@@ -1448,7 +1460,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& cluster,
     const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config)
 {
-    TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, std::move(pureTxResults));
+    TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults));
 
     /* bindingName -> stage */
     auto collectBindings = [&serializerCtx, &query] (auto id, const auto& phase) {

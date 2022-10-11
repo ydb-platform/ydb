@@ -40,6 +40,7 @@ struct TEvConsole {
         EvConfigSubscriptionRequest,
         EvConfigSubscriptionCanceled,
         EvConfigSubscriptionNotification,
+        EvUpdateTenantPoolConfig,
 
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
@@ -106,6 +107,8 @@ struct TEvConsole {
     struct TEvDescribeTenantOptionsRequest : public TEventShortDebugPB<TEvDescribeTenantOptionsRequest, NKikimrConsole::TDescribeTenantOptionsRequest, EvDescribeTenantOptionsRequest> {};
 
     struct TEvDescribeTenantOptionsResponse : public TEventShortDebugPB<TEvDescribeTenantOptionsResponse, NKikimrConsole::TDescribeTenantOptionsResponse, EvDescribeTenantOptionsResponse> {};
+
+    struct TEvUpdateTenantPoolConfig : public TEventShortDebugPB<TEvUpdateTenantPoolConfig, NKikimrConsole::TUpdateTenantPoolConfig, EvUpdateTenantPoolConfig> {};
 
     //////////////////////////////////////////////////
     // CONFIGS MANAGEMENT

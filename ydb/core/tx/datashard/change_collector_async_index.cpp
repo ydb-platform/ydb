@@ -187,6 +187,11 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     return true;
 }
 
+void TAsyncIndexChangeCollector::Reset() {
+    TBaseChangeCollector::Reset();
+    RowsCache.Reset();
+}
+
 auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
     Y_VERIFY(Self->GetUserTables().contains(tableId.PathId.LocalPathId));
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);

@@ -1239,7 +1239,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
             PendingQuotaRequest = std::move(PendingRequest);
         }
     } else {
-        if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
+        if (!PendingQuotaRequest && SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
             SendRequest(std::move(PendingRequest), ctx);
         }
     }
@@ -1496,6 +1496,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
             return RecheckACL(ctx);
 
         case EWakeupTag::RlAllowed:
+            if (auto counters = Request->GetCounters()) {
+                counters->AddConsumedRequestUnits(PendingQuotaRequest->RequiredQuota);
+            }
+
             if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
                 SendRequest(std::move(PendingQuotaRequest), ctx);
             } else {

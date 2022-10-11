@@ -886,7 +886,7 @@ public:
                 str << Endl;
 
                 str << "EnableSessionActor: "
-                    << (AppData()->FeatureFlags.GetEnableKqpSessionActor() ? "true" : "false") << Endl;
+                    << (TableServiceConfig.GetEnableKqpSessionActor() ? "true" : "false") << Endl;
                 str << "Active workers/session_actors count on node: " << LocalSessions->size() << Endl;
 
                 const auto& sessionsShutdownInFlight = LocalSessions->GetShutdownInFlight();
@@ -1153,7 +1153,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* workerActor = AppData()->FeatureFlags.GetEnableKqpSessionActor() && config->HasKqpForceNewEngine()
+        IActor* workerActor = TableServiceConfig.GetEnableKqpSessionActor() && config->HasKqpForceNewEngine()
                 ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters)
                 : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(workerActor, TMailboxType::HTSwap, AppData()->UserPoolId);

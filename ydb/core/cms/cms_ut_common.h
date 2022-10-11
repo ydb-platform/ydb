@@ -4,6 +4,8 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -37,6 +39,7 @@ public:
     using TEvWhiteboard = NNodeWhiteboard::TEvWhiteboard;
 
     static NKikimrBlobStorage::TEvControllerConfigResponse Config;
+    static NKikimrConfig::TBootstrap BootstrapConfig;
     static THashMap<ui32, TFakeNodeInfo> Info;
     static TMutex Mutex;
 
@@ -55,9 +58,12 @@ public:
             HFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
             HFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
             HFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
+            HFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigRequest, Handle);
         }
     }
 
+
+    void Handle(NConsole::TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx);

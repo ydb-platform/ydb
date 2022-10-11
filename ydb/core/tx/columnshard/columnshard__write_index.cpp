@@ -238,6 +238,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Self->IncCounter(ok ? COUNTER_INDEXING_SUCCESS : COUNTER_INDEXING_FAIL);
         Self->IncCounter(COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
         Self->IncCounter(COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
+        Self->IncCounter(COUNTER_INDEXING_TIME, Ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCompaction()) {
         Self->ActiveIndexingOrCompaction = false;
 
@@ -253,6 +254,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             Self->IncCounter(COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, blobsWritten);
             Self->IncCounter(COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, bytesWritten);
         }
+        Self->IncCounter(COUNTER_COMPACTION_TIME, Ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCleanup()) {
         Self->ActiveCleanup = false;
 

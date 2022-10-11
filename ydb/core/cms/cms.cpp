@@ -4,9 +4,11 @@
 #include "scheme.h"
 #include "sentinel.h"
 #include "erasure_checkers.h"
+#include "ydb/core/protos/config_units.pb.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/cms/console/config_helpers.h>
@@ -77,6 +79,8 @@ void TCms::OnActivateExecutor(const TActorContext &ctx)
         Become(&TThis::StateNotSupported);
         return;
     }
+
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
 
     State->CmsTabletId = TabletID();
     State->CmsActorId = SelfId();
@@ -556,49 +560,58 @@ bool TCms::CheckSysTabletsNode(const TAction &action,
     if (node.Services & EService::DynamicNode || node.PDisks.size()) {
         return true;
     }
- 
-    auto nodes = ClusterInfo->GetSysTabletNodes();
-
-    ui32 disabledNodesCnt = 0;
-    TErrorInfo err;
-    TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
-    TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-    for (auto node : nodes) {
-        if (node->IsLocked(err, State->Config.DefaultRetryTime, 
-                           TActivationContext::Now(), duration) || 
-            node->IsDown(err, defaultDeadline))
-        { 
-            ++disabledNodesCnt;
-        }
-    }
-
-    switch (opts.AvailabilityMode) {
-        case MODE_MAX_AVAILABILITY:
-            if (disabledNodesCnt > 0) {
-                error.Code = TStatus::DISALLOW_TEMP;
-                error.Reason = TStringBuilder() << "Too many locked sys nodes: " << disabledNodesCnt;
-                error.Deadline = defaultDeadline;
-                return false;
+    
+    for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
+            ui32 disabledNodesCnt = 1; // сounting including this node
+            TErrorInfo err;
+            TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
+            TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+            
+            for (auto &nodeId : ClusterInfo->TabletTypeToNodes[tabletType]) {
+                if (nodeId == node.NodeId) {
+                    continue;
+                }
+                if (ClusterInfo->Node(nodeId).IsLocked(err, State->Config.DefaultRetryTime, 
+                                                       TActivationContext::Now(), duration) || 
+                    ClusterInfo->Node(nodeId).IsDown(err, defaultDeadline))
+                { 
+                    ++disabledNodesCnt;
+                }
             }
-            break;
-        case MODE_KEEP_AVAILABLE:
-            if (disabledNodesCnt * 8 >= nodes.size()) {
-                error.Code = TStatus::DISALLOW_TEMP;
-                error.Reason = TStringBuilder() << "Too many locked sys nodes: " << disabledNodesCnt;
-                error.Deadline = defaultDeadline;
-                return false;
-            }
-            break;
-        case MODE_FORCE_RESTART:
-            break;
-        default:
-            error.Code = TStatus::WRONG_REQUEST;
-            error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
+            
+            ui32 tabletNodes = ClusterInfo->TabletTypeToNodes[tabletType].size();
+            switch (opts.AvailabilityMode) {
+                case MODE_MAX_AVAILABILITY:
+                    if (tabletNodes > 1 && disabledNodesCnt * 2 > tabletNodes){
+                        error.Code = TStatus::DISALLOW_TEMP;
+                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType) 
+                                                        << " has too many locked nodes: " << disabledNodesCnt
+                                                        << " limit: " << tabletNodes / 2 << " (50%)";
+                        error.Deadline = defaultDeadline;
+                        return false;
+                    }
+                    break;
+                case MODE_KEEP_AVAILABLE:
+                    if (tabletNodes > 1 && disabledNodesCnt > tabletNodes - 1) {
+                        error.Code = TStatus::DISALLOW_TEMP;
+                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType) 
+                                                        << " has too many locked nodes: " << disabledNodesCnt
+                                                        << ". At least one node must be available";
+                        error.Deadline = defaultDeadline;
+                        return false;
+                    }
+                    break;
+                case MODE_FORCE_RESTART:
+                    break;
+                default:
+                    error.Code = TStatus::WRONG_REQUEST;
+                    error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
                                    EAvailabilityMode_Name(opts.AvailabilityMode).data(),
                                    static_cast<ui32>(opts.AvailabilityMode));
-            error.Deadline = defaultDeadline;
-            return false;
-        }
+                    error.Deadline = defaultDeadline;
+                    return false;
+            }
+    }
  
     return true;
 }
@@ -1478,6 +1491,8 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
         State->Sentinel = RegisterWithSameMailbox(CreateSentinel(State));
 
     info->DebugDump(ctx);
+
+    TabletCounters->Simple()[COUNTER_BOOTSTRAP_DIFFERS].Set(ClusterInfo->IsLocalBootConfDiffersFromConsole);
 
     ProcessQueue(ctx);
 }

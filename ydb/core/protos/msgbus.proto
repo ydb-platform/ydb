@@ -717,6 +717,7 @@ message TConsoleRequest {
         NKikimrConsole.TCheckConfigUpdatesRequest CheckConfigUpdatesRequest = 13;
         NKikimrConsole.TListConfigValidatorsRequest ListConfigValidatorsRequest = 14;
         NKikimrConsole.TToggleConfigValidatorRequest ToggleConfigValidatorRequest = 15;
+        NKikimrConsole.TUpdateTenantPoolConfig UpdateTenantPoolConfig = 16;
     }
     optional string DomainName = 100;
     optional string SecurityToken = 101;

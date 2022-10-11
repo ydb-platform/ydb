@@ -62,11 +62,15 @@ THashMap<ui64, TString> SplitData(const std::shared_ptr<arrow::RecordBatch>& bat
     }
 
     std::vector<ui32> rowSharding;
-    if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_DEFAULT) {
+    if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N) {
         NArrow::THashSharding sharding(numShards);
         rowSharding = sharding.MakeSharding(batch, shardingColumns);
     } else if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS) {
-        NArrow::TLogsSharding sharding(numShards);
+        ui32 activeShards = NArrow::TLogsSharding::DEFAULT_ACITVE_SHARDS;
+        if (hashSharding.HasActiveShardsCount()) {
+            activeShards = hashSharding.GetActiveShardsCount();
+        }
+        NArrow::TLogsSharding sharding(numShards, activeShards);
         rowSharding = sharding.MakeSharding(batch, shardingColumns);
     }
 

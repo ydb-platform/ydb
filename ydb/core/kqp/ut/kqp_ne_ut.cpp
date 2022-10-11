@@ -1107,6 +1107,32 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST_TWIN(PureTxMixedWithDeferred, UseSessionActor) {
+        auto settings = TKikimrSettings()
+            .SetEnableKqpSessionActor(UseSessionActor);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (3u, "Three")
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+            SELECT 1=1;
+        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        CompareYson(R"(
+            [ [%true]; ]
+        )", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_TWIN(PrunePartitionsByLiteral, UseSessionActor) {
         auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
@@ -3414,6 +3440,52 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         )", TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(FlatmapLambdaMutiusedConnections) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            $values = SELECT Value2 AS Value FROM TwoShard;
+
+            $values_filtered = SELECT * FROM $values WHERE Value < 5;
+
+            SELECT Key FROM `/Root/EightShard`
+            WHERE Data IN $values_filtered OR Data = 0
+            ORDER BY Key;
+
+            SELECT * FROM $values
+            ORDER BY Value;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[101u]];[[202u]];[[303u]];[[401u]];[[502u]];[[603u]];[[701u]];[[802u]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[-1]];[[-1]];[[0]];[[0]];[[1]];[[1]]])",
+            FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    Y_UNIT_TEST(EmptyMapWithBroadcast) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            SELECT ts.Value1 AS c1, kv.Value AS c2, t.Name AS c3
+            FROM TwoShard AS ts
+            INNER JOIN KeyValue AS kv ON ts.Value2 = kv.Key
+            INNER JOIN Test AS t ON ts.Key = t.Group
+            WHERE ts.Key = 30;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

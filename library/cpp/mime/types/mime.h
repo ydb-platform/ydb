@@ -58,6 +58,7 @@ enum MimeTypes {
     MIME_WOFF2 = 44,
     MIME_TTF = 45,
     MIME_WEBMANIFEST = 46,
+    MIME_CBOR = 47,
     MIME_MAX
 };
 

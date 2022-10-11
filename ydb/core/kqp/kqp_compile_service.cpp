@@ -725,7 +725,7 @@ private:
     void ReplyError(const TActorId& sender, const TString& uid, Ydb::StatusIds::StatusCode status,
         const TIssues& issues, const TActorContext& ctx)
     {
-        Reply(sender, TKqpCompileResult::Make(uid, status, issues), NKqpProto::TKqpStatsCompile(), ctx);
+        Reply(sender, TKqpCompileResult::Make(uid, status, issues, ETableReadType::Other), NKqpProto::TKqpStatsCompile(), ctx);
     }
 
     void ReplyInternalError(const TActorId& sender, const TString& uid, const TString& message,

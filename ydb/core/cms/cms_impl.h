@@ -12,8 +12,11 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/protos/counters_cms.pb.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+
 
 #include <util/generic/stack.h>
 #include <util/generic/queue.h>
@@ -416,6 +419,10 @@ private:
     THashMap<ui32, ui32> NodeToRing;
     THashSet<ui32> StateStorageNodes;
 
+    // Monitoring
+    THolder<class NKikimr::TTabletCountersBase> TabletCountersPtr;
+    TTabletCountersBase* TabletCounters;
+
 public:
     TCms(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
@@ -424,6 +431,12 @@ public:
         , Logger(State)
         , ConfigSubscriptionId(0)
     {
+        TabletCountersPtr.Reset(new TProtobufTabletCounters<
+            ESimpleCounters_descriptor,
+            ECumulativeCounters_descriptor,
+            EPercentileCounters_descriptor,
+            ETxTypes_descriptor>());
+        TabletCounters = TabletCountersPtr.Get();
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()

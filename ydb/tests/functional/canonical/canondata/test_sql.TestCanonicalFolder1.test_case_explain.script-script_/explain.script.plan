@@ -103,7 +103,7 @@
                                 "Node Type": "Aggregate-Limit"
                             }
                         ],
-                        "Node Type": "Precompute_0_0",
+                        "Node Type": "Precompute_0",
                         "Parent Relationship": "InitPlan"
                     },
                     {
@@ -134,7 +134,7 @@
                                 "Node Type": "Collect"
                             }
                         ],
-                        "Node Type": "ResultSet_1_0",
+                        "Node Type": "ResultSet_1",
                         "PlanNodeType": "ResultSet"
                     }
                 ],
@@ -220,7 +220,7 @@
                                 "Node Type": "Aggregate-Limit"
                             }
                         ],
-                        "Node Type": "Precompute_0_0",
+                        "Node Type": "Precompute_0",
                         "Parent Relationship": "InitPlan"
                     },
                     {
@@ -251,7 +251,7 @@
                                 "Node Type": "Collect"
                             }
                         ],
-                        "Node Type": "ResultSet_1_0",
+                        "Node Type": "ResultSet_1",
                         "PlanNodeType": "ResultSet"
                     }
                 ],
@@ -296,7 +296,7 @@
                                 "Node Type": "ConstantExpr-Limit"
                             }
                         ],
-                        "Node Type": "ResultSet_0_0",
+                        "Node Type": "ResultSet",
                         "PlanNodeType": "ResultSet"
                     }
                 ],

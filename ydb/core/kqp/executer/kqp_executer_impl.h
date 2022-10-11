@@ -211,7 +211,7 @@ protected:
 
         LOG_T("Collect channels updates for task: " << task.Id << " at actor " << task.ComputeActorId);
 
-        // N.B. update only output channels
+        auto& selfUpdates = updates[task.ComputeActorId];
 
         for (auto& input : task.Inputs) {
             for (auto channelId : input.Channels) {
@@ -222,6 +222,7 @@ protected:
                 auto& srcTask = TasksGraph.GetTask(channel.SrcTask);
                 if (srcTask.ComputeActorId) {
                     updates[srcTask.ComputeActorId].emplace(channelId);
+                    selfUpdates.emplace(channelId);
                 }
 
                 LOG_T("Task: " << task.Id << ", input channelId: " << channelId << ", src task: " << channel.SrcTask
@@ -231,7 +232,21 @@ protected:
 
         for (auto& output : task.Outputs) {
             for (auto channelId : output.Channels) {
-                updates[task.ComputeActorId].emplace(channelId);
+                selfUpdates.emplace(channelId);
+
+                auto& channel = TasksGraph.GetChannel(channelId);
+                YQL_ENSURE(channel.SrcTask == task.Id);
+
+                if (channel.DstTask) {
+                    auto& dstTask = TasksGraph.GetTask(channel.DstTask);
+                    if (dstTask.ComputeActorId) {
+                        // not a optimal solution
+                        updates[dstTask.ComputeActorId].emplace(channelId);
+                    }
+
+                    LOG_T("Task: " << task.Id << ", output channelId: " << channelId << ", dst task: " << channel.DstTask
+                        << ", at actor " << dstTask.ComputeActorId);
+                }
             }
         }
     }

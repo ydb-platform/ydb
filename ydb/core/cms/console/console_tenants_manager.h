@@ -713,6 +713,7 @@ public:
     class TTxRevertPoolState;
     class TTxUpdateSubDomainKey;
     class TTxUpdateTenantState;
+    class TTxUpdateTenantPoolConfig;
 
     ITransaction *CreateTxAlterTenant(TEvConsole::TEvAlterTenantRequest::TPtr &ev);
     ITransaction *CreateTxCreateTenant(TEvConsole::TEvCreateTenantRequest::TPtr &ev);
@@ -738,6 +739,7 @@ public:
     ITransaction *CreateTxRevertPoolState(TTenant::TPtr tenant,
                                           TStoragePool::TPtr pool,
                                           TActorId worker);
+    ITransaction *CreateTxUpdateTenantPoolConfig(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev);
 
     void ClearState();
     void SetConfig(const NKikimrConsole::TTenantsConfig &config);
@@ -917,6 +919,7 @@ public:
     void Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvRemoveTenantRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPoolAllocated::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPoolDeleted::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorContext &ctx);
@@ -944,6 +947,7 @@ public:
             HFuncTraced(TEvConsole::TEvListTenantsRequest, Handle);
             HFuncTraced(TEvConsole::TEvNotifyOperationCompletionRequest, Handle);
             HFuncTraced(TEvConsole::TEvRemoveTenantRequest, Handle);
+            HFuncTraced(TEvConsole::TEvUpdateTenantPoolConfig, Handle);
             HFuncTraced(TEvPrivate::TEvStateLoaded, Handle);
             HFuncTraced(TEvPrivate::TEvPoolAllocated, Handle);
             HFuncTraced(TEvPrivate::TEvPoolDeleted, Handle);

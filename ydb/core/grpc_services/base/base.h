@@ -17,6 +17,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/base/events.h>
@@ -345,6 +346,9 @@ public:
     virtual void ReplyUnavaliable() = 0;
 
     virtual bool Validate(TString& error) = 0;
+
+    virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
+    virtual IGRpcProxyCounters::TPtr GetCounters() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
 
     // This method allows to set hook for unary call.
@@ -508,6 +512,13 @@ public:
 
     bool Validate(TString&) override {
         return true;
+    }
+
+    void SetCounters(IGRpcProxyCounters::TPtr) override {
+    }
+
+    IGRpcProxyCounters::TPtr GetCounters() const override {
+        return nullptr;
     }
 
     void UseDatabase(const TString& database) override {
@@ -685,6 +696,14 @@ public:
         return true;
     }
 
+    void SetCounters(IGRpcProxyCounters::TPtr counters) override {
+        Counters_ = counters;
+    }
+
+    IGRpcProxyCounters::TPtr GetCounters() const override {
+        return Counters_;
+    }
+
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
     }
@@ -747,6 +766,7 @@ private:
     NYql::TIssueManager IssueManager_;
     TMaybe<NRpcService::TRlPath> RlPath_;
     bool RlAllowed_;
+    IGRpcProxyCounters::TPtr Counters_;
 };
 
 template <typename TDerived>
@@ -944,6 +964,14 @@ public:
         return true;
     }
 
+    void SetCounters(IGRpcProxyCounters::TPtr counters) override {
+        Counters = counters;
+    }
+
+    IGRpcProxyCounters::TPtr GetCounters() const override {
+        return Counters;
+    }
+
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
     }
@@ -1103,6 +1131,7 @@ private:
     ui64 Ru = 0;
     TRespHook RespHook;
     TMaybe<NRpcService::TRlPath> RlPath;
+    IGRpcProxyCounters::TPtr Counters;
 };
 
 template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>

@@ -14,6 +14,8 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_PROCESS_NOTIFICATION; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification Execute");

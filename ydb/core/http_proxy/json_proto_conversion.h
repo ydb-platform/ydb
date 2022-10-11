@@ -5,7 +5,9 @@
 #include <library/cpp/protobuf/json/json_output_create.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/proto2json_printer.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
+#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 
 
 namespace NKikimr::NHttpProxy {
@@ -143,44 +145,44 @@ void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* message
                         Y_ENSURE(fieldDescriptor->cpp_type() ==
                                  google::protobuf::FieldDescriptor::CPPTYPE_STRING,
                                  "Base64 transformer is only applicable to strings");
-                        reflection->AddString(message, fieldDescriptor, Base64Decode(value.GetString()));
+                        reflection->AddString(message, fieldDescriptor, Base64Decode(elem.GetString()));
                         break;
                     }
                     case Ydb::DataStreams::V1::TRANSFORM_DOUBLE_S_TO_INT_MS: {
-                        reflection->SetInt64(message, fieldDescriptor, value.GetDouble() * 1000);
+                        reflection->AddInt64(message, fieldDescriptor, elem.GetDouble() * 1000);
                         break;
                     }
                     case Ydb::DataStreams::V1::TRANSFORM_EMPTY_TO_NOTHING:
                     case Ydb::DataStreams::V1::TRANSFORM_NONE: {
                         switch (fieldDescriptor->cpp_type()) {
                             case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
-                                reflection->AddInt32(message, fieldDescriptor, value.GetInteger());
+                                reflection->AddInt32(message, fieldDescriptor, elem.GetInteger());
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
-                                reflection->AddInt64(message, fieldDescriptor, value.GetInteger());
+                                reflection->AddInt64(message, fieldDescriptor, elem.GetInteger());
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_UINT32:
-                                reflection->AddUInt32(message, fieldDescriptor, value.GetUInteger());
+                                reflection->AddUInt32(message, fieldDescriptor, elem.GetUInteger());
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_UINT64:
-                                reflection->AddUInt64(message, fieldDescriptor, value.GetUInteger());
+                                reflection->AddUInt64(message, fieldDescriptor, elem.GetUInteger());
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE:
-                                reflection->AddDouble(message, fieldDescriptor, value.GetDouble());
+                                reflection->AddDouble(message, fieldDescriptor, elem.GetDouble());
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT:
-                                reflection->AddFloat(message, fieldDescriptor, value.GetDouble());
+                                reflection->AddFloat(message, fieldDescriptor, elem.GetDouble());
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_BOOL:
-                                reflection->AddFloat(message, fieldDescriptor, value.GetBoolean());
+                                reflection->AddBool(message, fieldDescriptor, elem.GetBoolean());
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_ENUM:
                                 {
                                     const NProtoBuf::EnumValueDescriptor* enumValueDescriptor =
-                                            fieldDescriptor->enum_type()->FindValueByName(value.GetString());
+                                            fieldDescriptor->enum_type()->FindValueByName(elem.GetString());
                                     i32 number{0};
                                     if (enumValueDescriptor == nullptr &&
-                                        TryFromString(value.GetString(), number)) {
+                                        TryFromString(elem.GetString(), number)) {
                                         enumValueDescriptor =
                                                 fieldDescriptor->enum_type()->FindValueByNumber(number);
                                     }
@@ -190,7 +192,7 @@ void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* message
                                 }
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_STRING:
-                                reflection->AddString(message, fieldDescriptor, value.GetString());
+                                reflection->AddString(message, fieldDescriptor, elem.GetString());
                                 break;
                             case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE: {
                                 NProtoBuf::Message *msg = reflection->AddMessage(message, fieldDescriptor);

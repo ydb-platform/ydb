@@ -693,7 +693,7 @@ message TFeatureFlags {
     optional bool EnableTtlOnAsyncIndexedTables = 55 [default = true];
     optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = true];
     optional bool EnableNodeBrokerSingleDomainMode = 57 [default = true];
-    optional bool EnableKqpSessionActor = 58 [default = false];
+    reserved 58; // optional bool EnableKqpSessionActor = 58 [default = true];
     // Dangerous settings we don't want in the public api unless required
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
@@ -1148,6 +1148,7 @@ message TTableServiceConfig {
     optional uint32 ForceNewEngineLevel = 22 [default = 0];
     optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
     optional TQueryReplayConfig QueryReplayConfig = 21;
+    optional bool EnableKqpSessionActor = 23 [default = false];
 };
 
 // Config describes immediate controls and allows

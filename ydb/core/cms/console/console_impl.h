@@ -109,6 +109,7 @@ private:
             FFunc(TEvConsole::EvReplaceConfigSubscriptionsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvSetConfigRequest, Handle);
             FFunc(TEvConsole::EvToggleConfigValidatorRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvUpdateTenantPoolConfig, ForwardToTenantsManager);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);

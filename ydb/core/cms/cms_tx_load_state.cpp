@@ -17,6 +17,8 @@ public:
     {
     }
 
+     TTxType GetTxType() const override { return TXTYPE_LOAD_STATE; } 
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLoadState Execute");

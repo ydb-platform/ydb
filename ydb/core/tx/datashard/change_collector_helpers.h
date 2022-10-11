@@ -27,6 +27,8 @@ public:
     void UpdateCachedRow(ui32 tid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates);
 
+    void Reset();
+
 private:
     THashMap<ui32, THashMap<TString, TRow>> Rows;
 

@@ -86,8 +86,13 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings()
     {
         // default value for tests, can be overwritten by SetFeatureFlags()
-        this->SetEnableKqpSessionActor(false);
+        SetEnableKqpSessionActor(false);
         this->SetEnableKqpScanQueryStreamLookup(true);
+    }
+
+    TKikimrSettings& SetEnableKqpSessionActor(bool enable) {
+        AppConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(enable);
+        return *this;
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }

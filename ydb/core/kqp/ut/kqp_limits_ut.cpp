@@ -66,6 +66,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST_NEW_ENGINE(DatashardProgramSize) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
+        app.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 0, 0, 0);
@@ -110,6 +111,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto app = NKikimrConfig::TAppConfig();
         auto& queryLimits = *app.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetComputeNodeMemoryLimitBytes(1'000'000'000);
+        app.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 100, 10, 1'000'000, 1, 2);
 
@@ -147,6 +149,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
         app.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(5).MilliSeconds());
+        app.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 0, 0, 0);
@@ -290,6 +293,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(20);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(appConfig);
 
@@ -336,6 +340,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetReadsetCountLimit(50);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(appConfig);
         CreateLargeTable(kikimr, 10, 10, 100);
@@ -370,7 +375,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetEnableMvccSnapshotReads(false);
+            .SetEnableMvccSnapshotReads(false)
+            .SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(serverSettings);
         CreateLargeTable(kikimr, 20, 10, 1'000'000, 1);
@@ -411,6 +417,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetComputeNodeMemoryLimitBytes(100'000'000);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(appConfig);
 
@@ -462,6 +469,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST_NEW_ENGINE(QueryExecTimeout) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10'000'000'000);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(appConfig);
 

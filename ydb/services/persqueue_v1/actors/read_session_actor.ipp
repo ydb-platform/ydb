@@ -1892,7 +1892,12 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& e
             return RecheckACL(ctx);
 
         case EWakeupTag::RlAllowed:
+            if (auto counters = Request->GetCounters()) {
+                counters->AddConsumedRequestUnits(PendingQuota->RequiredQuota);
+            }
+
             ProcessAnswer(ctx, PendingQuota);
+
             if (!WaitingQuota.empty()) {
                 PendingQuota = WaitingQuota.front();
                 WaitingQuota.pop_front();

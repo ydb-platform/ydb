@@ -26,6 +26,12 @@ enum class EColumnCompression {
     ZSTD
 };
 
+enum EShardingHashType {
+    HASH_TYPE_UNSPECIFIED,
+    HASH_TYPE_MODULO_N,
+    HASH_TYPE_LOGS_SPECIAL,
+};
+
 struct TCompression {
     EColumnCompression Codec = EColumnCompression::LZ4;
     TMaybe<int> Level;
@@ -111,15 +117,15 @@ private:
 
 class TLogStoreDescription {
 public:
-    TLogStoreDescription(ui32 columnShardCount, const THashMap<TString, TSchema>& schemaPresets,
+    TLogStoreDescription(ui32 shardsCount, const THashMap<TString, TSchema>& schemaPresets,
                          const THashMap<TString, TTierConfig>& tierConfigs = {});
     TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult&& desc, const TDescribeLogStoreSettings& describeSettings);
     void SerializeTo(Ydb::LogStore::CreateLogStoreRequest& request) const;
     const THashMap<TString, TSchema>& GetSchemaPresets() const {
         return SchemaPresets;
     }
-    ui32 GetColumnShardCount() const {
-        return ColumnShardCount;
+    ui32 GetShardsCount() const {
+        return ShardsCount;
     }
     const TString& GetOwner() const {
         return Owner;
@@ -135,7 +141,7 @@ public:
     }
 
 private:
-    ui32 ColumnShardCount;
+    ui32 ShardsCount;
     THashMap<TString, TSchema> SchemaPresets;
     TString Owner;
     TVector<NScheme::TPermissions> Permissions;
@@ -143,24 +149,41 @@ private:
     THashMap<TString, TTierConfig> TierConfigs;
 };
 
+struct TLogTableSharding {
+    EShardingHashType Type;
+    TVector<TString> Columns;
+    ui32 ShardsCount;
+    ui32 ActiveShardsCount;
+
+    TLogTableSharding(EShardingHashType type, const TVector<TString>& columns, ui32 shardsCount, ui32 activeShards = 0)
+        : Type(type)
+        , Columns(columns)
+        , ShardsCount(shardsCount)
+        , ActiveShardsCount(activeShards)
+    {}
+
+    TLogTableSharding(const Ydb::LogStore::DescribeLogTableResult& desc);
+};
+
 class TLogTableDescription {
 public:
-    TLogTableDescription(const TString& schemaPresetName, const TVector<TString>& shardingColumns,
-        ui32 columnShardCount, const TMaybe<TTtlSettings>& ttlSettings = {});
-    TLogTableDescription(const TSchema& schema, const TVector<TString>& shardingColumns,
-        ui32 columnShardCount, const TMaybe<TTtlSettings>& ttlSettings = {});
-    TLogTableDescription(const TString& schemaPresetName, const TVector<TString>& shardingColumns,
-        ui32 columnShardCount, const THashMap<TString, TTier>& tiers);
+    TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding,
+        const TMaybe<TTtlSettings>& ttlSettings = {});
+    TLogTableDescription(const TSchema& schema, const TLogTableSharding& sharding,
+        const TMaybe<TTtlSettings>& ttlSettings = {});
+    TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding,
+        const THashMap<TString, TTier>& tiers);
     TLogTableDescription(Ydb::LogStore::DescribeLogTableResult&& desc, const TDescribeLogTableSettings& describeSettings);
     void SerializeTo(Ydb::LogStore::CreateLogTableRequest& request) const;
     const TSchema& GetSchema() const {
         return Schema;
     }
+
     const TVector<TString>& GetShardingColumns() const {
-        return ShardingColumns;
+        return Sharding.Columns;
     }
-    ui32 GetColumnShardCount() const {
-        return ColumnShardCount;
+    ui32 GetShardsCount() const {
+        return Sharding.ShardsCount;
     }
     const TMaybe<TTtlSettings>& GetTtlSettings() const {
         return TtlSettings;
@@ -179,8 +202,7 @@ public:
 private:
     const TString SchemaPresetName;
     const TSchema Schema;
-    const TVector<TString> ShardingColumns;
-    const ui32 ColumnShardCount;
+    const TLogTableSharding Sharding;
     const TMaybe<TTtlSettings> TtlSettings;
     THashMap<TString, TTier> Tiers;
     TString Owner;

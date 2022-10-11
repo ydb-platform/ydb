@@ -416,16 +416,16 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         TStringBuilder errStr;
-        errStr << "retention seconds and storage bytes must fit one of:";
+        errStr << "retention hours and storage megabytes must fit one of:";
         bool found = false;
         for (auto& limit : retentionLimits) {
-            errStr << " { seconds : [" << limit.GetMinPeriodSeconds() << ", " << limit.GetMaxPeriodSeconds() << "], "
-                   <<   " storage : [" << limit.GetMinStorageMegabytes() * 1_MB << ", " << limit.GetMaxStorageMegabytes() * 1_MB << "]},";
+            errStr << " { hours : [" << limit.GetMinPeriodSeconds() / 3600 << ", " << limit.GetMaxPeriodSeconds() / 3600 << "], "
+                   << " storage : [" << limit.GetMinStorageMegabytes() << ", " << limit.GetMaxStorageMegabytes() << "]},";
             found = found || (lifeTimeSeconds >= limit.GetMinPeriodSeconds() && lifeTimeSeconds <= limit.GetMaxPeriodSeconds() &&
-                storageBytes >= limit.GetMinStorageMegabytes() * 1_MB && storageBytes <= limit.GetMaxStorageMegabytes() * 1_MB);
+                              storageBytes >= limit.GetMinStorageMegabytes() * 1_MB && storageBytes <= limit.GetMaxStorageMegabytes() * 1_MB);
         }
         if (!found) {
-            error = errStr << " provided values: seconds " << lifeTimeSeconds << ", storage " << storageBytes;
+            error = errStr << " provided values: hours " << lifeTimeSeconds / 3600 << ", storage " << storageBytes / 1_MB;
             return Ydb::StatusIds::BAD_REQUEST;
         }
 

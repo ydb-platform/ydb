@@ -497,6 +497,16 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
     SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"SessionsActive"}, false);
     Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"Errors"}, true);
 
+    CodecCounters.push_back(NKikimr::NPQ::TMultiCounter(subGroup, aggr, {{"codec", "user"}}, {"MessagesWrittenByCodec"}, true));
+
+    auto allNames = GetEnumAllCppNames<Ydb::Topic::Codec>();
+    allNames.erase(allNames.begin());
+    allNames.pop_back();
+    allNames.pop_back();
+    for (auto &name : allNames)  {
+        auto nm = to_lower(name).substr(18);
+        CodecCounters.push_back(NKikimr::NPQ::TMultiCounter(subGroup, aggr, {{"codec", nm}}, {"MessagesWrittenByCodec"}, true));
+    }
     SessionsCreated.Inc();
     SessionsActive.Inc();
 }
@@ -517,6 +527,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
     SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_created_per_second"}, true, "name");
     SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_active"}, false, "name");
     Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.errors_per_second"}, true, "name");
+
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
@@ -1395,6 +1406,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
             CloseSession(TStringBuilder() << "bad write request - 'blocks_headers' at position " << messageIndex << " is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return false;
         }
+        ui32 intCodec = ((ui32)codecID + 1) < CodecCounters.size() ? ((ui32)codecID + 1) : 0;
+        if (CodecCounters.size() > intCodec) {
+            CodecCounters[intCodec].Inc();
+        }
 
         if (data.blocks_message_counts(messageIndex) != 1) {
             CloseSession(TStringBuilder() << "bad write request - 'blocks_message_counts' at position " << messageIndex << " is " << data.blocks_message_counts(messageIndex)
@@ -1432,6 +1447,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
             if (codecID == 0 || !ValidateWriteWithCodec(InitialPQTabletConfig, codecID - 1, error)) {
                 CloseSession(TStringBuilder() << "bad write request - codec is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx);
                 return false;
+            }
+            ui32 intCodec = codecID < CodecCounters.size() ? codecID : 0;
+            if (CodecCounters.size() > intCodec) {
+                CodecCounters[intCodec].Inc();
             }
 
             return true;

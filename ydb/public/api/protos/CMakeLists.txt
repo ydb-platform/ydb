@@ -66,6 +66,11 @@ generate_enum_serilization(api-protos
   INCLUDE_HEADERS
   ydb/public/api/protos/draft/datastreams.pb.h
 )
+generate_enum_serilization(api-protos
+  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_topic.pb.h
+  INCLUDE_HEADERS
+  ydb/public/api/protos/ydb_topic.pb.h
+)
 target_proto_addincls(api-protos
   ./
   ${CMAKE_SOURCE_DIR}/

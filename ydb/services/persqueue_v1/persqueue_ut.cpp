@@ -2746,6 +2746,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                           {
                               "BytesInflight",
                               "BytesInflightTotal",
+                              "MessagesWrittenByCodec",
                               "Errors",
                               "SessionsActive",
                               "SessionsCreated",

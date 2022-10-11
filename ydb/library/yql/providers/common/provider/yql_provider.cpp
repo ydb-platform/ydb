@@ -49,10 +49,11 @@ namespace {
         "bzip2"sv,
         "xz"sv
     };
-    constexpr std::array<std::string_view, 4> CompressionsForOutput = {
+    constexpr std::array<std::string_view, 5> CompressionsForOutput = {
         "gzip"sv,
         "brotli"sv,
         "zstd"sv,
+        "bzip2"sv,
         "xz"sv
     };
     constexpr std::array<std::string_view, 10> IntervalUnits = {

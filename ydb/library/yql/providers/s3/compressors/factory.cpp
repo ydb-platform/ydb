@@ -33,6 +33,8 @@ IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& compression) {
         return NBrotli::MakeCompressor();
     if ("zstd" == compression)
         return  NZstd::MakeCompressor();
+    if ("bzip2" == compression)
+        return  NBzip2::MakeCompressor();
     if ("xz" == compression)
         return NXz::MakeCompressor();
     if ("gzip" == compression)

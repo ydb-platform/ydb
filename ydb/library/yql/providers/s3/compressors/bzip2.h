@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #include <contrib/libs/libbz2/bzlib.h>
+#include "output_queue.h"
 
 namespace NYql {
 
@@ -22,6 +23,8 @@ private:
     void InitDecoder();
     void FreeDecoder();
 };
+
+IOutputQueue::TPtr MakeCompressor(std::optional<int> blockSize100k = {});
 
 }
 

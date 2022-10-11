@@ -39,7 +39,6 @@ For the key and non-key columns, you can only use [primitive](../../types/primit
 {% if feature_not_null == true %}
 Without additional modifiers, a column gets an [optional type](../../types/optional.md) and allows `NULL` values to be written. To create a non-optional type, use `NOT NULL`.
 {% else %}
-
 {% if feature_not_null_for_pk %}
 All columns are [optional](../../types/optional.md) by default and can be assigned NULL values. The `NOT NULL` limit can only be specified for columns that are part of the primary key..
 {% else %}
@@ -49,7 +48,6 @@ All columns allow writing `NULL` values, that is, they are [optional](../../type
 {% if feature_map_tables %}
 It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. Those columns become part of the key in the listed order.
 {% endif %}
-
 
 **Example**
 
@@ -71,9 +69,9 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
 The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
 
 ```sql
-CREATE TABLE table_name (
+CREATE TABLE table_name ( 
     ...
-    INDEX <Index_name> GLOBAL [SYNC|ASYNC] ON ( <Index_columns> ) COVER ( <Cover_columns> ),
+    INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
     ...
 )
 ```
@@ -86,14 +84,14 @@ where:
 
 **Example**
 
-```sql
+``` sql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,
     c Uft8,
     d Date,
-    INDEX idx_a GLOBAL ON (d),
-    INDEX idx_ca GLOBAL ASYNC ON (b, a) COVER ( c ),
+    INDEX idx_d GLOBAL ON (d),
+    INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
     PRIMARY KEY (a)
 )
 ```
@@ -115,7 +113,7 @@ WITH (
 
 Here, key is the name of the parameter and value is its value.
 
-For a list of possible parameter names and their values, see the [{{ backend_name }} table description]({{ concept_table }}).
+For a list of valid parameter names and values, see the [{{ backend_name }} table description]({{ concept_table }}).
 
 For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
 

@@ -20,14 +20,24 @@ public:
 
     size_t GetFuncsCount() const;
 
+    size_t GetPlannedCount() const;
+    size_t GetRunningCount() const;
+    size_t GetExecutedCount() const;
+
     void RunAllTasks();
 
 private:
     void DoStart() override;
 
+    TFunction MakeTask(TFunction func);
+    void RunTask(TFunction&& func);
+
     TExecutorPtr Executor;
     TMutex Mutex;
     std::vector<TFunction> Funcs;
+    std::atomic<size_t> Planned = 0;
+    std::atomic<size_t> Running = 0;
+    std::atomic<size_t> Executed = 0;
 };
 
 TIntrusivePtr<FunctionExecutorWrapper> CreateThreadPoolExecutorWrapper(size_t threads);

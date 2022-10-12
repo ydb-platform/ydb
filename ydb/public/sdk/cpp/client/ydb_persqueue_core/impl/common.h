@@ -313,35 +313,35 @@ protected:
 
     // Template for visitor implementation.
     struct TBaseHandlersVisitor {
-        TBaseHandlersVisitor(const TSettings& settings, TEventInfo& eventInfo)
+        TBaseHandlersVisitor(const TSettings& settings, TEvent& event)
             : Settings(settings)
-            , EventInfo(eventInfo)
+            , Event(event)
         {}
 
         template <class TEventType, class TFunc, class TCommonFunc>
-        bool PushHandler(TEventInfo&& eventInfo, const TFunc& specific, const TCommonFunc& common) {
+        bool PushHandler(TEvent&& event, const TFunc& specific, const TCommonFunc& common) {
             if (specific) {
-                PushSpecificHandler<TEventType>(std::move(eventInfo), specific);
+                PushSpecificHandler<TEventType>(std::move(event), specific);
                 return true;
             }
             if (common) {
-                PushCommonHandler(std::move(eventInfo), common);
+                PushCommonHandler(std::move(event), common);
                 return true;
             }
             return false;
         }
 
         template <class TEventType, class TFunc>
-        void PushSpecificHandler(TEventInfo&& eventInfo, const TFunc& f) {
-            Post(Settings.EventHandlers_.HandlersExecutor_, [func = f, event = std::move(eventInfo)]() mutable {
-                func(std::get<TEventType>(event.GetEvent()));
+        void PushSpecificHandler(TEvent&& event, const TFunc& f) {
+            Post(Settings.EventHandlers_.HandlersExecutor_, [func = f, event = std::move(event)]() mutable {
+                func(std::get<TEventType>(event));
             });
         }
 
         template <class TFunc>
-        void PushCommonHandler(TEventInfo&& eventInfo, const TFunc& f) {
-            Post(Settings.EventHandlers_.HandlersExecutor_, [func = f, event = std::move(eventInfo)]() mutable {
-                func(event.GetEvent());
+        void PushCommonHandler(TEvent&& event, const TFunc& f) {
+            Post(Settings.EventHandlers_.HandlersExecutor_, [func = f, event = std::move(event)]() mutable {
+                func(event);
             });
         }
 
@@ -350,7 +350,7 @@ protected:
         }
 
         const TSettings& Settings;
-        TEventInfo& EventInfo;
+        TEvent& Event;
     };
 
 

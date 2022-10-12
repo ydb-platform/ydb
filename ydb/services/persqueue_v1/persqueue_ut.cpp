@@ -2383,13 +2383,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(destroyEv, 2);
         UNIT_ASSERT_VALUES_EQUAL(dataEv, 5);
 
+        UNIT_ASSERT_VALUES_EQUAL(decompressor->GetExecutedCount(), 5);
+
         decompressor->StartFuncs({5, 6, 7, 8, 9});
 
         DumpCounters("StartFuncs-2");
 
-        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 5);
-
-        Sleep(TDuration::Seconds(5));
+        while (decompressor->GetExecutedCount() < 10) {
+            Sleep(TDuration::Seconds(1));
+        }
 
         UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
@@ -5517,6 +5519,132 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             auto partId = release->GetPartitionStream()->GetPartitionId();
             UNIT_ASSERT(partId == 1 || partId == 3);
         }
+    }
+    
+    Y_UNIT_TEST(LOGBROKER_7820) {
+        //
+        // 700 messages of 2000 characters are sent in the test
+        //
+        // the memory limit for the decompression task is ~512Kb. these are 263 messages of 2000 characters each
+        //
+        // the memory limit for the DataReceivedHandler handler is ~300Kb
+        // it is expected to be called several times with blocks of no more than 154 messages
+        //
+
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+
+        NYdb::NPersQueue::TPersQueueClient persqueueClient(*driver);
+        NYdb::NPersQueue::TReadSessionSettings settings;
+
+        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.MaxMemoryUsageBytes(1_MB);
+        settings.DisableClusterDiscovery(true);
+
+        //
+        // the handler stores the number of messages in each call
+        //
+        std::vector<size_t> dataSizes;
+
+        auto handler = [&](NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event){
+            UNIT_ASSERT_LE(event.GetMessages().size(), 154);
+
+            dataSizes.push_back(event.GetMessages().size());
+        };
+        settings.EventHandlers_.SimpleDataHandlers(std::move(handler), true);
+
+        //
+        // controlled decompressor
+        //
+        auto decompressor = CreateThreadPoolExecutorWrapper(1);
+        settings.DecompressionExecutor(decompressor);
+
+        //
+        // blocks of ~300Kb will be transmitted for processing
+        //
+        settings.EventHandlers_.MaxMessagesBytes(300_KB);
+
+        //
+        // managed handler executor
+        //
+        auto executor = CreateThreadPoolExecutorWrapper(1);
+        settings.EventHandlers_.HandlersExecutor(executor);
+
+        auto session = persqueueClient.CreateReadSession(settings);
+        auto counters = session->GetCounters();
+
+        //
+        // 700 messages of 2000 characters are transmitted
+        //
+        {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << 0, {}, TString("raw"));
+
+            for (ui32 i = 1; i <= 700; ++i) {
+                std::string message(2'000, 'x');
+
+                bool res = writer->Write(message, i);
+                UNIT_ASSERT(res);
+            }
+
+            auto res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        //
+        // auxiliary functions for decompressor and handler control
+        //
+        auto WaitTasks = [&](auto f, size_t c) {
+            while (f() < c) {
+                Sleep(TDuration::Seconds(1));
+            };
+        };
+        auto WaitPlannedTasks = [&](auto e, size_t count) {
+            WaitTasks([&]() { return e->GetPlannedCount(); }, count);
+        };
+        auto WaitExecutedTasks = [&](auto e, size_t count) {
+            WaitTasks([&]() { return e->GetExecutedCount(); }, count);
+        };
+
+        auto RunTasks = [&](auto e, const std::vector<size_t>& tasks) {
+            size_t n = tasks.size();
+            WaitPlannedTasks(e, n);
+            size_t completed = e->GetExecutedCount();
+            e->StartFuncs(tasks);
+            WaitExecutedTasks(e, completed + n);
+        };
+
+        //
+        // run executors
+        //
+        RunTasks(executor, {0}); // TCreatePartitionStreamEvent
+
+        RunTasks(decompressor, {0});
+        RunTasks(executor, {1, 2});
+
+        RunTasks(decompressor, {1});
+        RunTasks(executor, {3, 4});
+
+        RunTasks(decompressor, {2});
+        RunTasks(executor, {5, 6});
+
+        //
+        // all messages received
+        //
+        UNIT_ASSERT_VALUES_EQUAL(dataSizes.size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(std::accumulate(dataSizes.begin(), dataSizes.end(), 0), 700);
+        UNIT_ASSERT_VALUES_EQUAL(*std::max_element(dataSizes.begin(), dataSizes.end()), 154);
+
+        UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightCompressed->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
+
+        session->Close(TDuration::Seconds(10));
+
+        driver->Stop();
     }
 }
 }

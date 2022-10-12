@@ -1792,6 +1792,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         dataReceivedFuture.Wait();
         UNIT_ASSERT(*dataReceivedEvent);
+
         UNIT_ASSERT_VALUES_EQUAL((*dataReceivedEvent)->GetMessages().size(), 2);
 
         if (withCommit) {
@@ -1850,7 +1851,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             using TExpectedEvent = typename TAReadSessionEvent<true>::TPartitionStreamStatusEvent; \
 \
             size_t maxByteSize = std::numeric_limits<size_t>::max();\
-            auto event = sessionQueue.GetEventImpl(&maxByteSize);\
+            TUserRetrievedEventsInfoAccumulator<true> accumulator; \
+\
+            auto event = sessionQueue.GetEventImpl(&maxByteSize, accumulator); \
 \
             UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent()));\
         }
@@ -1860,7 +1863,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             using TExpectedEvent = typename TAReadSessionEvent<true>::TDataReceivedEvent; \
 \
             size_t maxByteSize = std::numeric_limits<size_t>::max(); \
-            auto event = sessionQueue.GetEventImpl(&maxByteSize); \
+            TUserRetrievedEventsInfoAccumulator<true> accumulator; \
+\
+            auto event = sessionQueue.GetEventImpl(&maxByteSize, accumulator); \
 \
             UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent())); \
             UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event.GetEvent()).GetMessagesCount(), count); \
@@ -1904,8 +1909,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         TDeferredActions<true> actions;
 
-        stream->SignalReadyEvents(&sessionQueue,
-                                  actions);
+        TPartitionStreamImpl<true>::SignalReadyEvents(stream,
+                                                      &sessionQueue,
+                                                      actions);
 
         UNIT_ASSERT_DATA_EVENT(1);
         UNIT_ASSERT_CONTROL_EVENT();

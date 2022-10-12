@@ -117,13 +117,13 @@ private:
 
 #undef DECLARE_HANDLER
         bool Visit() {
-            return std::visit(*this, EventInfo.Event);
+            return std::visit(*this, Event);
         }
 
     };
 
     bool ApplyHandler(TEventInfo& eventInfo) {
-        THandlersVisitor visitor(Settings, eventInfo);
+        THandlersVisitor visitor(Settings, eventInfo.Event);
         return visitor.Visit();
     }
 

@@ -16,12 +16,32 @@ void FunctionExecutorWrapper::Post(TFunction &&f)
 {
     with_lock (Mutex) {
         Funcs.push_back(std::move(f));
+        ++Planned;
     }
 }
 
 void FunctionExecutorWrapper::DoStart()
 {
     Executor->Start();
+}
+
+auto FunctionExecutorWrapper::MakeTask(TFunction func) -> TFunction
+{
+    return [this, func = std::move(func)]() {
+        ++Running;
+
+        func();
+
+        --Running;
+        ++Executed;
+    };
+}
+
+void FunctionExecutorWrapper::RunTask(TFunction&& func)
+{
+    Y_VERIFY(Planned > 0);
+    --Planned;
+    Executor->Post(MakeTask(std::move(func)));
 }
 
 void FunctionExecutorWrapper::StartFuncs(const std::vector<size_t>& indicies)
@@ -31,7 +51,7 @@ void FunctionExecutorWrapper::StartFuncs(const std::vector<size_t>& indicies)
             Y_VERIFY(index < Funcs.size());
             Y_VERIFY(Funcs[index]);
 
-            Executor->Post(std::move(Funcs[index]));
+            RunTask(std::move(Funcs[index]));
         }
     }
 }
@@ -43,12 +63,27 @@ size_t FunctionExecutorWrapper::GetFuncsCount() const
     }
 }
 
+size_t FunctionExecutorWrapper::GetPlannedCount() const
+{
+    return Planned;
+}
+
+size_t FunctionExecutorWrapper::GetRunningCount() const
+{
+    return Running;
+}
+
+size_t FunctionExecutorWrapper::GetExecutedCount() const
+{
+    return Executed;
+}
+
 void FunctionExecutorWrapper::RunAllTasks()
 {
     with_lock (Mutex) {
         for (auto& func : Funcs) {
             if (func) {
-                Executor->Post(std::move(func));
+                RunTask(std::move(func));
             }
         }
     }

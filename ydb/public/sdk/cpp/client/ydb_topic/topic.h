@@ -1227,6 +1227,10 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
         TSelf& SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
                                   bool commitDataAfterProcessing = false, bool gracefulStopAfterCommit = true);
 
+        //! Data size limit for the DataReceivedHandler handler.
+        //! The data size may exceed this limit.
+        FLUENT_SETTING_DEFAULT(size_t, MaxMessagesBytes, Max<size_t>());
+
         //! Function to handle data events.
         //! If this handler is set, data events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().

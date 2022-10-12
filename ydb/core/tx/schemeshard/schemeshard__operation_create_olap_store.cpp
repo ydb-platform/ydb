@@ -183,6 +183,12 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
         return nullptr;
     }
 
+    if (op.GetColumnShardCount() == 0) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = Sprintf("trying to create OLAP store without zero shards");
+        return nullptr;
+    }
+
     op.SetNextSchemaPresetId(1);
     op.SetNextTtlSettingsPresetId(1);
 

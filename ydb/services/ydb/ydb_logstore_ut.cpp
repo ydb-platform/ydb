@@ -121,6 +121,16 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = logStoreClient.DropLogStore("/Root/LogStore").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
+
+        // negative
+        {
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(pkField), TestSchemaKey());
+            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
+            schemaPresets["default"] = logSchema;
+            NYdb::NLogStore::TLogStoreDescription storeDescr(0, schemaPresets);
+            auto res = logStoreClient.CreateLogStore("/Root/LogStore1", std::move(storeDescr)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(LogStore) {

@@ -876,4 +876,91 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         const NSc::TValue expectedResult = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5,e:{f:42}}}");
         UNIT_ASSERT_VALUES_EQUAL(v, expectedResult);
     }
+
+    Y_UNIT_TEST(TestNewNodeOnCurrentPool) {
+        NSc::TValue parent;
+        parent["foo"] = "bar";
+
+        // standalone
+        NSc::TValue firstChild(10);
+        UNIT_ASSERT(!NSc::TValue::SamePool(parent, firstChild));
+
+        // shares a memory pool
+        NSc::TValue secondChild = parent.CreateNew();
+        UNIT_ASSERT(secondChild.IsNull());
+        UNIT_ASSERT(NSc::TValue::SamePool(parent, secondChild));
+        secondChild = 20;
+        UNIT_ASSERT(secondChild.IsIntNumber());
+        UNIT_ASSERT(NSc::TValue::SamePool(parent, secondChild));
+
+        // attach children to parent
+        parent["first"] = std::move(firstChild);
+        parent["second"] = std::move(secondChild);
+        UNIT_ASSERT_VALUES_EQUAL(parent["first"].GetIntNumber(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(parent["second"].GetIntNumber(), 20);
+        UNIT_ASSERT(!NSc::TValue::SamePool(parent, parent["first"]));
+        UNIT_ASSERT(NSc::TValue::SamePool(parent, parent["second"]));
+    }
+
+    Y_UNIT_TEST(TestNewNodeAfterMove) {
+        NSc::TValue a;
+        NSc::TValue b = std::move(a); // after this, `a` has no memory pool
+        NSc::TValue a2 = a.CreateNew(); // no crash here
+        NSc::TValue b2 = b.CreateNew();
+        UNIT_ASSERT(!NSc::TValue::SamePool(a, b));
+        UNIT_ASSERT(NSc::TValue::SamePool(b, b2));
+        UNIT_ASSERT(!NSc::TValue::SamePool(a2, b2));
+    }
+
+    namespace {
+        bool FillChild(int x, NSc::TValue& result) {
+            if (x % 2 == 0) {
+                result["value"] = x;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    Y_UNIT_TEST(TestHierarchyCreationPatterns) {
+        const int n = 1000;
+
+        // Good: the code looks so clear and intuitive.
+        // Bad: it creates one thousand of independent memory pools, half of them remain alive at the end.
+        NSc::TValue list1;
+        for (int i = 0; i < n; ++i) {
+            NSc::TValue child;
+            if (FillChild(i, child)) {
+                list1.Push(std::move(child));
+            }
+        }
+
+        // Good: a single memory pool is reused.
+        // Bad: we have to add and remove a child manually.
+        // Bad: some memory on pool remains unused (gaps are left after removing nodes).
+        NSc::TValue list2;
+        for (int i = 0; i < n; ++i) {
+            auto& child = list2.Push();
+            if (!FillChild(i, child)) {
+                list2.Pop();
+            }
+        }
+
+        // Good: a single memory pool is reused.
+        // Good: the code looks quite intuitive.
+        // Good: there could be multiple parents on the same pool.
+        // Bad: some memory on pool remains unused.
+        // Bad: you have to know about the special method `CreateNew()`.
+        NSc::TValue list3;
+        for (int i = 0; i < n; ++i) {
+            auto child = list3.CreateNew();
+            if (FillChild(i, child)) {
+                list3.Push(std::move(child));
+            }
+        }
+
+        // Results are the same
+        UNIT_ASSERT_VALUES_EQUAL(list1.ToJson(), list2.ToJson());
+        UNIT_ASSERT_VALUES_EQUAL(list2.ToJson(), list3.ToJson());
+    }
 };

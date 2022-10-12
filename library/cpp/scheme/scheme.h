@@ -50,6 +50,11 @@ namespace NSc {
         // A COW copy will see changes in its parent, but no change in the COW copy will propagate to its parent.
 
     public:
+        // XXX: A newly constructed standalone TValue instance (even null!) consumes ~4 KB of memory because it allocates a memory pool inside.
+        // Consider building a tree of TValues in top-down order (from root to leaves) to share a single pool
+        // instead of creating child TValues first and appending them to a parent TValue.
+        // All somehow cached values should be constant, otherwise the shared pool can grow infinitely.
+
         inline TValue();
         inline TValue(TValue& v);
         inline TValue(const TValue& v);
@@ -385,6 +390,8 @@ namespace NSc {
     public:                                    // Copy methods /////////////////////////////////////////////////////////
         TValue Clone() const;                  // returns deep copy of self (on the separate pool)
         TValue& CopyFrom(const TValue& other); // deep copy other value into self, returns self
+
+        TValue CreateNew() const;              // returns a new null value which shares a memory pool with self
 
         TValue& Swap(TValue& v);
 

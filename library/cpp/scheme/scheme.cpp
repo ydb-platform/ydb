@@ -68,6 +68,10 @@ namespace NSc {
         return TValue().CopyFrom(*this);
     }
 
+    TValue TValue::CreateNew() const {
+        return Y_LIKELY(TheCore) ? TValue(TheCore->Pool) : TValue();
+    }
+
     double TValue::ForceNumber(double deflt) const {
         const TScCore& core = Core();
         if (core.IsNumber()) {
@@ -231,7 +235,7 @@ namespace NSc {
     }
 
     bool TValue::SamePool(const TValue& a, const TValue& b) {
-        return Same(a, b) || a.TheCore->Pool.Get() == b.TheCore->Pool.Get();
+        return Same(a, b) || (a.TheCore && b.TheCore && a.TheCore->Pool.Get() == b.TheCore->Pool.Get());
     }
 
     bool TValue::Equal(const TValue& a, const TValue& b) {

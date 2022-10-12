@@ -421,6 +421,9 @@ namespace {
             }
             Cout << Endl;
         }
+        if (profile->Has("iam-endpoint")) {
+            Cout << "  iam-endpoint: " << profile->GetValue("iam-endpoint").as<TString>() << Endl;
+        }
     }
 }
 

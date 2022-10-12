@@ -246,7 +246,7 @@ namespace NKikimr::NBsController {
 
                 const bool doLogCommand = Success && State->Changed();
                 Success = Success && Self->CommitConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
-                    Cmd.GetIgnoreDegradedGroupsChecks(), txc, &Error);
+                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), txc, &Error);
 
                 Finish();
                 if (doLogCommand) {

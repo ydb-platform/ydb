@@ -169,7 +169,7 @@ public:
         Response = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), Self->SelfId(), result.release(), 0, 0);
 
         TString error;
-        if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, txc, &error)) {
+        if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
             State->Rollback();
             State.reset();
         }

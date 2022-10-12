@@ -209,7 +209,7 @@ namespace NKikimr::NBsController {
                 }
                 State->CheckConsistency();
                 TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, txc, &error)) {
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
                     State->Rollback();
                     State.reset();
                 }
@@ -349,7 +349,7 @@ namespace NKikimr::NBsController {
 
             ConfigureBlobDepot();
         }
-        
+
         void ConfigureBlobDepot() {
             TGroupInfo *group = GetGroup();
             const ui64 tabletId = group->BlobDepotId.GetOrElse(BlobDepotTabletId);
@@ -474,7 +474,7 @@ namespace NKikimr::NBsController {
                 Action(*State);
                 State->CheckConsistency();
                 TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, txc, &error)) {
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
                     State->Rollback();
                     State.reset();
                 }

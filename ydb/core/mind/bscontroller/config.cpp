@@ -258,7 +258,8 @@ namespace NKikimr::NBsController {
         };
 
         bool TBlobStorageController::CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
-                bool suppressDegradedGroupsChecking, TTransactionContext& txc, TString *errorDescription) {
+                bool suppressDegradedGroupsChecking, bool suppressDisintegratedGroupsChecking,
+                TTransactionContext& txc, TString *errorDescription) {
             NIceDb::TNiceDb db(txc.DB);
 
             for (auto&& [base, overlay] : state.Groups.Diff()) {
@@ -275,16 +276,19 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            for (auto&& [base, overlay] : state.Groups.Diff()) {
-                if (base && overlay->second) {
-                    const TGroupInfo::TGroupStatus& prev = base->second->Status;
-                    const TGroupInfo::TGroupStatus& status = overlay->second->Status;
-                    if (status.ExpectedStatus == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED &&
-                            status.ExpectedStatus != prev.ExpectedStatus) { // status did really change
-                        *errorDescription = TStringBuilder() << "GroupId# " << overlay->first
-                            << " ExpectedStatus# DISINTEGRATED";
-                        return false;
-                    }
+            if (!suppressDisintegratedGroupsChecking) {
+                for (auto&& [base, overlay] : state.Groups.Diff()) {
+                    if (base && overlay->second) {
+                        const TGroupInfo::TGroupStatus& prev = base->second->Status;
+                        const TGroupInfo::TGroupStatus& status = overlay->second->Status;
+                        Cerr << '!' << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus) << ' ' << NKikimrBlobStorage::TGroupStatus::E_Name(prev.ExpectedStatus) << Endl;
+                        if (status.ExpectedStatus == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED &&
+                                status.ExpectedStatus != prev.ExpectedStatus) { // status did really change
+                            *errorDescription = TStringBuilder() << "GroupId# " << overlay->first
+                                << " ExpectedStatus# DISINTEGRATED";
+                           return false;
+                        }
+                     }
                 }
             }
 

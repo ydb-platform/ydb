@@ -1479,7 +1479,7 @@ private:
     void UpdateSystemViews();
 
     bool CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
-        TTransactionContext& txc, TString *errorDescription);
+        bool suppressDisintegratedGroupsChecking, TTransactionContext& txc, TString *errorDescription);
 
     void CommitSelfHealUpdates(TConfigState& state);
     void CommitScrubUpdates(TConfigState& state, TTransactionContext& txc);

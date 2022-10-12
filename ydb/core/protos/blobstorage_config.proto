@@ -544,6 +544,9 @@ message TConfigRequest {
     // ignore degraded groups checking
     bool IgnoreDegradedGroupsChecks = 8;
 
+    // ignore disintegrated groups checking
+    bool IgnoreDisintegratedGroupsChecks = 11;
+
     // do not settle slots over non-operating PDisks
     bool SettleOnlyOnOperationalDisks = 9;
 

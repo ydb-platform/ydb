@@ -405,8 +405,14 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
     auto *msg = ev->Get();
     const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
     if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end() && it->second.Status != msg->Status) {
-        it->second.Status = msg->Status;
+        auto& vdisk = it->second;
+        vdisk.Status = msg->Status;
         SendDiskMetrics(false);
+
+        if (msg->Status == NKikimrBlobStorage::EVDiskStatus::READY && vdisk.WhiteboardVDiskId) {
+            Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskDropDonors(*vdisk.WhiteboardVDiskId,
+                vdisk.WhiteboardInstanceGuid, NNodeWhiteboard::TEvWhiteboard::TEvVDiskDropDonors::TDropAllDonors()));
+        }
     }
 }
 

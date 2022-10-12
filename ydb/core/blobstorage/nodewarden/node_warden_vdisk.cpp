@@ -175,6 +175,7 @@ namespace NKikimr::NStorage {
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
             vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors)));
         vdisk.WhiteboardVDiskId.emplace(vdiskId);
+        vdisk.WhiteboardInstanceGuid = whiteboardInstanceGuid;
 
         // create an actor
         auto *as = TActivationContext::ActorSystem();
@@ -281,9 +282,19 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::Handle(TEvBlobStorage::TEvDropDonor::TPtr ev) {
         auto *msg = ev->Get();
-        STLOG(PRI_INFO, BS_NODE, NW34, "TEvDropDonor", (VSlotId, TVSlotId(msg->NodeId, msg->PDiskId, msg->VSlotId)),
-            (VDiskId, msg->VDiskId));
+        const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
+        STLOG(PRI_INFO, BS_NODE, NW34, "TEvDropDonor", (VSlotId, vslotId), (VDiskId, msg->VDiskId));
         SendDropDonorQuery(msg->NodeId, msg->PDiskId, msg->VSlotId, msg->VDiskId);
+
+        if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end()) {
+            const auto& vdisk = it->second;
+            if (vdisk.WhiteboardVDiskId) {
+                NKikimrBlobStorage::TVSlotId id;
+                vslotId.Serialize(&id);
+                Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskDropDonors(*vdisk.WhiteboardVDiskId,
+                    vdisk.WhiteboardInstanceGuid, {id}));
+            }
+        }
     }
 
     void TNodeWarden::UpdateGroupInfoForDisk(TVDiskRecord& vdisk, const TIntrusivePtr<TBlobStorageGroupInfo>& newInfo) {

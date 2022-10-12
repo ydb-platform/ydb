@@ -46,7 +46,12 @@ public:
 
 private:
     TStatus AnnotateDqReplicateAlwaysError(const TExprNode::TPtr& input, TExprContext& ctx) {
-        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Reading multiple times from the same source is not supported"));
+        ctx.AddError(
+            TIssue(
+                ctx.GetPosition(input->Pos()),
+                "Reading multiple times from the same source is not supported")
+                .SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR,
+                         TSeverityIds::S_ERROR));
         return TStatus::Error;
     }
 

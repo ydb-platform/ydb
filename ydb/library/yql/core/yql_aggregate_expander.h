@@ -39,6 +39,8 @@ public:
     TExprNode::TPtr ExpandAggregate();
 
 private:
+    using TIdxSet = std::set<ui32>;
+
     TExprNode::TPtr ExpandAggApply(const TExprNode::TPtr& node);
     bool CollectTraits();
     TExprNode::TPtr RebuildAggregate();
@@ -71,6 +73,8 @@ private:
     TExprNode::TPtr GetFinalAggStateExtractor(ui32 i);
 
     TExprNode::TPtr GeneratePhases();
+    void GenerateInitForDistinct(TExprNodeBuilder& parent, ui32& ndx, const TIdxSet& indicies, const TExprNode::TPtr& distinctField);
+    TExprNode::TPtr GenerateJustOverStates(const TExprNode::TPtr& input, const TIdxSet& indicies);
 
 private:
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";
@@ -105,7 +109,6 @@ private:
     TExprNode::TListType DistinctFields;
     TExprNode::TListType NothingStates;
 
-    using TIdxSet = std::set<ui32>;
     std::unordered_map<std::string_view, TIdxSet> Distinct2Columns;
     TIdxSet NonDistinctColumns;
 

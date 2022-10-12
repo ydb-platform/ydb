@@ -130,9 +130,7 @@ public:
 
         if (CurrentStepIndex == Steps.size()) {
             if (Transaction) {
-                auto transaction = *Transaction;
-                Transaction.Clear();
-                return transaction.Commit()
+                return Transaction->Commit()
                 .Apply([this, session=session](const TFuture<TCommitTransactionResult>& future) {
 
                     TCommitTransactionResult result = future.GetValue();
@@ -141,6 +139,7 @@ public:
                     if (!status.IsSuccess()) {
                         return MakeFuture(status);
                     } else {
+                        this->Transaction.Clear();
                         return this->NextStep(session);
                     }
                 });

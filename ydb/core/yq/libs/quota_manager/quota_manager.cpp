@@ -427,7 +427,7 @@ private:
                     }
                 }
             },
-            "ReadQuotas"
+            "ReadQuotas", true
         ).Process(SelfId(),
             [this, callback=callback](TReadQuotaExecuter& executer) {
                 auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
@@ -598,7 +598,7 @@ private:
                                 builder.AddTimestamp("usage_updated_at", executer.State.Usage.Usage->UpdatedAt);
                             }
                         },
-                        "WriteQuota"
+                        "WriteQuota", true
                     );
                 }
             },

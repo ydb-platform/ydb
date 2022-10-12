@@ -44,8 +44,9 @@ namespace NKikimr {
             Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, SelfVDiskId, true, ReplDone,
                 IncarnationGuid);
 
-            NPDisk::TStatusFlags statusFlags = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags().Flags;
-            Result->Record.SetStatusFlags(statusFlags);
+            const auto& oos = VCtx->GetOutOfSpaceState();
+            Result->Record.SetStatusFlags(oos.GetGlobalStatusFlags().Flags);
+            Result->Record.SetApproximateFreeSpaceShare(oos.GetFreeSpaceShare());
 
             // send requests to all actors
             SendLocalStatusRequest(ctx, SkeletonId);

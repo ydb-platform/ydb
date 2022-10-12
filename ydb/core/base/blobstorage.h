@@ -2023,6 +2023,7 @@ struct TEvBlobStorage {
     struct TEvStatusResult : public TEventLocal<TEvStatusResult, EvStatusResult> {
         NKikimrProto::EReplyStatus Status;
         TStorageStatusFlags StatusFlags;
+        float ApproximateFreeSpaceShare = 0.0f; // zero means absence of correct data
         TString ErrorReason;
 
         TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags)

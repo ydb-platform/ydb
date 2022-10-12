@@ -933,6 +933,7 @@ message TEvVStatusResult {
     optional uint32 StatusFlags = 9; // flags from EStatusFlags
     optional bool JoinedGroup = 10;
     optional bool Replicated = 11 [default = false];
+    optional float ApproximateFreeSpaceShare = 12; // must contain valid value if set
     optional fixed64 IncarnationGuid = 30;
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }

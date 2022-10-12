@@ -16,6 +16,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
     ui64 Requests;
     ui64 Responses;
     TGroupQuorumTracker QuorumTracker;
+    std::optional<float> ApproximateFreeSpaceShare;
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
         ProcessReplyFromQueue(ev);
@@ -33,6 +34,10 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
 
         if (record.HasStatusFlags()) {
             StatusFlags.Merge(record.GetStatusFlags());
+        }
+        if (record.HasApproximateFreeSpaceShare()) {
+            const float value = record.GetApproximateFreeSpaceShare();
+            ApproximateFreeSpaceShare = Min(ApproximateFreeSpaceShare.value_or(value), value);
         }
         ++Responses;
 
@@ -55,6 +60,9 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
     friend class TBlobStorageGroupRequestActor<TBlobStorageGroupStatusRequest>;
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         auto result = std::make_unique<TEvBlobStorage::TEvStatusResult>(status, StatusFlags.Raw);
+        if (ApproximateFreeSpaceShare) {
+            result->ApproximateFreeSpaceShare = *ApproximateFreeSpaceShare;
+        }
         result->ErrorReason = ErrorReason;
         A_LOG_DEBUG_S("DSPS03", "ReplyAndDie Result# " << result->Print(false));
         SendResponseAndDie(std::move(result));

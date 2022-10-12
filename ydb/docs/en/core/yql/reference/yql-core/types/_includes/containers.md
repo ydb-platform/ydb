@@ -1,5 +1,9 @@
 # Containers
 
+YQL supports containers as a way to define a complex data structure organized in a certain way.
+Values of container types can be passed to YQL queries as input parameters, or returned from YQL queries as output result set columns.
+Container types cannot be used as the types of columns in {{ ydb-short-name }} tables.
+
 | Type | Declaration,</br>example | Description |
 | ------------ | ---------------- | ------------- |
 | List | `List<Type>`,</br>`List<Int32>` | A variable-length sequence consisting of same-type elements. |

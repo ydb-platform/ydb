@@ -630,14 +630,50 @@
             "ListBase": "TCoAggregateTuple"
         },
         {
-            "Name": "TCoAggregate",
+            "Name": "TCoAggregateBase",
             "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "Aggregate"},
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 1, "Name": "Keys",      "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "Handlers",  "Type": "TCoAggregateTupleList"},
                 {"Index": 3, "Name": "Settings",  "Type": "TCoNameValueTupleList"}
             ]
+        },
+        {
+            "Name": "TCoAggregate",
+            "Base": "TCoAggregateBase",
+            "Match": {"Type": "Callable", "Name": "Aggregate"}
+        },
+        {
+            "Name": "TCoAggregateCombine",
+            "Base": "TCoAggregateBase",
+            "Match": {"Type": "Callable", "Name": "AggregateCombine"}
+        },
+        {
+            "Name": "TCoAggregateCombineState",
+            "Base": "TCoAggregateBase",
+            "Match": {"Type": "Callable", "Name": "AggregateCombineState"}
+        },
+        {
+            "Name": "TCoAggregateMergeState",
+            "Base": "TCoAggregateBase",
+            "Match": {"Type": "Callable", "Name": "AggregateMergeState"}
+        },
+        {
+            "Name": "TCoAggregateMergeFinalize",
+            "Base": "TCoAggregateBase",
+            "Match": {"Type": "Callable", "Name": "AggregateMergeFinalize"}
+        },
+        {
+            "Name": "TCoAggregateMergeManyFinalize",
+            "Base": "TCoAggregateBase",
+            "Match": {"Type": "Callable", "Name": "AggregateMergeManyFinalize"}
+        },
+        {
+            "Name": "TCoAggregateFinalize",
+            "Base": "TCoAggregateBase",
+            "Match": {"Type": "Callable", "Name": "AggregateFinalize"}
         },
         {
             "Name": "TCoFold1",

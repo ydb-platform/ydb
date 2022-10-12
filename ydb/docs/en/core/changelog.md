@@ -2,6 +2,10 @@
 
 ## 10.12.2022 {#10-12-2022}
 
+**What's new in version 22.4**
+
+To upgrade to **22.4** version see [Downloads](downloads/index.md).
+
 * {{ ydb-short-name }} Topics and Change Data Capture (CDC):
   * A new Topic API is introduced in {{ ydb-short-name }}. {{ ydb-short-name }} [topic](concepts/topic.md) is an entity for storing unstructured messages and delivering them to multiple subscribers.
   * A new TopicAPI is supported in [{{ ydb-short-name }} CLI](reference/ydb-cli/topic-overview.md) and [SDK](reference/ydb-sdk/topic.md). The API enables topic management operations and streaming message publish/subscribe.
@@ -32,8 +36,6 @@
   * Added initial version of audit log for DDL statements.
   * Added support of authentication with static credentials.
   * Added system tables for query performance diagnostics.
-
-To upgrade to **22.4** version, see [Downloads](downloads/index.md).
 
 ## 09.22.2022 {#22-09-2022}
 

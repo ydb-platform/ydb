@@ -1,7 +1,7 @@
 #pragma once
 
-#include "pq.h"
-#include "user_info.h"
+#include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -211,6 +211,13 @@ struct TFinalizer {
 // SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+void BalancerPrepare(
+    const TString topic,
+    const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,
+    const ui64 ssId,
+    TTestContext& tc,
+    const bool requireAuth = false);
+
 struct TTabletPreparationParameters {
     ui32 maxCountInPartition{20'000'000};
     ui64 maxSizeInPartition{100_MB};
@@ -232,11 +239,13 @@ void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
     TTestContext& tc);
+void PQTabletRestart(TTestContext& tc);
 
 TActorId RegisterReadSession(
    const TString& session,
    TTestContext& tc,
    const TVector<ui32>& groups = {});
+void WaitReadSessionKill(TTestContext& tc);
 
 TActorId SetOwner(
     const ui32 partition,
@@ -244,6 +253,80 @@ TActorId SetOwner(
     const TString& owner,
     bool force);
 
+void FillDeprecatedUserInfo(
+    NKikimrClient::TKeyValueRequest_TCmdWrite* write,
+    const TString& client,
+    ui32 partition,
+    ui64 offset);
+
+void FillUserInfo(
+    NKikimrClient::TKeyValueRequest_TCmdWrite* write,
+    const TString& client,
+    ui32 partition,
+    ui64 offset);
+
+void PQGetPartInfo(
+    ui64 startOffset,
+    ui64 endOffset,
+    TTestContext& tc);
+
+void ReserveBytes(
+    const ui32 partition,
+    TTestContext& tc,
+    const TString& cookie,
+    i32 msgSeqNo,
+    i64 size,
+    const TActorId& pipeClient,
+    bool lastRequest);
+
+void WaitPartition(
+    const TString &session,
+    TTestContext& tc,
+    ui32 partition,
+    const TString& sessionToRelease,
+    const TString& topic,
+    const TActorId& pipe,
+    bool ok = true);
+
+void WriteData(
+    const ui32 partition,
+    const TString& sourceId,
+    const TVector<std::pair<ui64, TString>> data,
+    TTestContext& tc,
+    const TString& cookie,
+    i32 msgSeqNo,
+    i64 offset,
+    bool disableDeduplication = false);
+
+void WritePartData(
+    const ui32 partition,
+    const TString& sourceId,
+    const i64 offset,
+    const ui64 seqNo,
+    const ui16 partNo,
+    const ui16 totalParts,
+    const ui32 totalSize,
+    const TString& data,
+    TTestContext& tc,
+    const TString& cookie,
+    i32 msgSeqNo);
+
+void WritePartDataWithBigMsg(
+    const ui32 partition,
+    const TString& sourceId,
+    const ui64 seqNo,
+    const ui16 partNo,
+    const ui16 totalParts,
+    const ui32 totalSize,
+    const TString& data,
+    TTestContext& tc,
+    const TString& cookie,
+    i32 msgSeqNo,
+    ui32 bigMsgSize);
+
+//
+// CMD's
+//
 TVector<TString> CmdSourceIdRead(TTestContext& tc);
 
 std::pair<TString, TActorId> CmdSetOwner(
@@ -251,13 +334,6 @@ std::pair<TString, TActorId> CmdSetOwner(
     TTestContext& tc,
     const TString& owner = "default",
     bool force = true);
-
-void BalancerPrepare(
-    const TString topic,
-    const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,
-    const ui64 ssId,
-    TTestContext& tc,
-    const bool requireAuth = false);
 
 void CmdCreateSession(
     const ui32 partition,
@@ -331,80 +407,5 @@ void CmdWrite(
     bool treatWrongCookieAsError = false,
     bool treatBadOffsetAsError = true,
     bool disableDeduplication = false);
-
-void FillDeprecatedUserInfo(
-    NKikimrClient::TKeyValueRequest_TCmdWrite* write,
-    const TString& client,
-    ui32 partition,
-    ui64 offset);
-
-void FillUserInfo(
-    NKikimrClient::TKeyValueRequest_TCmdWrite* write,
-    const TString& client,
-    ui32 partition,
-    ui64 offset);
-
-void PQGetPartInfo(
-    ui64 startOffset,
-    ui64 endOffset,
-    TTestContext& tc);
-
-void ReserveBytes(
-    const ui32 partition,
-    TTestContext& tc,
-    const TString& cookie,
-    i32 msgSeqNo,
-    i64 size,
-    const TActorId& pipeClient,
-    bool lastRequest);
-
-void RestartTablet(TTestContext& tc);
-
-void WaitPartition(
-    const TString &session,
-    TTestContext& tc,
-    ui32 partition,
-    const TString& sessionToRelease,
-    const TString& topic,
-    const TActorId& pipe,
-    bool ok = true);
-
-void WaitSessionKill(TTestContext& tc);
-
-void WriteData(
-    const ui32 partition,
-    const TString& sourceId,
-    const TVector<std::pair<ui64, TString>> data,
-    TTestContext& tc,
-    const TString& cookie,
-    i32 msgSeqNo,
-    i64 offset,
-    bool disableDeduplication = false);
-
-void WritePartData(
-    const ui32 partition,
-    const TString& sourceId,
-    const i64 offset,
-    const ui64 seqNo,
-    const ui16 partNo,
-    const ui16 totalParts,
-    const ui32 totalSize,
-    const TString& data,
-    TTestContext& tc,
-    const TString& cookie,
-    i32 msgSeqNo);
-
-void WritePartDataWithBigMsg(
-    const ui32 partition,
-    const TString& sourceId,
-    const ui64 seqNo,
-    const ui16 partNo,
-    const ui16 totalParts,
-    const ui32 totalSize,
-    const TString& data,
-    TTestContext& tc,
-    const TString& cookie,
-    i32 msgSeqNo,
-    ui32 bigMsgSize);
 
 } // namespace NKikimr

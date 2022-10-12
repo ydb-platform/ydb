@@ -1,9 +1,8 @@
-#include "pq_ut.h"
-
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 
 #include <ydb/core/testlib/fake_scheme_shard.h>
@@ -126,7 +125,7 @@ Y_UNIT_TEST(TestGroupsBalancer3) {
     WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
 
     pipe = RegisterReadSession("session2", tc, {2});
-    WaitSessionKill(tc); //session 1 will die
+    WaitReadSessionKill(tc); //session 1 will die
 }
 
 
@@ -166,7 +165,7 @@ Y_UNIT_TEST(TestUserInfoCompatibility) {
         TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
         Y_UNUSED(result);
 
-        RestartTablet(tc);
+        PQTabletRestart(tc);
         Cerr  << "AFTER RESTART\n";
 
         CmdGetOffset(0, client, 0, tc);
@@ -214,7 +213,7 @@ Y_UNIT_TEST(TestReadRuleVersions) {
 
         }
 
-        RestartTablet(tc);
+        PQTabletRestart(tc);
 
         CmdGetOffset(0, client, 1, tc);
         CmdGetOffset(1, client, 2, tc);
@@ -344,7 +343,7 @@ Y_UNIT_TEST(TestDescribeBalancer) {
         UNIT_ASSERT(result);
         auto& rec = result->Record;
         UNIT_ASSERT(rec.HasSchemeShardId() && rec.GetSchemeShardId() == ssId);
-        RestartTablet(tc);
+        PQTabletRestart(tc);
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
         result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
         UNIT_ASSERT(result);
@@ -773,7 +772,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
         PQGetPartInfo(0, 1, tc);
         CmdWrite(0, "sourceid5", data, tc);
-        RestartTablet(tc);
+        PQTabletRestart(tc);
         PQGetPartInfo(0, 2, tc);
 
         ui32 toWrite = 5;
@@ -879,7 +878,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             UNIT_ASSERT(result->Record.HasStatus());
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
         }
-        RestartTablet(tc);
+        PQTabletRestart(tc);
     });
 }
 
@@ -1270,7 +1269,7 @@ Y_UNIT_TEST(TestWriteSplit) {
         data.push_back({2, TString{size, 'a'}});
         activeZone = PlainOrSoSlow(true, false);
         CmdWrite(0, "sourceIdx", data, tc, false, {}, false, "", -1, 40'000);
-        RestartTablet(tc);
+        PQTabletRestart(tc);
         activeZone = false;
         PQGetPartInfo(40'000, 40'002, tc);
     });
@@ -1716,7 +1715,7 @@ Y_UNIT_TEST(TestGetTimestamps) {
         CmdSetOffset(0, "user1", 5, true, tc);
         CmdWrite(0, "sourceid1", data, tc, false, {}, false);
         CmdGetOffset(0, "user1", 5, tc, 5);
-        RestartTablet(tc);
+        PQTabletRestart(tc);
         CmdGetOffset(0, "user1", 5, tc, 5);
 
         CmdWrite(0, "sourceid2", data, tc, false, {}, false, "", -1,100);
@@ -1902,7 +1901,7 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
         TAutoPtr<IEventHandle> handle;
         for (ui32 i = 0; i < 10; ++i) {
             CmdRead(0, 0, 1, 100_MB, 1, false, tc);
-            RestartTablet(tc);
+            PQTabletRestart(tc);
         }
     });
 }
@@ -1991,7 +1990,7 @@ Y_UNIT_TEST(TestWriteTimeStampEstimate) {
 
     PQTabletPrepare({.localDC=false}, {{"aaa", true}}, tc);
 
-    RestartTablet(tc);
+    PQTabletRestart(tc);
 
     CmdGetOffset(0, "user1", 0, tc, -1, 0);
 
@@ -2027,7 +2026,7 @@ Y_UNIT_TEST(TestWriteTimeLag) {
     }
 
     // After restart all caches are empty.
-    RestartTablet(tc);
+    PQTabletRestart(tc);
 
     PQTabletPrepare({.maxSizeInPartition=1_TB}, {{"aaa", false}, {"important", true}, {"another", true}}, tc);
     PQTabletPrepare({.maxSizeInPartition=1_TB}, {{"aaa", false}, {"another1", true}, {"important", true}}, tc);

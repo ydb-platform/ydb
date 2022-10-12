@@ -1,11 +1,10 @@
-#include "pq_ut.h"
-
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -246,7 +245,7 @@ void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
     }
 }
 
-void RestartTablet(TTestContext& tc) {
+void PQTabletRestart(TTestContext& tc) {
     TTestActorRuntime& runtime = *tc.Runtime;
 
     ForwardToTablet(runtime, tc.TabletId, tc.Edge, new TEvents::TEvPoisonPill());
@@ -289,7 +288,7 @@ TActorId RegisterReadSession(const TString& session, TTestContext& tc, const TVe
     return pipeClient;
 }
 
-void WaitSessionKill(TTestContext& tc) {
+void WaitReadSessionKill(TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
 
     tc.Runtime->ResetScheduledCount();

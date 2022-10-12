@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
+add_subdirectory(slow)
 
 add_executable(ydb-core-persqueue-ut)
 target_compile_options(ydb-core-persqueue-ut PRIVATE
@@ -25,6 +27,7 @@ target_link_libraries(ydb-core-persqueue-ut PUBLIC
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
+  persqueue-ut-common
   core-testlib-default
   ydb_persqueue_core-ut-ut_utils
   library-cpp-resource
@@ -40,16 +43,15 @@ target_link_options(ydb-core-persqueue-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-persqueue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/counters_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/internals_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/metering_sink_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/mirrorer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_ut_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/type_codecs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/user_info_ut.cpp
-  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/883a2909624fe08b296fc5214248dcb3.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/counters_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/internals_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/metering_sink_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/mirrorer_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pq_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/sourceid_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/type_codecs_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/user_info_ut.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/3af3a3a0fb89a603529db7e6dfaff0b5.cpp
 )
 add_test(
   NAME
@@ -63,12 +65,12 @@ add_test(
   --show-fails
 )
 resources(ydb-core-persqueue-ut
-  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/883a2909624fe08b296fc5214248dcb3.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/3af3a3a0fb89a603529db7e6dfaff0b5.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/counters_datastreams.html
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/counters_pqproxy_firstclass.html
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/counters_pqproxy.html
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/counters_labeled.json
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_datastreams.html
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy.html
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_labeled.json
   KEYS
   counters_datastreams.html
   counters_pqproxy_firstclass.html

@@ -3,9 +3,8 @@
 #include <util/system/env.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-
-#include "pq_ut.h"
 
 namespace NKikimr {
 

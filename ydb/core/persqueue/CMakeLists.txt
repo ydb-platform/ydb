@@ -11,7 +11,6 @@ add_subdirectory(config)
 add_subdirectory(events)
 add_subdirectory(partition_key_range)
 add_subdirectory(ut)
-add_subdirectory(ut_slow)
 add_subdirectory(writer)
 
 add_library(ydb-core-persqueue)

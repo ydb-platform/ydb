@@ -1,5 +1,3 @@
-#include "pq_ut.h"
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/sanitizers.h>
@@ -9,6 +7,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -47,7 +46,7 @@ Y_UNIT_TEST(TestWriteVeryBigMessage) {
         CmdWrite(0, "sourceIdx", data, tc, false, {}, false, "", -1, 0);
         activeZone = true;
         PQGetPartInfo(so, 1, tc);
-        RestartTablet(tc);
+        PQTabletRestart(tc);
         PQGetPartInfo(so, 1, tc);
     });
 }

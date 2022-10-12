@@ -1448,12 +1448,18 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
         i64 minSlotSize = Max<i64>();
+        for (const auto& [_, owner] : VDiskOwners) {
+            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) * Format.ChunkSize);
+        }
+
         for (const auto& [vdiskId, owner] : VDiskOwners) {
             const TOwnerData &data = OwnerData[owner];
             // May be less than 0 if owner exceeded his quota
-            i64 ownerFree = Max<i64>(0, Keeper.GetOwnerFree(owner)) * Format.ChunkSize;
             i64 ownerAllocated = (i64)Keeper.GetOwnerUsed(owner) * Format.ChunkSize;
-            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) * Format.ChunkSize);
+            i64 ownerFree = Max<i64>(0, minSlotSize == Max<i64>()
+                ? Keeper.GetOwnerFree(owner) * Format.ChunkSize // fallback calculation method
+                : minSlotSize - ownerAllocated);
+
             reportResult->VDiskStateVect.emplace_back(data.WhiteboardProxyId, NKikimrWhiteboard::TVDiskStateInfo());
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
             vdiskInfo.SetAvailableSize(ownerFree);

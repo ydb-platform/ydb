@@ -1973,7 +1973,50 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                                     .Seal();
                             }
 
-                            GenerateInitForDistinct(parent, pos, indicies, distinctField);
+                            for (ui32 i: indicies) {
+                                auto trait = Traits[i];
+                                auto initLambda = trait->Child(1);
+                                auto saveLambda = trait->Child(3);
+                                if (initLambda->Head().ChildrenSize() == 1) {
+                                    parent.List(pos++)
+                                        .Add(0, InitialColumnNames[i])
+                                        .Apply(1, *saveLambda)
+                                            .With(0)
+                                                .Apply(*initLambda)
+                                                    .With(0)
+                                                        .Callable("Member")
+                                                            .Arg(0, "item")
+                                                            .Add(1, distinctField)
+                                                        .Seal()
+                                                    .Done()
+                                                .Seal()
+                                            .Done()
+                                        .Seal()
+                                    .Seal();
+                                } else {
+                                    parent.List(pos++)
+                                        .Add(0, InitialColumnNames[i])
+                                        .Apply(1, *saveLambda)
+                                            .With(0)
+                                                .Apply(*initLambda)
+                                                    .With(0)
+                                                        .Callable("Member")
+                                                            .Arg(0, "item")
+                                                            .Add(1, distinctField)
+                                                        .Seal()
+                                                    .Done()
+                                                    .With(1)
+                                                        .Callable("Uint32")
+                                                            .Atom(0, ToString(i), TNodeFlags::Default)
+                                                        .Seal()
+                                                    .Done()
+                                                .Seal()
+                                            .Done()
+                                        .Seal()
+                                    .Seal();
+                                }
+                            }
+
                             return parent;
                         })
                     .Seal()

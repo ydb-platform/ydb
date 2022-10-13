@@ -32,7 +32,6 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <util/string/printf.h>
-#include <util/string/escape.h>
 
 #include <library/cpp/actors/wilson/wilson_span.h>
 #include <library/cpp/actors/wilson/wilson_trace.h>
@@ -1360,57 +1359,6 @@ public:
         }
     }
 
-    void SlowLogQuery(const TActorContext &ctx, const TKqpRequestInfo& requestInfo, const TDuration& duration,
-        Ydb::StatusIds::StatusCode status, const std::function<ui64()>& resultsSizeFunc)
-    {
-        auto logSettings = ctx.LoggerSettings();
-        if (!logSettings) {
-            return;
-        }
-
-        ui32 thresholdMs = 0;
-        NActors::NLog::EPriority priority;
-
-        if (logSettings->Satisfies(NActors::NLog::PRI_TRACE, NKikimrServices::KQP_SLOW_LOG)) {
-            priority = NActors::NLog::PRI_TRACE;
-            thresholdMs = Config->_KqpSlowLogTraceThresholdMs.Get().GetRef();
-        } else if (logSettings->Satisfies(NActors::NLog::PRI_NOTICE, NKikimrServices::KQP_SLOW_LOG)) {
-            priority = NActors::NLog::PRI_NOTICE;
-            thresholdMs = Config->_KqpSlowLogNoticeThresholdMs.Get().GetRef();
-        } else if (logSettings->Satisfies(NActors::NLog::PRI_WARN, NKikimrServices::KQP_SLOW_LOG)) {
-            priority = NActors::NLog::PRI_WARN;
-            thresholdMs = Config->_KqpSlowLogWarningThresholdMs.Get().GetRef();
-        } else {
-            return;
-        }
-
-        if (duration >= TDuration::MilliSeconds(thresholdMs)) {
-            auto username = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
-            if (username.empty()) {
-                username = "UNAUTHENTICATED";
-            }
-
-            auto queryText = ExtractQueryText();
-
-            auto paramsText = TStringBuilder()
-                << ToString(QueryState->ParametersSize)
-                << 'b';
-
-            ui64 resultsSize = 0;
-            if (resultsSizeFunc) {
-                resultsSize = resultsSizeFunc();
-            }
-
-            LOG_LOG_S(ctx, priority, NKikimrServices::KQP_SLOW_LOG, requestInfo
-                << "Slow query, duration: " << duration.ToString()
-                << ", status: " << status
-                << ", user: " << username
-                << ", results: " << resultsSize << 'b'
-                << ", text: \"" << EscapeC(queryText) << '"'
-                << ", parameters: " << paramsText);
-        }
-    }
-
     void FillStats(NKikimrKqp::TEvQueryResponse* record) {
         auto *response = record->MutableResponse();
         auto* stats = &QueryState->Stats;
@@ -1432,15 +1380,9 @@ public:
             auto now = TInstant::Now();
             auto queryDuration = now - QueryState->StartTime;
             CollectSystemViewQueryStats(stats, queryDuration, queryRequest.GetDatabase(), ru);
-            SlowLogQuery(TlsActivationContext->AsActorContext(), requestInfo, queryDuration, record->GetYdbStatus(),
-                [record]() {
-                    ui64 resultsSize = 0;
-                    for (auto& result : record->GetResponse().GetResults()) {
-                        resultsSize += result.ByteSize();
-                    }
-                    return resultsSize;
-                }
-            );
+            SlowLogQuery(TlsActivationContext->AsActorContext(), Config.Get(), requestInfo, queryDuration,
+                record->GetYdbStatus(), QueryState->UserToken, QueryState->ParametersSize, record,
+                [this]() { return this->ExtractQueryText(); });
         }
 
         bool reportStats = (GetStatsModeInt(queryRequest) != EKikimrStatsMode::None);

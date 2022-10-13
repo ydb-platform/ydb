@@ -74,6 +74,7 @@ target_sources(ydb-core-kqp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_metadata_loader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_response.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_worker_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_worker_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_session_actor.cpp
 )
 

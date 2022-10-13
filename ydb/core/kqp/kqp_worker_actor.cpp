@@ -1678,13 +1678,8 @@ private:
             auto ru = CalcRequestUnit(stats);
             record.SetConsumedRu(ru);
             CollectSystemViewQueryStats(ctx, &stats, queryDuration, queryRequest.GetDatabase(), ru);
-            SlowLogQuery(ctx, requestInfo, queryDuration, status, [&record](){
-                ui64 resultsSize = 0;
-                for (auto& result : record.GetResponse().GetResults()) {
-                    resultsSize += result.ByteSize();
-                }
-                return resultsSize;
-            });
+            SlowLogQuery(ctx, Config.Get(), requestInfo, queryDuration, record.GetYdbStatus(), QueryState->UserToken,
+                QueryState->ParametersSize, &record, [this] () { return this->ExtractQueryText(); });
         }
 
         bool reportStats = (GetStatsMode(queryRequest, EKikimrStatsMode::None) != EKikimrStatsMode::None);
@@ -1792,58 +1787,6 @@ private:
         }
         return QueryState->Request.GetQuery();
     }
-
-    void SlowLogQuery(const TActorContext &ctx, const TKqpRequestInfo& requestInfo, const TDuration& duration,
-        Ydb::StatusIds::StatusCode status, const std::function<ui64()>& resultsSizeFunc)
-    {
-        auto logSettings = ctx.LoggerSettings();
-        if (!logSettings) {
-            return;
-        }
-
-        ui32 thresholdMs = 0;
-        NActors::NLog::EPriority priority;
-
-        if (logSettings->Satisfies(NActors::NLog::PRI_TRACE, NKikimrServices::KQP_SLOW_LOG)) {
-            priority = NActors::NLog::PRI_TRACE;
-            thresholdMs = Config->_KqpSlowLogTraceThresholdMs.Get().GetRef();
-        } else if (logSettings->Satisfies(NActors::NLog::PRI_NOTICE, NKikimrServices::KQP_SLOW_LOG)) {
-            priority = NActors::NLog::PRI_NOTICE;
-            thresholdMs = Config->_KqpSlowLogNoticeThresholdMs.Get().GetRef();
-        } else if (logSettings->Satisfies(NActors::NLog::PRI_WARN, NKikimrServices::KQP_SLOW_LOG)) {
-            priority = NActors::NLog::PRI_WARN;
-            thresholdMs = Config->_KqpSlowLogWarningThresholdMs.Get().GetRef();
-        } else {
-            return;
-        }
-
-        if (duration >= TDuration::MilliSeconds(thresholdMs)) {
-            auto username = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
-            if (username.empty()) {
-                username = "UNAUTHENTICATED";
-            }
-
-            auto queryText = ExtractQueryText();
-
-            auto paramsText = TStringBuilder()
-                << ToString(QueryState->ParametersSize)
-                << 'b';
-
-            ui64 resultsSize = 0;
-            if (resultsSizeFunc) {
-                resultsSize = resultsSizeFunc();
-            }
-
-            LOG_LOG_S(ctx, priority, NKikimrServices::KQP_SLOW_LOG, requestInfo
-                << "Slow query, duration: " << duration.ToString()
-                << ", status: " << status
-                << ", user: " << username
-                << ", results: " << resultsSize << 'b'
-                << ", text: \"" << EscapeC(queryText) << '"'
-                << ", parameters: " << paramsText);
-        }
-    }
-
 
     void FillCompileStatus(const TKqpCompileResult::TConstPtr& compileResult,
         TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& record)

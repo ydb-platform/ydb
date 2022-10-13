@@ -18,6 +18,7 @@ target_link_libraries(core-kqp-prepare PUBLIC
   core-kqp-common
   dq-actors-protos
   yql-dq-type_ann
+  public-lib-value
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-prepare PRIVATE

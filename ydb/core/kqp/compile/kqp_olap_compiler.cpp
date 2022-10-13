@@ -407,6 +407,17 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
     }
 }
 
+void CompileProjection(const TKqpOlapExtractMembers& extractMembers, TKqpOlapCompileContext& ctx) {
+    auto* projection = ctx.CreateProjection();
+    for (auto col : extractMembers.Members()) {
+        auto colName = col.StringValue();
+        auto colId = GetOrCreateColumnId(col, ctx);
+
+        auto* projCol = projection->AddColumns();
+        projCol->SetId(colId);
+    }
+}
+
 void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
     if (operation.Raw() == ctx.GetRowExpr()) {
         return;
@@ -419,6 +430,9 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
             return;
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);
+            return;
+        } else if (auto maybeExtractMembers = operation.Maybe<TKqpOlapExtractMembers>()) {
+            CompileProjection(maybeExtractMembers.Cast(), ctx);
             return;
         }
     }

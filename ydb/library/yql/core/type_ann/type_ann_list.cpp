@@ -4213,7 +4213,7 @@ namespace {
         TVector<const TItemExprType*> resItems;
         for (auto& x : input->Tail().Children()) {
             YQL_ENSURE(x->IsAtom());
-            auto pos = FindOrReportMissingMember(x->Content(), input->Head().Pos(), *structType, ctx);
+            auto pos = FindOrReportMissingMember(x->Content(), input->Head().Pos(), *structType, ctx.Expr);
             if (!pos) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -4252,7 +4252,7 @@ namespace {
         const auto structType = inputItemType->Cast<TStructExprType>();
         for (auto& x : input->Tail().Children()) {
             YQL_ENSURE(x->IsAtom());
-            auto pos = FindOrReportMissingMember(x->Content(), input->Head().Pos(), *structType, ctx);
+            auto pos = FindOrReportMissingMember(x->Content(), input->Head().Pos(), *structType, ctx.Expr);
             if (!pos) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -4306,7 +4306,7 @@ namespace {
 
         for (auto& column : columnOrder) {
             YQL_ENSURE(column->IsAtom());
-            auto pos = FindOrReportMissingMember(column->Content(), input->Head().Pos(), *structType, ctx);
+            auto pos = FindOrReportMissingMember(column->Content(), input->Head().Pos(), *structType, ctx.Expr);
             if (!pos) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -4762,7 +4762,7 @@ namespace {
                 continue;
             }
 
-            auto item = FindOrReportMissingMember(child->Content(), child->Pos(), *inputStructType, ctx);
+            auto item = FindOrReportMissingMember(child->Content(), child->Pos(), *inputStructType, ctx.Expr);
             if (!item) {
                 return IGraphTransformer::TStatus::Error;
             }

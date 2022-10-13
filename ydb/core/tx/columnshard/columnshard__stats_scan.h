@@ -53,13 +53,14 @@ public:
 
         ApplyRangePredicates(batch);
 
+        // Leave only requested columns
+        auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
+
         if (!ReadMetadata->Program.empty()) {
             auto status = ApplyProgram(batch, ReadMetadata->Program, NArrow::GetCustomExecContext());
             Y_VERIFY_S(status.ok(), status.message());
         }
 
-        // Leave only requested columns
-        auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
         NOlap::TPartialReadResult out{std::move(resultBatch), std::move(lastKey)};
 
         return out;

@@ -465,6 +465,14 @@
             ]
         },
         {
+            "Name": "TKqpOlapExtractMembers",
+            "Base": "TKqpOlapOperationBase",
+            "Match": {"Type": "Callable", "Name": "TKqpOlapExtractMembers"},
+            "Children": [
+                {"Index": 1, "Name": "Members", "Type": "TCoAtomList"}
+            ]
+        },
+        {
             "Name": "TKqpEnsure",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpEnsure"},

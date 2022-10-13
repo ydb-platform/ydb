@@ -131,27 +131,51 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
 
     auto read = node.Cast<TKqpReadOlapTableRangesBase>();
 
-    // When process is set it may use columns in read.Columns() but those columns may not be present
-    // in the results. Thus do not apply extract members if process is not empty lambda
-    // TODO: Support process lambda in this rule.
-    if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
-        return node;
-    }
-
     auto usedColumns = GetUsedColumns(read, read.Columns(), parentsMap, allowMultiUsage, ctx);
     if (!usedColumns) {
         return node;
     }
 
-    return Build<TKqpReadOlapTableRangesBase>(ctx, read.Pos())
-        .CallableName(read.CallableName())
-        .Table(read.Table())
-        .Ranges(read.Ranges())
-        .Columns(usedColumns.Cast())
-        .Settings(read.Settings())
-        .ExplainPrompt(read.ExplainPrompt())
-        .Process(read.Process())
-        .Done();
+    // When process is set it may use columns in read.Columns() but those columns may not be present
+    // in the results. Thus do not apply extract members if process is not empty lambda
+    if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
+        auto extractMembers = Build<TKqpOlapExtractMembers>(ctx, node.Pos())
+            .Input(read.Process().Args().Arg(0))
+            .Members(usedColumns.Cast())
+            .Done();
+
+        auto extractMembersLambda = Build<TCoLambda>(ctx, node.Pos())
+            .Args({"row"})
+            .Body<TExprApplier>()
+                .Apply(extractMembers)
+                .With(read.Process().Args().Arg(0), "row")
+                .Build()
+            .Done();
+
+        auto newProcessLambda = ctx.FuseLambdas(extractMembersLambda.Ref(), read.Process().Ref());
+
+        YQL_CLOG(INFO, ProviderKqp) << "Pushed ExtractMembers lambda: " << KqpExprToPrettyString(*newProcessLambda, ctx);
+
+        return Build<TKqpReadOlapTableRangesBase>(ctx, read.Pos())
+            .CallableName(read.CallableName())
+            .Table(read.Table())
+            .Ranges(read.Ranges())
+            .Columns(read.Columns())
+            .Settings(read.Settings())
+            .ExplainPrompt(read.ExplainPrompt())
+            .Process(newProcessLambda)
+            .Done();
+    } else {
+        return Build<TKqpReadOlapTableRangesBase>(ctx, read.Pos())
+            .CallableName(read.CallableName())
+            .Table(read.Table())
+            .Ranges(read.Ranges())
+            .Columns(usedColumns.Cast())
+            .Settings(read.Settings())
+            .ExplainPrompt(read.ExplainPrompt())
+            .Process(read.Process())
+            .Done();
+    }
 }
 
 TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,

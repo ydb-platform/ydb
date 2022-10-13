@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
+#include "ydb/library/yql/core/type_ann/type_ann_impl.h"
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -920,6 +921,42 @@ TStatus AnnotateOlapAgg(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+
+TStatus AnnotateOlapExtractMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* nodeItemType = nullptr;
+    if (!EnsureNewSeqType<true>(node->Head(), ctx, &nodeItemType)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureStructType(node->Head().Pos(), *nodeItemType, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const auto structType = nodeItemType->Cast<TStructExprType>();
+    TVector<const TItemExprType*> resItems;
+    for (auto& x : node->Tail().Children()) {
+        YQL_ENSURE(x->IsAtom());
+        auto pos = NYql::NTypeAnnImpl::FindOrReportMissingMember(x->Content(), node->Head().Pos(), *structType, ctx);
+        if (!pos) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        resItems.push_back(structType->GetItems()[*pos]);
+    }
+
+    const auto resItemType = ctx.MakeType<TStructExprType>(resItems);
+    if (!resItemType->Validate(node->Pos(), ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    node->SetTypeAnn(MakeSequenceType(node->Head().GetTypeAnn()->GetKind(), *resItemType, ctx));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 TStatus AnnotateKqpTxInternalBinding(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -1235,6 +1272,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapAgg::Match(input.Get())) {
                 return AnnotateOlapAgg(input, ctx);
+            }
+
+            if (TKqpOlapExtractMembers::Match(input.Get())) {
+                return AnnotateOlapExtractMembers(input, ctx);
             }
 
             if (TKqpCnMapShard::Match(input.Get()) || TKqpCnShuffleShard::Match(input.Get())) {

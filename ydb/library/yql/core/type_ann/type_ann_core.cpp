@@ -869,11 +869,11 @@ namespace NTypeAnnImpl {
         return result;
     }
 
-    TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TStructExprType& structType, TContext& ctx) {
+    TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TStructExprType& structType, TExprContext& ctx) {
         TString errStr;
         auto result = FindOrReportMissingMember(memberName, structType, errStr);
         if (!result) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), errStr));
+            ctx.AddError(TIssue(ctx.GetPosition(pos), errStr));
         }
         return result;
     }
@@ -913,7 +913,7 @@ namespace NTypeAnnImpl {
         }
 
         auto memberName = input->Tail().Content();
-        auto pos = FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx);
+        auto pos = FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx.Expr);
         if (!pos) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1095,7 +1095,7 @@ namespace NTypeAnnImpl {
         bool isOptional = input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
         const TStructExprType& structType = *RemoveAllOptionals(input->Head().GetTypeAnn())->Cast<TStructExprType>();
 
-        auto pos = FindOrReportMissingMember(columnNameNode->Content(), input->Pos(), structType, ctx);
+        auto pos = FindOrReportMissingMember(columnNameNode->Content(), input->Pos(), structType, ctx.Expr);
         if (!pos) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1706,7 +1706,7 @@ namespace NTypeAnnImpl {
         TVector<const TItemExprType*> newItems = structType->GetItems();
         EraseIf(newItems, [&](const auto& item) { return item->GetName() == memberName; });
 
-        if (!Forced && !FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx)) {
+        if (!Forced && !FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1744,7 +1744,7 @@ namespace NTypeAnnImpl {
             auto memberName = child->Content();
             EraseIf(newItems, [&](const auto& item) { return item->GetName() == memberName; });
 
-            if (!Forced && !FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx)) {
+            if (!Forced && !FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -1927,7 +1927,7 @@ namespace NTypeAnnImpl {
 
         auto memberName = input->Child(1)->Content();
         auto structType = input->Head().GetTypeAnn()->Cast<TStructExprType>();
-        auto pos = FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx);
+        auto pos = FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx.Expr);
         if (!pos) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -5032,7 +5032,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         const TTypeAnnotationNode* itemType;
         if (varType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Struct) {
             auto structType = varType->GetUnderlyingType()->Cast<TStructExprType>();
-            auto pos = FindOrReportMissingMember(input->Child(1)->Content(), input->Pos(), *structType, ctx);
+            auto pos = FindOrReportMissingMember(input->Child(1)->Content(), input->Pos(), *structType, ctx.Expr);
             if (!pos) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -7904,7 +7904,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             input->SetTypeAnn(tupleType->GetItems()[index]);
         } else {
             auto structType = variantType->GetUnderlyingType()->Cast<TStructExprType>();
-            auto pos = FindOrReportMissingMember(input->Child(1)->Content(), input->Pos(), *structType, ctx);
+            auto pos = FindOrReportMissingMember(input->Child(1)->Content(), input->Pos(), *structType, ctx.Expr);
             if (!pos) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -8023,7 +8023,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     itemType = tupleType->GetItems()[index];
                     itemIndex = index;
                 } else {
-                    auto pos = FindOrReportMissingMember(child->Content(), child->Pos(), *structType, ctx);
+                    auto pos = FindOrReportMissingMember(child->Content(), child->Pos(), *structType, ctx.Expr);
                     if (!pos) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -11030,7 +11030,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto pos = FindOrReportMissingMember(key, keyNode->Pos(), structType, ctx);
+            auto pos = FindOrReportMissingMember(key, keyNode->Pos(), structType, ctx.Expr);
             if (!pos) {
                 return IGraphTransformer::TStatus::Error;
             }

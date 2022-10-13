@@ -1751,7 +1751,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountAll_FilterL) {
-    //https://st.yandex-team.ru/KIKIMR-15900
+        //https://st.yandex-team.ru/KIKIMR-16073
         return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
@@ -1834,8 +1834,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_ResultT_FilterL_Limit2) {
-        //https://st.yandex-team.ru/KIKIMR-15900
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -1845,14 +1843,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 2
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("KqpOlapExtractMembers")
             .MutableLimitChecker().SetExpectedLimit(2);
 
         TestAggregations({ testCase });
     }
 
     Y_UNIT_TEST(Aggregation_ResultT_FilterL_OrderT_Limit2) {
-        //https://st.yandex-team.ru/KIKIMR-15900
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -1863,7 +1860,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 2
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("KqpOlapExtractMembers")
             .MutableLimitChecker().SetExpectedLimit(2);
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_ResultL_FilterL_OrderL_Limit2) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp, level
+                FROM `/Root/olapStore/olapTable`
+                WHERE level > 1
+                ORDER BY level
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter");
 
         TestAggregations({ testCase });
     }

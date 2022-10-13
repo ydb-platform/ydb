@@ -89,6 +89,26 @@ void TProtoToJson::ProtoToJson(IOutputStream& to, const ::google::protobuf::Mess
         return;
     }
 
+    if (protoFrom.GetTypeName() == google::protobuf::Int64Value::descriptor()->full_name()) {
+        auto& b = static_cast<const google::protobuf::Int64Value&>(protoFrom);
+        if (jsonSettings.UI64AsString) {
+            to << '"';
+            to << b.value();
+            to << '"';
+        } else {
+            to << b.value();
+        }
+        return;
+    }
+
+    if (protoFrom.GetTypeName() == google::protobuf::StringValue::descriptor()->full_name()) {
+        auto& s = static_cast<const google::protobuf::StringValue&>(protoFrom);
+        to << '"';
+        EscapeJsonString(to, s.value());
+        to << '"';
+        return;
+    }
+
     to << '{';
     ProtoToJsonInline(to, protoFrom, jsonSettings);
     to << '}';
@@ -478,6 +498,10 @@ void TProtoToJson::ProtoToJsonSchema(IOutputStream& to, const TJsonSettings& jso
                     to << "{\"type\":\"string\", \"example\":\"3600s\"}";
                 } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::BoolValue::descriptor()->full_name()) {
                     to << "{\"type\":\"boolean\"}";
+                } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::StringValue::descriptor()->full_name()) {
+                    to << "{\"type\":\"string\"}";
+                } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::Int64Value::descriptor()->full_name()) {
+                    to << "{\"type\":\"integer\",\"format\":\"int64\"}";
                 } else if (descriptors.insert(descriptor).second) {
                     ProtoToJsonSchema(to, jsonSettings, fieldDescriptor->message_type(), descriptors);
                     descriptors.erase(descriptor);

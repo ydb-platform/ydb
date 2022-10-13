@@ -3,7 +3,6 @@ option cc_enable_arenas = true;
 
 package FQHttp;
 
-import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -30,23 +29,23 @@ message Column {
 }
 
 message ResultSetMeta {
-    int64 rows_count = 1 [(Ydb.value) = ">= 0"];
+    google.protobuf.Int64Value rows_count = 1;
     google.protobuf.BoolValue truncated = 2;
 }
 
 message CreateQueryRequest {
     YandexQuery.QueryContent.QueryType type = 1;
-    string name = 2 [(Ydb.length).le = 1024];
-    string text = 3 [(Ydb.length).le = 102400]; // The text of the query itself
-    string description = 4 [(Ydb.length).le = 10240]; // Description of the query, there can be any text
+    string name = 2;
+    string text = 3;
+    string description = 4;
 }
 
 message CreateQueryResult {
-    string id = 1 [(Ydb.length).le = 1024];
+    string id = 1;
 }
 
 message GetQueryRequest {
-    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+    string query_id = 1;
 }
 
 message GetQueryResult {
@@ -57,19 +56,19 @@ message GetQueryResult {
         FAILED = 3;
     }
 
-    string id = 1;
+    google.protobuf.StringValue id = 1;
     YandexQuery.QueryContent.QueryType type = 2;
-    string name = 3 [(Ydb.length).le = 1024];
-    string description = 4 [(Ydb.length).le = 10240]; // Description of the query, there can be any text
+    google.protobuf.StringValue name = 3;
+    google.protobuf.StringValue description = 4;
     ComputeStatus status = 5;
-    string text = 6 [(Ydb.length).le = 102400]; // The text of the query itself
+    google.protobuf.StringValue text = 6;
     QueryMeta meta = 7;
     repeated Ydb.Issue.IssueMessage issues = 8;
     repeated ResultSetMeta result_sets = 9;
 }
 
 message GetQueryStatusRequest {
-    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+    string query_id = 1;
 }
 
 message GetQueryStatusResult {
@@ -77,24 +76,24 @@ message GetQueryStatusResult {
 }
 
 message DeleteQueryRequest {
-    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+    string query_id = 1;
 }
 
 message DeleteQueryResult {
 }
 
 message StopQueryRequest {
-    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
+    string query_id = 1;
 }
 
 message StopQueryResult {
 }
 
 message GetResultDataRequest {
-    string query_id = 1 [(Ydb.length).range = {min: 1, max: 1024}];
-    int32 result_set_index = 2 [(Ydb.value) = ">= 0"];
-    int64 offset = 3 [(Ydb.value) = ">= 0"];
-    int64 limit = 4 [(Ydb.value) = "[1; 1000]"];
+    string query_id = 1;
+    int32 result_set_index = 2;
+    int64 offset = 3;
+    int64 limit = 4;
 }
 
 message GetResultDataResult {

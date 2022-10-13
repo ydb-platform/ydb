@@ -26,6 +26,9 @@ using ::google::protobuf::RepeatedPtrField;
 #define SIMPLE_COPY_MUTABLE_FIELD(field) *dst.mutable_##field() = src.field()
 #define SIMPLE_COPY_MUTABLE_RENAME_FIELD(srcField, dstField) *dst.mutable_##dstField() = src.srcField()
 
+#define SIMPLE_COPY_MUTABLE_WRAPPER_FIELD(field) dst.mutable_##field()->set_value(src.field())
+#define SIMPLE_COPY_MUTABLE_RENAME_WRAPPER_FIELD(srcField, dstField) dst.mutable_##dstField()->set_value(src.srcField())
+
 #define SIMPLE_COPY_REPEATABLE_FIELD(field) FqConvert(src.field(), *dst.mutable_##field())
 #define SIMPLE_COPY_REPEATABLE_RENAME_FIELD(srcField, dstField) FqConvert(src.srcField(), *dst.mutable_##dstField())
 
@@ -58,16 +61,19 @@ void FqConvert(const Ydb::Operations::Operation& src, FQHttp::Error& dst) {
     SIMPLE_COPY_MUTABLE_RENAME_FIELD(issues, details);
 }
 
-#define FQ_CONVERT_QUERY_CONTENT(srcType, dstType) \
-void FqConvert(const srcType& src, dstType& dst) { \
-    SIMPLE_COPY_FIELD(type); \
-    SIMPLE_COPY_FIELD(name); \
-    SIMPLE_COPY_FIELD(text); \
-    SIMPLE_COPY_FIELD(description); \
+void FqConvert(const FQHttp::CreateQueryRequest& src, YandexQuery::QueryContent& dst) {
+    SIMPLE_COPY_FIELD(type);
+    SIMPLE_COPY_FIELD(name);
+    SIMPLE_COPY_FIELD(text);
+    SIMPLE_COPY_FIELD(description);
 }
 
-FQ_CONVERT_QUERY_CONTENT(FQHttp::CreateQueryRequest, YandexQuery::QueryContent);
-FQ_CONVERT_QUERY_CONTENT(YandexQuery::QueryContent, FQHttp::GetQueryResult);
+void FqConvert(const YandexQuery::QueryContent& src, FQHttp::GetQueryResult& dst) {
+    SIMPLE_COPY_FIELD(type);
+    SIMPLE_COPY_MUTABLE_WRAPPER_FIELD(name);
+    SIMPLE_COPY_MUTABLE_WRAPPER_FIELD(text);
+    SIMPLE_COPY_MUTABLE_WRAPPER_FIELD(description);
+}
 
 void FqConvert(const FQHttp::CreateQueryRequest& src, YandexQuery::CreateQueryRequest& dst) {
     FqConvert(src, *dst.mutable_content());
@@ -118,16 +124,15 @@ FQHttp::GetQueryResult::ComputeStatus RemapQueryStatus(YandexQuery::QueryMeta::C
 }
 
 void FqConvert(const YandexQuery::ResultSetMeta& src, FQHttp::ResultSetMeta& dst) {
-    SIMPLE_COPY_FIELD(rows_count);
-    // this field should be present in json regardless of value
-    dst.mutable_truncated()->set_value(src.truncated());
+    SIMPLE_COPY_MUTABLE_WRAPPER_FIELD(rows_count);
+    SIMPLE_COPY_MUTABLE_WRAPPER_FIELD(truncated);
 }
 
 void FqConvert(const YandexQuery::Query& src, FQHttp::GetQueryResult& dst) {
     FQ_CONVERT_FIELD(meta);
 
     FqConvert(src.content(), dst);
-    dst.set_id(src.meta().common().id());
+    dst.mutable_id()->set_value(src.meta().common().id());
     dst.set_status(RemapQueryStatus(src.meta().status()));
 
     for (const auto& result_meta : src.result_set_meta()) {

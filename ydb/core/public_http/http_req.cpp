@@ -142,10 +142,10 @@ namespace NKikimr::NPublicHttp {
 
         auto group = Counters;
         if (Db) {
-            group = group->GetSubgroup("db", Db);
+            group = group->GetSubgroup("target_db", Db);
         }
         if (Project) {
-            group = group->GetSubgroup("project", Project);
+            group = group->GetSubgroup("target_project", Project);
         }
         group = group->GetSubgroup("path_pattern", PathPattern)->GetSubgroup("method", TString(Request->Method));
         group->GetSubgroup("code", TString(status))->GetCounter("count", true)->Inc();

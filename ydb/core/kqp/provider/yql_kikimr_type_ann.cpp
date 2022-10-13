@@ -820,6 +820,12 @@ private:
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     "Can't reset TTL settings"));
                 return TStatus::Error;
+            } else if (name == "storeType") {
+                meta->TableSettings.StoreType = TString(setting.Value().Cast<TCoAtom>().Value());
+            } else if (name == "partitionByHashFunction") {
+                meta->TableSettings.PartitionByHashFunction = TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                );
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));

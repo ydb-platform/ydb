@@ -1108,14 +1108,9 @@ public:
             }
 
             std::pair<TString, TString> pathPair;
-            if (createDir) {
+            {
                 TString error;
-                if (!TrySplitPathByDb(metadata->Name, Database, pathPair, error)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            } else {
-                TString error;
-                if (!TrySplitTablePath(metadata->Name, pathPair, error)) {
+                if (!GetPathPair(metadata->Name, pathPair, error, createDir)) {
                     return MakeFuture(ResultFromError<TGenericResult>(error));
                 }
             }
@@ -1218,6 +1213,51 @@ public:
                 });
 
             return tablePromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> CreateColumnTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(metadata->Cluster)) {
+                return InvalidCluster<TGenericResult>(metadata->Cluster);
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!GetPathPair(metadata->Name, pathPair, error, createDir)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(Database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(pathPair.first);
+
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnTable);
+            NKikimrSchemeOp::TColumnTableDescription* tableDesc = schemeTx.MutableCreateColumnTable();
+            FillCreateColumnTableColumnDesc(*tableDesc, pathPair.second, metadata);
+
+            if (!FillCreateColumnTableDesc(metadata, *tableDesc, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                return MakeFuture(std::move(errResult));
+            }
+
+            return SendSchemeRequest(ev.Release());
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
@@ -2174,6 +2214,15 @@ private:
         return false;
     }
 
+    bool GetPathPair(const TString& tableName, std::pair<TString, TString>& pathPair, TString& error,
+        bool createDir) {
+        if (createDir) {
+            return TrySplitPathByDb(tableName, Database, pathPair, error);
+        } else {
+            return TrySplitTablePath(tableName, pathPair, error);
+        }
+    }
+
 private:
     static TRunResponse GetRunResponse(NKikimrTxUserProxy::TEvProposeTransactionStatus&& ev) {
         IKqpGateway::TRunResponse response;
@@ -2248,6 +2297,28 @@ private:
 
         for (TString& keyColumn : metadata->KeyColumnNames) {
             tableDesc.AddKeyColumnNames(keyColumn);
+        }
+    }
+
+    static void FillCreateColumnTableColumnDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+        const TString& name, NYql::TKikimrTableMetadataPtr metadata)
+    {
+        tableDesc.SetName(name);
+
+        TColumnTableSchema& schema = *tableDesc.MutableSchema();
+
+        Y_ENSURE(metadata->ColumnOrder.size() == metadata->Columns.size());
+        for (const auto& name : metadata->ColumnOrder) {
+            auto columnIt = metadata->Columns.find(name);
+            Y_ENSURE(columnIt != metadata->Columns.end());
+
+            TOlapColumnDescription& columnDesc = *schema.AddColumns();
+            columnDesc.SetName(columnIt->second.Name);
+            columnDesc.SetType(columnIt->second.Type);
+        }
+
+        for (TString& keyColumn : metadata->KeyColumnNames) {
+            schema.AddKeyColumnNames(keyColumn);
         }
     }
 
@@ -2490,7 +2561,7 @@ private:
                     familyProto->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
                 } else {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unknown compression '" << family.Compression << "' for a column family";
+                    error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
                     return false;
                 }
             }
@@ -2655,6 +2726,26 @@ private:
         if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
             return false;
         }
+        return true;
+    }
+
+    static bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
+        NKikimrSchemeOp::TColumnTableDescription& tableDesc, Ydb::StatusIds::StatusCode& code, TString& error)
+    {
+
+        if (metadata->TableSettings.PartitionByHashFunction) {
+            auto& hashSharding = *tableDesc.MutableSharding()->MutableHashSharding();
+            if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "modulo_n") {
+                hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+            } else if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "cloud_logs") {
+                hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown hash function '" << metadata->TableSettings.PartitionByHashFunction.GetRef() << "' to partition by";
+                return false;
+            }
+        }
+
         return true;
     }
 

@@ -862,6 +862,13 @@ public:
                     YQL_ENSURE(false, "Can't reset TTL settings");
                 }
             }
+            if (Params.TableSettings.StoreType) {
+                const auto& ref = Params.TableSettings.StoreType.GetRef();
+                settings = L(settings, Q(Y(Q("storeType"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
+            if (Params.TableSettings.PartitionByHashFunction) {
+                settings = L(settings, Q(Y(Q("partitionByHashFunction"), Params.TableSettings.PartitionByHashFunction)));
+            }
 
             opts = L(opts, Q(Y(Q("tableSettings"), Q(settings))));
         }

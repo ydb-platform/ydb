@@ -474,7 +474,12 @@ public:
             }
 
             bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->CreateTable(table.Metadata, true);
+            auto future = prepareOnly ? CreateDummySuccess() : (
+                table.Metadata->TableSettings.StoreType
+                    && to_lower(table.Metadata->TableSettings.StoreType.GetRef()) == "column"
+                    ? Gateway->CreateColumnTable(table.Metadata, true)
+                    : Gateway->CreateTable(table.Metadata, true)
+            );
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

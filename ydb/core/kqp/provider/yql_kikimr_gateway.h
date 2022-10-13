@@ -174,6 +174,8 @@ struct TTableSettings {
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
     TResetableSetting<TTtlSettings, void> TtlSettings;
+    TMaybe<TString> StoreType;
+    TMaybe<TString> PartitionByHashFunction;
 
     bool IsSet() const;
 };
@@ -621,6 +623,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
 
     virtual TVector<TString> GetCollectedSchemeData() = 0;
 

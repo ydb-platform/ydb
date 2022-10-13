@@ -2241,6 +2241,24 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         } else {
             settings.TtlSettings.Reset();
         }
+    } else if (to_lower(id.Name) == "store") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreId(*value, settings.StoreType, *this)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an identifier";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "partition_by_hash_function") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreString(*value, settings.PartitionByHashFunction, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else {
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;

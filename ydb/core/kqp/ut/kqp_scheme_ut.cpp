@@ -2881,6 +2881,46 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(CreateTableStoreSimple) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableStoreName = "/Root/ColumnTableTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableStoreName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE = COLUMN,
+                PARTITION_BY_HASH_FUNCTION = "asd"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStoreWithWrongFunction) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableStoreName = "/Root/ColumnTableTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableStoreName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE = COLUMN,
+                PARTITION_BY_HASH_FUNCTION = "some_function"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

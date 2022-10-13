@@ -1102,11 +1102,13 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> KeyBloomFilter;
         TNodePtr ReadReplicasSettings;
         NYql::TResetableSetting<TTtlSettings, void> TtlSettings;
+        TMaybe<TIdentifier> StoreType;
+        TNodePtr PartitionByHashFunction;
 
         bool IsSet() const {
             return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
                 || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter
-                || ReadReplicasSettings || TtlSettings;
+                || ReadReplicasSettings || TtlSettings || StoreType || PartitionByHashFunction;
         }
     };
 

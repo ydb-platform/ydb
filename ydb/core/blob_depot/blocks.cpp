@@ -165,7 +165,7 @@ namespace NKikimr::NBlobDepot {
                 case NKikimrProto::ALREADY:
                     // race, but this is not possible in current implementation
                     // ORLY? :)
-                    Y_FAIL();
+                    Y_FAIL(); // FIXME: fails
 
                 case NKikimrProto::ERROR:
                 default:

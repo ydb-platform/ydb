@@ -11,6 +11,8 @@ namespace NKikimr::NBlobDepot {
             bool ReadBody;
             ui32 MinGeneration = 0;
 
+            ui32 GetBlockedGenerationRetriesRemain = 10;
+
             bool DoneWithBlockedGeneration = false;
             bool DoneWithData = false;
 
@@ -88,8 +90,8 @@ namespace NKikimr::NBlobDepot {
                     CheckIfDone();
                 } else if (status != NKikimrProto::UNKNOWN) {
                     EndWithError(status, "tablet was deleted");
-                } else {
-                    Y_FAIL();
+                } else if (!--GetBlockedGenerationRetriesRemain) {
+                    EndWithError(status, "too many retries to obtain blocked generation");
                 }
             }
 

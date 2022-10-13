@@ -30,6 +30,7 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/given_id_range.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/group_metrics_exchange.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/mon_main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/space_monitor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/testing.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_apply_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_init_schema.cpp

@@ -126,6 +126,8 @@ namespace NKikimr::NBlobDepot {
                     if (outcome == EUpdateOutcome::DROP) {
                         it->second = 0;
                         deleteQ.push_back(id);
+                    } else {
+                        TotalStoredDataSize += id.BlobSize();
                     }
                 } else if (outcome != EUpdateOutcome::DROP) {
                     ++it->second;
@@ -139,6 +141,7 @@ namespace NKikimr::NBlobDepot {
                     InFlightTrash.emplace(cookie, id);
                     NIceDb::TNiceDb(txc.DB).Table<Schema::Trash>().Key(id.AsBinaryString()).Update();
                     RefCount.erase(it);
+                    TotalStoredDataSize -= id.BlobSize();
                 }
             }
             if (!deleteQ.empty()) {

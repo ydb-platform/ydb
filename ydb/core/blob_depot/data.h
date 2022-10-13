@@ -354,6 +354,7 @@ namespace NKikimr::NBlobDepot {
         TIntrusiveList<TRecordsPerChannelGroup, TRecordWithTrash> RecordsWithTrash;
         std::optional<TKey> LastLoadedKey; // keys are being loaded in ascending order
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
+        ui64 TotalStoredDataSize = 0;
 
         friend class TGroupAssimilator;
 
@@ -480,6 +481,10 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev);
+
+        ui64 GetTotalStoredDataSize() const {
+            return TotalStoredDataSize;
+        }
 
     private:
         void ExecuteIssueGC(ui8 channel, ui32 groupId, TGenStep issuedGenStep,

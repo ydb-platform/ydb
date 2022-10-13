@@ -44,11 +44,9 @@ namespace NKikimr::NBlobDepot {
                     EnumerateBlobsForValueChain(value->ValueChain, TabletID(), [&](TLogoBlobID id, ui32, ui32 size) {
                         const ui32 groupId = Info()->GroupFor(id.Channel(), id.Generation());
                         const auto state = overseer.GetBlobState(groupId, id);
-                        Y_VERIFY_S(state == NTesting::EBlobState::CERTAINLY_WRITTEN
-                            || state == NTesting::EBlobState::POSSIBLY_WRITTEN,
+                        Y_VERIFY_S(state == NTesting::EBlobState::CERTAINLY_WRITTEN,
                             "UserId# " << userId.ToString() << " UserState# " << (int)userState
                             << " Id# " << id.ToString() << " State# " << (int)state);
-                        // FIXME(alexvru): handle this case somehow?
                         numDataBytes += size;
                     });
                     Y_VERIFY(numDataBytes == userId.BlobSize());

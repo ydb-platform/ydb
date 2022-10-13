@@ -4,6 +4,7 @@
 #include "garbage_collection.h"
 #include "data.h"
 #include "data_uncertain.h"
+#include "space_monitor.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -13,6 +14,7 @@ namespace NKikimr::NBlobDepot {
         , BlocksManager(new TBlocksManager(this))
         , BarrierServer(new TBarrierServer(this))
         , Data(new TData(this))
+        , SpaceMonitor(new TSpaceMonitor(this))
     {}
 
     TBlobDepot::~TBlobDepot()
@@ -44,6 +46,9 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvRangeResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);
+
+                hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
+                cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);
 
                 hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
 

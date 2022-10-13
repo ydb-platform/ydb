@@ -2,6 +2,7 @@
 #include "data.h"
 #include "garbage_collection.h"
 #include "blocks.h"
+#include "space_monitor.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -15,6 +16,7 @@ namespace NKikimr::NBlobDepot {
             Trash,
             Barriers,
             Blocks,
+            Storage,
         };
 
         static constexpr const char *TableName(ETable table) {
@@ -24,11 +26,13 @@ namespace NKikimr::NBlobDepot {
                 case ETable::Trash: return "trash";
                 case ETable::Barriers: return "barriers";
                 case ETable::Blocks: return "blocks";
+                case ETable::Storage: return "storage";
             }
         }
 
         static ETable TableByName(const TString& name) {
-            for (const ETable table : {ETable::Data, ETable::RefCount, ETable::Trash, ETable::Barriers, ETable::Blocks}) {
+            for (const ETable table : {ETable::Data, ETable::RefCount, ETable::Trash, ETable::Barriers, ETable::Blocks,
+                    ETable::Storage}) {
                 if (name == TableName(table)) {
                     return table;
                 }
@@ -67,6 +71,10 @@ namespace NKikimr::NBlobDepot {
                 case ETable::Blocks:
                     render = &TTxMonData::RenderBlocksTable;
                     break;
+
+                case ETable::Storage:
+                    render = &TTxMonData::RenderStorageTable;
+                    break;
             }
             if (!render) {
                 Y_FAIL();
@@ -79,7 +87,8 @@ namespace NKikimr::NBlobDepot {
                     }
                     DIV_CLASS("panel-body") {
                         Stream << "<ul class='nav nav-tabs'>";
-                        for (const ETable tab : {ETable::Data, ETable::RefCount, ETable::Trash, ETable::Barriers, ETable::Blocks}) {
+                        for (const ETable tab : {ETable::Data, ETable::RefCount, ETable::Trash, ETable::Barriers,
+                                ETable::Blocks, ETable::Storage}) {
                             Stream << "<li" << (table == tab ? " class='active'" : "") << ">"
                                 << "<a href='app?TabletID=" << Self->TabletID() << "&page=data&table="
                                 << TableName(tab) << "'>" << TableName(tab) << "</a></li>";
@@ -226,6 +235,69 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        void RenderStorageTable(bool header) {
+            HTML(Stream) {
+                if (header) {
+                    TABLEH() { Stream << "group id"; }
+                    TABLEH() { Stream << "bytes stored<br>in current generation"; }
+                    TABLEH() { Stream << "bytes stored<br>total"; }
+                    TABLEH() { Stream << "status flag"; }
+                    TABLEH() { Stream << "free space share"; }
+                } else {
+                    const ui32 generation = Self->Executor()->Generation();
+                    auto *info = Self->Info();
+                    std::map<ui32, std::tuple<ui64, ui64>> space;
+
+                    Self->Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
+                        const ui32 groupId = info->GroupFor(id.Channel(), id.Generation());
+                        auto& [current, total] = space[groupId];
+                        total += id.BlobSize();
+                        if (id.Generation() == generation) {
+                            current += id.BlobSize();
+                        }
+                    });
+
+                    for (const auto& [groupId, _] : Self->SpaceMonitor->Groups) {
+                        space.try_emplace(groupId);
+                    }
+
+                    auto outSize = [&](ui64 size) {
+                        static const char *suffixes[] = {
+                            "B", "KiB", "MiB", "GiB", "TiB", "PiB", nullptr
+                        };
+                        FormatHumanReadable(Stream, size, 1024, 2, suffixes);
+                    };
+
+                    for (const auto& [groupId, value] : space) {
+                        const auto& [current, total] = value;
+                        TABLER() {
+                            TABLED() { Stream << groupId; }
+                            TABLED() { outSize(current); }
+                            TABLED() { outSize(total); }
+
+                            const auto it = Self->SpaceMonitor->Groups.find(groupId);
+                            if (it != Self->SpaceMonitor->Groups.end()) {
+                                const auto& groupInfo = it->second;
+                                TABLED() {
+                                    Stream << groupInfo.StatusFlags.ToString();
+                                }
+                                TABLED() {
+                                    if (groupInfo.ApproximateFreeSpaceShare) {
+                                        Stream << Sprintf("%.1f %%", 100 * groupInfo.ApproximateFreeSpaceShare);
+                                    } else {
+                                        Stream << "<unknown>";
+                                    }
+                                }
+                            } else {
+                                TABLED() {}
+                                TABLED() {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         void Complete(const TActorContext&) override {
             TActivationContext::Send(new IEventHandle(Request->Sender, Self->SelfId(), new NMon::TEvRemoteHttpInfoRes(
                 Stream.Str()), 0, Request->Cookie));
@@ -263,7 +335,6 @@ namespace NKikimr::NBlobDepot {
         Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(s.Str()), 0, ev->Cookie);
         return true;
     }
-
 
     void TBlobDepot::RenderMainPage(IOutputStream& s) {
         HTML(s) {

@@ -24,6 +24,7 @@ namespace NKikimr::NBlobDepot {
                 EvCheckExpiredAgents = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvCommitCertainKeys,
                 EvDoGroupMetricsExchange,
+                EvKickSpaceMonitor,
             };
         };
 
@@ -122,6 +123,7 @@ namespace NKikimr::NBlobDepot {
             DoGroupMetricsExchange();
             StartGroupAssimilator();
             ProcessRegisterAgentQ();
+            KickSpaceMonitor();
         }
 
         void OnDetach(const TActorContext&) override {
@@ -207,6 +209,15 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Space monitoring
+
+        class TSpaceMonitor;
+        std::unique_ptr<TSpaceMonitor> SpaceMonitor;
+
+        void Handle(TEvBlobStorage::TEvStatusResult::TPtr ev);
+        void KickSpaceMonitor();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Monitoring

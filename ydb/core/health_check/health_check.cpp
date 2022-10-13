@@ -203,8 +203,11 @@ public:
         static TString GetIssueId(const Ydb::Monitoring::IssueLog& issueLog) {
             TStringStream id;
             id << Ydb::Monitoring::StatusFlag_Status_Name(issueLog.status());
-            id << '-' << crc16(issueLog.message());
             const Ydb::Monitoring::Location& location(issueLog.location());
+            if (location.database().name()) {
+                id << '-' << crc16(location.database().name());
+            }
+            id << '-' << crc16(issueLog.message());
             if (location.storage().node().id()) {
                 id << '-' << location.storage().node().id();
             } else {
@@ -440,8 +443,11 @@ public:
     TTabletRequestsState TabletRequests;
 
     TDuration Timeout = TDuration::MilliSeconds(10000);
-    bool IgnoreServerlessDatabases = true;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
+
+    bool IsSpecificDatabaseFilter() {
+        return FilterDatabase && FilterDatabase != DomainPath;
+    }
 
     void Bootstrap() {
         FilterDatabase = Request->Database;
@@ -460,20 +466,17 @@ public:
         if (ConsoleId) {
             TabletRequests.TabletStates[ConsoleId].Database = DomainPath;
             TabletRequests.TabletStates[ConsoleId].Type = TTabletTypes::Console;
-            if (FilterDatabase) {
-                if (FilterDatabase != DomainPath) {
-                    IgnoreServerlessDatabases = false; // we don't ignore sl database if it was exactly specified
-                    RequestTenantStatus(FilterDatabase);
-                } else {
-                    TTenantInfo& tenant = TenantByPath[DomainPath];
-                    tenant.Name = DomainPath;
-                    RequestSchemeCacheNavigate(DomainPath);
-                }
-            } else {
+            if (!FilterDatabase) {
                 TTenantInfo& tenant = TenantByPath[DomainPath];
                 tenant.Name = DomainPath;
                 RequestSchemeCacheNavigate(DomainPath);
                 RequestListTenants();
+            } else if (FilterDatabase != DomainPath) {
+                RequestTenantStatus(FilterDatabase);
+            } else {
+                TTenantInfo& tenant = TenantByPath[DomainPath];
+                tenant.Name = DomainPath;
+                RequestSchemeCacheNavigate(DomainPath);
             }
         }
 
@@ -485,7 +488,7 @@ public:
             RequestHiveInfo(RootHiveId);
         }
 
-        if (RootSchemeShardId && (!FilterDatabase || FilterDatabase == DomainPath)) {
+        if (RootSchemeShardId && !IsSpecificDatabaseFilter()) {
             TabletRequests.TabletStates[RootSchemeShardId].Database = DomainPath;
             TabletRequests.TabletStates[RootSchemeShardId].Type = TTabletTypes::SchemeShard;
             RequestDescribe(RootSchemeShardId, DomainPath);
@@ -534,7 +537,8 @@ public:
                 storagePoolName = STATIC_STORAGE_POOL_NAME;
             }
             StoragePoolState[storagePoolName].Groups.emplace(group.groupid());
-            if (!FilterDatabase || FilterDatabase == DomainPath) {
+            
+            if (!IsSpecificDatabaseFilter()) {
                 DatabaseState[DomainPath].StoragePoolNames.emplace_back(storagePoolName);
             }
         }
@@ -828,7 +832,7 @@ public:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        bool needComputeFromStaticNodes = (!FilterDatabase || FilterDatabase == DomainPath);
+        bool needComputeFromStaticNodes = !IsSpecificDatabaseFilter();
         NodesInfo = ev->Release();
         for (const auto& ni : NodesInfo->Nodes) {
             MergedNodeInfo[ni.NodeId] = &ni;
@@ -954,12 +958,14 @@ public:
             Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
             operation.result().UnpackTo(&getTenantStatusResult);
             TString path = getTenantStatusResult.path();
-            if (!getTenantStatusResult.has_serverless_resources() || !IgnoreServerlessDatabases) {
+
+            bool ignoreServerlessDatabases = !IsSpecificDatabaseFilter(); // we don't ignore sl database if it was exactly specified
+            if (getTenantStatusResult.has_serverless_resources() && ignoreServerlessDatabases) {
+                DatabaseState.erase(path);
+            } else {
                 DatabaseStatusByPath[path] = std::move(getTenantStatusResult);
                 DatabaseState[path];
                 RequestSchemeCacheNavigate(path);
-            } else {
-                DatabaseState.erase(path);
             }
         }
         RequestDone("TEvGetTenantStatusResponse");
@@ -1809,47 +1815,97 @@ public:
         storageStatus.set_overall(context.GetOverallStatus());
     }
 
-    void FillResult(Ydb::Monitoring::SelfCheckResult& result) {
-        Ydb::Monitoring::StatusFlag::Status overall = Ydb::Monitoring::StatusFlag::GREY;
-        std::unordered_set<std::pair<TString, TString>> issueIds;
-        bool hasDegraded = false;
-        for (auto& [path, state] : DatabaseState) {
-            Ydb::Monitoring::DatabaseStatus& databaseStatus(*result.add_database_status());
-            TSelfCheckResult context;
-            context.Type = "DATABASE";
-            context.Location.mutable_database()->set_name(path);
-            databaseStatus.set_name(path);
-            FillCompute(state, *databaseStatus.mutable_compute(), {&context, "COMPUTE"});
-            FillStorage(state, *databaseStatus.mutable_storage(), {&context, "STORAGE"});
-            if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN
-                    && databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(MaxStatus(databaseStatus.compute().overall(), databaseStatus.storage().overall()),
-                    "Database has multiple issues", "database-state", {"compute-state", "storage-state"});
-            } else if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(databaseStatus.compute().overall(), "Database has compute issues", "database-state", {"compute-state"});
-            } else if (databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(databaseStatus.storage().overall(), "Database has storage issues", "database-state", {"storage-state"});
+    struct TOverallStateContext {
+        Ydb::Monitoring::SelfCheckResult* Result;
+        Ydb::Monitoring::StatusFlag::Status Status = Ydb::Monitoring::StatusFlag::GREY;
+        bool HasDegraded = false;
+        std::unordered_set<std::pair<TString, TString>> IssueIds;
+        
+        TOverallStateContext(Ydb::Monitoring::SelfCheckResult* result) {
+            Result = result;
+        }
+
+        void FillSelfCheckResult() {
+            switch (Status) {
+            case Ydb::Monitoring::StatusFlag::GREEN:
+                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
+                break;
+            case Ydb::Monitoring::StatusFlag::YELLOW:
+                if (HasDegraded) {
+                    Result->set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
+                } else {
+                    Result->set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
+                }
+                break;
+            case Ydb::Monitoring::StatusFlag::BLUE:
+                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
+                break;
+            case Ydb::Monitoring::StatusFlag::ORANGE:
+                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
+                break;
+            case Ydb::Monitoring::StatusFlag::RED:
+                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::EMERGENCY);
+                break;
+            default:
+                break;
             }
-            databaseStatus.set_overall(context.GetOverallStatus());
-            overall = MaxStatus(overall, context.GetOverallStatus());
-            for (auto& issueRecord : context.IssueLog) {
+        }
+
+        void UpdateMaxStatus(Ydb::Monitoring::StatusFlag::Status status) {
+            Status = MaxStatus(Status, status);
+        }
+
+        void AddIssues(TList<TSelfCheckResult::TIssueRecord>& issueRecords) {
+            for (auto& issueRecord : issueRecords) {
                 std::pair<TString, TString> key{issueRecord.IssueLog.location().database().name(), issueRecord.IssueLog.id()};
-                if (issueIds.emplace(key).second) {
-                    result.mutable_issue_log()->Add()->CopyFrom(issueRecord.IssueLog);
+                if (IssueIds.emplace(key).second) {
+                    Result->mutable_issue_log()->Add()->CopyFrom(issueRecord.IssueLog);
                 }
             }
-            if (!hasDegraded && overall != Ydb::Monitoring::StatusFlag::GREEN && context.HasTags({"storage-state"})) {
-                hasDegraded = true;
+        }
+    };
+
+    void FillDatabaseResult(TOverallStateContext& context, const TString& path, TDatabaseState& state) {
+        Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
+        TSelfCheckResult dbContext;
+        dbContext.Type = "DATABASE";
+        dbContext.Location.mutable_database()->set_name(path);
+        databaseStatus.set_name(path);
+        FillCompute(state, *databaseStatus.mutable_compute(), {&dbContext, "COMPUTE"});
+        FillStorage(state, *databaseStatus.mutable_storage(), {&dbContext, "STORAGE"});
+        if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN
+                && databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
+            dbContext.ReportStatus(MaxStatus(databaseStatus.compute().overall(), databaseStatus.storage().overall()),
+                "Database has multiple issues", "database-state", {"compute-state", "storage-state"});
+        } else if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
+            dbContext.ReportStatus(databaseStatus.compute().overall(), "Database has compute issues", "database-state", {"compute-state"});
+        } else if (databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
+            dbContext.ReportStatus(databaseStatus.storage().overall(), "Database has storage issues", "database-state", {"storage-state"});
+        }
+        databaseStatus.set_overall(dbContext.GetOverallStatus());
+        context.UpdateMaxStatus(dbContext.GetOverallStatus());
+        context.AddIssues(dbContext.IssueLog);
+        if (!context.HasDegraded && context.Status != Ydb::Monitoring::StatusFlag::GREEN && dbContext.HasTags({"storage-state"})) {
+            context.HasDegraded = true;
+        }
+    }
+
+    void FillResult(TOverallStateContext context) {
+        if (IsSpecificDatabaseFilter()) {
+            FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
+        } else {
+            for (auto& [path, state] : DatabaseState) {
+                FillDatabaseResult(context, path, state);
             }
         }
         if (DatabaseState.empty()) {
-            Ydb::Monitoring::DatabaseStatus& databaseStatus(*result.add_database_status());
-            TSelfCheckResult context;
-            context.Location.mutable_database()->set_name(DomainPath);
+            Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
+            TSelfCheckResult tabletContext;
+            tabletContext.Location.mutable_database()->set_name(DomainPath);
             databaseStatus.set_name(DomainPath);
             {
-                FillSystemTablets({&context, "SYSTEM_TABLET"});
-                overall = MaxStatus(overall, context.GetOverallStatus());
+                FillSystemTablets({&tabletContext, "SYSTEM_TABLET"});
+                context.UpdateMaxStatus(tabletContext.GetOverallStatus());
             }
         }
         if (!FilterDatabase) {
@@ -1860,42 +1916,15 @@ public:
                 }
             }
             if (!unknownDatabase.StoragePoolNames.empty()) {
-                Ydb::Monitoring::DatabaseStatus& databaseStatus(*result.add_database_status());
-                TSelfCheckResult context;
-                FillStorage(unknownDatabase, *databaseStatus.mutable_storage(), {&context, "STORAGE"});
-                databaseStatus.set_overall(context.GetOverallStatus());
-                overall = MaxStatus(overall, context.GetOverallStatus());
-                for (auto& issueRecord : context.IssueLog) {
-                    std::pair<TString, TString> key{issueRecord.IssueLog.location().database().name(), issueRecord.IssueLog.id()};
-                    if (issueIds.emplace(key).second) {
-                        result.mutable_issue_log()->Add()->CopyFrom(issueRecord.IssueLog);
-                    }
-                }
+                Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
+                TSelfCheckResult storageContext;
+                FillStorage(unknownDatabase, *databaseStatus.mutable_storage(), {&storageContext, "STORAGE"});
+                databaseStatus.set_overall(storageContext.GetOverallStatus());
+                context.UpdateMaxStatus(storageContext.GetOverallStatus());
+                context.AddIssues(storageContext.IssueLog);
             }
         }
-        switch (overall) {
-        case Ydb::Monitoring::StatusFlag::GREEN:
-            result.set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
-            break;
-        case Ydb::Monitoring::StatusFlag::YELLOW:
-            if (hasDegraded) {
-                result.set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
-            } else {
-                result.set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
-            }
-            break;
-        case Ydb::Monitoring::StatusFlag::BLUE:
-            result.set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
-            break;
-        case Ydb::Monitoring::StatusFlag::ORANGE:
-            result.set_self_check_result(Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
-            break;
-        case Ydb::Monitoring::StatusFlag::RED:
-            result.set_self_check_result(Ydb::Monitoring::SelfCheck::EMERGENCY);
-            break;
-        default:
-            break;
-        }
+        context.FillSelfCheckResult();
     }
 
     void ReplyAndPassAway() {
@@ -1911,7 +1940,7 @@ public:
             TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
         }
 
-        FillResult(result);
+        FillResult({&result});
 
         if (!Request->Request.return_verbose_status()) {
             result.clear_database_status();

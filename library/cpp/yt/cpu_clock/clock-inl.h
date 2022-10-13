@@ -5,13 +5,7 @@
 #include "clock.h"
 #endif
 
-#if !defined(__arm__) && !defined(__aarch64__)
-#   ifdef _WIN32
-#       include <intrin.h>
-#   else
-#       include <x86intrin.h>
-#   endif
-#endif
+#include <util/system/datetime.h>
 
 namespace NYT {
 
@@ -19,11 +13,7 @@ namespace NYT {
 
 inline TCpuInstant GetCpuInstant()
 {
-#if !defined(__arm__) && !defined(__aarch64__)
-    return __rdtsc();
-#else
-    return MicroSeconds();
-#endif
+    return static_cast<TCpuInstant>(GetCycleCount());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

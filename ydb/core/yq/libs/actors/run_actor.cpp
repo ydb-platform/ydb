@@ -161,7 +161,6 @@ public:
         // parse phase
         {
             if (!Program->ParseSql(SqlSettings)) {
-                Issues.AddIssues(Program->Issues());
                 SendStatusAndDie(TProgram::TStatus::Error, "Failed to parse query");
                 return;
             }
@@ -175,7 +174,6 @@ public:
         // compile phase
         {
             if (!Program->Compile("")) {
-                Issues.AddIssues(Program->Issues());
                 SendStatusAndDie(TProgram::TStatus::Error, "Failed to compile query");
                 return;
             }

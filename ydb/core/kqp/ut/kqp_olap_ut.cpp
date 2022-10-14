@@ -2177,6 +2177,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto streamSender = runtime->AllocateEdgeActor();
         SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
         runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+        UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
     }
 
     Y_UNIT_TEST(ManyColumnShardsFilterPushdownEmptySet) {

@@ -65,7 +65,7 @@ void TClientCommandRootBase::ParseToken(TString& token, TString& tokenFile, cons
     }
 }
 
-void TClientCommandRootBase::ParseProtocol(TConfig& config) {
+bool TClientCommandRootBase::ParseProtocol(TConfig& config, TString& message) {
     auto separator_pos = Address.find("://");
     if (separator_pos != TString::npos) {
         TString protocol = Address.substr(0, separator_pos);
@@ -75,10 +75,12 @@ void TClientCommandRootBase::ParseProtocol(TConfig& config) {
         } else if (protocol == "grpc") {
             config.EnableSsl = false;
         } else {
-            throw TMisuseException() << "Unknown protocol \"" << protocol << "\".";
+            message = TStringBuilder() << "Unknown protocol \"" << protocol << "\".";
+            return false;
         }
         Address = Address.substr(separator_pos + 3);
     }
+    return true;
 }
 
 void TClientCommandRootBase::ParseCaCerts(TConfig& config) {

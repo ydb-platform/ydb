@@ -107,7 +107,10 @@ public:
                 return;
             }
         }
-        ParseProtocol(config);
+        TString message;
+        if (!ParseProtocol(config, message)) {
+            throw TMisuseException() << message;
+        }
         ParseCaCerts(config);
         config.Address = Address;
 

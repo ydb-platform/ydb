@@ -255,7 +255,10 @@ void TClientCommandRootCommon::ParseAddress(TConfig& config) {
 
     if (!Address.empty()) {
         config.EnableSsl = Settings.EnableSsl.GetRef();
-        ParseProtocol(config);
+        TString message;
+        if (!ParseProtocol(config, message)) {
+            MisuseErrors.push_back(message);
+        }
         auto colon_pos = Address.find(":");
         if (colon_pos == TString::npos) {
             config.Address = Address + ":" + port;
@@ -263,7 +266,8 @@ void TClientCommandRootCommon::ParseAddress(TConfig& config) {
             if (colon_pos == Address.rfind(":")) {
                 config.Address = Address;
             } else {
-                throw TMisuseException() << "Wrong format for option 'endpoint': more than one colon found.";
+                MisuseErrors.push_back("Wrong format for option 'endpoint': more than one colon found.");
+                return;
             }
         }
     }
@@ -274,8 +278,9 @@ void TClientCommandRootCommon::ParseProfile() {
         if (ProfileManager->HasProfile(ProfileName)) {
             Profile = ProfileManager->GetProfile(ProfileName);
         } else {
-            throw TMisuseException() << "Profile " << ProfileName << " does not exist." << Endl
-                << "Run \"ydb config profile list\" to see existing profiles";
+            MisuseErrors.push_back(TStringBuilder() << "Profile " << ProfileName << " does not exist." << Endl
+                << "Run \"ydb config profile list\" to see existing profiles");
+            return;
         }
     }
 }
@@ -298,6 +303,18 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
     TClientCommandRootBase::Validate(config);
     if (!config.NeedToConnect) {
         return;
+    }
+
+    if (!MisuseErrors.empty()) {
+        TStringBuilder errors;
+        for (auto it = MisuseErrors.begin(); it != MisuseErrors.end(); ++it) {
+            if (it != MisuseErrors.begin()) {
+                errors << Endl;
+            }
+            errors << *it;
+        }
+
+        throw TMisuseException() << errors;
     }
 
     if (Address.empty()) {
@@ -333,8 +350,8 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
     }
     auto authValue = profile->GetValue("authentication");
     if (!authValue["method"]) {
-        throw TMisuseException()
-            << "Configuration profile has \"authentication\" but does not has \"method\" in it";
+        MisuseErrors.push_back("Configuration profile has \"authentication\" but does not has \"method\" in it");
+        return false;
     }
     TString authMethod = authValue["method"].as<TString>();
 
@@ -357,11 +374,14 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         knownMethod |= (authMethod == "static-credentials");
     }
     if (!knownMethod) {
-        throw TMisuseException() << "Unknown authentication method in configuration profile: \"" << authMethod << "\"";
+        MisuseErrors.push_back(TStringBuilder() << "Unknown authentication method in configuration profile: \""
+            << authMethod << "\"");
+        return false;
     }
     if (!authValue["data"]) {
-        throw TMisuseException() << "Active configuration profile has \"authentication\" with method \""
-            << authMethod << "\" in it, but no \"data\"";
+        MisuseErrors.push_back(TStringBuilder() << "Active configuration profile has \"authentication\" with method \""
+            << authMethod << "\" in it, but no \"data\"");
+        return false;
     }
     auto authData = authValue["data"];
 
@@ -375,7 +395,16 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             PrintSettingFromProfile("token file", profile, explicitOption);
         }
         TString filename = authData.as<TString>();
-        config.SecurityToken = ReadFromFile(filename, "token");
+        TString fileContent;
+        if (!ReadFromFileIfExists(filename, "token", fileContent, true)) {
+            MisuseErrors.push_back(TStringBuilder() << "Couldn't read token from file " << filename);
+            return false;
+        }
+        if (!fileContent) {
+            MisuseErrors.push_back(TStringBuilder() << "Empty token file " << filename << " provided");
+            return false;
+        }
+        config.SecurityToken = fileContent;
     } else if (authMethod == "yc-token") {
         if (IsVerbose()) {
             PrintSettingFromProfile("Yandex.Cloud Passport token (yc-token)", profile, explicitOption);
@@ -387,7 +416,16 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             PrintSettingFromProfile("Yandex.Cloud Passport token file (yc-token-file)", profile, explicitOption);
         }
         TString filename = authData.as<TString>();
-        config.YCToken = ReadFromFile(filename, "token");
+        TString fileContent;
+        if (!ReadFromFileIfExists(filename, "token", fileContent, true)) {
+            MisuseErrors.push_back(TStringBuilder() << "Couldn't read token from file " << filename);
+            return false;
+        }
+        if (!fileContent) {
+            MisuseErrors.push_back(TStringBuilder() << "Empty token file " << filename << " provided");
+            return false;
+        }
+        config.YCToken = fileContent;
         CheckForIamEndpoint(config, profile);
     } else if (authMethod == "sa-key-file") {
         if (IsVerbose()) {
@@ -415,7 +453,13 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         }
         if (authData["password-file"]) {
             TString filename = authData["password-file"].as<TString>();
-            config.StaticCredentials.Password = ReadFromFile(filename, "password", true);
+            TString fileContent;
+            if (!ReadFromFileIfExists(filename, "password", fileContent, true)) {
+                MisuseErrors.push_back(TStringBuilder() << "Couldn't read password from file " << filename);
+                DoNotAskForPassword = true;
+                return false;
+            }
+            config.StaticCredentials.Password = fileContent;
             if (!config.StaticCredentials.Password) {
                 DoNotAskForPassword = true;
             }
@@ -583,7 +627,8 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             str << " UseMetadataCredentials (true)";
         }
 
-        throw TMisuseException() << str << ". Choose exactly one of them";
+        MisuseErrors.push_back(TStringBuilder() << str << ". Choose exactly one of them");
+        return;
     }
 
     if (config.UseStaticCredentials) {
@@ -594,7 +639,8 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             }
         } else {
             if (config.StaticCredentials.Password) {
-                throw TMisuseException() << "User password was provided without user name";
+                MisuseErrors.push_back("User password was provided without user name");
+                return;
             }
         }
     }

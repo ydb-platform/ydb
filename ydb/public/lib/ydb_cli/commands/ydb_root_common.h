@@ -67,6 +67,7 @@ private:
     TString SaKeyFile;
     TString IamEndpoint;
     const TClientSettings& Settings;
+    TVector<TString> MisuseErrors;
 };
 
 }

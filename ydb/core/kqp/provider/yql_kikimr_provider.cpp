@@ -697,19 +697,4 @@ TCoNameValueTupleList TKiExecDataQuerySettings::BuildNode(TExprContext& ctx, TPo
         .Done();
 }
 
-template <>
-double TKikimrQueryContext::GetRandom<double>() const {
-    return RandomProvider->GenRandReal2();
-}
-
-template <>
-ui64 TKikimrQueryContext::GetRandom<ui64>() const {
-    return RandomProvider->GenRand64();
-}
-
-template <>
-TGUID TKikimrQueryContext::GetRandom<TGUID>() const {
-    return RandomProvider->GenUuid4();
-}
-
 } // namespace NYql

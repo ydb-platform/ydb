@@ -76,7 +76,65 @@ enum class EKikimrQueryType {
     YqlScriptStreaming,
 };
 
-struct TKikimrQueryContext : TThrRefBase {
+struct TTimeAndRandomProvider {
+    TIntrusivePtr<ITimeProvider> TimeProvider;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
+
+    std::optional<ui64> CachedNow;
+    std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
+
+    ui64 GetCachedNow() {
+        if (!CachedNow) {
+            CachedNow = TimeProvider->Now().GetValue();
+        }
+
+        return *CachedNow;
+    }
+
+    ui64 GetCachedDate() {
+        return std::min<ui64>(NUdf::MAX_DATE - 1u, GetCachedNow() / 86400000000ul);
+    }
+
+    ui64 GetCachedDatetime() {
+        return std::min<ui64>(NUdf::MAX_DATETIME - 1u, GetCachedNow() / 1000000ul);
+    }
+
+    ui64 GetCachedTimestamp() {
+        return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1u, GetCachedNow());
+    }
+
+    template <typename T>
+    T GetRandom() const {
+        if constexpr (std::is_same_v<T, double>) {
+            return RandomProvider->GenRandReal2();
+        }
+        if constexpr (std::is_same_v<T, ui64>) {
+            return RandomProvider->GenRand64();
+        }
+        if constexpr (std::is_same_v<T, TGUID>) {
+            return RandomProvider->GenUuid4();
+        }
+    }
+
+    template <typename T>
+    T GetCachedRandom() {
+        auto& cached = std::get<std::optional<T>>(CachedRandom);
+        if (!cached) {
+            cached = GetRandom<T>();
+        }
+
+        return *cached;
+    }
+
+    void Reset() {
+        CachedNow.reset();
+        std::get<0>(CachedRandom).reset();
+        std::get<1>(CachedRandom).reset();
+        std::get<2>(CachedRandom).reset();
+    }
+};
+
+struct TKikimrQueryContext : TThrRefBase, TTimeAndRandomProvider {
     TKikimrQueryContext() {}
     TKikimrQueryContext(const TKikimrQueryContext&) = delete;
     TKikimrQueryContext& operator=(const TKikimrQueryContext&) = delete;
@@ -109,50 +167,8 @@ struct TKikimrQueryContext : TThrRefBase {
     THashMap<ui64, TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult>> InProgress;
     TVector<ui64> ExecutionOrder;
 
-    // Used to store results of transactions in TKqpSessionActor
-    TVector<TVector<NKikimrMiniKQL::TResult>> TxResults;
-
     NActors::TActorId ReplyTarget;
     TMaybe<NKikimrKqp::TRlPath> RlPath;
-
-    TIntrusivePtr<ITimeProvider> TimeProvider;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-
-    std::optional<ui64> CachedNow;
-    std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
-
-    ui64 GetCachedNow() {
-        if (!CachedNow) {
-            CachedNow = TimeProvider->Now().GetValue();
-        }
-
-        return *CachedNow;
-    }
-
-    ui64 GetCachedDate() {
-        return std::min<ui64>(NUdf::MAX_DATE - 1u, GetCachedNow() / 86400000000ul);
-    }
-
-    ui64 GetCachedDatetime() {
-        return std::min<ui64>(NUdf::MAX_DATETIME - 1u, GetCachedNow() / 1000000ul);
-    }
-
-    ui64 GetCachedTimestamp() {
-        return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1u, GetCachedNow());
-    }
-
-    template <typename T>
-    T GetRandom() const;
-
-    template <typename T>
-    T GetCachedRandom() {
-        auto& cached = std::get<std::optional<T>>(CachedRandom);
-        if (!cached) {
-            cached = GetRandom<T>();
-        }
-
-        return *cached;
-    }
 
     void Reset() {
         PrepareOnly = false;
@@ -173,10 +189,7 @@ struct TKikimrQueryContext : TThrRefBase {
 
         RlPath.Clear();
 
-        CachedNow.reset();
-        std::get<0>(CachedRandom).reset();
-        std::get<1>(CachedRandom).reset();
-        std::get<2>(CachedRandom).reset();
+        TTimeAndRandomProvider::Reset();
     }
 };
 

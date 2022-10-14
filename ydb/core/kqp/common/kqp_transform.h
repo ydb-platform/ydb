@@ -156,7 +156,7 @@ private:
     friend class TKqpTransactionContext;
 };
 
-class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase {
+class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase, public NYql::TTimeAndRandomProvider {
 public:
     explicit TKqpTransactionContext(bool implicit)
         : Implicit(implicit)
@@ -216,6 +216,7 @@ public:
 
     void Reset() {
         TKikimrTransactionContextBase::Reset();
+        TTimeAndRandomProvider::Reset();
 
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
@@ -278,7 +279,6 @@ public:
         ui32 LastIndex = 0;
     };
 
-public:
     const bool Implicit;
 
     TInstant CreationTime;
@@ -324,7 +324,7 @@ private:
     NYql::NLog::ELevel Level;
 };
 
-TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TKikimrQueryContext& queryCtx,
+TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TTimeAndRandomProvider& randomCtx, NYql::TKikimrParamsMap& parameters,
     const TVector<TVector<NKikimrMiniKQL::TResult>>& txResults, const NKqpProto::TKqpPhyParamBinding& paramBinding);
 
 } // namespace NKqp

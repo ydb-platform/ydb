@@ -76,7 +76,9 @@ struct TKqpQueryState {
     TKqpCompileResult::TConstPtr CompileResult;
     NKqpProto::TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
-    std::shared_ptr<TKikimrQueryContext> QueryCtx = std::make_shared<TKikimrQueryContext>();
+    NYql::TKikimrParamsMap Parameters;
+    TVector<TVector<NKikimrMiniKQL::TResult>> TxResults;
+
     TActorId RequestActorId;
 
     ui64 CurrentTx = 0;
@@ -166,7 +168,7 @@ public:
     void MakeNewQueryState() {
         ++QueryId;
         YQL_ENSURE(!QueryState);
-        QueryState = std::make_unique<TKqpQueryState>();
+        QueryState = std::make_shared<TKqpQueryState>();
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -693,9 +695,9 @@ public:
             return false;
         }
 
-        auto& queryCtx = QueryState->QueryCtx;
-        queryCtx->TimeProvider = TAppData::TimeProvider;
-        queryCtx->RandomProvider = TAppData::RandomProvider;
+        auto& txCtx = QueryState->TxCtx;
+        txCtx->TimeProvider = TAppData::TimeProvider;
+        txCtx->RandomProvider = TAppData::RandomProvider;
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         auto [success, issues] = ApplyTableOperations(QueryState->TxCtx.Get(), phyQuery);
@@ -718,7 +720,7 @@ public:
             || action == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED && type == NKikimrKqp::QUERY_TYPE_PREPARED_DML,
             "Unexpected query action: " << action << " and type: " << type);
 
-        ParseParameters(std::move(*QueryState->Request.MutableParameters()), queryCtx->Parameters);
+        ParseParameters(std::move(*QueryState->Request.MutableParameters()), QueryState->Parameters);
         return true;
     }
 
@@ -816,13 +818,13 @@ public:
     }
 
     NKikimrMiniKQL::TParams* ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type) {
-        auto& queryCtx = QueryState->QueryCtx;
-        YQL_ENSURE(queryCtx);
+        auto& txCtx = QueryState->TxCtx;
+        YQL_ENSURE(txCtx);
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-        auto parameter = queryCtx->Parameters.FindPtr(name);
+        auto parameter = QueryState->Parameters.FindPtr(name);
         if (!parameter) {
             if (type.GetKind() == NKikimrMiniKQL::ETypeKind::Optional) {
-                auto& newParameter = queryCtx->Parameters[name];
+                auto& newParameter = QueryState->Parameters[name];
                 newParameter.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Optional);
                 *newParameter.MutableType()->MutableOptional()->MutableItem() = type.GetOptional().GetItem();
 
@@ -846,13 +848,13 @@ public:
             ValidateParameter(paramDesc.GetName(), paramDesc.GetType());
         }
 
-        TKqpParamsMap paramsMap(QueryState->QueryCtx);
+        TKqpParamsMap paramsMap(QueryState);
 
         for (const auto& paramBinding : tx.GetParamBindings()) {
             try {
-                auto& qCtx = QueryState->QueryCtx;
+                auto& txCtx = QueryState->TxCtx;
                 auto it = paramsMap.Values.emplace(paramBinding.GetName(),
-                    *GetParamValue(/*ensure*/ true, *qCtx, qCtx->TxResults, paramBinding));
+                    *GetParamValue(/*ensure*/ true, *txCtx, QueryState->Parameters, QueryState->TxResults, paramBinding));
                 YQL_ENSURE(it.second);
             } catch (const yexception& ex) {
                 auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
@@ -896,7 +898,7 @@ public:
     }
 
     TKqpParamsMap GetParamsRefMap(const TParamValueMap& map) {
-        TKqpParamsMap paramsMap(QueryState->QueryCtx);
+        TKqpParamsMap paramsMap(QueryState);
         for (auto& [k, v] : map) {
             auto res = paramsMap.Values.emplace(k, NYql::NDq::TMkqlValueRef(v));
             YQL_ENSURE(res.second);
@@ -908,9 +910,8 @@ public:
     TParamValueMap CreateKqpValueMap(const NKqpProto::TKqpPhyTx& tx) {
         TParamValueMap paramsMap;
         for (const auto& paramBinding : tx.GetParamBindings()) {
-            auto& qCtx = QueryState->QueryCtx;
-            auto paramValueRef = *GetParamValue(/*ensure*/ true, *qCtx, qCtx->TxResults,
-                    paramBinding);
+            auto& txCtx = QueryState->TxCtx;
+            auto paramValueRef = *GetParamValue(/*ensure*/ true, *txCtx, QueryState->Parameters, QueryState->TxResults, paramBinding);
 
             NKikimrMiniKQL::TParams param;
             param.MutableType()->CopyFrom(paramValueRef.GetType());
@@ -1221,7 +1222,7 @@ public:
         LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, response->GetResult().ResultsSize());
 
         auto& txResult = *response->MutableResult();
-        QueryState->QueryCtx->TxResults.emplace_back(ExtractTxResults(txResult));
+        QueryState->TxResults.emplace_back(ExtractTxResults(txResult));
 
         if (ev->Get()->LockHandle) {
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->Get()->LockHandle);
@@ -1466,7 +1467,7 @@ public:
                 auto txIndex = rb.GetTxResultBinding().GetTxIndex();
                 auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
 
-                auto& txResults = QueryState->QueryCtx->TxResults;
+                auto& txResults = QueryState->TxResults;
                 YQL_ENSURE(txIndex < txResults.size());
                 YQL_ENSURE(resultIndex < txResults[txIndex].size());
 
@@ -2172,7 +2173,7 @@ private:
     std::optional<TActorId> WorkerId;
     TActorId ExecuterId;
 
-    std::unique_ptr<TKqpQueryState> QueryState;
+    std::shared_ptr<TKqpQueryState> QueryState;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
     TKikimrConfiguration::TPtr Config;

@@ -30,12 +30,12 @@ void TLogExprTransformer::LogExpr(const TExprNode& input, TExprContext& ctx, con
     YQL_CVLOG(level, component) << description << ":\n" << KqpExprToPrettyString(input, ctx);
 }
 
-TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TKikimrQueryContext& queryCtx,
+TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, TTimeAndRandomProvider& randomCtx, TKikimrParamsMap& parameters,
     const TVector<TVector<NKikimrMiniKQL::TResult>>& txResults, const NKqpProto::TKqpPhyParamBinding& paramBinding)
 {
     switch (paramBinding.GetTypeCase()) {
         case NKqpProto::TKqpPhyParamBinding::kExternalBinding: {
-            const auto* clientParam = queryCtx.Parameters.FindPtr(paramBinding.GetName());
+            const auto* clientParam = parameters.FindPtr(paramBinding.GetName());
             if (clientParam) {
                 return NYql::NDq::TMkqlValueRef(*clientParam);
             }
@@ -57,18 +57,18 @@ TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TKikimrQueryCo
         }
         case NKqpProto::TKqpPhyParamBinding::kInternalBinding: {
             auto& internalBinding = paramBinding.GetInternalBinding();
-            auto& param = queryCtx.Parameters[paramBinding.GetName()];
+            auto& param = parameters[paramBinding.GetName()];
 
             switch (internalBinding.GetType()) {
                 case NKqpProto::TKqpPhyInternalBinding::PARAM_NOW:
                     param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
                     param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id);
-                    param.MutableValue()->SetUint64(queryCtx.GetCachedNow());
+                    param.MutableValue()->SetUint64(randomCtx.GetCachedNow());
                     break;
                 case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATE: {
                     param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
                     param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TDate>::Id);
-                    ui64 date = queryCtx.GetCachedDate();
+                    ui64 date = randomCtx.GetCachedDate();
                     YQL_ENSURE(date <= Max<ui32>());
                     param.MutableValue()->SetUint32(static_cast<ui32>(date));
                     break;
@@ -76,7 +76,7 @@ TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TKikimrQueryCo
                 case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATETIME: {
                     param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
                     param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TDatetime>::Id);
-                    ui64 datetime = queryCtx.GetCachedDatetime();
+                    ui64 datetime = randomCtx.GetCachedDatetime();
                     YQL_ENSURE(datetime <= Max<ui32>());
                     param.MutableValue()->SetUint32(static_cast<ui32>(datetime));
                     break;
@@ -84,22 +84,22 @@ TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TKikimrQueryCo
                 case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_TIMESTAMP:
                     param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
                     param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TTimestamp>::Id);
-                    param.MutableValue()->SetUint64(queryCtx.GetCachedTimestamp());
+                    param.MutableValue()->SetUint64(randomCtx.GetCachedTimestamp());
                     break;
                 case NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_NUMBER:
                     param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
                     param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id);
-                    param.MutableValue()->SetUint64(queryCtx.GetCachedRandom<ui64>());
+                    param.MutableValue()->SetUint64(randomCtx.GetCachedRandom<ui64>());
                     break;
                 case NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM:
                     param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
                     param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<double>::Id);
-                    param.MutableValue()->SetDouble(queryCtx.GetCachedRandom<double>());
+                    param.MutableValue()->SetDouble(randomCtx.GetCachedRandom<double>());
                     break;
                 case NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_UUID: {
                     param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
                     param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TUuid>::Id);
-                    auto uuid = queryCtx.GetCachedRandom<TGUID>();
+                    auto uuid = randomCtx.GetCachedRandom<TGUID>();
                     const auto ptr = reinterpret_cast<ui8*>(uuid.dw);
                     param.MutableValue()->SetLow128(*reinterpret_cast<ui64*>(ptr));
                     param.MutableValue()->SetHi128(*reinterpret_cast<ui64*>(ptr + 8));

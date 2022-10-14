@@ -184,7 +184,8 @@ TKqpParamsMap TKqpExecutePhysicalTransformerBase::PrepareParameters(const NKqpPr
     TKqpParamsMap paramsMap(TransformState);
     for (const auto& paramBinding : tx.GetParamBindings()) {
         auto it = paramsMap.Values.emplace(paramBinding.GetName(),
-                *GetParamValue(/*ensure*/ true, *TransformCtx->QueryCtx, TransformState->TxResults, paramBinding));
+                *GetParamValue(/*ensure*/ true, *TransformCtx->QueryCtx, TransformCtx->QueryCtx->Parameters,
+                    TransformState->TxResults, paramBinding));
         YQL_ENSURE(it.second);
     }
 
@@ -193,8 +194,8 @@ TKqpParamsMap TKqpExecutePhysicalTransformerBase::PrepareParameters(const NKqpPr
 
 void TKqpExecutePhysicalTransformerBase::PreserveParams(const NKqpProto::TKqpPhyTx& tx, TParamValueMap& paramsMap) {
     for (const auto& paramBinding : tx.GetParamBindings()) {
-        auto paramValueRef = *GetParamValue(/*ensure*/ true, *TransformCtx->QueryCtx, TransformState->TxResults,
-                paramBinding);
+        auto paramValueRef = *GetParamValue(/*ensure*/ true, *TransformCtx->QueryCtx, TransformCtx->QueryCtx->Parameters,
+                TransformState->TxResults, paramBinding);
 
         NKikimrMiniKQL::TParams param;
         param.MutableType()->CopyFrom(paramValueRef.GetType());

@@ -103,7 +103,9 @@ private:
     TMaybe<TKqpParamsMap> PrepareParameters(const NKqpProto::TKqpPhyTx& tx) {
         TKqpParamsMap params;
         for (const auto& paramBinding : tx.GetParamBindings()) {
-            if (auto paramValue = GetParamValue(/*ensure*/ false, *TransformCtx->QueryCtx, TxResults, paramBinding)) {
+            if (auto paramValue = GetParamValue(/*ensure*/ false, *TransformCtx->QueryCtx,
+                    TransformCtx->QueryCtx->Parameters, TxResults, paramBinding))
+            {
                 params.Values.emplace(std::make_pair(paramBinding.GetName(), *paramValue));
             } else {
                 return {};

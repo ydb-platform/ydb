@@ -41,18 +41,11 @@ namespace {
         "json_each_row"sv,
         "parquet"sv
     };
-    constexpr std::array<std::string_view, 6> CompressionsForInput = {
+    constexpr std::array<std::string_view, 6> Compressions = {
         "gzip"sv,
         "zstd"sv,
         "lz4"sv,
         "brotli"sv,
-        "bzip2"sv,
-        "xz"sv
-    };
-    constexpr std::array<std::string_view, 5> CompressionsForOutput = {
-        "gzip"sv,
-        "brotli"sv,
-        "zstd"sv,
         "bzip2"sv,
         "xz"sv
     };
@@ -1106,20 +1099,20 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
 }
 
 bool ValidateCompressionForInput(std::string_view compression, TExprContext& ctx) {
-    if (compression.empty() || IsIn(CompressionsForInput, compression)) {
+    if (compression.empty() || IsIn(Compressions, compression)) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
-        << ". Use one of: " << JoinSeq(", ", CompressionsForInput)));
+        << ". Use one of: " << JoinSeq(", ", Compressions)));
     return false;
 }
 
 bool ValidateCompressionForOutput(std::string_view compression, TExprContext& ctx) {
-    if (compression.empty() || IsIn(CompressionsForOutput, compression)) {
+    if (compression.empty() || IsIn(Compressions, compression)) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
-        << ". Use one of: " << JoinSeq(", ", CompressionsForOutput)));
+        << ". Use one of: " << JoinSeq(", ", Compressions)));
     return false;
 }
 

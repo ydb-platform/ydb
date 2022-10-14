@@ -20,6 +20,7 @@ constexpr ui32 Lz4ioMagicNumber =  0x184D2204U;
 constexpr ui32 LegacyMagicNumber = 0x184C2102U;
 
 constexpr size_t LegacyBlockSize = 8_MB;
+constexpr size_t FrameMaxBlockSize = 4_MB;
 
 void WriteLE32 (void* p, ui32 value32)
 {
@@ -38,8 +39,6 @@ ui32 ReadLE32 (const void* s) {
     value32 += (ui32)srcPtr[3] << 24U;
     return value32;
 }
-
-constexpr size_t BufferSize = 64_KB;
 
 EStreamType CheckMagic(const void* data) {
     switch (ReadLE32(data)) {
@@ -68,8 +67,8 @@ TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
         const auto errorCode = LZ4F_createDecompressionContext(&Ctx, LZ4F_VERSION);
         YQL_ENSURE(!LZ4F_isError(errorCode), "Can't create LZ4F context resource: " << LZ4F_getErrorName(errorCode));
 
-        InBuffer.resize(BufferSize);
-        OutBuffer.resize(BufferSize);
+        InBuffer.resize(64_KB);
+        OutBuffer.resize(FrameMaxBlockSize);
 
         size_t inSize = MagicNumberSize;
         size_t outSize = 0ULL;
@@ -113,8 +112,9 @@ bool TReadBuffer::nextImpl() {
 }
 
 size_t TReadBuffer::DecompressFrame() {
-    if (NextToLoad > InBuffer.size())
-        NextToLoad = InBuffer.size();
+    if (NextToLoad > InBuffer.size()) {
+        InBuffer.resize(NextToLoad);
+    }
 
     if (Pos >= Remaining) {
         for (auto toRead = NextToLoad; toRead > 0U;) {
@@ -168,10 +168,9 @@ size_t TReadBuffer::DecompressLegacy() {
 namespace {
 
 class TCompressor : public TOutputQueue<> {
-static constexpr size_t BlockSize = 4_MB;
 public:
     TCompressor(int level)
-        : OutputBufferSize(LZ4F_compressFrameBound(BlockSize, nullptr)), OutputBuffer(std::make_unique<char[]>(OutputBufferSize))
+        : OutputBufferSize(LZ4F_compressFrameBound(FrameMaxBlockSize, nullptr)), OutputBuffer(std::make_unique<char[]>(OutputBufferSize))
     {
         Prefs.autoFlush = 1;
         Prefs.compressionLevel = level;
@@ -254,7 +253,7 @@ private:
     LZ4F_preferences_t Prefs;
     LZ4F_compressionContext_t Ctx;
 
-    TOutputQueue<BlockSize, BlockSize> InputQueue;
+    TOutputQueue<FrameMaxBlockSize, FrameMaxBlockSize> InputQueue;
     bool IsFirstBlock = true;
 };
 

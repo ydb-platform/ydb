@@ -93,7 +93,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         switch (status) {
             case NKikimrProto::ERROR:
             case NKikimrProto::VDISK_ERROR_STATE:
-            case NKikimrProto::OUT_OF_SPACE:
                 FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
                 if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
                     ErrorReason = "Failed disks check fails on non-OK event status";

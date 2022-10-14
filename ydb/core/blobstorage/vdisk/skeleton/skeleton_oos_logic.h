@@ -40,7 +40,9 @@ namespace NKikimr {
         bool DefaultAllow(ESpaceColor color) const;
 
         template <typename TEvPtr>
-        friend bool AllowImpl(const TOutOfSpaceLogic &logic, const TActorContext &ctx, TEvPtr &ev);
+        friend bool AllowPut(const TOutOfSpaceLogic &logic, ESpaceColor color, TEvPtr &ev);
+
+        ESpaceColor GetSpaceColor() const;
     };
 
 } // NKikimr

@@ -154,6 +154,7 @@ public:
         str << "<td>" << q.Cyan << "</td>";
         str << "<td>" << q.Yellow << "</td>";
         str << "<td>" << q.LightOrange << "</td>";
+        str << "<td>" << q.PreOrange << "</td>";
         str << "<td>" << q.Orange << "</td>";
         str << "<td>" << q.Red << "</td>";
         str << "<td>" << q.Black << "</td>";
@@ -183,6 +184,7 @@ public:
                 <th>Cyan</th>
                 <th>Yellow</th>
                 <th>LightOrange</th>
+                <th>PreOrange</th>
                 <th>Orange</th>
                 <th>Red</th>
                 <th>Black</th>

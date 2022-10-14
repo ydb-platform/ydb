@@ -10,104 +10,65 @@ namespace NPDisk {
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct TDiskColor {
+    i64 Multiplier = 0;
+    i64 Divisor = 1;
+    i64 Addend = 0;
+
+    TString ToString() const {
+        return TStringBuilder() << Multiplier << " / " << Divisor << " + " << Addend;
+    }
+
+    i64 CalculateQuota(i64 total) const {
+        return total * Multiplier / Divisor + Addend;
+    }
+};
+
 struct TColorLimits {
-    i64 BlackMultiplier = 0;
-    i64 BlackDivisor = 1;
-    i64 BlackAddend = 0;
-
-    i64 RedMultiplier = 0;
-    i64 RedDivisor = 1;
-    i64 RedAddend = 0;
-
-    i64 OrangeMultiplier = 0;
-    i64 OrangeDivisor = 1;
-    i64 OrangeAddend = 0;
-
-    i64 LightOrangeMultiplier = 0;
-    i64 LightOrangeDivisor = 1;
-    i64 LightOrangeAddend = 0;
-
-    i64 YellowMultiplier = 0;
-    i64 YellowDivisor = 1;
-    i64 YellowAddend = 0;
-
-    i64 LightYellowMultiplier = 0;
-    i64 LightYellowDivisor = 1;
-    i64 LightYellowAddend = 0;
-
-    i64 CyanMultiplier = 0;
-    i64 CyanDivisor = 1;
-    i64 CyanAddend = 0;
+    TDiskColor Black;
+    TDiskColor Red;
+    TDiskColor Orange;
+    TDiskColor PreOrange;
+    TDiskColor LightOrange;
+    TDiskColor Yellow;
+    TDiskColor LightYellow;
+    TDiskColor Cyan;
 
     void Print(IOutputStream &str) {
-        str << "  Black = Total * " << BlackMultiplier << " / " << BlackDivisor << " + " << BlackAddend << "\n";
-        str << "  Red = Total * " << RedMultiplier << " / " << RedDivisor << " + " << RedAddend << "\n";
-        str << "  Orange = Total * " << OrangeMultiplier << " / " << OrangeDivisor << " + " << OrangeAddend << "\n";
-        str << "  LightOrange = Total * " << LightOrangeMultiplier << " / " << LightOrangeDivisor << " + " << LightOrangeAddend << "\n";
-        str << "  Yellow = Total * " << YellowMultiplier << " / " << YellowDivisor << " + " << YellowAddend << "\n";
-        str << "  LightYellow = Total * " << LightYellowMultiplier << " / " << LightYellowDivisor << " + " << LightYellowAddend << "\n";
-        str << "  Cyan = Total * " << CyanMultiplier << " / " << CyanDivisor << " + " << CyanAddend << "\n";
+        str << "  Black = Total * " << Black.ToString() << "\n";
+        str << "  Red = Total * " << Red.ToString() << "\n";
+        str << "  Orange = Total * " << Orange.ToString() << "\n";
+        str << "  PreOrange = Total * " << PreOrange.ToString() << "\n";
+        str << "  LightOrange = Total * " << LightOrange.ToString() << "\n";
+        str << "  Yellow = Total * " << Yellow.ToString() << "\n";
+        str << "  LightYellow = Total * " << LightYellow.ToString() << "\n";
+        str << "  Cyan = Total * " << Cyan.ToString() << "\n";
     }
 
     static TColorLimits MakeChunkLimits() {
-        TColorLimits l;
-
-        l.BlackMultiplier = 1; // Leave bare minimum for disaster recovery
-        l.BlackDivisor = 1000;
-        l.BlackAddend = 2;
-
-        l.RedMultiplier = 10;
-        l.RedDivisor =  1000;
-        l.RedAddend = 3;
-
-        l.OrangeMultiplier = 30;
-        l.OrangeDivisor =  1000;
-        l.OrangeAddend = 4;
-
-        l.LightOrangeMultiplier = 65;
-        l.LightOrangeDivisor =  1000;
-        l.LightOrangeAddend = 5;
-
-        l.YellowMultiplier = 80; // Stop serving user writes at 8% free space
-        l.YellowDivisor =  1000;
-        l.YellowAddend = 6;
-
-        l.LightYellowMultiplier = 100; // Ask tablets to move to another group at 10% free space
-        l.LightYellowDivisor =   1000;
-        l.LightYellowAddend = 7;
-
-        l.CyanMultiplier = 130; // 13% free space or less
-        l.CyanDivisor =   1000;
-        l.CyanAddend = 8;
-
-        return l;
+        return {
+            {1,   1000, 2}, // Black: Leave bare minimum for disaster recovery
+            {10,  1000, 3}, // Red
+            {30,  1000, 4}, // Orange
+            {50,  1000, 4}, // PreOrange
+            {65,  1000, 5}, // LightOrange
+            {80,  1000, 6}, // Yellow: Stop serving user writes at 8% free space
+            {100, 1000, 7}, // LightYellow: Ask tablets to move to another group at 10% free space
+            {130, 1000, 8}, // Cyan: 13% free space or less
+        };
     }
 
     static TColorLimits MakeLogLimits() {
-        TColorLimits l;
-
-        l.BlackMultiplier = 250; // Stop early to leave some space for disaster recovery
-        l.BlackDivisor =   1000;
-
-        l.RedMultiplier = 350;
-        l.RedDivisor =   1000;
-
-        l.OrangeMultiplier = 500;
-        l.OrangeDivisor =   1000;
-
-        l.LightOrangeMultiplier = 700;
-        l.LightOrangeDivisor =   1000;
-
-        l.YellowMultiplier = 900;
-        l.YellowDivisor =   1000;
-
-        l.LightYellowMultiplier = 930;
-        l.LightYellowDivisor =   1000;
-
-        l.CyanMultiplier = 982; // Ask to cut log
-        l.CyanDivisor =   1000;
-
-        return l;
+        return {
+            {250, 1000}, // Black: Stop early to leave some space for disaster recovery
+            {350, 1000}, // Red
+            {500, 1000}, // Orange
+            {600, 1000}, // PreOrange
+            {700, 1000}, // LightOrange
+            {900, 1000}, // Yellow
+            {930, 1000}, // LightYellow
+            {982, 1000}, // Cyan: Ask to cut log
+        };
     }
 };
 

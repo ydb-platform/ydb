@@ -216,7 +216,6 @@ public:
 
             case NKikimrProto::ERROR:
             case NKikimrProto::VDISK_ERROR_STATE:
-            case NKikimrProto::OUT_OF_SPACE:
                 FailedGroupDisks += {&Info->GetTopology(), vdiskId};
                 if (!Info->GetTopology().GetQuorumChecker().CheckFailModelForGroup(FailedGroupDisks)) {
                     return ReplyAndDie(NKikimrProto::ERROR, "failure model exceeded");

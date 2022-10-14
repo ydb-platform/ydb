@@ -19,6 +19,8 @@ inline NKikimrBlobStorage::TPDiskSpaceColor::E StatusFlagToSpaceColor(NPDisk::TS
         return TColor::ORANGE;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
         return TColor::LIGHT_ORANGE;
+    } else if (flags & NKikimrBlobStorage::StatusDiskSpacePreOrange) {
+        return TColor::PRE_ORANGE;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceYellowStop) {
         return TColor::YELLOW;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) {
@@ -43,6 +45,9 @@ inline NPDisk::TStatusFlags SpaceColorToStatusFlag(NKikimrBlobStorage::TPDiskSpa
             [[fallthrough]];
         case TColor::ORANGE:
             flags |= NKikimrBlobStorage::StatusDiskSpaceOrange;
+            [[fallthrough]];
+        case TColor::PRE_ORANGE:
+            flags |= NKikimrBlobStorage::StatusDiskSpacePreOrange;
             [[fallthrough]];
         case TColor::LIGHT_ORANGE:
             flags |= NKikimrBlobStorage::StatusDiskSpaceLightOrange;

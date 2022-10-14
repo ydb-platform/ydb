@@ -2745,6 +2745,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
             | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceRed)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceOrange)
+            | ui32(NKikimrBlobStorage::StatusDiskSpacePreOrange)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
@@ -2761,6 +2762,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
             | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceRed)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceOrange)
+            | ui32(NKikimrBlobStorage::StatusDiskSpacePreOrange)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)
             | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));

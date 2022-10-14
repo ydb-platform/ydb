@@ -118,6 +118,8 @@ do { \
         << (LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) ? "SpaceLightYellow " : "") \
         << (LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop) ? "SpaceYellow " : "") \
         << (LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusDiskSpaceOrange) ? "SpaceOrange " : "") \
+        << (LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusDiskSpacePreOrange) ? "SpacePreOrange " : "") \
+        << (LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange) ? "SpaceLightOrange " : "") \
         << (LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusDiskSpaceRed) ? "SpaceRed " : "") \
         << (LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusDiskSpaceBlack) ? "SpaceBlack " : "") \
         << (LastResponse.StatusFlags & ui32(NKikimrBlobStorage::StatusNewOwner) ? "NewOwner " : "") \
@@ -130,6 +132,8 @@ do { \
         << ((s) & ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) ? "SpaceLightYellow " : "") \
         << ((s) & ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop) ? "SpaceYellow " : "") \
         << ((s) & ui32(NKikimrBlobStorage::StatusDiskSpaceOrange) ? "SpaceOrange " : "") \
+        << ((s) & ui32(NKikimrBlobStorage::StatusDiskSpacePreOrange) ? "SpacePreOrange " : "") \
+        << ((s) & ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange) ? "SpaceLightOrange " : "") \
         << ((s) & ui32(NKikimrBlobStorage::StatusDiskSpaceRed) ? "SpaceRed " : "") \
         << ((s) & ui32(NKikimrBlobStorage::StatusDiskSpaceBlack) ? "SpaceBlack " : "") \
         << ((s) & ui32(NKikimrBlobStorage::StatusNewOwner) ? "NewOwner " : "") \

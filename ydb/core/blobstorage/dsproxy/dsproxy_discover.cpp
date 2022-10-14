@@ -193,8 +193,7 @@ struct TGroupResponseTracker {
             "Success# %" PRIu32 " RequestsSent# %" PRIu32,
             (ui32)domain.GetSuccess(), (ui32)domain.GetRequestsSent());
         bool isDomain = false;
-        if (status != NKikimrProto::ERROR && status != NKikimrProto::VDISK_ERROR_STATE &&
-                status != NKikimrProto::OUT_OF_SPACE) {
+        if (status != NKikimrProto::ERROR && status != NKikimrProto::VDISK_ERROR_STATE) {
             Y_VERIFY(status == NKikimrProto::OK || status == NKikimrProto::NOT_YET);
             isDomain = domain.GotSuccessReply(vDiskIdx);
         } else {

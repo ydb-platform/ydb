@@ -16,6 +16,7 @@ namespace NPDisk {
     XX(Red) \
     XX(Orange) \
     XX(LightOrange) \
+    XX(PreOrange) \
     XX(Yellow) \
     XX(LightYellow) \
     XX(Cyan) \
@@ -85,7 +86,7 @@ public:
 
         i64 value = 0;
 #define CALCULATE_COLOR(NAME) \
-        value = Max(value, hardLimit * limits.NAME ## Multiplier / limits.NAME ## Divisor + limits.NAME ## Addend); \
+        value = Max(value, limits.NAME.CalculateQuota(hardLimit)); \
         AtomicSet(NAME, value); \
         ++value;
         DISK_SPACE_COLORS(CALCULATE_COLOR)
@@ -144,8 +145,10 @@ public:
             return TColor::LIGHT_YELLOW;
         } else if (newFree > AtomicGet(LightOrange)) {
             return TColor::YELLOW;
-        } else if (newFree > AtomicGet(Orange)) {
+        } else if (newFree > AtomicGet(PreOrange)) {
             return TColor::LIGHT_ORANGE;
+        } else if (newFree > AtomicGet(Orange)) {
+            return TColor::PRE_ORANGE;
         } else if (newFree > AtomicGet(Red)) {
             return TColor::ORANGE;
         } else if (newFree > AtomicGet(Black)) {
@@ -167,6 +170,8 @@ public:
             return AtomicGet(HardLimit) - AtomicGet(Yellow);
         case TColor::LIGHT_ORANGE:
             return AtomicGet(HardLimit) - AtomicGet(LightOrange);
+        case TColor::PRE_ORANGE:
+            return AtomicGet(HardLimit) - AtomicGet(PreOrange);
         case TColor::ORANGE:
             return AtomicGet(HardLimit) - AtomicGet(Orange);
         case TColor::RED:

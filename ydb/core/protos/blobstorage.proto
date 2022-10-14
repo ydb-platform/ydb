@@ -139,13 +139,14 @@ message TEvVWindowChange {
 enum EStatusFlags {  // Never use this type for storage, use ui32 bitset
     StatusIsValid = 1;                          // 0000 0000 0001, if not set, status flags could not be obtained
     StatusDiskSpaceCyan = 128;                  // 0000 1000 0000
-    StatusDiskSpaceLightYellowMove = 2;  // 0010 0000 0000
-    StatusDiskSpaceYellowStop = 512;        // 0000 0000 0010
+    StatusDiskSpaceLightYellowMove = 2;         // 0000 0000 0010
+    StatusDiskSpaceYellowStop = 512;            // 0010 0000 0000
     StatusDiskSpaceLightOrange = 256;           // 0001 0000 0000
+    StatusDiskSpacePreOrange = 1024;            // 0100 0000 0000
     StatusDiskSpaceOrange = 4;                  // 0000 0000 0100
     StatusDiskSpaceRed = 8;                     // 0000 0000 1000
     StatusDiskSpaceBlack = 64;                  // 0000 0100 0000
-    StatusMaskDiskSpace = 974;                  // 0011 1100 1110
+    StatusMaskDiskSpace = 1998;                 // 0111 1100 1110
     StatusNewOwner = 16;                        // 0000 0001 0000
     StatusNotEnoughDiskSpaceForOperation = 32;  // 0000 0010 0000
 }

@@ -80,6 +80,7 @@ namespace NKikimr {
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop),
                     "DiskSpaceYellowStop", str);
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange), "DiskSpaceLightOrange", str);
+            isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpacePreOrange), "DiskSpacePreOrange", str);
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceOrange), "DiskSpaceOrange", str);
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceRed), "DiskSpaceRed", str);
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceBlack), "DiskSpaceBlack", str);

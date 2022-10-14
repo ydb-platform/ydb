@@ -59,7 +59,8 @@ struct TStorageStatusFlags {
                 | ui32(NKikimrBlobStorage::StatusDiskSpaceRed)
                 | ui32(NKikimrBlobStorage::StatusDiskSpaceBlack)
                 | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
-                | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)));
+                | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)
+                | ui32(NKikimrBlobStorage::StatusDiskSpacePreOrange)));
         }
     }
 
@@ -80,6 +81,7 @@ struct TStorageStatusFlags {
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) ? " LightYellow" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceYellowStop) ? " Yellow" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceLightOrange) ? " LightOrange" : "")
+            << ((Raw & NKikimrBlobStorage::StatusDiskSpacePreOrange) ? " PreOrange" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceOrange) ? " Orange" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceRed) ? " Red" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceBlack) ? " Black" : "")

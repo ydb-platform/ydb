@@ -59,7 +59,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
 
     TVector<ui32> OkVDisksWithParts;
 
-    ui32 SendedStarts = 0;
+    ui32 SentStarts = 0;
     ui32 ReceivedFoundParts = 0;
     ui32 ErrorResponses = 0;
     ui32 ReceivedResults = 0;
@@ -73,6 +73,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
     bool UseVPatch = false;
     bool IsGoodPatchedBlobId = false;
     bool IsAllowedErasure = false;
+    bool IsSecured = false;
 
 #define PATCH_LOG(priority, service, marker, msg, ...)                         \
         STLOG(priority, service, marker, msg,                                  \
@@ -311,19 +312,19 @@ public:
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA26, "Received VPatchFoundParts",
                 (Status, status),
                 (SubgroupIdx, (ui32)subgroupIdx),
-                (ReceivedResults, static_cast<TString>(TStringBuilder() << ReceivedResults << '/' << Info->Type.TotalPartCount())),
+                (ReceivedResults, static_cast<TString>(TStringBuilder() << ReceivedFoundParts << '/' << SentStarts)),
                 (ErrorReason, errorReason));
 
-        if (ReceivedFoundParts == SendedStarts) {
+        if (ReceivedFoundParts == SentStarts) {
             bool continueVPatch = VerifyPartPlacement();
             if (continueVPatch) {
                 continueVPatch = ContinueVPatch();
             } else {
-                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA27, "Failed VerifyPartPlacement");
+                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA32, "Failed VerifyPartPlacement");
                 Mon->VPatchPartPlacementVerifyFailed->Inc();
             }
             if (!continueVPatch) {
-                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA27, "Start Fallback strategy from hadling TEvVPatchFoundParts");
+                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA33, "Start Fallback strategy from hadling TEvVPatchFoundParts");
                 StopVPatch();
                 StartFallback();
             }
@@ -482,6 +483,10 @@ public:
             auto &diffsForPart = diffSet.PartDiffs[diffForPartIdx].Diffs;
             for (auto &diff : diffsForPart) {
                 ev->AddDiff(diff.Offset, diff.Buffer);
+
+                PATCH_LOG(PRI_TRACE, BS_PROXY_PATCH, BPPA35, "Add Diff",
+                        (Offset, diff.Offset),
+                        (BufferSize, diff.Buffer.Size()));
             }
 
             for (const TPartPlacement &parity : parityPlacements) {
@@ -524,7 +529,7 @@ public:
 
     void StartMovedPatch() {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA09, "Start Moved strategy",
-                (SendedStarts, SendedStarts));
+                (SentStarts, SentStarts));
         Become(&TThis::MovedPatchState);
 
         ui32 subgroupIdx = 0;
@@ -563,7 +568,7 @@ public:
 
     void StartFallback() {
         Mon->PatchesWithFallback->Inc();
-        if (WithMovingPatchRequestToStaticNode && UseVPatch) {
+        if (WithMovingPatchRequestToStaticNode && UseVPatch && !IsSecured) {
             PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA05, "Start Moved strategy from fallback");
             StartMovedPatch();
         } else {
@@ -588,11 +593,11 @@ public:
             std::unique_ptr<TEvBlobStorage::TEvVPatchStart> ev = std::make_unique<TEvBlobStorage::TEvVPatchStart>(
                     OriginalId, PatchedId, VDisks[idx], Deadline, idx, true);
             events.emplace_back(std::move(ev));
-            SendedStarts++;
+            SentStarts++;
         }
 
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA08, "Start VPatch strategy",
-                (SendedStarts, SendedStarts));
+                (SentStarts, SentStarts));
 
         SendToQueues(events, false);
     }
@@ -793,12 +798,13 @@ public:
             return;
         }
 
+        IsSecured = (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE);
+
         IsGoodPatchedBlobId = result;
         IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
-                || Info->Type.GetErasure() == TErasureType::ErasureMirror3
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
-        if (IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID) {
+        if (IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID && !IsSecured) {
             PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA03, "Start VPatch strategy from bootstrap");
             StartVPatch();
         } else {
@@ -806,7 +812,8 @@ public:
                     (IsGoodPatchedBlobId, IsGoodPatchedBlobId),
                     (IsAllowedErasure, IsAllowedErasure),
                     (UseVPatch, UseVPatch),
-                    (IsSameGroup, OriginalGroupId == Info->GroupID));
+                    (IsSameGroup, OriginalGroupId == Info->GroupID),
+                    (IsSecured, IsSecured));
             StartFallback();
         }
     }

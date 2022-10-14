@@ -687,7 +687,7 @@ message TFeatureFlags {
     optional bool AllowStreamExecuteYqlScript = 42 [default = true];
     optional bool EnableKqpScanOverPersistentSnapshot = 43 [default = true]; // deprecated: always true
     optional bool EnableOlapSchemaOperations = 44 [default = true];
-    optional bool EnableVPatch = 45 [default = false];
+    optional bool EnableVPatch = 45 [default = true];
     optional bool EnableMvccSnapshotReads = 46 [default = true];
     optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = true];

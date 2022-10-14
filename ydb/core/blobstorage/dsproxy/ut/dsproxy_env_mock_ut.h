@@ -48,7 +48,9 @@ struct TDSProxyEnv {
         return VDisks[i];
     }
 
-    void Configure(TTestActorRuntime& runtime, TBlobStorageGroupType type, ui64 groupId, ui64 nodeIndex) {
+    void Configure(TTestActorRuntime& runtime, TBlobStorageGroupType type, ui64 groupId, ui64 nodeIndex,
+            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1)
+    {
         GroupId = groupId;
         NodeIdx = nodeIndex;
 
@@ -59,9 +61,9 @@ struct TDSProxyEnv {
         }
 
         if (type.GetErasure() == TErasureType::ErasureMirror3dc) {
-            Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, 3, 3, &VDisks);
+            Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, 3, 3, &VDisks, encryptionMode);
         } else {
-            Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, type.BlobSubgroupSize(), 1, &VDisks);
+            Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, type.BlobSubgroupSize(), 1, &VDisks, encryptionMode);
         }
 
         RealProxyActorId = MakeBlobStorageProxyID(groupId);

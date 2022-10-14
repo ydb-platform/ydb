@@ -155,7 +155,7 @@
                                 "Node Type": "Aggregate"
                             }
                         ],
-                        "Node Type": "Precompute_0_0",
+                        "Node Type": "Precompute_0",
                         "Parent Relationship": "InitPlan"
                     },
                     {
@@ -186,7 +186,7 @@
                                 "Node Type": "Collect"
                             }
                         ],
-                        "Node Type": "ResultSet_1_0",
+                        "Node Type": "ResultSet_1",
                         "PlanNodeType": "ResultSet"
                     }
                 ],
@@ -229,7 +229,7 @@
                                                         "Name": "Aggregate"
                                                     },
                                                     {
-                                                        "ReadRange": [
+                                                        "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadColumns": null,
@@ -252,7 +252,7 @@
                                 "Node Type": "Aggregate"
                             }
                         ],
-                        "Node Type": "ResultSet_0_0",
+                        "Node Type": "ResultSet",
                         "PlanNodeType": "ResultSet"
                     }
                 ],
@@ -319,7 +319,7 @@
                                 "Node Type": "Aggregate"
                             }
                         ],
-                        "Node Type": "Precompute_0_0",
+                        "Node Type": "Precompute_0",
                         "Parent Relationship": "InitPlan"
                     },
                     {
@@ -350,7 +350,7 @@
                                 "Node Type": "Collect"
                             }
                         ],
-                        "Node Type": "ResultSet_1_0",
+                        "Node Type": "ResultSet_1",
                         "PlanNodeType": "ResultSet"
                     }
                 ],
@@ -393,7 +393,7 @@
                                                         "Name": "Aggregate"
                                                     },
                                                     {
-                                                        "ReadRange": [
+                                                        "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadColumns": null,
@@ -416,7 +416,7 @@
                                 "Node Type": "Aggregate"
                             }
                         ],
-                        "Node Type": "ResultSet_0_0",
+                        "Node Type": "ResultSet",
                         "PlanNodeType": "ResultSet"
                     }
                 ],
@@ -442,7 +442,7 @@
                                 "Node Type": "ConstantExpr"
                             }
                         ],
-                        "Node Type": "ResultSet_0_0",
+                        "Node Type": "ResultSet",
                         "PlanNodeType": "ResultSet"
                     }
                 ],

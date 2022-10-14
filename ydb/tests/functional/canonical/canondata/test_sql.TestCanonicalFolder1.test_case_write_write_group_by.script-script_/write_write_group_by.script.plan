@@ -61,7 +61,7 @@
                                                                 "PlanNodeId": 1,
                                                                 "Operators": [
                                                                     {
-                                                                        "ReadRange": [
+                                                                        "ReadRanges": [
                                                                             "Group (-\u221e, +\u221e)",
                                                                             "Name (-\u221e, +\u221e)"
                                                                         ],
@@ -98,7 +98,7 @@
                                 "Node Type": "Collect"
                             }
                         ],
-                        "Node Type": "Precompute_0_0",
+                        "Node Type": "Precompute_0",
                         "Parent Relationship": "InitPlan"
                     },
                     {
@@ -202,7 +202,7 @@
                                 "Node Type": "Limit"
                             }
                         ],
-                        "Node Type": "ResultSet_0_0",
+                        "Node Type": "ResultSet",
                         "PlanNodeType": "ResultSet"
                     }
                 ],

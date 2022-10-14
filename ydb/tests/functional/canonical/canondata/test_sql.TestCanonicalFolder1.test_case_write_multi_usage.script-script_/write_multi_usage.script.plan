@@ -209,10 +209,10 @@
                                                         "Limit": "1001"
                                                     },
                                                     {
-                                                        "ReadRange": [
+                                                        "ReadLimit": "1001",
+                                                        "ReadRanges": [
                                                             "Name (-\u221e, +\u221e)"
                                                         ],
-                                                        "ReadLimit": "1001",
                                                         "ReadColumns": [
                                                             "Name",
                                                             "Value"
@@ -240,7 +240,7 @@
                                 "Node Type": "Limit"
                             }
                         ],
-                        "Node Type": "ResultSet_0_0",
+                        "Node Type": "ResultSet_0",
                         "PlanNodeType": "ResultSet"
                     },
                     {
@@ -263,11 +263,11 @@
                                                         "Limit": "1001"
                                                     },
                                                     {
-                                                        "ReadRange": [
+                                                        "ReadLimit": "1001",
+                                                        "ReadRanges": [
                                                             "Group (-\u221e, +\u221e)",
                                                             "Name (-\u221e, +\u221e)"
                                                         ],
-                                                        "ReadLimit": "1001",
                                                         "ReadColumns": [
                                                             "Amount",
                                                             "Comment",
@@ -298,7 +298,7 @@
                                 "Node Type": "Limit"
                             }
                         ],
-                        "Node Type": "ResultSet_0_1",
+                        "Node Type": "ResultSet_1",
                         "PlanNodeType": "ResultSet"
                     }
                 ],

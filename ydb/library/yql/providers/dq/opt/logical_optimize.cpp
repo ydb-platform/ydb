@@ -51,7 +51,7 @@ public:
     {
 #define HNDL(name) "DqsLogical-"#name, Hndl(&TDqsLogicalOptProposalTransformer::name)
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(SkipUnordered));
-        AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
+        AddHandler(0, &TCoAggregateBase::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
@@ -78,7 +78,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
-        auto aggregate = node.Cast<TCoAggregate>();
+        auto aggregate = node.Cast<TCoAggregateBase>();
         auto input = aggregate.Input().Maybe<TDqConnection>();
 
         auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
@@ -86,7 +86,7 @@ protected:
             if (hopSetting) {
                 return RewriteAsHoppingWindow(node, ctx, input.Cast());
             } else {
-                return DqRewriteAggregate(node, ctx, TypesCtx, true);
+                return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false));
             }
         }
         return node;

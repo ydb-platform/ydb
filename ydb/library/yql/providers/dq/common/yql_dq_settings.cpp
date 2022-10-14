@@ -51,6 +51,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, EnableDqReplicate);
     REGISTER_SETTING(*this, WatermarksMode);
     REGISTER_SETTING(*this, WatermarksGranularityMs);
+    REGISTER_SETTING(*this, UseAggPhases);
 }
 
 } // namespace NYql

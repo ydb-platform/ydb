@@ -74,6 +74,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> EnableGraceJoin;
     NCommon::TConfSetting<TString, false> WatermarksMode;
     NCommon::TConfSetting<ui64, false> WatermarksGranularityMs;
+    NCommon::TConfSetting<bool, false> UseAggPhases;
 
     NCommon::TConfSetting<TString, false> WorkerFilter;
 
@@ -116,6 +117,7 @@ struct TDqSettings {
         SAVE_SETTING(WatermarksMode);
         SAVE_SETTING(EnableGraceJoin);
         SAVE_SETTING(WatermarksGranularityMs);
+        SAVE_SETTING(UseAggPhases);
 
 #undef SAVE_SETTING
     }

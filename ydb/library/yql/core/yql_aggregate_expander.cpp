@@ -118,7 +118,30 @@ TExprNode::TPtr TAggregateExpander::RebuildAggregate()
 {
     TExprNode::TListType newAggregatedColumnsItems = AggregatedColumns->ChildrenList();
     for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
-        newAggregatedColumnsItems[index] = Ctx.ChangeChild(*(newAggregatedColumnsItems[index]), 1, std::move(Traits[index]));
+        auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
+        if (trait->IsCallable("AggApply")) {
+            newAggregatedColumnsItems[index] = Ctx.ChangeChild(*(newAggregatedColumnsItems[index]), 1, std::move(Traits[index]));
+        } else if (trait->IsCallable("AggApplyState")) {
+            auto newTrait = Ctx.Builder(Node->Pos())
+                .Callable("AggregationTraits")
+                    .Add(0, trait->ChildPtr(1))
+                    .Add(1, trait->ChildPtr(2)) // extractor for state, not initial value itself
+                    .Lambda(2)
+                        .Param("item")
+                        .Param("state")
+                        .Callable("Void")
+                        .Seal()
+                    .Seal()
+                    .Add(3, Traits[index]->ChildPtr(3))
+                    .Add(4, Traits[index]->ChildPtr(4))
+                    .Add(5, Traits[index]->ChildPtr(5))
+                    .Add(6, Traits[index]->ChildPtr(6))
+                    .Add(7, Traits[index]->ChildPtr(7))
+                .Seal()
+                .Build();
+
+            newAggregatedColumnsItems[index] = Ctx.ChangeChild(*(newAggregatedColumnsItems[index]), 1, std::move(newTrait));
+        }
     }
 
     return Ctx.ChangeChild(*Node, 2, Ctx.NewList(Node->Pos(), std::move(newAggregatedColumnsItems)));

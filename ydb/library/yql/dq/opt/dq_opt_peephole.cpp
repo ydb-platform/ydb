@@ -69,7 +69,7 @@ std::pair<TExprNode::TListType, TExprNode::TListType> JoinKeysToAtoms(TExprConte
 }
 
 TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, const TExprNode::TListType& keyAtoms,
-    const TTypeAnnotationNode::TListType& keyDryTypes, bool optional)
+    const TTypeAnnotationNode::TListType& keyDryTypes, bool needCast)
 {
     YQL_ENSURE(keyAtoms.size() == keyDryTypes.size());
 
@@ -89,7 +89,7 @@ TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, con
     }
 
     if (keysTuple.size() == 1) {
-        return optional
+        return needCast
             ? Build<TCoLambda>(ctx, pos)
                 .Args({keySelectorArg})
                 .Body<TCoStrictCast>()
@@ -106,7 +106,7 @@ TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, con
     }
 
     auto type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTupleExprType>(keyDryTypes));
-    return optional
+    return needCast
         ? Build<TCoLambda>(ctx, pos)
             .Args({keySelectorArg})
             .Body<TCoStrictCast>()
@@ -174,7 +174,7 @@ TExprNode::TPtr AddConvertedKeys(TExprNode::TPtr list, TExprContext& ctx, TExprN
 }
 
 TExprNode::TListType OriginalJoinOutputMembers(const TDqPhyMapJoin& mapJoin, TExprContext& ctx) {
-    const auto origItemType = mapJoin.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List ? 
+    const auto origItemType = mapJoin.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List ?
         mapJoin.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>() :
         mapJoin.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
     TExprNode::TListType structMembers;
@@ -194,7 +194,7 @@ TExprNode::TListType OriginalJoinOutputMembers(const TDqPhyMapJoin& mapJoin, TEx
  *  - Explicitly convert right input to the dict
  *  - Use quite pretty trick: do `MapJoinCore` in `FlatMap`-lambda
  *    (rely on the fact that there will be only one element in the `FlatMap`-stream)
- *  - Align key types using `StrictCast`, use internal columns to store converted left keys   
+ *  - Align key types using `StrictCast`, use internal columns to store converted left keys
  */
 TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyMapJoin>()) {
@@ -465,19 +465,25 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
     const auto* leftRowType = GetSeqItemType(joinDict.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
     const auto* rightRowType = GetSeqItemType(joinDict.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
 
-    bool optKeyLeft = false, optKeyRight = false, badKey = false;
+    bool castKeyLeft = false, castKeyRight = false, badKey = false;
     TTypeAnnotationNode::TListType keyTypeItems;
     keyTypeItems.reserve(leftKeys.size());
     for (auto i = 0U; i < leftKeys.size(); ++i) {
+        bool optKeyLeft = false, optKeyRight = false;
         auto leftKeyType = leftRowType->FindItemType(leftKeys[i]->Content());
         auto rightKeyType = rightRowType->FindItemType(rightKeys[i]->Content());
-        keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(leftKeyType, optKeyLeft, ctx), DryType(rightKeyType, optKeyRight, ctx), ctx));
-        badKey = !keyTypeItems.back();
+        auto leftDryType = DryType(leftKeyType, optKeyLeft, ctx);
+        auto rightDryType = DryType(rightKeyType, optKeyRight, ctx);
+        auto commonType = CommonType<true>(node.Pos(), leftDryType, rightDryType, ctx);
+        badKey = !commonType;
         if (badKey) {
-            YQL_CLOG(DEBUG, CoreDq) << "Not comparable keys in join: " << leftKeys[i]->Content()
-                << "(" << *leftKeyType << ") vs " << rightKeys[i]->Content() << "(" << *rightKeyType << ")";
+            YQL_CLOG(DEBUG, CoreDq) << "Join has null result in key comparison: " << leftKeys[i]->Content()
+                << "(" << *leftKeyType << ") and " << rightKeys[i]->Content() << "(" << *rightKeyType << ")";
             break;
         }
+        castKeyLeft = (!IsSameAnnotation(*leftDryType, *commonType) || optKeyLeft);
+        castKeyRight = (!IsSameAnnotation(*rightDryType, *commonType) || optKeyRight);
+        keyTypeItems.emplace_back(commonType);
     }
 
     TExprNode::TPtr leftKeySelector;
@@ -498,8 +504,8 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
                 .Build()
             .Done().Ptr();
     } else {
-        leftKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), leftKeys, keyTypeItems, optKeyLeft);
-        rightKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), rightKeys, keyTypeItems, optKeyRight);
+        leftKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), leftKeys, keyTypeItems, castKeyLeft);
+        rightKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), rightKeys, keyTypeItems, castKeyRight);
     }
 
     auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {

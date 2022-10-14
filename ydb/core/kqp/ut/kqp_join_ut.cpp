@@ -1239,6 +1239,35 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[36u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST_NEW_ENGINE(JoinMismatchDictKeyTypes) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Join_Uint64_1` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync().IsSuccess());
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT t1.Key
+            FROM
+                (SELECT 2 AS Key, COUNT(*) AS Cnt FROM `/Root/Join_Uint64_1`) AS t1
+            LEFT JOIN
+            AS_TABLE(
+                AsList(AsStruct(2u AS Key1, "Val1" AS Value))
+            ) AS t2
+            ON t1.Key = t2.Key1
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
 }
 
 } // namespace NKqp

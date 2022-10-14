@@ -2176,8 +2176,75 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         runtime->SetObserverFunc(captureEvents);
         auto streamSender = runtime->AllocateEdgeActor();
         SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
+        runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+    }
+
+    Y_UNIT_TEST(ManyColumnShardsFilterPushdownEmptySet) {
+        // uncomment this line to reproduce the bug
+        return;
+
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetNodeCount(2);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+
+        auto runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        EnableDebugLogging(runtime);
+
+        const ui32 numShards = 10;
+        const ui32 numIterations = 50;
+        CreateTestOlapTable(*server, "largeOlapTable", "largeOlapStore", numShards, numShards);
+        ui32 insertRows = 0;
+        for(ui64 i = 0; i < numIterations; ++i) {
+            SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            insertRows += 2000;
+        }
+
+        bool hasResult = false;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
+
+                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                        Cerr << "-- nodeId: " << nodeId << Endl;
+                        nodeId = runtime->GetNodeId(0);
+                    }
+                    break;
+                }
+
+                case NKqp::TKqpExecuterEvents::EvStreamData: {
+                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+
+                    Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
+                    Cerr.Flush();
+
+                    Y_ASSERT(record.GetResultSet().rows().size() == 0);
+                    hasResult = true;
+
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    resp->Record.SetEnough(false);
+                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
+                    resp->Record.SetFreeSpace(100);
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime->SetObserverFunc(captureEvents);
+        auto streamSender = runtime->AllocateEdgeActor();
+        SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, "PRAGMA Kikimr.KqpPushOlapProcess = \"true\";\nSELECT * FROM `/Root/largeOlapStore/largeOlapTable` where resource_id = Utf8(\"notfound\");", false));
         auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
-        UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
+        UNIT_ASSERT(hasResult);
     }
 
     Y_UNIT_TEST(GranulesInShard) {

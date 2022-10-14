@@ -110,35 +110,6 @@ struct TKqpCleanupCtx {
     TInstant Start = TInstant::Now();
 };
 
-EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest) {
-    switch (queryRequest.GetCollectStats()) {
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
-            return EKikimrStatsMode::None;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            return EKikimrStatsMode::Basic;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
-            return EKikimrStatsMode::Full;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
-            return EKikimrStatsMode::Profile;
-        default:
-            return EKikimrStatsMode::None;
-    }
-}
-
-TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {
-    const auto& queryLimitsProto = settings.Service.GetQueryLimits();
-    const auto& phaseLimitsProto = queryLimitsProto.GetPhaseLimits();
-
-    TKikimrQueryLimits queryLimits;
-    auto& phaseLimits = queryLimits.PhaseLimits;
-    phaseLimits.AffectedShardsLimit = phaseLimitsProto.GetAffectedShardsLimit();
-    phaseLimits.ReadsetCountLimit = phaseLimitsProto.GetReadsetCountLimit();
-    phaseLimits.ComputeNodeMemoryLimitBytes = phaseLimitsProto.GetComputeNodeMemoryLimitBytes();
-    phaseLimits.TotalReadSizeLimitBytes = phaseLimitsProto.GetTotalReadSizeLimitBytes();
-
-    return queryLimits;
-}
-
 class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -626,39 +597,6 @@ public:
         ExecuteOrDefer();
     }
 
-    void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
-        YQL_ENSURE(QueryState->TxCtx);
-        auto& txCtx = QueryState->TxCtx;
-        switch (settings.tx_mode_case()) {
-            case Ydb::Table::TransactionSettings::kSerializableReadWrite:
-                txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-                txCtx->Readonly = false;
-                break;
-
-            case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                txCtx->EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                    ? NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED
-                    : NKikimrKqp::ISOLATION_LEVEL_READ_COMMITTED;
-                txCtx->Readonly = true;
-                break;
-
-            case Ydb::Table::TransactionSettings::kStaleReadOnly:
-                txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
-                txCtx->Readonly = true;
-                break;
-
-            case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
-                // TODO: (KIKIMR-3374) Use separate isolation mode to avoid optimistic locks.
-                txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-                txCtx->Readonly = true;
-                break;
-
-            case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
-                YQL_ENSURE(false, "tx_mode not set, settings: " << settings);
-                break;
-        };
-    }
-
     void RemoveOldTransactions() {
         if (ExplicitTransactions.Size() == *Config->_KqpMaxActiveTxPerSession.Get()) {
             auto it = ExplicitTransactions.FindOldest();
@@ -690,7 +628,7 @@ public:
         QueryState->TxId = UlidGen.Next();
         QueryState->TxId_Human = QueryState->TxId.ToString();
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false);
-        SetIsolationLevel(settings);
+        QueryState->TxCtx->SetIsolationLevel(settings);
         CreateNewTx();
 
         Counters->ReportTxCreated(Settings.DbCounters);

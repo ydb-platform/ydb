@@ -2,7 +2,38 @@
 
 namespace NKikimr::NKqp {
 
-void SlowLogQuery(const TActorContext &ctx, const NYql::TKikimrConfiguration* config, const TKqpRequestInfo& requestInfo,
+using namespace NYql;
+
+EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest) {
+    switch (queryRequest.GetCollectStats()) {
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
+            return EKikimrStatsMode::None;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
+            return EKikimrStatsMode::Basic;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+            return EKikimrStatsMode::Full;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
+            return EKikimrStatsMode::Profile;
+        default:
+            return EKikimrStatsMode::None;
+    }
+}
+
+TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {
+    const auto& queryLimitsProto = settings.Service.GetQueryLimits();
+    const auto& phaseLimitsProto = queryLimitsProto.GetPhaseLimits();
+
+    TKikimrQueryLimits queryLimits;
+    auto& phaseLimits = queryLimits.PhaseLimits;
+    phaseLimits.AffectedShardsLimit = phaseLimitsProto.GetAffectedShardsLimit();
+    phaseLimits.ReadsetCountLimit = phaseLimitsProto.GetReadsetCountLimit();
+    phaseLimits.ComputeNodeMemoryLimitBytes = phaseLimitsProto.GetComputeNodeMemoryLimitBytes();
+    phaseLimits.TotalReadSizeLimitBytes = phaseLimitsProto.GetTotalReadSizeLimitBytes();
+
+    return queryLimits;
+}
+
+void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, const TKqpRequestInfo& requestInfo,
     const TDuration& duration, Ydb::StatusIds::StatusCode status, const TString& userToken, ui64 parametersSize,
     NKikimrKqp::TEvQueryResponse *record, const std::function<TString()> extractQueryText)
 {

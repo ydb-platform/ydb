@@ -241,6 +241,37 @@ public:
         ForceNewEngineSettings.ForceNewEngineLevel = level;
     }
 
+    void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
+        switch (settings.tx_mode_case()) {
+            case Ydb::Table::TransactionSettings::kSerializableReadWrite:
+                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                Readonly = false;
+                break;
+
+            case Ydb::Table::TransactionSettings::kOnlineReadOnly:
+                EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
+                    ? NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED
+                    : NKikimrKqp::ISOLATION_LEVEL_READ_COMMITTED;
+                Readonly = true;
+                break;
+
+            case Ydb::Table::TransactionSettings::kStaleReadOnly:
+                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
+                Readonly = true;
+                break;
+
+            case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+                // TODO: (KIKIMR-3374) Use separate isolation mode to avoid optimistic locks.
+                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                Readonly = true;
+                break;
+
+            case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
+                YQL_ENSURE(false, "tx_mode not set, settings: " << settings);
+                break;
+        };
+    }
+
 public:
     struct TParamsState : public TThrRefBase {
         TParamValueMap Values;

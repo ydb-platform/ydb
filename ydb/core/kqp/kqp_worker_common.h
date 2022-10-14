@@ -1,6 +1,8 @@
-#include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/kqp_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/log.h>
@@ -121,5 +123,8 @@ inline ETableReadType ExtractMostHeavyReadType(const TString& queryPlan) {
 void SlowLogQuery(const TActorContext &ctx, const NYql::TKikimrConfiguration* config, const TKqpRequestInfo& requestInfo,
     const TDuration& duration, Ydb::StatusIds::StatusCode status, const TString& userToken, ui64 parametersSize,
     NKikimrKqp::TEvQueryResponse *record, const std::function<TString()> extractQueryText);
+
+NYql::EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest);
+NYql::TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings);
 
 }

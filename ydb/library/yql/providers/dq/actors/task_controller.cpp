@@ -299,6 +299,10 @@ private:
         ADD_COUNTER(PendingInputTimeUs)
         ADD_COUNTER(PendingOutputTimeUs)
         ADD_COUNTER(FinishTimeUs)
+        ADD_COUNTER(InputRows)
+        ADD_COUNTER(InputBytes)
+        ADD_COUNTER(OutputRows)
+        ADD_COUNTER(OutputBytes)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)

@@ -439,9 +439,14 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet,
         NJson::TJsonValue& row = data.AppendValue(NJson::TJsonValue());
         for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
             const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-            row[columnMeta.Name] = prettyValueFormat
+            NJson::TJsonValue v = prettyValueFormat
                 ? FormatColumnPrettyValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, holderFactory)
                 : FormatColumnValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, holderFactory);
+            if (prettyValueFormat) {
+                row.AppendValue(std::move(v));
+            } else {
+                row[columnMeta.Name] = std::move(v);
+            }
         }
     }
 }

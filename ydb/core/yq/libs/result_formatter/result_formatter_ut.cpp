@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
 
             // Cerr << stream.Str() << Endl;
 
-            TString expected = R"___({"data":[{"column0":31337,"column1":1000000001},{"column0":31338,"column1":1000000002}],"columns":[{"name":"column0","type":"Int32"},{"name":"column1","type":"Int64"}]})___";
+            TString expected = R"___({"data":[[31337,1000000001],[31338,1000000002]],"columns":[{"name":"column0","type":"Int32"},{"name":"column1","type":"Int64"}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
 
             //Cerr << stream.Str() << Endl;
 
-            TString expected = R"___({"data":[{"column0":[31337,1000000001]}],"columns":[{"name":"column0","type":"List<Int32>"}]})___";
+            TString expected = R"___({"data":[[[31337,1000000001]]],"columns":[{"name":"column0","type":"List<Int32>"}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
             NJson::WriteJson(&stream, &root);
 
             //Cerr << stream.Str() << Endl;
-            TString expected = R"___({"data":[{"column0":[31337]},{"column0":[]}],"columns":[{"name":"column0","type":"Optional<Int32>"}]})___";
+            TString expected = R"___({"data":[[[31337]],[[]]],"columns":[{"name":"column0","type":"Optional<Int32>"}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
             NJson::WriteJson(&stream, &root);
 
             //Cerr << stream.Str() << Endl;
-            TString expected = R"___({"data":[{"column0":{"k2":113370,"k1":31337}}],"columns":[{"name":"column0","type":"Struct<'k1':Int32,'k2':Int64>"}]})___";
+            TString expected = R"___({"data":[[{"k2":113370,"k1":31337}]],"columns":[{"name":"column0","type":"Struct<'k1':Int32,'k2':Int64>"}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
             NJson::WriteJson(&stream, &root);
 
             //Cerr << stream.Str() << Endl;
-            TString expected = R"___({"data":[{"column0":{}}],"columns":[{"name":"column0","type":"Struct<>"}]})___";
+            TString expected = R"___({"data":[[{}]],"columns":[{"name":"column0","type":"Struct<>"}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }

@@ -8,6 +8,6 @@ namespace NYql {
 
 class TFileStorageConfig;
 
-NYql::NFS::IDownloaderPtr MakeHttpDownloader(bool restictedUser, const TFileStorageConfig& config, const std::vector<TString>& extraAllowedUrls);
+NYql::NFS::IDownloaderPtr MakeHttpDownloader(const TFileStorageConfig& config);
 
 } // NYql

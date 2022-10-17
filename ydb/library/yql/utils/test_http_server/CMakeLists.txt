@@ -6,22 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(proto)
 
-add_library(core-file_storage-http_download)
-target_link_libraries(core-file_storage-http_download PUBLIC
+add_library(yql-utils-test_http_server)
+target_link_libraries(yql-utils-test_http_server PUBLIC
   contrib-libs-cxxsupp
   yutil
-  core-file_storage-defs
-  core-file_storage-download
-  core-file_storage-proto
-  file_storage-http_download-proto
-  yql-utils-fetch
-  yql-utils-log
-  library-yql-utils
-  cpp-digest-md5
+  cpp-http-server
   cpp-http-misc
 )
-target_sources(core-file_storage-http_download PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/http_download/http_download.cpp
+target_sources(yql-utils-test_http_server PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/test_http_server/test_http_server.cpp
 )

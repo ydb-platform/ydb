@@ -12,6 +12,7 @@ add_subdirectory(backtrace)
 add_subdirectory(failure_injector)
 add_subdirectory(fetch)
 add_subdirectory(log)
+add_subdirectory(test_http_server)
 add_subdirectory(threading)
 add_subdirectory(ut)
 

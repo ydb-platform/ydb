@@ -1,6 +1,6 @@
 package NYql;
 
-message TSchemeTranslate {
+message TSchemeTranslate { // TODO: remove
     required string Pattern = 1; // regexp to match
     required string TargetUrl = 2; // replacement string for target URL
 }
@@ -9,7 +9,7 @@ message TFileStorageConfig {
     optional string Path = 1; // Path to file storage. An auto-cleaned temp directory is used for empty value
     optional uint32 MaxFiles = 2 [default = 1000]; // Maximum number of files in the storage
     optional uint32 MaxSizeMb = 3 [default = 100]; // Maximum total size of all files in the storage
-    repeated TSchemeTranslate CustomSchemes = 4;
+    repeated TSchemeTranslate CustomSchemes = 4; // TODO: remove
     optional uint32 Threads = 5 [default = 1]; // Number of download threads for async downloading
     optional uint32 RetryCount = 6 [default = 0]; // Number of additional attempts to download file
     optional uint32 RetryDelayMs = 7 [default = 1000]; // Delay in ms between attempts to download file

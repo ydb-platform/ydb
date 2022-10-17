@@ -2,9 +2,8 @@
 
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/http/server/http_ex.h>
-#include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/deprecated/atomic/atomic_ops.h>
+#include <util/generic/yexception.h>
 
 namespace NYql {
 
@@ -103,7 +102,7 @@ public:
     }
 
     void Start() {
-        UNIT_ASSERT(HttpServer_.Start());
+        Y_ENSURE(HttpServer_.Start());
     }
 
     void Stop() {

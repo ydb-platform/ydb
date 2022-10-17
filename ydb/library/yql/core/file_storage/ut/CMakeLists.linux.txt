@@ -21,8 +21,8 @@ target_link_libraries(ydb-library-yql-core-file_storage-ut PUBLIC
   yql-core-file_storage
   cpp-http-server
   cpp-threading-future
-  core-file_storage-http_download
   cpp-deprecated-atomic
+  yql-utils-test_http_server
 )
 target_link_options(ydb-library-yql-core-file_storage-ut PRIVATE
   -ldl
@@ -38,7 +38,6 @@ target_sources(ydb-library-yql-core-file_storage-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/file_storage_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/sized_cache_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/storage_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/ut/test_http_server.cpp
 )
 add_test(
   NAME

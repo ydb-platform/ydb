@@ -304,8 +304,6 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST(JoinWithDuplicates) {
-        // TODO (fix the bug)
-        return;
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

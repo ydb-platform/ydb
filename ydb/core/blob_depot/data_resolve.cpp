@@ -383,7 +383,7 @@ namespace NKikimr::NBlobDepot {
                     }
                     if (minId == maxId) {
                         const auto it = Data.find(TKey(minId));
-                        if (it != Data.end() && !it->second.ValueChain.empty() || it->second.OriginalBlobId) {
+                        if (it != Data.end() && (!it->second.ValueChain.empty() || it->second.OriginalBlobId)) {
                             continue; // fast path for extreme queries
                         }
                     }

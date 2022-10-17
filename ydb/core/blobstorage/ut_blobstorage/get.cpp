@@ -4,12 +4,13 @@
 Y_UNIT_TEST_SUITE(Get) {
 
     void SendGet(const TTestInfo &test, const TLogoBlobID &blobId, const TString &data,
-            NKikimrProto::EReplyStatus status, std::optional<ui64> readerTabletId = {}, std::optional<ui32> readerTabletGeneration = {})
+            NKikimrProto::EReplyStatus status, std::optional<ui64> readerTabletId = {}, std::optional<ui32> readerTabletGeneration = {},
+            bool mustRestoreFirst = false, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0, bool checkResultData = true)
     {
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> getQueries{new TEvBlobStorage::TEvGet::TQuery[1]};
         getQueries[0].Id = blobId;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(getQueries, 1, TInstant::Max(),
-                NKikimrBlobStorage::AsyncRead);
+                NKikimrBlobStorage::AsyncRead, mustRestoreFirst, isIndexOnly, forceBlockedGeneration);
         if (readerTabletId && readerTabletGeneration) {
             ev->ReaderTabletData = {*readerTabletId, *readerTabletGeneration};
         }
@@ -22,7 +23,7 @@ Y_UNIT_TEST_SUITE(Get) {
         UNIT_ASSERT(getResult);
         UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Status, status);
-        if (status == NKikimrProto::EReplyStatus::OK) {
+        if (checkResultData && status == NKikimrProto::EReplyStatus::OK) {
             UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer, data);
         }
     }
@@ -70,6 +71,32 @@ Y_UNIT_TEST_SUITE(Get) {
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvBlockResult);
         auto blockResult = handle->Get<TEvBlobStorage::TEvBlockResult>();
         UNIT_ASSERT(blockResult);
+
+        // check that TEvGet still returns OK for blocked generation without reader params
+        SendGet(test, originalBlobId, data, NKikimrProto::OK);
+        // check that now TEvGet returns BLOCKED for blocked generation with reader params
+        SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, tabletId, tabletGeneration);
+    }
+
+    Y_UNIT_TEST(TestForceBlockedGenerationIndexRestoreGetRequest) {
+        TEnvironmentSetup env(true);
+        TTestInfo test = InitTest(env);
+
+        ui64 tabletId = 1;
+        ui32 tabletGeneration = 1;
+
+        constexpr ui32 size = 100;
+        TString data(size, 'a');
+        TLogoBlobID originalBlobId(tabletId, tabletGeneration, 0, 0, size, 0);
+
+        // check that TEvGet returns OK without reader params
+        SendPut(test, originalBlobId, data, NKikimrProto::OK);
+        // check that TEvGet returns OK with reader params
+        SendGet(test, originalBlobId, data, NKikimrProto::OK, tabletId, tabletGeneration);
+
+        // block tablet generation
+        ui32 blockedTabletGeneration = tabletGeneration + 1;
+        SendGet(test, originalBlobId, data, NKikimrProto::OK, {}, {}, false, true, blockedTabletGeneration, false);
 
         // check that TEvGet still returns OK for blocked generation without reader params
         SendGet(test, originalBlobId, data, NKikimrProto::OK);

@@ -17,6 +17,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
     const TInstant Deadline;
     const bool IsInternal;
+    const ui32 ForceBlockedGeneration;
 
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
     TVector<TBlobStatusTracker> BlobStatus;
@@ -274,6 +275,7 @@ public:
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
         , IsInternal(ev->IsInternal)
+        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
         , VGetsInFlight(0)
         , StartTime(now)
         , GetHandleClass(ev->GetHandleClass)
@@ -309,7 +311,8 @@ public:
             << " QuerySize# " << QuerySize
             << " Queries# " << makeQueriesList()
             << " Deadline# " << Deadline
-            << " RestartCounter# " << RestartCounter);
+            << " RestartCounter# " << RestartCounter
+            << " ForceBlockedGeneration# " << ForceBlockedGeneration);
 
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
@@ -337,11 +340,18 @@ public:
                             QuorumTracker.emplace(cookie, Info.Get());
                         }
 
-                        vget = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(vd, Deadline,
-                                NKikimrBlobStorage::EGetHandleClass::FastRead,
-                                TEvBlobStorage::TEvVGet::EFlags::ShowInternals, cookie);
+                        vget = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
+                                    vd,
+                                    Deadline,
+                                    NKikimrBlobStorage::EGetHandleClass::FastRead,
+                                    TEvBlobStorage::TEvVGet::EFlags::ShowInternals,
+                                    cookie,
+                                    {},
+                                    ForceBlockedGeneration
+                                );
 
                         vget->Record.SetSuppressBarrierCheck(IsInternal);
+                        vget->Record.SetTabletId(TabletId);
                     }
                     const ui64 cookie = queryIdx;
                     vget->AddExtremeQuery(id, 0, 0, &cookie);

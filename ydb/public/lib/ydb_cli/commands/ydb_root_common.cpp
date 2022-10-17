@@ -208,10 +208,13 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     }
 
     if (config.UseIamAuth) {
-        opts.AddLongOption("iam-endpoint", "Endpoint of IAM service")
+        TStringBuilder iamEndpointHelp;
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        iamEndpointHelp << "Endpoint of IAM service (default: " << colors.Cyan();
+        iamEndpointHelp << "\"" << config.IamEndpoint << "\"" << colors.OldColor() << ")";
+        opts.AddLongOption("iam-endpoint", iamEndpointHelp)
             .RequiredArgument("STR")
-            .StoreResult(&IamEndpoint)
-            .DefaultValue(config.IamEndpoint);
+            .StoreResult(&IamEndpoint);
     }
 
     opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from.")
@@ -235,6 +238,7 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     TClientCommandRootBase::Parse(config);
     ParseDatabase(config);
     ParseCaCerts(config);
+    ParseIamEndpoint(config);
 
     config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
 }
@@ -299,6 +303,21 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
     config.Database = Database;
 }
 
+void TClientCommandRootCommon::ParseIamEndpoint(TConfig& config) {
+    if (IamEndpoint.empty()) {
+        auto profile = Profile;
+        if (!profile) {
+            profile = ProfileManager->GetActiveProfile();
+        }
+        if (profile && profile->Has("iam-endpoint")) {
+            IamEndpoint = profile->GetValue("iam-endpoint").as<TString>();
+        }
+    }
+    if (!IamEndpoint.empty()) {
+        config.IamEndpoint = IamEndpoint;
+    }
+}
+
 void TClientCommandRootCommon::Validate(TConfig& config) {
     TClientCommandRootBase::Validate(config);
     if (!config.NeedToConnect) {
@@ -335,12 +354,6 @@ namespace {
     inline void PrintSettingFromProfile(const TString& setting, std::shared_ptr<IProfile> profile, bool explicitOption) {
         Cout << "Using " << setting << " due to configuration in" << (explicitOption ? "" : " active") << " profile \""
             << profile->GetName() << "\"" << (explicitOption ? " from explicit --profile option" : "") << Endl;
-    }
-}
-
-void TClientCommandRootCommon::CheckForIamEndpoint(TConfig& config, std::shared_ptr<IProfile> profile) {
-    if (profile->Has("iam-endpoint")) {
-        config.IamEndpoint = profile->GetValue("iam-endpoint").as<TString>();
     }
 }
 
@@ -410,7 +423,6 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             PrintSettingFromProfile("Yandex.Cloud Passport token (yc-token)", profile, explicitOption);
         }
         config.YCToken = authData.as<TString>();
-        CheckForIamEndpoint(config, profile);
     } else if (authMethod == "yc-token-file") {
         if (IsVerbose()) {
             PrintSettingFromProfile("Yandex.Cloud Passport token file (yc-token-file)", profile, explicitOption);
@@ -426,13 +438,11 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             return false;
         }
         config.YCToken = fileContent;
-        CheckForIamEndpoint(config, profile);
     } else if (authMethod == "sa-key-file") {
         if (IsVerbose()) {
             PrintSettingFromProfile("service account key file (sa-key-file)", profile, explicitOption);
         }
         config.SaKeyFile = authData.as<TString>();
-        CheckForIamEndpoint(config, profile);
     } else if (authMethod == "ydb-token") {
         if (IsVerbose()) {
             PrintSettingFromProfile("OAuth token (ydb-token)", profile, explicitOption);
@@ -643,10 +653,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                 return;
             }
         }
-    }
-
-    if (!config.IamEndpoint && config.UseIamAuth && IamEndpoint) {
-        config.IamEndpoint = IamEndpoint;
     }
 }
 

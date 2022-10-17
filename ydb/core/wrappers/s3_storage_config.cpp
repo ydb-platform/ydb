@@ -96,9 +96,15 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     Aws::Client::ClientConfiguration config;
 
     config.endpointOverride = settings.GetEndpoint();
-    config.connectTimeoutMs = settings.GetConnectionTimeoutMs();
-    config.requestTimeoutMs = settings.GetRequestTimeoutMs();
-    config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
+    if (settings.HasConnectionTimeoutMs()) {
+        config.connectTimeoutMs = settings.GetConnectionTimeoutMs();
+    }
+    if (settings.HasRequestTimeoutMs()) {
+        config.requestTimeoutMs = settings.GetRequestTimeoutMs();
+    }
+    if (settings.HasHttpRequestTimeoutMs()) {
+        config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
+    }
     config.enableTcpKeepAlive = true;
     //    config.lowSpeedLimit = 0;
     config.maxConnections = 5;

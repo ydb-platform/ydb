@@ -882,9 +882,9 @@ message TS3Settings {
     };
 
     optional TLimits Limits = 100;
-    optional uint32 RequestTimeoutMs = 101 [default = 1000];
-    optional uint32 HttpRequestTimeoutMs = 102 [default = 1000];
-    optional uint32 ConnectionTimeoutMs = 103 [default = 5000];
+    optional uint32 RequestTimeoutMs = 101;
+    optional uint32 HttpRequestTimeoutMs = 102;
+    optional uint32 ConnectionTimeoutMs = 103;
 };
 
 message TBackupTask {

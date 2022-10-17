@@ -59,7 +59,7 @@ public:
     void Handle(TEvBlobStorage::TEvVBlockResult::TPtr &ev) {
         switch (ev->Get()->Record.GetStatus()) {
         case NKikimrProto::OK:
-            [[fallthrough]];
+            break;
         case NKikimrProto::ALREADY:
             break;
         default: {

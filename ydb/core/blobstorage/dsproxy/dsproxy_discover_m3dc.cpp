@@ -80,7 +80,6 @@ public:
                 nullptr,                                // cookie
                 ForceBlockedGeneration);                // forceBlockedGeneration
 
-
             // disable barrier checking
             query->Record.SetSuppressBarrierCheck(true);
 

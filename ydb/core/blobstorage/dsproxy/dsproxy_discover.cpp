@@ -907,6 +907,7 @@ public:
             << " MinGeneration# " << MinGeneration
             << " ReadBody# " << (ReadBody ? "true" : "false")
             << " Deadline# " << Deadline
+            << " ForceBlockedGeneration# " << ForceBlockedGeneration
             << " FromLeader# " << (FromLeader ? "true" : "false")
             << " RestartCounter# " << RestartCounter);
 
@@ -937,7 +938,8 @@ public:
                 << " vDiskId# " << vd
                 << " node# " << Info->GetActorId(vd).NodeId()
                 << " msg# " << msg->ToString()
-                << " cookie# " << cookie);
+                << " cookie# " << cookie
+                << " ForceBlockedGeneration# " << msg->Record.GetForceBlockedGeneration());
             CountEvent(*msg);
             SendToQueue(std::move(msg), cookie);
             TotalSent++;

@@ -1185,6 +1185,7 @@ namespace NKikimr {
                 << " Internals# " << record.GetShowInternals()
                 << " TabletId# " << record.GetTabletId()
                 << " AcquireBlockedGeneration# " << record.GetAcquireBlockedGeneration()
+                << " ForceBlockedGeneration# " << record.GetForceBlockedGeneration()
                 << "}";
             return str.Str();
         }

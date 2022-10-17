@@ -25,6 +25,7 @@ target_sources(blobstorage-vdisk-skeleton PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeletonfront.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_syncfull.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_syncfullhandler.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_block_and_get.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_compactionstate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_loggedrec.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_mon_dbmainpage.cpp

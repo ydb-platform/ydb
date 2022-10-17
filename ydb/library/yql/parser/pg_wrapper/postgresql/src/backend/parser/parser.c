@@ -282,9 +282,7 @@ base_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, core_yyscan_t yyscanner)
 			if (cur_token == UIDENT)
 			{
 				/* It's an identifier, so truncate as appropriate */
-				truncate_identifier(lvalp->core_yystype.str,
-									strlen(lvalp->core_yystype.str),
-									true);
+
 				cur_token = IDENT;
 			}
 			else if (cur_token == USCONST)

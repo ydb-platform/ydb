@@ -1499,7 +1499,6 @@ YY_RULE_SETUP
 					BEGIN(INITIAL);
 					yylval.str = litbufdup();
 					len = strlen(yylval.str);
-					truncate_identifier(yylval.str, len, true);
 					return IDENT;
 				}
 	YY_BREAK
@@ -1517,7 +1516,7 @@ YY_RULE_SETUP
 {
 					int len = strlen(yytext);
 
-					yylval.str = downcase_truncate_identifier(yytext, len, true);
+					yylval.str = downcase_identifier(yytext, len, false, false);
 					return IDENT;
 				}
 	YY_BREAK

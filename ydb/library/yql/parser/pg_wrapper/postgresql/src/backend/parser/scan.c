@@ -6226,8 +6226,6 @@ YY_RULE_SETUP
 					if (yyextra->literallen == 0)
 						yyerror("zero-length delimited identifier");
 					ident = litbufdup(yyscanner);
-					if (yyextra->literallen >= NAMEDATALEN)
-						truncate_identifier(ident, yyextra->literallen, true);
 					yylval->str = ident;
 					return IDENT;
 				}
@@ -6274,7 +6272,7 @@ YY_RULE_SETUP
 					/* throw back all but the initial u/U */
 					yyless(1);
 					/* and treat it as {identifier} */
-					ident = downcase_truncate_identifier(yytext, yyleng, true);
+					ident = downcase_identifier(yytext, yyleng, false, false);
 					yylval->str = ident;
 					return IDENT;
 				}
@@ -6555,7 +6553,7 @@ YY_RULE_SETUP
 					 * No.  Convert the identifier to lower case, and truncate
 					 * if necessary.
 					 */
-					ident = downcase_truncate_identifier(yytext, yyleng, true);
+					ident = downcase_identifier(yytext, yyleng, false, false);
 					yylval->str = ident;
 					return IDENT;
 				}

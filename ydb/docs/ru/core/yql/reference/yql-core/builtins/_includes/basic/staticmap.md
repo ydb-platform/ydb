@@ -4,7 +4,8 @@
 
 **Сигнатура**
 ```
-StaticMap(Struct<...>, lambda)->List<T>
+StaticMap(Struct<...>, lambda)->Struct<...>
+StaticMap(Tuple<...>, lambda)->Tuple<...>
 ```
 
 Аргументы:

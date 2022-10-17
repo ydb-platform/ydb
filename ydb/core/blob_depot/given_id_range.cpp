@@ -107,11 +107,11 @@ namespace NKikimr::NBlobDepot {
                 const TChunk cut = chunk & mask;
                 chunk -= mask;
 
-                if (chunk.Empty()) {
-                    Ranges.erase(it);
-                }
                 if (!cut.Empty()) {
                     result.Ranges.emplace_hint(result.Ranges.end(), it->first, cut);
+                }
+                if (chunk.Empty()) {
+                    Ranges.erase(it);
                 }
 
                 const size_t count = cut.Count();

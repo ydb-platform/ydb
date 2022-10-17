@@ -1853,7 +1853,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             size_t maxByteSize = std::numeric_limits<size_t>::max();\
             TUserRetrievedEventsInfoAccumulator<true> accumulator; \
 \
-            auto event = sessionQueue.GetEventImpl(&maxByteSize, accumulator); \
+            auto event = sessionQueue.GetEventImpl(maxByteSize, accumulator); \
 \
             UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent()));\
         }
@@ -1865,7 +1865,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             size_t maxByteSize = std::numeric_limits<size_t>::max(); \
             TUserRetrievedEventsInfoAccumulator<true> accumulator; \
 \
-            auto event = sessionQueue.GetEventImpl(&maxByteSize, accumulator); \
+            auto event = sessionQueue.GetEventImpl(maxByteSize, accumulator); \
 \
             UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent())); \
             UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event.GetEvent()).GetMessagesCount(), count); \

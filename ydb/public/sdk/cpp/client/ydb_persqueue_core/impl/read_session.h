@@ -363,9 +363,9 @@ public:
     }
 
     void TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>* messages,
-                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>* compressedMessages,
-                  size_t* maxByteSize,
+                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
+                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
+                  size_t& maxByteSize,
                   size_t& dataSize) const;
 
     TDataDecompressionInfoPtr<UseMigrationProtocol> GetParent() const {
@@ -768,7 +768,7 @@ public:
                             std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session);
 
     TReadSessionEventInfo<UseMigrationProtocol>
-        GetEventImpl(size_t* maxByteSize,
+        GetEventImpl(size_t& maxByteSize,
                      TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator); // Assumes that we're under lock.
 
     TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent>
@@ -882,7 +882,7 @@ private:
 
     typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent
         GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
-                         size_t* maxByteSize,
+                         size_t& maxByteSize,
                          TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator); // Assumes that we're under lock.
 
     bool ApplyHandler(TReadSessionEventInfo<UseMigrationProtocol>& eventInfo, TDeferredActions<UseMigrationProtocol>& deferred) {

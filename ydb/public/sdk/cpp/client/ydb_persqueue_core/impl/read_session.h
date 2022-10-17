@@ -532,8 +532,7 @@ public:
                           size_t& maxByteSize,
                           TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
                           TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
-                          TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator,
-                          bool useReadyQueue);
+                          TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
 private:
     static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
@@ -736,8 +735,7 @@ public:
                                  size_t& maxByteSize,
                                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
                                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
-                                 TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator,
-                                 bool useReadyQueue);
+                                 TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
 private:
     const TKey Key;

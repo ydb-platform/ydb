@@ -1745,16 +1745,14 @@ void TPartitionStreamImpl<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<
                                                                   size_t& maxByteSize,
                                                                   TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
                                                                   TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
-                                                                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator,
-                                                                  bool useReadyQueue)
+                                                                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator)
 {
     partitionStream->EventsQueue.GetDataEventImpl(partitionStream,
                                                   maxEventsCount,
                                                   maxByteSize,
                                                   messages,
                                                   compressedMessages,
-                                                  accumulator,
-                                                  useReadyQueue);
+                                                  accumulator);
 }
 
 template <bool UseMigrationProtocol>
@@ -1763,8 +1761,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::GetDataEventImpl(TIntr
                                                                            size_t& maxByteSize,
                                                                            TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
                                                                            TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
-                                                                           TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator,
-                                                                           bool useReadyQueue)
+                                                                           TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator)
 {
     GetDataEventImpl(partitionStream,
                      maxEventsCount,
@@ -1772,7 +1769,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::GetDataEventImpl(TIntr
                      messages,
                      compressedMessages,
                      accumulator,
-                     useReadyQueue ? Ready : NotReady);
+                     Ready);
 }
 
 template <bool UseMigrationProtocol>
@@ -1830,8 +1827,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<TP
                                                                  *maxByteSize,
                                                                  messages,
                                                                  compressedMessages,
-                                                                 accumulator,
-                                                                 true);
+                                                                 accumulator);
 
     if (event.EventsCount == 0) {
         TParent::Events.pop();

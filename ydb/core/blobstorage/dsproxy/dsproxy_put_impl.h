@@ -496,7 +496,7 @@ protected:
                 } else if constexpr (isVMultiPut) {
                     // this request MUST originate from the TEvPut, so the Span field must be filled in
                     Y_VERIFY(put.Span);
-                    outVPutEvents.back()->AddVPut(put.Id, put.Buffer.ConvertToString(), &cookie, put.ExtraBlockChecks, put.Span->GetTraceId());
+                    outVPutEvents.back()->AddVPut(put.Id, TContiguousData(TRope(put.Buffer)), &cookie, put.ExtraBlockChecks, put.Span->GetTraceId());
                 }
 
                 if (put.IsHandoff) {

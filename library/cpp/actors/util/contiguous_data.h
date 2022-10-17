@@ -697,8 +697,15 @@ public:
     {}
 
     explicit TContiguousData(TString s)
+#ifndef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
         : Backend(std::move(s))
+#endif
     {
+#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
+        auto ss = NActors::TSharedData::Copy(s.data(), s.size());
+        TBackTracingOwner::FakeOwner(ss, TBackTracingOwner::INFO_COPIED_STRING);
+        Backend = TBackend(std::move(ss));
+#endif
         auto span = Backend.GetData();
         Begin = span.data();
         End = Begin + span.size();

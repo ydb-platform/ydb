@@ -815,12 +815,12 @@ namespace NKikimr {
             return sum;
         }
 
-        void StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TString &buffer);
+        void StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TContiguousData &buffer);
 
 
         TRope GetItemBuffer(ui64 itemIdx) const;
 
-        void AddVPut(const TLogoBlobID &logoBlobId, const TString &buffer, ui64 *cookie,
+        void AddVPut(const TLogoBlobID &logoBlobId, const TContiguousData &buffer, ui64 *cookie,
                 std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());

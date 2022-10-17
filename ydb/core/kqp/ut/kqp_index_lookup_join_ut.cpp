@@ -22,6 +22,26 @@ void PrepareTables(TSession session) {
             Value String,
             PRIMARY KEY (Key)
         );
+
+        CREATE TABLE `/Root/LaunchByProcessIdAndPinned` (
+            idx_processId Utf8,
+            idx_pinned Bool,
+            idx_launchNumber Int32,
+            PRIMARY KEY(idx_processId, idx_pinned, idx_launchNumber)
+        );
+
+        CREATE TABLE `/Root/LaunchByProcessIdAndTag` (
+            idx_processId Utf8,
+            idx_tag Utf8,
+            idx_launchNumber Int32,
+            PRIMARY KEY(idx_processId, idx_tag, idx_launchNumber)
+        );
+
+        CREATE TABLE `/Root/Launch` (
+            idx_processId Utf8,
+            idx_launchNumber Int32,
+            PRIMARY KEY(idx_processId, idx_launchNumber)
+        );
     )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
@@ -39,6 +59,26 @@ void PrepareTables(TSession session) {
             (101, "Value21"),
             (102, "Value22"),
             (103, "Value23");
+
+        REPLACE INTO `/Root/LaunchByProcessIdAndPinned` (idx_processId, idx_pinned, idx_launchNumber) VALUES
+            ("eProcess", false, 4),
+            ("eProcess", true, 5),
+            ("eProcess", true, 6);
+
+        REPLACE INTO `/Root/LaunchByProcessIdAndTag` (idx_processId, idx_tag, idx_launchNumber) VALUES
+            ("eProcess", "tag1", 4),
+            ("eProcess", "tag2", 4),
+            ("eProcess", "tag1", 5),
+            ("eProcess", "tag3", 5);
+
+        REPLACE INTO `/Root/Launch` (idx_processId, idx_launchNumber) VALUES
+            ("dProcess", 1),
+            ("eProcess", 2),
+            ("eProcess", 3),
+            ("eProcess", 4),
+            ("eProcess", 5),
+            ("eProcess", 6),
+            ("eProcess", 7);
     )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
 }
 
@@ -76,6 +116,49 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads) {
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Right");
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), rightTableReads);
+}
+
+Y_UNIT_TEST_NEW_ENGINE(MultiJoins) {
+    TString query =
+        R"(
+            SELECT main.idx_processId AS `processId`, main.idx_launchNumber AS `launchNumber`
+            FROM (
+                  SELECT t1.idx_processId AS processId, t1.idx_launchNumber AS launchNumber
+              FROM `/Root/LaunchByProcessIdAndPinned` AS t1
+              JOIN `/Root/LaunchByProcessIdAndTag` AS t3 ON t1.idx_processId = t3.idx_processId
+                AND t1.idx_launchNumber = t3.idx_launchNumber
+              WHERE t1.idx_processId = "eProcess"
+                AND t1.idx_pinned = true
+                AND t1.idx_launchNumber < 10
+                AND t3.idx_tag = "tag1"
+             ORDER BY processId DESC, launchNumber DESC
+                LIMIT 2
+            ) AS filtered
+            JOIN `/Root/Launch` AS main
+              ON main.idx_processId = filtered.processId
+                AND main.idx_launchNumber = filtered.launchNumber
+            ORDER BY `processId` DESC, `launchNumber` DESC
+            LIMIT 2
+        )";
+
+    TString answer =
+        R"([
+            [["eProcess"];[5]]
+        ])";
+
+    TKikimrRunner kikimr;
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    PrepareTables(session);
+
+    TExecDataQuerySettings execSettings;
+    execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+    auto result = session.ExecuteDataQuery(Q_(query), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 }
 
 Y_UNIT_TEST_NEW_ENGINE(Inner) {

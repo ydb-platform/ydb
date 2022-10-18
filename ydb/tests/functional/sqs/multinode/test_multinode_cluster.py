@@ -143,9 +143,7 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
         check_master_node_counters(new_node_index)
 
     @pytest.mark.parametrize(**STOP_NODE_PARAMS)
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    def test_reassign_master(self, stop_node, tables_format):
-        self._init_with_params(tables_format=tables_format)
+    def test_reassign_master(self, stop_node):
         self._create_queue_and_assert(self.queue_name)
         node_index = self._get_queue_master_node_index()
         proxy_node_index = self._other_node(node_index)

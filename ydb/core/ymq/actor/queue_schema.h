@@ -90,18 +90,19 @@ public:
         return NKikimrServices::TActivity::SQS_ACTOR;
     }
 
-private:
-    enum class ECreateComponentsStep : ui32 {
+public:
+    enum class ECreateComponentsStep {
         GetTablesFormatSetting,
         MakeQueueDir,
         MakeQueueVersionDir,
         MakeShards,
         MakeTables,
-        DescribeTableForSetSchemeShardId,
         DiscoverLeaderTabletId,
         AddQuoterResource,
+        Commit
     };
 
+private:
     const TQueuePath QueuePath_;
     const TCreateQueueRequest Request_;
     const TActorId Sender_;
@@ -188,7 +189,7 @@ private:
     void HandleDeleteQuoterResource(NKesus::TEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev);
     void PassAway() override;
 
-private:
+public:
     enum class EDeleting : ui32 {
         EraseQueueRecord,
         RemoveTables,
@@ -199,13 +200,14 @@ private:
         Finish,
     };
 
+private:
     const TQueuePath QueuePath_;
     const bool IsFifo_;
     const ui32 TablesFormat_;
     const TActorId Sender_;
     TVector<TTable> Tables_;
     TVector<int> Shards_;
-    ui32 SI_;
+    EDeleting DeletionStep_;
     const TString RequestId_;
     TIntrusivePtr<TUserCounters> UserCounters_;
     ui64 Version_ = 0;

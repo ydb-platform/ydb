@@ -225,7 +225,7 @@ Y_UNIT_TEST(MultipleFileParts) {
 
     WaitBootstrap(runtime);
 
-    const TString filePrefix = TStringBuilder() << NFs::CurrentWorkingDirectory() << "/kqp_spilling/node_1/1_test_";
+    const TString filePrefix = TStringBuilder() << NFs::CurrentWorkingDirectory() << "/kqp_spilling/node_" << runtime.GetNodeId() << "/1_test_";
 
     for (ui32 i = 0; i < 5; ++i) {
         // Cerr << "---- store blob #" << i << Endl;
@@ -268,7 +268,7 @@ Y_UNIT_TEST(SingleFilePart) {
 
     WaitBootstrap(runtime);
 
-    const TString filePrefix = TStringBuilder() << NFs::CurrentWorkingDirectory() << "/kqp_spilling/node_1/1_test_";
+    const TString filePrefix = TStringBuilder() << NFs::CurrentWorkingDirectory() << "/kqp_spilling/node_" << runtime.GetNodeId() << "/1_test_";
 
     for (ui32 i = 0; i < 5; ++i) {
         // Cerr << "---- store blob #" << i << Endl;

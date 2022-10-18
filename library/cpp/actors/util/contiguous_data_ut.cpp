@@ -54,32 +54,32 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
         TContiguousData data = TContiguousData::Uninitialized(10, 20, 30);
         UNIT_ASSERT_EQUAL(data.size(), 10);
         UNIT_ASSERT_EQUAL(data.Headroom(), 20);
-        UNIT_ASSERT_EQUAL(data.Tailroom(), 30);
-        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 76);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 34);
+        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 80);
         UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), data.size() + data.Headroom() + data.Tailroom() + 2 * sizeof(char*));
         data.GrowFront(5);
         UNIT_ASSERT_EQUAL(data.size(), 15);
         UNIT_ASSERT_EQUAL(data.Headroom(), 15);
-        UNIT_ASSERT_EQUAL(data.Tailroom(), 30);
-        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 76);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 34);
+        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 80);
         UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), data.size() + data.Headroom() + data.Tailroom() + 2 * sizeof(char*));
         data.GrowBack(5);
         UNIT_ASSERT_EQUAL(data.size(), 20);
         UNIT_ASSERT_EQUAL(data.Headroom(), 15);
-        UNIT_ASSERT_EQUAL(data.Tailroom(), 25);
-        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 76);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 29);
+        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 80);
         UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), data.size() + data.Headroom() + data.Tailroom() + 2 * sizeof(char*));
         data.GrowFront(21);
         UNIT_ASSERT_EQUAL(data.size(), 41);
         UNIT_ASSERT_EQUAL(data.Headroom(), 0);
-        UNIT_ASSERT_EQUAL(data.Tailroom(), 25);
-        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 82);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 31);
+        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 88);
         UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), data.size() + data.Headroom() + data.Tailroom() + 2 * sizeof(char*));
-        data.GrowBack(26);
-        UNIT_ASSERT_EQUAL(data.size(), 67);
+        data.GrowBack(32);
+        UNIT_ASSERT_EQUAL(data.size(), 73);
         UNIT_ASSERT_EQUAL(data.Headroom(), 0);
         UNIT_ASSERT_EQUAL(data.Tailroom(), 0);
-        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 67);
+        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 73);
         UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), data.size() + data.Headroom() + data.Tailroom());
     }
 
@@ -89,25 +89,30 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
         UNIT_ASSERT_EQUAL(data.data(), otherData.data());
         UNIT_ASSERT_EQUAL(data.size(), 10);
         UNIT_ASSERT_EQUAL(data.Headroom(), 20);
-        UNIT_ASSERT_EQUAL(data.Tailroom(), 30);
-        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 76);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 34);
+        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 80);
         UNIT_ASSERT_EQUAL(otherData.size(), 10);
         UNIT_ASSERT_EQUAL(otherData.Headroom(), 20);
-        UNIT_ASSERT_EQUAL(otherData.Tailroom(), 30);
-        UNIT_ASSERT_EQUAL(otherData.GetOccupiedMemorySize(), 76);
+        UNIT_ASSERT_EQUAL(otherData.Tailroom(), 34);
+        UNIT_ASSERT_EQUAL(otherData.GetOccupiedMemorySize(), 80);
         data.GrowFront(5);
         data.GrowBack(5);
         UNIT_ASSERT_EQUAL(data.data() + 5, otherData.data());
         UNIT_ASSERT_EQUAL(data.size(), 20);
         UNIT_ASSERT_EQUAL(data.Headroom(), 15);
-        UNIT_ASSERT_EQUAL(data.Tailroom(), 25);
-        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 76);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 29);
+        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 80);
         otherData.GrowFront(5);
         UNIT_ASSERT_UNEQUAL(data.data(), otherData.data());
         UNIT_ASSERT_EQUAL(otherData.size(), 15);
         UNIT_ASSERT_EQUAL(otherData.Headroom(), 15);
-        UNIT_ASSERT_EQUAL(otherData.Tailroom(), 30);
-        UNIT_ASSERT_EQUAL(otherData.GetOccupiedMemorySize(), 76);
+        UNIT_ASSERT_EQUAL(otherData.Tailroom(), 34);
+        UNIT_ASSERT_EQUAL(otherData.GetOccupiedMemorySize(), 80);
+        data.Trim(10, 5);
+        UNIT_ASSERT_EQUAL(data.size(), 10);
+        UNIT_ASSERT_EQUAL(data.Headroom(), 20);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 34);
+        UNIT_ASSERT_EQUAL(data.GetOccupiedMemorySize(), 80);
     }
 
     Y_UNIT_TEST(Trim) {
@@ -155,15 +160,14 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
         extracted = data.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
         UNIT_ASSERT_EQUAL(data.data(), extracted.data());
 
-        // TODO(innokentii) add microoptimization for this case
-        // TContiguousData data = TContiguousData::Uninitialized(10, 20, 30);
-        // data.GrowFront(20);
-        // extracted = data.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
-        // UNIT_ASSERT_EQUAL(data.data(), extracted.data());
-        // UNIT_ASSERT_EQUAL(data.size(), extracted.size());
-        // data.GrowBack(30);
-        // extracted = data.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
-        // UNIT_ASSERT_EQUAL(data.data(), extracted.data());
-        // UNIT_ASSERT_EQUAL(data.size(), extracted.size());
+        TContiguousData data2 = TContiguousData::Uninitialized(10, 20, 30);
+        data2.GrowFront(20);
+        extracted = data2.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
+        UNIT_ASSERT_EQUAL(data2.data(), extracted.data());
+        UNIT_ASSERT_EQUAL(data2.size(), extracted.size());
+        data2.GrowBack(34);
+        extracted = data2.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
+        UNIT_ASSERT_EQUAL(data2.data(), extracted.data());
+        UNIT_ASSERT_EQUAL(data2.size(), extracted.size());
     }
 }

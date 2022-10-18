@@ -9521,8 +9521,8 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "SetPackageVersion", TVector<TDeferredAtom>{ values[0], TDeferredAtom(values[1].Build()->GetPos(), ToString(version)) }, false);
         } else if (normalizedPragma == "file") {
-            if (values.size() != 2U || pragmaValueDefault) {
-                Error() << "Expected file alias and url as pragma values";
+            if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
+                Error() << "Expected file alias, url and optional token name as pragma values";
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }
@@ -9531,8 +9531,8 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "AddFileByUrl", values, false);
         } else if (normalizedPragma == "folder") {
-            if (values.size() != 2U || pragmaValueDefault) {
-                Error() << "Expected folder alias as url as pragma values";
+            if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
+                Error() << "Expected folder alias, url and optional token name as pragma values";
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }

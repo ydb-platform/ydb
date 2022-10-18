@@ -828,7 +828,7 @@ namespace {
             return true;
         }
 
-        bool AddFileByUrlImpl(const TStringBuf alias, const TStringBuf url, const TPosition pos, TExprContext& ctx) {
+        bool AddFileByUrlImpl(const TStringBuf alias, const TStringBuf url, const TStringBuf token, const TPosition pos, TExprContext& ctx) {
             if (url.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Empty URL for file '" << alias << "'."));
                 return false;
@@ -843,18 +843,32 @@ namespace {
             TUserDataBlock block;
             block.Type = EUserDataType::URL;
             block.Data = url;
-            Types.UserDataStorage->TryFillUserDataToken(block);
+            if (token) {
+                block.UrlToken = token;
+            } else {
+                Types.UserDataStorage->TryFillUserDataToken(block);
+            }
             Types.UserDataStorage->AddUserDataBlock(key, block);
             return true;
         }
 
         bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
-            if (args.size() != 2) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 arguments, but got " << args.size()));
+            if (args.size() < 2 || args.size() > 3) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
                 return false;
             }
 
-            return AddFileByUrlImpl(args[0], args[1], pos, ctx);
+            TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
+            if (token) {
+                if (auto cred = Types.FindCredential(token)) {
+                    token = cred->Content;
+                } else {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << token << "'."));
+                    return false;
+                }
+            }
+
+            return AddFileByUrlImpl(args[0], args[1], token, pos, ctx);
         }
 
         bool SetPackageVersion(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
@@ -882,7 +896,7 @@ namespace {
             return true;
         }
 
-        bool DoListSandboxFolder(const TStringBuf url, const TPosition& pos, TExprContext& ctx, NJson::TJsonValue& content) {
+        bool DoListSandboxFolder(const TStringBuf url, const TStringBuf token, const TPosition& pos, TExprContext& ctx, NJson::TJsonValue& content) {
             TString urlStr(url);
             if (!url.empty() && url.back() != '/') {
                 urlStr += "/";
@@ -895,6 +909,9 @@ namespace {
 
             THttpHeaders headers;
             headers.AddHeader("Accept", "application/json");
+            if (token) {
+                headers.AddHeader("Authorization", TString("OAuth ").append(token));
+            }
             auto result = Fetch(httpUrl, headers, TDuration::Seconds(30));
             if (!result) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Failed to fetch " << url << " for building folder"));
@@ -913,11 +930,11 @@ namespace {
             return true;
         }
 
-        bool ListSandboxFolder(const TStringBuf url, const TPosition& pos, TExprContext& ctx, NJson::TJsonValue& content) {
+        bool ListSandboxFolder(const TStringBuf url, const TStringBuf token, const TPosition& pos, TExprContext& ctx, NJson::TJsonValue& content) {
             try {
 
                 return WithRetry<std::exception>(3, [&]() {
-                    return DoListSandboxFolder(url, pos, ctx, content);
+                    return DoListSandboxFolder(url, token, pos, ctx, content);
                 }, [&](const auto& e, int attempt, int attemptCount) {
                     YQL_CLOG(WARN, ProviderConfig) << "Error in loading sandbox folder " << url << ", attempt " << attempt << "/" << attemptCount << ", details: " << e.what();
                 });
@@ -936,9 +953,21 @@ namespace {
         }
 
         bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
-            if (args.size() != 2) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 arguments, but got " << args.size()));
+            if (args.size() < 2 || args.size() > 3) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
                 return false;
+            }
+
+            TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
+            if (token) {
+                if (auto cred = Types.FindCredential(token)) {
+                    token = cred->Content;
+                } else {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << token << "' for folder."));
+                    return false;
+                }
+            } else if (auto cred = Types.FindCredential("default_sandbox")) {
+                token = cred->Content;
             }
 
             std::vector<std::pair<TString, TString>> queue;
@@ -951,7 +980,7 @@ namespace {
 
                 YQL_CLOG(DEBUG, ProviderConfig) << "Listing sandbox folder " << prefix << ": " << url;
                 NJson::TJsonValue content;
-                if (!ListSandboxFolder(url, pos, ctx, content)) {
+                if (!ListSandboxFolder(url, token, pos, ctx, content)) {
                     return false;
                 }
 
@@ -969,7 +998,7 @@ namespace {
                         }
                         alias << file.first;
                         if (type == "REGULAR") {
-                            if (!AddFileByUrlImpl(alias, TStringBuf(MakeHttps(fileUrl->GetString())), pos, ctx)) {
+                            if (!AddFileByUrlImpl(alias, TStringBuf(MakeHttps(fileUrl->GetString())), token, pos, ctx)) {
                                 return false;
                             }
                         } else if (type == "DIRECTORY") {

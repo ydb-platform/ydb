@@ -17,7 +17,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
     const TInstant Deadline;
     const bool IsInternal;
-    const ui32 ForceBlockedGeneration;
+    const std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
 
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
     TVector<TBlobStatusTracker> BlobStatus;
@@ -245,7 +245,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
-            true /*mustRestoreFirst*/, true /*isIndexOnly*/, 0u /*forceBlockedGeneration*/, IsInternal);
+            true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
         ev->RestartCounter = counter;
         return ev;
     }
@@ -275,7 +275,7 @@ public:
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
         , IsInternal(ev->IsInternal)
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , ForceBlockTabletData(ev->ForceBlockTabletData)
         , VGetsInFlight(0)
         , StartTime(now)
         , GetHandleClass(ev->GetHandleClass)
@@ -312,7 +312,8 @@ public:
             << " Queries# " << makeQueriesList()
             << " Deadline# " << Deadline
             << " RestartCounter# " << RestartCounter
-            << " ForceBlockedGeneration# " << ForceBlockedGeneration);
+            << " ForceBlockTabletId# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Id) : "")
+            << " ForceBlockTabletGeneration# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Generation) : ""));
 
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
@@ -347,7 +348,7 @@ public:
                                     TEvBlobStorage::TEvVGet::EFlags::ShowInternals,
                                     cookie,
                                     {},
-                                    ForceBlockedGeneration
+                                    ForceBlockTabletData
                                 );
 
                         vget->Record.SetSuppressBarrierCheck(IsInternal);

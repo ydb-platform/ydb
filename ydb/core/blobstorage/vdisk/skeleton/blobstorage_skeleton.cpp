@@ -890,10 +890,11 @@ namespace NKikimr {
                     && Hull->IsBlocked(record.GetReaderTabletData().GetId(), {record.GetReaderTabletData().GetGeneration(), 0}).Status != TBlocksCache::EStatus::OK) {
                 ReplyError(NKikimrProto::BLOCKED, "tablet's generation is blocked", ev, ctx, now);
             } else {
-                if (ev->Get()->Record.GetForceBlockedGeneration() > 0) {
-                    auto tabletGeneration = ev->Get()->Record.GetForceBlockedGeneration();
+                if (ev->Get()->Record.GetForceBlockTabletData().GetGeneration() > 0) {
+                    auto tabletId = ev->Get()->Record.GetForceBlockTabletData().GetId();
+                    auto tabletGeneration = ev->Get()->Record.GetForceBlockTabletData().GetGeneration();
                     ui32 blockedGeneration = 0;
-                    if (!Hull->GetBlocked(record.GetTabletId(), &blockedGeneration) || blockedGeneration < tabletGeneration) {
+                    if (!Hull->GetBlocked(tabletId, &blockedGeneration) || blockedGeneration < tabletGeneration) {
                          // TODO: add counter
                         auto actor = CreateBlockAndGetActor(
                             std::move(ev),

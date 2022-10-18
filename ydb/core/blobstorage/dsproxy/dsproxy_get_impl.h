@@ -22,7 +22,7 @@ class TGetImpl {
     const bool CollectDebugInfo;
     const bool MustRestoreFirst;
     const bool ReportDetailedPartMap;
-    const ui32 ForceBlockedGeneration;
+    std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
 
     ui64 ReplyBytes = 0;
     i64 BytesToReport = 0;
@@ -66,7 +66,7 @@ public:
         , CollectDebugInfo(ev->CollectDebugInfo)
         , MustRestoreFirst(ev->MustRestoreFirst)
         , ReportDetailedPartMap(ev->ReportDetailedPartMap)
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , ForceBlockTabletData(ev->ForceBlockTabletData)
         , Blackboard(info, groupQueues, NKikimrBlobStorage::AsyncBlob, ev->GetHandleClass)
         , RequestPrefix(requestPrefix)
         , PhantomCheck(ev->PhantomCheck)
@@ -78,7 +78,7 @@ public:
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass(), MustRestoreFirst,
-            false /*isIndexOnly*/, ForceBlockedGeneration, IsInternal, IsVerboseNoDataEnabled, CollectDebugInfo,
+            false /*isIndexOnly*/, ForceBlockTabletData, IsInternal, IsVerboseNoDataEnabled, CollectDebugInfo,
             ReportDetailedPartMap);
         ev->RestartCounter = counter;
         ev->PhantomCheck = PhantomCheck;

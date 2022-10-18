@@ -119,32 +119,28 @@ struct TEvArgs {
 
 struct TEvGetArgs : public TEvArgs {
     TEvGetArgs() = default;
-    TEvGetArgs(bool mustRestoreFirst, bool indexOnly, ui32 forceBlockedGeneration) 
+    TEvGetArgs(bool mustRestoreFirst, bool indexOnly)
         : TEvArgs(EEventType::GET)
         , MustRestoreFirst(mustRestoreFirst)
         , IndexOnly(indexOnly)
-        , ForceBlockedGeneration(forceBlockedGeneration)
     {
     }
 
     bool MustRestoreFirst = false;
     bool IndexOnly = false;
-    ui32 ForceBlockedGeneration = 0;
 };
 
 struct MultiTEvGetArgs : public TEvArgs {
     MultiTEvGetArgs() = default;
-    MultiTEvGetArgs(bool mustRestoreFirst, bool indexOnly, ui32 forceBlockedGeneration) 
+    MultiTEvGetArgs(bool mustRestoreFirst, bool indexOnly)
         : TEvArgs(EEventType::MULTIGET)
         , MustRestoreFirst(mustRestoreFirst)
         , IndexOnly(indexOnly)
-        , ForceBlockedGeneration(forceBlockedGeneration)
     {
     }
     
     bool MustRestoreFirst = false;
     bool IndexOnly = false;
-    ui32 ForceBlockedGeneration = 0;
 };
 
 struct TEvDiscoverArgs : public TEvArgs {

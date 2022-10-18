@@ -156,7 +156,7 @@ public:
         const TLogoBlobID to = TLogoBlobID(TabletId, MinGeneration, 0, 0, 0, 0);
         SendToQueue(TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(state.VDiskId, Deadline, HandleClass,
             TEvBlobStorage::TEvVGet::EFlags::None, Nothing(), state.From, to, MaxBlobsAtOnce, nullptr,
-            ForceBlockedGeneration), 0);
+            TEvBlobStorage::TEvVGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration)), 0);
         const EDiskState prev = std::exchange(state.State, EDiskState::READ_PENDING);
         Y_VERIFY(prev == EDiskState::IDLE);
     }
@@ -283,7 +283,7 @@ public:
                 case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
                 case TBlobStorageGroupInfo::EBS_FULL: {
                     // we have to process this blob
-                    auto query = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, Deadline, HandleClass, true, !ReadBody, ForceBlockedGeneration);
+                    auto query = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, Deadline, HandleClass, true, !ReadBody, TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
                     query->IsInternal = true;
                     SendToProxy(std::move(query));
                     GetIssuedFor = id;

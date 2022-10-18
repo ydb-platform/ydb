@@ -703,8 +703,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                     auto msg = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(vDiskId, Deadline,
                             NKikimrBlobStorage::EGetHandleClass::Discover, TEvBlobStorage::TEvVGet::EFlags::ShowInternals,
                             {}, curVDisk.nextLogoBlobId, to, GroupResponseTracker.CurrentRequestSize, nullptr,
-                            ForceBlockedGeneration);
-                    msg->Record.SetTabletId(TabletId);
+                            TEvBlobStorage::TEvVGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
                     msg->Record.SetSuppressBarrierCheck(true);
                     const ui64 cookie = TVDiskIdShort(vDiskId).GetRaw();
                     A_LOG_DEBUG_S("BSD15", "Request more data sending TEvVGet Tablet# " << TabletId
@@ -931,7 +930,7 @@ public:
 
             auto msg = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(vd, Deadline,
                 NKikimrBlobStorage::EGetHandleClass::Discover, TEvBlobStorage::TEvVGet::EFlags::ShowInternals,
-                {}, from, to, GroupResponseTracker.CurrentRequestSize, nullptr, ForceBlockedGeneration);
+                {}, from, to, GroupResponseTracker.CurrentRequestSize, nullptr, TEvBlobStorage::TEvVGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
             msg->Record.SetTabletId(TabletId);
             msg->Record.SetAcquireBlockedGeneration(true);
             const ui64 cookie = TVDiskIdShort(vd).GetRaw();

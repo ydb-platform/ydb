@@ -30,15 +30,17 @@ public:
         , VDiskIncarnationGuid(vDiskIncarnationGuid)
         , GInfo(gInfo)
     {
-        Y_VERIFY(ev->Get()->Record.GetForceBlockedGeneration() > 0);
+        Y_VERIFY(ev->Get()->Record.HasForceBlockTabletData());
+        Y_VERIFY(ev->Get()->Record.GetForceBlockTabletData().HasId());
+        Y_VERIFY(ev->Get()->Record.GetForceBlockTabletData().HasGeneration());
         Request = std::move(ev);
     }
 
     void Bootstrap() {
         // create TEvVBlock request
         auto request = std::make_unique<TEvBlobStorage::TEvVBlock>(
-            Request->Get()->Record.GetTabletId(),
-            Request->Get()->Record.GetForceBlockedGeneration(),
+            Request->Get()->Record.GetForceBlockTabletData().GetId(),
+            Request->Get()->Record.GetForceBlockTabletData().GetGeneration(),
             VDiskIDFromVDiskID(Request->Get()->Record.GetVDiskID()),
             Request->Get()->Record.GetMsgQoS().HasDeadlineSeconds() ? 
                 TInstant::Seconds(Request->Get()->Record.GetMsgQoS().GetDeadlineSeconds()) :
@@ -82,7 +84,7 @@ public:
         }
 
         // send TEvVGet request, the reply will go directly to sender.
-        // there is no need to clear ForceBlockedGeneration parameter
+        // there is no need to clear ForceBlockTabletData parameter
         // since by now the required generation has been blocked.
         TActivationContext::Send(Request.Release());
         PassAway();

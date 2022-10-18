@@ -198,7 +198,9 @@ TString TGetImpl::DumpFullState() const {
     str << Endl;
     str << " ReportDetailedPartMap# " << ReportDetailedPartMap;
     str << Endl;
-    str << " ForceBlockedGeneration# " << ForceBlockedGeneration;
+    str << " ForceBlockTabletId# " << ForceBlockTabletData->Id;
+    str << Endl;
+    str << " ForceBlockTabletGeneration# " << ForceBlockTabletData->Generation;
     str << Endl;
 
     str << " ReplyBytes# " << ReplyBytes;
@@ -272,7 +274,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
         if (beginIdx < endIdx) {
             TVDiskID vDiskId = Info->GetVDiskId(diskOrderNumber);
             auto vGet = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vDiskId, Deadline, Blackboard.GetHandleClass,
-                    TEvBlobStorage::TEvVGet::EFlags::None, TVGetCookie(beginIdx, endIdx), {}, ForceBlockedGeneration);
+                    TEvBlobStorage::TEvVGet::EFlags::None, TVGetCookie(beginIdx, endIdx), {}, ForceBlockTabletData);
             for (ui32 idx = beginIdx; idx < endIdx; ++idx) {
                 TDiskGetRequest &get = requests.GetsToSend[idx];
                 ui64 cookie = idx;

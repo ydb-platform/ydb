@@ -536,7 +536,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 q[i].Set(refs[i + firstRequestIdx] /*must be index read*/);
             }
             SendToBSProxy(SelfId(), group, new TEvBlobStorage::TEvGet(q, (ui32)count, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true, BlockedGen));
+                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true, TEvBlobStorage::TEvGet::TForceBlockTabletData(Info->TabletID, BlockedGen)));
             ++RequestsLeft;
 
             firstRequestIdx = endRequestIdx;

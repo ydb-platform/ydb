@@ -163,7 +163,7 @@ namespace NKikimr::NPrivate {
             std::unique_ptr<TEvBlobStorage::TEvVGet> msg = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskId, Deadline,
                     NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, cookie,
                     OriginalBlobId, TLogoBlobID(OriginalBlobId, TLogoBlobID::MaxPartId),
-                    TLogoBlobID::MaxPartId, nullptr, false);
+                    TLogoBlobID::MaxPartId, nullptr);
             Send(LeaderId, msg.release());
 
             Become(&TThis::StartState);
@@ -194,7 +194,7 @@ namespace NKikimr::NPrivate {
             ui32 cookie = 0;
             std::unique_ptr<TEvBlobStorage::TEvVGet> msg = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskId, Deadline,
                     NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, cookie,
-                    {}, false);
+                    {});
             TLogoBlobID id(OriginalBlobId, pullingPart);
             msg->AddExtremeQuery(id, 0, 0, &pullingPart);
             Send(LeaderId, msg.release());

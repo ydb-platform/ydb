@@ -47,7 +47,7 @@ namespace NKikimr {
             const auto flags = record.GetShowInternals()
                 ? TEvBlobStorage::TEvVGet::EFlags::ShowInternals
                 : TEvBlobStorage::TEvVGet::EFlags::None;
-            auto query = fun(vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {}, 0);
+            auto query = fun(vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {}, std::nullopt);
 
             bool action = false;
 

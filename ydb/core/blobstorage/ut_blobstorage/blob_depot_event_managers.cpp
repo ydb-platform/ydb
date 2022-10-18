@@ -115,10 +115,10 @@ void VerifiedPut(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, TBlobInfo& b
 }
 
 void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlobID id,
-        bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration, ui64 cookie) {
-    auto ev = new TEvBlobStorage::TEvGet(id, 0, id.BlobSize(), TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, 
-            mustRestoreFirst, isIndexOnly, forceBlockedGeneration);
-            
+        bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData, ui64 cookie) {
+    auto ev = new TEvBlobStorage::TEvGet(id, 0, id.BlobSize(), TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead,
+            mustRestoreFirst, isIndexOnly, forceBlockTabletData);
+
 #ifdef LOG_GET
     Cerr << "Request# " << ev->Print(true) << Endl;
 #endif
@@ -143,11 +143,11 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureTEvGetResult(TEnviro
 
 
 void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res,
-        TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration,
+        TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData,
         TBSState& state) 
 {
-    Y_UNUSED(forceBlockedGeneration);
-    
+    Y_UNUSED(forceBlockTabletData);
+
     ui32 softCollectGen = state[blob.Id.TabletID()].Channels[blob.Id.Channel()].SoftCollectGen;
     ui32 softCollectStep = state[blob.Id.TabletID()].Channels[blob.Id.Channel()].SoftCollectStep;
     ui32 hardCollectGen = state[blob.Id.TabletID()].Channels[blob.Id.Channel()].HardCollectGen;
@@ -183,19 +183,19 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
 }
 
 void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
-        TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration,
+        TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData,
         TBSState& state, bool withDeadline) 
 {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
-    SendTEvGet(env, sender, groupId, blob.Id, mustRestoreFirst, isIndexOnly, forceBlockedGeneration);
+    SendTEvGet(env, sender, groupId, blob.Id, mustRestoreFirst, isIndexOnly, forceBlockTabletData);
     auto res = CaptureTEvGetResult(env, sender, true, withDeadline);
     // if (!res) { return; } // <- Temporary solution
 
-    VerifyTEvGetResult(res.Release(), blob, mustRestoreFirst, isIndexOnly, forceBlockedGeneration, state);
+    VerifyTEvGetResult(res.Release(), blob, mustRestoreFirst, isIndexOnly, forceBlockTabletData, state);
 }
 
 void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, std::vector<TBlobInfo>& blobs,
-        bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration, ui64 cookie) 
+        bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData, ui64 cookie)
 {
     ui32 sz = blobs.size();
 
@@ -207,7 +207,7 @@ void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, std::vect
     }
 
     auto ev = new TEvBlobStorage::TEvGet(queries, sz, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead,
-            mustRestoreFirst, isIndexOnly, forceBlockedGeneration);
+            mustRestoreFirst, isIndexOnly, forceBlockTabletData);
 
 #ifdef LOG_MULTIGET
     Cerr << "Request# " << ev->Print(true) << Endl;
@@ -232,12 +232,12 @@ TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureMultiTEvGetResult(TE
 }
 
 
-void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res, 
-        std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration,
+void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res,
+        std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData,
         TBSState& state) 
 {
     Y_UNUSED(mustRestoreFirst);
-    Y_UNUSED(forceBlockedGeneration);
+    Y_UNUSED(forceBlockTabletData);
     NKikimrProto::EReplyStatus status = res->Get()->Status;
     auto& responses = res->Get()->Responses;
 
@@ -271,16 +271,16 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
     }
 }
 
-void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration,
+void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly, std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData,
         TBSState& state, bool withDeadline) 
 {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
-    SendTEvGet(env, sender, groupId, blobs, mustRestoreFirst, isIndexOnly, forceBlockedGeneration);
+    SendTEvGet(env, sender, groupId, blobs, mustRestoreFirst, isIndexOnly, forceBlockTabletData);
 
     auto res = CaptureMultiTEvGetResult(env, sender, true, withDeadline);
     // if (!res) { return; } // <- Temporary solution
 
-    VerifyTEvGetResult(res.Release(), blobs, mustRestoreFirst, isIndexOnly, forceBlockedGeneration, state);
+    VerifyTEvGetResult(res.Release(), blobs, mustRestoreFirst, isIndexOnly, forceBlockTabletData, state);
 }
 
 void SendTEvRange(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 tabletId, 

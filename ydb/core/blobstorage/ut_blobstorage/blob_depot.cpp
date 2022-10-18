@@ -46,17 +46,15 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         // do TEvGet with Reader* params 
         auto mustRestoreFirst = false;
         auto isIndexOnly = false;
-        ui32 forceBlockedGeneration = 0;
 
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(
             blob.Id,
             0,
             blob.Id.BlobSize(),
             TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::FastRead, 
+            NKikimrBlobStorage::EGetHandleClass::FastRead,
             mustRestoreFirst,
-            isIndexOnly,
-            forceBlockedGeneration);
+            isIndexOnly);
         ev->ReaderTabletData = {tabletId, tabletGeneration};
 
         auto sender = tenv.Env->Runtime->AllocateEdgeActor(nodeId);

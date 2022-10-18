@@ -5,6 +5,8 @@
 
 #include <blob_depot_auxiliary_structures.h>
 
+#include <optional>
+
 bool IsCollected(const TLogoBlobID& id, ui32 collectGen, ui32 collectStep);
 bool IsCollected(const TBlobInfo& blob, ui32 softCollectGen, ui32 softCollectStep, ui32 hardCollectGen, ui32 hardCollectStep);
 
@@ -18,24 +20,25 @@ void VerifiedPut(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, TBlobInfo& b
 
 /* --------------------------------- GET --------------------------------- */
 void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlobID id,
-        bool mustRestoreFirst = false, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0, ui64 cookie = 0);
+        bool mustRestoreFirst = false, bool isIndexOnly = false,
+        std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData = {}, ui64 cookie = 0);
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture = true, bool withDeadline = true);
 void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res,
-        TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration,
-        TBSState& state);
-void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
-        TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration,
-        TBSState& state, bool withDeadline = true);
+        TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly,
+        std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData, TBSState& state);
+void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, TBlobInfo& blob, bool mustRestoreFirst, bool isIndexOnly,
+        std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData, TBSState& state, bool withDeadline = true);
 
 /* --------------------------------- MULTIGET --------------------------------- */
 void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, std::vector<TBlobInfo>& blobs,
-        bool mustRestoreFirst = false, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0, ui64 cookie = 0);
+        bool mustRestoreFirst = false, bool isIndexOnly = false,
+        std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData = {}, ui64 cookie = 0);
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureMultiTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture = true, bool withDeadline = true);
-void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res, 
-        std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration,
-        TBSState& state);
-void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly, ui32 forceBlockedGeneration,
-        TBSState& state, bool withDeadline = true);
+void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res,
+        std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly,
+        std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData, TBSState& state);
+void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, std::vector<TBlobInfo>& blobs, bool mustRestoreFirst, bool isIndexOnly,
+        std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> forceBlockTabletData, TBSState& state, bool withDeadline = true);
 
 /* --------------------------------- RANGE --------------------------------- */
 void SendTEvRange(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 tabletId, 

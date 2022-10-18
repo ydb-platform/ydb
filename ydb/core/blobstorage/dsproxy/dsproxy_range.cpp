@@ -58,7 +58,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         // prepare new index query message
         auto msg = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(vdisk, Deadline, NKikimrBlobStorage::EGetHandleClass::FastRead,
                 TEvBlobStorage::TEvVGet::EFlags::ShowInternals, {}, from, to, MaxBlobsToQueryAtOnce, nullptr,
-                ForceBlockedGeneration);
+                TEvBlobStorage::TEvVGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
 
         // disable barrier checking
         msg->Record.SetSuppressBarrierCheck(true);
@@ -245,7 +245,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
 
         // register query in wilson and send it to DS proxy
         auto get = std::make_unique<TEvBlobStorage::TEvGet>(queries, queryCount, Deadline,
-                NKikimrBlobStorage::EGetHandleClass::FastRead, MustRestoreFirst, IsIndexOnly, ForceBlockedGeneration);
+                NKikimrBlobStorage::EGetHandleClass::FastRead, MustRestoreFirst, IsIndexOnly, TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
         get->IsInternal = true;
 
         A_LOG_DEBUG_S("DSR08", "sending TEvGet# " << get->ToString());

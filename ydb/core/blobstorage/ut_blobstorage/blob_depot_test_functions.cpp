@@ -83,24 +83,24 @@ void TestBasicPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 gro
     blobs.push_back(TBlobInfo(tenv.DataGen(100), tabletId, 2));
     blobs.push_back(TBlobInfo(tenv.DataGen(200), tabletId, 1));
 
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[0], true, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[1], true, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[0], true, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[1], true, false, std::nullopt, state);
 
     VerifiedPut(*tenv.Env, 1, groupId, blobs[0], state);
     VerifiedPut(*tenv.Env, 1, groupId, blobs[1], state);
 
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[0], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[1], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[2], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[0], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[1], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[2], false, false, std::nullopt, state);
 
-    VerifiedGet(*tenv.Env, 1, groupId, blobs, false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs, false, false, std::nullopt, state);
 
     blobs.push_back(TBlobInfo(tenv.DataGen(1000), tabletId + (1 << 12), 1));
     VerifiedPut(*tenv.Env, 1, groupId, blobs[2], state);
     VerifiedPut(*tenv.Env, 1, groupId, blobs[3], state);
-    
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[2], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[3], false, false, 0, state);
+
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[2], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[3], false, false, std::nullopt, state);
 }
 
 TLogoBlobID MinBlobID(ui64 tablet) {
@@ -200,10 +200,10 @@ void TestBasicBlock(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId
 
     VerifiedPut(*tenv.Env, 1, groupId, blobs[1], state);
     VerifiedPut(*tenv.Env, 1, groupId, blobs[3], state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[3], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[3], false, false, std::nullopt, state);
 
     VerifiedPut(*tenv.Env, 1, groupId, blobs[4], state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[4], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[4], false, false, std::nullopt, state);
 
     VerifiedBlock(*tenv.Env, 1, groupId, tabletId, 2, state);
     VerifiedBlock(*tenv.Env, 1, groupId, tabletId, 3, state);
@@ -213,10 +213,10 @@ void TestBasicBlock(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId
     VerifiedBlock(*tenv.Env, 1, groupId, tablet2, 2, state);
 
     VerifiedPut(*tenv.Env, 1, groupId, blobs[6], state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[6], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[6], false, false, std::nullopt, state);
 
     VerifiedPut(*tenv.Env, 1, groupId, blobs[7], state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[7], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[7], false, false, std::nullopt, state);
 }
 
 void TestBasicCollectGarbage(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId) {    
@@ -262,14 +262,14 @@ void TestBasicCollectGarbage(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui3
 
     VerifiedCollectGarbage(*tenv.Env, 1, groupId, tabletId, gen, perGenCtr++, 0, true, 1, 2, nullptr, nullptr, false, false,
         blobs, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[0], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[1], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[2], false, false, 0, state);
-    
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[20], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[30], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[31], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[40], false, false, 0, state); 
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[0], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[1], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[2], false, false, std::nullopt, state);
+
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[20], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[30], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[31], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[40], false, false, std::nullopt, state);
 
     VerifiedCollectGarbage(*tenv.Env, 1, groupId, tabletId, gen, perGenCtr++, 0, true, 1, 1, nullptr, nullptr, false, false, blobs, state);
 
@@ -289,14 +289,14 @@ void TestBasicCollectGarbage(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui3
     } 
     VerifiedRange(*tenv.Env, 1, groupId, tabletId, blobs[1].Id, blobs[1].Id, false, false, blobs, state);
 
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[1], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[2], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[3], false, false, 0, state);
-    
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[20], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[30], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[31], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[40], false, false, 0, state); 
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[1], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[2], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[3], false, false, std::nullopt, state);
+
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[20], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[30], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[31], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[40], false, false, std::nullopt, state); 
 
     VerifiedCollectGarbage(*tenv.Env, 1, groupId, tabletId, gen, perGenCtr++, 0, true, 1, 1, nullptr, nullptr, false, true, blobs, state);
 
@@ -306,16 +306,16 @@ void TestBasicCollectGarbage(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui3
             false, false,
             blobs, state);
 
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[4], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[5], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[4], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[5], false, false, std::nullopt, state);
 
     VerifiedCollectGarbage(*tenv.Env, 1, groupId, tabletId, gen, perGenCtr++, 0, false, 1, 6, 
             nullptr, 
             new TVector<TLogoBlobID>({blobs[4].Id, blobs[5].Id}), 
             false, false,
             blobs, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[4], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[5], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[4], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[5], false, false, std::nullopt, state);
 
 
     VerifiedCollectGarbage(*tenv.Env, 1, groupId, tabletId, gen, perGenCtr++, 0, true, 1, 15, nullptr, nullptr, false, true, blobs, state);
@@ -325,13 +325,13 @@ void TestBasicCollectGarbage(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui3
     gen++;
     perGenCtr = 1;
     VerifiedCollectGarbage(*tenv.Env, 1, groupId, tabletId, gen + 1, perGenCtr++, 0, true, 2, 1, nullptr, nullptr, false, false, blobs, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[18], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[19], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[20], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[21], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[30], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[31], false, false, 0, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[40], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[18], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[19], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[20], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[21], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[30], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[31], false, false, std::nullopt, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[40], false, false, std::nullopt, state);
 
     VerifiedCollectGarbage(*tenv.Env, 1, groupId, tabletId, 6, 1, 0, true, 2, 1, nullptr, nullptr, false, false, blobs, state);
 
@@ -344,7 +344,7 @@ void TestBasicCollectGarbage(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui3
 
     VerifiedBlock(*tenv.Env, 1, groupId, tabletId, 10, state);
     VerifiedCollectGarbage(*tenv.Env, 1, groupId, tabletId, 7, 1, 0, true, 100, 1, nullptr, nullptr, false, true, blobs, state);
-    VerifiedGet(*tenv.Env, 1, groupId, blobs[39], false, false, 0, state);
+    VerifiedGet(*tenv.Env, 1, groupId, blobs[39], false, false, std::nullopt, state);
 }
 
 void TestRestoreGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, std::vector<TActorId>* vdisks) {
@@ -381,7 +381,7 @@ void TestRestoreGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId
     blockedEventType = TEvBlobStorage::TEvVGet::EventType;
 
     for (ui32 i = 0; i < blobsNum; ++i) {
-        VerifiedGet(*tenv.Env, 1, groupId, blobs[i], true, false, 0, state, false);
+        VerifiedGet(*tenv.Env, 1, groupId, blobs[i], true, false, std::nullopt, state, false);
     }
 
     blockedEventType = TEvBlobStorage::TEvVGet::EventType;
@@ -389,7 +389,7 @@ void TestRestoreGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId
 
     for (ui32 i = 0; i < blobsNum; ++i) {
         if (blobs[i].Status == TBlobInfo::EStatus::WRITTEN) {
-            VerifiedGet(*tenv.Env, 1, groupId, blobs[i], false, false, 0, state, false);
+            VerifiedGet(*tenv.Env, 1, groupId, blobs[i], false, false, std::nullopt, state, false);
         }
     }
 }
@@ -441,7 +441,7 @@ void TestRestoreDiscover(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 gr
 
     for (ui32 i = 0; i < blobsNum * 2; ++i) {
         if (blobs[i].Status == TBlobInfo::EStatus::WRITTEN) {
-            VerifiedGet(*tenv.Env, 1, groupId, blobs[i], false, false, 0, state, false);
+            VerifiedGet(*tenv.Env, 1, groupId, blobs[i], false, false, std::nullopt, state, false);
         }
     }
 }
@@ -489,7 +489,7 @@ void TestRestoreRange(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 group
 
     for (ui32 i = 0; i < 2 * blobsNum; ++i) {
         if (blobs[i].Status == TBlobInfo::EStatus::WRITTEN) {
-            VerifiedGet(*tenv.Env, 1, groupId, blobs[i], false, false, 0, state, false);
+            VerifiedGet(*tenv.Env, 1, groupId, blobs[i], false, false, std::nullopt, state, false);
         }
     }
 }
@@ -574,8 +574,7 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
                 TBlobInfo& blob = tenv.Rand(blobs);
                 bool mustRestoreFirst = false;
                 bool indexOnly = tenv.Rand(2);
-                ui32 forceBlockedGeneration = 0;
-                VerifiedGet(*tenv.Env, node, groupId, blob, mustRestoreFirst, indexOnly, forceBlockedGeneration, state);
+                VerifiedGet(*tenv.Env, node, groupId, blob, mustRestoreFirst, indexOnly, std::nullopt, state);
             }
             break;
 
@@ -596,8 +595,7 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
 
                 bool mustRestoreFirst = false;
                 bool indexOnly = tenv.Rand(2);
-                ui32 forceBlockedGeneration = 0;
-                VerifiedGet(*tenv.Env, node, groupId, getBlobs, mustRestoreFirst, indexOnly, forceBlockedGeneration, state);
+                VerifiedGet(*tenv.Env, node, groupId, getBlobs, mustRestoreFirst, indexOnly, std::nullopt, state);
             }
             break;
 
@@ -801,10 +799,9 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
                 ui32 blobNum = tenv.Rand(1 , blobsNum);
                 bool mustRestoreFirst = tenv.Rand(2);
                 bool indexOnly = tenv.Rand(2);
-                ui32 forceBlockedGeneration = 0;
-                SendTEvGet(*tenv.Env, edge, groupId, blobs[blobNum].Id, mustRestoreFirst, indexOnly, forceBlockedGeneration, cookie);
+                SendTEvGet(*tenv.Env, edge, groupId, blobs[blobNum].Id, mustRestoreFirst, indexOnly, std::nullopt, cookie);
                 getCtr++;
-                requests[cookie] = std::make_shared<TEvGetArgs>(mustRestoreFirst, indexOnly, forceBlockedGeneration);
+                requests[cookie] = std::make_shared<TEvGetArgs>(mustRestoreFirst, indexOnly);
             }
             break;
 
@@ -815,13 +812,12 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
                 for (ui32 i = 0; i < blobsInRequest; ++i) {
                     request.push_back(tenv.Rand(blobs));
                 }
-                
+
                 bool mustRestoreFirst = tenv.Rand(2);
                 bool indexOnly = tenv.Rand(2);
-                ui32 forceBlockedGeneration = 0;
-                SendTEvGet(*tenv.Env, edge, groupId, request, mustRestoreFirst, indexOnly, forceBlockedGeneration, cookie);
+                SendTEvGet(*tenv.Env, edge, groupId, request, mustRestoreFirst, indexOnly, std::nullopt, cookie);
                 getCtr++;
-                requests[cookie] = std::make_shared<TEvGetArgs>(mustRestoreFirst, indexOnly, forceBlockedGeneration);
+                requests[cookie] = std::make_shared<TEvGetArgs>(mustRestoreFirst, indexOnly);
             }
             break;
 
@@ -873,7 +869,7 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
                                 response.push_back(*mappedBlobs[res->Get()->Responses[i].Id]);
                             }
                             TEvGetArgs args = *requests[res->Cookie]->Get<TEvGetArgs>();
-                            VerifyTEvGetResult(res.release(), response, args.MustRestoreFirst, args.IndexOnly, args.ForceBlockedGeneration, state);
+                            VerifyTEvGetResult(res.release(), response, args.MustRestoreFirst, args.IndexOnly, std::nullopt, state);
                         }
                         --getCtr;
                         break;

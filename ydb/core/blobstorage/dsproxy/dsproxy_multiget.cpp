@@ -29,7 +29,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     const TInstant StartTime;
     const bool MustRestoreFirst;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
-    const ui32 ForceBlockedGeneration;
+    const std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
 
     static constexpr ui64 MaxRequestsInFlight = 3;
     ui64 RequestsInFlight = 0;
@@ -106,7 +106,7 @@ public:
         , StartTime(now)
         , MustRestoreFirst(ev->MustRestoreFirst)
         , GetHandleClass(ev->GetHandleClass)
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , ForceBlockTabletData(ev->ForceBlockTabletData)
     {}
 
     void PrepareRequest(ui32 beginIdx, ui32 endIdx) {
@@ -118,7 +118,7 @@ public:
             queries[idx - beginIdx] = Queries[idx];
         }
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, endIdx - beginIdx, Deadline, GetHandleClass,
-            MustRestoreFirst, false, ForceBlockedGeneration);
+            MustRestoreFirst, false, ForceBlockTabletData);
         ev->IsInternal = IsInternal;
         ev->ReaderTabletData = ReaderTabletData;
         PendingGets.emplace_back(std::move(ev), cookie);

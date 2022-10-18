@@ -19,6 +19,8 @@ class TDiscoverVDiskWorker {
 
     const TVDiskID VDiskId;
 
+    const ui64 TabletId;
+
     // is there an get unanswered get request?
     bool GetQueryInFlight = false;
 
@@ -59,6 +61,7 @@ class TDiscoverVDiskWorker {
 public:
     TDiscoverVDiskWorker(const TVDiskID& vdiskId, ui64 tabletId, ui32 minGeneration, ui32 forceBlockedGeneration)
         : VDiskId(vdiskId)
+        , TabletId(tabletId)
         , FirstBlob(tabletId, Max<ui32>(), Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie)
         , LastBlob(tabletId, minGeneration, 0, 0, 0, 0)
         , ForceBlockedGeneration(forceBlockedGeneration)
@@ -78,7 +81,7 @@ public:
                 LastBlob,                               // toId
                 BlobsAtOnce,                            // maxResults
                 nullptr,                                // cookie
-                ForceBlockedGeneration);                // forceBlockedGeneration
+                TEvBlobStorage::TEvVGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));    // forceBlockTabletData
 
             // disable barrier checking
             query->Record.SetSuppressBarrierCheck(true);

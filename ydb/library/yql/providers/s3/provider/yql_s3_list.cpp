@@ -14,6 +14,7 @@
 #include <library/cpp/threading/future/async_semaphore.h>
 #include <library/cpp/xml/document/xml-document.h>
 #include <util/string/builder.h>
+#include <util/folder/iterator.h>
 
 namespace NYql {
 
@@ -73,9 +74,10 @@ using namespace NThreading;
 
 class TS3Lister : public IS3Lister {
 public:
-    explicit TS3Lister(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery)
+    explicit TS3Lister(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery, bool allowLocalFiles)
         : Gateway(httpGateway)
         , MaxFilesPerQuery(maxFilesPerQuery)
+        , AllowLocalFiles(allowLocalFiles)
     {}
 private:
     using TResultFilter = std::function<bool (const TString& path, TVector<TString>& matchedGlobs)>;
@@ -224,11 +226,49 @@ private:
         YQL_CLOG(INFO, ProviderS3) << "Listing of " << urlStr << prefix << " : got exception: " << ex.what();
         promise.SetException(std::current_exception());
     }
-
-
+    #include <iostream>
     TFuture<TListResult> DoList(const TString& token, const TString& urlStr, const TString& pattern, const TMaybe<TString>& pathPrefix) {
         TString prefix;
         TResultFilter filter = MakeFilter(pattern, pathPrefix, prefix);
+        auto promise = NewPromise<IS3Lister::TListResult>();
+        auto future = promise.GetFuture();
+
+        if (urlStr.substr(0, 7) == "file://") {
+            try {
+                if (!AllowLocalFiles) {
+                    ythrow yexception() << "Using local files as DataSource isn't allowed, but trying access " << urlStr;
+                }
+                auto fullPath = urlStr.substr(7);
+                for (const auto &e: TPathSplit(fullPath)) {
+                    if (e == "..") {
+                        ythrow yexception() << "Security violation: trying access parent directory in path";
+                    }
+                }
+                
+                IS3Lister::TListEntries output;
+
+                for (const auto& entry: TDirIterator(fullPath)) {
+                    if (entry.fts_type != FTS_F) {
+                        continue;
+                    }
+
+                    auto filename = TString(entry.fts_path + urlStr.size() - 7);
+                    TVector<TString> matches;
+                    if (filter(filename, matches)) {
+                        output.emplace_back();
+                        output.back().Path = filename;
+                        output.back().Size = entry.fts_statp->st_size;
+                        output.back().MatchedGlobs.swap(matches);
+                    }
+                }
+                
+                promise.SetValue(std::move(output));
+            } catch (const std::exception& ex) {
+                promise.SetException(std::current_exception());
+            }
+            return future;
+        }
+        
 
         const auto retryPolicy = GetHTTPDefaultRetryPolicy();
         TUrlBuilder urlBuilder(urlStr);
@@ -241,9 +281,6 @@ private:
         if (!token.empty()) {
             headers.emplace_back("X-YaCloud-SubjectToken:" + token);
         }
-
-        auto promise = NewPromise<IS3Lister::TListResult>();
-        auto future = promise.GetFuture();
 
         Gateway->Download(
             url,
@@ -277,6 +314,7 @@ private:
 
     const IHTTPGateway::TPtr Gateway;
     const ui64 MaxFilesPerQuery;
+    const bool AllowLocalFiles;
 };
 
 class TS3ParallelLimitedLister : public IS3Lister {
@@ -321,8 +359,8 @@ private:
 
 }
 
-IS3Lister::TPtr IS3Lister::Make(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery, ui64 maxInflightListsPerQuery) {
-    auto lister = IS3Lister::TPtr(new TS3Lister(httpGateway, maxFilesPerQuery));
+IS3Lister::TPtr IS3Lister::Make(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery, ui64 maxInflightListsPerQuery, bool allowLocalFiles) {
+    auto lister = IS3Lister::TPtr(new TS3Lister(httpGateway, maxFilesPerQuery, allowLocalFiles));
     return IS3Lister::TPtr(new TS3ParallelLimitedLister(lister, maxInflightListsPerQuery));
 }
 

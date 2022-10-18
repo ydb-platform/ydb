@@ -56,7 +56,7 @@ class TS3IODiscoveryTransformer : public TGraphTransformerBase {
 public:
     TS3IODiscoveryTransformer(TS3State::TPtr state, IHTTPGateway::TPtr gateway)
         : State_(std::move(state))
-        , Lister_(IS3Lister::Make(gateway, State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxInflightListsPerQuery))
+        , Lister_(IS3Lister::Make(gateway, State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxInflightListsPerQuery, State_->Configuration->AllowLocalFiles))
     {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {

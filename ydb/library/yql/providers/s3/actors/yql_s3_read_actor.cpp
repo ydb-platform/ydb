@@ -14,6 +14,7 @@
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypesNumber.h>
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/ColumnsWithTypeAndName.h>
 
@@ -106,6 +107,7 @@ struct TEvPrivate {
         EvReadError,
         EvRetry,
         EvNextBlock,
+        EvBlockProcessed,
 
         EvEnd
     };
@@ -152,10 +154,16 @@ struct TEvPrivate {
     };
 
     struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
-        TEvNextBlock(NDB::Block& block, size_t pathInd) : PathIndex(pathInd) { Block.swap(block); }
+        TEvNextBlock(NDB::Block& block, size_t pathInd, std::function<void()> functor = [](){}) : PathIndex(pathInd), Functor(functor) { Block.swap(block); }
         NDB::Block Block;
         const size_t PathIndex;
+        std::function<void()> Functor;
     };
+
+    struct TEvBlockProcessed : public NActors::TEventLocal<TEvBlockProcessed, EvBlockProcessed> {
+        TEvBlockProcessed() {}
+    };
+
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -409,8 +417,8 @@ private:
 
     static constexpr std::string_view TruncatedSuffix = "... [truncated]"sv;
 public:
-    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId, const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex, const TString& path)
-        : TActorCoroImpl(256_KB), InputIndex(inputIndex), TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId), PathIndex(pathIndex), Path(path)
+    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId, const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex, const TString& path, const TString& url, const std::size_t maxBlocksInFly)
+        : TActorCoroImpl(256_KB), InputIndex(inputIndex), TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId), PathIndex(pathIndex), Path(path), Url(url), MaxBlocksInFly(maxBlocksInFly)
     {}
 
     bool Next(TString& value) {
@@ -500,24 +508,52 @@ private:
         NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
 
         TIssue exceptIssue;
+        bool isLocal = Url.StartsWith("file://");
         try {
-            TReadBufferFromStream buffer(this);
-            const auto decompress(MakeDecompressor(buffer, ReadSpec->Compression));
-            YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
-            NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
-
-            while (auto block = stream.read()) {
-                Send(ParentActorId, new TEvPrivate::TEvNextBlock(block, PathIndex));
+            std::unique_ptr<NDB::ReadBuffer> buffer;
+            if (isLocal) {
+                buffer = std::make_unique<NDB::ReadBufferFromFile>(Url.substr(7) + Path);
+            } else {
+                buffer = std::make_unique<TReadBufferFromStream>(this);
             }
+            const auto decompress(MakeDecompressor(*buffer, ReadSpec->Compression));
+            YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
+            NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : *buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
+            auto actorSystem = GetActorSystem();
+            auto selfActorId = SelfActorId;
+            size_t cntBlocksInFly = 0;
+            if (isLocal) {
+                while (auto block = stream.read()) {
+                    if (++cntBlocksInFly > MaxBlocksInFly) {
+                        WaitForSpecificEvent<TEvPrivate::TEvBlockProcessed>();
+                        --cntBlocksInFly;
+                    }
+                    Send(ParentActorId, new TEvPrivate::TEvNextBlock(block, PathIndex, [actorSystem, selfActorId]() {
+                        actorSystem->Send(new IEventHandle(selfActorId, selfActorId, new TEvPrivate::TEvBlockProcessed()));
+                    }));
+                }
+                while (cntBlocksInFly--) {
+                    WaitForSpecificEvent<TEvPrivate::TEvBlockProcessed>();
+                }
+            } else {
+                while (auto block = stream.read()) {
+                    Send(ParentActorId, new TEvPrivate::TEvNextBlock(block, PathIndex));
+                }
+            }
+
         } catch (const TS3ReadError&) {
             // Finish reading. Add error from server to issues
+        } catch (const TDtorException&) {
+            throw;
         } catch (const std::exception& err) {
             exceptIssue.Message = TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what();
             fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
 
-        WaitFinish();
+        if (!isLocal) {
+            WaitFinish();
+        }
 
         if (!ErrorText.empty()) {
             TString errorCode;
@@ -583,6 +619,7 @@ private:
 
         return result;
     }
+
 private:
     const ui64 InputIndex;
     const TTxId TxId;
@@ -592,6 +629,7 @@ private:
     const NActors::TActorId ComputeActorId;
     const size_t PathIndex;
     const TString Path;
+    const TString Url;
 
     bool InputFinished = false;
     long HttpResponseCode = 0L;
@@ -601,6 +639,7 @@ private:
 
     std::size_t LastOffset = 0;
     TString LastData;
+    std::size_t MaxBlocksInFly = 2;
 };
 
 class TS3ReadCoroActor : public TActorCoro {
@@ -612,8 +651,10 @@ public:
 private:
     void Registered(TActorSystem* actorSystem, const TActorId& parent) override {
         TActorCoro::Registered(actorSystem, parent); // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3ReadCoroActor" << ": " << SelfId() << ", TxId: " << RetryStuff->TxId << ". " << "Start Download, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
-        DownloadStart(RetryStuff, actorSystem, SelfId(), parent);
+        if (RetryStuff->Url.substr(0, 6) != "file://") {
+            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3ReadCoroActor" << ": " << SelfId() << ", TxId: " << RetryStuff->TxId << ". " << "Start Download, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
+            DownloadStart(RetryStuff, actorSystem, SelfId(), parent);
+        }
     }
 
     static IHTTPGateway::THeaders MakeHeader(const TString& token) {
@@ -637,7 +678,8 @@ public:
         ui64 startPathIndex,
         const TReadSpec::TPtr& readSpec,
         const NActors::TActorId& computeActorId,
-        const IRetryPolicy<long>::TPtr& retryPolicy
+        const IRetryPolicy<long>::TPtr& retryPolicy,
+        const std::size_t maxBlocksInFly
     )   : Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
         , InputIndex(inputIndex)
@@ -651,16 +693,18 @@ public:
         , StartPathIndex(startPathIndex)
         , ReadSpec(readSpec)
         , Count(Paths.size())
+        , MaxBlocksInFly(maxBlocksInFly)
     {}
 
     void Bootstrap() {
         LOG_D("TS3StreamReadActor", "Bootstrap");
         Become(&TS3StreamReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
+            
             const TPath& path = Paths[pathInd];
             auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + std::get<TString>(path), Headers, std::get<std::size_t>(path), TxId, RetryPolicy);
             RetryStuffForFile.push_back(stuff);
-            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, stuff, ReadSpec, pathInd + StartPathIndex, std::get<TString>(path));
+            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, stuff, ReadSpec, pathInd + StartPathIndex, std::get<TString>(path), Url, MaxBlocksInFly);
             RegisterWithSameMailbox(std::make_unique<TS3ReadCoroActor>(std::move(impl), std::move(stuff)).release());
         }
     }
@@ -670,8 +714,8 @@ public:
 private:
     class TBoxedBlock : public TComputationValue<TBoxedBlock> {
     public:
-        TBoxedBlock(TMemoryUsageInfo* memInfo, NDB::Block& block)
-            : TComputationValue(memInfo)
+        TBoxedBlock(TMemoryUsageInfo* memInfo, NDB::Block& block, std::function<void()> functor)
+            : TComputationValue(memInfo), OnDestroyFunctor(functor)
         {
             Block.swap(block);
         }
@@ -684,7 +728,22 @@ private:
             return &Block;
         }
 
+        ~TBoxedBlock() {
+            if (OnDestroyFunctor) {
+                OnDestroyFunctor();
+            }
+        }
+
         NDB::Block Block;
+        std::function<void()> OnDestroyFunctor;
+    };
+
+    class TReadyBlock {
+    public:
+        TReadyBlock(TEvPrivate::TEvNextBlock::TPtr& event) : PathInd(event->Get()->PathIndex), Functor (std::move(event->Get()->Functor)) { Block.swap(event->Get()->Block); }
+        NDB::Block Block;
+        size_t PathInd;
+        std::function<void()> Functor;
     };
 
     void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
@@ -695,15 +754,14 @@ private:
     i64 GetAsyncInputData(TUnboxedValueVector& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
         i64 total = 0LL;
         if (!Blocks.empty()) do {
-            auto& block = std::get<NDB::Block>(Blocks.front());
-            const i64 s = block.bytes();
+            const i64 s = Blocks.front().Block.bytes();
 
-            auto value = HolderFactory.Create<TBoxedBlock>(block);
+            auto value = HolderFactory.Create<TBoxedBlock>(Blocks.front().Block, Blocks.front().Functor);
             if (AddPathIndex) {
                 NUdf::TUnboxedValue* tupleItems = nullptr;
                 auto tuple = ContainerCache.NewArray(HolderFactory, 2, tupleItems);
                 *tupleItems++ = value;
-                *tupleItems++ = NUdf::TUnboxedValuePod(std::get<ui64>(Blocks.front()));
+                *tupleItems++ = NUdf::TUnboxedValuePod(Blocks.front().PathInd);
                 value = tuple;
             }
 
@@ -711,7 +769,7 @@ private:
             total += s;
             output.emplace_back(std::move(value));
             Blocks.pop_front();
-        } while (!Blocks.empty() && free > 0LL && std::get<NDB::Block>(Blocks.front()).bytes() <= size_t(free));
+        } while (!Blocks.empty() && free > 0LL && Blocks.front().Block.bytes() <= size_t(free));
 
         finished = Blocks.empty() && !Count;
         if (finished) {
@@ -745,11 +803,7 @@ private:
     }
 
     void HandleNextBlock(TEvPrivate::TEvNextBlock::TPtr& next) {
-        Blocks.emplace_back();
-        auto& block = std::get<NDB::Block>(Blocks.back());
-        auto& pathInd = std::get<size_t>(Blocks.back());
-        block.swap(next->Get()->Block);
-        pathInd = next->Get()->PathIndex;
+        Blocks.emplace_back(next);
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -782,8 +836,9 @@ private:
     const bool AddPathIndex;
     const ui64 StartPathIndex;
     const TReadSpec::TPtr ReadSpec;
-    std::deque<std::tuple<NDB::Block, size_t>> Blocks;
+    std::deque<TReadyBlock> Blocks;
     ui32 Count;
+    const std::size_t MaxBlocksInFly;
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -961,9 +1016,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
-
+        std::size_t maxBlocksInFly = 2;
+        if (const auto it = settings.find("fileReadBlocksInFly"); settings.cend() != it)
+            maxBlocksInFly = FromString<ui64>(it->second);
         const auto actor = new TS3StreamReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken,
-                                                  std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId, retryPolicy);
+                                                  std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId, retryPolicy, maxBlocksInFly);
+        
         return {actor, actor};
     } else {
         ui64 sizeLimit = std::numeric_limits<ui64>::max();

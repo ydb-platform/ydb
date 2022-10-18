@@ -153,7 +153,6 @@ public:
         , Slots_(std::move(slots))
         , Width_(Slots_.size())
     {
-        Y_VERIFY_DEBUG(Width_ > 0);
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state,
@@ -161,9 +160,10 @@ public:
         NUdf::TUnboxedValue*const* output) const
     {
         auto& s = GetState(state, ctx);
-        for (size_t i = 0; i < s.MaxLength_; ++i) {
+        size_t rows = 0;
+        for (; rows < s.MaxLength_; ++rows) {
             if (const auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data()); EFetchResult::One != result) {
-                if (i == 0) {
+                if (rows == 0) {
                     return result;
                 }
                 break;
@@ -179,6 +179,10 @@ public:
             if (auto* out = output[i]; out != nullptr) {
                 *out = s.Builders_[i]->Build();
             }
+        }
+
+        if (auto* out = output[Width_]; out != nullptr) {
+            *out = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(rows)));
         }
 
         return EFetchResult::One;
@@ -365,7 +369,6 @@ public:
         , Slots_(std::move(slots))
         , Width_(Slots_.size())
     {
-        Y_VERIFY_DEBUG(Width_ > 0);
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state,
@@ -388,7 +391,7 @@ public:
                 s.Arrays_[i] = TArrowBlock::From(s.Values_[i]).GetDatum().array();
             }
 
-            s.Count_ = s.Arrays_[0]->length;
+            s.Count_ = TArrowBlock::From(s.Values_[Width_]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
         }
 
         for (size_t i = 0; i < Width_; ++i) {
@@ -420,12 +423,15 @@ private:
 
         TState(TMemoryUsageInfo* memInfo, const TVector<NUdf::EDataSlot>& slots)
             : TComputationValue(memInfo)
-            , Values_(slots.size())
-            , ValuePointers_(slots.size())
+            , Values_(slots.size() + 1)
+            , ValuePointers_(slots.size() + 1)
             , Arrays_(slots.size())
         {
-            for (size_t i = 0; i < slots.size(); ++i) {
+            for (size_t i = 0; i < slots.size() + 1; ++i) {
                 ValuePointers_[i] = &Values_[i];
+            }
+
+            for (size_t i = 0; i < slots.size(); ++i) {
                 Readers_.push_back(MakeBlockReader(slots[i]));
             }
         }
@@ -555,8 +561,9 @@ IComputationNode* WrapFromBlocks(TCallable& callable, const TComputationNodeFact
 IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
     const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
+    MKQL_ENSURE(tupleType->GetElementsCount() > 0, "Expected at least one column");
     TVector<NUdf::EDataSlot> slots;
-    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+    for (ui32 i = 0; i < tupleType->GetElementsCount() - 1; ++i) {
         const auto blockType = AS_TYPE(TBlockType, tupleType->GetElementType(i));
         bool isOptional;
         const auto slot = *UnpackOptionalData(blockType->GetItemType(), isOptional)->GetDataSlot();

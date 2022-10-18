@@ -4342,7 +4342,7 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
     }
 
     TExprNode::TListType blockArgs;
-    for (ui32 i = 0; i < multiInputType->GetSize(); ++i) {
+    for (ui32 i = 0; i < multiInputType->GetSize() + 1; ++i) { // last argument is used for length of blocks
         blockArgs.push_back(ctx.NewArgument(node->Pos(), "arg" + ToString(i)));
     }
 
@@ -4511,6 +4511,7 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes << ", extra columns: " << lambdaArgs.size();
 
+    roots.push_back(blockArgs.back());
     auto blockLambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), std::move(blockArgs)), std::move(roots));
     auto ret = ctx.Builder(node->Pos())
         .Callable("WideFromBlocks")

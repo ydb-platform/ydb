@@ -646,6 +646,7 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
         retMultiType.push_back(ctx.Expr.MakeType<TBlockExprType>(type));
     }
 
+    retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
     input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
     return IGraphTransformer::TStatus::Ok;
@@ -662,16 +663,31 @@ IGraphTransformer::TStatus WideFromBlocksWrapper(const TExprNode::TPtr& input, T
     }
 
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    if (multiType->GetSize() == 0) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Expected at least one column"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
     TTypeAnnotationNode::TListType retMultiType;
+    bool isScalar;
     for (const auto& type : multiType->GetItems()) {
         if (!EnsureBlockOrScalarType(input->Pos(), *type, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool isScalar;
         retMultiType.push_back(GetBlockItemType(*type, isScalar));
     }
 
+    if (!isScalar) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Last column should be a scalar"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureSpecificDataType(input->Pos(), *retMultiType.back(), EDataSlot::Uint64, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    retMultiType.pop_back();
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
     input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
     return IGraphTransformer::TStatus::Ok;

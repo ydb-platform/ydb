@@ -1430,6 +1430,7 @@ TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode flow) {
         for (size_t i = 0; i < inputTupleType->GetElementsCount(); ++i) {
             outputTupleItems.push_back(NewBlockType(inputTupleType->GetElementType(i), TBlockType::EShape::Many));
         }
+        outputTupleItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
         outputTupleType = NewTupleType(outputTupleItems);
     }
 
@@ -1451,12 +1452,20 @@ TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode flow) {
     TType* outputTupleType;
     {
         const auto* inputTupleType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType());
+        MKQL_ENSURE(inputTupleType->GetElementsCount() > 0, "Expected at least one column");
         std::vector<TType*> outputTupleItems;
         outputTupleItems.reserve(inputTupleType->GetElementsCount());
+        bool isScalar;
         for (size_t i = 0; i < inputTupleType->GetElementsCount(); ++i) {
-            auto withoutBlock = AS_TYPE(TBlockType, inputTupleType->GetElementType(i))->GetItemType();
+            auto blockType = AS_TYPE(TBlockType, inputTupleType->GetElementType(i));
+            isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
+            auto withoutBlock = blockType->GetItemType();
             outputTupleItems.push_back(withoutBlock);
         }
+
+        MKQL_ENSURE(isScalar, "Last column should be scalar");
+        MKQL_ENSURE(AS_TYPE(TDataType, outputTupleItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+        outputTupleItems.pop_back();
         outputTupleType = NewTupleType(outputTupleItems);
     }
 

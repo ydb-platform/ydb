@@ -20,6 +20,13 @@ items:
 - { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }
 - { name: Работа с YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Работа с YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
+- name: Разработка
+  hidden: true
+  items:
+  - name: Ядро
+    items:
+    - name: Тестирование с помощью нагружающих акторов
+      href: development/testing-load-actor.md
 
 # Footer
 - { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }

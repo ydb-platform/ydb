@@ -13,101 +13,39 @@ using namespace NYql::NNodes;
 
 namespace {
 
-enum class EAggType {
-    Count,
-    Some
-};
-
-struct TAggInfo {
-    std::string AggName;
-    std::string ColName;
-    EAggType Type;
-};
-
-bool ContainsConstOnly(const TExprBase& node) {
-    return node.Maybe<TCoDataCtor>().IsValid();
+std::string GetColumnNameUnderAggregation(const TCoAggApply& aggApply, TExprContext& ctx) {
+    auto extractorBody = aggApply.Extractor().Body();
+    if (extractorBody.Maybe<TCoVoid>() && aggApply.Name() == "count_all") {
+        return "*";
+    }
+    if (!extractorBody.Maybe<TCoMember>()) {
+        YQL_CLOG(WARN, ProviderKqp) << "Expected TCoMember callable to get column under aggregation. Got: " << KqpExprToPrettyString(extractorBody, ctx);
+        return "";
+    }
+    return extractorBody.Cast<TCoMember>().Name().StringValue();
 }
 
-bool ContainsSimpleColumnOnly(const TExprBase& node, const TExprBase& parent) {
-    if (!parent.Maybe<TCoInputBase>()) {
+std::string GetAggregationName(const TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TCoAtom>()) {
+        YQL_CLOG(WARN, ProviderKqp) << "Expected TCoAtom as aggregation name. Got: " << KqpExprToPrettyString(node, ctx);
+        return "";
+    }
+    return node.Cast<TCoAtom>().StringValue();
+}
+
+bool CanBePushedDown(const TExprBase& trait, TExprContext& ctx)
+{
+    if (!trait.Maybe<TCoAggApply>()) {
+        YQL_CLOG(WARN, ProviderKqp) << "Expected TCoAggApply in aggregate pushdown to column shard. Got: " << KqpExprToPrettyString(trait, ctx);
         return false;
     }
-    auto input = parent.Cast<TCoInputBase>().Input();
-    if (auto maybeExprList = node.Maybe<TExprList>()) {
-        for (auto expr : maybeExprList.Cast()) {
-            if (!expr.Maybe<TCoMember>() || expr.Cast<TCoMember>().Struct().Raw() != input.Raw()) {
-                return false;
-            }
-        }
+    auto aggApply = trait.Cast<TCoAggApply>();
+    auto aggName = aggApply.Name();
+    if (aggName == "count" || aggName == "count_all") {
         return true;
     }
-    return node.Maybe<TCoMember>().IsValid() && node.Cast<TCoMember>().Struct().Raw() == input.Raw();
-}
-
-std::vector<std::string> GetGroupByCols(const TExprBase& keySelectorBody, const TExprBase& parent) {
-    std::vector<std::string> res;
-    if (!ContainsSimpleColumnOnly(keySelectorBody, parent)) {
-        YQL_CLOG(DEBUG, ProviderKqp) << "For aggregate push down optimization in GROUP BY column list should be Member callables only.";
-        return res;
-    }
-    if (auto maybeMember = keySelectorBody.Maybe<TCoMember>()) {
-        res.push_back(keySelectorBody.Cast<TCoMember>().Name().StringValue());
-    } else if (auto maybeExprList = keySelectorBody.Maybe<TExprList>()) {
-        for (auto expr : maybeExprList.Cast()) {
-            res.push_back(expr.Cast<TCoMember>().Name().StringValue());
-        }
-    }
-    return res;
-}
-
-std::vector<TAggInfo> GetAggregationsFromInit(const TExprBase& node) {
-    std::vector<TAggInfo> res;
-    if (!node.Maybe<TCoAsStruct>()) {
-        return res;
-    }
-    for (auto item : node.Cast<TCoAsStruct>()) {
-        auto tuple = item.Cast<TCoNameValueTuple>();
-        auto tupleValue = tuple.Value();
-        if (tupleValue.Maybe<TCoAggrCountInit>()) {
-            auto aggrCntInit = tupleValue.Cast<TCoAggrCountInit>();
-            if (aggrCntInit.Value().Maybe<TCoMember>()) {
-                TAggInfo aggInfo;
-                aggInfo.AggName = tuple.Name();
-                aggInfo.Type = EAggType::Count;
-                aggInfo.ColName = aggrCntInit.Value().Cast<TCoMember>().Name();
-                res.push_back(aggInfo);
-            }
-        } else {
-            YQL_CLOG(DEBUG, ProviderKqp) << "Unsupported aggregation type in init handler.";
-            res.clear();
-            return res;
-        }
-    }
-    return res;
-}
-
-std::vector<TAggInfo> GetAggregationsFromUpdate(const TExprBase& node) {
-    std::vector<TAggInfo> res;
-    if (!node.Maybe<TCoAsStruct>()) {
-        return res;
-    }
-    for (auto item : node.Cast<TCoAsStruct>()) {
-        auto tuple = item.Cast<TCoNameValueTuple>();
-        auto tupleValue = tuple.Value();
-        if (auto maybeAggrCntUpd = tupleValue.Maybe<TCoAggrCountUpdate>()) {
-            if (maybeAggrCntUpd.Cast().Value().Maybe<TCoMember>()) {
-                TAggInfo aggInfo;
-                aggInfo.Type = EAggType::Count;
-                aggInfo.AggName = tuple.Name();
-                res.push_back(aggInfo);
-            }
-        } else {
-            YQL_CLOG(DEBUG, ProviderKqp) << "Unsupported aggregation type in update handler.";
-            res.clear();
-            return res;
-        }
-    }
-    return res;
+    YQL_CLOG(WARN, ProviderKqp) << "Unsupported type of aggregation: " << aggName.StringValue();
+    return false;
 }
 
 } // anonymous namespace end
@@ -118,14 +56,14 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
         return node;
     }
 
-    if (!node.Maybe<TCoCombineByKey>()) {
+    if (!node.Maybe<TCoAggregateCombine>()) {
         return node;
     }
 
-    auto combineKey = node.Cast<TCoCombineByKey>();
-    auto maybeRead = combineKey.Input().Maybe<TKqpReadOlapTableRanges>();
+    auto aggCombine = node.Cast<TCoAggregateCombine>();
+    auto maybeRead = aggCombine.Input().Maybe<TKqpReadOlapTableRanges>();
     if (!maybeRead) {
-        maybeRead = combineKey.Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>();
+        maybeRead = aggCombine.Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>();
     }
 
     if (!maybeRead) {
@@ -133,62 +71,29 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     auto read = maybeRead.Cast();
-    
-    auto keySelectorBody = combineKey.KeySelectorLambda().Cast<TCoLambda>().Body();
-    if (!ContainsSimpleColumnOnly(keySelectorBody, combineKey) && !ContainsConstOnly(keySelectorBody)) {
-        return node;
-    }
-    auto aggKeyCols = Build<TCoAtomList>(ctx, node.Pos());
-    auto groupByCols = GetGroupByCols(keySelectorBody, combineKey);
-    for (auto groupByCol : groupByCols) {
-        aggKeyCols.Add<TCoAtom>()
-            .Build(groupByCol)
-        .Done();
-    }
-
-    auto initHandlerBody = combineKey.InitHandlerLambda().Cast<TCoLambda>().Body();
-    auto aggInits = GetAggregationsFromInit(initHandlerBody);
-
-    auto updateHandlerBody = combineKey.UpdateHandlerLambda().Cast<TCoLambda>().Body();
-    auto aggUpdates = GetAggregationsFromUpdate(updateHandlerBody);
-
-    auto finishHandlerBody = combineKey.FinishHandlerLambda().Cast<TCoLambda>().Body();
-    if (aggInits.empty() || aggInits.size() != aggUpdates.size()) {
-        return node;
-    }
-
-    for (size_t i = 0; i != aggInits.size(); ++i) {
-        if (aggInits[i].Type != aggUpdates[i].Type) {
-           YQL_CLOG(DEBUG, ProviderKqp) << "Different aggregation type in init and update handlers in aggregate push-down optimization!";
-           return node;
-        }
-    }
 
     auto aggs = Build<TKqpOlapAggOperationList>(ctx, node.Pos());
     // TODO: TMaybeNode<TKqpOlapAggOperation>;
-    for (size_t i = 0; i != aggInits.size(); ++i) {
-        std::string aggType;
-        switch (aggInits[i].Type) {
-            case EAggType::Count:
-            {
-                aggType = "count";
-                break;
-            }
-            case EAggType::Some:
-            {
-                aggType = "some";
-                break;
-            }
-            default:
-            {
-                YQL_ENSURE(false, "Unsupported type of aggregation!"); //  add aggInits[i].Type
-                return node;
-            }
+    for (auto handler: aggCombine.Handlers()) {
+        auto trait = handler.Trait();
+        if (!CanBePushedDown(trait, ctx)) {
+            return node;
         }
+        auto aggApply = trait.Cast<TCoAggApply>();
+        auto aggName = GetAggregationName(handler.ColumnName(), ctx);
+        auto colName = GetColumnNameUnderAggregation(aggApply, ctx);
+        if (aggName.empty() || colName.empty()) {
+            return node;
+        }
+        auto aggOp = aggApply.Name();
+        if (aggOp == "count_all") {
+            aggOp = TCoAtom(ctx.NewAtom(node.Pos(), "count"));
+        }
+
         aggs.Add<TKqpOlapAggOperation>()
-            .Name().Build(aggInits[i].AggName)
-            .Type().Build(aggType)
-            .Column().Build(aggInits[i].ColName)
+            .Name().Build(aggName)
+            .Type().Build(aggOp)
+            .Column().Build(colName)
             .Build()
             .Done();
     }
@@ -196,9 +101,9 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     auto olapAgg = Build<TKqpOlapAgg>(ctx, node.Pos())
         .Input(read.Process().Args().Arg(0))
         .Aggregates(std::move(aggs.Done()))
-        .KeyColumns(std::move(aggKeyCols.Done()))
+        .KeyColumns(aggCombine.Keys())
         .Done();
-    
+
     auto olapAggLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"row"})
         .Body<TExprApplier>()
@@ -210,7 +115,7 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     auto newProcessLambda = ctx.FuseLambdas(olapAggLambda.Ref(), read.Process().Ref());
 
     YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(*newProcessLambda, ctx);
-    
+
     auto newRead = Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
         .Table(read.Table())
         .Ranges(read.Ranges())
@@ -257,7 +162,7 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             )
         )
         .Done();
-    
+
     auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"row"})
         .Body<TExprApplier>()
@@ -265,7 +170,7 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .With(read.Process().Args().Arg(0), "row")
             .Build()
         .Done();
-    
+
     YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
 
     auto newRead = Build<TKqpReadOlapTableRanges>(ctx, node.Pos())

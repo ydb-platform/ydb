@@ -36,7 +36,7 @@ public:
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
-        AddHandler(0, &TCoCombineByKey::Match, HNDL(PushOlapAggregate));
+        AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TDqPhyLength::Match, HNDL(PushOlapLength));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));

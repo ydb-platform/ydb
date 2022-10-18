@@ -1392,9 +1392,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
-        // remove this return when GROUP BY will be implemented on columnshard
-        return;
-
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
@@ -1418,6 +1415,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString query = R"(
                 --!syntax_v1
                 PRAGMA Kikimr.KqpPushOlapProcess = "true";
+                PRAGMA EmitAggApply;
+
                 SELECT
                     level, COUNT(level)
                 FROM `/Root/olapStore/olapTable`
@@ -1437,9 +1436,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST_TWIN(CountAllPushdown, UseLlvm) {
-        // remove this return when COUNT(*) will be implemented on columnshard
-        return;
-
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
@@ -1463,7 +1459,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString query = fmt::format(R"(
                 --!syntax_v1
                 PRAGMA Kikimr.KqpPushOlapProcess = "true";
+                PRAGMA EmitAggApply;
                 PRAGMA ydb.EnableLlvm = "{}";
+
                 SELECT
                     COUNT(*)
                 FROM `/Root/olapStore/olapTable`
@@ -1594,6 +1592,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             queryFixed << "--!syntax_v1" << Endl;
             if (Pushdown) {
                 queryFixed << "PRAGMA Kikimr.KqpPushOlapProcess = \"true\";" << Endl;
+                queryFixed << "PRAGMA EmitAggApply;" << Endl;
             }
             queryFixed << Query << Endl;
             Cerr << "REQUEST:\n" << queryFixed << Endl;
@@ -1737,7 +1736,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Composite_GroupByUR_Limit) {
-        //https://st.yandex-team.ru/KIKIMR-15900
+        // https://st.yandex-team.ru/KIKIMR-16141
         return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
@@ -1881,44 +1880,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregations({ testCase });
     }
 
+    Y_UNIT_TEST(Aggregation_ResultCountExpr) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                    SELECT
+                        COUNT(level + 2)
+                    FROM `/Root/olapStore/olapTable`
+                )")
+            .SetExpectedReply("[[23000u;]]")
+            .AddExpectedPlanOptions("CombineCore");
+
+        TestAggregations({ testCase });
+    }
+
     Y_UNIT_TEST(AggregationAndFilterPushdownOnDiffCols) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
-        TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
-        CreateTestOlapTable(kikimr);
-        auto tableClient = kikimr.GetTableClient();
-
-        {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
-        }
-
-        {
-            TString query = R"(
-                --!syntax_v1
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
                 SELECT
                     COUNT(`timestamp`)
                 FROM `/Root/olapStore/olapTable`
                 WHERE level = 2
-            )";
-            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            )")
+            .SetExpectedReply("[[4600u;]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .AddExpectedPlanOptions("KqpOlapFilter");
 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            CompareYson(result, R"([[4600u;]])");
-
-            // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg", "KqpOlapFilter" });
-        }
+        TestAggregations({ testCase });
     }
 
     Y_UNIT_TEST_TWIN(StatsSysView, UseSessionActor) {

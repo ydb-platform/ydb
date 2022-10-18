@@ -2133,6 +2133,40 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_VALUES_EQUAL(it.ReadNext().GetValueSync().EOS(), true);
     }
 
+    Y_UNIT_TEST(TestReadTableSnapshot) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `/Root/EmptyTable` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )___").ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto it = session.ReadTable("/Root/EmptyTable").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), EStatus::SUCCESS);
+
+        // We expect at least one part that also specifies a snapshot
+        TReadTableResultPart streamPart = it.ReadNext().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(streamPart.IsSuccess(), true);
+        UNIT_ASSERT_VALUES_EQUAL(bool(streamPart.GetSnapshot()), true);
+        UNIT_ASSERT_GT(streamPart.GetSnapshot()->GetStep(), 0u);
+        UNIT_ASSERT_GT(streamPart.GetSnapshot()->GetTxId(), 0u);
+    }
+
     Y_UNIT_TEST(RetryOperation) {
         TKikimrWithGrpcAndRootSchema server;
         NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));

@@ -54,7 +54,7 @@ class AbstractReadTableTest(object):
         self.logger.debug("received chunk data, %s", chunk_or_future)
         return chunk_or_future
 
-    def _prepare_test(self, name, partitions=8):
+    def _prepare_test(self, name, partitions=8, with_data=True):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         table_name = '/Root/{}'.format(name)
         self.logger.debug("Preparing data for test %s", name)
@@ -98,8 +98,9 @@ class AbstractReadTableTest(object):
             for idx in range(partitions * partitions):
                 shard_id = idx % partitions
                 table_row = {'Key1': shard_id * shard_key_bound + idx, 'Key2': idx + 1000, 'Value': str(idx ** 4)}
-                data_by_shard_id[shard_id].append(table_row)
-                data.append(table_row)
+                if with_data:
+                    data_by_shard_id[shard_id].append(table_row)
+                    data.append(table_row)
 
             tx.execute(
                 prepared,
@@ -248,6 +249,21 @@ class TestReadTableSuccessStories(AbstractReadTableTest):
                 25
             )
         )
+
+    def test_read_table_without_data_has_snapshot(self):
+        session, table_name, _, _ = self._prepare_test('test_read_table_without_data_has_snapshot', with_data=False)
+        stream = session.read_table(
+            table_name,
+            ordered=True,
+        )
+
+        chunks = 0
+        for chunk in stream:
+            assert not chunk.rows
+            assert chunk.snapshot is not None
+            chunks += 1
+
+        assert chunks > 0
 
 
 class TestReadTableTruncatedResults(AbstractReadTableTest):

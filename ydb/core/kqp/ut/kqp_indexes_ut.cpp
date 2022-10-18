@@ -2882,15 +2882,15 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index1/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(yson, "");
+            UNIT_ASSERT_VALUES_EQUAL(yson, "[]");
         }
         {
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index2/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(yson, "");
+            UNIT_ASSERT_VALUES_EQUAL(yson, "[]");
         }
         {
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(yson, "");
+            UNIT_ASSERT_VALUES_EQUAL(yson, "[]");
         }
     }
 
@@ -3160,11 +3160,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index1/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(yson, "");
+            UNIT_ASSERT_VALUES_EQUAL(yson, "[]");
         }
         {
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(yson, "");
+            UNIT_ASSERT_VALUES_EQUAL(yson, "[]");
         }
     }
 
@@ -3860,7 +3860,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
 
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(yson, "");
+            UNIT_ASSERT_VALUES_EQUAL(yson, "[]");
         }
     }
 

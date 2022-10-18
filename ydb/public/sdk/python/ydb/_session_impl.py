@@ -407,7 +407,8 @@ def bulk_upsert_request_factory(table, rows, column_types):
 
 def wrap_read_table_response(response):
     issues._process_response(response)
-    return convert.ResultSet.from_message(response.result.result_set)
+    snapshot = response.snapshot if response.HasField("snapshot") else None
+    return convert.ResultSet.from_message(response.result.result_set, snapshot=snapshot)
 
 
 class SessionState(object):

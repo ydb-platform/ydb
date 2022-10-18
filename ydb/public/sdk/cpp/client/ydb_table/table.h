@@ -1786,6 +1786,21 @@ private:
     TMaybe<TQueryStats> QueryStats_;
 };
 
+class TReadTableSnapshot {
+public:
+    TReadTableSnapshot(ui64 step, ui64 txId)
+        : Step_(step)
+        , TxId_(txId)
+    {}
+
+    ui64 GetStep() const { return Step_; }
+    ui64 GetTxId() const { return TxId_; }
+
+private:
+    ui64 Step_;
+    ui64 TxId_;
+};
+
 template<typename TPart>
 class TSimpleStreamPart : public TStreamPartStatus {
 public:
@@ -1793,13 +1808,18 @@ public:
 
     TPart ExtractPart() { return std::move(Part_); }
 
-    TSimpleStreamPart(TPart&& part, TStatus&& status)
+    TSimpleStreamPart(TPart&& part, TStatus&& status,
+            std::optional<TReadTableSnapshot> snapshot = std::nullopt)
         : TStreamPartStatus(std::move(status))
         , Part_(std::move(part))
+        , Snapshot_(std::move(snapshot))
     {}
+
+    const std::optional<TReadTableSnapshot>& GetSnapshot() { return Snapshot_; }
 
 private:
     TPart Part_;
+    std::optional<TReadTableSnapshot> Snapshot_;
 };
 
 template<typename TPart>

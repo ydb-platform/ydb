@@ -42,9 +42,28 @@ static ui64 CalcRuConsumption(const TString& data) {
     return mb * 128; // 128 ru for 1 MiB
 }
 
-static void NullSerializeReadTableResponse(const TString& input, Ydb::StatusIds::StatusCode status, TString* output) {
+static void NullSerializeReadTableResponse(Ydb::StatusIds::StatusCode status, ui64 planStep, ui64 txId, TString* output) {
     Ydb::Impl::ReadTableResponse readTableResponse;
     readTableResponse.set_status(status);
+
+    if (planStep && txId) {
+        auto* snapshot = readTableResponse.mutable_snapshot();
+        snapshot->set_plan_step(planStep);
+        snapshot->set_tx_id(txId);
+    }
+
+    Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
+}
+
+static void NullSerializeReadTableResponse(const TString& input, Ydb::StatusIds::StatusCode status, ui64 planStep, ui64 txId, TString* output) {
+    Ydb::Impl::ReadTableResponse readTableResponse;
+    readTableResponse.set_status(status);
+
+    if (planStep && txId) {
+        auto* snapshot = readTableResponse.mutable_snapshot();
+        snapshot->set_plan_step(planStep);
+        snapshot->set_tx_id(txId);
+    }
 
     readTableResponse.mutable_result()->set_result_set(input.Data(), input.Size());
     Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
@@ -53,7 +72,9 @@ static void NullSerializeReadTableResponse(const TString& input, Ydb::StatusIds:
 static void NullSerializeReadTableResponse(const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, Ydb::StatusIds::StatusCode status, TString* output) {
     Ydb::Impl::ReadTableResponse readTableResponse;
     readTableResponse.set_status(status);
-    readTableResponse.mutable_issues()->CopyFrom(message);
+    if (!message.empty()) {
+        readTableResponse.mutable_issues()->CopyFrom(message);
+    }
     Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
 }
 
@@ -178,6 +199,11 @@ private:
     void HandleResponseData(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
         const TEvTxUserProxy::TEvProposeTransactionStatus* msg = ev->Get();
         LastStatusTimestamp_ = ctx.Now();
+
+        if (msg->Record.GetStep() && !PlanStep) {
+            PlanStep = msg->Record.GetStep();
+            TxId = msg->Record.GetTxId();
+        }
 
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
         auto issueMessage = msg->Record.GetIssues();
@@ -550,6 +576,11 @@ private:
             TString out;
             NullSerializeReadTableResponse(message, status, &out);
             Request_->SendSerializedResult(std::move(out), status);
+        } else if (!SentSerializedResult && PlanStep && TxId) {
+            // Send an empty result with the snapshot
+            TString out;
+            NullSerializeReadTableResponse(status, PlanStep, TxId, &out);
+            Request_->SendSerializedResult(std::move(out), status);
         }
         Request_->FinishStream();
         LOG_NOTICE_S(ctx, NKikimrServices::READ_TABLE_API,
@@ -668,7 +699,7 @@ private:
                     << ", RU required: " << ru << " " << getRlPAth());
 
         TString out;
-        NullSerializeReadTableResponse(data, StatusIds::SUCCESS, &out);
+        NullSerializeReadTableResponse(data, StatusIds::SUCCESS, PlanStep, TxId, &out);
         TInstant startTime = ctx.Now();
 
         if (Request_->GetRlPath()) {
@@ -716,6 +747,7 @@ private:
         }
 
         Request_->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
+        SentSerializedResult = true;
 
         LeftInGRpcAdaptorQueue_++;
         if (LeftInGRpcAdaptorQueue_ > QuotaLimit_) {
@@ -729,6 +761,9 @@ private:
     std::unique_ptr<IRequestNoOpCtx> Request_;
 
     TActorId ReadTableActor;
+
+    ui64 PlanStep = 0;
+    ui64 TxId = 0;
 
     TList<TEvTxProcessing::TEvStreamQuotaRequest::TPtr> QuotaRequestQueue_;
 
@@ -757,6 +792,7 @@ private:
     };
     TDeque<TBuffEntry> SendBuffer_;
     bool HasPendingSuccess = false;
+    bool SentSerializedResult = false;
 };
 
 void DoReadTableRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {

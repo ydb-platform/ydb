@@ -8,9 +8,15 @@ package Ydb.Impl;
 message ReadTableResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
-    ReadTobleResult result = 3;
+    ReadTableSnapshot snapshot = 4;
+    ReadTableResult result = 3;
 };
 
-message ReadTobleResult {
+message ReadTableSnapshot {
+    uint64 plan_step = 1;
+    uint64 tx_id = 2;
+}
+
+message ReadTableResult {
     bytes result_set = 1;
 };

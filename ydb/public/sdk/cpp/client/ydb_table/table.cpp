@@ -1240,16 +1240,24 @@ public:
         auto promise = NThreading::NewPromise<TSimpleStreamPart<TResultSet>>();
         // Capture self - guarantee no dtor call during the read
         auto readCb = [self, promise](TGRpcStatus&& grpcStatus) mutable {
+            std::optional<TReadTableSnapshot> snapshot;
+            if (self->Response_.has_snapshot()) {
+                snapshot.emplace(
+                    self->Response_.snapshot().plan_step(),
+                    self->Response_.snapshot().tx_id());
+            }
             if (!grpcStatus.Ok()) {
                 self->Finished_ = true;
                 promise.SetValue({TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())),
-                              TStatus(TPlainStatus(grpcStatus, self->Endpoint_))});
+                              TStatus(TPlainStatus(grpcStatus, self->Endpoint_)),
+                              snapshot});
             } else {
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(self->Response_.issues(), issues);
                 EStatus clientStatus = static_cast<EStatus>(self->Response_.status());
                 promise.SetValue({TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())),
-                              TStatus(clientStatus, std::move(issues))});
+                              TStatus(clientStatus, std::move(issues)),
+                              snapshot});
             }
         };
         StreamProcessor_->Read(&Response_, readCb);

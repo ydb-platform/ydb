@@ -818,29 +818,112 @@ TExprNode::TPtr ApplyExtractMembersToCollect(const TExprNode::TPtr& node, const 
 }
 
 TExprNode::TPtr ApplyExtractMembersToMapNext(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    TCoMapNext mapNext(node);
+    const TCoMapNext mapNext(node);
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
-
-    const bool singleValue = GetItemType(*mapNext.Lambda().Ref().GetTypeAnn()) == nullptr;
-    TSet<TStringBuf> memberNames;
-    for (auto& member : members->ChildrenList()) {
-        YQL_ENSURE(member->IsAtom());
-        memberNames.insert(member->Content());
-    }
-    TExprBase newBody{FilterByFields(mapNext.Pos(), mapNext.Lambda().Body().Ptr(), memberNames, ctx, singleValue)};
 
     return Build<TCoMapNext>(ctx, mapNext.Pos())
         .Input(mapNext.Input())
         .Lambda()
             .Args({"current", "next"})
-            .Body<TExprApplier>()
-                .Apply(newBody)
-                .With(mapNext.Lambda().Args().Arg(0), "current")
-                .With(mapNext.Lambda().Args().Arg(1), "next")
+            .Body<TCoFilterMembers>()
+                .Input<TExprApplier>()
+                    .Apply(mapNext.Lambda())
+                    .With(0, "current")
+                    .With(1, "next")
+                    .Build()
+                .Members(members)
+                .Build()
             .Build()
-        .Build()
         .Done()
         .Ptr();
+}
+
+TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExprNode::TPtr members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
+    const TCoChain1Map chain1Map(node);
+    const auto allMembers = AddMembersUsedInside(chain1Map.UpdateHandler().Body().Ptr(), chain1Map.UpdateHandler().Args().Arg(1).Ref(), TExprNode::TPtr(members), parentsMap, ctx);
+    if (!allMembers || GetSeqItemType(node->GetTypeAnn())->Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize())
+        return {};
+
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    auto output = Build<TCoChain1Map>(ctx, chain1Map.Pos())
+        .Input(chain1Map.Input())
+        .InitHandler()
+            .Args({"item"})
+            .Body<TCoFilterMembers>()
+                .Input<TExprApplier>()
+                    .Apply(chain1Map.InitHandler())
+                    .With(0, "item")
+                    .Build()
+                .Members(allMembers)
+                .Build()
+            .Build()
+        .UpdateHandler()
+            .Args({"prev","next"})
+            .Body<TCoFilterMembers>()
+                .Input<TExprApplier>()
+                    .Apply(chain1Map.UpdateHandler())
+                    .With(0, "prev")
+                    .With(1, "next")
+                    .Build()
+                .Members(allMembers)
+                .Build()
+            .Build()
+        .Done().Ptr();
+
+    if (allMembers != members) {
+        output = Build<TCoExtractMembers>(ctx, chain1Map.Pos())
+            .Input(std::move(output))
+            .Members(std::move(members))
+            .Done().Ptr();
+    }
+
+    return output;
+}
+
+TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExprNode::TPtr members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
+    const TCoCondense1 condense1(node);
+    auto allMembers = members;
+    allMembers = AddMembersUsedInside(condense1.UpdateHandler().Body().Ptr(), condense1.UpdateHandler().Args().Arg(1).Ref(), std::move(allMembers), parentsMap, ctx);
+    allMembers = AddMembersUsedInside(condense1.SwitchHandler().Body().Ptr(), condense1.SwitchHandler().Args().Arg(1).Ref(), std::move(allMembers), parentsMap, ctx);
+
+    if (!allMembers || GetSeqItemType(node->GetTypeAnn())->Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize())
+        return {};
+
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    auto output = Build<TCoCondense1>(ctx, condense1.Pos())
+        .Input(condense1.Input())
+        .InitHandler()
+            .Args({"item"})
+            .Body<TCoFilterMembers>()
+                .Input<TExprApplier>()
+                    .Apply(condense1.InitHandler())
+                    .With(0, "item")
+                    .Build()
+                .Members(allMembers)
+                .Build()
+            .Build()
+        .SwitchHandler(condense1.SwitchHandler())
+        .UpdateHandler()
+            .Args({"prev","next"})
+            .Body<TCoFilterMembers>()
+                .Input<TExprApplier>()
+                    .Apply(condense1.UpdateHandler())
+                    .With(0, "prev")
+                    .With(1, "next")
+                    .Build()
+                .Members(allMembers)
+                .Build()
+            .Build()
+        .Done().Ptr();
+
+    if (allMembers != members) {
+        output = Build<TCoExtractMembers>(ctx, condense1.Pos())
+            .Input(std::move(output))
+            .Members(std::move(members))
+            .Done().Ptr();
+    }
+
+    return output;
 }
 
 } // NYql

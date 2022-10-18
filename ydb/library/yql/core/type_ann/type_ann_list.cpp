@@ -754,6 +754,11 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        if (IsIdentityLambda(input->Tail())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         const TTypeAnnotationNode* itemType = nullptr;
         if (!EnsureNewSeqType<true>(input->Head(), ctx.Expr, &itemType)) {
             return IGraphTransformer::TStatus::Error;
@@ -1003,13 +1008,18 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        auto& initLambda = input->ChildRef(1);
-        auto& updateLambda = input->ChildRef(2);
+        if (IsIdentityLambda(input->Tail()) && IsIdentityLambda(*input->Child(1))) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
 
         const TTypeAnnotationNode* itemType = nullptr;
         if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
             return IGraphTransformer::TStatus::Error;
         }
+
+        auto& initLambda = input->ChildRef(1);
+        auto& updateLambda = input->ChildRef(2);
 
         auto status = ConvertToLambda(initLambda, ctx.Expr, 1);
         status = status.Combine(ConvertToLambda(updateLambda, ctx.Expr, 2));

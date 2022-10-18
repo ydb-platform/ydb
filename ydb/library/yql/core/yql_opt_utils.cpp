@@ -258,6 +258,52 @@ template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& ar
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TString>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn);
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, std::map<std::string_view, TExprNode::TPtr>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn);
 
+TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx) {
+    if (!members || !start || &arg == start.Get()) {
+        return {};
+    }
+
+    if (RemoveOptionalType(arg.GetTypeAnn())->GetKind() != ETypeAnnotationKind::Struct) {
+        return {};
+    }
+
+    if (!IsDepended(*start, arg)) {
+        return std::move(members);
+    }
+
+    TNodeSet nodes;
+    VisitExpr(start, [&](const TExprNode::TPtr& node) {
+        if (!node->IsCallable("DependsOn"))
+            nodes.emplace(node.Get());
+        return true;
+    });
+
+    std::unordered_set<std::string_view> names(members->ChildrenSize());
+    members->ForEachChild([&names](const TExprNode& name){ names.emplace(name.Content()); });
+
+
+    const auto parents = parentsMap.find(&arg);
+    YQL_ENSURE(parents != parentsMap.cend());
+    TExprNode::TListType extra;
+    for (const auto& parent : parents->second) {
+        if (nodes.cend() == nodes.find(parent))
+            continue;
+        if (!parent->IsCallable("Member"))
+            return {};
+        if (names.emplace(parent->Tail().Content()).second)
+            extra.emplace_back(parent->TailPtr());
+    }
+
+
+    if (!extra.empty()) {
+        auto children = members->ChildrenList();
+        std::move(extra.begin(), extra.end(), std::back_inserter(children));
+        members = ctx.ChangeChildren(*members, std::move(children));
+    }
+
+    return std::move(members);
+}
+
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
     TExprContext& ctx, bool singleValue) {
@@ -1547,4 +1593,9 @@ TVector<TStringBuf> GetCommonKeysFromVariantSelector(const NNodes::TCoLambda& la
     }
     return {};
 }
+
+bool IsIdentityLambda(const TExprNode& lambda) {
+    return lambda.IsLambda() && &lambda.Head().Head() == &lambda.Tail();
+}
+
 }

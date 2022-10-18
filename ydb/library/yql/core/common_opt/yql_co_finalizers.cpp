@@ -287,6 +287,26 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
 
         return true;
     };
+
+    map[TCoChain1Map::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        SubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
+                return ApplyExtractMembersToChain1Map(input, members, parentsMap, ctx, " with multi-usage");
+            }
+        );
+
+        return true;
+    };
+
+    map[TCoCondense1::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        SubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
+                return ApplyExtractMembersToCondense1(input, members, parentsMap, ctx, " with multi-usage");
+            }
+        );
+
+        return true;
+    };
 }
 
 } // NYql

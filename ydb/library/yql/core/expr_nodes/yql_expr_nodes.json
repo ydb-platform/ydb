@@ -1608,7 +1608,22 @@
                 {"Index": 1, "Name": "Members", "Type": "TCoAtomList"}
             ]
         },
-
+        {
+            "Name": "TCoSelectMembers",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "SelectMembers"},
+            "Children": [
+                {"Index": 1, "Name": "Members", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TCoFilterMembers",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "FilterMembers"},
+            "Children": [
+                {"Index": 1, "Name": "Members", "Type": "TCoAtomList"}
+            ]
+        },
         {
             "Name": "TCoFlattenMembers",
             "VarArgBase": "TCoNameValueTuple",

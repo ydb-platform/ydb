@@ -33,6 +33,8 @@ template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
     TExprContext& ctx, bool singleValue);
 
+TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx);
+
 bool IsDepended(const TExprNode& from, const TExprNode& to);
 bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx);
 bool IsEmptyOptional(const TExprNode& node);
@@ -116,5 +118,7 @@ const TItemExprType* GetLightColumn(const TStructExprType& type);
 
 // returned value exists as long as lambda object exists
 TVector<TStringBuf> GetCommonKeysFromVariantSelector(const NNodes::TCoLambda& lambda);
+
+bool IsIdentityLambda(const TExprNode& lambda);
 
 }

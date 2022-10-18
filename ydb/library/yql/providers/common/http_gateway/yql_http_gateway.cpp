@@ -82,7 +82,7 @@ public:
     };
 
     TEasyCurl(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method, size_t offset = 0ULL, size_t sizeLimit = 0, size_t bodySize = 0, const TCurlInitConfig& config = TCurlInitConfig())
-        : Headers(headers), Method(method), Offset(offset), SizeLimit(sizeLimit), BodySize(bodySize), Counter(counter), DownloadedBytes(downloadedBytes), UploadedBytes(uploadedBytes), Config(config), Url(url)
+        : Headers(headers), Method(method), Offset(offset), SizeLimit(sizeLimit), BodySize(bodySize), Counter(counter), DownloadedBytes(downloadedBytes), UploadedBytes(uploadedBytes), Config(config), ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0'), Url(url)
     {
         InitHandles();
         Counter->Inc();
@@ -97,6 +97,8 @@ public:
         if (Handle) {
             return;
         }
+
+        std::fill(ErrorBuffer.begin(), ErrorBuffer.end(), 0);
 
         Handle = curl_easy_init();
         switch (Method) {
@@ -127,6 +129,7 @@ public:
         curl_easy_setopt(Handle, CURLOPT_TIMEOUT, Config.RequestTimeout);
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_TIME, Config.LowSpeedTime);
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, Config.LowSpeedLimit);
+        curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer.data());
 
         if (!Headers.empty()) {
             CurlHeaders = std::accumulate(Headers.cbegin(), Headers.cend(), CurlHeaders,
@@ -180,6 +183,7 @@ public:
     virtual size_t Read(char *buffer, size_t size, size_t nmemb) = 0;
 
     size_t GetSizeLimit() const { return SizeLimit; }
+    TString GetDetailedErrorText() const { return ErrorBuffer.data(); }
 protected:
     void SkipTo(size_t offset) const {
         if (offset || Offset || SizeLimit) {
@@ -225,6 +229,7 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
     const TCurlInitConfig Config;
+    std::vector<char> ErrorBuffer;
 public:
     TString Url;
 };
@@ -282,7 +287,7 @@ private:
 
     void Done(CURLcode result, long httpResponseCode) final {
         if (CURLE_OK != result)
-            return Fail(TIssue(curl_easy_strerror(result)));
+            return Fail(TIssue( TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
 
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
@@ -394,7 +399,7 @@ private:
 
     void Done(CURLcode result, long) final {
         if (CURLE_OK != result)
-            return Fail(TIssue(curl_easy_strerror(result)));
+            return Fail(TIssue(TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
 
         if (!Cancelled)
             OnFinish(TIssues());

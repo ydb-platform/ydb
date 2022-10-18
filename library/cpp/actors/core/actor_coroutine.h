@@ -150,12 +150,12 @@ namespace NActors {
         void DoRun() override final;
     };
 
-    class TActorCoro : public IActor {
+    class TActorCoro : public IActorCallback {
         THolder<TActorCoroImpl> Impl;
 
     public:
         TActorCoro(THolder<TActorCoroImpl> impl, ui32 activityType = IActor::ACTOR_COROUTINE)
-            : IActor(static_cast<TReceiveFunc>(&TActorCoro::StateFunc), activityType)
+            : IActorCallback(static_cast<TReceiveFunc>(&TActorCoro::StateFunc), activityType)
             , Impl(std::move(impl))
         {}
 

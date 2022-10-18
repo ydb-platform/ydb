@@ -14,7 +14,7 @@ using TEvGet = TEvBlobStorage::TEvGet;
 struct TBlockIO::TLoaded : public TEvBlobStorage::TEvGetResult::TResponse{ };
 
 TBlockIO::TBlockIO(TActorId service, ui64 cookie)
-    : ::NActors::IActor(static_cast<TReceiveFunc>(&TBlockIO::Inbox), NKikimrServices::TActivity::SAUSAGE_BIO_A)
+    : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TBlockIO::Inbox), NKikimrServices::TActivity::SAUSAGE_BIO_A)
     , Service(service)
     , Cookie(cookie)
 {

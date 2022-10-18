@@ -1,4 +1,5 @@
 #include "actor.h"
+#include "actor_virtual.h"
 #include "executor_thread.h"
 #include <library/cpp/actors/util/datetime.h>
 
@@ -180,4 +181,16 @@ namespace NActors {
     double IActor::GetElapsedTicksAsSeconds() const {
         return NHPTimer::GetSeconds(ElapsedTicks);
     }
+
+    void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        (actor->*StateFunc)(ev, ctx);
+    }
+
+    void TActorVirtualBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        Y_VERIFY(!!ev);
+        Y_ASSERT(dynamic_cast<IEventBehavioral*>(ev->GetBase()));
+        IEventBehavioral* eActor = static_cast<IEventBehavioral*>(ev->GetBase());
+        eActor->Execute(actor, ev, ctx);
+    }
+
 }

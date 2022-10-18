@@ -32,7 +32,7 @@ protected:
     virtual void CloseEraser() = 0;
 };
 
-class TCondEraseScan: public IActor, public IScan, public IEraserOps {
+class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
     struct TDataShardId {
         TActorId ActorId;
         ui64 TabletId;
@@ -215,7 +215,7 @@ class TCondEraseScan: public IActor, public IScan, public IEraserOps {
 
 public:
     explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId, THolder<IEraseRowsCondition> condition, const TLimits& limits)
-        : IActor(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
+        : IActorCallback(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
         , TableId(tableId)
         , DataShard{ds->SelfId(), ds->TabletID()}
         , ReplyTo(replyTo)

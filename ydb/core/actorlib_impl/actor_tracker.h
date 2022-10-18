@@ -79,14 +79,14 @@ namespace NActors {
         void SendUntrack(const TActorContext& ctx);
     };
 
-    class TTrackedActorBase : public IActor {
+    class TTrackedActorBase : public IActorCallback {
         // plain pointer to tracker; tracker always lives longer than the tracked actors, so it is safe to reference
         // it in this way; the reference is filled in when RegisterSubactor is called
         TActorTracker *Tracker = nullptr;
 
     protected:
         TTrackedActorBase()
-            : IActor(static_cast<TReceiveFunc>(&TTrackedActorBase::InitialReceiveFunc))
+            : IActorCallback(static_cast<TReceiveFunc>(&TTrackedActorBase::InitialReceiveFunc))
         {}
 
         // subactor registration helpers

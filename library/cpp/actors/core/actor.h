@@ -220,20 +220,58 @@ namespace NActors {
 
     class TDecorator;
 
-    class IActor : protected IActorOps {
+    class TActorVirtualBehaviour {
     public:
-        typedef void (IActor::*TReceiveFunc)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        static void Receive(IActor* actor, TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+    public:
+    };
+
+    class TActorCallbackBehaviour {
+    private:
+        using TBase = IActor;
+        friend class TDecorator;
+    public:
+        typedef void (IActor::* TReceiveFunc)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
 
     private:
         TReceiveFunc StateFunc;
+    public:
+        TActorCallbackBehaviour() = default;
+        TActorCallbackBehaviour(TReceiveFunc stateFunc)
+            : StateFunc(stateFunc) {
+        }
+        // NOTE: exceptions must not escape state function but if an exception hasn't be caught
+        // by the actor then we want to crash an see the stack
+        void Receive(IActor* actor, TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+
+        template <typename T>
+        void Become(T stateFunc) {
+            StateFunc = static_cast<TReceiveFunc>(stateFunc);
+        }
+
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
+            StateFunc = static_cast<TReceiveFunc>(stateFunc);
+            ctx.Schedule(std::forward<TArgs>(args)...);
+        }
+
+        TReceiveFunc CurrentStateFunc() const {
+            return StateFunc;
+        }
+
+    };
+
+    class IActor: protected IActorOps {
+    private:
         TActorIdentity SelfActorId;
         i64 ElapsedTicks;
-        ui64 HandledEvents;
-
         friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
         friend class TDecorator;
-
+        const bool VirtualUsage = false;
+    protected:
+        TActorCallbackBehaviour CImpl;
     public:
+        using TReceiveFunc = TActorCallbackBehaviour::TReceiveFunc;
         /// @sa services.proto NKikimrServices::TActivity::EType
         enum EActorActivity {
             OTHER = 0,
@@ -264,13 +302,22 @@ namespace NActors {
         ui32 ActivityType;
 
     protected:
-        IActor(TReceiveFunc stateFunc, ui32 activityType = OTHER)
-            : StateFunc(stateFunc)
-            , SelfActorId(TActorId())
+        ui64 HandledEvents;
+
+        IActor(TActorCallbackBehaviour&& cImpl, ui32 activityType = OTHER)
+            : SelfActorId(TActorId())
             , ElapsedTicks(0)
-            , HandledEvents(0)
+            , CImpl(std::move(cImpl))
             , ActivityType(activityType)
-        {
+            , HandledEvents(0) {
+        }
+
+        IActor(ui32 activityType = OTHER)
+            : SelfActorId(TActorId())
+            , ElapsedTicks(0)
+            , VirtualUsage(true)
+            , ActivityType(activityType)
+            , HandledEvents(0) {
         }
 
     public:
@@ -281,51 +328,21 @@ namespace NActors {
         virtual void Die(const TActorContext& ctx); // would unregister actor so call exactly once and only from inside of message processing
         virtual void PassAway();
 
-    public:
-        template <typename T>
-        void Become(T stateFunc) {
-            StateFunc = static_cast<TReceiveFunc>(stateFunc);
-        }
-
-        template <typename T, typename... TArgs>
-        void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
-            StateFunc = static_cast<TReceiveFunc>(stateFunc);
-            ctx.Schedule(std::forward<TArgs>(args)...);
-        }
-
-        template <typename T, typename... TArgs>
-        void Become(T stateFunc, TArgs&&... args) {
-            StateFunc = static_cast<TReceiveFunc>(stateFunc);
-            Schedule(std::forward<TArgs>(args)...);
-        }
-
     protected:
         void SetActivityType(ui32 activityType) {
             ActivityType = activityType;
         }
 
     public:
-        TReceiveFunc CurrentStateFunc() const {
-            return StateFunc;
-        }
-
-        // NOTE: exceptions must not escape state function but if an exception hasn't be caught
-        // by the actor then we want to crash an see the stack
-        void Receive(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-            (this->*StateFunc)(ev, ctx);
-            HandledEvents++;
-        }
-
         // must be called to wrap any call trasitions from one actor to another
         template<typename TActor, typename TMethod, typename... TArgs>
         static decltype((std::declval<TActor>().*std::declval<TMethod>())(std::declval<TArgs>()...))
-                InvokeOtherActor(TActor& actor, TMethod&& method, TArgs&&... args) {
-            struct TRecurseContext : TActorContext {
-                TActivationContext *Prev;
+            InvokeOtherActor(TActor& actor, TMethod&& method, TArgs&&... args) {
+            struct TRecurseContext: TActorContext {
+                TActivationContext* Prev;
                 TRecurseContext(const TActorId& actorId)
                     : TActorContext(TActivationContext::ActorContextFor(actorId))
-                    , Prev(TlsActivationContext)
-                {
+                    , Prev(TlsActivationContext) {
                     TlsActivationContext = this;
                 }
                 ~TRecurseContext() {
@@ -350,7 +367,7 @@ namespace NActors {
         void AddElapsedTicks(i64 ticks) {
             ElapsedTicks += ticks;
         }
-        auto GetActivityType() const {
+        ui32 GetActivityType() const {
             return ActivityType;
         }
         ui64 GetHandledEvents() const {
@@ -358,6 +375,14 @@ namespace NActors {
         }
         TActorIdentity SelfId() const {
             return SelfActorId;
+        }
+        void Receive(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+            ++HandledEvents;
+            if (Y_UNLIKELY(VirtualUsage)) {
+                TActorVirtualBehaviour::Receive(this, ev, ctx);
+            } else {
+                CImpl.Receive(this, ev, ctx);
+            }
         }
 
     protected:
@@ -383,7 +408,7 @@ namespace NActors {
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
         // There is one thread per mailbox to execute actor, which mean
         // no _cpu core scalability_ for such actors.
-        // This method of registration can be usefull if multiple actors share
+        // This method of registration can be useful if multiple actors share
         // some memory.
         TActorId RegisterWithSameMailbox(IActor* actor) const noexcept final;
 
@@ -405,8 +430,44 @@ namespace NActors {
         return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(index);
     }
 
+    class IActorCallback: public IActor {
+    public:
+        IActorCallback(TReceiveFunc stateFunc, ui32 activityType = OTHER)
+            : IActor(TActorCallbackBehaviour(stateFunc), activityType) {
+
+        }
+
+        template <typename T>
+        void Become(T stateFunc) {
+            CImpl.Become(stateFunc);
+        }
+
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
+            CImpl.Become(stateFunc, ctx, std::forward<TArgs>(args)...);
+        }
+
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, TArgs&&... args) {
+            CImpl.Become(stateFunc);
+            Schedule(std::forward<TArgs>(args)...);
+        }
+
+        TReceiveFunc CurrentStateFunc() const {
+            return CImpl.CurrentStateFunc();
+        }
+    };
+
+    class IActorVirtual: public IActor {
+    public:
+        IActorVirtual(ui32 activityType = OTHER)
+            : IActor(activityType) {
+
+        }
+    };
+
     template <typename TDerived>
-    class TActor: public IActor {
+    class TActor: public IActorCallback {
     private:
         template <typename T, typename = const char*>
         struct HasActorName: std::false_type { };
@@ -438,7 +499,7 @@ namespace NActors {
         // static constexpr char ActorName[] = "UNNAMED";
 
         TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx), ui32 activityType = GetActivityTypeIndex())
-            : IActor(static_cast<TReceiveFunc>(func), activityType)
+            : IActorCallback(static_cast<TReceiveFunc>(func), activityType)
         { }
 
     public:
@@ -486,13 +547,13 @@ namespace NActors {
         return TActorContext(tls.Mailbox, tls.ExecutorThread, tls.EventStart, id);
     }
 
-    class TDecorator : public IActor {
+    class TDecorator : public IActorCallback {
     protected:
         THolder<IActor> Actor;
 
     public:
         TDecorator(THolder<IActor>&& actor)
-            : IActor(static_cast<TReceiveFunc>(&TDecorator::State), actor->GetActivityType())
+            : IActorCallback(static_cast<TReceiveFunc>(&TDecorator::State), actor->GetActivityType())
             , Actor(std::move(actor))
         {
         }

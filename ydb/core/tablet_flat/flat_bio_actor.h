@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBlockIO {
 
-    class TBlockIO : public ::NActors::IActor {
+    class TBlockIO : public ::NActors::IActorCallback {
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
         using EStatus = NKikimrProto::EReplyStatus;

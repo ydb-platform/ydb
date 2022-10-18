@@ -66,7 +66,7 @@ namespace NFake {
     };
 
 
-    class TNanny : public ::NActors::IActor {
+    class TNanny : public ::NActors::IActorCallback {
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
 
     public:
@@ -79,7 +79,7 @@ namespace NFake {
         };
 
         TNanny()
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TNanny::Inbox))
+            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TNanny::Inbox))
             , Fake(NTable::CreateFakeDb())
         {
             Fake->Init(NTable::TScheme());

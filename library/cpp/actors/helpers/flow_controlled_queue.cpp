@@ -12,7 +12,7 @@ namespace NActors {
 
 class TFlowControlledRequestQueue;
 
-class TFlowControlledRequestActor : public IActor {
+class TFlowControlledRequestActor : public IActorCallback {
     TFlowControlledRequestQueue * const QueueActor;
 
     void HandleReply(TAutoPtr<IEventHandle> &ev);
@@ -24,7 +24,7 @@ public:
     const ui64 StartCounter;
 
     TFlowControlledRequestActor(ui32 activity, TFlowControlledRequestQueue *queue, TActorId source, ui64 cookie, ui32 flags)
-        : IActor(static_cast<TReceiveFunc>(&TFlowControlledRequestActor::StateWait), activity)
+        : IActorCallback(static_cast<TReceiveFunc>(&TFlowControlledRequestActor::StateWait), activity)
         , QueueActor(queue)
         , Source(source)
         , Cookie(cookie)
@@ -48,7 +48,7 @@ public:
     using IActor::PassAway;
 };
 
-class TFlowControlledRequestQueue : public IActor {
+class TFlowControlledRequestQueue : public IActorCallback {
     const TActorId Target;
     const TFlowControlledQueueConfig Config;
 
@@ -154,7 +154,7 @@ class TFlowControlledRequestQueue : public IActor {
     }
 public:
     TFlowControlledRequestQueue(TActorId target, ui32 activity, const TFlowControlledQueueConfig &config)
-        : IActor(static_cast<TReceiveFunc>(&TFlowControlledRequestQueue::StateWork), activity)
+        : IActorCallback(static_cast<TReceiveFunc>(&TFlowControlledRequestQueue::StateWork), activity)
         , Target(target)
         , Config(config)
         , MinimalSeenLatency(TDuration::Seconds(1))

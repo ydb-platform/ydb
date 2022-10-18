@@ -51,7 +51,7 @@ namespace NTabletFlatExecutor {
         TVector<ui32> YellowStopChannels;
     };
 
-    class TOpsCompact: private ::NActors::IActor, public NTable::IVersionScan {
+    class TOpsCompact: private ::NActors::IActorCallback, public NTable::IVersionScan {
         using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using TScheme = NTable::TRowScheme;
@@ -65,7 +65,7 @@ namespace NTabletFlatExecutor {
         constexpr static ui64 MaxFlight = 20ll * (1ll << 20);
 
         TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TOpsCompact::Inbox), NKikimrServices::TActivity::OPS_COMPACT_A)
+            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TOpsCompact::Inbox), NKikimrServices::TActivity::OPS_COMPACT_A)
             , Mask(mask)
             , Owner(owner)
             , Conf(std::move(conf))

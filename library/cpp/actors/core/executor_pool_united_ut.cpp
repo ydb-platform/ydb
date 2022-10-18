@@ -30,7 +30,7 @@ inline ui64 DoTimedWork(ui64 workUs) {
     return nowUs - startUs;
 }
 
-class TTestSenderActor : public IActor {
+class TTestSenderActor : public IActorCallback {
 private:
     using EActivityType = IActor::EActivityType ;
     using EActorActivity = IActor::EActorActivity;
@@ -44,7 +44,7 @@ private:
 public:
     TTestSenderActor(std::function<void(void)> action = [](){},
                      EActivityType activityType =  EActorActivity::OTHER)
-        : IActor(static_cast<TReceiveFunc>(&TTestSenderActor::Execute), activityType)
+        : IActorCallback(static_cast<TReceiveFunc>(&TTestSenderActor::Execute), activityType)
         , Action(action)
     {}
 

@@ -2,12 +2,13 @@
 
 #include "actor.h"
 #include "events.h"
+#include <util/generic/noncopyable.h>
 
 namespace NActors {
     template<typename T> struct dependent_false : std::false_type {};
 
     template<typename TDerived>
-    class TActorBootstrapped : public TActor<TDerived> {
+    class TActorBootstrapped: public TActor<TDerived> {
     protected:
         TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
             return new IEventHandle(TEvents::TSystem::Bootstrap, 0, self, parentId, {}, 0);
@@ -31,7 +32,7 @@ namespace NActors {
         }
 
         TActorBootstrapped()
-            : TActor<TDerived>(&TDerived::StateBootstrap)
-        {}
+            : TActor<TDerived>(&TDerived::StateBootstrap) {
+        }
     };
 }

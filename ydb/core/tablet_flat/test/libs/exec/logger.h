@@ -112,13 +112,13 @@ namespace NFake {
     };
 
 
-    class TLogFwd : public ::NActors::IActor {
+    class TLogFwd : public ::NActors::IActorCallback {
     public:
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
 
         TLogFwd(TIntrusivePtr<TSink> sink)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TLogFwd::Inbox), IActor::LOG_ACTOR)
+            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TLogFwd::Inbox), IActor::LOG_ACTOR)
             , Sink(std::move(sink))
         {
         }

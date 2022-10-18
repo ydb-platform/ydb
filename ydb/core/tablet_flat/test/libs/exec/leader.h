@@ -11,7 +11,7 @@
 namespace NKikimr {
 namespace NFake {
 
-    class TLeader: public ::NActors::IActor {
+    class TLeader: public ::NActors::IActorCallback {
         enum class EState {
             Lock    = 0,    /* Do not start shutdown process    */
             Free    = 1,    /* Start to shut as Head will gone  */
@@ -23,7 +23,7 @@ namespace NFake {
         using ELnLev = NUtil::ELnLev;
 
         TLeader(ui32 head, TAtomic &stopped)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TLeader::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
+            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TLeader::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
             , Time(TAppData::TimeProvider.Get())
             , Edge(head) /* Live until this runlevel exists */
             , Stopped(stopped)

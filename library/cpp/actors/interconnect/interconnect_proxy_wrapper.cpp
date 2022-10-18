@@ -4,7 +4,7 @@
 
 namespace NActors {
 
-    class TInterconnectProxyWrapper : public IActor {
+    class TInterconnectProxyWrapper : public IActorCallback {
         TIntrusivePtr<TInterconnectProxyCommon> Common;
         const ui32 NodeId;
         TInterconnectMock *Mock;
@@ -12,7 +12,7 @@ namespace NActors {
 
     public:
         TInterconnectProxyWrapper(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 nodeId, TInterconnectMock *mock)
-            : IActor(static_cast<TReceiveFunc>(&TInterconnectProxyWrapper::StateFunc), INTERCONNECT_PROXY_WRAPPER)
+            : IActorCallback(static_cast<TReceiveFunc>(&TInterconnectProxyWrapper::StateFunc), INTERCONNECT_PROXY_WRAPPER)
             , Common(std::move(common))
             , NodeId(nodeId)
             , Mock(mock)

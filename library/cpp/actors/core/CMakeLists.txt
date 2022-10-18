@@ -25,11 +25,14 @@ target_link_libraries(cpp-actors-core PUBLIC
   cpp-threading-future
 )
 target_sources(cpp-actors-core PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor_bootstrapped.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor_coroutine.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor_virtual.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actorid.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actorsystem.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/ask.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/av_bootstrapped.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/balancer.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/buffer.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/callstack.cpp

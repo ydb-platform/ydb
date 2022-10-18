@@ -1472,7 +1472,7 @@ bool CanConvertSqlInToJoin(const TCoSqlIn& sqlIn) {
         auto rightListItemType = rightArgType->Cast<TListExprType>()->GetItemType();
 
         auto isDataOrTupleOfData = [](const TTypeAnnotationNode* type) {
-            if (IsDataOrOptionalOfData(type)) {
+            if (IsDataOrOptionalOfData(type) || type->GetKind() == ETypeAnnotationKind::Pg) {
                 return true;
             }
             if (type->GetKind() == ETypeAnnotationKind::Tuple) {
@@ -1768,13 +1768,11 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
             YQL_ENSURE(rightStructType->GetSize() == 1);
 
             const TItemExprType* itemType = rightStructType->GetItems()[0];
-            if (IsDataOrOptionalOfData(itemType->GetItemType())) {
+            if (itemType->GetItemType()->GetKind() != ETypeAnnotationKind::Tuple) {
                 result.Right = rightArg;
                 result.RightArgColumns = { ToString(itemType->GetName()) };
                 return result;
             }
-
-            YQL_ENSURE(itemType->GetItemType()->GetKind() == ETypeAnnotationKind::Tuple);
 
             rightArg = Build<TCoFlatMap>(ctx, rightArg->Pos())
                     .Input(rightArg)

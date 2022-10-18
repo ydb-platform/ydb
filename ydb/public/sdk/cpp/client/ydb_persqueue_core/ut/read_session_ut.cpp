@@ -1688,7 +1688,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         });
         auto destroyCalledPromise = NThreading::NewPromise<TReadSessionEvent::TDestroyPartitionStreamEvent>();
         auto destroyCalled = destroyCalledPromise.GetFuture();
-        setup.Settings.EventHandlers_.DestroyPartitionStreamHandler([&](TReadSessionEvent::TDestroyPartitionStreamEvent& event) {
+        setup.Settings.EventHandlers_.DestroyPartitionStreamHandler([destroyCalledPromise = std::move(destroyCalledPromise)](TReadSessionEvent::TDestroyPartitionStreamEvent& event) mutable {
             destroyCalledPromise.SetValue(std::move(event));
         });
         auto closedCalledPromise = NThreading::NewPromise<void>();

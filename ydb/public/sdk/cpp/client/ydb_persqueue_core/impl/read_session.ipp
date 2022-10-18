@@ -1342,13 +1342,22 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnCreateNewDecompressi
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount)
 {
+
     *Settings.Counters_->MessagesInflight -= messagesCount;
     *Settings.Counters_->BytesInflightUncompressed -= decompressedSize;
     *Settings.Counters_->BytesInflightCompressed -= compressedSize;
     *Settings.Counters_->BytesInflightTotal -= (compressedSize + decompressedSize);
 
-    CompressedDataSize -= compressedSize;
-    DecompressedDataSize -= decompressedSize;
+    TDeferredActions<UseMigrationProtocol> deferred;
+    with_lock (Lock) {
+        UpdateMemoryUsageStatisticsImpl();
+
+        CompressedDataSize -= compressedSize;
+        DecompressedDataSize -= decompressedSize;
+
+        ContinueReadingDataImpl();
+        StartDecompressionTasksImpl(deferred);
+    }
 }
 
 template<bool UseMigrationProtocol>

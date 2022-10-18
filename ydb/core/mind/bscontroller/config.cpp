@@ -281,7 +281,6 @@ namespace NKikimr::NBsController {
                     if (base && overlay->second) {
                         const TGroupInfo::TGroupStatus& prev = base->second->Status;
                         const TGroupInfo::TGroupStatus& status = overlay->second->Status;
-                        Cerr << '!' << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus) << ' ' << NKikimrBlobStorage::TGroupStatus::E_Name(prev.ExpectedStatus) << Endl;
                         if (status.ExpectedStatus == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED &&
                                 status.ExpectedStatus != prev.ExpectedStatus) { // status did really change
                             *errorDescription = TStringBuilder() << "GroupId# " << overlay->first

@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/effects/kqp_opt_phy_effects_rules.h>
 
+#include <ydb/library/yql/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
@@ -34,6 +35,7 @@ public:
             HNDL(RemoveRedundantSortByPk));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
+        AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TDqPhyLength::Match, HNDL(PushOlapLength));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
@@ -71,6 +73,13 @@ public:
         AddHandler(0, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<false>));
         AddHandler(0, &TCoTake::Match, HNDL(PropagatePrecomuteTake<false>));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<false>));
+
+        AddHandler(0, &TCoAggregateCombine::Match, HNDL(ExpandAggregatePhase));
+        AddHandler(0, &TCoAggregateCombineState::Match, HNDL(ExpandAggregatePhase));
+        AddHandler(0, &TCoAggregateMergeState::Match, HNDL(ExpandAggregatePhase));
+        AddHandler(0, &TCoAggregateMergeFinalize::Match, HNDL(ExpandAggregatePhase));
+        AddHandler(0, &TCoAggregateMergeManyFinalize::Match, HNDL(ExpandAggregatePhase));
+        AddHandler(0, &TCoAggregateFinalize::Match, HNDL(ExpandAggregatePhase));
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
@@ -140,10 +149,25 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> PushAggregateCombineToStage(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = DqPushAggregateCombineToStage(node, ctx, optCtx, *getParents(), false);
+        DumpAppliedRule("PushAggregateCombineToStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> PushOlapAggregate(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushOlapAggregate(node, ctx, KqpCtx);
         DumpAppliedRule("PushOlapAggregate", node.Ptr(), output.Ptr(), ctx);
         return output;
+    }
+
+
+    TMaybeNode<TExprBase> ExpandAggregatePhase(TExprBase node, TExprContext& ctx) {
+        auto output = ExpandAggregatePeephole(node.Ptr(), ctx, TypesCtx);
+        DumpAppliedRule("ExpandAggregatePhase", node.Ptr(), output, ctx);
+        return TExprBase(output);
     }
 
     TMaybeNode<TExprBase> PushOlapLength(TExprBase node, TExprContext& ctx) {

@@ -4582,14 +4582,11 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        bool isStream;
-        if (!EnsureSeqType(input->Head(), ctx.Expr, &isStream)) {
+        const TTypeAnnotationNode* inputItemType = nullptr;
+        if (!EnsureNewSeqType<false, true>(input->Head(), ctx.Expr, &inputItemType)) {
             return IGraphTransformer::TStatus::Error;
         }
-
-        auto inputItemType = isStream
-            ? input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()
-            : input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        auto inputTypeKind = input->Head().GetTypeAnn()->GetKind();
 
         if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -4911,9 +4908,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(isStream
-            ? (const TTypeAnnotationNode*)ctx.Expr.MakeType<TStreamExprType>(rowType)
-            : (const TTypeAnnotationNode*)ctx.Expr.MakeType<TListExprType>(rowType));
+        input->SetTypeAnn(MakeSequenceType(inputTypeKind, *rowType, ctx.Expr));
         return IGraphTransformer::TStatus::Ok;
     }
 

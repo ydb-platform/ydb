@@ -876,6 +876,37 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
     return result.Cast();
 }
 
+NNodes::TExprBase DqPushAggregateCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    if (!node.Maybe<TCoAggregateCombine>().Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto aggCombine = node.Cast<TCoAggregateCombine>();
+    auto dqUnion = aggCombine.Input().Cast<TDqCnUnionAll>();
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    auto lambda = Build<TCoLambda>(ctx, aggCombine.Pos())
+            .Args({"stream"})
+            .Body<TCoAggregateCombine>()
+                .Input("stream")
+                .Keys(aggCombine.Keys())
+                .Handlers(aggCombine.Handlers())
+                .Settings(aggCombine.Settings())
+                .Build()
+            .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+
+    return result.Cast();
+}
+
 TExprBase DqBuildPartitionsStage(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap) {
     return DqBuildPartitionsStageStub<TCoPartitionsByKeys>(std::move(node), ctx, parentsMap);
 }

@@ -75,7 +75,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqRewriteAggregate(node, ctx, TypesCtx, false, false);
+        TExprBase output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->PushOlapProcess());
         DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

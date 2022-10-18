@@ -3,7 +3,7 @@
 #include "columnshard.h"
 #include "columnshard_common.h"
 #include "columnshard_ttl.h"
-#include "columnshard_txs.h"
+#include "columnshard_private_events.h"
 #include "blob_manager.h"
 #include "inflight_request_tracker.h"
 
@@ -12,6 +12,9 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/tx_processing.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -68,6 +71,10 @@ struct TSettings {
     }
 };
 
+using ITransaction = NTabletFlatExecutor::ITransaction;
+
+template <typename T>
+using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
 class TColumnShard
     : public TActor<TColumnShard>

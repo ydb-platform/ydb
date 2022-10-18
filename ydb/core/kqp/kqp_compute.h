@@ -7,7 +7,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <ydb/core/tx/columnshard/columnshard__costs.h>
+#include <ydb/core/tx/columnshard/columnshard_costs.h>
 
 namespace NKikimr::NKqp {
 

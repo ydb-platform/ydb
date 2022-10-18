@@ -1,10 +1,10 @@
-#include "columnshard__scan.h"
-#include "columnshard__index_scan.h"
-#include "columnshard__stats_scan.h"
-
+#include <ydb/core/tx/columnshard/columnshard__scan.h>
+#include <ydb/core/tx/columnshard/columnshard__index_scan.h>
+#include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
+#include <ydb/core/tx/columnshard/columnshard__read_base.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/columnshard_txs.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/kqp/kqp_compute.h>

@@ -1,5 +1,5 @@
 #include "columnshard_impl.h"
-#include "columnshard_txs.h"
+#include "columnshard_private_events.h"
 #include "columnshard_schema.h"
 
 #include <util/string/vector.h>

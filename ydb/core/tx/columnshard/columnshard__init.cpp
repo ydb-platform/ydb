@@ -1,6 +1,6 @@
 #include "columnshard_impl.h"
 #include "columnshard_ttl.h"
-#include "columnshard_txs.h"
+#include "columnshard_private_events.h"
 #include "columnshard_schema.h"
 #include "blob_manager_db.h"
 
@@ -11,6 +11,21 @@ namespace NKikimr::NColumnShard {
 using namespace NTabletFlatExecutor;
 
 // TTxInit => SwitchToWork
+
+/// Load data from local database
+class TTxInit : public TTransactionBase<TColumnShard> {
+public:
+    TTxInit(TColumnShard* self)
+        : TBase(self)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_INIT; }
+
+    void SetDefaults();
+    bool ReadEverything(TTransactionContext& txc, const TActorContext& ctx);
+};
 
 void TTxInit::SetDefaults() {
     Self->CurrentSchemeShardId = 0;
@@ -322,6 +337,18 @@ void TTxInit::Complete(const TActorContext& ctx) {
 
 // TTxUpdateSchema => TTxInit
 
+/// Update local database on tablet start
+class TTxUpdateSchema : public TTransactionBase<TColumnShard> {
+public:
+    TTxUpdateSchema(TColumnShard* self)
+        : TBase(self)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_UPDATE_SCHEMA; }
+};
+
 bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_UNUSED(txc);
     LOG_S_DEBUG("TTxUpdateSchema.Execute at tablet " << Self->TabletID());
@@ -334,6 +361,18 @@ void TTxUpdateSchema::Complete(const TActorContext& ctx) {
 }
 
 // TTxInitSchema => TTxUpdateSchema
+
+/// Create local database on tablet start if none
+class TTxInitSchema : public TTransactionBase<TColumnShard> {
+public:
+    TTxInitSchema(TColumnShard* self)
+        : TBase(self)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
+};
 
 bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());

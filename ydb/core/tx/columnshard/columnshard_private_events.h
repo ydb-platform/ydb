@@ -2,13 +2,7 @@
 
 #include "blob_manager.h"
 
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
-
 #include <ydb/core/protos/counters_columnshard.pb.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
-#include <ydb/core/tx/tx_processing.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -209,80 +203,6 @@ struct TEvPrivate {
 
         bool Manual;
     };
-};
-
-using ITransaction = NTabletFlatExecutor::ITransaction;
-
-template <typename T>
-using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
-
-class TColumnShard;
-
-/// Load data from local database
-class TTxInit : public TTransactionBase<TColumnShard> {
-public:
-    TTxInit(TColumnShard* self)
-        : TBase(self)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
-
-    void SetDefaults();
-    bool ReadEverything(TTransactionContext& txc, const TActorContext& ctx);
-};
-
-/// Create local database on tablet start if none
-class TTxInitSchema : public TTransactionBase<TColumnShard> {
-public:
-    TTxInitSchema(TColumnShard* self)
-        : TBase(self)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
-};
-
-/// Update local database on tablet start
-class TTxUpdateSchema : public TTransactionBase<TColumnShard> {
-public:
-    TTxUpdateSchema(TColumnShard* self)
-        : TBase(self)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_UPDATE_SCHEMA; }
-};
-
-/// Read portion of data in OLAP transaction
-class TTxReadBase : public TTransactionBase<TColumnShard> {
-protected:
-    explicit TTxReadBase(TColumnShard* self)
-        : TBase(self)
-    {}
-
-    std::shared_ptr<NOlap::TReadMetadata> PrepareReadMetadata(
-                                    const TActorContext& ctx,
-                                    const TReadDescription& readDescription,
-                                    const std::unique_ptr<NOlap::TInsertTable>& insertTable,
-                                    const std::unique_ptr<NOlap::IColumnEngine>& index,
-                                    const TBatchCache& batchCache,
-                                    TString& error) const;
-
-protected:
-    bool ParseProgram(
-        const TActorContext& ctx,
-        NKikimrSchemeOp::EOlapProgramType programType,
-        TString serializedProgram,
-        TReadDescription& read,
-        const IColumnResolver& columnResolver
-    );
-
-protected:
-    TString ErrorDescription;
 };
 
 }

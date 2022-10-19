@@ -15,15 +15,7 @@
 
 #pragma once
 
-#include <stdbool.h>
-#include "utils/s2n_result.h"
-#include "utils/s2n_safety.h"
-#include "crypto/s2n_fips.h"
-#include "pq-crypto/s2n_pq_asm.h"
+#include "tls/extensions/s2n_extension_type.h"
 
-bool s2n_kyber512r3_is_avx2_bmi2_enabled(void);
-S2N_RESULT s2n_try_enable_kyber512r3_opt_avx2_bmi2(void);
-S2N_RESULT s2n_disable_kyber512r3_opt_avx2_bmi2(void);
- 
-bool s2n_pq_is_enabled(void);
-S2N_RESULT s2n_pq_init(void);
+extern const s2n_extension_type s2n_client_npn_extension;
+extern const s2n_extension_type s2n_server_npn_extension;

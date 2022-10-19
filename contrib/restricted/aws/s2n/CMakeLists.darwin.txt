@@ -103,6 +103,7 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_type.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_type_lists.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_key_share.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_npn.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_nst_early_data_indication.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_psk_key_exchange_modes.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_quic_transport_params.c
@@ -167,6 +168,7 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_read_stream.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_record_write.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_recv.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_renegotiate.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_resume.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_security_policies.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_send.c

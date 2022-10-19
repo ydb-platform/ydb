@@ -1028,7 +1028,7 @@ int s2n_cipher_suites_init(void)
 }
 
 /* Reset any selected record algorithms */
-int s2n_cipher_suites_cleanup(void)
+S2N_RESULT s2n_cipher_suites_cleanup(void)
 {
     const int num_cipher_suites = sizeof(s2n_all_cipher_suites) / sizeof(struct s2n_cipher_suite *);
     for (int i = 0; i < num_cipher_suites; i++) {
@@ -1038,7 +1038,7 @@ int s2n_cipher_suites_cleanup(void)
 
         /* Release custom SSLv3 cipher suites */
         if (cur_suite->sslv3_cipher_suite != cur_suite) {
-            POSIX_GUARD(s2n_free_object((uint8_t **)&cur_suite->sslv3_cipher_suite, sizeof(struct s2n_cipher_suite)));
+            RESULT_GUARD_POSIX(s2n_free_object((uint8_t **)&cur_suite->sslv3_cipher_suite, sizeof(struct s2n_cipher_suite)));
         }
         cur_suite->sslv3_cipher_suite = NULL;
     }
@@ -1053,7 +1053,7 @@ int s2n_cipher_suites_cleanup(void)
 #endif
     }
 
-    return 0;
+    return S2N_RESULT_OK;
 }
 
 S2N_RESULT s2n_cipher_suite_from_iana(const uint8_t iana[static S2N_TLS_CIPHER_SUITE_LEN], struct s2n_cipher_suite **cipher_suite)
@@ -1188,7 +1188,12 @@ static int s2n_set_cipher_as_server(struct s2n_connection *conn, uint8_t *wire, 
         }
     }
 
-    /* RFC5746 Section 3.6: A server must check if TLS_EMPTY_RENEGOTIATION_INFO_SCSV is included */
+    /**
+     *= https://tools.ietf.org/rfc/rfc5746#3.6
+     *# o  When a ClientHello is received, the server MUST check if it
+     *#    includes the TLS_EMPTY_RENEGOTIATION_INFO_SCSV SCSV.  If it does,
+     *#    set the secure_renegotiation flag to TRUE.
+     */
     if (s2n_wire_ciphers_contain(renegotiation_info_scsv, wire, count, cipher_suite_len)) {
         conn->secure_renegotiation = 1;
     }
@@ -1210,7 +1215,7 @@ static int s2n_set_cipher_as_server(struct s2n_connection *conn, uint8_t *wire, 
             }
 
             /* If connection is for SSLv3, use SSLv3 version of suites */
-            if (conn->client_protocol_version == S2N_SSLv3) {
+            if (conn->actual_protocol_version == S2N_SSLv3) {
                 match = match->sslv3_cipher_suite;
             }
 

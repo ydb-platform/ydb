@@ -15,15 +15,11 @@
 
 #pragma once
 
-#include <stdbool.h>
-#include "utils/s2n_result.h"
-#include "utils/s2n_safety.h"
-#include "crypto/s2n_fips.h"
-#include "pq-crypto/s2n_pq_asm.h"
+struct s2n_connection;
+struct s2n_config;
 
-bool s2n_kyber512r3_is_avx2_bmi2_enabled(void);
-S2N_RESULT s2n_try_enable_kyber512r3_opt_avx2_bmi2(void);
-S2N_RESULT s2n_disable_kyber512r3_opt_avx2_bmi2(void);
- 
-bool s2n_pq_is_enabled(void);
-S2N_RESULT s2n_pq_init(void);
+typedef enum { S2N_RENEGOTIATE_REJECT, S2N_RENEGOTIATE_ACCEPT} s2n_renegotiate_response;
+typedef int (*s2n_renegotiate_request_cb)(struct s2n_connection *conn, void *context, s2n_renegotiate_response *response);
+int s2n_config_set_renegotiate_request_cb(struct s2n_config *config, s2n_renegotiate_request_cb cb, void *ctx);
+
+int s2n_renegotiate_wipe(struct s2n_connection *conn);

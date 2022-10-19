@@ -23,7 +23,7 @@
 #include <cstdio>
 
 
-#include <config.h>  // for PACKAGE_VERSION
+#include "UriConfig.h"  // for PACKAGE_VERSION
 #include <uriparser/UriBase.h>
 
 

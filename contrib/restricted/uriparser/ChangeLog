@@ -2,6 +2,29 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
+2022-10-05 -- 0.9.7
+
+  * Fixed: Multiple issues with IPv6 and IPvFuture literal parsing
+      (GitHub #146, GitHub #150)
+      Thanks to Scallop Ye for the report and the pull request!
+  * Fixed: Fix symbol visibility for -DBUILD_SHARED_LIBS=OFF (GitHub #139,
+      GitHub #141); thanks to Mariusz Zaborski for the report!
+  * Fixed: For MinGW, use size_t for inet_ntop declaration and fix macro
+      checks for both MinGW and mingw-w64 (GitHub #131)
+  * Fixed: Compiler warnings (GitHub #132, GitHub #152)
+  * Improved: Use name UriConfig.h rather than generic config.h for the
+      config header file to avoid name clashes and also include it through
+      "UriConfig.h" with quotes rather than <UriConfig.h> so that it is found
+      in quote path locations (GitHub #149)
+      Thanks to Gaspard Petit for bringing this up!
+  * Improved: Document need for UriConfig.h in UriMemory.c (GitHub #136)
+  * Infrastructure: Add (support for) Visual Studio 17/2022 (GitHub #152)
+  * Infrastructure: Drop (support for) Visual Studio <=14/2015 (GitHub #152)
+  * Infrastructure: Update Clang from 13 to 15 (GitHub #143, GitHub #151)
+  * Infrastructure: Make MinGW with 32bit Wine on Ubuntu 20.04 possible
+      (GitHub #142, GitHub #144, GitHub #145)
+  * Soname: 1:30:0 — see https://verbump.de/ for what these numbers do
+
 2022-01-06 -- 0.9.6
 
 >>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>

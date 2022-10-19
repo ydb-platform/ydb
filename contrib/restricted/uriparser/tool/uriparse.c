@@ -43,9 +43,11 @@
 #ifdef _WIN32
 # include <winsock2.h>
 # include <ws2tcpip.h>
-# ifdef __MINGW32__
+# if defined(__MINGW32__) &&                                              \
+     (!defined(__MINGW64_VERSION_MAJOR) || __MINGW64_VERSION_MAJOR < 3 || \
+      _WIN32_WINNT < _WIN32_WINNT_VISTA)
 WINSOCK_API_LINKAGE const char * WSAAPI inet_ntop(
-		int af, const void *src, char *dst, socklen_t size);
+		int af, const void *src, char *dst, size_t size);
 # endif
 #else
 # include <sys/socket.h>
@@ -57,7 +59,7 @@ WINSOCK_API_LINKAGE const char * WSAAPI inet_ntop(
 #define RANGE(x)  (int)((x).afterLast-(x).first), ((x).first)
 
 
-void usage() {
+void usage(void) {
 	printf("Usage: uriparse URI [..]\n");
 }
 

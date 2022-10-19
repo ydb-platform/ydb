@@ -478,6 +478,7 @@ static const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(ParserState) * state,
 
 	switch (*first) {
 	case _UT('v'):
+	case _UT('V'):
 	*/
 		if (first + 1 >= afterLast) {
 			URI_FUNC(StopSyntax)(state, afterLast, memory);
@@ -540,7 +541,9 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(
 	}
 
 	switch (*first) {
+	/* The leading "v" of IPvFuture is case-insensitive. */
 	case _UT('v'):
+	case _UT('V'):
 		{
 			const URI_CHAR * const afterIpFuture
 					= URI_FUNC(ParseIpFuture)(state, first, afterLast, memory);
@@ -624,11 +627,6 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(
 						/* Leading zero */
 						URI_FUNC(StopSyntax)(state, first - digitCount, memory);
 						return NULL;
-					} else if ((digitCount > 2)
-							&& (digitHistory[1] == 0)) {
-						/* Leading zero */
-						URI_FUNC(StopSyntax)(state, first - digitCount + 1, memory);
-						return NULL;
 					} else if ((digitCount == 3)
 							&& (100 * digitHistory[0]
 								+ 10 * digitHistory[1]
@@ -661,11 +659,6 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(
 							&& (digitHistory[0] == 0)) {
 						/* Leading zero */
 						URI_FUNC(StopSyntax)(state, first - digitCount, memory);
-						return NULL;
-					} else if ((digitCount > 2)
-							&& (digitHistory[1] == 0)) {
-						/* Leading zero */
-						URI_FUNC(StopSyntax)(state, first - digitCount + 1, memory);
 						return NULL;
 					} else if ((digitCount == 3)
 							&& (100 * digitHistory[0]
@@ -788,6 +781,10 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(
 								URI_FUNC(StopSyntax)(state, first + 1, memory);
 								return NULL; /* ":::+ "*/
 							}
+						} else if (quadsDone == 0 || first[1] == _UT(']')) {
+							/* Single leading or trailing ":" */
+							URI_FUNC(StopSyntax)(state, first, memory);
+							return NULL;
 						}
 
 						if (setZipper) {
@@ -797,7 +794,7 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(
 					break;
 
 				case _UT('.'):
-					if ((quadsDone > 6) /* NOTE */
+					if ((quadsDone + zipperEver > 6) /* NOTE */
 							|| (!zipperEver && (quadsDone < 6))
 							|| letterAmong
 							|| (digitCount == 0)
@@ -809,11 +806,6 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(
 							&& (digitHistory[0] == 0)) {
 						/* Leading zero */
 						URI_FUNC(StopSyntax)(state, first - digitCount, memory);
-						return NULL;
-					} else if ((digitCount > 2)
-							&& (digitHistory[1] == 0)) {
-						/* Leading zero */
-						URI_FUNC(StopSyntax)(state, first - digitCount + 1, memory);
 						return NULL;
 					} else if ((digitCount == 3)
 							&& (100 * digitHistory[0]
@@ -848,6 +840,11 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(
 
 					if (digitCount > 0) {
 						if (zipperEver) {
+							/* Too many quads? */
+							if (quadsDone >= 7) {
+								URI_FUNC(StopSyntax)(state, first, memory);
+								return NULL;
+							}
 							uriWriteQuadToDoubleByte(digitHistory, digitCount, quadsAfterZipper + 2 * quadsAfterZipperCount);
 							quadsAfterZipperCount++;
 						} else {

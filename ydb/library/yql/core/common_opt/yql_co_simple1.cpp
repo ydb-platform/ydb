@@ -1461,55 +1461,6 @@ bool ShouldConvertSqlInToJoin(const TCoSqlIn& sqlIn, bool /* negated */) {
     return tableSource;
 }
 
-bool CanConvertSqlInToJoin(const TCoSqlIn& sqlIn) {
-    auto leftArg = sqlIn.Lookup();
-    auto leftColumnType = leftArg.Ref().GetTypeAnn();
-
-    auto rightArg = sqlIn.Collection();
-    auto rightArgType = rightArg.Ref().GetTypeAnn();
-
-    if (rightArgType->GetKind() == ETypeAnnotationKind::List) {
-        auto rightListItemType = rightArgType->Cast<TListExprType>()->GetItemType();
-
-        auto isDataOrTupleOfData = [](const TTypeAnnotationNode* type) {
-            if (IsDataOrOptionalOfData(type) || type->GetKind() == ETypeAnnotationKind::Pg) {
-                return true;
-            }
-            if (type->GetKind() == ETypeAnnotationKind::Tuple) {
-                return AllOf(type->Cast<TTupleExprType>()->GetItems(), [](const auto& item) {
-                    return IsDataOrOptionalOfData(item);
-                });
-            }
-            return false;
-        };
-
-        if (rightListItemType->GetKind() == ETypeAnnotationKind::Struct) {
-            auto rightStructType = rightListItemType->Cast<TStructExprType>();
-            YQL_ENSURE(rightStructType->GetSize() == 1);
-            auto rightColumnType = rightStructType->GetItems()[0]->GetItemType();
-            return isDataOrTupleOfData(rightColumnType);
-        }
-
-        return isDataOrTupleOfData(rightListItemType);
-    }
-
-    /**
-     * todo: support tuple of equal tuples
-     *
-     * sql expression \code{.sql} ... where (k1, k2) in ((1, 2), (2, 3), (3, 4)) \endcode
-     * is equivalent to the \code{.sql} ... where (k1, k2) in AsTuple((1, 2), (2, 3), (3, 4)) \endcode
-     * but not to the \code{.sql} ... where (k1, k2) in AsList((1, 2), (2, 3), (3, 4)) \endcode
-     * so, it's not supported now
-     */
-
-    if (rightArgType->GetKind() == ETypeAnnotationKind::Dict) {
-        auto rightDictType = rightArgType->Cast<TDictExprType>()->GetKeyType();
-        return IsDataOrOptionalOfData(leftColumnType) && IsDataOrOptionalOfData(rightDictType);
-    }
-
-    return false;
-}
-
 struct TPredicateChainNode {
     TExprNode::TPtr Pred;
 
@@ -1674,7 +1625,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
     }
 
     TCoSqlIn sqlIn(curr);
-    if (!shouldConvertSqlInToJoin(sqlIn, result.Negated) || !CanConvertSqlInToJoin(sqlIn)) {
+    if (!shouldConvertSqlInToJoin(sqlIn, result.Negated)) {
         // not convertible to join
         return result;
     }

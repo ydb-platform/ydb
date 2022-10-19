@@ -1031,7 +1031,8 @@ TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesDat
             return false;
         }
 
-        return CanRewriteSqlInToEquiJoin(sqlIn.Lookup().Ref().GetTypeAnn(), sqlIn.Collection().Ref().GetTypeAnn());
+        return CanRewriteSqlInToEquiJoin(sqlIn.Lookup().Ref().GetTypeAnn(), sqlIn.Collection().Ref().GetTypeAnn())
+            && CanConvertSqlInToJoin(sqlIn);
     };
 
     const bool prefixOnly = true;

@@ -39,8 +39,18 @@ message TConfig {
     optional uint32 PerformanceProfileMaxReadIops = 34;
     optional uint32 PerformanceProfileMaxWriteBandwidth = 35;
     optional uint32 PerformanceProfileMaxWriteIops = 36;
+    optional uint32 PerformanceProfileBoostTime = 37;
+    optional uint32 PerformanceProfileBoostRefillTime = 38;
+    optional uint32 PerformanceProfileBoostPercentage = 39;
 
     optional uint32 NodesCount = 40;
+
+    optional bool PerformanceProfileThrottlingEnabled = 41;
+    optional uint32 PerformanceProfileBurstPercentage = 42;
+    optional uint32 PerformanceProfileDefaultPostponedRequestWeight = 43;
+    optional uint32 PerformanceProfileMaxPostponedWeight = 44;
+    optional uint32 PerformanceProfileMaxWriteCostMultiplier = 45;
+    optional uint32 PerformanceProfileMaxPostponedTime = 46;
 }
 
 message TUpdateConfig {

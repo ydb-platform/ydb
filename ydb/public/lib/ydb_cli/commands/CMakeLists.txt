@@ -34,8 +34,10 @@ target_link_libraries(clicommands PUBLIC
   cpp-client-ydb_table
   cpp-client-ydb_topic
   ydb_types-credentials-login
+  library-cpp-resource
 )
 target_sources(clicommands PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/stock_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/kv_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.cpp
@@ -55,4 +57,46 @@ target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_tools.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_yql.cpp
+)
+
+add_global_library_for(clicommands.global clicommands)
+target_link_libraries(clicommands.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-histogram-hdr
+  cpp-protobuf-json
+  cpp-regex-pcre
+  cpp-threading-local_executor
+  kikimr_backup
+  ydb-library-workload
+  public-lib-operation_id
+  common
+  lib-ydb_cli-dump
+  lib-ydb_cli-import
+  topic
+  cpp-client-draft
+  cpp-client-ydb_discovery
+  cpp-client-ydb_export
+  cpp-client-ydb_import
+  cpp-client-ydb_monitoring
+  cpp-client-ydb_operation
+  cpp-client-ydb_persqueue_public
+  cpp-client-ydb_proto
+  cpp-client-ydb_scheme
+  cpp-client-ydb_table
+  cpp-client-ydb_topic
+  ydb_types-credentials-login
+  library-cpp-resource
+)
+target_sources(clicommands.global PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/b27fa204a2892655fc6f34eb84a6343b.cpp
+)
+resources(clicommands.global
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/b27fa204a2892655fc6f34eb84a6343b.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_queries.sql
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_schema.sql
+  KEYS
+  click_bench_queries.sql
+  click_bench_schema.sql
 )

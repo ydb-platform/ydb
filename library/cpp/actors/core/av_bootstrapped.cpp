@@ -10,8 +10,8 @@ TAutoPtr<NActors::IEventHandle> TActorAutoStart::AfterRegister(const TActorId& s
     return new IEventHandle(self, parentId, new TEventForStart, 0);
 }
 
-void TActorAutoStart::ProcessEvent(TEventForStart* /*ev*/, TAutoPtr<IEventHandle>& handle, const NActors::TActorContext& ctx) {
-    DoOnStart(handle->Sender, ctx);
+void TActorAutoStart::ProcessEvent(TEventContext<TEventForStart>& ev) {
+    DoOnStart(ev.GetHandle().Sender);
 }
 
 }

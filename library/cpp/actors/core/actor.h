@@ -222,7 +222,7 @@ namespace NActors {
 
     class TActorVirtualBehaviour {
     public:
-        static void Receive(IActor* actor, TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        static void Receive(IActor* actor, std::unique_ptr<IEventHandle> ev);
     public:
     };
 
@@ -234,15 +234,19 @@ namespace NActors {
         typedef void (IActor::* TReceiveFunc)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
 
     private:
-        TReceiveFunc StateFunc;
+        TReceiveFunc StateFunc = nullptr;
     public:
         TActorCallbackBehaviour() = default;
         TActorCallbackBehaviour(TReceiveFunc stateFunc)
             : StateFunc(stateFunc) {
         }
+        bool Initialized() const {
+            return !!StateFunc;
+        }
+
         // NOTE: exceptions must not escape state function but if an exception hasn't be caught
         // by the actor then we want to crash an see the stack
-        void Receive(IActor* actor, TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void Receive(IActor* actor, TAutoPtr<IEventHandle>& ev);
 
         template <typename T>
         void Become(T stateFunc) {
@@ -267,7 +271,6 @@ namespace NActors {
         i64 ElapsedTicks;
         friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
         friend class TDecorator;
-        const bool VirtualUsage = false;
     protected:
         TActorCallbackBehaviour CImpl;
     public:
@@ -315,7 +318,6 @@ namespace NActors {
         IActor(ui32 activityType = OTHER)
             : SelfActorId(TActorId())
             , ElapsedTicks(0)
-            , VirtualUsage(true)
             , ActivityType(activityType)
             , HandledEvents(0) {
         }
@@ -376,12 +378,12 @@ namespace NActors {
         TActorIdentity SelfId() const {
             return SelfActorId;
         }
-        void Receive(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        void Receive(TAutoPtr<IEventHandle>& ev, const TActorContext& /*ctx*/) {
             ++HandledEvents;
-            if (Y_UNLIKELY(VirtualUsage)) {
-                TActorVirtualBehaviour::Receive(this, ev, ctx);
+            if (CImpl.Initialized()) {
+                CImpl.Receive(this, ev);
             } else {
-                CImpl.Receive(this, ev, ctx);
+                TActorVirtualBehaviour::Receive(this, std::unique_ptr<IEventHandle>(ev.Release()));
             }
         }
 

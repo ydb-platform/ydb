@@ -182,15 +182,15 @@ namespace NActors {
         return NHPTimer::GetSeconds(ElapsedTicks);
     }
 
-    void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        (actor->*StateFunc)(ev, ctx);
+    void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev) {
+        (actor->*StateFunc)(ev, TActivationContext::AsActorContext());
     }
 
-    void TActorVirtualBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TActorVirtualBehaviour::Receive(IActor* actor, std::unique_ptr<IEventHandle> ev) {
         Y_VERIFY(!!ev);
         Y_ASSERT(dynamic_cast<IEventBehavioral*>(ev->GetBase()));
         IEventBehavioral* eActor = static_cast<IEventBehavioral*>(ev->GetBase());
-        eActor->Execute(actor, ev, ctx);
+        eActor->Execute(actor, std::move(ev));
     }
 
 }

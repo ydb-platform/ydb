@@ -4,24 +4,44 @@
 
 namespace NActors {
 
+template <class TEvent>
+class TEventContext {
+private:
+    TEvent* Event;
+    std::unique_ptr<IEventHandle> Handle;
+public:
+    const TEvent* operator->() const {
+        return Event;
+    }
+    const IEventHandle& GetHandle() const {
+        return *Handle;
+    }
+    TEventContext(std::unique_ptr<IEventHandle> handle)
+        : Handle(std::move(handle))
+    {
+        Y_ASSERT(dynamic_cast<TEvent*>(Handle->GetBase()));
+        Event = static_cast<TEvent*>(Handle->GetBase());
+        Y_VERIFY(Event);
+    }
+};
+
 class IEventBehavioral: public IEventBase {
 protected:
-    virtual bool DoExecute(IActor* actor, TAutoPtr<IEventHandle>& eventPtr, const NActors::TActorContext& ctx) = 0;
+    virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) = 0;
 public:
-    bool Execute(IActor* actor, TAutoPtr<IEventHandle>& eventPtr, const NActors::TActorContext& ctx) {
-        return DoExecute(actor, eventPtr, ctx);
+    bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) {
+        return DoExecute(actor, std::move(eventPtr));
     }
 };
 
 template <class TEvent, class TExpectedActor>
 class IEventForActor: public IEventBehavioral {
 protected:
-    virtual bool DoExecute(IActor* actor, TAutoPtr<IEventHandle>& eventPtr, const NActors::TActorContext& ctx) override {
+    virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) override {
         Y_ASSERT(dynamic_cast<TExpectedActor*>(actor));
-        Y_ASSERT(dynamic_cast<TEvent*>(eventPtr->GetBase()));
         auto* actorCorrect = static_cast<TExpectedActor*>(actor);
-        TEvent* evPtrLocal(static_cast<TEvent*>(eventPtr->GetBase()));
-        actorCorrect->ProcessEvent(evPtrLocal, eventPtr, ctx);
+        TEventContext<TEvent> context(std::move(eventPtr));
+        actorCorrect->ProcessEvent(context);
         return true;
     }
 public:

@@ -7,10 +7,10 @@ class TEventForStart;
 
 class TActorAutoStart: public IActorVirtual {
 protected:
-    virtual void DoOnStart(const TActorId& senderActorId, const ::NActors::TActorContext& ctx) = 0;
+    virtual void DoOnStart(const TActorId& senderActorId) = 0;
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override;
 public:
-    void ProcessEvent(TEventForStart* ev, TAutoPtr<IEventHandle>& handle, const NActors::TActorContext& ctx);
+    void ProcessEvent(TEventContext<TEventForStart>& ev);
 
     TActorAutoStart() {
     }

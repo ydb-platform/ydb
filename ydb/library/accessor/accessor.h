@@ -20,11 +20,16 @@ public:\
     }\
 private:
 
+namespace NYDBAccessor {
+template <class T>
+using TReturnTypeDetector = std::conditional_t<std::is_trivial_v<T> && sizeof(T) <= sizeof(uintptr_t), T, const T&>;
+}
+
 #define YDB_READONLY_ACCESSOR_IMPL(name, type, declSpecifiers, defaultValue) \
 private:\
     declSpecifiers type name = defaultValue;\
 public:\
-    const type& Get ## name() const noexcept {\
+    NYDBAccessor::TReturnTypeDetector<type> Get ## name() const noexcept {\
         return name;\
     }\
 private:
@@ -46,13 +51,13 @@ public:\
 private:
 
 #define YDB_ACCESSOR(type, name, defaultValue) YDB_ACCESSOR_IMPL(auto, name, type, private:, defaultValue, noexcept)
-#define YDB_MUTABLE_ACCESSOR(type, name, defaultValue) YDB_ACCESSOR_IMPL(const auto, name, type, mutable, defaultValue, const noexcept)
 #define YDB_ACCESSOR_DEF(type, name) YDB_ACCESSOR_IMPL(auto, name, type, private:, type(), noexcept)
-#define YDB_PROTECT_ACCESSOR(type, name, defaultValue) YDB_ACCESSOR_IMPL(auto, name, type, protected:, defaultValue, noexcept)
-#define YDB_PROTECT_ACCESSOR_DEF(type, name) YDB_ACCESSOR_IMPL(auto, name, type, protected:, type(), noexcept)
+#define YDB_ACCESSOR_MUTABLE(type, name, defaultValue) YDB_ACCESSOR_IMPL(const auto, name, type, mutable, defaultValue, const noexcept)
+#define YDB_ACCESSOR_PROTECT(type, name, defaultValue) YDB_ACCESSOR_IMPL(auto, name, type, protected:, defaultValue, noexcept)
+#define YDB_ACCESSOR_PROTECT_DEF(type, name) YDB_ACCESSOR_IMPL(auto, name, type, protected:, type(), noexcept)
 
-#define YDB_CONST(type, name) YDB_READONLY_ACCESSOR_IMPL(name, type, const, type())
 #define YDB_READONLY(type, name, defaultValue) YDB_READONLY_ACCESSOR_IMPL(name, type, private:, defaultValue)
+#define YDB_READONLY_CONST(type, name) YDB_READONLY_ACCESSOR_IMPL(name, type, const, type())
 #define YDB_READONLY_DEF(type, name) YDB_READONLY_ACCESSOR_IMPL(name, type, private:, type())
 #define YDB_READONLY_PROTECT(type, name, defaultValue) YDB_READONLY_ACCESSOR_IMPL(name, type, protected:, defaultValue)
 #define YDB_READONLY_PROTECT_DEF(type, name) YDB_READONLY_ACCESSOR_IMPL(name, type, protected:, type())
@@ -66,7 +71,7 @@ public:\
     bool Has##name() const noexcept {\
         return name.has_value();\
     }\
-    const type& Get##name##Unsafe() const noexcept {\
+    NYDBAccessor::TReturnTypeDetector<type> Get##name##Unsafe() const noexcept {\
         return *name;\
     }\
     type& Get##name##Unsafe() noexcept {\

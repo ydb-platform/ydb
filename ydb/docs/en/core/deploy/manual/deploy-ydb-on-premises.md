@@ -177,17 +177,24 @@ We don't recommend storing data on disks used by other processes (including the 
       1. Create a private Certificate Authority (CA) certificate:
 
          ```bash
-         openssl req -new -x509 -config ca.cnf -key secure/ca.key -out ca.crt -days 365 -batch
+         openssl req -new -x509 -config ca.cnf -key secure/ca.key -out certs/ca.crt -days 1830 -batch
          ```
+
+      1. Create the initial text database and certificate serial number files for OpenSSL:
+
+          ```bash
+          touch index.txt
+          echo 01 >serial.txt
+          ```
 
    1. Create keys and certificates for the cluster nodes:
 
-      1. Create a `node.conf` configuration file with the following contents:
+      1. Create a `node.cnf` configuration file with the following contents:
 
          ```text
          # OpenSSL node configuration file
          [ req ]
-         prompt=no
+         prompt = no
          distinguished_name = distinguished_name
          req_extensions = extensions
 
@@ -201,7 +208,7 @@ We don't recommend storing data on disks used by other processes (including the 
       1. Create a certificate key:
 
          ```bash
-         openssl genrsa -out node.key 2048
+         openssl genrsa -out certs/node.key 2048
          ```
 
       1. Create a Certificate Signing Request (CSR):

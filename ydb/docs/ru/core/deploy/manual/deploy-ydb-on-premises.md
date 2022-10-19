@@ -177,17 +177,24 @@ sudo usermod -aG disk ydb
       1. Создайте частный Certificate Authority (CA) сертификат:
 
           ```bash
-          openssl req -new -x509 -config ca.cnf -key secure/ca.key -out ca.crt -days 365 -batch
+          openssl req -new -x509 -config ca.cnf -key secure/ca.key -out certs/ca.crt -days 1830 -batch
+          ```
+
+      1. Создайте текстовую базу данных и файл индекса сертификатов OpenSSL:
+
+          ```bash
+          touch index.txt
+          echo 01 >serial.txt
           ```
 
   1. Создайте ключи и сертификаты для нод кластера:
 
-      1. Создайте конфигурационный файл `node.conf` со следующим содержимым:
+      1. Создайте конфигурационный файл `node.cnf` со следующим содержимым:
 
           ```text
           # OpenSSL node configuration file
           [ req ]
-          prompt=no
+          prompt = no
           distinguished_name = distinguished_name
           req_extensions = extensions
 
@@ -201,7 +208,7 @@ sudo usermod -aG disk ydb
       1. Создайте ключ сертификата:
 
           ```bash
-          openssl genrsa -out node.key 2048
+          openssl genrsa -out certs/node.key 2048
           ```
 
       1. Создайте Certificate Signing Request (CSR):

@@ -7,6 +7,7 @@
 #include "json_proxy_operations.h"
 #include "json_proxy_proto.h"
 #include "json_proxy_toggle_config_validator.h"
+#include "json_proxy_sentinel.h"
 #include "base_handler.h"
 #include "walle.h"
 
@@ -72,6 +73,7 @@ public:
             ApiHandlers["/api/json/toggleconfigvalidator"] = new TApiMethodHandler<TJsonProxyToggleConfigValidator>;
             ApiHandlers["/api/json/configupdates"] = new TApiMethodHandler<TJsonProxyConfigUpdates>;
             ApiHandlers["/api/json/proto"] = new TApiMethodHandler<TJsonProxyProto>;
+            ApiHandlers["/api/json/sentinel"] = new TApiMethodHandler<TJsonProxySentinel>;
 
             ApiHandlers["/api/datashard/json/getinfo"]
                 = new TApiMethodHandler<TJsonProxyDataShard<TEvDataShard::TEvGetInfoRequest,

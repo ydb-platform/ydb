@@ -236,6 +236,7 @@ private:
             HFunc(TEvCms::TEvResetMarkerRequest, Handle);
             HFunc(TEvCms::TEvSetMarkerRequest, Handle);
             HFunc(TEvCms::TEvGetLogTailRequest, Handle);
+            HFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
@@ -392,6 +393,7 @@ private:
     void Handle(TEvCms::TEvResetMarkerRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvSetMarkerRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

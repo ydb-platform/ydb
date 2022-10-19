@@ -587,3 +587,26 @@ message TGetLogTailResponse {
     optional TStatus Status = 1;
     repeated TLogRecord LogRecords = 2;
 }
+
+message TGetSentinelStateRequest {
+}
+
+message TPDiskInfo {
+    optional uint32 State = 1; // EPDiskState
+    optional uint32 PrevState = 2; // EPDiskState
+    optional uint64 StateCounter = 3;
+    optional uint32 Status = 4; // EPDiskStatus
+    optional bool ChangingAllowed = 5;
+    optional bool Touched = 6;
+}
+
+message TPDisk {
+    optional TPDiskID Id = 1;
+    optional TPDiskInfo Info = 2;
+}
+
+message TGetSentinelStateResponse {
+    optional TStatus Status = 1;
+    optional TCmsConfig.TSentinelConfig SentinelConfig = 2;
+    repeated TPDisk PDisks = 3;
+}

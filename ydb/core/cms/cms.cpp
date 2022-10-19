@@ -1978,6 +1978,18 @@ void TCms::Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &c
     Execute(CreateTxGetLogTail(ev), ctx);
 }
 
+void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx)
+{
+    if(State->Sentinel) {
+        ctx.Send(ev->Forward(State->Sentinel));
+    } else {
+        auto Response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
+        auto &rec = Response->Record;
+        rec.MutableStatus()->SetCode(NKikimrCms::TStatus::ERROR);
+        ctx.Send(ev->Sender, Response.Release());
+    }
+}
+
 void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
 {

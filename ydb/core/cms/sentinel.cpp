@@ -953,6 +953,31 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         );
     }
 
+    void Handle(TEvSentinel::TEvGetSentinelStateRequest::TPtr& ev, const TActorContext &ctx) {
+        THolder<TEvCms::TEvGetSentinelStateResponse> Response;
+        Response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
+        auto &rec = Response->Record;
+        rec.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+
+        auto& sentinelConfig = *rec.MutableSentinelConfig();
+        Config.Serialize(sentinelConfig);
+
+        if (SentinelState) {
+            for (auto it = SentinelState->PDisks.begin(); it != SentinelState->PDisks.end(); ++it) {
+                auto &entry = *rec.AddPDisks();
+                entry.MutableId()->SetNodeId(it->first.NodeId);
+                entry.MutableId()->SetDiskId(it->first.DiskId);
+                entry.MutableInfo()->SetState(it->second.GetState());
+                entry.MutableInfo()->SetPrevState(it->second.GetPrevState());
+                entry.MutableInfo()->SetStateCounter(it->second.GetStateCounter());
+                entry.MutableInfo()->SetStatus(it->second.GetStatus());
+                entry.MutableInfo()->SetChangingAllowed(it->second.IsChangingAllowed());
+                entry.MutableInfo()->SetTouched(it->second.IsTouched());
+            }
+        }
+        ctx.Send(ev->Sender, Response.Release());
+    }
+
     void Handle(TEvSentinel::TEvStatusChanged::TPtr& ev) {
         const TPDiskID& id = ev->Get()->Id;
         const bool success = ev->Get()->Success;
@@ -1045,6 +1070,7 @@ public:
             cFunc(TEvSentinel::TEvUpdateState::EventType, UpdateState);
             cFunc(TEvSentinel::TEvStateUpdated::EventType, OnStateUpdated);
             hFunc(TEvSentinel::TEvStatusChanged, Handle);
+            HFunc(TEvSentinel::TEvGetSentinelStateRequest, Handle);
             cFunc(TEvSentinel::TEvBSCPipeDisconnected::EventType, OnPipeDisconnected);
 
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);

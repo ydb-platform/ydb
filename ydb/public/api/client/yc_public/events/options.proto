@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package yandex.cloud.events;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud/events;events";
+option java_package = "yandex.cloud.api.events";
+
+extend google.protobuf.FieldOptions {
+  bool hide = 100700;
+}
+
+extend google.protobuf.MessageOptions {
+  bool include = 100800;
+}

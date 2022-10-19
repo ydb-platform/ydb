@@ -8,13 +8,12 @@
 
 add_subdirectory(common)
 add_subdirectory(impl)
-add_subdirectory(proto)
 
 add_library(cpp-client-iam)
 target_link_libraries(cpp-client-iam PUBLIC
   contrib-libs-cxxsupp
   yutil
-  iam-proto-v1
+  client-yc_public-iam
   client-iam-impl
   client-iam-common
 )

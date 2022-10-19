@@ -1,0 +1,338 @@
+syntax = "proto3";
+
+package yandex.cloud.events.yq;
+
+import "google/rpc/status.proto";
+import "ydb/public/api/client/yc_public/events/common.proto";
+import "ydb/public/api/client/yc_public/events/options.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud/events/yq;yq";
+option java_package = "yandex.cloud.api.events.yq";
+
+// Query
+// Query is the text of an SQL request, the results of the last run and the state after the last run (partitions offsets, consumer in YDS)
+// Create a query object with a given SQL
+message CreateQuery {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string query_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+    string execute_mode = 5;
+    string compute_status = 6;
+    int64 text_length = 7;
+  }
+
+  message RequestParameters {
+    string name = 1;
+    string visibility = 2;
+    string type = 3;
+    string execute_mode = 4;
+    int64 text_length = 5;
+  }
+}
+
+// Change the attributes of the query (acl, name, ...)
+message UpdateQuery {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string query_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+    string execute_mode = 5;
+    string compute_status = 6;
+    int64 text_length = 7;
+  }
+
+  message RequestParameters {
+    string query_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+    string execute_mode = 5;
+    reserved 6;
+    string state_load_mode = 8;
+    int64 text_length = 7;
+  }
+}
+
+// Completely delete the query
+message DeleteQuery {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string query_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+    string execute_mode = 5;
+    string compute_status = 6;
+    int64 text_length = 7;
+  }
+
+  message RequestParameters {
+    string query_id = 1;
+  }
+}
+
+// Change the state of the query lifecycle
+message ControlQuery {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string query_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+    string execute_mode = 5;
+    string compute_status = 6;
+    int64 text_length = 7;
+  }
+
+  message RequestParameters {
+    string query_id = 1;
+    string action = 2;
+  }
+}
+
+
+// Connection
+// Connection - entity that describes connection points. This can be imagined as an analogue of a network address.
+// Create a connection object (ObjectStorage, YDB, YDS, ...)
+message CreateConnection {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string connection_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+  }
+
+  message RequestParameters {
+    string name = 1;
+    string visibility = 2;
+    string type = 3;
+  }
+}
+
+// Change the attributes of the connection
+message UpdateConnection {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string connection_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+  }
+
+  message RequestParameters {
+    string connection_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+  }
+}
+
+// Completely delete the connection
+message DeleteConnection {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string connection_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string type = 4;
+  }
+
+  message RequestParameters {
+    string connection_id = 1;
+  }
+}
+
+
+// Binding
+// Binding - entity using which a schema is assigned to non-schematic data
+// Create a binding object - bind schema with ObjectStorage object or YDS stream
+message CreateBinding {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+      string binding_id = 1;
+      string name = 2;
+      string visibility = 3;
+      string connection_id = 4;
+      string type = 5;
+  }
+
+  message RequestParameters {
+    string name = 1;
+    string visibility = 2;
+    string connection_id = 3;
+    string type = 4;
+  }
+}
+
+// Change the attributes of the binding
+message UpdateBinding {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+      string binding_id = 1;
+      string name = 2;
+      string visibility = 3;
+      string connection_id = 4;
+      string type = 5;
+  }
+
+  message RequestParameters {
+    string binding_id = 1;
+    string name = 2;
+    string visibility = 3;
+    string connection_id = 4;
+    string type = 5;
+  }
+}
+
+// Completely delete the binding
+message DeleteBinding {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+      string binding_id = 1;
+      string name = 2;
+      string visibility = 3;
+      string connection_id = 4;
+      string type = 5;
+  }
+
+  message RequestParameters {
+    string binding_id = 1;
+  }
+}

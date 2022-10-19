@@ -6,6 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(client)
-add_subdirectory(grpc)
-add_subdirectory(protos)
+add_subdirectory(yc_public)

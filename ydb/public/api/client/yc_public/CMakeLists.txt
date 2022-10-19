@@ -6,4 +6,7 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(v1)
+add_subdirectory(common)
+add_subdirectory(events)
+add_subdirectory(iam)
+add_subdirectory(logging)

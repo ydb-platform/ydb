@@ -7,8 +7,17 @@
 
 
 
-add_library(client-iam-common INTERFACE)
-target_link_libraries(client-iam-common INTERFACE
+add_library(client-iam-common)
+target_link_libraries(client-iam-common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-grpc-client
+  cpp-http-simple
+  library-cpp-json
+  cpp-threading-atomic
+  public-lib-jwt
+  client-ydb_types-credentials
+)
+target_sources(client-iam-common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/iam/common/iam.cpp
 )

@@ -7,22 +7,22 @@
 
 
 
-add_library(iam-proto-v1)
-set_property(TARGET iam-proto-v1 PROPERTY
+add_library(client-yc_public-iam)
+set_property(TARGET client-yc_public-iam PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
-target_link_libraries(iam-proto-v1 PUBLIC
+target_link_libraries(client-yc_public-iam PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-grpc
   contrib-libs-googleapis-common-protos
+  client-yc_public-common
   contrib-libs-protobuf
 )
-target_proto_messages(iam-proto-v1 PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/iam/proto/v1/iam_token_service.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/iam/proto/v1/validation.proto
+target_proto_messages(client-yc_public-iam PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_public/iam/iam_token_service.proto
 )
-target_proto_addincls(iam-proto-v1
+target_proto_addincls(client-yc_public-iam
   ./
   ${CMAKE_SOURCE_DIR}/
   ${CMAKE_BINARY_DIR}
@@ -32,11 +32,11 @@ target_proto_addincls(iam-proto-v1
   ${CMAKE_BINARY_DIR}
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
-target_proto_outs(iam-proto-v1
+target_proto_outs(client-yc_public-iam
   --cpp_out=${CMAKE_BINARY_DIR}/
   --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
 )
-target_proto_plugin(iam-proto-v1
+target_proto_plugin(client-yc_public-iam
   grpc_cpp
   grpc_cpp
 )

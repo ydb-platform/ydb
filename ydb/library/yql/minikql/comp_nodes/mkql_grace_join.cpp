@@ -31,15 +31,20 @@ struct TColumnDataPackInfo {
     NUdf::EDataSlot DataType = NUdf::EDataSlot::Uint32; // Data type of the column for standard types (TDataType)
     bool IsKeyColumn = false; // True if this columns is key for join
     bool IsString = false; // True if value is string
+    ui32 Offset = 0; // Offset of column in packed data
+//    TValuePacker Packer; // Packer for composite data types
 };
 
 struct TGraceJoinPacker {
     ui64 NullsBitmapSize = 0; // Number of ui64 values for nulls bitmap
+    ui64 TuplesPacked = 0; // Total number of packed tuples
+    ui64 TuplesUnpacked = 0; // Total number of unpacked tuples
+    std::chrono::time_point<std::chrono::system_clock> StartTime; // Start time of execution
+    std::chrono::time_point<std::chrono::system_clock> EndTime; // End time of execution
     std::vector<ui64> TupleIntVals; // Packed value of all fixed length values of table tuple.  Keys columns should be packed first.
     std::vector<ui32> TupleStrSizes; // Sizes of all packed strings
     std::vector<char*> TupleStrings; // All values of tuple strings
     std::vector<ui32> Offsets; // Offsets of table column values in bytes
-    std::vector<ui32> PackedIdx; // Indexes of initial columns after packing
     std::vector<TType*>  ColumnTypes; // Types of all columns
     std::vector<TValuePacker> Packers; // Packers for composite data types
     const THolderFactory& HolderFactory; // To use during unpacking
@@ -77,6 +82,7 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
     }
 
      if (colType->GetKind() != TType::EKind::Data) {
+        MKQL_ENSURE(false, "Unknown data type.");
         res.IsString = true;
         res.DataType = NUdf::EDataSlot::String;
         return;
@@ -106,6 +112,10 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.Bytes = sizeof(i64); break;
         case NUdf::EDataSlot::Uint64:
             res.Bytes = sizeof(ui64); break;
+        case NUdf::EDataSlot::Float:
+            res.Bytes = sizeof(float); break;
+        case NUdf::EDataSlot::Double:
+            res.Bytes = sizeof(double); break;
         case NUdf::EDataSlot::Date:
             res.Bytes = sizeof(ui64); break;
         case NUdf::EDataSlot::Datetime:
@@ -124,8 +134,11 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.Bytes = 10; break;
         case NUdf::EDataSlot::Decimal:
             res.Bytes = 16; break;
+        case NUdf::EDataSlot::String:
+            res.IsString = true; break;
         default:
         {
+            MKQL_ENSURE(false, "Unknown data type.");
             res.IsString = true;
         }
     }
@@ -135,6 +148,7 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
 
 void TGraceJoinPacker::Pack()  {
 
+    TuplesPacked++;
     for (ui64 i = 0; i < NullsBitmapSize; ++i) {
         TupleIntVals[i] = 0;  // Clearing nulls bit array. Bit 1 means particular column contains null value
     }
@@ -142,16 +156,17 @@ void TGraceJoinPacker::Pack()  {
     for (ui64 i = 0; i < ColumnsPackInfo.size(); i++) {
 
         const TColumnDataPackInfo &pi = ColumnsPackInfo[i];
-        ui32 offset = Offsets[i];
-        NYql::NUdf::TUnboxedValue value = *TuplePtrs[i];
+        ui32 offset = pi.Offset;
+
+        NYql::NUdf::TUnboxedValue value = *TuplePtrs[pi.ColumnIdx];
         if (!value) { // Null value
-            ui64 currNullsIdx = PackedIdx[i] / (sizeof(ui64) * 8);
-            ui64 remShift = ( PackedIdx[i] - currNullsIdx * (sizeof(ui64) * 8) );
+            ui64 currNullsIdx = i / (sizeof(ui64) * 8);
+            ui64 remShift = ( i - currNullsIdx * (sizeof(ui64) * 8) );
             ui64 bitMask = (0x1) << remShift;
             TupleIntVals[currNullsIdx] |= bitMask;
             continue;
         }
-        TType* type = ColumnTypes[i];
+        TType* type = pi.MKQLType;
 
         TType* colType;
         if (type->IsOptional()) {
@@ -182,14 +197,13 @@ void TGraceJoinPacker::Pack()  {
         case NUdf::EDataSlot::Uint16:
             WriteUnaligned<ui16>(buffPtr, value.Get<ui16>()); break;
         case NUdf::EDataSlot::Int32:
-            *(reinterpret_cast<i32*> (buffPtr)) = value.Get<i32>(); break;
+            WriteUnaligned<i32>(buffPtr,  value.Get<i32>()); break;
         case NUdf::EDataSlot::Uint32:
             WriteUnaligned<ui32>(buffPtr, value.Get<ui32>()); break;
         case NUdf::EDataSlot::Int64:
             WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
         case NUdf::EDataSlot::Uint64:
             WriteUnaligned<ui64>(buffPtr, value.Get<ui64>()); break;
-            *(reinterpret_cast<ui64*> (buffPtr)) = value.Get<ui64>(); break;
         case NUdf::EDataSlot::Float:
             WriteUnaligned<float>(buffPtr, value.Get<float>()); break;
         case NUdf::EDataSlot::Double:
@@ -233,7 +247,8 @@ void TGraceJoinPacker::Pack()  {
         }
         default:
         {
-            auto str = TuplePtrs[i]->AsStringRef();
+
+            auto str = TuplePtrs[pi.ColumnIdx]->AsStringRef();
             TupleStrings[offset] = str.Data();
             TupleStrSizes[offset] = str.Size();
         }
@@ -243,23 +258,24 @@ void TGraceJoinPacker::Pack()  {
 }
 
 void TGraceJoinPacker::UnPack()  {
+    TuplesUnpacked++;
     for (ui64 i = 0; i < ColumnsPackInfo.size(); i++) {
         const TColumnDataPackInfo &pi = ColumnsPackInfo[i];
-        ui32 offset = Offsets[i];
-        NYql::NUdf::TUnboxedValue & value = *TuplePtrs[i];
+        ui32 offset = pi.Offset;
+        NYql::NUdf::TUnboxedValue & value = *TuplePtrs[pi.ColumnIdx];
         if (JoinTupleData.AllNulls) {
             value = NYql::NUdf::TUnboxedValue();
             continue;
         }
-        ui64 currNullsIdx = PackedIdx[i] / (sizeof(ui64) * 8);
-        ui64 remShift = ( PackedIdx[i] - currNullsIdx * (sizeof(ui64) * 8) );
+        ui64 currNullsIdx = i / (sizeof(ui64) * 8);
+        ui64 remShift = ( i - currNullsIdx * (sizeof(ui64) * 8) );
         ui64 bitMask = (0x1) << remShift;
         if ( TupleIntVals[currNullsIdx] & bitMask ) {
             value = NYql::NUdf::TUnboxedValue();
             continue;
         }
 
-        TType * type = ColumnTypes[i];
+        TType * type = pi.MKQLType;
 
         TType * colType;
         if (type->IsOptional()) {
@@ -360,16 +376,24 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         auto colType = columnTypes[i];
         auto packInfo = GetPackInfo(colType);
         packInfo.ColumnIdx = i;
-        allColumnsPackInfo.push_back(packInfo);
-        Packers.push_back(TValuePacker(true,colType));
-    }
+        
 
-    for ( auto const & keyColIdx: keyColumns ) {
-        allColumnsPackInfo[keyColIdx].IsKeyColumn = true;
-    }
+        ui32 keyColNums = std::count_if(keyColumns.begin(), keyColumns.end(), [&](ui32 k) {return k == i;});
+
+        if (keyColNums > 0) {
+            packInfo.IsKeyColumn = true;
+            for (ui32 j = 0; j < keyColNums; j++) {
+                ColumnsPackInfo.push_back(packInfo);
+                Packers.push_back(TValuePacker(true,colType));
+            }
+        } else {
+            ColumnsPackInfo.push_back(packInfo);
+            Packers.push_back(TValuePacker(true,colType));
+        }
+     }
 
 
-    ColumnsPackInfo = allColumnsPackInfo;
+    nColumns = ColumnsPackInfo.size();
 
     ui64 totalIntColumnsNum = std::count_if(ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](TColumnDataPackInfo a) { return !a.IsString; });
     ui64 totalStrColumnsNum = nColumns - totalIntColumnsNum;
@@ -397,7 +421,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     JoinTupleData.StrColumns = TupleStrings.data();
     JoinTupleData.StrSizes = TupleStrSizes.data();
 
-    std::sort(allColumnsPackInfo.begin(), allColumnsPackInfo.end(), [](TColumnDataPackInfo & a, TColumnDataPackInfo & b)
+    std::sort(ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](TColumnDataPackInfo & a, TColumnDataPackInfo & b)
         {
             if (a.IsKeyColumn && !b.IsKeyColumn) return true;
             if (a.Bytes > b.Bytes) return true;
@@ -406,7 +430,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         });
     
     Offsets.resize(nColumns);
-    PackedIdx.resize(nColumns);
     TupleHolder.resize(nColumns);
     TupleStringHolder.resize(nColumns);
 
@@ -416,15 +439,16 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     ui32 currStrOffset = 0;
     ui32 currIdx = 0;
 
-    for( auto const & p: allColumnsPackInfo ) {
+    for( auto & p: ColumnsPackInfo ) {
         if ( !p.IsString ) {
+            p.Offset = currIntOffset;
             Offsets[p.ColumnIdx] = currIntOffset;
             currIntOffset += p.Bytes;
         } else {
+            p.Offset = currStrOffset;
             Offsets[p.ColumnIdx] = currStrOffset;
             currStrOffset++;
         }
-        PackedIdx[p.ColumnIdx] = currIdx;
         currIdx++;
     }
 
@@ -625,11 +649,18 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 const NKikimr::NMiniKQL::EFetchResult resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
 
                 if (resultLeft == EFetchResult::One) {
+                    if (LeftPacker->TuplesPacked == 0) {
+                        LeftPacker->StartTime = std::chrono::system_clock::now();
+                    }
                     LeftPacker->Pack();
                     LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data());
                 }
 
                 if (resultRight == EFetchResult::One) {
+                    if (RightPacker->TuplesPacked == 0) {
+                        RightPacker->StartTime = std::chrono::system_clock::now();
+                    }
+
                     RightPacker->Pack();
                     RightPacker->TablePtr->AddTuple(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data());
                 }
@@ -640,9 +671,14 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
                 if (resultRight == EFetchResult::Finish && resultLeft == EFetchResult::Finish && !*JoinCompleted) {
                     *JoinCompleted = true;
+                    LeftPacker->StartTime = std::chrono::system_clock::now();
+                    RightPacker->StartTime = std::chrono::system_clock::now();
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind);
                     JoinedTablePtr->ResetIterator();
-                }
+                    LeftPacker->EndTime = std::chrono::system_clock::now(); 
+                    RightPacker->EndTime = std::chrono::system_clock::now();
+                    
+                 }
             }
 
             JoinedTuple->resize((LeftRenames.size() + RightRenames.size()) / 2);

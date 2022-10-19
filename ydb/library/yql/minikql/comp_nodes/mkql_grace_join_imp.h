@@ -110,7 +110,9 @@ class TTable {
     inline void GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData& td);
 
     // True if current iterator of tuple in joinedTable has corresponding joined tuple in second table. Id of joined tuple in second table returns in tupleId2.
-    inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2); 
+    inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);
+
+    ui64 TotalPacked = 0; 
 
 public:
 

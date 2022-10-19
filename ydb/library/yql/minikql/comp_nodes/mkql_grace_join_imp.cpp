@@ -15,12 +15,9 @@ namespace GraceJoin {
 
 void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes ) {
 
+    TotalPacked++;
 
     TempTuple.clear();
-//    TempTuple.resize( NullsBitmapSize + NumberOfKeyIntColumns );
-//    ui64 * memCopyStart = TempTuple.data() + TempTuple.size() - (NullsBitmapSize + NumberOfKeyIntColumns);
-//    std::memcpy(memCopyStart, intColumns, (NullsBitmapSize + NumberOfKeyIntColumns)*sizeof(ui64));
-
     TempTuple.insert(TempTuple.end(), intColumns, intColumns + NullsBitmapSize + NumberOfKeyIntColumns);
 
     
@@ -83,7 +80,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     }
 
     // Adding data values
-    ui64 * dataColumns = intColumns + NumberOfKeyIntColumns;
+    ui64 * dataColumns = intColumns + NullsBitmapSize + NumberOfKeyIntColumns;
     dataIntVals.insert(dataIntVals.end(), dataColumns, dataColumns + NumberOfDataIntColumns);
 
     // Adding strings values for data columns
@@ -251,7 +248,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind ) {
 
         ui32 tuple1Idx = 0;
         auto it1 = bucket1->KeyIntVals.begin();
-        while ( it1 != bucket1->KeyIntVals.end() ) {
+        while ( it1 < bucket1->KeyIntVals.end() ) {
         
             ui64 valSize = (!JoinTable1->NumberOfKeyStringColumns) ? headerSize : headerSize + *(it1 + headerSize - JoinTable1->TotalStringsSize);
             ui64 hash = *it1;
@@ -307,19 +304,14 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind ) {
             it1 += valSize;
             tuple1Idx ++;
         }
-
-        if (    JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || JoinKind == EJoinKind::LeftSemi  || 
-                JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi ||
-                JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) 
+        std::sort(joinResults.begin(), joinResults.end(), [](JoinTuplesIds a, JoinTuplesIds b)
         {
-            std::sort(joinResults.begin(), joinResults.end(), [](JoinTuplesIds a, JoinTuplesIds b)
-            {
-                if (a.id1 < b.id1) return true;
-                if (a.id1 == b.id1 && (a.id2 < b.id2)) return true;
-                return false;
-            });
+            if (a.id1 < b.id1) return true;
+            if (a.id1 == b.id1 && (a.id2 < b.id2)) return true;
+            return false;
+        });
 
-        }
+        
         TableBuckets[bucket].JoinIds = std::move(joinResults);
         if ( JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
             std::vector<ui32> & rightIds = TableBuckets[bucket].RightIds;
@@ -361,7 +353,7 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
     dataIntsOffset = NumberOfDataIntColumns * tupleId;
 
     for ( ui64 i = 0; i < NumberOfDataIntColumns; ++i) {
-        td.IntColumns[NumberOfKeyIntColumns + i] = tb.DataIntVals[dataIntsOffset + i];
+        td.IntColumns[NumberOfKeyIntColumns + NullsBitmapSize + i] = tb.DataIntVals[dataIntsOffset + i];
     }
 
     char *strPtr = nullptr;
@@ -410,7 +402,7 @@ inline bool TTable::HasJoinedTupleId(TTable *joinedTable, ui32 &tupleId2) {
     }
     else
     {
-        return false;
+       return false;
     }
 }
 
@@ -724,7 +716,7 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 
     TotalStringsSize = (numberOfKeyStringColumns > 0 ) ? 1 : 0;
 
-    HeaderSize = HashSize + NullsBitmapSize + NumberOfKeyIntColumns + TotalStringsSize; 
+    HeaderSize = HashSize + NullsBitmapSize + NumberOfKeyIntColumns + TotalStringsSize;
 
     TableBuckets.resize(NumberOfBuckets);
 

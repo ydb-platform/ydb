@@ -848,7 +848,6 @@ TExprBase DqBuildGraceJoin(const TDqJoin& join, TExprContext& ctx) {
     static const std::set<std::string_view> supportedTypes = {
         "Inner"sv,
         "Left"sv,
-        "Cross"sv,
         "LeftOnly"sv,
         "LeftSemi"sv,
         "Right"sv,

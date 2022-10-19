@@ -592,7 +592,7 @@ namespace NTypeAnnImpl {
             }
 
             auto columnType = GetFieldType(leftTupleType, *oldPos);
-            if ((joinKind == "Right" || joinKind == "Full" || joinKind == "Exclusion") && !columnType->IsOptionalOrNull()) {
+            if ((joinKind == "Right" || joinKind == "Full" || joinKind == "Exclusion" ) && !columnType->IsOptionalOrNull()) {
                 columnType = ctx.Expr.MakeType<TOptionalExprType>(columnType);
             }
 

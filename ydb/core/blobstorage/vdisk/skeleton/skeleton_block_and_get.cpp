@@ -12,6 +12,8 @@
 namespace NKikimr {
 
 class TBlockAndGetActor : public TActorBootstrapped<TBlockAndGetActor> {
+private:
+    static constexpr auto VBLOCK_DEFAULT_DEADLINE_SECONDS = 120;
 public:
     TBlockAndGetActor() = delete;
     explicit TBlockAndGetActor(
@@ -44,7 +46,7 @@ public:
             VDiskIDFromVDiskID(Request->Get()->Record.GetVDiskID()),
             Request->Get()->Record.GetMsgQoS().HasDeadlineSeconds() ? 
                 TInstant::Seconds(Request->Get()->Record.GetMsgQoS().GetDeadlineSeconds()) :
-                TInstant::Max()
+                TInstant::Seconds(VBLOCK_DEFAULT_DEADLINE_SECONDS)
         );
 
         // send TEvVBlock request
@@ -84,8 +86,8 @@ public:
         }
 
         // send TEvVGet request, the reply will go directly to sender.
-        // there is no need to clear ForceBlockTabletData parameter
-        // since by now the required generation has been blocked.
+        // clear ForceBlockTabletData to make sure we never ever have a cycle.
+        Request->Get()->Record.ClearForceBlockTabletData();
         TActivationContext::Send(Request.Release());
         PassAway();
     }

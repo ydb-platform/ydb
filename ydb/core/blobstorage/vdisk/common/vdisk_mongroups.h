@@ -431,6 +431,7 @@ public:                                                                         
                 COUNTER_INIT(GetMsgs, true);
                 COUNTER_INIT(BlockMsgs, true);
                 COUNTER_INIT(GetBlockMsgs, true);
+                COUNTER_INIT(BlockAndGetMsgs, true);
                 COUNTER_INIT(GCMsgs, true);
                 COUNTER_INIT(GetBarrierMsgs, true);
                 COUNTER_INIT(SyncMsgs, true);
@@ -473,6 +474,7 @@ public:                                                                         
             COUNTER_DEF(GetMsgs);
             COUNTER_DEF(BlockMsgs);
             COUNTER_DEF(GetBlockMsgs);
+            COUNTER_DEF(BlockAndGetMsgs);
             COUNTER_DEF(GCMsgs);
             COUNTER_DEF(GetBarrierMsgs);
             COUNTER_DEF(SyncMsgs);

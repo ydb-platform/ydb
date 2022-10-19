@@ -21,11 +21,12 @@ namespace NPQ {
             return NKikimrServices::TActivity::PERSQUEUE_CACHE_ACTOR;
         }
 
-        TPQCacheProxy(const TActorId& tablet, TString topicName, ui32 size)
+        TPQCacheProxy(const TActorId& tablet, TString topicName, ui64 tabletId, ui32 size)
         : Tablet(tablet)
         , TopicName(topicName)
+        , TabletId(tabletId)
         , Cookie(0)
-        , Cache(topicName, size)
+        , Cache(tabletId, size)
         , CountersUpdateTime(TAppData::TimeProvider->Now())
         {
             Y_VERIFY(topicName.size(), "CacheProxy with empty topic name");
@@ -296,14 +297,15 @@ namespace NPQ {
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)
         {
             THolder<TCacheL2Response> resp(ev->Get()->Data.Release());
-            Y_VERIFY(resp->TopicName == TopicName);
+            Y_VERIFY(resp->TabletId == TabletId);
 
             for (TCacheBlobL2& blob : resp->Removed)
                 Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, 0, 0), blob.Value);
 
             if (resp->Overload) {
                 LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE,
-                    "Have to remove new data from cache. Topic " << TopicName << " cookie " << resp->Cookie);
+                    "Have to remove new data from cache. Topic " << TopicName << ", tablet id" << TabletId
+                                                                 << ", cookie " << resp->Cookie);
             }
 
             UpdateCounters(ctx);
@@ -380,6 +382,7 @@ namespace NPQ {
 
         TActorId Tablet;
         TString TopicName;
+        ui64 TabletId;
         ui64 Cookie;
         // any TKvRequest would be placed into KvRequests or into BlockedReads depending on ReadsInProgress content
         THashMap<ui64, TKvRequest> KvRequests;

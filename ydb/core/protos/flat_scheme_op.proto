@@ -932,6 +932,35 @@ message TRestoreTask {
     }
 }
 
+message TPersQueueGroupAllocate {
+    message TPartition {
+        optional uint32 PartitionId = 1;
+        optional uint64 GroupId = 2;
+        optional uint64 TabletId = 3;
+
+        optional uint64 OwnerId = 4;
+        optional uint64 ShardId = 5;
+    }
+
+    optional string Name = 1;
+    optional uint64 AlterVersion = 2;
+
+    optional uint32 TotalGroupCount = 3;
+    optional uint32 NextPartitionId = 4;
+    optional uint32 PartitionPerTablet = 5;
+
+    optional NKikimrPQ.TPQTabletConfig PQTabletConfig = 6;
+    repeated TPartition Partitions = 7;
+
+    optional uint64 BalancerTabletID = 8;
+    optional uint64 BalancerOwnerId = 9;
+    optional uint64 BalancerShardId = 10;
+}
+
+message TPersQueueGroupDeallocate {
+    optional string Name = 1;
+}
+
 message TPersQueueGroupDescription {
     message TPartition {
         optional uint32 PartitionId = 1;
@@ -962,6 +991,8 @@ message TPersQueueGroupDescription {
 
     // Can be passed upon creation
     optional NKikimrPQ.TBootstrapConfig BootstrapConfig = 13;
+
+    optional TPersQueueGroupAllocate Allocate = 14;
 }
 
 message TRtmrVolumeDescription {
@@ -1157,7 +1188,7 @@ enum EOperationType {
     // *************
     // Unsafe operation. Nornally it is used for deleting database. It called by CMS, and CMS takes care of remaining resourses.
     // If you apply it manually to an ordinary path in cases of emergenses, be aware of:
-    // 1 -- data transactions are ignored. Distributed transactions colud be broken so progress on another shards would be blocked forever
+    // 1 -- data transactions are ignored. Distributed transactions colud be broken so progress on other shards would be blocked forever
     // 2 -- boorowed/loans blobs could be lost forever.
     //
     ESchemeOpForceDropUnsafe = 27;
@@ -1241,6 +1272,9 @@ enum EOperationType {
 
     // Move index
     ESchemeOpMoveIndex = 82;
+
+    ESchemeOpAllocatePersQueueGroup = 83;
+    ESchemeOpDeallocatePersQueueGroup = 84;
 }
 
 message TApplyIf {
@@ -1343,8 +1377,12 @@ message TModifyScheme {
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;
     optional TReplicationDescription Replication = 52;
+
     optional TBlobDepotDescription BlobDepot = 54;
     optional TMoveIndex MoveIndex = 55;
+
+    optional TPersQueueGroupAllocate AllocatePersQueueGroup = 56;
+    optional TPersQueueGroupDeallocate DeallocatePersQueueGroup = 57;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

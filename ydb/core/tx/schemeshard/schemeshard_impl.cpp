@@ -1262,6 +1262,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateTable:
     case TTxState::TxCopyTable:
     case TTxState::TxCreatePQGroup:
+    case TTxState::TxAllocatePQ:
     case TTxState::TxCreateSubDomain:
     case TTxState::TxCreateExtSubDomain:
     case TTxState::TxCreateBlockStoreVolume:
@@ -3767,6 +3768,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , AllowConditionalEraseOperations(1, 0, 1)
     , AllowServerlessStorageBilling(0, 0, 1)
     , DisablePublicationsOfDropping(0, 0, 1)
+    , FillAllocatePQ(1, 0, 1)
     , SplitSettings()
     , IsReadOnlyMode(false)
     , ParentDomainLink(this)
@@ -3901,6 +3903,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, "SchemeShard_AllowConditionalEraseOperations");
     appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, "SchemeShard_DisablePublicationsOfDropping");
+    appData->Icb->RegisterSharedControl(FillAllocatePQ, "SchemeShard_FillAllocatePQ");
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
     appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");

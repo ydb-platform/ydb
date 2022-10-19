@@ -127,6 +127,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup:
             return *modifyScheme.MutableCreatePersQueueGroup()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpAllocatePersQueueGroup:
+            return *modifyScheme.MutableAllocatePersQueueGroup()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpDeallocatePersQueueGroup:
+            return *modifyScheme.MutableDeallocatePersQueueGroup()->MutableName();
+
         case NKikimrSchemeOp::ESchemeOpDropTable:
         case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpRmDir:
@@ -567,6 +573,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropFileStore:
         case NKikimrSchemeOp::ESchemeOpDropKesus:
         case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup:
+        case NKikimrSchemeOp::ESchemeOpDeallocatePersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpDropTable:
         case NKikimrSchemeOp::ESchemeOpDropSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpDropColumnStore:
@@ -692,6 +699,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup:
+        case NKikimrSchemeOp::ESchemeOpAllocatePersQueueGroup:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;

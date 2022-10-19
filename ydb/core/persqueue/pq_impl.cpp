@@ -640,9 +640,11 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         }
 
         Y_VERIFY(TopicName.size(), "Need topic name here");
-        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
+        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, TabletID(),
+                                                    cacheSize));
     } else {
-        Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
+        //Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
+        TopicPath = Config.GetTopicPath();
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
     }
 
@@ -775,7 +777,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             cacheSize = Config.GetCacheSize();
 
         Y_VERIFY(TopicName.size(), "Need topic name here");
-        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
+        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, TabletID(), cacheSize));
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config");
     } else {

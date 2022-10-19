@@ -43,23 +43,23 @@ struct TL2Counters {
 class TPersQueueCacheL2 : public TActorBootstrapped<TPersQueueCacheL2> {
 public:
     struct TKey {
-        TString TopicName;
+        ui64 TabletId;
         ui32 Partition;
         ui64 Offset;
         ui16 PartNo;
 
-        TKey(TString topicName, const TCacheBlobL2& blob)
-            : TopicName(topicName)
+        TKey(ui64 tabletId, const TCacheBlobL2& blob)
+            : TabletId(tabletId)
             , Partition(blob.Partition)
             , Offset(blob.Offset)
             , PartNo(blob.PartNo)
         {
-            KeyHash = Hash128to32(ComputeHash(topicName), (static_cast<ui64>(Partition) << 16) + PartNo);
+            KeyHash = Hash128to32(TabletId, (static_cast<ui64>(Partition) << 16) + PartNo);
             KeyHash = Hash128to32(KeyHash, Offset);
         }
 
         bool operator == (const TKey& key) const {
-            return TopicName == key.TopicName &&
+            return TabletId == key.TabletId &&
                 Partition == key.Partition &&
                 Offset == key.Offset &&
                 PartNo == key.PartNo;
@@ -112,11 +112,11 @@ private:
     void Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TActorContext& ctx);
     void SendResponses(const TActorContext& ctx, const THashMap<TKey, TCacheValue::TPtr>& evicted);
 
-    void AddBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs,
+    void AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                   THashMap<TKey, TCacheValue::TPtr>& outEvicted);
-    void RemoveBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs);
-    void TouchBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs, bool isHit = true);
-    void RegretBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs);
+    void RemoveBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
+    void TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit = true);
+    void RegretBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
 
     static ui64 ClampMinSize(ui64 maxSize) {
         static const ui64 MIN_SIZE = 32_MB;

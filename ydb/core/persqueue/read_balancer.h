@@ -151,14 +151,17 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         TVector<std::pair<ui32, TPartInfo>> NewPartitions;
         TVector<std::pair<ui64, TTabletInfo>> NewTablets;
         TVector<std::pair<ui32, ui32>> NewGroups;
+        TVector<std::pair<ui64, TTabletInfo>> ReallocatedTablets;
 
         TTxWrite(TPersQueueReadBalancer *self, TVector<ui32>&& deletedPartitions, TVector<std::pair<ui32, TPartInfo>>&& newPartitions,
-                 TVector<std::pair<ui64, TTabletInfo>>&& newTablets, TVector<std::pair<ui32, ui32>>&& newGroups)
+                 TVector<std::pair<ui64, TTabletInfo>>&& newTablets, TVector<std::pair<ui32, ui32>>&& newGroups,
+                 TVector<std::pair<ui64, TTabletInfo>>&& reallocatedTablets)
             : Self(self)
             , DeletedPartitions(std::move(deletedPartitions))
             , NewPartitions(std::move(newPartitions))
             , NewTablets(std::move(newTablets))
             , NewGroups(std::move(newGroups))
+            , ReallocatedTablets(std::move(reallocatedTablets))
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

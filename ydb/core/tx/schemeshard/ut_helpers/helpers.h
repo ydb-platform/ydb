@@ -178,6 +178,8 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterPQGroup);
     GENERIC_HELPERS(DropPQGroup);
     DROP_BY_PATH_ID_HELPERS(DropPQGroup);
+    GENERIC_HELPERS(AllocatePQ);
+    GENERIC_HELPERS(DeallocatePQ);
 
     // rtmr
     GENERIC_HELPERS(CreateRtmrVolume);
@@ -486,5 +488,7 @@ namespace NSchemeShardUT_Private {
 
     NKikimrTxDataShard::TEvCompactTableResult CompactTable(
         TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
+
+    NKikimrPQ::TDescribeResponse GetDescibeFromPQBalancer(TTestActorRuntime& runtime, ui64 balancerId);
 
 } //NSchemeShardUT_Private

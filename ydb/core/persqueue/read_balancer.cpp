@@ -150,6 +150,11 @@ bool TPersQueueReadBalancer::TTxWrite::Execute(TTransactionContext& txc, const T
             NIceDb::TUpdate<Schema::Tablets::Owner>(p.second.Owner),
             NIceDb::TUpdate<Schema::Tablets::Idx>(p.second.Idx));
     }
+    for (auto& p : ReallocatedTablets) {
+        db.Table<Schema::Tablets>().Key(p.first).Update(
+            NIceDb::TUpdate<Schema::Tablets::Owner>(p.second.Owner),
+            NIceDb::TUpdate<Schema::Tablets::Idx>(p.second.Idx));
+    }
     return true;
 }
 
@@ -484,6 +489,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     TVector<ui32> deletedPartitions;
     TVector<std::pair<ui64, TTabletInfo>> newTablets;
     TVector<std::pair<ui32, ui32>> newGroups;
+    TVector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
 
     for (auto& p : record.GetTablets()) {
         auto it = TabletsInfo.find(p.GetTabletId());
@@ -491,7 +497,14 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             TTabletInfo info{p.GetOwner(), p.GetIdx()};
             TabletsInfo[p.GetTabletId()] = info;
             newTablets.push_back(std::make_pair(p.GetTabletId(), info));
+        } else {
+            if (it->second.Owner != p.GetOwner() || it->second.Idx != p.GetIdx()) {
+                TTabletInfo info{p.GetOwner(), p.GetIdx()};
+                TabletsInfo[p.GetTabletId()] = info;
+                reallocatedTablets.push_back(std::make_pair(p.GetTabletId(), info));
+            }
         }
+
     }
 
     ui32 prevGroups = GroupsInfo.size();
@@ -551,7 +564,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
     RebuildStructs();
 
-    Execute(new TTxWrite(this, std::move(deletedPartitions), std::move(newPartitions), std::move(newTablets), std::move(newGroups)), ctx);
+    Execute(new TTxWrite(this, std::move(deletedPartitions), std::move(newPartitions), std::move(newTablets), std::move(newGroups), std::move(reallocatedTablets)), ctx);
 }
 
 

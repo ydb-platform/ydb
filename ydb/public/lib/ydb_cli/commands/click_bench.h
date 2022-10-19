@@ -37,26 +37,8 @@ public:
         return externalQueries;
     }
 
-    TString PatchQuery(const TStringBuf& original) const {
-        TString result(original.data(), original.size());
-        if (EnablePushdown) {
-            result = "PRAGMA ydb.KqpPushOlapProcess = \"true\";\n" + result;
-        }
-        if (DisableLlvm) {
-            result = "PRAGMA ydb.EnableLlvm=\"false\";\n" + result;
-        }
-        return result;
-    }
-
-    bool NeedRun(const ui32 queryIdx) const {
-        if (QueriesToRun.size() && !QueriesToRun.contains(queryIdx)) {
-            return false;
-        }
-        if (QueriesToSkip.contains(queryIdx)) {
-            return false;
-        }
-        return true;
-    }
+    TString PatchQuery(const TStringBuf& original) const;
+    bool NeedRun(const ui32 queryIdx) const;
 };
 
 class TClickHouseBench {
@@ -129,9 +111,6 @@ private:
 
 class TCommandClickBench : public NYdb::NConsoleClient::TClientCommandTree {
 public:
-    TCommandClickBench() : TClientCommandTree("click_bench") {
-        AddCommand(std::make_unique<TClickBenchCommandRun>());
-        AddCommand(std::make_unique<TClickBenchCommandInit>());
-    }
+    TCommandClickBench();
 };
 

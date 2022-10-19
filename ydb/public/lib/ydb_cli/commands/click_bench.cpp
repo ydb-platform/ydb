@@ -1,6 +1,7 @@
 #include <util/string/split.h>
 #include <util/stream/file.h>
 #include <util/string/strip.h>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/folder/pathsplit.h>
 #include <library/cpp/json/json_writer.h>
@@ -87,6 +88,39 @@ TClickHouseBench::TTestInfo TClickHouseBench::AnalyzeTestRuns(const TVector<TDur
 
     return info;
 }
+
+TString TBenchContext::PatchQuery(const TStringBuf& original) const {
+    TString result(original.data(), original.size());
+    if (EnablePushdown) {
+        result = "PRAGMA ydb.KqpPushOlapProcess = \"true\";\n" + result;
+    }
+    if (DisableLlvm) {
+        result = "PRAGMA ydb.EnableLlvm=\"false\";\n" + result;
+    }
+
+    std::vector<TStringBuf> lines;
+    for(auto& line : StringSplitter(result).Split('\n').SkipEmpty()) {
+        if (line.StartsWith("--")) {
+            continue;
+        }
+
+        lines.push_back(line);
+    }
+
+    return JoinSeq('\n', lines);
+}
+
+
+bool TBenchContext::NeedRun(const ui32 queryIdx) const {
+    if (QueriesToRun.size() && !QueriesToRun.contains(queryIdx)) {
+        return false;
+    }
+    if (QueriesToSkip.contains(queryIdx)) {
+        return false;
+    }
+    return true;
+}
+
 
 TClickBenchCommandInit::TClickBenchCommandInit()
     : TYdbCommand("init", {"i"}, "Initialize table")
@@ -354,4 +388,11 @@ std::pair<TString, TString> TStreamQueryRunner::ResultToYson(NTable::TScanQueryP
 
     writer.OnEndList();
     return {out.Str(), err_out.Str()};
+}
+
+TCommandClickBench::TCommandClickBench()
+    : TClientCommandTree("click_bench")
+{
+    AddCommand(std::make_unique<TClickBenchCommandRun>());
+    AddCommand(std::make_unique<TClickBenchCommandInit>());
 }

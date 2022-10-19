@@ -2,6 +2,7 @@
 #include "yql_s3_provider_impl.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -49,9 +50,34 @@ private:
             return TStatus::Error;
         }
 
-        if (!TS3Target::Match(input->Child(TS3WriteObject::idx_Target))) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3WriteObject::idx_Target)->Pos()), "Expected S3 target."));
+        auto source = input->Child(TS3WriteObject::idx_Input);
+        if (!EnsureListType(*source, ctx)) {
             return TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* sourceType = source->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        if (!EnsureStructType(source->Pos(), *sourceType, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto target = input->Child(TS3WriteObject::idx_Target);
+        if (!TS3Target::Match(target)) {
+            ctx.AddError(TIssue(ctx.GetPosition(target->Pos()), "Expected S3 target."));
+            return TStatus::Error;
+        }
+
+        TS3Target tgt(target);
+        if (auto settings = tgt.Settings()) {
+            if (auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
+                const TTypeAnnotationNode* targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                if (!IsSameAnnotation(*targetType, *sourceType)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(source->Pos()),
+                                        TStringBuilder() << "Type mismatch between schema type: " << *targetType
+                                                         << " and actual data type: " << *sourceType << ", diff is: "
+                                                         << GetTypeDiff(*targetType, *sourceType)));
+                    return TStatus::Error;
+                }
+            }
         }
 
         input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
@@ -121,10 +147,14 @@ private:
                     return true;
                 }
 
+                if (name == "userschema") {
+                    return EnsureValidUserSchemaSetting(setting, ctx);
+                }
+
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode", "userschema"}, validator, ctx)) {
                 return TStatus::Error;
             }
         }

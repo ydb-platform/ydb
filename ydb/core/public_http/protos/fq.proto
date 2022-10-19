@@ -13,8 +13,9 @@ import "ydb/public/api/protos/yq.proto";
 ////////////////////////////////////////////////////////////
 
 message Error {
-    Ydb.StatusIds.StatusCode message = 1;
-    repeated Ydb.Issue.IssueMessage details = 2;
+    int32 status = 1;
+    Ydb.StatusIds.StatusCode message = 2;
+    repeated Ydb.Issue.IssueMessage details = 3;
 }
 
 message QueryMeta {

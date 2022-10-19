@@ -57,6 +57,7 @@ void FqConvert(const RepeatedPtrField<T>& src, RepeatedPtrField<U>& dst) {
 }
 
 void FqConvert(const Ydb::Operations::Operation& src, FQHttp::Error& dst) {
+	dst.set_status(static_cast<int>(src.status()));
     SIMPLE_COPY_RENAME_FIELD(status, message);
     SIMPLE_COPY_MUTABLE_RENAME_FIELD(issues, details);
 }

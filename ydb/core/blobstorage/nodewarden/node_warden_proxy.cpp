@@ -45,7 +45,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             }
         } else {
             // create proxy with configuration
-            proxy.reset(CreateBlobStorageGroupProxyConfigured(std::move(info), false, DsProxyNodeMon, getCounters(info),
+            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
                 EnablePutBatching, EnableVPatch));
         }
     } else {

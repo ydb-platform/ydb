@@ -271,38 +271,38 @@ struct TCompareDescr {
     void Prepare(TComputationContext& ctx, Container& items) const {
         if (!KeyTypes.empty()) {
             auto& encoders = Encoders.RefMutableObject(ctx, KeySchemeTypes, Comparators.empty());
-            if (KeyTypes.size() > 1U) {
-                // sort tuples
-                if (encoders.NeedEncode) {
-                    // rebuild tuples
-                    for (auto& x : items) {
-                        NUdf::TUnboxedValue* arrayItems = nullptr;
-                        NUdf::TUnboxedValue array = ctx.HolderFactory.CreateDirectArrayHolder(KeyTypes.size(), arrayItems);
-                        for (ui32 i = 0; i < KeyTypes.size(); ++i) {
-                            if (auto& e = encoders.Columns[i]) {
-                                arrayItems[i] = MakeString(e->Encode(Get(x).GetElement(i), false));
-                            } else {
-                                arrayItems[i] = Get(x).GetElement(i);
-                            }
-                        }
-
-                        Set(x) = std::move(array);
-                    }
-                }
-            } else if (auto& encoder = encoders.Columns.front()) {
-                for (auto& x : items) {
-                    Set(x) = MakeString(encoder->Encode(Get(x), false));
-                }
+            for (auto& x : items) {
+                PrepareImpl(ctx, x, encoders);
             }
         }
     }
-    
+
     void PrepareValue(TComputationContext& ctx, NUdf::TUnboxedValue& item) const {
         if (!KeyTypes.empty()) {
-            auto& encoder = Encoders.RefMutableObject(ctx, KeySchemeTypes, Comparators.empty()).Columns.front();
-            if (encoder) {
-                Set(item) = MakeString(encoder->Encode(Get(item), false));
+            auto& encoders = Encoders.RefMutableObject(ctx, KeySchemeTypes, Comparators.empty());
+            PrepareImpl(ctx, item, encoders);
+        }
+    }
+
+    template <class T>
+    void PrepareImpl(TComputationContext& ctx, T& item, TEncoders& encoders) const {
+        if (KeyTypes.size() > 1U) {
+            // sort tuples
+            if (encoders.NeedEncode) {
+                NUdf::TUnboxedValue* arrayItems = nullptr;
+                NUdf::TUnboxedValue array = ctx.HolderFactory.CreateDirectArrayHolder(KeyTypes.size(), arrayItems);
+                for (ui32 i = 0; i < KeyTypes.size(); ++i) {
+                    if (auto& e = encoders.Columns[i]) {
+                        arrayItems[i] = MakeString(e->Encode(Get(item).GetElement(i), false));
+                    } else {
+                        arrayItems[i] = Get(item).GetElement(i);
+                    }
+                }
+
+                Set(item) = std::move(array);
             }
+        } else if (auto& encoder = encoders.Columns.front()) {
+            Set(item) = MakeString(encoder->Encode(Get(item), false));
         }
     }
 
@@ -551,8 +551,8 @@ public:
         }
         auto hotkey = HotKey->GetValue(ctx);
         auto hotkey_prepared = hotkey;
-        
-        if (!hotkey_prepared.IsInvalid()) {            
+
+        if (!hotkey_prepared.IsInvalid()) {
             Description.PrepareValue(ctx, hotkey_prepared);
         }
 
@@ -568,7 +568,7 @@ public:
                 });
 
                 auto keys_copy = keys;
-                
+
                 Description.Prepare(ctx, keys);
 
                 const auto& ascending = Ascending->GetValue(ctx);

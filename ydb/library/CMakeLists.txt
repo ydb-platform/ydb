@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(accessor)
 add_subdirectory(aclib)
 add_subdirectory(arrow_clickhouse)
 add_subdirectory(backup)

@@ -2511,13 +2511,6 @@ void TDeferredActions<UseMigrationProtocol>::DeferDestroyDecompressionInfos(std:
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferOnUserRetrievedEvent(TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                                                                       i64 decompressedSize)
-{
-    UserRetrievedEventsInfo.Add(parent, decompressedSize);
-}
-
-template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DoActions() {
     Read();
     StartExecutorTasks();
@@ -2525,7 +2518,6 @@ void TDeferredActions<UseMigrationProtocol>::DoActions() {
     Reconnect();
     SignalWaiters();
     StartSessions();
-    OnUserRetrievedEvents();
 }
 
 template<bool UseMigrationProtocol>
@@ -2574,12 +2566,6 @@ void TDeferredActions<UseMigrationProtocol>::SignalWaiters() {
     for (auto& w : Waiters) {
         w.Signal();
     }
-}
-
-template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::OnUserRetrievedEvents()
-{
-    UserRetrievedEventsInfo.OnUserRetrievedEvent();
 }
 
 template<bool UseMigrationProtocol>

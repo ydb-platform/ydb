@@ -156,7 +156,6 @@ public:
     void DeferStartSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session);
     void DeferSignalWaiter(TWaiter&& waiter);
     void DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos);
-    void DeferOnUserRetrievedEvent(TDataDecompressionInfoPtr<UseMigrationProtocol> info, i64 decompressedSize);
 
 private:
     void DoActions();
@@ -167,7 +166,6 @@ private:
     void Reconnect();
     void SignalWaiters();
     void StartSessions();
-    void OnUserRetrievedEvents();
 
 private:
     // Read.
@@ -193,11 +191,6 @@ private:
     std::vector<std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>>> Sessions;
 
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> DecompressionInfos;
-
-    //
-    // OnUserRetrievedEvent
-    //
-    TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> UserRetrievedEventsInfo;
 };
 
 template <bool UseMigrationProtocol>

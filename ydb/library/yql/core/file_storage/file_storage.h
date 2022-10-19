@@ -12,6 +12,7 @@
 #include <util/generic/string.h>
 
 #include <vector>
+#include <functional>
 
 namespace NYql {
 
@@ -31,6 +32,7 @@ struct IFileStorage: public TThrRefBase {
     virtual TFsPath GetRoot() const = 0;
     virtual TFsPath GetTemp() const = 0;
     virtual const TFileStorageConfig& GetConfig() const = 0;
+    virtual void SetTokenResolver(std::function<TString(const TString&, const TString&)> tokenResolver) = 0;
 };
 
 using TFileStoragePtr = TIntrusivePtr<IFileStorage>;

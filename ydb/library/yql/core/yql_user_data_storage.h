@@ -14,11 +14,9 @@ namespace NYql {
 class TUserDataStorage : public TThrRefBase {
 public:
     typedef TIntrusivePtr<TUserDataStorage> TPtr;
-    typedef std::function<TMaybe<TString>(const TString& url)> TTokenResolver;
 
 public:
     TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex);
-    void SetTokenResolver(TTokenResolver tokenResolver);
 
     void AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block);
     void AddUserDataBlock(const TUserDataKey& key, const TUserDataBlock& block);
@@ -40,8 +38,6 @@ public:
     TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount = ~0u) const;
     static TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount = ~0u);
 
-    void FillUserDataTokens();
-    void TryFillUserDataToken(TUserDataBlock& block) const;
     std::map<TString, const TUserDataBlock*> GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount = ~0u) const;
     static TString MakeFullName(const TStringBuf& name);
     static TString MakeFolderName(const TStringBuf& name);
@@ -73,7 +69,6 @@ private:
     TUserDataTable UserData_;
     IUdfResolver::TPtr UdfResolver;
     TUdfIndex::TPtr UdfIndex;
-    TTokenResolver TokenResolver_;
 
     THashSet<TUserDataKey, TUserDataKey::THash, TUserDataKey::TEqualTo> ScannedUdfs;
     std::function<void(const TUserDataBlock& block)> ScanUdfStrategy_;

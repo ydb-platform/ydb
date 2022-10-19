@@ -108,12 +108,6 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             }
         };
 
-        info.TokenResolver = [](const TString& url) -> TMaybe<TString> {
-            Y_UNUSED(url);
-
-            return Nothing();
-        };
-
         return info;
     };
 }

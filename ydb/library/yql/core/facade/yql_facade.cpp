@@ -87,7 +87,18 @@ TProgram::TStatus SyncExecution(
     return status;
 }
 
-std::function<TMaybe<TString>(const TString&)> BuildCompositeTokenResolver(TVector<std::function<TMaybe<TString>(const TString&)>>&& children) {
+std::function<TString(const TString&, const TString&)> BuildDefaultTokenResolver(const TTypeAnnotationContext* typeCtx) {
+    return [typeCtx](const TString& /*url*/, const TString& alias) -> TString {
+        if (alias) {
+            if (auto cred = typeCtx->FindCredential(TString("default_").append(alias))) {
+                return cred->Content;
+            }
+        }
+        return {};
+    };
+}
+
+std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolver(TVector<std::function<TString(const TString&, const TString&)>>&& children) {
     if (children.empty()) {
         return {};
     }
@@ -96,14 +107,14 @@ std::function<TMaybe<TString>(const TString&)> BuildCompositeTokenResolver(TVect
         return std::move(children[0]);
     }
 
-    return[children = std::move(children)](const TString& url)->TMaybe<TString> {
+    return [children = std::move(children)](const TString& url, const TString& alias) -> TString {
         for (auto& c : children) {
-            if (auto r = c(url)) {
+            if (auto r = c(url, alias)) {
                 return r;
             }
         }
 
-        return Nothing();
+        return {};
     };
 }
 
@@ -1263,6 +1274,11 @@ void TProgram::CloseLastSession() {
             dp.CloseSession(sessionId);
         }
     }
+
+    // Token resolver may keep some references to provider internal's. So reset it to release provider's data
+    if (FileStorage_) {
+        FileStorage_->SetTokenResolver({});
+    }
 }
 
 TString TProgram::ResultsAsString() const {
@@ -1307,7 +1323,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     PlanBuilder_ = CreatePlanBuilder(*typeAnnotationContext);
     THashSet<TString> providerNames;
     TVector<TString> fullResultDataSinks;
-    TVector<std::function<TMaybe<TString>(const TString& url)>> tokenResolvers;
+    TVector<std::function<TString(const TString&, const TString&)>> tokenResolvers;
     for (const auto& dpi : DataProvidersInit_) {
         auto dp = dpi(
             username,
@@ -1385,7 +1401,11 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider);
     }
 
-    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
+    tokenResolvers.push_back(BuildDefaultTokenResolver(typeAnnotationContext.Get()));
+    if (FileStorage_) {
+        FileStorage_->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
+    }
+
     return typeAnnotationContext;
 }
 

@@ -845,8 +845,6 @@ namespace {
             block.Data = url;
             if (token) {
                 block.UrlToken = token;
-            } else {
-                Types.UserDataStorage->TryFillUserDataToken(block);
             }
             Types.UserDataStorage->AddUserDataBlock(key, block);
             return true;

@@ -25,6 +25,7 @@
 #include <util/generic/guid.h>
 #include <util/generic/yexception.h>
 
+#include <util/string/builder.h>
 #include <util/stream/str.h>
 #include <util/stream/file.h>
 #include <util/stream/null.h>
@@ -178,6 +179,9 @@ public:
         return Config;
     }
 
+    void SetTokenResolver(std::function<TString(const TString&, const TString&)> /*tokenResolver*/) final {
+    }
+
 private:
     TFileLinkPtr PutUrl(const THttpURL& url, const TString& token, const NFS::IDownloaderPtr& downloader) {
         return WithRetry<TDownloadError>(Config.GetRetryCount(), [&, this]() {
@@ -189,7 +193,7 @@ private:
     }
 
     TFileLinkPtr DoPutUrl(const THttpURL& url, const TString& token, const NFS::IDownloaderPtr& downloader) {
-        const auto urlMetaFile = BuildUrlMetaFileName(url);
+        const auto urlMetaFile = BuildUrlMetaFileName(url, token);
         auto lock = MultiResourceLock.Acquire(urlMetaFile); // let's use meta file as lock name
 
         TUrlMeta urlMeta;
@@ -231,7 +235,7 @@ private:
         }
 
         // todo: remove oldContentLink ?
-        const auto urlContentFile = BuildUrlContentFileName(url, etag, lastModified);
+        const auto urlContentFile = BuildUrlContentFileName(url, token, etag, lastModified);
         TFileLinkPtr result = Storage.Put(urlContentFile, TString(), TString(), puller);
 
         // save meta using rename for atomicity
@@ -247,13 +251,13 @@ private:
         return result;
     }
 
-    static TString BuildUrlMetaFileName(const THttpURL& url) {
-        return MD5::Calc(url.PrintS(THttpURL::FlagNoFrag | THttpURL::FlagHostAscii)) + ".url_meta";
+    static TString BuildUrlMetaFileName(const THttpURL& url, const TString& token) {
+        return MD5::Calc(TStringBuilder() << token << url.PrintS(THttpURL::FlagNoFrag | THttpURL::FlagHostAscii)) + ".url_meta";
     }
 
-    static TString BuildUrlContentFileName(const THttpURL& url, const TString& etag, const TString& lastModified) {
+    static TString BuildUrlContentFileName(const THttpURL& url, const TString& token, const TString& etag, const TString& lastModified) {
         TString needle = etag ? etag : lastModified;
-        return MD5::Calc(needle + url.PrintS(THttpURL::FlagNoFrag | THttpURL::FlagHostAscii)) + ".url";
+        return MD5::Calc(TStringBuilder() << token << needle << url.PrintS(THttpURL::FlagNoFrag | THttpURL::FlagHostAscii)) + ".url";
     }
 
 private:

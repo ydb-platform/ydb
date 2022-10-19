@@ -38,7 +38,6 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     }
 
     Y_ENSURE(UserDataStorage);
-    UserDataStorage->FillUserDataTokens();
 
     // Disable "in progress" constraints
     //DisableConstraintCheck.emplace(TSortedConstraintNode::Name());
@@ -219,7 +218,6 @@ bool TModuleResolver::AddFromUrl(const TStringBuf& file, const TStringBuf& url, 
     block.Type = EUserDataType::URL;
     block.Data = url;
     block.Data = SubstParameters(block.Data);
-    UserData->TryFillUserDataToken(block);
     UserData->AddUserDataBlock(file, block);
 
     return AddFromFile(file, ctx, syntaxVersion, packageVersion);

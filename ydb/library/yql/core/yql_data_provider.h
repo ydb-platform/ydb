@@ -228,7 +228,7 @@ struct TDataProviderInfo {
 
     std::function<void(const TString& sessionId)> CleanupSession;
 
-    std::function<TMaybe<TString>(const TString& url)> TokenResolver;
+    std::function<TString(const TString& url, const TString& alias)> TokenResolver;
 };
 
 using THiddenQueryAborter = std::function<void()>; // aborts hidden query, which is running within a separate TProgram

@@ -45,10 +45,6 @@ TUserDataStorage::TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable d
 {
 }
 
-void TUserDataStorage::SetTokenResolver(TTokenResolver tokenResolver) {
-    TokenResolver_ = std::move(tokenResolver);
-}
-
 void TUserDataStorage::AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block) {
     const auto key = ComposeUserDataKey(name);
     AddUserDataBlock(key, block);
@@ -154,29 +150,6 @@ TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUser
     });
 
     return res;
-}
-
-void TUserDataStorage::FillUserDataTokens() {
-    for (auto& p : UserData_) {
-        TryFillUserDataToken(p.second);
-    }
-}
-
-void TUserDataStorage::TryFillUserDataToken(TUserDataBlock& block) const {
-    if (block.Type != EUserDataType::URL) {
-        return;
-    }
-
-    // no need to overwrite existing value
-    if (block.UrlToken) {
-        return;
-    }
-
-    if (!TokenResolver_) {
-        return;
-    }
-
-    block.UrlToken = TokenResolver_(block.Data).GetOrElse({});
 }
 
 std::map<TString, const TUserDataBlock*> TUserDataStorage::GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount) const {

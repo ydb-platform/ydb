@@ -7,6 +7,7 @@ namespace NYql {
 class TFileStorageDecorator: public IFileStorage {
 public:
     TFileStorageDecorator(TFileStoragePtr fs);
+    ~TFileStorageDecorator() = default;
 
     TFileLinkPtr PutFile(const TString& file, const TString& outFileName) override;
     TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5) override;
@@ -18,6 +19,7 @@ public:
     TFsPath GetRoot() const override;
     TFsPath GetTemp() const override;
     const TFileStorageConfig& GetConfig() const override;
+    void SetTokenResolver(std::function<TString(const TString&, const TString&)> tokenResolver) override;
 
 protected:
     TFileStoragePtr Inner_;

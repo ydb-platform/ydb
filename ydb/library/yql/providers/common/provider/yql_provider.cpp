@@ -551,7 +551,6 @@ bool FillUsedFilesImpl(
                 const auto it = crutches.find(geobase);
                 if (crutches.cend() != it) {
                     auto pragma = it->second;
-                    types.UserDataStorage->TryFillUserDataToken(pragma);
                     types.UserDataStorage->AddUserDataBlock(geobase, pragma);
                     files.emplace(geobase, pragma).first->second.Usage.Set(EUserDataBlockUsage::Path);
                 }

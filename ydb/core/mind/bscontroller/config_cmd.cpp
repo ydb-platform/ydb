@@ -253,7 +253,7 @@ namespace NKikimr::NBsController {
                     LogCommand(txc, TDuration::Seconds(timer.Passed()));
                 }
 
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA03, "Transaction complete",
+                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA03, "Transaction ended",
                     (UniqueId, State->UniqueId),
                     (Status, Success ? "commit" : "rollback"),
                     (Error, Error));
@@ -345,6 +345,7 @@ namespace NKikimr::NBsController {
 
             void Complete(const TActorContext&) override {
                 if (auto state = std::exchange(State, std::nullopt)) {
+                    STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, State->UniqueId));
                     state->ApplyConfigUpdates();
                 }
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));

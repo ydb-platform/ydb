@@ -127,8 +127,8 @@ namespace NKikimr::NBsController {
                 if (pdiskInfo->BoxId != boxId) {
                     throw TExError() << "Drive is defind in host configs, but placed in another box# " << pdiskInfo->BoxId;
                 }
-                STLOG(PRI_NOTICE, BS_CONTROLLER_AUDIT, BSCA06, "Set new ExpectedSerial for HostConfigs drive",
-                        (Serial, newSerial), (BoxId, boxId), (PDiskId, *updatePDiskId), (Path, path));
+                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA06, "Set new ExpectedSerial for HostConfigs drive",
+                    (UniqueId, UniqueId), (Serial, newSerial), (BoxId, boxId), (PDiskId, *updatePDiskId), (Path, path));
                 return;
             }
         }
@@ -174,7 +174,8 @@ namespace NKikimr::NBsController {
         Y_VERIFY(success);
         driveInfoNew->PDiskConfig = config;
 
-        STLOG(PRI_NOTICE, BS_CONTROLLER_AUDIT, BSCA00, "AddDriveSerial", (Serial, newSerial), (BoxId, boxId));
+        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA00, "AddDriveSerial", (UniqueId, UniqueId), (Serial, newSerial),
+            (BoxId, boxId));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd,
@@ -225,8 +226,8 @@ namespace NKikimr::NBsController {
             }
             auto* pdiskUpdate = PDisks.FindForUpdate(*removePDiskId);
             pdiskUpdate->ExpectedSerial = {};
-            STLOG(PRI_NOTICE, BS_CONTROLLER_AUDIT, BSCA08, "Reset ExpectedSerial for HostConfig drive",
-                    (Serial, serial), (PDiskId, *removePDiskId));
+            STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA08, "Reset ExpectedSerial for HostConfig drive",
+                (UniqueId, UniqueId), (Serial, serial), (PDiskId, *removePDiskId));
 
             // create fictional row in DrivesSerials to be able to reply kAlready for already removed disk
             // even if they are defined through HostConfig
@@ -257,7 +258,7 @@ namespace NKikimr::NBsController {
             driveInfoMutable->PDiskId.Clear();
             driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
 
-            STLOG(PRI_NOTICE, BS_CONTROLLER_AUDIT, BSCA07, "RemoveDriveSerial", (Serial, serial));
+            STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA07, "RemoveDriveSerial", (UniqueId, UniqueId), (Serial, serial));
         }
     }
 

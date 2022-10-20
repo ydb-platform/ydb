@@ -222,7 +222,7 @@ public:
         , ValidatePolicy(opts.ValidatePolicy)
         , GraphPerProcess(opts.GraphPerProcess)
         , PatternNodes(MakeIntrusive<TPatternNodes>(opts.AllocState))
-        , ExternalAlloc(opts.CacheAlloc)
+        , ExternalAlloc(opts.PatternEnv)
     {
         PatternNodes->HolderFactory = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes->MemInfo, &FunctionRegistry);
         PatternNodes->ValueBuilder = MakeHolder<TDefaultValueBuilder>(*PatternNodes->HolderFactory, ValidatePolicy);
@@ -845,44 +845,6 @@ TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNode
 IComputationPattern::TPtr MakeComputationPattern(TExploringNodeVisitor& explorer, const TRuntimeNode& root,
         const std::vector<TNode*>& entryPoints, const TComputationPatternOpts& opts) {
     return MakeComputationPatternImpl(explorer, root, entryPoints, opts);
-}
-
-class TComputationPatternCache: public IComputationPatternCache {
-public:
-    IComputationPattern::TPtr EmplacePattern(const TString& serialized, PrepareFunc prepareFunc) override;
-    void CleanCache() override {
-        RewriteToCache.clear();
-    }
-    size_t GetSize() const override {
-        return RewriteToCache.size();
-    }
-    size_t GetCacheHits() const override {
-        return CacheHits;
-    }
-private:
-    TMutex CacheMutex;
-    THashMap<uint128, IComputationPattern::TPtr> RewriteToCache;
-    ui64 CacheHits = 0;
-    ui64 CacheMiss = 0;
-};
-
-IComputationPatternCache::TPtr IComputationPatternCache::Create() {
-    return THolder(new TComputationPatternCache());
-}
-
-IComputationPattern::TPtr TComputationPatternCache::EmplacePattern(const TString& serialized, PrepareFunc prepareFunc) {
-    const uint128 hash = CityHash128(serialized);
-    with_lock(CacheMutex) {
-        auto iter = RewriteToCache.find(hash);
-        if (iter == RewriteToCache.end()) {
-            ++CacheMiss;
-            // TODO: do not block without collision by prepareFunc()
-            iter = RewriteToCache.emplace(hash, prepareFunc()).first;
-        } else {
-            ++CacheHits;
-        }
-        return iter->second;
-    }
 }
 
 } // namespace NMiniKQL

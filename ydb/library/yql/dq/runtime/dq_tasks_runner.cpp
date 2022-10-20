@@ -382,6 +382,7 @@ public:
 
         bool filledCacheEntry = false;
         if (entry) {
+            opts.SetPatternEnv(entry);
             if (!entry->Pattern) {
                 auto guard = entry->Env.BindAllocator();
                 entry->Pattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);

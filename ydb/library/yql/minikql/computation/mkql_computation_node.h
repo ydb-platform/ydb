@@ -280,13 +280,6 @@ using TStreamEmitter = std::function<void(NUdf::TUnboxedValue&&)>;
 struct TPatternCacheEntry;
 
 struct TComputationPatternOpts {
-    TComputationPatternOpts(std::shared_ptr<TInjectedAlloc> cacheAlloc, std::shared_ptr<TTypeEnvironment> cacheEnv)
-        : CacheAlloc(std::move(cacheAlloc))
-        , CacheTypeEnv(std::move(cacheEnv))
-        , AllocState(CacheAlloc->InjectedState())
-        , Env(*CacheTypeEnv)
-    {}
-
     TComputationPatternOpts(TAllocState& allocState, const TTypeEnvironment& env)
         : AllocState(allocState)
         , Env(env)
@@ -330,8 +323,11 @@ struct TComputationPatternOpts {
         SecureParamsProvider = secureParamsProvider;
     }
 
-    mutable std::shared_ptr<TInjectedAlloc> CacheAlloc; // obsolete
-    mutable std::shared_ptr<TTypeEnvironment> CacheTypeEnv; // obsolete
+    void SetPatternEnv(std::shared_ptr<TPatternCacheEntry> cacheEnv) {
+        PatternEnv = std::move(cacheEnv);
+    }
+
+    mutable std::shared_ptr<TPatternCacheEntry> PatternEnv;
     TAllocState& AllocState;
     const TTypeEnvironment& Env;
 
@@ -365,20 +361,6 @@ IComputationPattern::TPtr MakeComputationPattern(
         const TRuntimeNode& root,
         const std::vector<TNode*>& entryPoints,
         const TComputationPatternOpts& opts);
-
-class IComputationPatternCache {
-public:
-    typedef THolder<IComputationPatternCache> TPtr;
-    typedef std::function<IComputationPattern::TPtr()> PrepareFunc;
-
-    virtual ~IComputationPatternCache() = default;
-    static TPtr Create();
-
-    virtual IComputationPattern::TPtr EmplacePattern(const TString& serialized, PrepareFunc prepareFunc) = 0;
-    virtual void CleanCache() = 0;
-    virtual size_t GetSize() const = 0;
-    virtual size_t GetCacheHits() const = 0;
-};
 
 std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams);
 

@@ -11,10 +11,15 @@
 
 namespace NYql::NDq {
 
+struct TS3ReadActorFactoryConfig {
+    ui64 RowsInBatch = 1000;
+};
+
 void RegisterS3ReadActorFactory(
     TDqAsyncIoFactory& factory,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr gateway = IHTTPGateway::Make(),
-    const IRetryPolicy<long>::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy());
+    const IRetryPolicy<long>::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
+    const TS3ReadActorFactoryConfig& = {});
 
 }

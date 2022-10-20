@@ -9,6 +9,8 @@
 
 namespace NYql::NDq {
 
+struct TS3ReadActorFactoryConfig;
+
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -20,6 +22,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const IRetryPolicy<long>::TPtr& retryPolicy);
+    const IRetryPolicy<long>::TPtr& retryPolicy,
+    const TS3ReadActorFactoryConfig& cfg);
 
 } // namespace NYql::NDq

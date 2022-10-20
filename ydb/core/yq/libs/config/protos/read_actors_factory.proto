@@ -10,6 +10,7 @@ import "ydb/library/yql/providers/s3/proto/retry_config.proto";
 
 message TS3ReadActorFactoryConfig {
     NYql.NS3.TRetryConfig RetryConfig = 1;
+    uint64 RowsInBatch = 2; // Default = 1000
 }
 
 message TPqReadActorFactoryConfig {

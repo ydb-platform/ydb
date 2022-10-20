@@ -23,6 +23,7 @@
 #endif
 
 #include "yql_s3_read_actor.h"
+#include "yql_s3_source_factory.h"
 #include "yql_s3_actors_util.h"
 
 #include <ydb/core/protos/services.pb.h>
@@ -417,8 +418,8 @@ private:
 
     static constexpr std::string_view TruncatedSuffix = "... [truncated]"sv;
 public:
-    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId, const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex, const TString& path, const TString& url, const std::size_t maxBlocksInFly)
-        : TActorCoroImpl(256_KB), InputIndex(inputIndex), TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId), PathIndex(pathIndex), Path(path), Url(url), MaxBlocksInFly(maxBlocksInFly)
+    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId, const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex, const TString& path, const TString& url, const std::size_t maxBlocksInFly, const TS3ReadActorFactoryConfig& readActorFactoryCfg)
+        : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex), TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId), PathIndex(pathIndex), Path(path), Url(url), MaxBlocksInFly(maxBlocksInFly)
     {}
 
     bool Next(TString& value) {
@@ -518,7 +519,7 @@ private:
             }
             const auto decompress(MakeDecompressor(*buffer, ReadSpec->Compression));
             YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
-            NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : *buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
+            NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : *buffer, NDB::Block(ReadSpec->Columns), nullptr, ReadActorFactoryCfg.RowsInBatch, ReadSpec->Settings));
             auto actorSystem = GetActorSystem();
             auto selfActorId = SelfActorId;
             size_t cntBlocksInFly = 0;
@@ -621,6 +622,7 @@ private:
     }
 
 private:
+    const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const ui64 InputIndex;
     const TTxId TxId;
     const TRetryStuff::TPtr RetryStuff;
@@ -679,8 +681,10 @@ public:
         const TReadSpec::TPtr& readSpec,
         const NActors::TActorId& computeActorId,
         const IRetryPolicy<long>::TPtr& retryPolicy,
-        const std::size_t maxBlocksInFly
-    )   : Gateway(std::move(gateway))
+        const std::size_t maxBlocksInFly,
+        const TS3ReadActorFactoryConfig& readActorFactoryCfg
+    )   : ReadActorFactoryCfg(readActorFactoryCfg)
+        , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
         , InputIndex(inputIndex)
         , TxId(txId)
@@ -700,11 +704,11 @@ public:
         LOG_D("TS3StreamReadActor", "Bootstrap");
         Become(&TS3StreamReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
-            
+
             const TPath& path = Paths[pathInd];
             auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + std::get<TString>(path), Headers, std::get<std::size_t>(path), TxId, RetryPolicy);
             RetryStuffForFile.push_back(stuff);
-            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, stuff, ReadSpec, pathInd + StartPathIndex, std::get<TString>(path), Url, MaxBlocksInFly);
+            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, stuff, ReadSpec, pathInd + StartPathIndex, std::get<TString>(path), Url, MaxBlocksInFly, ReadActorFactoryCfg);
             RegisterWithSameMailbox(std::make_unique<TS3ReadCoroActor>(std::move(impl), std::move(stuff)).release());
         }
     }
@@ -820,6 +824,7 @@ private:
         }
     }
 
+    const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const IHTTPGateway::TPtr Gateway;
     std::vector<TRetryStuff::TPtr> RetryStuffForFile;
     const THolderFactory& HolderFactory;
@@ -960,7 +965,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const IRetryPolicy<long>::TPtr& retryPolicy)
+    const IRetryPolicy<long>::TPtr& retryPolicy,
+    const TS3ReadActorFactoryConfig& cfg)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
@@ -1020,8 +1026,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("fileReadBlocksInFly"); settings.cend() != it)
             maxBlocksInFly = FromString<ui64>(it->second);
         const auto actor = new TS3StreamReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken,
-                                                  std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId, retryPolicy, maxBlocksInFly);
-        
+                                                  std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId, retryPolicy, maxBlocksInFly, cfg);
+
         return {actor, actor};
     } else {
         ui64 sizeLimit = std::numeric_limits<ui64>::max();

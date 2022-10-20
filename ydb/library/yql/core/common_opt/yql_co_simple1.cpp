@@ -3629,14 +3629,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (node->Head().IsCallable({"Just", "AsList"})) {
             YQL_CLOG(DEBUG, Core) << "Move " << node->Content() << " over " << node->Head().Content();
-            TSet<TString> fields;
-            node->Tail().ForEachChild([&fields](const TExprNode& child) {
-                fields.emplace(child.Content());
-            });
-
             auto args = node->Head().ChildrenList();
             for (auto& arg : args) {
-                arg = FilterByFields(node->Pos(), arg, fields, ctx, true);
+                arg = ctx.NewCallable(node->Pos(), "FilterMembers", {std::move(arg), node->TailPtr()});
             }
 
             return ctx.ChangeChildren(node->Head(), std::move(args));

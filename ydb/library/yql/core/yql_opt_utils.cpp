@@ -307,23 +307,13 @@ TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNo
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
     TExprContext& ctx, bool singleValue) {
-    if (singleValue) {
-        TExprNode::TListType structItems;
-        for (auto field : subsetFields) {
-            auto name = ctx.NewAtom(position, field);
-            auto member = ctx.NewCallable(position, "Member", { input , name });
-            structItems.push_back(ctx.NewList(position, { name, member }));
-        }
-
-        return ctx.NewCallable(position, "AsStruct", std::move(structItems));
-    }
-
     TExprNode::TListType fields;
-    for (auto& x : subsetFields) {
+    fields.reserve(subsetFields.size());
+    for (const auto& x : subsetFields) {
         fields.emplace_back(ctx.NewAtom(position, x));
     }
 
-    return ctx.NewCallable(position, "ExtractMembers", { input, ctx.NewList(position, std::move(fields)) });
+    return ctx.NewCallable(position, singleValue ? "FilterMembers" : "ExtractMembers", { input, ctx.NewList(position, std::move(fields)) });
 }
 
 template TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TSet<TStringBuf>& subsetFields, TExprContext& ctx, bool singleValue);

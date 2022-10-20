@@ -115,6 +115,7 @@ public:
         Functions["RemoveSystemMembers"] = &TCallableConstraintTransformer::RemovePrefixMembersWrap;
         Functions["RemovePrefixMembers"] = &TCallableConstraintTransformer::RemovePrefixMembersWrap;
         Functions["SelectMembers"] = &TCallableConstraintTransformer::SelectMembersWrap;
+        Functions["FilterMembers"] = &TCallableConstraintTransformer::SelectMembersWrap;
         Functions["CastStruct"] = &TCallableConstraintTransformer::SelectMembersWrap;
         Functions["SafeCast"] = &TCallableConstraintTransformer::SelectMembersWrap<true>;
         Functions["StrictCast"] = &TCallableConstraintTransformer::SelectMembersWrap<true>;

@@ -407,8 +407,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, pathId, step);
+        if (path->StepCreated == InvalidStepId) {
+            path->StepCreated = step;
+            context.SS->PersistCreateStep(db, pathId, step);
+        }
 
         Y_VERIFY(context.SS->SubDomains.contains(pathId));
         auto subDomain = context.SS->SubDomains.at(pathId);
@@ -1183,8 +1185,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, pathId, step);
+        if (path->StepCreated == InvalidStepId) {
+            path->StepCreated = step;
+            context.SS->PersistCreateStep(db, pathId, step);
+        }
 
         if (txState->TxType == TTxState::TxCreatePQGroup  || txState->TxType == TTxState::TxAllocatePQ) {
             auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -1390,8 +1394,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, pathId, step);
+        if (path->StepCreated == InvalidStepId) {
+            path->StepCreated = step;
+            context.SS->PersistCreateStep(db, pathId, step);
+        }
 
         TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(pathId);
 

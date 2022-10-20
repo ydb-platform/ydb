@@ -4,15 +4,72 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/folder/pathsplit.h>
-#include <library/cpp/json/json_writer.h>
 
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+
 #include "click_bench.h"
+
+
+namespace NYdb::NConsoleClient {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+
+namespace {
+
+struct TTestInfo {
+    TDuration ColdTime;
+    TDuration Min;
+    TDuration Max;
+    double Mean = 0;
+    double Std = 0;
+    std::vector<TDuration> Timings;
+
+    explicit TTestInfo(std::vector<TDuration>&& timings)
+        : Timings(std::move(timings))
+    {
+
+        if (Timings.empty()) {
+            return;
+        }
+
+        ColdTime = Timings[0];
+
+        if (Timings.size() > 1) {
+            ui32 sum = 0;
+            for (size_t j = 1; j < Timings.size(); ++j) {
+                if (Max < Timings[j]) {
+                    Max = Timings[j];
+                }
+                if (!Min || Min > Timings[j]) {
+                    Min = Timings[j];
+                }
+                sum += Timings[j].MilliSeconds();
+            }
+            Mean = (double) sum / (double) (Timings.size() - 1);
+            if (Timings.size() > 2) {
+                double variance = 0;
+                for (size_t j = 1; j < Timings.size(); ++j) {
+                    variance += (Mean - Timings[j].MilliSeconds()) * (Mean - Timings[j].MilliSeconds());
+                }
+                variance = variance / (double) (Timings.size() - 2);
+                Std = sqrt(variance);
+            }
+        }
+    }
+};
+
+TString FullTablePath(const TString& database, const TString& path, const TString& table) {
+    TPathSplitUnix prefixPathSplit(database);
+    prefixPathSplit.AppendComponent(path);
+    prefixPathSplit.AppendComponent(table);
+    return prefixPathSplit.Reconstruct();
+}
 
 
 static void ThrowOnError(const TStatus& status) {
@@ -20,6 +77,51 @@ static void ThrowOnError(const TStatus& status) {
         ythrow yexception() << "Operation failed with status " << status.GetStatus() << ": "
                             << status.GetIssues().ToString();
     }
+}
+
+static std::pair<TString, TString> ResultToYson(NTable::TScanQueryPartIterator& it) {
+    TStringStream out;
+    TStringStream err_out;
+    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+    writer.OnBeginList();
+
+    for (;;) {
+        auto streamPart = it.ReadNext().GetValueSync();
+        if (!streamPart.IsSuccess()) {
+            if (!streamPart.EOS()) {
+                err_out << streamPart.GetIssues().ToString() << Endl;
+            }
+            break;
+        }
+
+        if (streamPart.HasResultSet()) {
+            auto result = streamPart.ExtractResultSet();
+            auto columns = result.GetColumnsMeta();
+
+            NYdb::TResultSetParser parser(result);
+            while (parser.TryNextRow()) {
+                writer.OnListItem();
+                writer.OnBeginList();
+                for (ui32 i = 0; i < columns.size(); ++i) {
+                    writer.OnListItem();
+                    FormatValueYson(parser.GetValue(i), writer);
+                }
+                writer.OnEndList();
+                out << "\n";
+            }
+        }
+    }
+
+    writer.OnEndList();
+    return {out.Str(), err_out.Str()};
+}
+
+static std::pair<TString, TString> Execute(const TString& query, NTable::TTableClient& client) {
+    TStreamExecScanQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+    auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
+    ThrowOnError(it);
+    return ResultToYson(it);
 }
 
 static NJson::TJsonValue GetQueryLabels(ui32 queryId) {
@@ -44,52 +146,110 @@ static NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 qu
     return sensorValue;
 }
 
-void TClickHouseBench::Init() {
-    TString createSql = NResource::Find("click_bench_schema.sql");
-    TTableClient client(Driver);
+}
 
-    SubstGlobal(createSql, "{table}", FullTablePath());
-    ThrowOnError(client.RetryOperationSync([createSql](TSession session) {
-        return session.ExecuteSchemeQuery(createSql).GetValueSync();
-    }));
+TString TClickBenchCommandRun::GetQueries(const TString& fullTablePath) const {
+
+    TString queries;
+    if (ExternalQueries) {
+        queries = ExternalQueries;
+    } else if (ExternalQueriesFile) {
+        TFileInput fInput(ExternalQueriesFile);
+        queries = fInput.ReadAll();
+    } else {
+        queries = NResource::Find("click_bench_queries.sql");
+    }
+
+    SubstGlobal(queries, "{table}", "`" + fullTablePath + "`");
+    return queries;
+}
+
+bool TClickBenchCommandRun::RunBench(TConfig& config)
+{
+    TOFStream outFStream{OutFilePath};
+
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NTable::TTableClient(driver);
+
+    TStringStream report;
+    report << "Results for " << (IterationsCount + 1) << " iterations" << Endl;
+    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
+    report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |   Std   |" << Endl;
+    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
+
+    NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
+    const bool collectJsonSensors = !JsonReportFileName.empty();
+    const TString queries = GetQueries(FullTablePath(config.Database, Path, Table));
+    i32 queryN = 0;
+    bool allOkay = true;
+    for (auto& qtoken : StringSplitter(queries).Split(';')) {
+        if (!NeedRun(++queryN)) {
+            continue;
+        }
+
+        const TString query = PatchQuery(qtoken.Token());
+
+        std::vector<TDuration> timings;
+        timings.reserve(1 + IterationsCount);
+
+        Cout << Sprintf("Query%02u", queryN) << ":" << Endl;
+        Cerr << "Query text:\n" << Endl;
+        Cerr << query << Endl << Endl;
+
+        for (ui32 i = 0; i <= IterationsCount; ++i) {
+            auto t1 = TInstant::Now();
+            auto res = Execute(query, client);
+            auto duration = TInstant::Now() - t1;
+            timings.emplace_back(duration);
+
+            Cout << "\titeration " << i << ":\t";
+            if (res.second == "") {
+                Cout << "ok\t" << duration << " seconds" << Endl;
+            } else {
+                allOkay = false;
+                Cout << "failed\t" << duration << " seconds" << Endl;
+                Cerr << queryN << ": " << query << Endl
+                     << res.first << res.second << Endl;
+            }
+
+            if (i == 0) {
+                outFStream << queryN << ": " << Endl
+                           << res.first << res.second << Endl << Endl;
+            }
+        }
+
+        auto testInfo = TTestInfo(std::move(timings));
+        report << Sprintf("|   %02u    | %8zu | %7zu | %7.zu | %8.2f | %7.2f |", queryN,
+            testInfo.ColdTime.MilliSeconds(), testInfo.Min.MilliSeconds(), testInfo.Max.MilliSeconds(),
+            testInfo.Mean, testInfo.Std) << Endl;
+        if (collectJsonSensors) {
+            jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
+            jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
+            jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, queryN));
+            jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, queryN));
+            jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
+        }
+    }
+
+    driver.Stop(true);
+
+    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
+
+    Cout << Endl << report.Str() << Endl;
+    Cout << "Results saved to " << OutFilePath << Endl;
+
+    if (collectJsonSensors) {
+        TOFStream jStream{JsonReportFileName};
+        NJson::WriteJson(&jStream, &jsonReport, /*formatOutput*/ true);
+        jStream.Finish();
+        Cout << "Report saved to " << JsonReportFileName << Endl;
+    }
+
+    return allOkay;
 }
 
 
-TClickHouseBench::TTestInfo TClickHouseBench::AnalyzeTestRuns(const TVector<TDuration>& timings) {
-    TTestInfo info;
-
-    if (timings.empty()) {
-        return info;
-    }
-
-    info.ColdTime = timings[0];
-
-    if (timings.size() > 1) {
-        ui32 sum = 0;
-        for (size_t j = 1; j < timings.size(); ++j) {
-            if (info.Max < timings[j]) {
-                info.Max = timings[j];
-            }
-            if (!info.Min || info.Min > timings[j]) {
-                info.Min = timings[j];
-            }
-            sum += timings[j].MilliSeconds();
-        }
-        info.Mean = (double) sum / (double) (timings.size() - 1);
-        if (timings.size() > 2) {
-            double variance = 0;
-            for (size_t j = 1; j < timings.size(); ++j) {
-                variance += (info.Mean - timings[j].MilliSeconds()) * (info.Mean - timings[j].MilliSeconds());
-            }
-            variance = variance / (double) (timings.size() - 2);
-            info.Std = sqrt(variance);
-        }
-    }
-
-    return info;
-}
-
-TString TBenchContext::PatchQuery(const TStringBuf& original) const {
+TString TClickBenchCommandRun::PatchQuery(const TStringBuf& original) const {
     TString result(original.data(), original.size());
     if (EnablePushdown) {
         result = "PRAGMA ydb.KqpPushOlapProcess = \"true\";\n" + result;
@@ -111,7 +271,7 @@ TString TBenchContext::PatchQuery(const TStringBuf& original) const {
 }
 
 
-bool TBenchContext::NeedRun(const ui32 queryIdx) const {
+bool TClickBenchCommandRun::NeedRun(const ui32 queryIdx) const {
     if (QueriesToRun.size() && !QueriesToRun.contains(queryIdx)) {
         return false;
     }
@@ -149,8 +309,14 @@ void TClickBenchCommandInit::Config(TConfig& config) {
 int TClickBenchCommandInit::Run(TConfig& config) {
     auto driver = CreateDriver(config);
 
-    TClickHouseBench chb(driver, config.Database, Path, Table);
-    chb.Init();
+    TString createSql = NResource::Find("click_bench_schema.sql");
+    TTableClient client(driver);
+
+    SubstGlobal(createSql, "{table}", FullTablePath(config.Database, Path, Table));
+    ThrowOnError(client.RetryOperationSync([createSql](TSession session) {
+        return session.ExecuteSchemeQuery(createSql).GetValueSync();
+    }));
+
     Cout << "Table created" << Endl;
     driver.Stop(true);
     return 0;
@@ -242,153 +408,9 @@ void TClickBenchCommandRun::Config(TConfig& config) {
 
 
 int TClickBenchCommandRun::Run(TConfig& config) {
-    auto driver = CreateDriver(config);
-    TClickHouseBench chb(driver, config.Database, Path, Table);
-    std::unique_ptr<IQueryRunner> runner;
-    runner = std::make_unique<TStreamQueryRunner>(driver);
-    const bool okay = chb.RunBench(*runner, *this);
-    driver.Stop(true);
+    const bool okay = RunBench(config);
     return !okay;
 };
-
-
-bool TClickHouseBench::RunBench(IQueryRunner& queryRunner, const TBenchContext& context)
-{
-    TOFStream outFStream{context.OutFilePath};
-
-    TStringStream report;
-    report << "Results for " << (context.IterationsCount + 1) << " iterations" << Endl;
-    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
-    report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |   Std   |" << Endl;
-    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
-
-    NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
-    const bool collectJsonSensors = !context.JsonReportFileName.empty();
-    const TString queries = queryRunner.GetQueries(FullTablePath(), context.GetExternalQueries());
-    i32 queryN = 0;
-    bool allOkay = true;
-    for (auto& qtoken : StringSplitter(queries).Split(';')) {
-        if (!context.NeedRun(++queryN)) {
-            continue;
-        }
-        const TString query = context.PatchQuery(qtoken.Token());
-
-        TVector<TDuration> timings;
-        timings.reserve(1 + context.IterationsCount);
-
-        Cout << Sprintf("Query%02u", queryN) << ":" << Endl;
-        Cerr << "Query text:\n" << Endl;
-        Cerr << query << Endl << Endl;
-
-        for (ui32 i = 0; i <= context.IterationsCount; ++i) {
-            auto t1 = TInstant::Now();
-            auto res = queryRunner.Execute(query);
-
-            auto duration = TInstant::Now() - t1;
-
-            Cout << "\titeration " << i << ":\t";
-            if (res.second == "") {
-                Cout << "ok\t" << duration << " seconds" << Endl;
-                timings.emplace_back(duration);
-            } else {
-                allOkay = false;
-                Cout << "failed\t" << duration << " seconds" << Endl;
-                Cerr << queryN << ": " << query << Endl
-                     << res.first << res.second << Endl;
-            }
-
-            if (i == 0) {
-                outFStream << queryN << ": " << Endl
-                           << res.first << res.second << Endl << Endl;
-            }
-        }
-
-        auto testInfo = AnalyzeTestRuns(timings);
-        report << Sprintf("|   %02u    | %8zu | %7zu | %7.zu | %8.2f | %7.2f |", queryN,
-            testInfo.ColdTime.MilliSeconds(), testInfo.Min.MilliSeconds(), testInfo.Max.MilliSeconds(),
-            testInfo.Mean, testInfo.Std) << Endl;
-        if (collectJsonSensors) {
-            jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
-            jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
-            jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, queryN));
-            jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, queryN));
-            jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
-        }
-    }
-
-    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
-
-    Cout << Endl << report.Str() << Endl;
-    Cout << "Results saved to " << context.OutFilePath << Endl;
-
-    if (collectJsonSensors) {
-        TOFStream jStream{context.JsonReportFileName};
-        NJson::WriteJson(&jStream, &jsonReport, /*formatOutput*/ true);
-        jStream.Finish();
-        Cout << "Report saved to " << context.JsonReportFileName << Endl;
-    }
-
-    return allOkay;
-}
-
-TString TClickHouseBench::FullTablePath() const {
-    TPathSplitUnix prefixPathSplit(Database);
-    prefixPathSplit.AppendComponent(Path);
-    prefixPathSplit.AppendComponent(Table);
-    return prefixPathSplit.Reconstruct();
-}
-
-
-TString TStreamQueryRunner::GetQueries(const TString& fullTablePath, const TString& externalQueries) {
-    TString queries = externalQueries ? externalQueries : NResource::Find("click_bench_queries.sql");
-    SubstGlobal(queries, "{table}", "`" + fullTablePath + "`");
-    return queries;
-}
-
-std::pair<TString, TString> TStreamQueryRunner::Execute(const TString& query) {
-    TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
-    auto it = SqClient.StreamExecuteScanQuery(query, settings).GetValueSync();
-    ThrowOnError(it);
-    return ResultToYson(it);
-}
-
-std::pair<TString, TString> TStreamQueryRunner::ResultToYson(NTable::TScanQueryPartIterator& it) {
-    TStringStream out;
-    TStringStream err_out;
-    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
-    writer.OnBeginList();
-
-    for (;;) {
-        auto streamPart = it.ReadNext().GetValueSync();
-        if (!streamPart.IsSuccess()) {
-            if (!streamPart.EOS()) {
-                err_out << streamPart.GetIssues().ToString() << Endl;
-            }
-            break;
-        }
-
-        if (streamPart.HasResultSet()) {
-            auto result = streamPart.ExtractResultSet();
-            auto columns = result.GetColumnsMeta();
-
-            NYdb::TResultSetParser parser(result);
-            while (parser.TryNextRow()) {
-                writer.OnListItem();
-                writer.OnBeginList();
-                for (ui32 i = 0; i < columns.size(); ++i) {
-                    writer.OnListItem();
-                    FormatValueYson(parser.GetValue(i), writer);
-                }
-                writer.OnEndList();
-                out << "\n";
-            }
-        }
-    }
-
-    writer.OnEndList();
-    return {out.Str(), err_out.Str()};
-}
 
 TCommandClickBench::TCommandClickBench()
     : TClientCommandTree("click_bench")
@@ -396,3 +418,5 @@ TCommandClickBench::TCommandClickBench()
     AddCommand(std::make_unique<TClickBenchCommandRun>());
     AddCommand(std::make_unique<TClickBenchCommandInit>());
 }
+
+} // namespace NYdb::NConsoleClient

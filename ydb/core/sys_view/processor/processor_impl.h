@@ -208,6 +208,8 @@ private:
             IgnoreFunc(TEvSysView::TEvSendTopPartitions);
             IgnoreFunc(TEvSysView::TEvGetTopPartitionsRequest);
             IgnoreFunc(TEvSysView::TEvSendDbCountersRequest);
+            IgnoreFunc(TEvTabletPipe::TEvServerConnected);
+            IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             default:
                 if (!HandleDefaultEvents(ev, ctx)) {
                     LOG_CRIT(ctx, NKikimrServices::SYSTEM_VIEWS,

@@ -46,7 +46,7 @@ namespace NKikimr {
             const NKikimrProto::EReplyStatus status = result.GetStatus();
 
             // get the node id for this blob and check the part index
-            ui32 nodeId = info->GetIdxInSubgroup(vdisk, FullId.Hash());
+            ui32 nodeId = info->GetTopology().GetIdxInSubgroup(vdisk, FullId.Hash());
 
             // merge the ingress
             Ingress.Merge(TIngress(result.GetIngress()));

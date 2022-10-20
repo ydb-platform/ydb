@@ -118,8 +118,8 @@ struct TRequestCounters {
     }
 
     void DecInFly() {
-        Scope->InFly->Inc();
-        Common->InFly->Inc();
+        Scope->InFly->Dec();
+        Common->InFly->Dec();
     }
 
     void IncOk() {
@@ -128,8 +128,8 @@ struct TRequestCounters {
     }
 
     void DecOk() {
-        Scope->Ok->Inc();
-        Common->Ok->Inc();
+        Scope->Ok->Dec();
+        Common->Ok->Dec();
     }
 
     void IncError() {
@@ -138,8 +138,8 @@ struct TRequestCounters {
     }
 
     void DecError() {
-        Scope->Error->Inc();
-        Common->Error->Inc();
+        Scope->Error->Dec();
+        Common->Error->Dec();
     }
 
     void IncTimeout() {
@@ -148,8 +148,8 @@ struct TRequestCounters {
     }
 
     void DecTimeout() {
-        Scope->Timeout->Inc();
-        Common->Timeout->Inc();
+        Scope->Timeout->Dec();
+        Common->Timeout->Dec();
     }
 };
 

@@ -112,10 +112,10 @@ struct TRequestCounters {
 
     void DecInFly() {
         if (Scope) {
-            Scope->InFly->Inc();
+            Scope->InFly->Dec();
         }
         if (Common) {
-            Common->InFly->Inc();
+            Common->InFly->Dec();
         }
     }
 
@@ -130,10 +130,10 @@ struct TRequestCounters {
 
     void DecOk() {
         if (Scope) {
-            Scope->Ok->Inc();
+            Scope->Ok->Dec();
         }
         if (Common) {
-            Common->Ok->Inc();
+            Common->Ok->Dec();
         }
     }
 
@@ -148,10 +148,10 @@ struct TRequestCounters {
 
     void DecError() {
         if (Scope) {
-            Scope->Error->Inc();
+            Scope->Error->Dec();
         }
         if (Common) {
-            Common->Error->Inc();
+            Common->Error->Dec();
         }
     }
 
@@ -166,10 +166,10 @@ struct TRequestCounters {
 
     void DecRetry() {
         if (Scope) {
-            Scope->Retry->Inc();
+            Scope->Retry->Dec();
         }
         if (Common) {
-            Common->Retry->Inc();
+            Common->Retry->Dec();
         }
     }
 };

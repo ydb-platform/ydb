@@ -80,7 +80,22 @@ namespace NKikimr::NBlobDepot {
             , Response(std::move(response))
         {}
 
+        bool CheckIfObsolete() {
+            auto& block = Self->BlocksManager->Blocks[TabletId];
+            if (block.BlockedGeneration == BlockedGeneration && block.IssuerGuid == IssuerGuid) {
+                return false;
+            } else {
+                auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+                r.SetStatus(NKikimrProto::ALREADY);
+                Finish();
+                return true;
+            }
+        }
+
         void Bootstrap() {
+            if (CheckIfObsolete()) {
+                return;
+            }
             IssueNotificationsToAgents();
             Become(&TThis::StateFunc, AgentsWaitTime, new TEvents::TEvWakeup);
         }
@@ -186,12 +201,17 @@ namespace NKikimr::NBlobDepot {
             PassAway();
         }
 
-        STRICT_STFUNC(StateFunc,
-            hFunc(TEvBlobStorage::TEvBlockResult, Handle);
-            hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
-            cFunc(TEvents::TSystem::Wakeup, IssueBlocksToStorage);
-            cFunc(TEvents::TSystem::Poison, PassAway);
-        )
+        STATEFN(StateFunc) {
+            if (CheckIfObsolete()) {
+                return;
+            }
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvBlobStorage::TEvBlockResult, Handle);
+                hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
+                cFunc(TEvents::TSystem::Wakeup, IssueBlocksToStorage);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            }
+        }
     };
 
     void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid) {

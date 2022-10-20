@@ -12,14 +12,22 @@ import "ydb/public/api/protos/yq.proto";
 
 ////////////////////////////////////////////////////////////
 
+message IssueMessage {
+    Ydb.Issue.IssueMessage.Position position = 1;
+    string message = 2;
+    Ydb.Issue.IssueMessage.Position end_position = 3;
+    uint32 issue_code = 4;
+    string severity = 5;
+    repeated IssueMessage issues = 6;
+}
+
 message Error {
     int32 status = 1;
     Ydb.StatusIds.StatusCode message = 2;
-    repeated Ydb.Issue.IssueMessage details = 3;
+    repeated IssueMessage details = 3;
 }
 
 message QueryMeta {
-    google.protobuf.Timestamp created_at = 1;
     google.protobuf.Timestamp started_at = 2;
     google.protobuf.Timestamp finished_at = 3;
 }
@@ -64,7 +72,7 @@ message GetQueryResult {
     ComputeStatus status = 5;
     google.protobuf.StringValue text = 6;
     QueryMeta meta = 7;
-    repeated Ydb.Issue.IssueMessage issues = 8;
+    repeated IssueMessage issues = 8;
     repeated ResultSetMeta result_sets = 9;
 }
 

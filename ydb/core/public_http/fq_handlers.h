@@ -23,6 +23,8 @@ using ::google::protobuf::RepeatedPtrField;
 #define SIMPLE_COPY_FIELD(field) dst.set_##field(src.field())
 #define SIMPLE_COPY_RENAME_FIELD(srcField, dstField) dst.set_##dstField(src.srcField())
 
+#define SIMPLE_COPY_MUTABLE_OPTIONAL_FIELD(field) if (src.has_##field()) { *dst.mutable_##field() = src.field(); }
+
 #define SIMPLE_COPY_MUTABLE_FIELD(field) *dst.mutable_##field() = src.field()
 #define SIMPLE_COPY_MUTABLE_RENAME_FIELD(srcField, dstField) *dst.mutable_##dstField() = src.srcField()
 
@@ -48,18 +50,47 @@ void FqConvert(const T& src, ::google::protobuf::Empty& dst) {
     Y_UNUSED(dst);
 }
 
+TString RemapSeverity(int severity) {
+    // values from ydb/library/yql/public/issue/protos/issue_severity.proto
+    switch (severity) {
+    case 0:
+        return "FATAL";
+    case 1:
+        return "ERROR";
+    case 2:
+        return "WARNING";
+    case 3:
+        return "INFO";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+template <typename T, typename U>
+void FqConvert(const RepeatedPtrField<T>& src, RepeatedPtrField<U>& dst);
+
+void FqConvert(const Ydb::Issue::IssueMessage& src, FQHttp::IssueMessage& dst) {
+    SIMPLE_COPY_MUTABLE_OPTIONAL_FIELD(position);
+    SIMPLE_COPY_FIELD(message);
+    SIMPLE_COPY_MUTABLE_OPTIONAL_FIELD(end_position);
+    SIMPLE_COPY_FIELD(issue_code);
+    SIMPLE_COPY_REPEATABLE_FIELD(issues);
+    dst.set_severity(RemapSeverity(src.severity()));
+}
+
 template <typename T, typename U>
 void FqConvert(const RepeatedPtrField<T>& src, RepeatedPtrField<U>& dst) {
-    dst.Reserve(src.size());
+    // append
+    dst.Reserve(dst.size() + src.size());
     for (auto& v : src) {
         FqConvert(v, *dst.Add());
     }
 }
 
 void FqConvert(const Ydb::Operations::Operation& src, FQHttp::Error& dst) {
-	dst.set_status(static_cast<int>(src.status()));
+    dst.set_status(static_cast<int>(src.status()));
     SIMPLE_COPY_RENAME_FIELD(status, message);
-    SIMPLE_COPY_MUTABLE_RENAME_FIELD(issues, details);
+    SIMPLE_COPY_REPEATABLE_RENAME_FIELD(issues, details);
 }
 
 void FqConvert(const FQHttp::CreateQueryRequest& src, YandexQuery::QueryContent& dst) {
@@ -98,11 +129,10 @@ void FqConvert(const YandexQuery::CreateQueryResult& src, FQHttp::CreateQueryRes
 }
 
 void FqConvert(const YandexQuery::CommonMeta& src, FQHttp::QueryMeta& dst) {
-    SIMPLE_COPY_MUTABLE_FIELD(created_at);
+    SIMPLE_COPY_MUTABLE_RENAME_FIELD(created_at, started_at);
 }
 
 void FqConvert(const YandexQuery::QueryMeta& src, FQHttp::QueryMeta& dst) {
-    SIMPLE_COPY_MUTABLE_RENAME_FIELD(submitted_at, started_at);
     SIMPLE_COPY_MUTABLE_FIELD(finished_at);
     FqConvert(src.common(), dst);
 }
@@ -140,8 +170,9 @@ void FqConvert(const YandexQuery::Query& src, FQHttp::GetQueryResult& dst) {
         FqConvert(result_meta, *dst.mutable_result_sets()->Add());
     }
 
-    SIMPLE_COPY_MUTABLE_RENAME_FIELD(issue, issues);
-    dst.mutable_issues()->MergeFrom(src.transient_issue());
+    SIMPLE_COPY_REPEATABLE_RENAME_FIELD(issue, issues);
+    // append transient issues to issues
+    SIMPLE_COPY_REPEATABLE_RENAME_FIELD(transient_issue, issues);
 }
 
 void FqConvert(const FQHttp::GetQueryRequest& src, YandexQuery::DescribeQueryRequest& dst) {

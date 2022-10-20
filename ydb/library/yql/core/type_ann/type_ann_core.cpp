@@ -11497,6 +11497,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CountedAggregateAll"] = &CountedAggregateAllWrapper;
         Functions["AggApply"] = &AggApplyWrapper;
         Functions["AggApplyState"] = &AggApplyWrapper;
+        Functions["AggBlockApply"] = &AggBlockApplyWrapper;
         Functions["WinOnRows"] = &WinOnWrapper;
         Functions["WinOnGroups"] = &WinOnWrapper;
         Functions["WinOnRange"] = &WinOnWrapper;
@@ -11695,6 +11696,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
+        ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;
 
         Functions["AsRange"] = &AsRangeWrapper;
         Functions["RangeCreate"] = &RangeCreateWrapper;

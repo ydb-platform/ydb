@@ -235,20 +235,30 @@ public:
     virtual ~TBlockReaderBase() = default;
 
     virtual NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) = 0;
+
+    virtual NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) = 0;
 };
 
 template <typename T>
 class TFixedSizeBlockReader : public TBlockReaderBase {
 public:
-    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) override {
+    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
         return NUdf::TUnboxedValuePod(data.GetValues<T>(1)[index]);
+    }
+
+    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
+        return NUdf::TUnboxedValuePod(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
     }
 };
 
 class TBoolBlockReader : public TBlockReaderBase {
 public:
-    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) override {
+    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
         return NUdf::TUnboxedValuePod(arrow::BitUtil::GetBit(data.GetValues<uint8_t>(1), index));
+    }
+
+    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
+        return NUdf::TUnboxedValuePod(arrow::internal::checked_cast<const arrow::BooleanScalar&>(scalar).value);
     }
 };
 
@@ -379,6 +389,7 @@ public:
         while (s.Index_ == s.Count_) {
             for (size_t i = 0; i < Width_; ++i) {
                 s.Arrays_[i] = nullptr;
+                s.Scalars_[i] = nullptr;
             }
 
             auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data());
@@ -388,7 +399,12 @@ public:
 
             s.Index_ = 0;
             for (size_t i = 0; i < Width_; ++i) {
-                s.Arrays_[i] = TArrowBlock::From(s.Values_[i]).GetDatum().array();
+                const auto& datum = TArrowBlock::From(s.Values_[i]).GetDatum();
+                if (datum.is_scalar()) {
+                    s.Scalars_[i] = datum.scalar();
+                } else {
+                    s.Arrays_[i] = datum.array();
+                }
             }
 
             s.Count_ = TArrowBlock::From(s.Values_[Width_]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
@@ -400,11 +416,20 @@ public:
             }
 
             const auto& array = s.Arrays_[i];
-            const auto nullCount = array->GetNullCount();
-            if (nullCount == array->length || (nullCount > 0 && !arrow::BitUtil::GetBit(array->GetValues<uint8_t>(0), s.Index_ + array->offset))) {
-                *(output[i]) = NUdf::TUnboxedValue();
+            if (array) {
+                const auto nullCount = array->GetNullCount();
+                if (nullCount == array->length || (nullCount > 0 && !arrow::BitUtil::GetBit(array->GetValues<uint8_t>(0), s.Index_ + array->offset))) {
+                    *(output[i]) = NUdf::TUnboxedValue();
+                } else {
+                    *(output[i]) = s.Readers_[i]->Get(*array, s.Index_);
+                }
             } else {
-                *(output[i]) = s.Readers_[i]->Get(*array, s.Index_);
+                const auto& scalar = s.Scalars_[i];
+                if (!scalar->is_valid) {
+                    *(output[i]) = NUdf::TUnboxedValue();
+                } else {
+                    *(output[i]) = s.Readers_[i]->GetScalar(*scalar);
+                }
             }
         }
 
@@ -417,6 +442,7 @@ private:
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
         TVector<std::shared_ptr<arrow::ArrayData>> Arrays_;
+        TVector<std::shared_ptr<arrow::Scalar>> Scalars_;
         TVector<std::unique_ptr<TBlockReaderBase>> Readers_;
         size_t Count_ = 0;
         size_t Index_ = 0;
@@ -426,6 +452,7 @@ private:
             , Values_(slots.size() + 1)
             , ValuePointers_(slots.size() + 1)
             , Arrays_(slots.size())
+            , Scalars_(slots.size())
         {
             for (size_t i = 0; i < slots.size() + 1; ++i) {
                 ValuePointers_[i] = &Values_[i];

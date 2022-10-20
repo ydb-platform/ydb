@@ -1,9 +1,10 @@
 #include "yql_aggregate_expander.h"
-#include "yql_aggregate_expander.h"
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -53,6 +54,15 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
 
     if (Suffix == "" && !HaveSessionSetting && !EffectiveCompact && UsePhases) {
         return GeneratePhases();
+    }
+
+    if (TypesCtx.UseBlocks) {
+        if (Suffix == "Combine") {
+            auto ret = TryGenerateBlockCombine();
+            if (ret) {
+                return ret;
+            }
+        }
     }
 
     if (!allTraitsCollected) {
@@ -478,6 +488,107 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
                 .Arg(0, "item")
                 .Add(1, columnNames[i])
             .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAll() {
+    if (!TypesCtx.ArrowResolver) {
+        return nullptr;
+    }
+
+    auto streamArg = Ctx.NewArgument(Node->Pos(), "stream");
+    auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { streamArg });
+    TVector<TString> inputColumns;
+    for (ui32 i = 0; i < RowType->GetSize(); ++i) {
+        inputColumns.push_back(TString(RowType->GetItems()[i]->GetName()));
+    }
+
+    auto wideFlow = MakeExpandMap(Node->Pos(), inputColumns, flow, Ctx);
+
+    TExprNode::TListType extractorArgs;
+    for (ui32 i = 0; i < RowType->GetSize(); ++i) {
+        extractorArgs.push_back(Ctx.NewArgument(Node->Pos(), "field" + ToString(i)));
+    }
+
+    TExprNode::TListType extractorRoots;
+    TExprNode::TListType aggs;
+    TVector<TString> outputColumns;
+    for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
+        auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
+        if (trait->Child(0)->Content() == "count_all") {
+            // 0 columns
+            aggs.push_back(Ctx.Builder(Node->Pos())
+                .List()
+                    .Callable(0, "AggBlockApply")
+                        .Atom(0, trait->Child(0)->Content())
+                    .Seal()
+                .Seal()
+                .Build());
+        } else {
+            // 1 column
+            auto root = trait->Child(2)->TailPtr();
+            auto rowArg = &trait->Child(2)->Head().Head();
+
+            TVector<const TTypeAnnotationNode*> allTypes;
+            allTypes.push_back(root->GetTypeAnn());
+            bool supported = false;
+            YQL_ENSURE(TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allTypes, supported, Ctx));
+            if (!supported) {
+                return nullptr;
+            }
+
+            auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                Y_UNUSED(ctx);
+                if (node->IsCallable("Member") && &node->Head() == rowArg) {
+                    auto i = RowType->FindItem(node->Tail().Content());
+                    YQL_ENSURE(i, "Missing member");
+                    return extractorArgs[*i];
+                }
+
+                return node;
+            }, Ctx, TOptimizeExprSettings(&TypesCtx));
+
+            YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
+
+            aggs.push_back(Ctx.Builder(Node->Pos())
+                .List()
+                    .Callable(0, "AggBlockApply")
+                        .Atom(0, trait->Child(0)->Content())
+                        .Add(1, ExpandType(Node->Pos(), *trait->Child(2)->GetTypeAnn(), Ctx))
+                    .Seal()
+                    .Atom(1, ToString(extractorRoots.size()))
+                .Seal()
+                .Build());
+
+            extractorRoots.push_back(root);
+        }
+
+        outputColumns.push_back(TString(InitialColumnNames[index]->Content()));
+    }
+
+    auto mappedWidth = extractorRoots.size();
+    auto extractorLambda = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
+    auto mappedWideFlow = Ctx.NewCallable(Node->Pos(), "WideMap", { wideFlow, extractorLambda });
+    auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
+    auto aggWideFlow = Ctx.Builder(Node->Pos())
+        .Callable("BlockCombineAll")
+            .Add(0, blocks)
+            .Atom(1, ToString(mappedWidth))
+            .Callable(2, "Void")
+            .Seal()
+            .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
+        .Seal()
+        .Build();
+
+    auto finalFlow = MakeNarrowMap(Node->Pos(), outputColumns, aggWideFlow, Ctx);
+    auto root = Ctx.NewCallable(Node->Pos(), "FromFlow", { finalFlow });
+    auto lambdaStream = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), { streamArg }), std::move(root));
+
+    return Ctx.Builder(Node->Pos())
+        .Callable("LMap")
+            .Add(0, AggList)
+            .Add(1, lambdaStream)
         .Seal()
         .Build();
 }
@@ -2061,6 +2172,25 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         .Build();
 
     return mergeManyFinalize;
+}
+
+TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombine() {
+    if (HaveSessionSetting || HaveDistinct) {
+        return nullptr;
+    }
+
+    if (KeyColumns->ChildrenSize() == 0) {
+        for (const auto& x : AggregatedColumns->Children()) {
+            auto trait = x->ChildPtr(1);
+            if (!trait->IsCallable("AggApply")) {
+                return nullptr;
+            }
+        }
+
+        return TryGenerateBlockCombineAll();
+    }
+
+    return nullptr;
 }
 
 } // namespace NYql

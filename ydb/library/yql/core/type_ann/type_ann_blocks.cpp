@@ -110,5 +110,95 @@ IGraphTransformer::TStatus BlockBitCastWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockCombineAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 4U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    TTypeAnnotationNode::TListType inputItems;
+    for (const auto& type : multiType->GetItems()) {
+        if (!EnsureBlockOrScalarType(input->Pos(), *type, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isScalar;
+        inputItems.push_back(GetBlockItemType(*type, isScalar));
+    }
+
+    if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    ui32 countColumnIndex;
+    if (!TryFromString(input->Child(1)->Content(), countColumnIndex) || countColumnIndex >= inputItems.size()) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad count column index"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureSpecificDataType(input->Child(1)->Pos(), *inputItems[countColumnIndex], EDataSlot::Uint64, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!input->Child(2)->IsCallable("Void")) {
+        ui32 filterColumnIndex;
+        if (!TryFromString(input->Child(2)->Content(), filterColumnIndex) || filterColumnIndex >= inputItems.size()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad filter column index"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataType(input->Child(2)->Pos(), *inputItems[filterColumnIndex], EDataSlot::Bool, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (!EnsureTuple(*input->Child(3), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TTypeAnnotationNode::TListType retMultiType;
+    for (const auto& agg : input->Child(3)->Children()) {
+        if (!EnsureTupleMinSize(*agg, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!agg->Head().IsCallable("AggBlockApply")) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Expected AggBlockApply"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (agg->ChildrenSize() != agg->Head().ChildrenSize()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Different amount of input arguments"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (ui32 i = 1; i < agg->ChildrenSize(); ++i) {
+            ui32 argColumnIndex;
+            if (!TryFromString(agg->Child(i)->Content(), argColumnIndex) || argColumnIndex >= inputItems.size()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad arg column index"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto applyArgType = agg->Head().Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (!IsSameAnnotation(*inputItems[argColumnIndex], *applyArgType)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
+                    "Mismatch argument type, expected: " << *applyArgType << ", got: " << *inputItems[argColumnIndex]));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        retMultiType.push_back(AggApplySerializedStateType(agg->HeadPtr(), ctx.Expr));
+    }
+
+    auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
+    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 } // namespace NTypeAnnImpl
 }

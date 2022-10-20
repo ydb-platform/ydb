@@ -6,6 +6,7 @@
 #include "mkql_apply.h"
 #include "mkql_block_func.h"
 #include "mkql_blocks.h"
+#include "mkql_block_agg.h"
 #include "mkql_callable.h"
 #include "mkql_chain_map.h"
 #include "mkql_chain1_map.h"
@@ -268,6 +269,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"FromBlocks", &WrapFromBlocks},
         {"WideFromBlocks", &WrapWideFromBlocks},
         {"AsScalar", &WrapAsScalar},
+        {"BlockCombineAll", &WrapBlockCombineAll},
         {"MakeHeap", &WrapMakeHeap},
         {"PushHeap", &WrapPushHeap},
         {"PopHeap", &WrapPopHeap},

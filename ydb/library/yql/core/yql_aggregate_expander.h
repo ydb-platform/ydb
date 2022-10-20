@@ -75,6 +75,8 @@ private:
     TExprNode::TPtr GeneratePhases();
     void GenerateInitForDistinct(TExprNodeBuilder& parent, ui32& ndx, const TIdxSet& indicies, const TExprNode::TPtr& distinctField);
     TExprNode::TPtr GenerateJustOverStates(const TExprNode::TPtr& input, const TIdxSet& indicies);
+    TExprNode::TPtr TryGenerateBlockCombineAll();
+    TExprNode::TPtr TryGenerateBlockCombine();
 
 private:
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";

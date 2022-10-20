@@ -2237,6 +2237,16 @@
                 {"Index": 0, "Name": "Extractor", "Type": "TCoLambda"},
                 {"Index": 1, "Name": "Trait", "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TCoBlockCombineAll",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "BlockCombineAll"},
+            "Children": [
+                {"Index": 1, "Name": "CountColumn", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "FilterColumn", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Aggregations", "Type": "TExprList"}
+            ]
         }
     ]
 }

@@ -1588,4 +1588,49 @@ bool IsIdentityLambda(const TExprNode& lambda) {
     return lambda.IsLambda() && &lambda.Head().Head() == &lambda.Tail();
 }
 
+TExprNode::TPtr MakeExpandMap(TPositionHandle pos, const TVector<TString>& columns, const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("ExpandMap")
+            .Add(0, input)
+            .Lambda(1)
+                .Param("item")
+                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
+                    ui32 i = 0U;
+                    for (const auto& col : columns) {
+                        lambda.Callable(i++, "Member")
+                            .Arg(0, "item")
+                            .Atom(1, col)
+                        .Seal();
+                    }
+                    return lambda;
+                })
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr MakeNarrowMap(TPositionHandle pos, const TVector<TString>& columns, const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("NarrowMap")
+            .Add(0, input)
+            .Lambda(1)
+                .Params("fields", columns.size())
+                .Callable("AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& col : columns) {
+                            parent.List(i)
+                                .Atom(0, col)
+                                .Arg(1, "fields", i)
+                            .Seal();
+                            ++i;
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 }

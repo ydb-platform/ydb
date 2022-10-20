@@ -67,6 +67,17 @@ TExprNode::TPtr Now0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnn
     return node;
 }
 
+TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(types);
+    if (node->Head().IsCallable("WideFromBlocks")) {
+        YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
+        return node->Head().HeadPtr();
+    }
+
+    return node;
+}
+
 TExprNode::TPtr SplitEquiJoinToPairsRecursive(const TExprNode& node, const TExprNode& joinTree, TExprContext& ctx,
     std::vector<std::string_view>& outLabels, const TExprNode::TPtr& settings) {
     const auto leftSubtree = joinTree.Child(1);
@@ -4483,15 +4494,22 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
         return true;
     });
 
-    if (!newNodes) {
-        return node;
-    }
-
     // calculate extra columns
     TNodeOnNodeOwnedMap replaces;
     TExprNode::TListType lambdaArgs, roots;
 
     for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
+        if (lambda->ChildPtr(i)->IsComplete()) {
+            TVector<const TTypeAnnotationNode*> allTypes;
+            allTypes.push_back(lambda->ChildPtr(i)->GetTypeAnn());
+            bool supported = false;
+            YQL_ENSURE(types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, supported, ctx));
+            if (supported) {
+                rewrites[lambda->Child(i)] = ctx.NewCallable(node->Pos(), "AsScalar", { lambda->ChildPtr(i) });
+                ++newNodes;
+            }
+        }
+
         VisitExpr(lambda->ChildPtr(i), [&](const TExprNode::TPtr& node) {
             auto it = rewrites.find(node.Get());
             if (it != rewrites.end()) {
@@ -4507,6 +4525,10 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
             return true;
         });
+    }
+
+    if (!newNodes) {
+        return node;
     }
 
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes << ", extra columns: " << lambdaArgs.size();
@@ -6210,6 +6232,7 @@ struct TPeepHoleRules {
         {"NarrowMultiMap", &OptimizeWideMapBlocks},
         {"WideMap", &OptimizeWideMapBlocks},
         {"NarrowMap", &OptimizeWideMapBlocks},
+        {"WideToBlocks", &OptimizeWideToBlocks},
     };
 
     TPeepHoleRules()

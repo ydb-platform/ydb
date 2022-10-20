@@ -116,6 +116,11 @@ struct TSwitchInput {
     std::optional<ui32> ResultVariantOffset;
 };
 
+struct TAggInfo {
+    TString Name;
+    std::vector<ui32> ArgsColumns;
+};
+
 class TProgramBuilder : private TNonCopyable {
 public:
     TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
@@ -242,6 +247,8 @@ public:
 
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockBitCast(TRuntimeNode value, TType* targetType);
+    TRuntimeNode BlockCombineAll(TRuntimeNode flow, ui32 countColumn, std::optional<ui32> filterColumn,
+        const TArrayRef<const TAggInfo>& aggs, TType* returnType);
 
     // udfs
     TRuntimeNode Udf(

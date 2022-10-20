@@ -48,6 +48,7 @@ struct Schema : NIceDb::Schema {
         LastGcBarrierStep = 9,
         LastExportNumber = 10,
         StorePathId = 11,
+        OwnerPath = 12,
     };
 
     enum class EInsertTableIds : ui8 {

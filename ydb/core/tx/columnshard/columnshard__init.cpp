@@ -35,6 +35,7 @@ void TTxInit::SetDefaults() {
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;
     Self->StorePathId = 0;
+    Self->OwnerPath.clear();
     Self->BasicTxInfo.clear();
     Self->DeadlineQueue.clear();
     Self->PlanQueue.clear();
@@ -79,6 +80,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::StorePathId, Self->StorePathId);
+    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPath, Self->OwnerPath);
 
     if (!ready)
         return false;

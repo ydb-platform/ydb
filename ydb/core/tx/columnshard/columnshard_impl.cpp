@@ -427,6 +427,10 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
         StorePathId = proto.GetStorePathId();
         Schema::SaveSpecialValue(db, Schema::EValueIds::StorePathId, StorePathId);
     }
+    if (proto.HasOwnerPath()) {
+        OwnerPath = proto.GetOwnerPath();
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
+    }
 }
 
 void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tableProto, const TRowVersion& version,

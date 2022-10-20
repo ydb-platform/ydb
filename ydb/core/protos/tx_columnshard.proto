@@ -162,6 +162,8 @@ message TCommitTxBody {
 message TInitShard {
     optional uint32 DataChannelCount = 1;
     optional uint64 StorePathId = 2;
+    optional uint64 TablePathId = 3;
+    optional string OwnerPath = 4; // tablestore or table path
 }
 
 message TSchemaPresetVersionInfo {

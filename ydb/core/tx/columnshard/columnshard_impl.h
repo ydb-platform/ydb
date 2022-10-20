@@ -350,6 +350,7 @@ private:
     ui64 StatsReportRound = 0;
     ui64 BackgroundActivation = 0;
     ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
+    TString OwnerPath;
 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;

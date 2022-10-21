@@ -87,27 +87,27 @@ public:
         }
     }
 
-    void Apply(ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId,
+    void Apply(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId,
         const TTabletCountersBase* executorCounters, const TTabletCountersBase* appCounters,
         const TActorContext& ctx)
     {
-        AllTypes->Apply(tabletID, executorCounters, nullptr, tabletType);
+        AllTypes->Apply(tabletId, executorCounters, nullptr, tabletType);
         //
         auto typeCounters = GetOrAddCountersByTabletType(tabletType, CountersByTabletType, Counters);
         if (typeCounters) {
-            typeCounters->Apply(tabletID, executorCounters, appCounters, tabletType);
+            typeCounters->Apply(tabletId, executorCounters, appCounters, tabletType);
         }
         //
         if (!IsFollower && AppData(ctx)->FeatureFlags.GetEnableDbCounters() && tenantPathId) {
             auto dbCounters = GetDbCounters(tenantPathId, ctx);
             if (dbCounters) {
                 auto* limitedAppCounters = GetOrAddLimitedAppCounters(tabletType);
-                dbCounters->Apply(tabletID, executorCounters, appCounters, tabletType, limitedAppCounters);
+                dbCounters->Apply(tabletId, executorCounters, appCounters, tabletType, limitedAppCounters);
             }
         }
 
         //
-        auto& quietStats = QuietTabletCounters[tabletID];
+        auto& quietStats = QuietTabletCounters[tabletId];
 
         if (executorCounters) {
             if (quietStats.first == nullptr)
@@ -122,7 +122,7 @@ public:
         }
     }
 
-    void ApplyLabeledCounters(ui64 tabletID, TTabletTypes::EType tabletType, const TTabletLabeledCountersBase* labeledCounters) {
+    void ApplyLabeledCounters(ui64 tabletId, TTabletTypes::EType tabletType, const TTabletLabeledCountersBase* labeledCounters) {
 
         auto iterTabletType = LabeledCountersByTabletTypeAndGroup.find(std::make_pair(tabletType, labeledCounters->GetGroup()));
 
@@ -157,25 +157,25 @@ public:
         for (ui32 i = 0, e = labeledCounters->GetCounters().Size(); i < e; ++i) {
             const ui64& value = labeledCounters->GetCounters()[i].Get();
             const ui64& id = labeledCounters->GetIds()[i].Get();
-            iterTabletType->second->SetValue(tabletID, i, value, id);
+            iterTabletType->second->SetValue(tabletId, i, value, id);
         }
     }
 
-    void ForgetTablet(ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId) {
-        AllTypes->Forget(tabletID);
+    void ForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId) {
+        AllTypes->Forget(tabletId);
         // and now erase from every other path
         auto iterTabletType = CountersByTabletType.find(tabletType);
         if (iterTabletType != CountersByTabletType.end()) {
-            iterTabletType->second->Forget(tabletID);
+            iterTabletType->second->Forget(tabletId);
         }
         // from db counters
         if (auto itPath = CountersByPathId.find(tenantPathId); itPath != CountersByPathId.end()) {
-            itPath->second->Forget(tabletID, tabletType);
+            itPath->second->Forget(tabletId, tabletType);
         }
         //and from all labeledCounters that could have this tablet
         auto iterTabletTypeAndGroup = LabeledCountersByTabletTypeAndGroup.lower_bound(std::make_pair(tabletType, TString()));
         for (; iterTabletTypeAndGroup != LabeledCountersByTabletTypeAndGroup.end() && iterTabletTypeAndGroup->first.first == tabletType; ) {
-            bool empty = iterTabletTypeAndGroup->second->ForgetTablet(tabletID);
+            bool empty = iterTabletTypeAndGroup->second->ForgetTablet(tabletId);
             if (empty) {
                 iterTabletTypeAndGroup = LabeledCountersByTabletTypeAndGroup.erase(iterTabletTypeAndGroup);
             } else {
@@ -183,15 +183,15 @@ public:
             }
         }
 
-        QuietTabletCounters.erase(tabletID);
+        QuietTabletCounters.erase(tabletId);
 
-        TString tabletIdStr = Sprintf("%" PRIu64, tabletID);
+        TString tabletIdStr = Sprintf("%" PRIu64, tabletId);
         Counters->RemoveSubgroup("tabletid", tabletIdStr.data());
     }
 
     void Query(const NKikimrTabletCountersAggregator::TEvTabletCountersRequest& request, NKikimrTabletCountersAggregator::TEvTabletCountersResponse& response) {
-        TVector<ui64> tabletIDs(request.GetTabletIds().begin(), request.GetTabletIds().end());
-        if (tabletIDs.empty()) {
+        TVector<ui64> tabletIds(request.GetTabletIds().begin(), request.GetTabletIds().end());
+        if (tabletIds.empty()) {
             for (const auto& pr : QuietTabletCounters) {
                 auto& countersInfo = *response.AddCountersInfo();
                 countersInfo.SetTabletId(pr.first);
@@ -219,8 +219,8 @@ public:
                 }
             }
         } else {
-            for (ui64 tabletID : tabletIDs) {
-                auto it = QuietTabletCounters.find(tabletID);
+            for (ui64 tabletId : tabletIds) {
+                auto it = QuietTabletCounters.find(tabletId);
                 if (it != QuietTabletCounters.end()) {
                     auto& countersInfo = *response.AddCountersInfo();
                     countersInfo.SetTabletId(it->first);
@@ -323,7 +323,7 @@ private:
             , TabletAppCounters(TabletAppCountersSection)
         {}
 
-        void Apply(ui64 tabletID,
+        void Apply(ui64 tabletId,
             const TTabletCountersBase* executorCounters,
             const TTabletCountersBase* appCounters,
             TTabletTypes::EType tabletType,
@@ -335,14 +335,14 @@ private:
                 if (!TabletExecutorCounters.IsInitialized) {
                     TabletExecutorCounters.Initialize(executorCounters);
                 }
-                TabletExecutorCounters.Apply(tabletID, executorCounters, tabletType);
+                TabletExecutorCounters.Apply(tabletId, executorCounters, tabletType);
             }
 
             if (appCounters) {
                 if (!TabletAppCounters.IsInitialized) {
                     TabletAppCounters.Initialize(limitedAppCounters ? limitedAppCounters : appCounters);
                 }
-                TabletAppCounters.Apply(tabletID, appCounters, tabletType);
+                TabletAppCounters.Apply(tabletId, appCounters, tabletType);
             }
         }
 
@@ -463,7 +463,7 @@ private:
 
                     // cumulative counters
                     FullSizeCumulative = counters->Cumulative().Size();
-                    AggregatedCumulativeCounters.Reserve(FullSizeSimple);
+                    AggregatedCumulativeCounters.Reserve(FullSizeCumulative);
                     for (ui32 i = 0; i < FullSizeCumulative; ++i) {
                         const char* name = counters->CumulativeCounterName(i);
                         if (!name) {
@@ -485,32 +485,37 @@ private:
                 IsInitialized = true;
             }
 
-            void Apply(ui64 tabletID, const TTabletCountersBase* counters, TTabletTypes::EType tabletType) {
+            void Apply(ui64 tabletId, const TTabletCountersBase* counters, TTabletTypes::EType tabletType) {
                 Y_VERIFY(counters);
 
                 TInstant now = TInstant::Now();
-                auto it = LastAggregateUpdateTime.find(tabletID);
+                auto it = LastAggregateUpdateTime.find(tabletId);
                 TDuration diff;
                 if (it != LastAggregateUpdateTime.end()) {
                     diff = now - it->second;
                     it->second = now;
                 } else {
-                    LastAggregateUpdateTime.emplace(tabletID, now);
+                    LastAggregateUpdateTime.emplace(tabletId, now);
                 }
 
                 // simple counters
                 ui32 nextSimpleOffset = 0;
+                TVector<ui64> simpleValues;
+                simpleValues.resize(FullSizeSimple); // more than needed
                 for (ui32 i = 0; i < FullSizeSimple; ++i) {
                     if (!counters->SimpleCounterName(i)) {
                         continue;
                     }
                     const ui32 offset = nextSimpleOffset++;
                     const ui64 value = counters->Simple()[i].Get();
-                    AggregatedSimpleCounters.SetValue(tabletID, offset, value, tabletType);
+                    simpleValues[offset] = value;
                 }
+                AggregatedSimpleCounters.SetValues(tabletId, simpleValues, tabletType);
 
                 // cumulative counters
                 ui32 nextCumulativeOffset = 0;
+                TVector<ui64> cumulativeValues;
+                cumulativeValues.resize(FullSizeCumulative, 0);
                 for (ui32 i = 0; i < FullSizeCumulative; ++i) {
                     if (!counters->CumulativeCounterName(i)) {
                         continue;
@@ -518,12 +523,12 @@ private:
                     const ui32 offset = nextCumulativeOffset++;
                     const ui64 valueDiff = counters->Cumulative()[i].Get();
                     if (diff) {
-                        const ui64 diffValue = valueDiff * 1000000 / diff.MicroSeconds(); // differentiate value to per second rate
-                        AggregatedCumulativeCounters.SetValue(tabletID, offset, diffValue, tabletType);
+                        cumulativeValues[offset] = valueDiff * 1000000 / diff.MicroSeconds(); // differentiate value to per second rate
                     }
                     Y_VERIFY(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
                     *CumulativeCounters[offset] += valueDiff;
                 }
+                AggregatedCumulativeCounters.SetValues(tabletId, cumulativeValues, tabletType);
 
                 // percentile counters
                 ui32 nextPercentileOffset = 0;
@@ -534,12 +539,13 @@ private:
 
                     const ui32 offset = nextPercentileOffset++;
                     AggregatedHistogramCounters.SetValue(
-                        tabletID,
+                        tabletId,
                         offset,
                         counters->Percentile()[i],
                         counters->PercentileCounterName(i),
                         tabletType);
                 }
+
             }
 
             void Forget(ui64 tabletId) {

@@ -40,8 +40,7 @@ public:
 
     void Reserve(size_t hint);
 
-    void AddSimpleCounter(const char* name,
-                          THolder<THistogramCounter> percentileAggregate = THolder<THistogramCounter>());
+    void AddSimpleCounter(const char* name, THolder<THistogramCounter> percentileAggregate = {});
 
     ui64 GetSum(ui32 counterIndex) const;
     void SetSum(ui32 counterIndex, ui64 value);
@@ -49,24 +48,21 @@ public:
     ui64 GetMax(ui32 counterIndex) const;
     void SetMax(ui32 counterIndex, ui64 value);
 
-    void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value, NKikimrTabletBase::TTabletTypes::EType tabletType);
+    void SetValues(ui64 tabletId, const TVector<ui64>& values, NKikimrTabletBase::TTabletTypes::EType tabletType);
     void ForgetTablet(ui64 tabletId);
     void RecalcAll();
 
 private:
-    //
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
 
     TCountersVector MaxSimpleCounters;
     TCountersVector SumSimpleCounters;
     THistogramVector HistSimpleCounters;
-    using TCountersByTabletIDMap = THashMap<ui64, ui64>;
 
-    TVector<TCountersByTabletIDMap> CountersByTabletID;
+    using TCountersByTabletIdMap = THashMap<ui64, TVector<ui64>>;
+    TCountersByTabletIdMap CountersByTabletId;
+
     TVector<bool> ChangedCounters;
-
-private:
-    void Recalc(ui32 idx);
 };
 
 class TAggregatedCumulativeCounters {
@@ -75,28 +71,26 @@ public:
     TAggregatedCumulativeCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
 
     void Reserve(size_t hint);
-    void AddCumulativeCounter(const char* name,
-                              THolder<THistogramCounter> percentileAggregate = THolder<THistogramCounter>());
+
+    void AddCumulativeCounter(const char* name, THolder<THistogramCounter> percentileAggregate = {});
+
     ui64 GetMax(ui32 counterIndex) const;
     void SetMax(ui32 counterIndex, ui64 value);
-    void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value,
-                  NKikimrTabletBase::TTabletTypes::EType tabletType);
+
+    void SetValues(ui64 tabletId, const TVector<ui64>& values, NKikimrTabletBase::TTabletTypes::EType tabletType);
     void ForgetTablet(ui64 tabletId);
     void RecalcAll();
 
 private:
-    //
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
 
     TCountersVector MaxCumulativeCounters;
     THistogramVector HistCumulativeCounters;
-    using TCountersByTabletIDMap = THashMap<ui64, ui64>;
 
-    TVector<TCountersByTabletIDMap> CountersByTabletID;
+    using TCountersByTabletIdMap = THashMap<ui64, TVector<ui64>>;
+    TCountersByTabletIdMap CountersByTabletId;
+
     TVector<bool> ChangedCounters;
-
-private:
-    void Recalc(ui32 idx);
 };
 
 class TAggregatedHistogramCounters {
@@ -111,12 +105,11 @@ public:
         THashMap<TString, THolder<THistogramCounter>>& histogramAggregates);
 
     void SetValue(
-        ui64 tabletID,
+        ui64 tabletId,
         ui32 counterIndex,
         const NKikimr::TTabletPercentileCounter& percentileCounter,
         const char* name,
         NKikimrTabletBase::TTabletTypes::EType tabletType);
-
 
     void ForgetTablet(ui64 tabletId);
 
@@ -141,10 +134,10 @@ private:
     TVector<NMonitoring::TBucketBounds> BucketBounds;
 
     // tabletId -> values
-    using TCountersByTabletIDMap = THashMap<ui64, TValuesVec>;
+    using TCountersByTabletIdMap = THashMap<ui64, TValuesVec>;
 
     // counter values (not "real" monitoring counters);
-    TVector<TCountersByTabletIDMap> CountersByTabletID; // each index is map from tablet to counter value
+    TVector<TCountersByTabletIdMap> CountersByTabletId; // each index is map from tablet to counter value
 };
 
 class TAggregatedLabeledCounters {
@@ -175,8 +168,8 @@ private:
     mutable TVector<ui64> Ids;
     mutable bool Changed;
 
-    using TCountersByTabletIDMap = THashMap<ui64, std::pair<ui64, ui64>>; //second pair is for counter and id
-    TVector<TCountersByTabletIDMap> CountersByTabletID;
+    using TCountersByTabletIdMap = THashMap<ui64, std::pair<ui64, ui64>>; //second pair is for counter and id
+    TVector<TCountersByTabletIdMap> CountersByTabletId;
 
 private:
     void Recalc(ui32 idx) const;

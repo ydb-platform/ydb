@@ -13,12 +13,27 @@
 #include <util/string/split.h>
 #include <util/string/subst.h>
 #include <util/charset/wide.h>
+#include <util/string/strip.h>
+#include <util/charset/unidata.h>
 
 using namespace NYql;
 using namespace NUdf;
 using namespace NUnicode;
 
 namespace {
+
+    template <class It>
+    struct TIsUnicodeSpaceAdapter {
+        bool operator()(const It& it) const noexcept {
+            return IsSpace(*it);
+        }
+    };
+
+    template <class It>
+    TIsUnicodeSpaceAdapter<It> IsUnicodeSpaceAdapter(It) {
+        return {};
+    }
+
 #define NORMALIZE_UDF_MAP(XX) \
     XX(Normalize, NFC)        \
     XX(NormalizeNFD, NFD)     \
@@ -428,6 +443,12 @@ namespace {
             return *args;
     }
 
+    SIMPLE_UDF(TStrip, TUtf8(TAutoMap<TUtf8>)) {
+        const TUtf32String input = UTF8ToUTF32<true>(args[0].AsStringRef());
+        const auto& result = StripString(input, IsUnicodeSpaceAdapter(input.begin()));
+        return valueBuilder->NewString(WideToUTF8(result));
+    }
+
 #define REGISTER_NORMALIZE_UDF(name, mode) T##name,
 #define EXPORTED_UNICODE_BASE_UDF \
     NORMALIZE_UDF_MAP(REGISTER_NORMALIZE_UDF) \
@@ -452,5 +473,6 @@ namespace {
     TToUpper, \
     TToTitle, \
     TToUint64, \
-    TTryToUint64
+    TTryToUint64, \
+    TStrip
 }

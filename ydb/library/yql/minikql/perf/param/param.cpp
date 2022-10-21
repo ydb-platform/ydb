@@ -19,7 +19,7 @@ int main(int, char**) {
 
     for (ui32 pass = 0; pass < 2; ++pass) {
         TString name = pass ? "param" : "const";
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 

@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
     template <typename TItem>
     void TestListPoolPagesImpl(size_t listSize, ui16 countOfLists, size_t expectedListCapacity, ui32 expectedMark) {
         using TPool = TListPool<TItem>;
-        TAlignedPagePool pagePool;
+        TAlignedPagePool pagePool(__LOCATION__);
         TPool pool(pagePool);
         UNIT_ASSERT(countOfLists > 1);
 
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
     template <typename TItem>
     void TestListPoolLargeImpl() {
         using TPool = TListPool<TItem>;
-        TAlignedPagePool pagePool;
+        TAlignedPagePool pagePool(__LOCATION__);
         TPool pool(pagePool);
         const size_t listSize = TListPoolBase::GetMaxListSize<TItem>();
         TItem* l = pool.template GetList<TItem>(listSize);
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         const ui32 addition = 20;
         const ui64 sumValuesTarget = sumKeysTarget + addition * elementsCount;
 
-        TAlignedPagePool pagePool;
+        TAlignedPagePool pagePool(__LOCATION__);
         TCompactHash<TItem, TItem, TItemHash> hash(pagePool);
 
         TVector<TItem> elements(elementsCount);
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         const ui32 keysCount = 10;
         const ui64 elementsCount = keysCount * (keysCount + 1) / 2;
 
-        TAlignedPagePool pagePool;
+        TAlignedPagePool pagePool(__LOCATION__);
         TCompactMultiHash<TItem, TItem, TItemHash> hash(pagePool);
 
         TVector<TItem> keys(keysCount);
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         const ui32 elementsCount = 32;
         const ui64 sumKeysTarget = elementsCount * (elementsCount - 1) / 2;
 
-        TAlignedPagePool pagePool;
+        TAlignedPagePool pagePool(__LOCATION__);
         TCompactHashSet<TItem, TItemHash> hash(pagePool);
 
         TVector<TItem> elements(elementsCount);
@@ -385,7 +385,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
     };
 
     Y_UNIT_TEST(TestStressSmallLists) {
-        TAlignedPagePool pagePool;
+        TAlignedPagePool pagePool(__LOCATION__);
         for (size_t listSize: xrange<size_t>(2, 17, 1)) {
             const size_t backets = TListPoolBase::GetSmallPageCapacity<ui64>(listSize);
             const size_t elementsCount = backets * listSize;

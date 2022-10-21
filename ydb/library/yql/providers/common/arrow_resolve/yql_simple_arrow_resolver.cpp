@@ -23,7 +23,7 @@ private:
         const TTypeAnnotationNode*& returnType, TExprContext& ctx) const override {
         try {
             returnType = nullptr;
-            TScopedAlloc alloc;
+            TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TProgramBuilder pgmBuilder(env, FunctionRegistry_);
             TType* mkqlOutputType;
@@ -49,7 +49,7 @@ private:
     bool HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, bool& has, TExprContext& ctx) const override {
         try {
             has = false;
-            TScopedAlloc alloc;
+            TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TProgramBuilder pgmBuilder(env, FunctionRegistry_);
             TNullOutput null;
@@ -70,7 +70,7 @@ private:
     bool AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, bool& supported, TExprContext& ctx) const override {
         try {
             supported = false;
-            TScopedAlloc alloc;
+            TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TProgramBuilder pgmBuilder(env, FunctionRegistry_);
             for (const auto& type : types) {

@@ -14,7 +14,8 @@ struct TPatternCacheEntry {
     IComputationPattern::TPtr Pattern;
 
     TPatternCacheEntry()
-        : Env(Alloc)
+        : Alloc(__LOCATION__)
+        , Env(Alloc)
     {
         Alloc.Release();
     }

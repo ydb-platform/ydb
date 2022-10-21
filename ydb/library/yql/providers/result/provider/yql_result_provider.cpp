@@ -401,7 +401,7 @@ namespace {
 
                     const auto& itemsNode = forNode.Items().Ref();
 
-                    TScopedAlloc alloc;
+                    TScopedAlloc alloc(__LOCATION__);
                     TTypeEnvironment env(alloc);
                     TStringStream err;
                     TProgramBuilder pgmBuilder(env, Config->FunctionRegistry);

@@ -16,7 +16,7 @@ namespace NKikimr::NMiniKQL {
 template <typename TProtoType>
 void TestExportType(std::function<TRuntimeNode(TProgramBuilder& pgmBuilder)> setup, const TString& expectedString) {
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -35,7 +35,7 @@ void TestExportValue(std::function<TRuntimeNode(TProgramBuilder& pgmBuilder)> se
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
     auto randomProvider = CreateDeterministicRandomProvider(1);
     auto timeProvider = CreateDeterministicTimeProvider(1);
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -70,7 +70,7 @@ void TestImportParams(const TString& type, const TString& value) {
     protoParam.MutableType()->CopyFrom(protoType);
     protoParam.MutableValue()->CopyFrom(protoValue);
 
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto runtimeNode = ImportValueFromProto(protoParam, env);
     UNIT_ASSERT(runtimeNode.HasValue());

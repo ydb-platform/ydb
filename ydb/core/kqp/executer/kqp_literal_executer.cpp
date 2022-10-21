@@ -154,7 +154,7 @@ private:
         }
 
         auto funcRegistry = AppData()->FunctionRegistry;
-        NMiniKQL::TScopedAlloc alloc(TAlignedPagePoolCounters(), funcRegistry->SupportsSizedAllocators());
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry->SupportsSizedAllocators());
         NMiniKQL::TTypeEnvironment typeEnv(alloc);
         NMiniKQL::TMemoryUsageInfo memInfo("KqpLocalExecuter");
         NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, funcRegistry);

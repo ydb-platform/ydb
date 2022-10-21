@@ -471,7 +471,7 @@ namespace NSchemeShardUT_Private {
 
     private:
         TTestActorRuntime& Runtime;
-        NMiniKQL::TScopedAlloc Alloc;
+        NMiniKQL::TScopedAlloc Alloc{__LOCATION__};
         NMiniKQL::TTypeEnvironment Env;
         ui64 TxId;
         const TString Table;

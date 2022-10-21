@@ -13,7 +13,8 @@ namespace NMiniKQL {
 class TMiniKQLTypeBuilderTest : public TTestBase {
 public:
     TMiniKQLTypeBuilderTest()
-        : Env(Alloc)
+        : Alloc(__LOCATION__)
+        , Env(Alloc)
         , TypeInfoHelper(new TTypeInfoHelper())
         , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {}) {
     }

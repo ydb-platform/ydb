@@ -158,7 +158,7 @@ namespace NYql::NDqs {
 
             // Sinks
             if (auto maybeDqOutputsList = stage.Outputs()) {
-                TScopedAlloc alloc;
+                TScopedAlloc alloc(__LOCATION__);
                 TTypeEnvironment typeEnv(alloc);
                 TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
 
@@ -471,7 +471,7 @@ namespace NYql::NDqs {
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
 
-            TScopedAlloc alloc;
+            TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment typeEnv(alloc);
 
             TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
@@ -588,7 +588,7 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
         using namespace NKikimr::NMiniKQL;
 
         THashMap<TStageId, std::tuple<TString,ui64,ui64>> result;
-        TScopedAlloc alloc(NKikimr::TAlignedPagePoolCounters(), FunctionRegistry->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         TVector<NNodes::TExprBase> fakeReads;
         NCommon::TMkqlCommonCallableCompiler compiler;
@@ -804,7 +804,7 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
 
-            TScopedAlloc alloc;
+            TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment typeEnv(alloc);
 
             TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);

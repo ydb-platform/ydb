@@ -19,7 +19,7 @@ namespace NCommon {
 using namespace NKikimr::NMiniKQL;
 
 TString GetSerializedResultType(const TString& program) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment typeEnv(alloc);
 
     TRuntimeNode programNode = DeserializeRuntimeNode(program, typeEnv);

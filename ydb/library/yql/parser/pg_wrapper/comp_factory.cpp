@@ -35,7 +35,7 @@ extern "C" {
 #include "executor/executor.h"
 #include "lib/stringinfo.h"
 #include "thread_inits.h"
-    
+
 #undef Abs
 #undef Min
 #undef Max
@@ -1285,7 +1285,7 @@ public:
             const auto& value = args[i];
             if (value) {
                 dnulls[i] = false;
-                
+
                 dvalues[i] = ArgDescs[i].PassByValue ?
                     ScalarDatumFromPod(value) :
                     PointerDatumFromPod(value);
@@ -2932,7 +2932,7 @@ public:
     }
 
     int Compare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR) const {
-        NMiniKQL::TScopedAlloc alloc;
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
         PG_TRY();
         {
@@ -2971,7 +2971,7 @@ public:
     }
 
     ui64 Hash(const char* data, size_t size) const {
-        NMiniKQL::TScopedAlloc alloc;
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
         PG_TRY();
         {

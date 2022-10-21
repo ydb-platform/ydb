@@ -172,7 +172,7 @@ std::pair<ui64, ui64> MeasureOld() {
     constexpr size_t count = 1000;
     constexpr size_t rowCount = 100000;
 
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TMemoryUsageInfo memInfo("Memory");
 
     TVector<NUdf::TUnboxedValue> values;
@@ -218,7 +218,7 @@ std::pair<ui64, ui64> MeasureNew() {
     constexpr size_t count = 1000;
     constexpr size_t rowCount = 100000;
 
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TMemoryUsageInfo memInfo("Memory");
 
     TVector<NUdf::TUnboxedValuePod> values;

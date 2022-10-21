@@ -687,7 +687,7 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
 
     KqpApplyCtx.Reset(kqpApplyCtx.Release());
 
-    KqpAlloc = MakeHolder<TScopedAlloc>(TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
+    KqpAlloc = MakeHolder<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
     KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
     KqpAlloc->Release();
 

@@ -36,7 +36,7 @@ public:
             const NMiniKQL::IFunctionRegistry* functionRegistry)
             : Program(pgm)
             , ResponseTo(sender)
-            , Alloc(allocPoolCounters, functionRegistry->SupportsSizedAllocators())
+            , Alloc(__LOCATION__, allocPoolCounters, functionRegistry->SupportsSizedAllocators())
             , TypeEnv(Alloc)
             , Cookie(0)
             , Retried(false)

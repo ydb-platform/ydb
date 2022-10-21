@@ -240,7 +240,7 @@ class TEngineFlat : public IEngineFlat {
 public:
     TEngineFlat(const TEngineFlatSettings& settings)
         : Settings(settings)
-        , Alloc(Settings.AllocCounters, settings.FunctionRegistry->SupportsSizedAllocators())
+        , Alloc(__LOCATION__, Settings.AllocCounters, settings.FunctionRegistry->SupportsSizedAllocators())
         , Env(Alloc)
         , Strings(Env)
         , NeedDiagnostics(false)

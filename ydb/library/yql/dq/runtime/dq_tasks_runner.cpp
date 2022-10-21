@@ -230,7 +230,8 @@ public:
         }
 
         if (!Context.Alloc) {
-            SelfAlloc = std::make_unique<TScopedAlloc>(TAlignedPagePoolCounters(), Context.FuncRegistry->SupportsSizedAllocators());
+            SelfAlloc = std::make_unique<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(),
+                    Context.FuncRegistry->SupportsSizedAllocators());
         }
 
         if (!Context.TypeEnv) {

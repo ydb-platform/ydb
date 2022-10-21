@@ -343,7 +343,7 @@ public:
         : Cluster(cluster)
         , TablesData(tablesData)
         , FuncRegistry(funcRegistry)
-        , Alloc(TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+        , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
         , KqlCtx(cluster, tablesData, TypeEnv, FuncRegistry)
         , KqlCompiler(CreateKqlCompiler(KqlCtx))

@@ -119,7 +119,9 @@ TComputationNodeFactory GetTestFactory() {
 
 template<bool UseLLVM>
 struct TSetup_ {
-    TSetup_() {
+    TSetup_()
+        : Alloc(__LOCATION__)
+    {
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         RandomProvider = CreateRandomProvider();
         TimeProvider = CreateTimeProvider();

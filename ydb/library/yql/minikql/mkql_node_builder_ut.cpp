@@ -10,14 +10,14 @@ namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     Y_UNIT_TEST(TestDataBuild) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto d2 = BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)456), NUdf::EDataSlot::Uint32, env);
         UNIT_ASSERT_EQUAL(d2->GetType()->GetSchemeType(), NUdf::TDataType<ui32>::Id);
     }
 
     Y_UNIT_TEST(TestStructTypeBuilder) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto type = TStructTypeBuilder(env)
             .Add("Field1", env.GetVoid()->GetGenericType())
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestStructLiteralBuilder) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto structObj = TStructLiteralBuilder(env)
             .Add("Field1", TRuntimeNode(env.GetVoid(), true))
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestListLiteralBuilder) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto list = TListLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), true))
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestCallableTypeBuilder) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(env.GetVoid()->GetType())
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestCallableTypeBuilderWithNamesAndFlags) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(env.GetVoid()->GetType())
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestCallableTypeBuilderBadOrderArgNames) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         UNIT_ASSERT_EXCEPTION(TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(env.GetVoid()->GetType())
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestCallableTypeBuilderDuplicateArgNames) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         UNIT_ASSERT_EXCEPTION(TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(env.GetVoid()->GetType())
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestDictLiteralBuilder) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto dict = TDictLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env),
             TDataType::Create(NUdf::TDataType<char*>::Id, env)).Add(
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestCallableBuilder) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(TRuntimeNode(env.GetEmptyStruct(), true))
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     }
 
     Y_UNIT_TEST(TestCallableBuilderWithNamesAndFlags) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(TRuntimeNode(env.GetEmptyStruct(), true))

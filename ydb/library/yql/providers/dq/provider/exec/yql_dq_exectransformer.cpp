@@ -545,7 +545,7 @@ private:
         FlushCounter("FreezeUsedFiles");
         // copy-paste }
 
-        TScopedAlloc alloc(NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         NCommon::TMkqlCommonCallableCompiler compiler;
 
@@ -1090,7 +1090,7 @@ private:
         YQL_ENSURE(tasks.size() <= maxTasksPerOperation);
 
         {
-            TScopedAlloc alloc(NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
             TTypeEnvironment typeEnv(alloc);
             for (auto& t : tasks) {
                 TUploadList uploadList;
@@ -1567,7 +1567,7 @@ private:
             YQL_ENSURE(tasks.size() <= maxTasksPerOperation);
 
             {
-                TScopedAlloc alloc(NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
                 TTypeEnvironment typeEnv(alloc);
                 for (auto& t : tasks) {
                     TUploadList uploadList;

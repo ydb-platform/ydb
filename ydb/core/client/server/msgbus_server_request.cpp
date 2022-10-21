@@ -115,7 +115,8 @@ public:
                 if (mkqlTx.GetParams().HasProto()) {
                     try {
                         TAlignedPagePoolCounters counters(AppData(ctx)->Counters, "params");
-                        NMiniKQL::TScopedAlloc alloc(counters, AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
+                        NMiniKQL::TScopedAlloc alloc(__LOCATION__, counters,
+                            AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
                         NMiniKQL::TTypeEnvironment env(alloc);
                         NMiniKQL::TRuntimeNode node = NMiniKQL::ImportValueFromProto(mkqlTx.GetParams().GetProto(), env);
                         TString bin = NMiniKQL::SerializeRuntimeNode(node, env);

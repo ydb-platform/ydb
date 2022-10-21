@@ -132,6 +132,7 @@ namespace {
             : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
             , RandomProvider(CreateDeterministicRandomProvider(1))
             , TimeProvider(CreateDeterministicTimeProvider(1))
+            , Alloc(__LOCATION__)
             , Env(Alloc)
             , PgmBuilder(Env, *FunctionRegistry)
             , SettingsConfigurer([](TEngineFlatSettings&) {})

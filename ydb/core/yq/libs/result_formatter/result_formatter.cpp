@@ -412,7 +412,7 @@ TString FormatSchema(const YandexQuery::Schema& schema)
 void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet, bool typeNameAsString, bool prettyValueFormat)
 {
     NYql::TExprContext ctx;
-    NKikimr::NMiniKQL::TScopedAlloc alloc;
+    NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
 
     TMemoryUsageInfo memInfo("BuildYdbResultSet");

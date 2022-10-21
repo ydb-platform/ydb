@@ -648,7 +648,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
     void ProcessSimpleUdfFunc(const char* udfFuncName, BuildArgsFunc argsFunc = BuildArgsFunc(), ValidateValueFunc validateFunc = ValidateValueFunc(),
             FullValidateValueFunc fullValidateFunc = FullValidateValueFunc(),
             NUdf::EValidateMode validateMode = NUdf::EValidateMode::Lazy) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper(new TTypeInfoHelper);
         auto functionRegistry = CreateFunctionRegistryWithUDFs();
@@ -704,7 +704,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
     }
 
     Y_UNIT_TEST(TestUdfResultCheckExceptionOnEmpty) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         bool wrapped = false;
         UNIT_ASSERT_EXCEPTION(TValidate<TValidateErrorPolicyThrow>::Value(nullptr, env.GetTypeOfType(),

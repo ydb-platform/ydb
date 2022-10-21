@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         if (watermark == nullptr) {
             watermark = &watermark_clone;
         }
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TSetup setup1(alloc, *watermark, watermarkMode);
 
         ui32 curGroupId = 0;

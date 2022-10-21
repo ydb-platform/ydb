@@ -35,6 +35,7 @@ protected:
     TMiniKQLComputationNodePackTest()
         : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
         , RandomProvider(CreateDefaultRandomProvider())
+        , Alloc(__LOCATION__)
         , Env(Alloc)
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Memory")

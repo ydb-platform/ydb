@@ -53,7 +53,8 @@ class TMiniKQLNodeCast: public TTestBase
     }
 
     TMiniKQLNodeCast()
-        : Env(Alloc)
+        : Alloc(__LOCATION__)
+        , Env(Alloc)
     {}
 
 private:

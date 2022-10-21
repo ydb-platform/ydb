@@ -181,7 +181,7 @@ TVector<TDataRow> TestRows() {
 Y_UNIT_TEST_SUITE(TKqpScanData) {
 
     Y_UNIT_TEST(UnboxedValueSize) {
-        NKikimr::NMiniKQL::TScopedAlloc alloc;
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         namespace NTypeIds = NScheme::NTypeIds;
         struct TTestCase {
             NUdf::TUnboxedValue Value;
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
     Y_UNIT_TEST(ArrowToUnboxedValueConverter) {
         TVector<TDataRow> rows = TestRows();
         std::shared_ptr<arrow::RecordBatch> batch = VectorToBatch(rows, rows.front().MakeArrowSchema());
-        NKikimr::NMiniKQL::TScopedAlloc alloc;
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
 
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         TVector<TDataRow> rows = TestRows();
         std::vector<std::shared_ptr<arrow::Field>> fields = { arrow::field("i8", arrow::int8()) };
         std::shared_ptr<arrow::RecordBatch> batch = VectorToBatch(rows, std::make_shared<arrow::Schema>(fields));
-        NKikimr::NMiniKQL::TScopedAlloc alloc;
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
 
@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
     }
 
     Y_UNIT_TEST(EmptyColumns) {
-        NKikimr::NMiniKQL::TScopedAlloc alloc;
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
 
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
     }
 
     Y_UNIT_TEST(EmptyColumnsAndNonEmptyArrowBatch) {
-        NKikimr::NMiniKQL::TScopedAlloc alloc;
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         TMemoryUsageInfo memInfo("");
         THolderFactory factory(alloc.Ref(), memInfo);
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {}, {});

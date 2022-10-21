@@ -8,7 +8,7 @@ namespace NMiniKQL {
 Y_UNIT_TEST_SUITE(TestListRepresentation) {
     Y_UNIT_TEST(Test) {
         TMemoryUsageInfo memInfo(TStringBuf("test"));
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         using TListType = TListRepresentation<ui32, 256>;
         TListType list1;
         auto it1 = list1.GetIterator();

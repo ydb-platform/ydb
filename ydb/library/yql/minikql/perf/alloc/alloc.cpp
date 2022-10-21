@@ -33,7 +33,7 @@ namespace {
 int main(int, char**) {
     Test<&malloc, &MyFree>("malloc");
     {
-        TScopedAlloc sopedAlloc;
+        TScopedAlloc sopedAlloc(__LOCATION__);
         Test<&UdfAllocateWithSize, &UdfFreeWithSize>("mkql");
     }
     return 0;

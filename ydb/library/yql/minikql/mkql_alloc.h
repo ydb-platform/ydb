@@ -4,9 +4,10 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
+#include <util/string/builder.h>
+#include <util/system/align.h>
 #include <util/system/defaults.h>
 #include <util/system/tls.h>
-#include <util/system/align.h>
 #include <new>
 #include <unordered_map>
 
@@ -21,7 +22,7 @@ struct TAllocPageHeader {
     ui64 Offset;
     ui64 UseCount;
     ui64 Deallocated;
-    ui64 Padding;
+    TAlignedPagePool* MyAlloc;
     TAllocPageHeader* Link;
 };
 
@@ -67,7 +68,7 @@ struct TAllocState : public TAlignedPagePool
         return &Root;
     }
 
-    explicit TAllocState(const TAlignedPagePoolCounters& counters, bool supportsSizedAllocators);
+    explicit TAllocState(const TSourceLocation& location, const TAlignedPagePoolCounters& counters, bool supportsSizedAllocators);
     void KillAllBoxed();
     void InvalidateMemInfo();
     size_t GetDeallocatedInPages() const;
@@ -114,8 +115,9 @@ private:
 
 class TScopedAlloc {
 public:
-    explicit TScopedAlloc(const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters(), bool supportsSizedAllocators = false)
-        : MyState_(counters, supportsSizedAllocators)
+    explicit TScopedAlloc(const TSourceLocation& location,
+            const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters(), bool supportsSizedAllocators = false)
+        : MyState_(location, counters, supportsSizedAllocators)
     {
         MyState_.MainContext = PgInitializeMainContext();
         Acquire();
@@ -250,7 +252,7 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state) {
     return MKQLAllocSlow(sz, state);
 }
 
-void MKQLFreeSlow(TAllocPageHeader* header) noexcept;
+void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state) noexcept;
 
 inline void MKQLFreeDeprecated(const void* mem) noexcept {
     if (!mem) {
@@ -268,11 +270,13 @@ inline void MKQLFreeDeprecated(const void* mem) noexcept {
 #endif
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
+    Y_VERIFY_DEBUG(header->MyAlloc == TlsAllocState, "%s", (TStringBuilder() << "wrong allocator was used; "
+        "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     if (Y_LIKELY(--header->UseCount != 0)) {
         return;
     }
 
-    MKQLFreeSlow(header);
+    MKQLFreeSlow(header, TlsAllocState);
 }
 
 inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state) noexcept {
@@ -297,12 +301,14 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state)
     }
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
+    Y_VERIFY_DEBUG(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
+        "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     if (Y_LIKELY(--header->UseCount != 0)) {
         header->Deallocated += sz;
         return;
     }
 
-    MKQLFreeSlow(header);
+    MKQLFreeSlow(header, state);
 }
 
 inline void* MKQLAllocDeprecated(size_t sz) {

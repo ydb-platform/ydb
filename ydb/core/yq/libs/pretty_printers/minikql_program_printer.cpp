@@ -243,7 +243,7 @@ TString PrettyPrintMkqlProgram(const NKikimr::NMiniKQL::TRuntimeNode& node, size
 }
 
 TString PrettyPrintMkqlProgram(const TString& rawProgram, size_t initialIndentChars) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
     NKikimr::NMiniKQL::TRuntimeNode node = DeserializeRuntimeNode(rawProgram, env);
     return PrettyPrintMkqlProgram(node, initialIndentChars);

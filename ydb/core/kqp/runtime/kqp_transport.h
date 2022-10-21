@@ -43,7 +43,7 @@ private:
     NMiniKQL::THolderFactory* HolderFactory = nullptr;
 
     struct TSelfHosted {
-        NMiniKQL::TScopedAlloc Alloc;
+        NMiniKQL::TScopedAlloc Alloc{__LOCATION__};
         NMiniKQL::TTypeEnvironment TypeEnv;
         NMiniKQL::TMemoryUsageInfo MemInfo;
         NMiniKQL::THolderFactory HolderFactory;

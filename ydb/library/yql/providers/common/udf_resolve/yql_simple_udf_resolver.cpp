@@ -142,7 +142,7 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     TExprContext& ctx) {
 
     bool hasErrors = false;
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
 
     for (auto udfPtr : functions) {

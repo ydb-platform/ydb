@@ -1994,7 +1994,7 @@ Y_UNIT_TEST_SUITE(TJsonTests) {
     }
 
     Y_UNIT_TEST(TestPerfParse) {
-        NMiniKQL::TScopedAlloc alloc;
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TMemoryUsageInfo memInfo("Memory");
         NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
         NMiniKQL::TDefaultValueBuilder builder(holderFactory);
@@ -2010,7 +2010,7 @@ Y_UNIT_TEST_SUITE(TJsonTests) {
     }
 
     Y_UNIT_TEST(TestPerfSerialize) {
-        NMiniKQL::TScopedAlloc alloc;
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TMemoryUsageInfo memInfo("Memory");
         NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
         NMiniKQL::TDefaultValueBuilder builder(holderFactory);

@@ -7,7 +7,7 @@ namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
     Y_UNIT_TEST(TestPagedArena) {
-        TAlignedPagePool pagePool;
+        TAlignedPagePool pagePool(__LOCATION__);
 
         {
             TPagedArena arena(&pagePool);
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
     }
 
     Y_UNIT_TEST(TestDeallocated) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         void* p1 = MKQLAllocWithSize(10);
         void* p2 = MKQLAllocWithSize(20);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
@@ -52,6 +52,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 1);
+    }
+
+    Y_UNIT_TEST(FreeInWrongAllocator) {
+        if (true) {
+            return;
+        }
+        TScopedAlloc alloc1(__LOCATION__);
+        void* p1 = MKQLAllocWithSize(10);
+        void* p2 = MKQLAllocWithSize(10);
+        {
+            TScopedAlloc alloc2(__LOCATION__);
+            MKQLFreeWithSize(p1, 10);
+        }
+        MKQLFreeWithSize(p2, 10);
     }
 }
 

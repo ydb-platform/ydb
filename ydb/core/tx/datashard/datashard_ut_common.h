@@ -146,7 +146,8 @@ struct TExpectedReadSet {
 class TEngineHolder {
 public:
     TEngineHolder()
-        : Env(Alloc)
+        : Alloc(__LOCATION__)
+        , Env(Alloc)
     {
         Alloc.Release();
     }

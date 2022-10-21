@@ -6,6 +6,7 @@ using namespace NKikimr::NBinaryJson;
 
 TJsonPathTestBase::TJsonPathTestBase()
     : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
+    , Alloc(__LOCATION__)
     , Env(Alloc)
     , MemInfo("Memory")
     , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())

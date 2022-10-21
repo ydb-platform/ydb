@@ -21,7 +21,7 @@ namespace NYql {
             : MutableFunctionRegistry_(CreateFunctionRegistry(CreateBuiltinRegistry())->Clone())
             , RandomProvider_(CreateDeterministicRandomProvider(1))
             , TimeProvider_(CreateDeterministicTimeProvider(10000000))
-            , Alloc_()
+            , Alloc_(__LOCATION__)
             , Env_(Alloc_)
         {
             MutableFunctionRegistry_->AddModule("", "TopFreq", NUdf::CreateTopFreqModule());

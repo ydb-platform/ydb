@@ -1363,7 +1363,7 @@ private:
         ReadOnlyTx = !Request.TopicOperations.HasOperations();
 
         auto& funcRegistry = *AppData()->FunctionRegistry;
-        NMiniKQL::TScopedAlloc alloc(TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
         NMiniKQL::TTypeEnvironment typeEnv(alloc);
 
         NMiniKQL::TMemoryUsageInfo memInfo("PrepareTasks");
@@ -1930,7 +1930,7 @@ private:
 
             auto result = TopicTabletStates.emplace(tabletId, std::move(state));
             YQL_ENSURE(result.second);
-        }        
+        }
     }
 
     void Finalize() {

@@ -21,7 +21,7 @@ int main(int, char**) {
     auto randomProvider = CreateDefaultRandomProvider();
     auto timeProvider = CreateDefaultTimeProvider();
 
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -45,7 +45,7 @@ int main(int, char**) {
             iters /= 100;
 #endif
             for (ui32 i = 0; i < iters; ++i) {
-                TScopedAlloc runAlloc;
+                TScopedAlloc runAlloc(__LOCATION__);
                 auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &runAlloc.Ref()));
                 TBindTerminator terminator(graph->GetTerminator());
 

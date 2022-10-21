@@ -25,6 +25,7 @@ namespace {
 
         TServices()
             : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
+            , Alloc(__LOCATION__)
             , TypeEnv(Alloc)
         {
             Alloc.Release();

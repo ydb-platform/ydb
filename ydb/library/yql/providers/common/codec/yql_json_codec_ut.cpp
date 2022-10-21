@@ -26,7 +26,7 @@ struct TTestContext {
     TDefaultValueBuilder Vb;
 
     TTestContext()
-    : Alloc()
+    : Alloc(__LOCATION__)
     , TypeEnv(Alloc)
     , MemInfo("Mem")
     , HolderFactory(Alloc.Ref(), MemInfo)

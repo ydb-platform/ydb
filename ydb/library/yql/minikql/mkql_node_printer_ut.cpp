@@ -85,7 +85,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TMiniKQLNodePrinterTest) {
     Y_UNIT_TEST(TestPrintWithoutSchema) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto node = BuildGraph(env);
         TString s = PrintNode(node);
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodePrinterTest) {
     }
 
     Y_UNIT_TEST(RuntimeNodeSerialization) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
         TCallableType* ctype1 = TCallableType::Create("ctype1", dtype1, 0, nullptr, nullptr, env);

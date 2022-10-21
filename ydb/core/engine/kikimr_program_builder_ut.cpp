@@ -38,14 +38,14 @@ namespace NMiniKQL {
     }
 
     struct TSetup {
-        TSetup() {
-            FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-            RandomProvider = CreateRandomProvider();
-            TimeProvider = CreateTimeProvider();
-
-            Env.Reset(new TTypeEnvironment(Alloc));
-            PgmBuilder.Reset(new TKikimrProgramBuilder(*Env, *FunctionRegistry));
-        }
+        TSetup()
+            : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
+            , RandomProvider(CreateRandomProvider())
+            , TimeProvider(CreateTimeProvider())
+            , Alloc(__LOCATION__)
+            , Env(new TTypeEnvironment(Alloc))
+            , PgmBuilder(new TKikimrProgramBuilder(*Env, *FunctionRegistry))
+        {}
 
         TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm) {
             Explorer.Walk(pgm.GetNode(), *Env);
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestEraseRowStaticKey) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestEraseRowPartialDynamicKey) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestEraseRowDynamicKey) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestSelectRow) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestUpdateRowStaticKey) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestUpdateRowDynamicKey) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestSelectFromInclusiveRange) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestSelectFromExclusiveRange) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestSelectToInclusiveRange) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -562,7 +562,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestSelectToExclusiveRange) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -620,7 +620,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestSelectBothFromInclusiveToInclusiveRange) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -670,7 +670,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestSelectBothFromExclusiveToExclusiveRange) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestAcquireLocks) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -735,7 +735,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestDiagnostics) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -747,7 +747,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestInvalidParameterName) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestInvalidParameterType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);

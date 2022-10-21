@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
 
                 auto randomProvider = CreateDeterministicRandomProvider(1);
                 auto timeProvider = CreateDeterministicTimeProvider(10000000);
-                TScopedAlloc graphAlloc;
+                TScopedAlloc graphAlloc(__LOCATION__);
 
                 auto entry = cache.Find(key);
 
@@ -600,7 +600,7 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
 
             auto randomProvider = CreateDeterministicRandomProvider(1);
             auto timeProvider = CreateDeterministicTimeProvider(10000000);
-            TScopedAlloc graphAlloc;
+            TScopedAlloc graphAlloc(__LOCATION__);
             auto entry = cache.Find(key);
             UNIT_ASSERT(entry);
             TComputationPatternOpts opts(entry->Alloc.Ref(), entry->Env, GetBuiltinFactory(),
@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
 
     Y_UNIT_TEST(AddPerf) {
         TTimer t("all: ");
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment typeEnv(alloc);
 
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
     }
 
     Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment typeEnv(alloc);
 
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();

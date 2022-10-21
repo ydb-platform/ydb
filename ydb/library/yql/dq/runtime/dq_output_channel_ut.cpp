@@ -37,7 +37,7 @@ struct TTestContext {
     TStructType* OutputType = nullptr;
 
     TTestContext(NDqProto::EDataTransportVersion transportVersion = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, bool bigRows = false)
-        : Alloc()
+        : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         , MemInfo("Mem")
         , HolderFactory(Alloc.Ref(), MemInfo)

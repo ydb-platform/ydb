@@ -502,7 +502,7 @@ public:
         try {
             const NMiniKQL::IFunctionRegistry& functionRegistry = *AppData(ctx)->FunctionRegistry;
             TAlignedPagePoolCounters counters(AppData(ctx)->Counters, "build");
-            NMiniKQL::TScopedAlloc alloc(counters, functionRegistry.SupportsSizedAllocators());
+            NMiniKQL::TScopedAlloc alloc(__LOCATION__, counters, functionRegistry.SupportsSizedAllocators());
             NMiniKQL::TTypeEnvironment env(alloc);
             NMiniKQL::TKikimrProgramBuilder pgmBuilder(env, functionRegistry);
             NMiniKQL::TRuntimeNode pgmReturn = pgmBuilder.NewEmptyListOfVoid();

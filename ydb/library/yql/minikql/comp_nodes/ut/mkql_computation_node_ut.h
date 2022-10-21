@@ -75,7 +75,9 @@ NUdf::TUnboxedValuePod ToValue(T value) {
 
 template<bool UseLLVM>
 struct TSetup {
-    TSetup(TComputationNodeFactory nodeFactory = {}) {
+    TSetup(TComputationNodeFactory nodeFactory = {})
+        : Alloc(__LOCATION__)
+    {
         NodeFactory = nodeFactory;
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         RandomProvider = CreateDeterministicRandomProvider(1);

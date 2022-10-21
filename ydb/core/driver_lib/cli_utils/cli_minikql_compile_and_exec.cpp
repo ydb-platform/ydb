@@ -40,7 +40,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
 
     auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
     TAlignedPagePoolCounters countersStub;
-    NMiniKQL::TScopedAlloc alloc(countersStub);
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__, countersStub);
     NMiniKQL::TTypeEnvironment TypeEnv(alloc);
 
     TAutoPtr<NMsgBusProxy::TBusRequest> request(new NMsgBusProxy::TBusRequest());

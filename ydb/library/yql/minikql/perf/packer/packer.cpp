@@ -18,7 +18,7 @@ int main(int, char**) {
 
     auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
 
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TMemoryUsageInfo memInfo("bench");
     THolderFactory holderFactory(alloc.Ref(), memInfo, functionRegistry.Get());

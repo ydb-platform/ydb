@@ -123,9 +123,9 @@ TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounte
 TAlignedPagePool::~TAlignedPagePool() {
     if (CheckLostMem && !UncaughtException()) {
         Y_VERIFY_DEBUG(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE,
-                       "Expected %ld, actual %ld (%ld page(s), %ld offloaded)",
+                       "memory leak; Expected %ld, actual %ld (%ld page(s), %ld offloaded); allocator created at: %s",
                        TotalAllocated, FreePages.size() * POOL_PAGE_SIZE,
-                       FreePages.size(), OffloadedActiveBytes);
+                       FreePages.size(), OffloadedActiveBytes, GetInfo().data());
         Y_VERIFY_DEBUG(OffloadedActiveBytes == 0, "offloaded: %ld", OffloadedActiveBytes);
     }
 

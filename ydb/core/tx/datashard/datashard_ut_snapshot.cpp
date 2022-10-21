@@ -1524,7 +1524,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                         Cerr << tx.DebugString() << Endl;
                         if (tx.HasMiniKQL()) {
                             using namespace NKikimr::NMiniKQL;
-                            TScopedAlloc alloc;
+                            TScopedAlloc alloc(__LOCATION__);
                             TTypeEnvironment typeEnv(alloc);
                             auto node = DeserializeRuntimeNode(tx.GetMiniKQL(), typeEnv);
                             Cerr << "MiniKQL:" << Endl;
@@ -1566,7 +1566,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                             for (const auto& task : tx.GetKqpTransaction().GetTasks()) {
                                 if (task.HasProgram() && task.GetProgram().GetRaw()) {
                                     using namespace NKikimr::NMiniKQL;
-                                    TScopedAlloc alloc;
+                                    TScopedAlloc alloc(__LOCATION__);
                                     TTypeEnvironment typeEnv(alloc);
                                     auto node = DeserializeRuntimeNode(task.GetProgram().GetRaw(), typeEnv);
                                     Cerr << "Task program:" << Endl;
@@ -1708,7 +1708,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.Inject = {};
 
         // Old engine doesn't support LockNodeId
-        // There's nothing to test unless we can write uncommitted data 
+        // There's nothing to test unless we can write uncommitted data
         if (!UseNewEngine) {
             return;
         }

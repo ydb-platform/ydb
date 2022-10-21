@@ -9,7 +9,7 @@ namespace NMiniKQL {
 
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
-TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, 0, nullptr };
+TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, nullptr, nullptr };
 
 void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept {
     Left = root;
@@ -22,8 +22,8 @@ void TAllocState::TListEntry::Unlink() noexcept {
     Left = Right = nullptr;
 }
 
-TAllocState::TAllocState(const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
-    : TAlignedPagePool(counters)
+TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
+    : TAlignedPagePool(location, counters)
     , SupportsSizedAllocators(supportsSizedAllocators)
     , CurrentPAllocList(&GlobalPAllocList)
 {
@@ -132,13 +132,15 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state) {
 
     void* ret = (char*)currPage + sizeof(TAllocPageHeader);
     currPage->UseCount = 1;
+    currPage->MyAlloc = state;
     currPage->Link = nullptr;
     return ret;
 }
 
-void MKQLFreeSlow(TAllocPageHeader* header) noexcept {
-    TAllocState *state = TlsAllocState;
+void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state) noexcept {
     Y_VERIFY_DEBUG(state);
+    Y_VERIFY_DEBUG(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
+        "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     state->ReturnBlock(header, header->Capacity);
     if (header == state->CurrentPage) {
         state->CurrentPage = &TAllocState::EmptyPageHeader;
@@ -154,6 +156,7 @@ void* TPagedArena::AllocSlow(size_t sz) {
     void* ret = (char*)CurrentPage_ + sizeof(TAllocPageHeader);
     CurrentPage_->Offset = roundedSize;
     CurrentPage_->UseCount = 0;
+    CurrentPage_->MyAlloc = PagePool_;
     CurrentPage_->Link = prevLink;
     return ret;
 }

@@ -2,6 +2,7 @@
 
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
+#include <util/string/builder.h>
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
 
@@ -43,8 +44,10 @@ public:
     static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
     static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
 
-    explicit TAlignedPagePool(const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
+    explicit TAlignedPagePool(const TSourceLocation& location,
+            const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
         : Counters(counters)
+        , DebugInfo(TStringBuilder() << location)
     {
         if (Counters.PoolsCntr) {
             ++(*Counters.PoolsCntr);
@@ -106,6 +109,10 @@ public:
     }
 
     void PrintStat(size_t usedPages, IOutputStream& out) const;
+
+    const TString& GetInfo() const {
+        return DebugInfo;
+    }
 
     void* GetBlock(size_t size);
 
@@ -217,6 +224,7 @@ protected:
     ui64 AllocNotifyCurrentBytes = 0;
 
     TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback;
+    TString DebugInfo;
 };
 
 } // NKikimr

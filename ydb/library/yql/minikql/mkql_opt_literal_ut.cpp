@@ -16,7 +16,7 @@ TRuntimeNode MakeVoidCallable(TProgramBuilder& pgmBuilder) {
 Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
     Y_UNIT_TEST(TestIfPredicateTrue) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestIfPredicateSame) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
      Y_UNIT_TEST(TestIfPredicateFalse) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestSize) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestLength) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestAddMember) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestMember) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestFilterPredicateTrue) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestFilterPredicateFalse) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestMapToVoid) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestFlatMapToLiteralListOfVoid) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestFlatMapToLiteralListOfVoid_Optional) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestLiteralCoalesceExist) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestLiteralCoalesceNotExist) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestLiteralExists) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestNth) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
 
     Y_UNIT_TEST(TestExtend) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 

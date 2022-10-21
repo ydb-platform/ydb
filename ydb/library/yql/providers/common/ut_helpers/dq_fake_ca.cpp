@@ -24,6 +24,7 @@ NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id) {
 
 TFakeActor::TFakeActor(TAsyncInputPromises& sourcePromises, TAsyncOutputPromises& asyncOutputPromises)
     : TActor<TFakeActor>(&TFakeActor::StateFunc)
+    , Alloc(__LOCATION__)
     , MemoryInfo("test")
     , HolderFactory(Alloc.Ref(), MemoryInfo)
     , TypeEnv(Alloc)

@@ -72,7 +72,8 @@ struct TPresortTest {
     TMemoryUsageInfo MemInfo;
 
     TPresortTest()
-        : MemInfo("Memory")
+        : Alloc(__LOCATION__)
+        , MemInfo("Memory")
     {}
 
     template <typename T>
@@ -433,7 +434,7 @@ Y_UNIT_TEST(Decimal) {
 }
 
 Y_UNIT_TEST(GenericVoid) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto type = env.GetVoid()->GetType();
     NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod::Void();
@@ -443,7 +444,7 @@ Y_UNIT_TEST(GenericVoid) {
 }
 
 Y_UNIT_TEST(GenericBool) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto type = TDataType::Create(NUdf::TDataType<bool>::Id, env);
     NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(true);
@@ -455,7 +456,7 @@ Y_UNIT_TEST(GenericBool) {
 }
 
 Y_UNIT_TEST(GenericNumber) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto type = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
     NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(ui32(1234));
@@ -465,7 +466,7 @@ Y_UNIT_TEST(GenericNumber) {
 }
 
 Y_UNIT_TEST(GenericString) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto type = TDataType::Create(NUdf::TDataType<char*>::Id, env);
     NUdf::TUnboxedValue value = MakeString("ALongStringExample");
@@ -475,7 +476,7 @@ Y_UNIT_TEST(GenericString) {
 }
 
 Y_UNIT_TEST(GenericOptional) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto type = TOptionalType::Create(TDataType::Create(NUdf::TDataType<bool>::Id, env), env);
     NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(true);
@@ -488,7 +489,7 @@ Y_UNIT_TEST(GenericOptional) {
 }
 
 Y_UNIT_TEST(NestedOptional) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     // Int32???
     auto type =
@@ -515,7 +516,7 @@ Y_UNIT_TEST(NestedOptional) {
 
 
 Y_UNIT_TEST(GenericList) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto type = TListType::Create(TDataType::Create(NUdf::TDataType<bool>::Id, env), env);
     TMemoryUsageInfo memInfo("test");
@@ -537,7 +538,7 @@ Y_UNIT_TEST(GenericList) {
 }
 
 Y_UNIT_TEST(GenericTuple) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TType* tupleTypes[2];
     tupleTypes[0] = TDataType::Create(NUdf::TDataType<bool>::Id, env);
@@ -555,7 +556,7 @@ Y_UNIT_TEST(GenericTuple) {
 }
 
 Y_UNIT_TEST(GenericStruct) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TStructMember structTypes[2];
     structTypes[0] = TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, env));
@@ -573,7 +574,7 @@ Y_UNIT_TEST(GenericStruct) {
 }
 
 Y_UNIT_TEST(GenericTupleVariant) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TType* tupleTypes[2];
     tupleTypes[0] = TDataType::Create(NUdf::TDataType<bool>::Id, env);
@@ -592,7 +593,7 @@ Y_UNIT_TEST(GenericTupleVariant) {
 }
 
 Y_UNIT_TEST(GenericStructVariant) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TStructMember structTypes[2];
     structTypes[0] = TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, env));
@@ -611,7 +612,7 @@ Y_UNIT_TEST(GenericStructVariant) {
 }
 
 Y_UNIT_TEST(GenericDict) {
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto type = TDictType::Create(TDataType::Create(NUdf::TDataType<ui32>::Id, env),
         TDataType::Create(NUdf::TDataType<bool>::Id, env), env);

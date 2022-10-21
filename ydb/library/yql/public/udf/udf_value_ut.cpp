@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
     }
 
     Y_UNIT_TEST(TestDump) {
-        NKikimr::NMiniKQL::TScopedAlloc alloc;
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << TUnboxedValuePod(), "Empty, count: 0");
         UNIT_ASSERT_STRINGS_EQUAL((TStringBuilder() << TUnboxedValuePod().MakeOptional()), "Empty, count: 1");
         UNIT_ASSERT_STRINGS_EQUAL((TStringBuilder() << TUnboxedValuePod::Invalid()), "Empty, count: -1");

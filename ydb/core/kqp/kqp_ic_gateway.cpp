@@ -597,7 +597,7 @@ private:
     static TString BuildParams(const TKqpParamsMap& paramsMap, const TAlignedPagePoolCounters& counters,
         const TActorContext &ctx)
     {
-        NMiniKQL::TScopedAlloc alloc(counters, AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__, counters, AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
         NMiniKQL::TTypeEnvironment env(alloc);
 
         NMiniKQL::TStructLiteralBuilder structBuilder(env);

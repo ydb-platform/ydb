@@ -54,7 +54,7 @@ struct TSetup {
 
 Y_UNIT_TEST_SUITE(TestCompactMultiDict) {
     Y_UNIT_TEST(TestIterate) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
 
         TSetup setup(alloc);
 

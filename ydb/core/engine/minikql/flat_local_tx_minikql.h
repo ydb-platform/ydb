@@ -121,7 +121,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             }
 
             TAlignedPagePoolCounters counters(appData->Counters, "local_tx");
-            TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__, counters, appData->FunctionRegistry->SupportsSizedAllocators());
             TTypeEnvironment typeEnv(alloc);
             auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, nullptr);
             future.Wait();
@@ -154,7 +154,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         }
 
         TAlignedPagePoolCounters counters(appData->Counters, "local_tx");
-        TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__, counters, appData->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         TLocalDbSchemeResolver dbResolver(txc.DB.GetScheme(), TabletId);
         const auto unguard = Unguard(alloc);

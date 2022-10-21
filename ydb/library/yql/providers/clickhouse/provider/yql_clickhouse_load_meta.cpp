@@ -224,7 +224,7 @@ private:
             return {{v.GetArray().front().GetString(), v.GetArray().back().GetString()}};
         });
 
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pb(env, *State_->FunctionRegistry);
 

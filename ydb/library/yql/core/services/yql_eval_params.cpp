@@ -23,7 +23,7 @@ bool BuildParameterValuesAsNodes(const THashMap<TStringBuf, const TTypeAnnotatio
         return false;
     }
 
-    TScopedAlloc alloc;
+    TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     TMemoryUsageInfo memInfo("Parameters");
     THolderFactory holderFactory(alloc.Ref(), memInfo);

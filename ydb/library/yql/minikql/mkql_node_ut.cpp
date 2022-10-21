@@ -11,7 +11,7 @@ namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     Y_UNIT_TEST(TestTypeOfType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         {
             auto type = env.GetTypeOfType();
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestTypeOfVoid) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         {
             auto type = env.GetTypeOfVoid();
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestVoid) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TVoid* voidObj = env.GetVoid();
         UNIT_ASSERT(voidObj->GetType()->IsVoid());
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestTypeOfData) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
         UNIT_ASSERT_EQUAL(dtype1->GetKind(), TType::EKind::Data);
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestData) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
         ui32 u = 34567;
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestStructType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TStructType* sempty = env.GetEmptyStruct()->GetType();
         UNIT_ASSERT_EQUAL(sempty->GetKind(), TType::EKind::Struct);
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestStructLiteral) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TStructType* semptyType = env.GetEmptyStruct()->GetType();
         TStructLiteral* sempty = TStructLiteral::Create(0, nullptr, semptyType, env);
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestListType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TListType* list1type = TListType::Create(env.GetVoid()->GetGenericType(), env);
         UNIT_ASSERT_EQUAL(list1type->GetKind(), TType::EKind::List);
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestStreamType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TStreamType* stream1type = TStreamType::Create(env.GetVoid()->GetGenericType(), env);
         UNIT_ASSERT_EQUAL(stream1type->GetKind(), TType::EKind::Stream);
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestListLiteral) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env);
         TListType* list1type = TListType::Create(env.GetVoid()->GetGenericType(), env);
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestOptionalType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TOptionalType* opt1type = TOptionalType::Create(env.GetVoid()->GetGenericType(), env);
         UNIT_ASSERT_EQUAL(opt1type->GetKind(), TType::EKind::Optional);
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestOptionalLiteral) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env);
         TOptionalType* opt1type = TOptionalType::Create(env.GetVoid()->GetGenericType(), env);
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestDictType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
         TDictType* dictType1 = TDictType::Create(dtype1, env.GetVoid()->GetGenericType(), env);
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestCallableType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TCallableType* ctype1 = TCallableType::Create("c1", env.GetTypeOfVoid(),
             0, nullptr, nullptr, env);
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestDictLiteral) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env);
         TDataType* dtype2 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestCallable) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TCallableType* ctype1 = TCallableType::Create("c1", env.GetTypeOfVoid(),
             0, nullptr, nullptr, env);
@@ -390,7 +390,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestThrowingVisitor) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TThrowingNodeVisitor visitor;
 
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestEmptyVisitor) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TEmptyNodeVisitor visitor;
 
@@ -406,13 +406,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TesAnyType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         UNIT_ASSERT(env.GetAnyType()->IsSameType(*env.GetAnyType()));
     }
 
     Y_UNIT_TEST(TestAny) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TAny* emptyAny = TAny::Create(env);
         UNIT_ASSERT(!emptyAny->HasItem());
@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestTupleType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TTupleType* tempty = env.GetEmptyTuple()->GetType();
         UNIT_ASSERT_EQUAL(tempty->GetKind(), TType::EKind::Tuple);
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestTupleLiteral) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TTupleType* temptyType = env.GetEmptyTuple()->GetType();
         TTupleLiteral* tempty = TTupleLiteral::Create(0, nullptr, temptyType, env);
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestVariantType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto emptyStructType = env.GetEmptyStruct()->GetType();
         auto emptyTupleType = env.GetEmptyTuple()->GetType();
@@ -541,7 +541,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
     }
 
     Y_UNIT_TEST(TestVariantLiteral) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         auto emptyStructType = env.GetEmptyStruct()->GetType();
 

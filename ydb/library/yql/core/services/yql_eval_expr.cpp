@@ -1035,7 +1035,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             return ctx.NewAtom(node->Pos(), value);
         }
 
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TStringStream err;
         TProgramBuilder pgmBuilder(env, functionRegistry);

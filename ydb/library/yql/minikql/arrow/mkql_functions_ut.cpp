@@ -6,7 +6,7 @@ namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLArrowFunctions) {
     Y_UNIT_TEST(Add) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
 
         auto uint64Type = TDataType::Create(NUdf::GetDataTypeInfo(NUdf::EDataSlot::Uint64).TypeId, env);
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLArrowFunctions) {
     }
 
     Y_UNIT_TEST(IsNull) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
 
         auto bool64Type = TDataType::Create(NUdf::GetDataTypeInfo(NUdf::EDataSlot::Bool).TypeId, env);

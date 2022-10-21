@@ -1244,7 +1244,7 @@ public:
         const TString& traceId)
         : TraceId(traceId)
         , Task(task)
-        , Alloc(NKikimr::TAlignedPagePoolCounters(), true)
+        , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true)
         , TypeEnv(Alloc)
         , MemInfo("TDqTaskRunnerProxy")
         , HolderFactory(Alloc.Ref(), MemInfo)

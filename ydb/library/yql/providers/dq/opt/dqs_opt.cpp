@@ -72,7 +72,7 @@ namespace NYql::NDqs {
             };
             settings.VisitStarted = true;
 
-            NKikimr::NMiniKQL::TScopedAlloc alloc;
+            NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
             NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
             NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(env, *funcRegistry);
             NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("Precompute");

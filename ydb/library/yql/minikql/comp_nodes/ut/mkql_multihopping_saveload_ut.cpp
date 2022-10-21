@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest) {
         bool withTraverse,
         bool dataWatermarks)
     {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
 
         for (ui32 yieldPos = 0; yieldPos < input.size(); ++yieldPos) {
             std::vector<std::tuple<ui32, ui32>> result;

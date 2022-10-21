@@ -84,7 +84,7 @@ struct TTestContext {
     };
 
     TTestContext()
-        : Alloc()
+        : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         , MemInfo("TestMem")
         , HolderFactory(Alloc.Ref(), MemInfo)

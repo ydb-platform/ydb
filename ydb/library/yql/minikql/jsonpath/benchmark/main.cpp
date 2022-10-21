@@ -64,7 +64,7 @@ const size_t MAX_PARSE_ERRORS = 100;
 
 Y_CPU_BENCHMARK(JsonPath, iface) {
     TIntrusivePtr<IFunctionRegistry> FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()));
-    TScopedAlloc Alloc;
+    TScopedAlloc Alloc(__LOCATION__);
     TTypeEnvironment Env(Alloc);
     TMemoryUsageInfo MemInfo("Memory");
     THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get());

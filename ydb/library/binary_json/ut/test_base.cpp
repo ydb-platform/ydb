@@ -6,6 +6,7 @@ using namespace NYql::NDom;
 
 TBinaryJsonTestBase::TBinaryJsonTestBase()
     : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
+    , Alloc(__LOCATION__)
     , Env(Alloc)
     , MemInfo("Memory")
     , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())

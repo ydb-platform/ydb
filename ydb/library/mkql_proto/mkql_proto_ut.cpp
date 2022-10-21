@@ -10,7 +10,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
 
     Y_UNIT_TEST(TestCanExport) {
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-        TScopedAlloc alloc;
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         "tuple_type {\n"
         "}\n");
     }
-    
+
     Y_UNIT_TEST(TestExportStructType) {
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
             std::vector<std::pair<std::string_view, TRuntimeNode>> items;

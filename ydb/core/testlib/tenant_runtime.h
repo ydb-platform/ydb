@@ -80,17 +80,8 @@ struct TTenantTestConfig {
         TResourceLimit Limit;
     };
 
-    struct TDynamicSlotConfig {
-        TString Id;
-        TString Type;
-        TString Domain;
-        TString Tenant;
-        TResourceLimit Limit;
-    };
-
     struct TTenantPoolConfig {
         TVector<TStaticSlotConfig> StaticSlots;
-        TVector<TDynamicSlotConfig> DynamicSlots;
         TString NodeType;
     };
 

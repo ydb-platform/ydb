@@ -15,8 +15,6 @@ TTenantTestConfig::TTenantPoolConfig TenantTenantPoolConfig()
     TTenantTestConfig::TTenantPoolConfig res = {
         // Static slots {tenant, {cpu, memory, network}}
         {},
-        // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-        {{ {"slot", "default", DOMAIN1_NAME, "", {1, 1, 1}} }},
         // NodeType
         "type1"
     };

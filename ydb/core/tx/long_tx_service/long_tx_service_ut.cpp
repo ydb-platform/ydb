@@ -23,8 +23,6 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 {
                     { {DOMAIN1_NAME, {1, 1, 1}} },
                 },
-                // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                {},
                 // NodeType
                 "storage"
             };

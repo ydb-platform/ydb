@@ -41,10 +41,6 @@ TTenantTestConfig MakeTenantTestConfig() {
                  {
                      // Static slots {tenant, {cpu, memory, network}}
                      {{{DOMAIN1_NAME, {1, 1, 1}}}},
-                     // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                     {{{DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, "", {1, 1, 1}},
-                       {DOMAIN1_SLOT2, SLOT2_TYPE, DOMAIN1_NAME, "", {2, 2, 2}},
-                       {DOMAIN1_SLOT3, SLOT3_TYPE, DOMAIN1_NAME, "", {3, 3, 3}}}},
                      "node-type"
                  }
              }

@@ -29,8 +29,6 @@ TTenantTestConfig::TTenantPoolConfig DefaultTenantPoolConfig()
     TTenantTestConfig::TTenantPoolConfig res = {
         // Static slots {tenant, {cpu, memory, network}}
         {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-        // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-        {},
         // NodeType
         "type1"
     };
@@ -42,8 +40,6 @@ TTenantTestConfig::TTenantPoolConfig TenantTenantPoolConfig()
     TTenantTestConfig::TTenantPoolConfig res = {
         // Static slots {tenant, {cpu, memory, network}}
         {{ {TENANT1_1_NAME, {1, 1, 1}} }},
-        // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-        {},
         // NodeType
         "type1"
     };
@@ -56,8 +52,6 @@ TTenantTestConfig::TTenantPoolConfig MultipleTenantsTenantPoolConfig()
         // Static slots {tenant, {cpu, memory, network}}
         {{ {TENANT1_1_NAME, {1, 1, 1}},
            {TENANT1_2_NAME, {1, 1, 1}} }},
-        // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-        {},
         // NodeType
         "type1"
     };

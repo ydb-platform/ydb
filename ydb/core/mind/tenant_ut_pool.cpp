@@ -90,19 +90,6 @@ public:
     }
 };
 
-void CollectActions(TVector<TAction> &actions, ui64 cookie, const TString &slotId,
-                    const TString &tenantName, NKikimrTenantPool::EStatus status)
-{
-    actions.push_back({slotId, tenantName, status, cookie, ""});
-}
-
-void CollectActions(TVector<TAction> &actions, ui64 cookie, const TString &slotId,
-                    const TString &tenantName, const TString &label,
-                    NKikimrTenantPool::EStatus status)
-{
-    actions.push_back({slotId, tenantName, status, cookie, label});
-}
-
 template<typename ...Ts>
 void CollectActions(TVector<TAction> &actions, ui64 cookie, const TString &slotId,
                     const TString &tenantName, NKikimrTenantPool::EStatus status,
@@ -133,16 +120,6 @@ void CheckConfigureSlot(TTenantTestRuntime &runtime, ui32 domain,
 
     TAutoPtr<IEventHandle> handle;
     runtime.GrabEdgeEventRethrow<TEvTest::TEvActionSuccess>(handle);
-}
-
-void CheckTenantPoolStatus(TTenantTestRuntime &runtime,
-                           const TString &d1s1 = "", const TString &d1s2 = "", const TString &d1s3 = "")
-{
-    THashMap<TString, NKikimrTenantPool::TSlotStatus> domain1;
-    domain1[DOMAIN1_SLOT1] = MakeSlotStatus(DOMAIN1_SLOT1, SLOT1_TYPE, d1s1, 1, 1, 1);
-    domain1[DOMAIN1_SLOT2] = MakeSlotStatus(DOMAIN1_SLOT2, SLOT2_TYPE, d1s2, 2, 2, 2);
-    domain1[DOMAIN1_SLOT3] = MakeSlotStatus(DOMAIN1_SLOT3, SLOT3_TYPE, d1s3, 3, 3, 3);
-    CheckTenantPoolStatus(runtime, 0, domain1);
 }
 
 void CheckLabels(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
@@ -272,520 +249,6 @@ void ChangeMonitoringConfig(TTenantTestRuntime &runtime,
 } // anonymous namesapce
 
 Y_UNIT_TEST_SUITE(TTenantPoolTests) {
-    Y_UNIT_TEST(TestAssignTenantSimple) {
-        TTenantTestRuntime runtime(DefaultTenantTestConfig);
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT2, TENANT1_2_NAME, NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 2, 2, 2}}});
-
-        CheckTenantPoolStatus(runtime, TENANT1_1_NAME, TENANT1_2_NAME, "");
-    }
-
-    Y_UNIT_TEST(TestAssignTenantStatic) {
-        TTenantTestRuntime runtime(DefaultTenantTestConfig);
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, DOMAIN1_NAME, NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 2, 2, 2}}});
-
-        CheckTenantPoolStatus(runtime,
-                              DOMAIN1_NAME, "", "");
-    }
-
-    Y_UNIT_TEST(TestAssignTenantMultiple) {
-        TTenantTestRuntime runtime(DefaultTenantTestConfig);
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT2, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT3, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_1_NAME, 6, 6, 6}}});
-
-        CheckTenantPoolStatus(runtime,
-                              TENANT1_1_NAME, TENANT1_1_NAME, TENANT1_1_NAME);
-    }
-
-    Y_UNIT_TEST(TestAssignTenantWithReassigns) {
-        TTenantTestRuntime runtime(DefaultTenantTestConfig);
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT2, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT3, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT2, TENANT1_2_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT3, DOMAIN1_NAME, NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 4, 4, 4},
-                                   {TENANT1_1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 2, 2, 2}}});
-
-        CheckTenantPoolStatus(runtime,
-                              TENANT1_1_NAME, TENANT1_2_NAME, DOMAIN1_NAME);
-    }
-
-    Y_UNIT_TEST(TestAssignTenantWithDetach) {
-        TTenantTestRuntime runtime(DefaultTenantTestConfig);
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT2, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT3, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT2, TENANT1_2_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT3, DOMAIN1_NAME, NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT2, "", NKikimrTenantPool::SUCCESS);
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT3, "", NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_1_NAME, 1, 1, 1}}});
-
-        CheckTenantPoolStatus(runtime,
-                              TENANT1_1_NAME, "", "");
-    }
-
-    Y_UNIT_TEST(TestAssignTenantUnknownTenant) {
-        TTenantTestRuntime runtime(DefaultTenantTestConfig);
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, TENANT1_U_NAME, NKikimrTenantPool::UNKNOWN_TENANT);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1}}});
-
-        CheckTenantPoolStatus(runtime);
-    }
-
-    Y_UNIT_TEST(TestAssignTenantPostponed) {
-        TTenantTestRuntime runtime(DefaultTenantTestConfig);
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS,
-                           DOMAIN1_SLOT2, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS,
-                           DOMAIN1_SLOT3, TENANT1_1_NAME, NKikimrTenantPool::SUCCESS,
-                           DOMAIN1_SLOT2, TENANT1_2_NAME, NKikimrTenantPool::SUCCESS,
-                           DOMAIN1_SLOT3, DOMAIN1_NAME, NKikimrTenantPool::SUCCESS,
-                           DOMAIN1_SLOT2, "", NKikimrTenantPool::SUCCESS,
-                           DOMAIN1_SLOT3, "", NKikimrTenantPool::SUCCESS,
-                           DOMAIN1_SLOT2, TENANT1_U_NAME, NKikimrTenantPool::UNKNOWN_TENANT,
-                           DOMAIN1_SLOT2, TENANT1_2_NAME, NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 2, 2, 2}}});
-
-        CheckTenantPoolStatus(runtime,
-                              TENANT1_1_NAME, TENANT1_2_NAME, "");
-    }
-
-    Y_UNIT_TEST(TestOwnership) {
-        TTenantTestRuntime runtime(DefaultTenantTestConfig);
-        TAutoPtr<IEventHandle> handle;
-
-        TActorId sender2 = runtime.AllocateEdgeActor();
-
-        // sender cannot configure slot because he is not owner
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
-                                      runtime.Sender,
-                                      new TEvTenantPool::TEvConfigureSlot(DOMAIN1_SLOT1, TENANT1_1_NAME, "")));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvConfigureSlotResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL((int)reply1->Record.GetStatus(), (int)NKikimrTenantPool::NOT_OWNER);
-
-        // sender takes ownership
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
-                                      runtime.Sender,
-                                      new TEvTenantPool::TEvTakeOwnership));
-        runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvTenantPoolStatus>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(runtime.Sender, handle->Recipient);
-
-        // now sender successfully configures slot
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
-                                      runtime.Sender,
-                                      new TEvTenantPool::TEvConfigureSlot(DOMAIN1_SLOT2, TENANT1_2_NAME, "")));
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvConfigureSlotResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL((int)reply2->Record.GetStatus(), (int)NKikimrTenantPool::SUCCESS);
-
-        // sender2 takes ownership and sender 1 is informed
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
-                                      sender2,
-                                      new TEvTenantPool::TEvTakeOwnership));
-        runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvLostOwnership>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(runtime.Sender, handle->Recipient);
-        runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvTenantPoolStatus>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(sender2, handle->Recipient);
-
-        // sender now cannot configure slot again
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
-                                      runtime.Sender,
-                                      new TEvTenantPool::TEvConfigureSlot(DOMAIN1_SLOT2, TENANT1_1_NAME, "")));
-        auto reply3 = runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvConfigureSlotResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL((int)reply3->Record.GetStatus(), (int)NKikimrTenantPool::NOT_OWNER);
-
-        // sender2 successfully configures slot
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
-                                      sender2,
-                                      new TEvTenantPool::TEvConfigureSlot(DOMAIN1_SLOT1, TENANT1_2_NAME, "")));
-        auto reply4 = runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvConfigureSlotResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL((int)reply4->Record.GetStatus(), (int)NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 3, 3, 3}}});
-
-        CheckTenantPoolStatus(runtime,
-                              TENANT1_2_NAME, TENANT1_2_NAME, "");
-    }
-
-    Y_UNIT_TEST(TestSensorLabels) {
-        const TTenantTestConfig config = {
-            // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
-            // HiveId
-            HIVE_ID,
-            // FakeTenantSlotBroker
-            true,
-            // FakeSchemeShard
-            true,
-            // CreateConsole
-            false,
-            // Nodes
-            {{
-                    // Node0
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, "", {1, 1, 1}} }},
-                            ""
-                        }
-                    }
-            }},
-            // DataCenterCount
-            1
-        };
-        TTenantTestRuntime runtime(config);
-        auto counters = runtime.GetDynamicCounters();
-        auto &services = GetDatabaseSensorServices();
-        for (auto &service : services) {
-            auto group = GetServiceCounters(counters, service);
-            auto counter = group->GetCounter("counter", true);
-            *counter = 1;
-        }
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, TENANT1_1_NAME, "slot-1", NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{TENANT1_1_NAME, 1, 1, 1}}});
-
-        auto &attrServices = GetDatabaseAttributeSensorServices();
-        for (auto &service : services) {
-            auto serviceGroup = GetServiceCounters(counters, service, false);
-            auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, TENANT1_1_NAME);
-            UNIT_ASSERT(tenantGroup);
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> slotGroup;
-            if (attrServices.contains(service)) {
-                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "slot-1");
-            } else {
-                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "slot-1");
-            }
-            UNIT_ASSERT(slotGroup);
-            auto counter = slotGroup->GetCounter("counter", true);
-            UNIT_ASSERT(*counter == 0);
-            *counter = 1;
-        }
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, DOMAIN1_NAME, "slot-2", NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1}}});
-
-        CheckLabels(counters, "", "");
-        for (auto &service : services) {
-            auto serviceGroup = GetServiceCounters(counters, service, false);
-            auto counter = serviceGroup->GetCounter("counter", true);
-            UNIT_ASSERT(*counter == 0);
-            *counter = 1;
-        }
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, "", NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({});
-
-        CheckLabels(counters, "", "");
-        for (auto &service : services) {
-            auto serviceGroup = GetServiceCounters(counters, service, false);
-            auto counter = serviceGroup->GetCounter("counter", true);
-            UNIT_ASSERT(*counter == 0);
-        }
-
-    }
-
-    Y_UNIT_TEST(TestForcedSensorLabels) {
-        const TTenantTestConfig config = {
-            // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
-            // HiveId
-            HIVE_ID,
-            // FakeTenantSlotBroker
-            true,
-            // FakeSchemeShard
-            true,
-            // CreateConsole
-            false,
-            // Nodes
-            {{
-                    // Node0
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, "", {1, 1, 1}} }},
-                            "",
-                        }
-                    }
-            }},
-            // DataCenterCount
-            1
-        };
-        NKikimrConfig::TAppConfig ext;
-        ext.MutableMonitoringConfig()->SetForceDatabaseLabels(true);
-        TTenantTestRuntime runtime(config, ext);
-        auto counters = runtime.GetDynamicCounters();
-        auto &services = GetDatabaseSensorServices();
-        for (auto &service : services) {
-            auto group = GetServiceCounters(counters, service);
-            auto counter = group->GetCounter("counter", true);
-            *counter = 1;
-        }
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, TENANT1_1_NAME, "slot-1", NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{TENANT1_1_NAME, 1, 1, 1}}});
-
-        auto &attrServices = GetDatabaseAttributeSensorServices();
-
-        for (auto &service : services) {
-            auto serviceGroup = GetServiceCounters(counters, service, false);
-            auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, TENANT1_1_NAME);
-            UNIT_ASSERT(tenantGroup);
-            ::NMonitoring::TDynamicCounterPtr slotGroup;
-            if (attrServices.contains(service)) {
-                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "slot-1");
-            } else {
-                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "slot-1");
-            }
-            UNIT_ASSERT(slotGroup);
-            auto counter = slotGroup->GetCounter("counter", true);
-            UNIT_ASSERT(*counter == 0);
-            *counter = 1;
-        }
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, DOMAIN1_NAME, "slot-2", NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 1, 1, 1}}});
-
-        for (auto &service : services) {
-            auto serviceGroup = GetServiceCounters(counters, service, false);
-            auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, CanonizePath(DOMAIN1_NAME));
-            UNIT_ASSERT(tenantGroup);
-            ::NMonitoring::TDynamicCounterPtr slotGroup;
-            if (attrServices.contains(service)) {
-                slotGroup = tenantGroup;
-            } else {
-                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static");
-            }
-            UNIT_ASSERT(slotGroup);
-            auto counter = slotGroup->GetCounter("counter", true);
-            UNIT_ASSERT(*counter == 0);
-            *counter = 1;
-        }
-
-        CheckConfigureSlot(runtime, 0,
-                           DOMAIN1_SLOT1, "", NKikimrTenantPool::SUCCESS);
-
-        runtime.WaitForHiveState({});
-
-        for (auto &service : services) {
-            auto serviceGroup = GetServiceCounters(counters, service, false);
-            auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, "<none>");
-            UNIT_ASSERT(tenantGroup);
-            ::NMonitoring::TDynamicCounterPtr slotGroup;
-            if (attrServices.contains(service)) {
-                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "unassigned");
-            } else {
-                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "unassigned");
-            }
-            UNIT_ASSERT(slotGroup);
-            auto counter = slotGroup->GetCounter("counter", true);
-            UNIT_ASSERT(*counter == 0);
-        }
-
-    }
-
-    Y_UNIT_TEST(TestSensorLabelsForStaticConfig) {
-        const TTenantTestConfig config = {
-            // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
-            // HiveId
-            HIVE_ID,
-            // FakeTenantSlotBroker
-            true,
-            // FakeSchemeShard
-            true,
-            // CreateConsole
-            false,
-            // Nodes
-            {{
-                    // Node0
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {},
-                            ""
-                        }
-                    },
-                    // Node1
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {{ {TENANT1_1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {},
-                            ""
-                        }
-                    },
-                    // Node2
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, DOMAIN1_NAME, {1, 1, 1}} }},
-                            ""
-                        }
-                    },
-                    // Node3
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}} }},
-                            ""
-                        }
-                    },
-                    // Node4
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, "", {1, 1, 1}} }},
-                            ""
-                        }
-                    },
-                    // Node5
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, DOMAIN1_NAME, {1, 1, 1}} }},
-                            ""
-                        }
-                    },
-                    // Node6
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, "", {1, 1, 1}} }},
-                            ""
-                        }
-                    },
-                    // Node7
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}},
-                               {DOMAIN1_SLOT2, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}} }},
-                            ""
-                        }
-                    },
-                    // Node8
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}} }},
-                            ""
-                        }
-                    }
-
-            }},
-            // DataCenterCount
-            1
-        };
-
-        TTenantTestRuntime runtime(config);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 6, 6, 6},
-                                   {TENANT1_1_NAME, 5, 5, 5}}});
-
-        TVector<std::pair<TString, TString>> labels = { { "", "" },
-                                                        { TENANT1_1_NAME, "static" },
-                                                        { "", "" },
-                                                        { TENANT1_1_NAME, "dynamic" },
-                                                        { "", "" },
-                                                        { "", "" },
-                                                        { "", "" },
-                                                        { TENANT1_1_NAME, "<multiple>" },
-                                                        { "<multiple>", "<multiple>"} };
-        for (size_t i = 0; i < labels.size(); ++i) {
-            auto counters = runtime.GetDynamicCounters(i);
-            CheckLabels(counters, labels[i].first, labels[i].second);
-        }
-    }
-
     Y_UNIT_TEST(TestForcedSensorLabelsForStaticConfig) {
         const TTenantTestConfig config = {
             // Domains {name, schemeshard {{ subdomain_names }}}
@@ -806,8 +269,6 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                         {
                             // Static slots {tenant, {cpu, memory, network}}
                             {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {},
                             "",
                         }
                     },
@@ -817,89 +278,9 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                         {
                             // Static slots {tenant, {cpu, memory, network}}
                             {{ {TENANT1_1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {},
                             "",
                         }
                     },
-                    // Node2
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, DOMAIN1_NAME, {1, 1, 1}} }},
-                            "",
-                        }
-                    },
-                    // Node3
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}} }},
-                            "",
-                        }
-                    },
-                    // Node4
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, "", {1, 1, 1}} }},
-                            "",
-                        }
-                    },
-                    // Node5
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, DOMAIN1_NAME, {1, 1, 1}} }},
-                            "",
-                        }
-                    },
-                    // Node6
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, "", {1, 1, 1}} }},
-                            "",
-                        }
-                    },
-                    // Node7
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}},
-                               {DOMAIN1_SLOT2, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}} }},
-                            "",
-                        }
-                    },
-                    // Node8
-                    {
-                        // TenantPoolConfig
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}} }},
-                            "",
-                        }
-                    }
 
             }},
             // DataCenterCount
@@ -914,14 +295,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                                    {TENANT1_1_NAME, 5, 5, 5}}});
 
         TVector<std::pair<TString, TString>> labels = { { CanonizePath(DOMAIN1_NAME), "static" },
-                                                        { TENANT1_1_NAME, "static" },
-                                                        { CanonizePath(DOMAIN1_NAME), "dynamic" },
-                                                        { TENANT1_1_NAME, "dynamic" },
-                                                        { CanonizePath(DOMAIN1_NAME), "static" },
-                                                        { CanonizePath(DOMAIN1_NAME), "<multiple>" },
-                                                        { "<none>", "dynamic" },
-                                                        { TENANT1_1_NAME, "<multiple>" },
-                                                        { "<multiple>", "<multiple>"} };
+                                                        { TENANT1_1_NAME, "static" }, };
         for (size_t i = 0; i < labels.size(); ++i) {
             auto counters = runtime.GetDynamicCounters(i);
             CheckLabels(counters, labels[i].first, labels[i].second);
@@ -945,9 +319,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                     {
                         {
                             // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {"slot", SLOT2_TYPE, DOMAIN1_NAME, "", {1, 1, 1}} }},
+                            {{ {DOMAIN1_NAME, {1, 1, 1}} }},
                             "node-type"
                         }
                     },
@@ -1000,8 +372,6 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                         {
                             // Static slots {tenant, {cpu, memory, network}}
                             {{ {DOMAIN1_NAME, {1, 1, 1}} }},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {},
                             "node-type"
                         }
                     },
@@ -1067,139 +437,8 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
         CheckLabels(counters, "", "");
     }
 
-    Y_UNIT_TEST(TestSensorsConfigForDynamicSlotLabelValue) {
-        const TTenantTestConfig config = {
-            // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME }}} }},
-            // HiveId
-            HIVE_ID,
-            // FakeTenantSlotBroker
-            true,
-            // FakeSchemeShard
-            true,
-            // CreateConsole
-            true,
-            // Nodes {tenant_pool_config, data_center}
-            {{
-                    {
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}} }},
-                            "node-type"
-                        }
-                    },
-                }},
-            // DataCenterCount
-            1,
-            // CreateConfigsDispatcher
-            true
-        };
-
-        NKikimrConfig::TAppConfig ext;
-        auto &monCfg = *ext.MutableMonitoringConfig();
-
-        TTenantTestRuntime runtime(config, ext);
-        auto counters = runtime.GetDynamicCounters();
-
-        CheckLabels(counters, TENANT1_1_NAME,
-                    monCfg.GetDatabaseLabels().GetDynamicSlotLabelValue(),
-                    {}, monCfg);
-
-        monCfg.MutableDatabaseLabels()->SetDynamicSlotLabelValue("very-dynamic");
-        ChangeMonitoringConfig(runtime, monCfg, true);
-
-        CheckLabels(counters, TENANT1_1_NAME,
-                    monCfg.GetDatabaseLabels().GetDynamicSlotLabelValue(),
-                    {}, monCfg);
-    }
-
-    Y_UNIT_TEST(TestSensorsConfigForDynamicSlot) {
-        const TTenantTestConfig config = {
-            // Domains {name, schemeshard {{ subdomain_names }}}
-            {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID,  TVector<TString>()} }},
-            // HiveId
-            HIVE_ID,
-            // FakeTenantSlotBroker
-            false,
-            // FakeSchemeShard
-            false,
-            // CreateConsole
-            true,
-            // Nodes {tenant_pool_config, data_center}
-            {{
-                    {
-                        {
-                            // Static slots {tenant, {cpu, memory, network}}
-                            {},
-                            // Dynamic slots {id, type, domain, tenant, {cpu, memory, network}}
-                            {{ {DOMAIN1_SLOT1, SLOT2_TYPE, DOMAIN1_NAME, "", {1, 1, 1}} }},
-                            "node-type"
-                        }
-                    },
-                }},
-            // DataCenterCount
-            1,
-            // CreateConfigsDispatcher
-            true
-        };
-
-        NKikimrConfig::TAppConfig ext;
-        auto &monCfg = *ext.MutableMonitoringConfig();
-
-        TTenantTestRuntime runtime(config, ext);
-        auto counters = runtime.GetDynamicCounters();
-
-        THashMap<TString, TString> attrs;
-        for (auto &l : GetDatabaseAttributeLabels())
-            attrs[l] = l + "_value";
-        TVector<std::pair<TString, TString>> attrsv;
-        for (auto &pr : attrs)
-            attrsv.push_back(pr);
-
-        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          attrsv,
-                          SLOT2_TYPE, ZONE_ANY, 1);
-
-        runtime.WaitForHiveState({{{TENANT1_1_NAME, 1, 1, 1}}});
-
-        CheckLabels(counters, TENANT1_1_NAME, "slot-1", attrs, monCfg);
-
-        monCfg.MutableDatabaseLabels()->AddServices("ydb");
-        monCfg.MutableDatabaseAttributeLabels()->AddAttributeGroups()
-            ->AddServices("tablets");
-        ChangeMonitoringConfig(runtime, monCfg);
-
-        CheckLabels(counters, TENANT1_1_NAME, "slot-1", attrs, monCfg);
-
-        monCfg.MutableDatabaseLabels()->SetEnabled(false);
-        ChangeMonitoringConfig(runtime, monCfg);
-
-        CheckLabels(counters, "", "", attrs, monCfg);
-
-        monCfg.MutableDatabaseAttributeLabels()->SetEnabled(false);
-        ChangeMonitoringConfig(runtime, monCfg);
-
-        CheckLabels(counters, "", "", {}, monCfg);
-
-        monCfg.MutableDatabaseLabels()->SetEnabled(true);
-        monCfg.MutableDatabaseAttributeLabels()->SetEnabled(true);
-        ChangeMonitoringConfig(runtime, monCfg);
-
-        CheckLabels(counters, TENANT1_1_NAME, "slot-1", attrs, monCfg);
-
-        monCfg.MutableDatabaseLabels()->ClearServices();
-        monCfg.MutableDatabaseAttributeLabels()->ClearAttributeGroups();
-        ChangeMonitoringConfig(runtime, monCfg);
-
-        CheckLabels(counters, TENANT1_1_NAME, "slot-1", attrs, monCfg);
-    }
-
     void TestState(
             const TTenantTestConfig::TStaticSlotConfig& staticSlot,
-            const TTenantTestConfig::TDynamicSlotConfig& dynamicSlot,
             NKikimrTenantPool::EState expected) {
 
         TTenantTestConfig config = {
@@ -1209,14 +448,12 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
             true, // FakeTenantSlotBroker
             true, // FakeSchemeShard
             false, // CreateConsole
-            {{{ {}, {}, "node-type" }}}, // Nodes
+            {{{ {}, "node-type" }}}, // Nodes
             1 // DataCenterCount
         };
 
         if (staticSlot.Tenant) {
             config.Nodes.back().TenantPoolConfig.StaticSlots.push_back(staticSlot);
-        } else if (dynamicSlot.Tenant) {
-            config.Nodes.back().TenantPoolConfig.DynamicSlots.push_back(dynamicSlot);
         }
 
         TTenantTestRuntime runtime(config, {}, false);
@@ -1245,17 +482,9 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
     }
 
     Y_UNIT_TEST(TestStateStatic) {
-        TestState({TENANT1_1_NAME, {1, 1, 1}}, {}, NKikimrTenantPool::EState::TENANT_OK);
+        TestState({TENANT1_1_NAME, {1, 1, 1}}, NKikimrTenantPool::EState::TENANT_OK);
     }
 
-    Y_UNIT_TEST(TestStateDynamic) {
-        TestState({}, {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_1_NAME, {1, 1, 1}}, NKikimrTenantPool::EState::TENANT_OK);
-    }
-
-    Y_UNIT_TEST(TestStateDynamicTenantUnknown) {
-        // After unsuccessful resolve on SS, tenant will be detached from slot, so state is unknown
-        TestState({}, {DOMAIN1_SLOT1, SLOT1_TYPE, DOMAIN1_NAME, TENANT1_U_NAME, {1, 1, 1}}, NKikimrTenantPool::EState::STATE_UNKNOWN);
-    }
 }
 
 } //namespace NKikimr

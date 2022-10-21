@@ -713,6 +713,7 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let fifo                   (Parameter 'FIFO              (DataType 'Bool)))
         (let contentBasedDeduplication (Parameter 'CONTENT_BASED_DEDUPLICATION (DataType 'Bool)))
         (let now                    (Parameter 'NOW               (DataType 'Uint64)))
+        (let createdTimestamp       (Parameter 'CREATED_TIMESTAMP (DataType 'Uint64)))
         (let shards                 (Parameter 'SHARDS            (DataType 'Uint64)))
         (let partitions             (Parameter 'PARTITIONS        (DataType 'Uint64)))
         (let masterTabletId         (Parameter 'MASTER_TABLET_ID  (DataType 'Uint64)))
@@ -823,7 +824,7 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('QueueState (Uint64 '3))
             '('FifoQueue fifo)
             '('DeadLetterQueue (Bool 'false))
-            '('CreatedTimestamp now)
+            '('CreatedTimestamp createdTimestamp)
             '('Shards shards)
             '('Partitions partitions)
             '('Version queueIdNumber)
@@ -857,7 +858,7 @@ static const char* const CommitQueueParamsQuery = R"__(
 
         (let stateUpdate '(
                         '('CleanupTimestamp now)
-                        '('CreatedTimestamp now)
+                        '('CreatedTimestamp createdTimestamp)
                         '('LastModifiedTimestamp now)
                         '('InflyCount (Int64 '0))
                         '('MessageCount (Int64 '0))
@@ -891,7 +892,7 @@ static const char* const CommitQueueParamsQuery = R"__(
                     (let row '(%5$s))
                     (let update '(
                         '('CleanupTimestamp now)
-                        '('CreatedTimestamp now)
+                        '('CreatedTimestamp createdTimestamp)
                         '('LastModifiedTimestamp now)
                         '('InflyCount (Int64 '0))
                         '('MessageCount (Int64 '0))
@@ -962,6 +963,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
     auto ev = MakeExecuteEvent(query);
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     Y_VERIFY(TablesFormat_ == 1 || LeaderTabletId_ != 0);
+    TInstant createdTimestamp = Request_.HasCreatedTimestamp() ? TInstant::Seconds(Request_.GetCreatedTimestamp()) : QueueCreationTimestamp_; 
     TParameters(trans->MutableParams()->MutableProto())
         .Utf8("NAME", QueuePath_.QueueName)
         .Utf8("CUSTOMNAME", CustomQueueName_)
@@ -970,6 +972,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Bool("FIFO", IsFifo_)
         .Bool("CONTENT_BASED_DEDUPLICATION", *ValidatedAttributes_.ContentBasedDeduplication)
         .Uint64("NOW", QueueCreationTimestamp_.MilliSeconds())
+        .Uint64("CREATED_TIMESTAMP", createdTimestamp.MilliSeconds())
         .Uint64("SHARDS", RequiredShardsCount_)
         .Uint64("PARTITIONS", Request_.GetPartitions())
         .Uint64("MASTER_TABLET_ID", LeaderTabletId_)

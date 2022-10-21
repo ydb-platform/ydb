@@ -174,7 +174,7 @@ public:
     }
 
     void ProgressState(TOperationContext&) override {
-        Y_FAIL("no progress state for modify acl");
+        Y_FAIL("no progress state for TDeallocatePQ");
     }
 
     void AbortPropose(TOperationContext&) override {

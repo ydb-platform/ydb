@@ -465,8 +465,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
     std::shared_ptr<Fq::Private::PingTaskResult> response = std::make_shared<Fq::Private::PingTaskResult>();
 
-    if (request.status())
+    if (request.status()) {
         Counters.GetFinalStatusCounters(cloudId, scope)->IncByStatus(request.status());
+    }
+
+    if (IsTerminalStatus(request.status())) {
+        LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << cloudId  << "], scope: [" << scope << "], query id: [" << request.query_id() << "], job id: [" << request.job_id() << "], status: " << YandexQuery::QueryMeta::ComputeStatus_Name(request.status()));
+    }
+
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
         ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl, Config.RetryPolicies, Counters.Counters, Config.Proto.GetMaxRequestSize()) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config.TaskLeaseTtl);

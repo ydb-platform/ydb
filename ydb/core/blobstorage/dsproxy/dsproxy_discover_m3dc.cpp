@@ -567,7 +567,7 @@ public:
                 GetInFlight = true;
                 Y_VERIFY(ResultBlobId.PartId() == 0);
                 auto query = std::make_unique<TEvBlobStorage::TEvGet>(ResultBlobId, 0U, 0U, Deadline,
-                        NKikimrBlobStorage::Discover, true, !ReadBody);
+                        NKikimrBlobStorage::Discover, true, !ReadBody, TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
                 query->IsInternal = true;
 
                 A_LOG_DEBUG_S("DSPDM17", "sending TEvGet# " << query->ToString());

@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(Get) {
         SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration));
     }
 
-    Y_UNIT_TEST(TestForceBlockedGenerationIndexRestoreGetRequest) {
+    Y_UNIT_TEST(TestForceBlockTabletDataWithIndexRestoreGetRequest) {
         TEnvironmentSetup env(true);
         TTestInfo test = InitTest(env);
 

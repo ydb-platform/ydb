@@ -56,7 +56,7 @@ public:
             }
 
             SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvGet(items, ids.size(), TInstant::Max(),
-                NKikimrBlobStorage::FastRead, true, true));
+                NKikimrBlobStorage::FastRead, true, true, TEvBlobStorage::TEvGet::TForceBlockTabletData(1, index)));
             auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>();
             TEvBlobStorage::TEvGetResult *msg = resp->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);

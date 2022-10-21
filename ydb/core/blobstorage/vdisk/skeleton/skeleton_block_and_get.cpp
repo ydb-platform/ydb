@@ -13,7 +13,7 @@ namespace NKikimr {
 
 class TBlockAndGetActor : public TActorBootstrapped<TBlockAndGetActor> {
 private:
-    static constexpr auto VBLOCK_DEFAULT_DEADLINE_SECONDS = 120;
+    static constexpr auto VBLOCK_DEFAULT_DEADLINE_SECONDS = 50;
 public:
     TBlockAndGetActor() = delete;
     explicit TBlockAndGetActor(

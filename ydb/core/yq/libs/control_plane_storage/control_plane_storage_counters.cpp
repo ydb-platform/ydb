@@ -6,6 +6,7 @@ TRequestScopeCounters::TRequestScopeCounters(const TString& name)
     : Name(name) {}
 
 void TRequestScopeCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
+    Counters = counters;
     auto requestCounters = counters->GetSubgroup("request_scope", Name);
     InFly = requestCounters->GetCounter("InFly", false);
     Ok = requestCounters->GetCounter("Ok", true);
@@ -13,10 +14,15 @@ void TRequestScopeCounters::Register(const ::NMonitoring::TDynamicCounterPtr& co
     Retry = requestCounters->GetCounter("Retry", true);
 }
 
+TRequestScopeCounters::~TRequestScopeCounters() {
+    Counters->RemoveSubgroup("request_scope", Name);
+}
+
 TRequestCommonCounters::TRequestCommonCounters(const TString& name)
     : Name(name) {}
 
 void TRequestCommonCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
+    Counters = counters;
     auto requestCounters = counters->GetSubgroup("request_common", Name);
     InFly = requestCounters->GetCounter("InFly", false);
     Ok = requestCounters->GetCounter("Ok", true);
@@ -32,7 +38,12 @@ NMonitoring::IHistogramCollectorPtr TRequestCommonCounters::GetLatencyHistogramB
     return NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
 }
 
-TFinalStatusCounters::TFinalStatusCounters(const ::NMonitoring::TDynamicCounterPtr& counters) {
+TRequestCommonCounters::~TRequestCommonCounters() {
+    Counters->RemoveSubgroup("request_scope", Name);
+}
+
+TFinalStatusCounters::TFinalStatusCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
+    : Counters(counters) {
     auto subgroup = counters->GetSubgroup("subcomponent", "FinalStatus");
     Completed = subgroup->GetCounter("COMPLETED", true);
     AbortedBySystem = subgroup->GetCounter("ABORTED_BY_SYSTEM", true);
@@ -71,6 +82,10 @@ void TFinalStatusCounters::IncByStatus(YandexQuery::QueryMeta::ComputeStatus fin
     default:
         Y_ENSURE(true, "Unexpected status: " << YandexQuery::QueryMeta_ComputeStatus_Name(finalStatus));
     }
+}
+
+TFinalStatusCounters::~TFinalStatusCounters() {
+    Counters->RemoveSubgroup("subcomponent", "FinalStatus");
 }
 
 } // NYq

@@ -54,6 +54,7 @@ LWTRACE_USING(YQ_CONTROL_PLANE_PROXY_PROVIDER);
 struct TRequestScopeCounters: public virtual TThrRefBase {
     const TString Name;
 
+    ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
     ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
     ::NMonitoring::TDynamicCounters::TCounterPtr Error;
@@ -64,11 +65,16 @@ struct TRequestScopeCounters: public virtual TThrRefBase {
     { }
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
+        Counters = counters;
         ::NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request_scope", Name);
         InFly = subgroup->GetCounter("InFly", false);
         Ok = subgroup->GetCounter("Ok", true);
         Error = subgroup->GetCounter("Error", true);
         Timeout = subgroup->GetCounter("Timeout", true);
+    }
+
+    virtual ~TRequestScopeCounters() override {
+        Counters->RemoveSubgroup("request_scope", Name);
     }
 
 private:
@@ -80,6 +86,7 @@ private:
 struct TRequestCommonCounters: public virtual TThrRefBase {
     const TString Name;
 
+    ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
     ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
     ::NMonitoring::TDynamicCounters::TCounterPtr Error;
@@ -91,12 +98,17 @@ struct TRequestCommonCounters: public virtual TThrRefBase {
     { }
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
+        Counters = counters;
         ::NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request_common", Name);
         InFly = subgroup->GetCounter("InFly", false);
         Ok = subgroup->GetCounter("Ok", true);
         Error = subgroup->GetCounter("Error", true);
         Timeout = subgroup->GetCounter("Timeout", true);
         LatencyMs = subgroup->GetHistogram("LatencyMs", GetLatencyHistogramBuckets());
+    }
+
+    virtual ~TRequestCommonCounters() override {
+        Counters->RemoveSubgroup("request_common", Name);
     }
 
 private:

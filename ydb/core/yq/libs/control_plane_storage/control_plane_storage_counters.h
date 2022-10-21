@@ -9,6 +9,7 @@ class TRequestScopeCounters: public virtual TThrRefBase {
 public:
     const TString Name;
 
+    ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
     ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
     ::NMonitoring::TDynamicCounters::TCounterPtr Error;
@@ -17,12 +18,15 @@ public:
     explicit TRequestScopeCounters(const TString& name);
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters);
+
+    virtual ~TRequestScopeCounters() override;
 };
 
 class TRequestCommonCounters: public virtual TThrRefBase {
 public:
     const TString Name;
 
+    ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
     ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
     ::NMonitoring::TDynamicCounters::TCounterPtr Error;
@@ -36,11 +40,14 @@ public:
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters);
 
+    virtual ~TRequestCommonCounters() override;
+
 private:
     static NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets();
 };
 
 class TFinalStatusCounters: public virtual TThrRefBase {
+    ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr Completed;
     ::NMonitoring::TDynamicCounters::TCounterPtr AbortedBySystem;
     ::NMonitoring::TDynamicCounters::TCounterPtr AbortedByUser;
@@ -51,6 +58,8 @@ public:
     TFinalStatusCounters(const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void IncByStatus(YandexQuery::QueryMeta::ComputeStatus finalStatus);
+
+    virtual ~TFinalStatusCounters() override;
 };
 
 } // NYq

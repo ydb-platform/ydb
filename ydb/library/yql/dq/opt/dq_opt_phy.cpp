@@ -2298,8 +2298,12 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     }
 
     auto joinType = join.JoinType().Value();
+    bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
+    bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
 
-    if (useGraceJoin) {
+
+
+    if (useGraceJoin && joinType != "Cross"sv && leftIsUnionAll && rightIsUnionAll) {
         return DqBuildGraceJoin(join, ctx);
     }
 

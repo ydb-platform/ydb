@@ -863,23 +863,9 @@ TExprBase DqBuildGraceJoin(const TDqJoin& join, TExprContext& ctx) {
         return join;
     }
 
-    auto buildShuffle = [&ctx, &join](const TExprBase& input, const TVector<TCoAtom>& keys) {
-        auto stage = Build<TDqStage>(ctx, join.Pos())
-            .Inputs()
-                .Add(input)
-                .Build()
-            .Program()
-                .Args({"stream"})
-                .Body("stream")
-                .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
-            .Done();
-
-        return Build<TDqCnHashShuffle>(ctx, join.Pos())
-            .Output()
-                .Stage(stage)
-                .Index().Build("0")
-                .Build()
+    auto buildShuffle = [&ctx, &join](const TDqOutput& input, const TVector<TCoAtom>& keys) {
+       return Build<TDqCnHashShuffle>(ctx, join.Pos())
+            .Output(input)
             .KeyColumns()
                 .Add(keys)
                 .Build()
@@ -888,8 +874,9 @@ TExprBase DqBuildGraceJoin(const TDqJoin& join, TExprContext& ctx) {
 
     TMaybeNode<TDqStage> joinStage;
 
-    auto leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
-    auto rightCn = join.RightInput().Cast<TDqCnUnionAll>();
+
+    TDqOutput leftCn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
+    TDqOutput rightCn = join.RightInput().Cast<TDqCnUnionAll>().Output();
 
     const TStructExprType* leftStructType = nullptr;
     auto leftSeqType = GetSequenceItemType(leftCn, false, ctx);
@@ -926,7 +913,7 @@ TExprBase DqBuildGraceJoin(const TDqJoin& join, TExprContext& ctx) {
     TCoArgument leftInputArg{ctx.NewArgument(join.Pos(), "_dq_join_left")};
     TCoArgument rightInputArg{ctx.NewArgument(join.Pos(), "_dq_join_right")};
 
-    auto leftWideFlow = ctx.Builder(join.Pos())
+    TExprNode::TPtr leftWideFlow = ctx.Builder(join.Pos())
             .Callable("ExpandMap")
                 .Add(0, leftInputArg.Ptr())
                 .Lambda(1)
@@ -944,7 +931,7 @@ TExprBase DqBuildGraceJoin(const TDqJoin& join, TExprContext& ctx) {
             .Seal()
             .Build();
 
-    auto rightWideFlow = ctx.Builder(join.Pos())
+    TExprNode::TPtr rightWideFlow = ctx.Builder(join.Pos())
             .Callable("ExpandMap")
                 .Add(0, rightInputArg.Ptr())
                 .Lambda(1)

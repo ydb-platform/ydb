@@ -50,23 +50,22 @@ struct TState : public TComputationValue<TState> {
         const arrow::compute::ScalarKernel& kernel,
         const arrow::compute::FunctionRegistry& registry, const std::vector<arrow::ValueDescr>& argsValuesDescr, TComputationContext& ctx)
         : TComputationValue(memInfo)
+        , Options(options)
         , ExecContext(&ctx.ArrowMemoryPool, nullptr, const_cast<arrow::compute::FunctionRegistry*>(&registry))
         , KernelContext(&ExecContext)
-        , Executor(arrow::compute::detail::KernelExecutor::MakeScalar())
     {
         if (kernel.init) {
             State = ARROW_RESULT(kernel.init(&KernelContext, { &kernel, argsValuesDescr, options }));
             KernelContext.SetState(State.get());
         }
 
-        ARROW_OK(Executor->Init(&KernelContext, { &kernel, argsValuesDescr, options }));
         Values.reserve(argsValuesDescr.size());
     }
 
+    const arrow::compute::FunctionOptions* Options;
     arrow::compute::ExecContext ExecContext;
     arrow::compute::KernelContext KernelContext;
     std::unique_ptr<arrow::compute::KernelState> State;
-    std::unique_ptr<arrow::compute::detail::KernelExecutor> Executor;
 
     std::vector<arrow::Datum> Values;
 };
@@ -100,8 +99,10 @@ public:
         }
 
         auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
-        ARROW_OK(state.Executor->Execute(state.Values, listener.get()));
-        auto output = state.Executor->WrapResults(state.Values, listener->values());
+        auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+        ARROW_OK(executor->Init(&state.KernelContext, { &Kernel, ArgsValuesDescr, state.Options }));
+        ARROW_OK(executor->Execute(state.Values, listener.get()));
+        auto output = executor->WrapResults(state.Values, listener->values());
         return ctx.HolderFactory.CreateArrowBlock(std::move(output));
     }
 
@@ -154,6 +155,7 @@ public:
         , FunctionRegistry(functionRegistry)
         , Function(ResolveFunction(FunctionRegistry, to))
         , Kernel(ResolveKernel(Function, ArgsValuesDescr))
+        , CastOptions(false)
     {
     }
 
@@ -165,8 +167,10 @@ public:
         Y_VERIFY_DEBUG(ArgsValuesDescr[0] == state.Values.back().descr());
 
         auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
-        ARROW_OK(state.Executor->Execute(state.Values, listener.get()));
-        auto output = state.Executor->WrapResults(state.Values, listener->values());
+        auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+        ARROW_OK(executor->Init(&state.KernelContext, { &Kernel, ArgsValuesDescr, state.Options }));
+        ARROW_OK(executor->Execute(state.Values, listener.get()));
+        auto output = executor->WrapResults(state.Values, listener->values());
         return ctx.HolderFactory.CreateArrowBlock(std::move(output));
     }
 
@@ -189,8 +193,7 @@ private:
     TState& GetState(TComputationContext& ctx) const {
         auto& result = ctx.MutableValues[StateIndex];
         if (!result.HasValue()) {
-            arrow::compute::CastOptions options(false);
-            result = ctx.HolderFactory.Create<TState>(Function, (const arrow::compute::FunctionOptions*)&options, Kernel, FunctionRegistry, ArgsValuesDescr, ctx);
+            result = ctx.HolderFactory.Create<TState>(Function, (const arrow::compute::FunctionOptions*)&CastOptions, Kernel, FunctionRegistry, ArgsValuesDescr, ctx);
         }
 
         return *static_cast<TState*>(result.AsBoxed().Get());
@@ -203,6 +206,7 @@ private:
     const arrow::compute::FunctionRegistry& FunctionRegistry;
     const arrow::compute::Function& Function;
     const arrow::compute::ScalarKernel& Kernel;
+    arrow::compute::CastOptions CastOptions;
 };
 
 }

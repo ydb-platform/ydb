@@ -32,7 +32,7 @@ public:
     }
 
     virtual void Add(NUdf::TUnboxedValue& value) = 0;
-    virtual NUdf::TUnboxedValuePod Build() = 0;
+    virtual NUdf::TUnboxedValuePod Build(bool finish) = 0;
 
 private:
     static int64_t TypeSize(arrow::DataType& itemType) {
@@ -53,33 +53,39 @@ class TFixedSizeBlockBuilder : public TBlockBuilderBase {
 public:
     TFixedSizeBlockBuilder(TComputationContext& ctx, const std::shared_ptr<arrow::DataType>& itemType)
         : TBlockBuilderBase(ctx, itemType)
-        , Builder_(&Ctx_.ArrowMemoryPool)
+        , Builder_(std::make_unique<TBuilder>(&Ctx_.ArrowMemoryPool))
     {
         this->Reserve();
     }
 
     void Add(NUdf::TUnboxedValue& value) override {
-        Y_VERIFY_DEBUG(Builder_.length() < MaxLength_);
+        Y_VERIFY_DEBUG(Builder_->length() < MaxLength_);
         if (value) {
-            this->Builder_.UnsafeAppend(value.Get<T>());
+            this->Builder_->UnsafeAppend(value.Get<T>());
         } else {
-            this->Builder_.UnsafeAppendNull();
+            this->Builder_->UnsafeAppendNull();
         }
     }
 
-    NUdf::TUnboxedValuePod Build() override {
+    NUdf::TUnboxedValuePod Build(bool finish) override {
         std::shared_ptr<arrow::ArrayData> result;
-        ARROW_OK(this->Builder_.FinishInternal(&result));
+        ARROW_OK(this->Builder_->FinishInternal(&result));
+        Builder_.reset();
+        if (!finish) {
+            Builder_ = std::make_unique<TBuilder>(&Ctx_.ArrowMemoryPool);
+            Reserve();
+        }
+
         return this->Ctx_.HolderFactory.CreateArrowBlock(std::move(result));
     }
 
 private:
     void Reserve() {
-        ARROW_OK(this->Builder_.Reserve(MaxLength_));
+        ARROW_OK(this->Builder_->Reserve(MaxLength_));
     }
 
 private:
-    TBuilder Builder_;
+    std::unique_ptr<TBuilder> Builder_;
 };
 
 std::unique_ptr<TBlockBuilderBase> MakeBlockBuilder(TComputationContext& ctx, NUdf::EDataSlot slot) {
@@ -130,7 +136,7 @@ public:
             builder->Add(result);
         }
 
-        return builder->Build();
+        return builder->Build(true);
     }
 
 private:
@@ -160,12 +166,20 @@ public:
         NUdf::TUnboxedValue*const* output) const
     {
         auto& s = GetState(state, ctx);
-        size_t rows = 0;
-        for (; rows < s.MaxLength_; ++rows) {
+        if (s.IsFinished_) {
+            return EFetchResult::Finish;
+        }
+
+        for (; s.Rows_ < s.MaxLength_; ++s.Rows_) {
             if (const auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data()); EFetchResult::One != result) {
-                if (rows == 0) {
+                if (EFetchResult::Finish == result) {
+                    s.IsFinished_ = true;
+                }
+
+                if (EFetchResult::Yield == result || s.Rows_ == 0) {
                     return result;
                 }
+
                 break;
             }
             for (size_t j = 0; j < Width_; ++j) {
@@ -177,14 +191,15 @@ public:
 
         for (size_t i = 0; i < Width_; ++i) {
             if (auto* out = output[i]; out != nullptr) {
-                *out = s.Builders_[i]->Build();
+                *out = s.Builders_[i]->Build(s.IsFinished_);
             }
         }
 
         if (auto* out = output[Width_]; out != nullptr) {
-            *out = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(rows)));
+            *out = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(s.Rows_)));
         }
 
+        s.Rows_ = 0;
         return EFetchResult::One;
     }
 
@@ -194,6 +209,8 @@ private:
         std::vector<NUdf::TUnboxedValue*> ValuePointers_;
         std::vector<std::unique_ptr<TBlockBuilderBase>> Builders_;
         size_t MaxLength_;
+        size_t Rows_ = 0;
+        bool IsFinished_ = false;
 
         TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<NUdf::EDataSlot>& slots)
             : TComputationValue(memInfo)

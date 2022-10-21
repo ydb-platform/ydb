@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import time
 import itertools
+from pkg_resources import resource_string
 from google.protobuf import text_format
 
 import ydb.tests.library.common.yatest_common as yatest_common
@@ -18,7 +19,6 @@ from . import kikimr_cluster_interface
 
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
-from library.python import resource
 
 
 logger = logging.getLogger(__name__)
@@ -347,8 +347,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         if bs_needed:
             self.client.add_config_item(
-                resource.find(
-                    "harness/resources/default_profile.txt"
+                resource_string(
+                    __name__,
+                    "resources/default_profile.txt"
                 )
             )
 

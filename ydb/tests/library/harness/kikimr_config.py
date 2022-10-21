@@ -5,6 +5,8 @@ import os
 import tempfile
 import socket
 import six
+import yaml
+from pkg_resources import resource_string
 
 from google.protobuf.text_format import Parse
 from ydb.core.protos import config_pb2
@@ -15,8 +17,6 @@ from ydb.tests.library.common.types import Erasure
 from .kikimr_port_allocator import KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path
 from .util import LogLevels
-import yaml
-from library.python import resource
 
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("GB"):
@@ -47,8 +47,8 @@ def get_additional_log_configs():
 
     for c_and_l in log_configs.split(','):
         if c_and_l:
-            c, l = c_and_l.split(':')
-            rt[c] = LogLevels.from_string(l)
+            c, log_level = c_and_l.split(':')
+            rt[c] = LogLevels.from_string(log_level)
     return rt
 
 
@@ -60,7 +60,7 @@ def get_grpc_host():
 
 def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, n_to_select, state_storage_nodes,
                       log_configs):
-    data = resource.find("harness/resources/default_yaml.yml")
+    data = resource_string(__name__, "resources/default_yaml.yml")
     if isinstance(data, bytes):
         data = data.decode('utf-8')
     data = data.format(
@@ -214,7 +214,7 @@ class KikimrConfigGenerator(object):
         if use_legacy_pq:
             self.yaml_config['pqconfig']['topics_are_first_class_citizen'] = False
             self.yaml_config['pqconfig']['cluster_table_path'] = '/Root/PQ/Config/V2/Cluster'
-            self.yaml_config['pqconfig']['version_table_path'] ='/Root/PQ/Config/V2/Versions'
+            self.yaml_config['pqconfig']['version_table_path'] = '/Root/PQ/Config/V2/Versions'
             self.yaml_config['pqconfig']['check_acl'] = False
             self.yaml_config['pqconfig']['require_credentials_in_new_protocol'] = False
             self.yaml_config['pqconfig']['root'] = '/Root/PQ'
@@ -327,7 +327,7 @@ class KikimrConfigGenerator(object):
     @property
     def domains_txt(self):
         app_config = config_pb2.TAppConfig()
-        Parse(resource.find("harness/resources/default_domains.txt"), app_config.DomainsConfig)
+        Parse(resource_string(__name__, "resources/default_domains.txt"), app_config.DomainsConfig)
         return app_config.DomainsConfig
 
     @property
@@ -381,8 +381,9 @@ class KikimrConfigGenerator(object):
     def write_tls_data(self):
         if self.__grpc_ssl_enable:
             for fpath, data in (
-            (self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert),
-            (self.grpc_tls_key_path, self.grpc_tls_key)):
+                (self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert),
+                (self.grpc_tls_key_path, self.grpc_tls_key)
+            ):
                 with open(fpath, 'wb') as f:
                     f.write(data)
 

@@ -25,6 +25,32 @@ bool IsConstMapLambda(TCoLambda lambda) {
     return body.Ref().IsCallable("Just") && body.Ref().GetDependencyScope()->second != lambda.Raw();
 }
 
+TExprNode::TPtr ExtractMemberFromLiteral(const TExprNode& lambda, const std::string_view& member) {
+    if (lambda.IsLambda() && lambda.Tail().IsCallable("AsStruct")) {
+        for (const auto& pair : lambda.Tail().ChildrenList()) {
+            if (pair->Head().IsAtom(member))
+                return pair->TailPtr();
+            else if (!pair->Tail().IsCallable("Member") || &pair->Tail().Tail() != &pair->Head() || &pair->Tail().Head() != &lambda.Head().Head())
+                break;
+        }
+    }
+    return {};
+}
+
+bool IsPasstroughtFields(std::map<std::string_view, TExprNode::TPtr> fields, const TExprNode& lambda) {
+    if (&lambda.Tail() == &lambda.Head().Head() || &lambda.Tail() == &lambda.Head().Tail())
+        return true;
+
+    if (lambda.Tail().IsCallable("AsStruct")) {
+        lambda.Tail().ForEachChild([&](const TExprNode& field) {
+            if (field.Tail().IsCallable("Member") && &field.Tail().Tail() == &field.Head() && (&field.Tail().Head() == &lambda.Head().Head() || &field.Tail().Head() == &lambda.Head().Tail()))
+                fields.erase(field.Head().Content());
+        });
+    }
+
+    return fields.empty();
+}
+
 template <typename TResult>
 TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAnnotationContext* types) {
     auto innerMap = outerMap.Input().template Cast<TCoFlatMapBase>();
@@ -2002,6 +2028,37 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable({"ForwardList", "FromFlow"})) {
             YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
             return ctx.SwapWithHead(*node);
+        }
+
+        // Very special optimizer for hybrid reduce. Drops Chain1Map whose only purpose is make key switch column.
+        if (const TCoCondense1 self(node); self.Input().Ref().IsCallable("Chain1Map") && self.SwitchHandler().Body().Ref().IsCallable("Member")
+            && &self.SwitchHandler().Body().Ref().Head() == self.SwitchHandler().Args().Arg(0).Raw()) {
+            const auto member = self.SwitchHandler().Body().Ref().Tail().Content();
+            const TCoChain1Map chain(self.Input().Ptr());
+            if (const auto init = ExtractMemberFromLiteral(chain.InitHandler().Ref(), member), update = ExtractMemberFromLiteral(chain.UpdateHandler().Ref(), member);
+                init && update && init->IsCallable("Bool") && !FromString<bool>(init->Tail().Content())) {
+                if (std::map<std::string_view, TExprNode::TPtr> usedFields;
+                    HaveFieldsSubset(update, chain.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false) && !usedFields.empty()
+                    && IsPasstroughtFields(usedFields, self.InitHandler().Ref()) && IsPasstroughtFields(usedFields, self.UpdateHandler().Ref())) {
+                    YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " with " << node->Head().Content();
+                    auto lambda = ctx.Builder(chain.Pos())
+                        .Lambda()
+                            .Param("item")
+                            .Param("state")
+                            .ApplyPartial(chain.UpdateHandler().Args().Ptr(), std::move(update))
+                                .With(0, "item")
+                                .With(1, "state")
+                            .Seal()
+                        .Seal().Build();
+
+                    return Build<TCoCondense1>(ctx, self.Pos())
+                        .Input(chain.Input())
+                        .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
+                        .SwitchHandler(std::move(lambda))
+                        .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
+                        .Done().Ptr();
+                }
+            }
         }
 
         return node;

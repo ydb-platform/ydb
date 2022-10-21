@@ -926,4 +926,25 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
     return output;
 }
 
+TExprNode::TPtr ApplyExtractMembersToCombineCore(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    const TCoCombineCore core(node);
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+
+    return Build<TCoCombineCore>(ctx, core.Pos())
+        .InitFrom(core)
+        .FinishHandler()
+            .Args({"key", "state"})
+            .Body<TCoExtractMembers>()
+                .Input<TExprApplier>()
+                    .Apply(core.FinishHandler())
+                    .With(0, "key")
+                    .With(1, "state")
+                    .Build()
+                .Members(members)
+                .Build()
+            .Build()
+        .Done()
+        .Ptr();
+}
+
 } // NYql

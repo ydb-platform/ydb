@@ -1487,6 +1487,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
+        if (self.Input().Maybe<TCoCombineCore>()) {
+            if (auto res = ApplyExtractMembersToCombineCore(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
         return node;
     };
 
@@ -1817,7 +1824,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
     };
 
     map[TCoCondense::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        TCoCondense self(node);
+        const TCoCondense self(node);
         if (!optCtx.IsSingleUsage(self.Input().Ref())) {
             return node;
         }
@@ -1842,6 +1849,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                         .Add(std::move(fields))
                     .Build()
                 .Build()
+                .State(self.State())
                 .SwitchHandler(ctx.DeepCopyLambda(self.SwitchHandler().Ref()))
                 .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
                 .Done().Ptr();
@@ -1850,7 +1858,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
     };
 
     map[TCoCondense1::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        TCoCondense1 self(node);
+        const TCoCondense1 self(node);
         if (!optCtx.IsSingleUsage(self.Input().Ref())) {
             return node;
         }
@@ -1980,6 +1988,85 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Settings(self.Settings())
                 .Done().Ptr();
         }
+        return node;
+    };
+
+    map[TCoCombineCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        const TCoCombineCore self(node);
+        if (!optCtx.IsSingleUsage(self.Input().Ref())) {
+            return node;
+        }
+
+        std::map<std::string_view, TExprNode::TPtr> usedFields;
+        if (HaveFieldsSubset(self.KeyExtractor().Body().Ptr(), self.KeyExtractor().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
+            && !usedFields.empty()
+            && HaveFieldsSubset(self.InitHandler().Body().Ptr(), self.InitHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false)
+            && !usedFields.empty()
+            && HaveFieldsSubset(self.UpdateHandler().Body().Ptr(), self.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false)
+            && !usedFields.empty()
+            && usedFields.size() < GetSeqItemType(self.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+        {
+            TExprNode::TListType fields;
+            fields.reserve(usedFields.size());
+            std::transform(usedFields.begin(), usedFields.end(), std::back_inserter(fields),
+                [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
+
+            YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            return Build<TCoCombineCore>(ctx, node->Pos())
+                .Input<TCoExtractMembers>()
+                    .Input(self.Input())
+                    .Members()
+                        .Add(std::move(fields))
+                    .Build()
+                .Build()
+                .KeyExtractor(ctx.DeepCopyLambda(self.KeyExtractor().Ref()))
+                .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
+                .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
+                .FinishHandler(ctx.DeepCopyLambda(self.FinishHandler().Ref()))
+                .MemLimit(self.MemLimit())
+                .Done().Ptr();
+        }
+        return node;
+    };
+
+    map[TCoMapJoinCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        const TCoMapJoinCore self(node);
+        if (!optCtx.IsSingleUsage(self.LeftInput().Ref())) {
+            return node;
+        }
+
+        const auto leftItemType = GetSeqItemType(self.LeftInput().Ref().GetTypeAnn());
+        if (ETypeAnnotationKind::Struct != leftItemType->GetKind()) {
+            return node;
+        }
+
+        std::unordered_set<std::string_view> leftFileldsSet(self.LeftKeysColumns().Size() + (self.LeftRenames().Size() >> 1U));
+        self.LeftKeysColumns().Ref().ForEachChild([&leftFileldsSet](const TExprNode& field) { leftFileldsSet.emplace(field.Content()); });
+        TExprNode::TListType renamed;
+        renamed.reserve(self.LeftRenames().Size() >> 1U);
+        for (auto i = 0U; i < self.LeftRenames().Size(); ++++i) {
+            if (leftFileldsSet.emplace(self.LeftRenames().Item(i).Value()).second)
+                renamed.emplace_back(self.LeftRenames().Item(i).Ptr());
+        }
+
+        if (leftFileldsSet.size() < leftItemType->Cast<TStructExprType>()->GetSize()) {
+            auto fields = self.LeftKeysColumns().Ptr();
+            if (!renamed.empty()) {
+                auto children = fields->ChildrenList();
+                std::move(renamed.begin(), renamed.end(), std::back_inserter(children));
+                fields = ctx.ChangeChildren(*fields, std::move(children));
+            }
+
+            YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            return Build<TCoMapJoinCore>(ctx, node->Pos())
+                .InitFrom(self)
+                .LeftInput<TCoExtractMembers>()
+                    .Input(self.LeftInput())
+                    .Members(std::move(fields))
+                    .Build()
+                .Done().Ptr();
+        }
+
         return node;
     };
 }

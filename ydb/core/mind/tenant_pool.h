@@ -72,18 +72,12 @@ public:
     void AddStaticSlot(const NKikimrTenantPool::TSlotConfig &slot);
     void AddStaticSlot(const TString &tenant,
                        const NKikimrTabletBase::TMetrics &limit = NKikimrTabletBase::TMetrics());
-    void AddDynamicSlot(const NKikimrTenantPool::TSlotConfig &slot);
-    void AddDynamicSlot(const TString &id, const TString &type, const TString &domain,
-                        const TString &tenant = TString(),
-                        const NKikimrTabletBase::TMetrics &limit = NKikimrTabletBase::TMetrics());
 
     bool IsEnabled = true;
     TString NodeType;
     THashMap<TString, NKikimrTenantPool::TSlotConfig> StaticSlots;
-    THashMap<TString, NKikimrTenantPool::TSlotConfig> DynamicSlots;
     TLocalConfig::TPtr LocalConfig;
     TString StaticSlotLabel;
-    TString DynamicSlotLabel;
 };
 
 IActor* CreateTenantPool(TTenantPoolConfig::TPtr config);

@@ -105,6 +105,7 @@ struct TKikimrRunConfig {
 
     TString                    PathToConfigCacheFile;
 
+    TString                    TenantName;
     TBasicKikimrServicesMask   ServicesMask;
 
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,

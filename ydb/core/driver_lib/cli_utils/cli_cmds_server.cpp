@@ -53,12 +53,6 @@ protected:
     TString UDFsDir;
     TVector<TString> UDFsPaths;
     TString TenantName;
-    TString TenantDomain;
-    TString TenantSlotType;
-    TString TenantSlotId;
-    ui64 TenantCPU;
-    ui64 TenantMemory;
-    ui64 TenantNetwork;
     TVector<TString> NodeBrokerAddresses;
     ui32 NodeBrokerPort;
     bool NodeBrokerUseTls;
@@ -112,11 +106,6 @@ protected:
         RestartsCountFile = "";
         CompileInflightLimit = 100000;
         TenantName = "";
-        TenantSlotType = "default";
-        TenantSlotId = "";
-        TenantCPU = 0;
-        TenantMemory = 0;
-        TenantNetwork = 0;
         NodeBrokerPort = 0;
         NodeBrokerUseTls = false;
         FixedNodeID = false;
@@ -172,20 +161,8 @@ protected:
         config.Opts->AddLongOption("sqs-port", "sqs port")
                 .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
         config.Opts->AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
-        config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'no', 'dynamic', '/<root>', '/<root>/<path_to_user>'}")
+        config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
-        config.Opts->AddLongOption("tenant-slot-type", "set tenant slot type for dynamic tenant")
-            .RequiredArgument("NAME").StoreResult(&TenantSlotType);
-        config.Opts->AddLongOption("tenant-slot-id", "set tenant slot id (for static tenants it is used for monitoring)")
-            .RequiredArgument("NAME").StoreResult(&TenantSlotId);
-        config.Opts->AddLongOption("tenant-domain", "specify domain for dynamic tenant")
-            .RequiredArgument("NAME").StoreResult(&TenantDomain);
-        config.Opts->AddLongOption("tenant-cpu", "specify CPU limit tenant binding")
-            .RequiredArgument("NUM").StoreResult(&TenantCPU);
-        config.Opts->AddLongOption("tenant-memory", "specify Memory limit for tenant binding")
-            .RequiredArgument("NUM").StoreResult(&TenantMemory);
-        config.Opts->AddLongOption("tenant-network", "specify Network limit for tenant binding")
-            .RequiredArgument("NUM").StoreResult(&TenantNetwork);
         config.Opts->AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         config.Opts->AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
         config.Opts->AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
@@ -202,7 +179,6 @@ protected:
         config.Opts->AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("tenant-pool-file", "Tenant Pool service config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
         config.Opts->AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
         config.Opts->AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
@@ -380,14 +356,11 @@ protected:
         }
 
         if (config.ParseResult->Has("tenant")) {
-            if (!IsStartWithSlash(TenantName) && TenantName != "no" && TenantName != "dynamic") {
-                ythrow yexception() << "lead / in --tenant parametr is always required except from 'no' and 'dynamic'";
+            if (!IsStartWithSlash(TenantName)) {
+                ythrow yexception() << "lead / in --tenant parametr is always required.";
             }
-            if (TenantName != "no" && NodeId && NodeKind != NODE_KIND_YQ) {
+            if (NodeId && NodeKind != NODE_KIND_YQ) {
                 ythrow yexception() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'";
-            }
-            if (config.ParseResult->Has("tenant-pool-file")) {
-                ythrow yexception() << "opt '--tenant' is incompatible with --tenant-pool-file";
             }
         }
 
@@ -449,7 +422,6 @@ protected:
         OPTION("vdisk-file", VDiskConfig);
         OPTION("drivemodel-file", DriveModelConfig);
         OPTION("grpc-file", GRpcConfig);
-        OPTION("tenant-pool-file", TenantPoolConfig);
         OPTION("dyn-nodes-file", DynamicNameserviceConfig);
         OPTION("cms-file", CmsConfig);
         OPTION("pq-file", PQConfig);
@@ -519,7 +491,7 @@ protected:
         if (!AppConfig.HasChannelProfileConfig())
             ythrow yexception() << "ChannelProfileConfig is not provided";
 
-        if ((!config.ParseResult->Has("tenant") || TenantName == "no") && RunConfig.ScopeId.IsEmpty()) {
+        if (!config.ParseResult->Has("tenant") && RunConfig.ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain();
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
                 if (domain.GetName() == myDomain) {
@@ -527,10 +499,6 @@ protected:
                     break;
                 }
             }
-        }
-        if (TenantName == "dynamic") {
-            Y_VERIFY(RunConfig.ScopeId.IsEmpty());
-            RunConfig.ScopeId = TKikimrScopeId::DynamicTenantScopeId;
         }
         if (NodeId)
             RunConfig.NodeId = NodeId;
@@ -613,10 +581,8 @@ protected:
         if (config.ParseResult->Has("node-type"))
             AppConfig.MutableTenantPoolConfig()->SetNodeType(NodeType);
 
-        if (config.ParseResult->Has("tenant")) {
-            if (TenantName != "no" && TenantName != "dynamic" && InterconnectPort != DefaultInterconnectPort) {
-                AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
-            }
+        if (config.ParseResult->Has("tenant") && InterconnectPort != DefaultInterconnectPort) {
+            AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
         }
 
         if (config.ParseResult->Has("data-center")) {
@@ -624,36 +590,17 @@ protected:
         }
 
         if (config.ParseResult->Has("tenant")) {
-            AppConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort());
-        }
-
-        // Add binding.
-        if (!AppConfig.HasTenantPoolConfig() && config.ParseResult->Has("tenant")) {
-            if (TenantName == "no") {
-                AppConfig.MutableTenantPoolConfig()->SetIsEnabled(false);
-            } else {
-                auto &slot = *AppConfig.MutableTenantPoolConfig()->AddSlots();
-                if (TenantName == "dynamic") {
-                    TString tenantDomain = DeduceTenantDomain();
-                    if (!tenantDomain) {
-                        ythrow yexception() << "cannot deduce domain for dynamic tenant, use '--tenant-domain' opt";
-                    }
-                    slot.SetId(TenantSlotId ? TenantSlotId : "dynamic-slot");
-                    slot.SetDomainName(tenantDomain);
-                    slot.SetIsDynamic(true);
-                    slot.SetType(TenantSlotType);
-                } else {
-                    slot.SetId(TenantSlotId ? TenantSlotId : "static-slot");
-                    slot.SetTenantName(TenantName);
-                    slot.SetIsDynamic(false);
-                }
-                if (config.ParseResult->Has("tenant-cpu"))
-                    slot.MutableResourceLimit()->SetCPU(TenantCPU);
-                if (config.ParseResult->Has("tenant-memory"))
-                    slot.MutableResourceLimit()->SetMemory(TenantMemory);
-                if (config.ParseResult->Has("tenant-network"))
-                    slot.MutableResourceLimit()->SetNetwork(TenantNetwork);
-            }
+            auto &slot = *AppConfig.MutableTenantPoolConfig()->AddSlots();
+            slot.SetId("static-slot");
+            slot.SetTenantName(TenantName);
+            slot.SetIsDynamic(false);
+            RunConfig.TenantName = TenantName;
+        } else {
+            auto &slot = *AppConfig.MutableTenantPoolConfig()->AddSlots();
+            slot.SetId("static-slot");
+            slot.SetTenantName(CanonizePath(DeduceNodeDomain()));
+            slot.SetIsDynamic(false);
+            RunConfig.TenantName = CanonizePath(DeduceNodeDomain());
         }
 
         if (config.ParseResult->Has("data-center")) {
@@ -847,23 +794,11 @@ protected:
         }
     }
 
-    TString DeduceTenantDomain() {
-        if (TenantDomain)
-            return TenantDomain;
-        if (AppConfig.GetDomainsConfig().DomainSize() == 1)
-            return AppConfig.GetDomainsConfig().GetDomain(0).GetName();
-        if (NodeDomain)
-            return NodeDomain;
-        return "";
-    }
-
     TString DeduceNodeDomain() {
         if (NodeDomain)
             return NodeDomain;
         if (AppConfig.GetDomainsConfig().DomainSize() == 1)
             return AppConfig.GetDomainsConfig().GetDomain(0).GetName();
-        if (TenantDomain)
-            return TenantDomain;
         if (AppConfig.GetTenantPoolConfig().SlotsSize() == 1) {
             auto &slot = AppConfig.GetTenantPoolConfig().GetSlots(0);
             if (slot.GetDomainName())

@@ -1040,6 +1040,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->MeteringConfig = runConfig.AppConfig.GetMeteringConfig();
     }
 
+    AppData->TenantName = runConfig.TenantName;
+
     if (runConfig.AppConfig.HasBootstrapConfig()) {
         AppData->BootstrapConfig = runConfig.AppConfig.GetBootstrapConfig();
     }

@@ -149,6 +149,8 @@ struct TAppData {
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers;
+    TString TenantName;
+
     TResourceProfilesPtr ResourceProfiles;
 
     TProgramShouldContinue * const KikimrShouldContinue;

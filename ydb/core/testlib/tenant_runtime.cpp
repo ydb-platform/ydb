@@ -750,17 +750,9 @@ void TTenantTestRuntime::CreateTenantPool(ui32 nodeIndex, const TTenantTestConfi
         slotConfig.MutableResourceLimit()->SetNetwork(slot.Limit.Network);
         tenantPoolConfig->AddStaticSlot(slotConfig);
     }
-    for (auto &slot : config.DynamicSlots) {
-        limit.SetCPU(slot.Limit.CPU);
-        limit.SetMemory(slot.Limit.Memory);
-        limit.SetNetwork(slot.Limit.Network);
-        tenantPoolConfig->AddDynamicSlot(slot.Id, slot.Type, slot.Domain, slot.Tenant, limit);
-    }
     tenantPoolConfig->NodeType = config.NodeType;
     tenantPoolConfig->StaticSlotLabel = Extension.GetMonitoringConfig().GetDatabaseLabels()
         .GetStaticSlotLabelValue();
-    tenantPoolConfig->DynamicSlotLabel = Extension.GetMonitoringConfig().GetDatabaseLabels()
-        .GetDynamicSlotLabelValue();
 
     TActorId actorId = Register(NKikimr::CreateTenantPool(tenantPoolConfig), nodeIndex, 0, TMailboxType::Revolving, 0);
     EnableScheduleForActor(actorId, true);

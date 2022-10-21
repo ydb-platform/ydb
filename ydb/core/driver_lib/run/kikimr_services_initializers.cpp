@@ -998,17 +998,8 @@ void TLocalServiceInitializer::InitializeServices(
         new TTabletSetupInfo(&NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
 
     TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(Config.GetTenantPoolConfig(), localConfig);
-    if (!tenantPoolConfig->IsEnabled
-        && (!tenantPoolConfig->StaticSlots.empty() || !tenantPoolConfig->DynamicSlots.empty()))
+    if (!tenantPoolConfig->IsEnabled && !tenantPoolConfig->StaticSlots.empty())
         Y_FAIL("Tenant slots are not allowed in disabled pool");
-    // If there are no slots configured then bind to all domains and serve '/' and '/{domain}' together as usual
-    if (tenantPoolConfig->IsEnabled
-        && tenantPoolConfig->StaticSlots.empty()
-        && tenantPoolConfig->DynamicSlots.empty()) {
-        for (const auto &domain : Config.GetDomainsConfig().GetDomain()) {
-            tenantPoolConfig->AddStaticSlot(domain.GetName());
-        }
-    }
 
     setup->LocalServices.push_back(std::make_pair(MakeTenantPoolRootID(),
         TActorSetupCmd(CreateTenantPool(tenantPoolConfig), TMailboxType::ReadAsFilled, 0)));

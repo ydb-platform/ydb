@@ -422,24 +422,6 @@ public:
             Tenants.emplace(tenant->Name, tenant);
         }
 
-        for (auto &pr : Config->DynamicSlots) {
-            TDynamicSlotInfo::TPtr slot = new TDynamicSlotInfo;
-            slot->Id = pr.second.GetId();
-            slot->Type = pr.second.GetType();
-            slot->ResourceLimit = pr.second.GetResourceLimit();
-            auto &tenantName = pr.second.GetTenantName();
-            if (tenantName) {
-                auto tenant = MaybeAddTenant(tenantName);
-                AttachSlot(slot, tenant, Config->DynamicSlotLabel, ctx);
-            }
-            DynamicSlots.emplace(slot->Id, slot);
-
-            LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL,
-                         LogPrefix << "registered dynamic slot '" << slot->Id
-                         << "' (type: " << slot->Type << "  resources: "
-                         << slot->ResourceLimit.ShortDebugString() << ")");
-        }
-
         for (auto &pr : Tenants)
             UpdateTenant(pr.second, ctx);
 
@@ -462,7 +444,6 @@ public:
                      const TActorContext &ctx)
     {
         auto &staticSlotLabel = config.GetDatabaseLabels().GetStaticSlotLabelValue();
-        auto &dynamicSlotLabel = config.GetDatabaseLabels().GetDynamicSlotLabelValue();
         bool modified = false;
 
         if (Config->StaticSlotLabel != staticSlotLabel) {
@@ -472,19 +453,6 @@ public:
             if (Config->StaticSlots.size())
                 modified = true;
             Config->StaticSlotLabel = staticSlotLabel;
-        }
-
-        if (Config->DynamicSlotLabel != dynamicSlotLabel) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                        LogPrefix << "dynamic slot label modified from "
-                        << Config->DynamicSlotLabel << " to " << dynamicSlotLabel);
-            for (auto &pr : DynamicSlots) {
-                if (pr.second->Label == Config->DynamicSlotLabel) {
-                    pr.second->Label = dynamicSlotLabel;
-                    modified = true;
-                }
-            }
-            Config->DynamicSlotLabel = dynamicSlotLabel;
         }
 
         if (modified)
@@ -720,25 +688,10 @@ public:
                     << "   IsEnabled: " << Config->IsEnabled << Endl
                     << "   NodeType: " << Config->NodeType << Endl
                     << "   StaticSlotLabel: " << Config->StaticSlotLabel << Endl
-                    << "   DynamicSlotLabel: " << Config->DynamicSlotLabel << Endl
                     << "   StaticSlots:" << Endl;
                 for (auto &pr : Config->StaticSlots)
                     str << "      " << pr.second.ShortDebugString() << Endl;
-                str << "   DynamicSlots:" << Endl;
-                for (auto &pr : Config->DynamicSlots)
-                    str << "      " << pr.second.ShortDebugString() << Endl;
 
-                str << "Dynamic slots:" << Endl;
-                for (auto &pr : DynamicSlots) {
-                    str << " - ID: " << pr.second->Id << Endl
-                        << "   Type: " << pr.second->Type << Endl
-                        << "   AssignedTenant: "
-                        << (pr.second->AssignedTenant ? pr.second->AssignedTenant->Name : TString()) << Endl
-                        << "   ResourceLimit: " << pr.second->ResourceLimit.ShortDebugString() << Endl
-                        << "   ActiveAction: " << EventToString(pr.second->ActiveAction.Get()) << Endl;
-
-                    str << "   PendingActions: " << pr.second->PendingActions.size() << Endl;
-                }
                 str << Endl;
 
                 str << "Tenants:" << Endl;
@@ -851,7 +804,6 @@ public:
         TTenantPoolConfig::TPtr res = new TTenantPoolConfig;
         res->NodeType = Config->NodeType;
         res->StaticSlotLabel = Config->StaticSlotLabel;
-        res->DynamicSlotLabel = Config->DynamicSlotLabel;
         return res;
     }
 
@@ -898,15 +850,6 @@ public:
             domainConfigs[domain]->AddStaticSlot(pr.second);
         }
 
-        for (auto &pr : Config->DynamicSlots) {
-            TString domain = pr.second.GetDomainName();
-            Y_VERIFY(domain, "empty domain for dynamic slot");
-            Y_VERIFY(pr.second.GetType(), "empty type for dynamic slot");
-            if (!domainConfigs.contains(domain))
-                domainConfigs[domain] = CreateDomainConfig();
-            domainConfigs[domain]->AddDynamicSlot(pr.second);
-        }
-
         auto domains = AppData(ctx)->DomainsInfo;
         for (auto &pr : domainConfigs) {
             auto *domain = domains->GetDomainByName(pr.first);
@@ -950,16 +893,13 @@ TTenantPoolConfig::TTenantPoolConfig(const NKikimrTenantPool::TTenantPoolConfig 
     : LocalConfig(localConfig)
 {
     for (auto &slot : config.GetSlots()) {
-        if (slot.GetIsDynamic())
-            AddDynamicSlot(slot);
-        else
+        if (!slot.GetIsDynamic())
             AddStaticSlot(slot);
     }
     IsEnabled = config.GetIsEnabled();
     NodeType = config.GetNodeType();
 
     StaticSlotLabel = monCfg.GetDatabaseLabels().GetStaticSlotLabelValue();
-    DynamicSlotLabel = monCfg.GetDatabaseLabels().GetDynamicSlotLabelValue();
 }
 
 TTenantPoolConfig::TTenantPoolConfig(const NKikimrTenantPool::TTenantPoolConfig &config,
@@ -988,28 +928,6 @@ void TTenantPoolConfig::AddStaticSlot(const TString &tenant,
     slot.SetIsDynamic(false);
     slot.MutableResourceLimit()->CopyFrom(limit);
     AddStaticSlot(slot);
-}
-
-void TTenantPoolConfig::AddDynamicSlot(const NKikimrTenantPool::TSlotConfig &slot)
-{
-    Y_VERIFY(IsEnabled);
-    Y_VERIFY(!DynamicSlots.contains(slot.GetId()),
-             "two dynamic slots with the same id '%s'", slot.GetId().data());
-    DynamicSlots[slot.GetId()] = slot;
-    DynamicSlots[slot.GetId()].SetTenantName(CanonizePath(slot.GetTenantName()));
-}
-
-void TTenantPoolConfig::AddDynamicSlot(const TString &id, const TString &type, const TString &domain,
-                                       const TString &tenant, const NKikimrTabletBase::TMetrics &limit)
-{
-    NKikimrTenantPool::TSlotConfig slot;
-    slot.SetId(id);
-    slot.SetDomainName(domain);
-    slot.SetTenantName(tenant);
-    slot.SetIsDynamic(true);
-    slot.SetType(type);
-    slot.MutableResourceLimit()->CopyFrom(limit);
-    AddDynamicSlot(slot);
 }
 
 IActor* CreateTenantPool(TTenantPoolConfig::TPtr config)

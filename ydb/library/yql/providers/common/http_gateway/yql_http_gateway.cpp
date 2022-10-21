@@ -641,24 +641,34 @@ private:
             const std::unique_lock lock(Sync);
             if (const auto it = Allocated.find(handle); Allocated.cend() != it) {
                 easy = std::move(it->second);
+                TString codeLabel;
+                TString codeValue;
                 if (CURLE_OK == result) {
                     curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
-                    TIntrusivePtr<::NMonitoring::TDynamicCounters> group;
-                    switch (easy->GetMetthod()) {
-                        case TEasyCurl::EMethod::GET:
-                        group = GroupForGET->GetSubgroup("code", ToString(httpResponseCode));
-                        break;
-                    case TEasyCurl::EMethod::POST:
-                        group = GroupForPOST->GetSubgroup("code", ToString(httpResponseCode));
-                        break;
-                    case TEasyCurl::EMethod::PUT:
-                        group = GroupForPUT->GetSubgroup("code", ToString(httpResponseCode));
-                        break;
-                    default:
-                        break;
-                    }
-                    if (group)
-                        group->GetCounter("count", true)->Inc();
+                    codeLabel = "code";
+                    codeValue = ToString(httpResponseCode);
+                } else {
+                    codeLabel = "curl_code";
+                    codeValue = ToString((int)result);
+                }
+
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> group;
+                switch (easy->GetMetthod()) {
+                case TEasyCurl::EMethod::GET:
+                    group = GroupForGET->GetSubgroup(codeLabel, codeValue);
+                    break;
+                case TEasyCurl::EMethod::POST:
+                    group = GroupForPOST->GetSubgroup(codeLabel, codeValue);
+                    break;
+                case TEasyCurl::EMethod::PUT:
+                    group = GroupForPUT->GetSubgroup(codeLabel, codeValue);
+                    break;
+                default:
+                    break;
+                }
+
+                if (group) {
+                    group->GetCounter("count", true)->Inc();
                 }
 
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {

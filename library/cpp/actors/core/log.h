@@ -359,4 +359,47 @@ namespace NActors {
         MemLogWrite(str.data(), str.size(), true);
         DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(str));
     }
+
+    class TRecordWriter: public TStringBuilder {
+    private:
+        const TActorContext& ActorContext;
+        ::NActors::NLog::EPriority Priority = ::NActors::NLog::EPriority::PRI_INFO;
+        ::NActors::NLog::EComponent Component = 0;
+    public:
+        TRecordWriter(const TActorContext& actorContext, ::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)
+            : ActorContext(actorContext)
+            , Priority(priority)
+            , Component(component) {
+
+        }
+
+        ~TRecordWriter() {
+            ::NActors::MemLogAdapter(ActorContext, Priority, Component, *this);
+        }
+    };
+
 }
+
+#define ACTORS_LOG_STREAM(actorCtxOrSystem, mPriority, mComponent) \
+     if (!IS_LOG_PRIORITY_ENABLED(actorCtxOrSystem, mPriority, mComponent)); else NActors::TRecordWriter(actorCtxOrSystem, static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent))
+
+#define ACTORS_LOG_STREAM_TRACE(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component)
+#define ACTORS_LOG_STREAM_DEBUG(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component)
+#define ACTORS_LOG_STREAM_INFO(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_INFO, component)
+#define ACTORS_LOG_STREAM_NOTICE(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component)
+#define ACTORS_LOG_STREAM_WARN(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_WARN, component)
+#define ACTORS_LOG_STREAM_ERROR(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_ERROR, component)
+#define ACTORS_LOG_STREAM_CRIT(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component)
+#define ACTORS_LOG_STREAM_ALERT(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component)
+#define ACTORS_LOG_STREAM_EMERG(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component)
+
+#define ALS_TRACE(component) ACTORS_LOG_STREAM_TRACE(TActivationContext::AsActorContext(), component)
+#define ALS_DEBUG(component) ACTORS_LOG_STREAM_DEBUG(TActivationContext::AsActorContext(), component)
+#define ALS_INFO(component) ACTORS_LOG_STREAM_INFO(TActivationContext::AsActorContext(), component)
+#define ALS_NOTICE(component) ACTORS_LOG_STREAM_NOTICE(TActivationContext::AsActorContext(), component)
+#define ALS_WARN(component) ACTORS_LOG_STREAM_WARN(TActivationContext::AsActorContext(), component)
+#define ALS_ERROR(component) ACTORS_LOG_STREAM_ERROR(TActivationContext::AsActorContext(), component)
+#define ALS_CRIT(component) ACTORS_LOG_STREAM_CRIT(TActivationContext::AsActorContext(), component)
+#define ALS_ALERT(component) ACTORS_LOG_STREAM_ALERT(TActivationContext::AsActorContext(), component)
+#define ALS_EMERG(component) ACTORS_LOG_STREAM_EMERG(TActivationContext::AsActorContext(), component)
+

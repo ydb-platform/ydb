@@ -12,7 +12,7 @@
 
 namespace NActors {
     class TChunkSerializer;
-
+    class IActor;
     class ISerializerToStream {
     public:
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
@@ -21,10 +21,20 @@ namespace NActors {
     class IEventBase
         : TNonCopyable,
           public ISerializerToStream {
+    protected:
+        // for compatibility with virtual actors
+        virtual bool DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
+            Y_VERIFY_DEBUG(false);
+            return false;
+        }
     public:
         // actual typing is performed by IEventHandle
 
         virtual ~IEventBase() {
+        }
+
+        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) {
+            return DoExecute(actor, std::move(eventPtr));
         }
 
         virtual TString ToStringHeader() const = 0;

@@ -564,7 +564,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAll() {
             extractorRoots.push_back(root);
         }
 
-        outputColumns.push_back(TString(InitialColumnNames[index]->Content()));
+        outputColumns.push_back(TString(FinalColumnNames[index]->Content()));
     }
 
     auto mappedWidth = extractorRoots.size();

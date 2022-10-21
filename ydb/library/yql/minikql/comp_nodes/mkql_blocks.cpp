@@ -17,6 +17,8 @@ namespace NMiniKQL {
 
 namespace {
 
+constexpr size_t MaxBlockSizeInBytes = 1_MB;
+
 class TBlockBuilderBase {
 public:
     TBlockBuilderBase(TComputationContext& ctx, const std::shared_ptr<arrow::DataType>& itemType)
@@ -39,8 +41,6 @@ private:
         const auto bits = static_cast<const arrow::FixedWidthType&>(itemType).bit_width();
         return arrow::BitUtil::BytesForBits(bits);
     }
-
-    static constexpr size_t MaxBlockSizeInBytes = 1_MB;
 
 protected:
     TComputationContext& Ctx_;
@@ -222,8 +222,8 @@ private:
                 Builders_.push_back(MakeBlockBuilder(ctx, slots[i]));
             }
 
-            MaxLength_ = Builders_.front()->MaxLength();
-            for (size_t i = 1; i < slots.size(); ++i) {
+            MaxLength_ = MaxBlockSizeInBytes;
+            for (size_t i = 0; i < slots.size(); ++i) {
                 MaxLength_ = Min(MaxLength_, Builders_[i]->MaxLength());
             }
         }

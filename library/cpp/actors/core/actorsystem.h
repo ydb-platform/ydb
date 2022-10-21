@@ -270,11 +270,6 @@ namespace NActors {
         bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0) const;
 
-        template <class TEvent, class... Types>
-        bool SendToActorId(const TActorId& recipient, Types... args) const {
-            return Send(recipient, new TEvent(args...), 0);
-        }
-
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *

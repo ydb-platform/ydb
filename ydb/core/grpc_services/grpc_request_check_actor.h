@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "audit_log.h"
 #include "service_ratelimiter_events.h"
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
@@ -112,6 +113,10 @@ public:
             }
         }
 
+        if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
+            AuditLog(GrpcRequestBaseCtx_, CheckedDatabaseName_, GetSubject(), ctx);
+        }
+
         // Simple rps limitation
         static NRpcService::TRlConfig rpsRlConfig(
             "serverless_rt_coordination_node_path",
@@ -205,6 +210,11 @@ public:
     }
 
 private:
+    TString GetSubject() const {
+        const auto sid = TBase::GetUserSID();
+        return sid ? sid : "no subject";
+    }
+
     static NYql::TIssues GetRlIssues(const Ydb::RateLimiter::AcquireResourceResponse& resp) {
         NYql::TIssues opIssues;
         NYql::IssuesFromMessage(resp.operation().issues(), opIssues);

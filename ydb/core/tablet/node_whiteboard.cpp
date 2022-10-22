@@ -392,6 +392,7 @@ protected:
         HFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
         HFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
+        HFunc(TEvWhiteboard::TEvVDiskDropDonors, Handle);
         HFunc(TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
@@ -455,6 +456,7 @@ protected:
         } else if (const auto it = VDiskStateInfo.find(key); it != VDiskStateInfo.end() &&
                 it->second.GetInstanceGuid() == record.GetInstanceGuid()) {
             auto& value = it->second;
+
             if (CheckedMerge(value, record) >= 100) {
                 value.SetChangeTime(ctx.Now().MilliSeconds());
                 UpdateSystemState(ctx);
@@ -476,6 +478,37 @@ protected:
             node.key().GroupGeneration = msg->Generation;
             VDiskStateInfo.insert(std::move(node));
             UpdateSystemState(ctx);
+        }
+    }
+
+    void Handle(TEvWhiteboard::TEvVDiskDropDonors::TPtr& ev, const TActorContext& ctx) {
+        auto& msg = *ev->Get();
+        if (const auto it = VDiskStateInfo.find(msg.VDiskId); it != VDiskStateInfo.end() &&
+                it->second.GetInstanceGuid() == msg.InstanceGuid) {
+            auto& value = it->second;
+            bool change = false;
+
+            if (msg.DropAllDonors) {
+                change = !value.GetDonors().empty();
+                value.ClearDonors();
+            } else {
+                for (const auto& donor : msg.DropDonors) {
+                    auto *donors = value.MutableDonors();
+                    for (int i = 0; i < donors->size(); ++i) {
+                        auto& x = donors->at(i);
+                        if (x.GetNodeId() == donor.GetNodeId() && x.GetPDiskId() == donor.GetPDiskId() && x.GetVSlotId() == donor.GetVSlotId()) {
+                            donors->DeleteSubrange(i, 1);
+                            change = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (change) {
+                value.SetChangeTime(ctx.Now().MilliSeconds());
+                UpdateSystemState(ctx);
+            }
         }
     }
 

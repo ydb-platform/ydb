@@ -707,6 +707,7 @@ message TFeatureFlags {
     optional bool EnablePredicateExtractForDataQueries = 68 [default = false];
     optional bool EnableMoveIndex = 70 [default = false];
     optional bool EnableNotNullDataColumns = 73 [default = false];
+    optional bool EnableGrpcAudit = 74 [default = false];
 }
 
 
@@ -1419,6 +1420,7 @@ message THiveConfig {
     optional bool CheckMoveExpediency = 46 [default = true];
     optional uint64 StoragePoolFreshPeriod = 47 [default = 60000]; // milliseconds
     optional string PoolsToMonitorForUsage = 48 [default = "System,User,IC"];
+    repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
 }
 
 message TDataShardConfig {

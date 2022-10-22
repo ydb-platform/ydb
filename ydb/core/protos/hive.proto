@@ -16,6 +16,11 @@ enum ETabletBootMode {
     TABLET_BOOT_MODE_EXTERNAL = 1;
 }
 
+enum EBalancerPolicy {
+    POLICY_BALANCE = 0;
+    POLICY_IGNORE = 1;
+}
+
 enum EErrorReason {
     // Default unspecified error reason
     ERROR_REASON_UNKNOWN = 0;
@@ -95,6 +100,7 @@ message TEvCreateTablet {
     repeated NKikimrSubDomains.TDomainKey AllowedDomains = 23;
     optional TDataCentersPreference DataCentersPreference = 24;
     repeated string AllowedDataCenters = 25;
+    optional EBalancerPolicy BalancerPolicy = 26;
 
     optional uint32 ChannelsProfile = 5 [deprecated = true]; // DEPRECATED
     optional uint32 Flags = 6 [deprecated = true]; // DEPRECATED
@@ -458,6 +464,7 @@ message TTabletInfo {
     optional NKikimrTabletBase.TMetrics ResourceUsage = 21;
     optional uint32 RestartsPerPeriod = 22;
     optional uint64 LastAliveTimestamp = 23;
+    optional EBalancerPolicy BalancerPolicy = 24;
 }
 
 message TEvSeizeTabletsReply {

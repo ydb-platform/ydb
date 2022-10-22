@@ -21,6 +21,7 @@ TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     , ResourceValues()
     , ResourceMetricsAggregates(Hive.GetDefaultResourceMetricsAggregates())
     , Weight(0)
+    , BalancerPolicy(EBalancerPolicy::POLICY_BALANCE)
 {}
 
 const TLeaderTabletInfo& TTabletInfo::GetLeader() const {
@@ -181,7 +182,9 @@ bool TTabletInfo::IsStopped() const {
 }
 
 bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
-    return now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod();
+    return (BalancerPolicy == EBalancerPolicy::POLICY_BALANCE)
+            && !Hive.IsInBalancerIgnoreList(GetTabletType())
+            && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }
 
 bool TTabletInfo::InitiateBoot() {

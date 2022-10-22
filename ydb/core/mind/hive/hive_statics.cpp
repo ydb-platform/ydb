@@ -340,5 +340,16 @@ TString GetLocationString(const NActors::TNodeLocation& location) {
     return proto.ShortDebugString();
 }
 
+void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list) {
+    std::sort(list.begin(), list.end());
+    list.erase(std::unique(list.begin(), list.end()), list.end());
+}
+
+bool IsValidTabletType(TTabletTypes::EType type) {
+    return (type > TTabletTypes::Unknown
+            && type < TTabletTypes::Reserved40
+            );
+}
+
 } // NHive
 } // NKikimr

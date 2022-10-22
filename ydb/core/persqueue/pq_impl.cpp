@@ -682,16 +682,29 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 void TPersQueue::HandleConfigWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
     if (resp.GetStatus() != NMsgBusProxy::MSTATUS_OK ||
-        resp.WriteResultSize() != 1 ||
-        resp.GetWriteResult(0).GetStatus() != NKikimrProto::OK)
-    {
+        resp.WriteResultSize() < 1) {
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
                     << " Config write error: " << resp.DebugString() << " " << ctx.SelfID);
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
+    for (const auto& res : resp.GetWriteResult()) {
+        if (res.GetStatus() != NKikimrProto::OK) {
+            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
+                        << " Config write error: " << resp.DebugString() << " " << ctx.SelfID);
+                ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
+            return;
+        }
+    }
 
-    Y_VERIFY(resp.WriteResultSize() == 1);
+    if (resp.WriteResultSize() > 1) {
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
+                    << " restarting - have some registering of message groups");
+            ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
+        return;
+    }
+
+    Y_VERIFY(resp.WriteResultSize() >= 1);
     Y_VERIFY(resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
     if (ConfigInited && PartitionsInited == Partitions.size()) //all partitions are working well - can apply new config
         ApplyNewConfigAndReply(ctx);
@@ -1269,11 +1282,13 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
         }
 
         sourceIdWriter.RegisterSourceId(mg.GetId(), 0, 0, ctx.Now(), std::move(keyRange));
-
-        for (const auto& partition : cfg.GetPartitions()) {
-            sourceIdWriter.FillRequest(request.Get(), partition.GetPartitionId());
-        }
     }
+
+    for (const auto& partition : cfg.GetPartitions()) {
+        sourceIdWriter.FillRequest(request.Get(), partition.GetPartitionId());
+    }
+
+    Y_VERIFY((ui64)request->Record.GetCmdWrite().size() == (ui64)bootstrapCfg.GetExplicitMessageGroups().size() * cfg.PartitionsSize() + 1);
 
     NewConfig = cfg;
     ctx.Send(ctx.SelfID, request.Release());

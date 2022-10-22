@@ -140,6 +140,8 @@ TString GetConditionalRedString(const TString& str, bool condition);
 TString GetDataCenterName(ui64 dataCenterId);
 TString LongToShortTabletName(const TString& longTabletName);
 TString GetLocationString(const NActors::TNodeLocation& location);
+void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list);
+bool IsValidTabletType(TTabletTypes::EType type);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
 public:
@@ -404,6 +406,9 @@ protected:
     std::unordered_map<TDataCenterId, std::unordered_set<TNodeId>> RegisteredDataCenterNodes;
     std::unordered_set<TNodeId> ConnectedNodes;
 
+    // normalized to be sorted list of unique values
+    std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
+
     // to be removed later
     bool TabletOwnersSynced = false;
     // to be removed later
@@ -482,6 +487,7 @@ protected:
     void Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&);
     void Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr&);
     void Handle(TEvPrivate::TEvProcessPendingOperations::TPtr&);
+    void Handle(TEvPrivate::TEvBalancerOut::TPtr&);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
@@ -746,6 +752,12 @@ public:
         std::get<NMetrics::EResource::Network>(initialMaximum) = CurrentConfig.GetMaxResourceNetwork();
         std::get<NMetrics::EResource::Counter>(initialMaximum) = CurrentConfig.GetMaxResourceCounter();
         return initialMaximum;
+    }
+
+    bool IsInBalancerIgnoreList(TTabletTypes::EType type) const {
+        const auto& ignoreList = BalancerIgnoreTabletTypes;
+        auto found = std::find(ignoreList.begin(), ignoreList.end(), type);
+        return (found != ignoreList.end());
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

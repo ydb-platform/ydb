@@ -146,6 +146,8 @@ protected:
         if (RecheckOnFinish && MaxMovements != 0 && Movements >= MaxMovements) {
             BLOG_D("Balancer initiated recheck");
             Hive->ProcessTabletBalancer();
+        } else {
+            Send(Hive->SelfId(), new TEvPrivate::TEvBalancerOut());
         }
         return IActor::PassAway();
     }
@@ -239,6 +241,7 @@ protected:
                     tablets.emplace_back(tablet);
                 }
             }
+            BLOG_TRACE("Balancer on node " << node->Id <<  ": " << tablets.size() << "/" << nodeTablets.size() << " tablets is suitable for balancing");
             if (!tablets.empty()) {
                 switch (Hive->GetTabletBalanceStrategy()) {
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:

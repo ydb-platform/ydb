@@ -308,6 +308,10 @@ void THive::Handle(TEvPrivate::TEvProcessPendingOperations::TPtr&) {
     BLOG_D("Handle ProcessPendingOperations");
 }
 
+void THive::Handle(TEvPrivate::TEvBalancerOut::TPtr&) {
+    BLOG_D("Handle BalancerOut");
+}
+
 void THive::Handle(TEvHive::TEvBootTablet::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
     TTabletInfo* tablet = FindTablet(tabletId);
@@ -554,6 +558,14 @@ void THive::BuildCurrentConfig() {
     for (const NKikimrConfig::THiveTabletPreference& tabletPreference : CurrentConfig.GetDefaultTabletPreference()) {
         DefaultDataCentersPreference[tabletPreference.GetType()] = tabletPreference.GetDataCentersPreference();
     }
+    BalancerIgnoreTabletTypes.clear();
+    for (auto i : CurrentConfig.GetBalancerIgnoreTabletTypes()) {
+        const auto type = TTabletTypes::EType(i);
+        if (IsValidTabletType(type)) {
+            BalancerIgnoreTabletTypes.emplace_back(type);
+        }
+    }
+    MakeTabletTypeSet(BalancerIgnoreTabletTypes);
 }
 
 void THive::Cleanup() {
@@ -1612,6 +1624,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         auto& tabletInfo = *response.AddTablets();
         tabletInfo.SetTabletID(tabletId);
         tabletInfo.SetTabletType(info->Type);
+        tabletInfo.SetObjectId(info->ObjectId);
         tabletInfo.SetState(static_cast<ui32>(info->State));
         tabletInfo.SetTabletBootMode(info->BootMode);
         tabletInfo.SetVolatileState(info->GetVolatileState());
@@ -1620,6 +1633,9 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         tabletInfo.MutableTabletOwner()->SetOwnerIdx(info->Owner.second);
         tabletInfo.SetGeneration(info->KnownGeneration);
         tabletInfo.MutableObjectDomain()->CopyFrom(info->ObjectDomain);
+        if (info->BalancerPolicy != NKikimrHive::EBalancerPolicy::POLICY_BALANCE) {
+            tabletInfo.SetBalancerPolicy(info->BalancerPolicy);
+        }
         if (!info->IsRunning()) {
             tabletInfo.SetLastAliveTimestamp(info->Statistics.GetLastAliveTimestamp());
         }
@@ -2437,6 +2453,7 @@ STFUNC(THive::StateWork) {
         hFunc(NSysView::TEvSysView::TEvGetTabletsRequest, Handle);
         hFunc(TEvHive::TEvRequestTabletOwners, Handle);
         hFunc(TEvHive::TEvTabletOwnersReply, Handle);
+        hFunc(TEvPrivate::TEvBalancerOut, Handle);
     default:
         if (!HandleDefaultEvents(ev, ctx)) {
             BLOG_W("THive::StateWork unhandled event type: " << ev->GetTypeRewrite()

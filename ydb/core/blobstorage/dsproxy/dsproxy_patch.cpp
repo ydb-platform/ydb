@@ -3,6 +3,7 @@
 #include "root_cause.h"
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/util/stlog.h>
 
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
@@ -71,6 +72,20 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
     TBlobStorageGroupInfo::TVDiskIds VDisks;
 
     bool UseVPatch = false;
+    bool IsGoodPatchedBlobId = false;
+    bool IsAllowedErasure = false;
+
+#define PATCH_LOG(priority, service, marker, msg, ...)                         \
+        STLOG(priority, service, marker, msg,                                  \
+                (ActorId, SelfId()),                                           \
+                (Group, Info->GroupID),                                        \
+                (DiffCount, DiffCount),                                        \
+                (OriginalBlob, OriginalId),                                    \
+                (PatchedBlob, PatchedId),                                     \
+                (Deadline, Deadline),                                          \
+                (RestartCounter, RestartCounter),                              \
+                __VA_ARGS__)                                                   \
+// PATCH_LOG
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -109,6 +124,10 @@ public:
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA02, "ReplyAndDie",
+                (Status, status),
+                (ErrorReason, ErrorReason));
+
         std::unique_ptr<TEvBlobStorage::TEvPatchResult> result = std::make_unique<TEvBlobStorage::TEvPatchResult>(status, PatchedId,
                 StatusFlags, Info->GroupID, ApproximateFreeSpaceShare);
         result->ErrorReason = ErrorReason;
@@ -139,6 +158,10 @@ public:
         TEvBlobStorage::TEvGetResult *result = ev->Get();
         Orbit = std::move(result->Orbit);
 
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA30, "Received TEvGetResult",
+                (Status, result->Status),
+                (ErrorReason, result->ErrorReason));
+
         ui32 patchedIdHash = PatchedId.Hash();
         bool incorrectCookie = ev->Cookie != patchedIdHash;
         bool fail = incorrectCookie
@@ -161,7 +184,6 @@ public:
                         << getResponseStatus
                         << " GetErrorReason# " << result->ErrorReason;
             }
-            R_LOG_ERROR_S("BPPA04", ErrorReason);
             ReplyAndDie(NKikimrProto::ERROR);
             return;
         }
@@ -179,6 +201,10 @@ public:
         TEvBlobStorage::TEvPutResult *result = ev->Get();
         Orbit = std::move(result->Orbit);
 
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA29, "Received TEvPutResult",
+                (Status, result->Status),
+                (ErrorReason, result->ErrorReason));
+
         StatusFlags = result->StatusFlags;
         ApproximateFreeSpaceShare = result->ApproximateFreeSpaceShare;
 
@@ -194,7 +220,6 @@ public:
                         << " PutStatus# " << NKikimrProto::EReplyStatus_Name(result->Status)
                         << " PutErrorReason# " << result->ErrorReason;
             }
-            R_LOG_ERROR_S("BPPA03", ErrorReason);
             ReplyAndDie(NKikimrProto::ERROR);
             return;
         }
@@ -217,9 +242,11 @@ public:
 
     void Handle(TEvBlobStorage::TEvVMovedPatchResult::TPtr &ev) {
         TEvBlobStorage::TEvVMovedPatchResult *result = ev->Get();
-        A_LOG_DEBUG_S("BPPA02", "received " << ev->Get()->ToString()
-            << " from# " << VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()));
         NKikimrBlobStorage::TEvVMovedPatchResult &record = result->Record;
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA28, "Received TEvVMovedPatchResult",
+                (Status, record.GetStatus()),
+                (ErrorReason, record.GetErrorReason()),
+                (VDiskId, VDiskIDFromVDiskID(record.GetVDiskID())));
         PullOutStatusFlagsAndFressSpace(record);
         Orbit = std::move(result->Orbit);
 
@@ -240,10 +267,9 @@ public:
                         << " VMovedPatchStatus# " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
                         << subErrorReason;
             }
-            A_LOG_INFO_S("BPPA05", "VMovedPatch failed, NaivePatch started;"
-                    << " OriginalId# " << OriginalId
-                    << " PatchedId# " << PatchedId
-                    << " ErrorReason# " << ErrorReason);
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA27, "Start Naive strategy from hadling TEvVMovedPatchResult",
+                    (Status, record.GetStatus()),
+                    (ErrorReason, ErrorReason));
             StartNaivePatch();
             return;
         }
@@ -284,26 +310,22 @@ public:
             OkVDisksWithParts.push_back(subgroupIdx);
         }
 
-        A_LOG_INFO_S("BPPA07", "received VPatchFoundParts"
-                << " Status# " << status
-                << " ActorId# " << SelfId()
-                << " Group# " << Info->GroupID
-                << " OriginalBlob# " << OriginalId
-                << " PatchedBlob# " << PatchedId
-                << " Deadline# " << Deadline
-                << " SubgroupIdx# " << (ui32)subgroupIdx
-                << " PartsCount# " << record.OriginalPartsSize()
-                << " ReceivedFoundParts# " << ReceivedFoundParts << '/' << SendedStarts
-                << " ErrorReason# " << errorReason);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA26, "Received VPatchFoundParts",
+                (Status, status),
+                (SubgroupIdx, (ui32)subgroupIdx),
+                (ReceivedResults, static_cast<TString>(TStringBuilder() << ReceivedResults << '/' << Info->Type.TotalPartCount())),
+                (ErrorReason, errorReason));
 
         if (ReceivedFoundParts == SendedStarts) {
             bool continueVPatch = VerifyPartPlacement();
             if (continueVPatch) {
                 continueVPatch = ContinueVPatch();
             } else {
+                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA27, "Failed VerifyPartPlacement");
                 Mon->VPatchPartPlacementVerifyFailed->Inc();
             }
             if (!continueVPatch) {
+                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA27, "Start Fallback strategy from hadling TEvVPatchFoundParts");
                 StopVPatch();
                 StartFallback();
             }
@@ -321,28 +343,27 @@ public:
             errorReason = record.GetErrorReason();
         }
 
-        A_LOG_INFO_S("BPPA06", "received VPatchResult"
-                << " Status# " << status
-                << " ActorId# " << SelfId()
-                << " Group# " << Info->GroupID
-                << " OriginalBlob# " << OriginalId
-                << " PatchedBlob# " << PatchedId
-                << " Deadline# " << Deadline
-                << " ReceivedResults# " << ReceivedResults << '/' << Info->Type.TotalPartCount()
-                << " ErrorReason# " << errorReason);
-
         Y_VERIFY(record.HasCookie());
         ui8 subgroupIdx = record.GetCookie();
+
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "Received VPatchResult",
+                (Status, status),
+                (SubgroupIdx, (ui32)subgroupIdx),
+                (ReceivedResults, static_cast<TString>(TStringBuilder() << ReceivedResults << '/' << Info->Type.TotalPartCount())),
+                (ErrorReason, errorReason));
 
         bool wasReceived = std::exchange(ReceivedResponseFlags[subgroupIdx], true);
         Y_VERIFY(!wasReceived);
 
         if (status != NKikimrProto::OK) {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA24, "Start Fallback strategy from handling VPatchResult",
+                    (ReceivedResults, TStringBuilder() << ReceivedResults << '/' << Info->Type.TotalPartCount()));
             StartFallback();
             return;
         }
 
         if (ReceivedResults == Info->Type.TotalPartCount()) {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA25, "Got all succesful responses, make own success response");
             ReplyAndDie(NKikimrProto::OK);
         }
     }
@@ -357,6 +378,7 @@ public:
         }
 
         if (countByDC[0] && countByDC[1] && countByDC[2]) {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA22, "VerifyPartPlacement {mirror-3-dc} found all 3 disks");
             return true;
         }
 
@@ -366,6 +388,8 @@ public:
                 x2Count++;
             }
         }
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "VerifyPartPlacement {mirror-3-dc}",
+                (X2Count, x2Count));
         return x2Count >= 2;
     }
 
@@ -374,15 +398,21 @@ public:
             return VerifyPartPlacementForMirror3dc();
         } else {
             TSubgroupPartLayout layout;
-
-            for (auto &[subgroupIdx, partId] : FoundParts) {
-                layout.AddItem(subgroupIdx, partId - 1, Info->Type);
+            for (auto &placement : FoundParts) {
+                PATCH_LOG(PRI_TRACE, BS_PROXY_PATCH, BPPA31, "Get part",
+                        (SubgroupIdx, (ui32)placement.VDiskIdxInSubgroup),
+                        (PartId, (ui32)placement.PartId));
+                layout.AddItem(placement.VDiskIdxInSubgroup, placement.PartId - 1, Info->Type);
             }
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA21, "VerifyPartPlacement",
+                    (EffectiveReplicas, layout.CountEffectiveReplicas(Info->Type)),
+                    (TotalPartount, Info->Type.TotalPartCount()));
             return layout.CountEffectiveReplicas(Info->Type) == Info->Type.TotalPartCount();
         }
     }
 
     void SendStopDiffs() {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA18, "Send stop diffs");
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchDiff>> events;
         for (ui32 vdiskIdx = 0; vdiskIdx < VDisks.size(); ++vdiskIdx) {
             if (!ErrorResponseFlags[vdiskIdx] && !EmptyResponseFlags[vdiskIdx] && ReceivedResponseFlags[vdiskIdx]) {
@@ -390,6 +420,9 @@ public:
                         OriginalId, PatchedId, VDisks[vdiskIdx], 0, Deadline, vdiskIdx);
                 ev->SetForceEnd();
                 events.emplace_back(std::move(ev));
+                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA19, "Send stop message",
+                        (VDiskIdxInSubgroup, vdiskIdx),
+                        (VDiskId, VDisks[vdiskIdx]));
             }
         }
         SendToQueues(events, false);
@@ -456,7 +489,12 @@ public:
             for (const TPartPlacement &parity : parityPlacements) {
                 ev->AddXorReceiver(VDisks[parity.VDiskIdxInSubgroup], parity.PartId);
             }
-
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA20, "Send TEvVPatchDiff",
+                    (VDiskIdxInSubgroup, idxInSubgroup),
+                    (PatchedVDiskIdxInSubgroup, patchedIdxInSubgroup),
+                    (DiffsForPart, diffsForPart.size()),
+                    (ParityPlacements, parityPlacements.size()),
+                    (WaitedXorDiffs, waitedXorDiffs));
             events.push_back(std::move(ev));
         }
         SendToQueues(events, false);
@@ -487,12 +525,8 @@ public:
     }
 
     void StartMovedPatch() {
-        A_LOG_DEBUG_S("BPPA12", "StartMovedPatch"
-            << " ActorId# " << SelfId()
-            << " Group# " << Info->GroupID
-            << " OriginalBlob# " << OriginalId
-            << " PatchedBlob# " << PatchedId
-            << " Deadline# " << Deadline);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA09, "Start Moved strategy",
+                (SendedStarts, SendedStarts));
         Become(&TThis::MovedPatchState);
 
         ui32 subgroupIdx = 0;
@@ -517,12 +551,7 @@ public:
     }
 
     void StartNaivePatch() {
-        A_LOG_DEBUG_S("BPPA11", "StartNaivePatch"
-            << " ActorId# " << SelfId()
-            << " Group# " << Info->GroupID
-            << " OriginalBlob# " << OriginalId
-            << " PatchedBlob# " << PatchedId
-            << " Deadline# " << Deadline);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA07, "Start Naive strategy");
         Become(&TThis::NaiveState);
         auto get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0, OriginalId.BlobSize(), Deadline,
             NKikimrBlobStorage::AsyncRead);
@@ -537,8 +566,12 @@ public:
     void StartFallback() {
         Mon->PatchesWithFallback->Inc();
         if (WithMovingPatchRequestToStaticNode && UseVPatch) {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA05, "Start Moved strategy from fallback");
             StartMovedPatch();
         } else {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA06, "Start Naive strategy from fallback",
+                    (WithMovingPatchRequestToStaticNode, WithMovingPatchRequestToStaticNode),
+                    (UseVPatch, UseVPatch));
             StartNaivePatch();
         }
     }
@@ -560,13 +593,8 @@ public:
             SendedStarts++;
         }
 
-        A_LOG_DEBUG_S("BPPA08", "StartVPatcn"
-            << " ActorId# " << SelfId()
-            << " Group# " << Info->GroupID
-            << " OriginalBlob# " << OriginalId
-            << " PatchedBlob# " << PatchedId
-            << " Deadline# " << Deadline
-            << " SendedStarts# " << SendedStarts);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA08, "Start VPatch strategy",
+                (SendedStarts, SendedStarts));
 
         SendToQueues(events, false);
     }
@@ -611,6 +639,7 @@ public:
     }
 
     bool ContinueVPatchForMirror3dc() {
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA10, "Continue VPatch {mirror-3-dc}");
         constexpr ui32 DCCount = 3;
         constexpr ui32 VDiskByDC = 3;
         ui32 countByDC[DCCount] = {0, 0, 0};
@@ -624,9 +653,14 @@ public:
         }
 
         if (countByDC[0] && countByDC[1] && countByDC[2]) {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA11, "Found disks {mirror-3-dc} on each dc",
+                    (DiskFromFirstDC, diskByDC[0][0].ToString()),
+                    (DiskFromSecondDC, diskByDC[0][0].ToString()),
+                    (DiskFromThirdDC, diskByDC[2][0].ToString()));
             SendDiffs({diskByDC[0][0], diskByDC[1][0], diskByDC[2][0]});
             return true;
         }
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA12, "Didn't find disks {mirror-3-dc} on each dc");
 
         ui32 x2Count = 0;
         for (ui32 dcIdx = 0; dcIdx < DCCount; ++dcIdx) {
@@ -635,6 +669,7 @@ public:
             }
         }
         if (x2Count < 2) {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA13, "Didn't find disks {mirror-3-dc}");
             return false;
         }
         TStackVec<TPartPlacement, TypicalPartsInBlob> placements;
@@ -645,17 +680,17 @@ public:
             }
         }
         SendDiffs(placements);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA14, "Found disks {mirror-3-dc} x2 mode",
+                (FirstDiskFromFirstDC, placements[0]),
+                (SecondDiskFromFirstDC, placements[1]),
+                (FirstDiskFromSecondDC, placements[2]),
+                (SecondDiskFromSecondDC, placements[3]));
         return true;
     }
 
     bool ContinueVPatch() {
-        A_LOG_DEBUG_S("BPPA09", "ContinueVPatch"
-            << " ActorId# " << SelfId()
-            << " Group# " << Info->GroupID
-            << " OriginalBlob# " << OriginalId
-            << " PatchedBlob# " << PatchedId
-            << " FoundParts# " << ConvertFoundPartsToString()
-            << " Deadline# " << Deadline);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA15, "Continue VPatch strategy",
+                (FoundParts, ConvertFoundPartsToString()));
 
         if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
             return ContinueVPatchForMirror3dc();
@@ -685,10 +720,11 @@ public:
         TStackVec<ui32, TypicalHandoffCount> choosenHandoffForParts(handoffParts.size());
         if (handoffParts.size()) {
             bool find = FindHandoffs(handoffForParts, handoffParts, &choosenHandoffForParts);
-            Y_VERIFY_DEBUG_S(find, "handoffParts# " << FormatList(handoffParts)
-                    << " FoundParts# " << ConvertFoundPartsToString()
-                    << " choosenHandoffForParts# " << FormatList(choosenHandoffForParts)
-                    << " inPrimary# " << FormatList(inPrimary));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA16, "Find handoff parts",
+                    (HandoffParts, FormatList(handoffParts)),
+                    (FoundParts, ConvertFoundPartsToString()),
+                    (choosenHandoffForParts, FormatList(choosenHandoffForParts)),
+                    (IsPrimary, FormatList(inPrimary)));
             if (!find) {
                 Mon->VPatchContinueFailed->Inc();
                 return false;
@@ -700,12 +736,7 @@ public:
     }
 
     void StopVPatch() {
-        A_LOG_DEBUG_S("BPPA10", "StopVPatch"
-            << " ActorId# " << SelfId()
-            << " Group# " << Info->GroupID
-            << " OriginalBlob# " << OriginalId
-            << " PatchedBlob# " << PatchedId
-            << " Deadline# " << Deadline);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA17, "Stop VPatch strategy");
         SendStopDiffs();
         ReceivedResponseFlags.assign(VDisks.size(), false);
     }
@@ -741,14 +772,8 @@ public:
     }
 
     void Bootstrap() {
-        A_LOG_INFO_S("BPPA01", "bootstrap"
-            << " ActorId# " << SelfId()
-            << " Group# " << Info->GroupID
-            << " DiffCount# " << DiffCount
-            << " OriginalBlob# " << OriginalId
-            << " PatchedBlob# " << PatchedId
-            << " Deadline# " << Deadline
-            << " RestartCounter# " << RestartCounter);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA01, "Actor bootstrapped");
+
         TLogoBlobID truePatchedBlobId = PatchedId;
         bool result = true;
         if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
@@ -770,13 +795,20 @@ public:
             return;
         }
 
-        bool isAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+        IsGoodPatchedBlobId = result;
+        IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
-        if (result && isAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID) {
+        if (IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID) {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA03, "Start VPatch strategy from bootstrap");
             StartVPatch();
         } else {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA04, "Start Fallback strategy from bootstrap",
+                    (IsGoodPatchedBlobId, IsGoodPatchedBlobId),
+                    (IsAllowedErasure, IsAllowedErasure),
+                    (UseVPatch, UseVPatch),
+                    (IsSameGroup, OriginalGroupId == Info->GroupID));
             StartFallback();
         }
     }

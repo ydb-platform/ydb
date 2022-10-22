@@ -214,6 +214,11 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 123,
+                "ColumnName": "BalancerPolicy",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 7,
                 "ColumnName": "AllowedNodes",
                 "ColumnType": "String"
@@ -286,6 +291,7 @@
                     121,
                     5,
                     122,
+                    123,
                     7,
                     11,
                     13,

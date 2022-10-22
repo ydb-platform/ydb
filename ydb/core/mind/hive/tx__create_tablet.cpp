@@ -29,6 +29,8 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     NKikimrHive::ETabletBootMode BootMode;
     NKikimrHive::TForwardRequest ForwardRequest;
 
+    NKikimrHive::EBalancerPolicy BalancerPolicy;
+
     TSideEffects SideEffects;
 
 public:
@@ -48,6 +50,7 @@ public:
         , BoundChannels(RequestData.GetBindedChannels().begin(), RequestData.GetBindedChannels().end())
         , AllowedDomains(RequestData.GetAllowedDomains().begin(), RequestData.GetAllowedDomains().end())
         , BootMode(RequestData.GetTabletBootMode())
+        , BalancerPolicy(RequestData.GetBalancerPolicy())
     {
         const ui32 allowedNodeIdsSize = RequestData.AllowedNodeIDsSize();
         AllowedNodeIds.reserve(allowedNodeIdsSize);
@@ -270,6 +273,8 @@ public:
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectID>(ObjectId);
                     tablet->BootMode = BootMode;
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BootMode>(BootMode);
+                    tablet->BalancerPolicy = BalancerPolicy;
+                    db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BalancerPolicy>(BalancerPolicy);
 
                     UpdateChannelsBinding(*tablet, db);
 
@@ -368,6 +373,7 @@ public:
         tablet.ObjectId = ObjectId;
         tablet.AssignDomains(ObjectDomain, AllowedDomains);
         tablet.Statistics.SetLastAliveTimestamp(now.MilliSeconds());
+        tablet.BalancerPolicy = BalancerPolicy;
 
         TVector<ui32> allowedDataCenters;
         for (const TDataCenterId& dc : tablet.AllowedDataCenters) {
@@ -387,7 +393,8 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::BootMode>(tablet.BootMode),
                                                         NIceDb::TUpdate<Schema::Tablet::ObjectID>(tablet.ObjectId),
                                                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(ObjectDomain),
-                                                        NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics));
+                                                        NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics),
+                                                        NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy));
 
         Self->PendingCreateTablets.erase({OwnerId, OwnerIdx});
 

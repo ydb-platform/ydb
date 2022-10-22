@@ -224,6 +224,12 @@ namespace NKikimr::NStorage {
                 return MakeBlobStorageVDiskID(NodeId, PDiskId, VDiskSlotId);
             }
 
+            void Serialize(NKikimrBlobStorage::TVSlotId *proto) const {
+                proto->SetNodeId(NodeId);
+                proto->SetPDiskId(PDiskId);
+                proto->SetVSlotId(VDiskSlotId);
+            }
+
             auto AsTuple() const { return std::make_tuple(NodeId, PDiskId, VDiskSlotId); }
             friend bool operator <(const TVSlotId& x, const TVSlotId& y) { return x.AsTuple() < y.AsTuple(); }
             friend bool operator <=(const TVSlotId& x, const TVSlotId& y) { return x.AsTuple() <= y.AsTuple(); }
@@ -253,6 +259,7 @@ namespace NKikimr::NStorage {
 
             // Last VDiskId reported to Node Whiteboard.
             std::optional<TVDiskID> WhiteboardVDiskId;
+            ui64 WhiteboardInstanceGuid;
 
             bool SlayInFlight = false;
 

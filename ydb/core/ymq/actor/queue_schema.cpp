@@ -1065,10 +1065,11 @@ void TCreateQueueSchemaActorV2::MatchQueueAttributes(
 ) {
     Become(&TCreateQueueSchemaActorV2::MatchAttributes);
 
+    const TString existingQueueName = IsCloudMode_ ? ExistingQueueResourceId_ : QueuePath_.QueueName;
     TDbQueriesMaker queryMaker(
         Cfg().GetRoot(),
         QueuePath_.UserName,
-        QueuePath_.QueueName,
+        existingQueueName,
         currentVersion,
         IsFifo_,
         0,
@@ -1085,7 +1086,7 @@ void TCreateQueueSchemaActorV2::MatchQueueAttributes(
     TParameters(trans->MutableParams()->MutableProto())
         .Uint64("QUEUE_ID_NUMBER", currentVersion)
         .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(currentVersion))
-        .Utf8("NAME", IsCloudMode_ ? ExistingQueueResourceId_ : QueuePath_.QueueName)
+        .Utf8("NAME", existingQueueName)
         .Bool("FIFO", IsFifo_)
         .Uint64("SHARDS", RequiredShardsCount_)
         .Uint64("PARTITIONS", Request_.GetPartitions())

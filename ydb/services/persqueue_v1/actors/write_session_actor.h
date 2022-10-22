@@ -256,6 +256,7 @@ private:
     NKikimr::NPQ::TMultiCounter SessionsActive;
 
     NKikimr::NPQ::TMultiCounter Errors;
+    std::vector<NKikimr::NPQ::TMultiCounter> CodecCounters;
 
     TIntrusivePtr<NACLib::TUserToken> Token;
     TString Auth;

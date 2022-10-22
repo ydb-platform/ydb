@@ -38,6 +38,7 @@ public:
     FEATURE_FLAG_SETTER(EnableMoveIndex)
     FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
     FEATURE_FLAG_SETTER(EnableArrowFormatAtDatashard)
+    FEATURE_FLAG_SETTER(EnableGrpcAudit)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

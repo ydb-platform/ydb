@@ -95,6 +95,7 @@ struct TTabletInfo {
     friend class TTxMonEvent_TabletInfo;
 public:
     using EVolatileState = NKikimrHive::ETabletVolatileState;
+    using EBalancerPolicy = NKikimrHive::EBalancerPolicy;
 
     enum class ETabletRole {
         Leader,
@@ -158,6 +159,7 @@ public:
     double Weight;
     mutable TString BootState;
     TInstant PostponedStart;
+    EBalancerPolicy BalancerPolicy;
 
     TTabletInfo(ETabletRole role, THive& hive);
     TTabletInfo(const TTabletInfo&) = delete;

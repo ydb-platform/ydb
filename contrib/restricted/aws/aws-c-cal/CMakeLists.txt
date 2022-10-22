@@ -10,6 +10,9 @@ find_package(OpenSSL REQUIRED)
 
 add_library(restricted-aws-aws-c-cal)
 target_compile_options(restricted-aws-aws-c-cal PRIVATE
+  -DAWS_CAL_USE_IMPORT_EXPORT
+  -DAWS_COMMON_USE_IMPORT_EXPORT
+  -DHAVE_SYSCONF
   -Wno-everything
 )
 target_include_directories(restricted-aws-aws-c-cal PUBLIC

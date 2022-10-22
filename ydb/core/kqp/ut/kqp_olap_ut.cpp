@@ -2168,9 +2168,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ManyColumnShardsFilterPushdownEmptySet) {
-        // uncomment this line to reproduce the bug
-        return;
-
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)

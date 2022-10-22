@@ -1106,7 +1106,7 @@ private:
             const ui64 prevFreeSpace = std::any_cast<ui64>(prev);
             return freeSpace > prevFreeSpace;
         };
-        if (!hasNewMemoryPred()) {
+        if (!hasNewMemoryPred() && ScanData->GetStoredBytes()) {
             return;
         }
         CA_LOG_D("POLL_SOURCES:START:" << InFlightShards.GetShardsCount() << "." << InFlightShards.GetScansCount());

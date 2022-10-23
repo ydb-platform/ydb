@@ -453,8 +453,12 @@ static enum aws_libcrypto_version s_resolve_libcrypto_lib(void) {
             AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "libcrypto.so reported version is 0x%lx", version);
             enum aws_libcrypto_version result = AWS_LIBCRYPTO_NONE;
             if (version >= 0x10101000L) {
-                AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "probing libcrypto.so for 1.1.1 symbols");
-                result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_1_1, module);
+                AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "probing libcrypto.so for aws-lc symbols");
+                result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_LC, module);
+                if (result == AWS_LIBCRYPTO_NONE) {
+                    AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "probing libcrypto.so for 1.1.1 symbols");
+                    result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_1_1, module);
+                }
             } else if (version >= 0x10002000L) {
                 AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "probing libcrypto.so for 1.0.2 symbols");
                 result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_0_2, module);

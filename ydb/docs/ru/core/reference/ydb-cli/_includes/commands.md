@@ -50,14 +50,14 @@ scheme permissions remove | Удаление разрешения
 scheme permissions revoke | Удаление разрешения
 scheme permissions set | Установка разрешений
 [scheme rmdir](../commands/dir.md#rmdir) | Удаление директории
-scripting yql | Выполнение YQL-скрипта
+[scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта
 table attribute add | Добавление атрибута таблицы
 table attribute drop | Удаление атрибута таблицы
 table drop | Удаление таблицы
 [table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса 
 [table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса 
 [table index drop](../commands/secondary_index.md#drop) | Удаление индекса
-[table query execute](../commands/query.md) | Исполнение YQL-запроса
+[table query execute](../table-query-execute.md) | Исполнение YQL-запроса
 [table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
 [table readtable](../commands/readtable.md) | Потоковое чтение таблицы
 table ttl drop | Удаление параметров TTL
@@ -78,5 +78,4 @@ tools copy | Копирование таблиц
 [version](../commands/service.md) | Вывод информации о версии {{ ydb-short-name }} CLI
 {% endif %}
 [workload](../commands/workload/index.md) | Генерация нагрузки
-yql | Выполнение YQL-скрипта (с поддержкой стриминга)
-
+[yql](../yql.md) | Выполнение YQL-скрипта (с поддержкой стриминга)

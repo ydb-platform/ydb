@@ -13,7 +13,7 @@
 * [Список объектов](../commands/scheme-ls.md).
 * [Получение информации об объекте схемы](../commands/scheme-describe.md).
 * [Работа с директориями](../commands/dir.md).
-* [Выполнение запроса к данным](../commands/query.md).
+* [Выполнение YQL](../yql-query-overview.md).
 * [Потоковое чтение таблицы](../commands/readtable.md).
 * [Работа со вторичными индексами](../commands/secondary_index.md).
 * [Получение списка эндпоинтов для базы данных](../commands/discovery-list.md).

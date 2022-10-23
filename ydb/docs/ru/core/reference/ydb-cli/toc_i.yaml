@@ -23,8 +23,6 @@ items:
       href: commands/tools/rename.md
   - name: Работа с данными
     items:
-    - name: Выполнение запроса к данным
-      href: commands/query.md
     - name: Получение плана исполнения запроса и AST
       href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
@@ -52,7 +50,17 @@ items:
     - name: Запись в топик
       href: topic-write.md
     - name: Конвейерная обработка сообщений
-      href: topic-pipeline.md
+      href: topic-pipeline.md    
+  - name: Выполнение YQL
+    items:
+    - name: Обзор
+      href: yql-query-overview.md
+    - name: Выполнение скрипта (с поддержкой стриминга)
+      href: yql.md
+    - name: Выполнение скрипта
+      href: scripting-yql.md
+    - name: Выполнение запроса
+      href: table-query-execute.md
 #  - name: Утилиты
 #    items:
     # - name: Копирование таблиц

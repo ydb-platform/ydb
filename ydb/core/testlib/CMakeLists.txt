@@ -98,6 +98,8 @@ target_link_libraries(ydb-core-testlib PUBLIC
 )
 target_sources(ydb-core-testlib PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actor_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/common_helper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/cs_helper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/fake_coordinator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/tablet_flat_dummy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/tablet_helpers.cpp

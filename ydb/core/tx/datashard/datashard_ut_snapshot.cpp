@@ -1670,7 +1670,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
-        InitRoot(server, sender);
+        server->SetupRootStoragePools(sender);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         CreateShardedTable(server, sender, "/Root", "table-1", 1);

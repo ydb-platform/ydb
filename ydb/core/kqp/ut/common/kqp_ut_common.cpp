@@ -943,46 +943,7 @@ void WaitForKqpProxyInit(const NYdb::TDriver& driver) {
 }
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender) {
-    if (server->GetSettings().StoragePoolTypes.empty()) {
-        return;
-    }
-
-    auto &runtime = *server->GetRuntime();
-    auto &settings = server->GetSettings();
-
-    auto tid = Tests::ChangeStateStorage(Tests::SchemeRoot, settings.Domain);
-    const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(settings.Domain);
-
-    auto evTx = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
-    auto transaction = evTx->Record.AddTransaction();
-    transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
-    transaction->SetWorkingDir("/");
-    auto op = transaction->MutableSubDomain();
-    op->SetName(domain.Name);
-
-    for (const auto& [kind, pool] : settings.StoragePoolTypes) {
-        auto* p = op->AddStoragePools();
-        p->SetKind(kind);
-        p->SetName(pool.GetName());
-    }
-
-    runtime.SendToPipe(tid, sender, evTx.Release(), 0, GetPipeConfigWithRetries());
-
-    {
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), tid);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
-    }
-
-    auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(1);
-    runtime.SendToPipe(tid, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
-
-    {
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
-    }
+    server->SetupRootStoragePools(sender);
 }
 
 } // namspace NKqp

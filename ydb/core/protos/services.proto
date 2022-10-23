@@ -326,6 +326,10 @@ enum EServiceKikimr {
 
     // DATASHARD section again
     DS_LOAD_TEST = 1400;
+
+    // MetadataProvider
+    METADATA_PROVIDER = 1500;
+
 };
 
 message TActivity {

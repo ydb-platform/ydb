@@ -17,7 +17,6 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <library/cpp/grpc/server/grpc_server.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/protos/kesus.pb.h>
@@ -27,6 +26,9 @@
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
 #include <ydb/core/http_proxy/auth_factory.h>
+#include <ydb/library/accessor/accessor.h>
+
+#include <library/cpp/grpc/server/grpc_server.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -209,6 +211,8 @@ namespace Tests {
 
         TServerSettings(const TServerSettings& settings) = default;
         TServerSettings& operator=(const TServerSettings& settings) = default;
+    private:
+        YDB_FLAG_ACCESSOR(EnableMetadataProvider, true);
     };
 
     class TServer : public TThrRefBase, TMoveOnly {
@@ -240,6 +244,7 @@ namespace Tests {
 
         void EnableGRpc(const NGrpc::TServerOptions& options);
         void EnableGRpc(ui16 port);
+        void SetupRootStoragePools(const TActorId sender) const;
 
         void SetupDefaultProfiles();
 

@@ -383,6 +383,12 @@ private:
     std::shared_ptr<TModuleFactories> Factories;
 };
 
+class TMetadataProviderInitializer: public IKikimrServicesInitializer {
+public:
+    TMetadataProviderInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TMemoryLogInitializer : public IKikimrServicesInitializer {
     size_t LogBufferSize = 0;
     size_t LogGrainSize = 0;

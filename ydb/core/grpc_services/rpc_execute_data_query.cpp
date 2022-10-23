@@ -260,5 +260,10 @@ void DoExecuteDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacility
     TActivationContext::AsActorContext().Register(new TExecuteDataQueryRPC(p.release()));
 }
 
+template<>
+IActor* TEvExecuteDataQueryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TExecuteDataQueryRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

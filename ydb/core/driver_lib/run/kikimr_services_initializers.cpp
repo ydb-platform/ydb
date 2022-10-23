@@ -148,6 +148,9 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 
+#include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/services/metadata/service.h>
+
 #include <library/cpp/actors/protos/services_common.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -2008,6 +2011,25 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TMetadataProviderInitializer::TMetadataProviderInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TMetadataProviderInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NMetadataProvider::TConfig serviceConfig;
+    if (Config.HasMetadataProviderConfig()) {
+        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetMetadataProviderConfig()));
+    }
+
+    if (serviceConfig.IsEnabled()) {
+        auto service = NMetadataProvider::CreateService(serviceConfig);
+        setup->LocalServices.push_back(std::make_pair(
+            NMetadataProvider::MakeServiceId(),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }
 

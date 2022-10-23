@@ -61,6 +61,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   core-tx-long_tx_service
   core-tx-mediator
   tx-replication-controller
+  core-tx-schemeshard
   core-tx-sequenceproxy
   core-tx-sequenceshard
   core-tx-time_cast
@@ -90,6 +91,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-services-persqueue_v1
   ydb-services-rate_limiter
   ydb-services-monitoring
+  services-metadata-ds_table
   ydb-services-ydb
   ydb-services-yq
   ydb-core-http_proxy

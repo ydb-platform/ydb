@@ -148,6 +148,7 @@ struct TKikimrEvents : TEvents {
         ES_HTTP_PROXY,
         ES_BLOB_DEPOT,
         ES_DATASHARD_LOAD,
+        ES_METADATA_PROVIDER,
     };
 };
 

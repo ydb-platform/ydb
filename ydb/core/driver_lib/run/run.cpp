@@ -1429,6 +1429,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories));
     }
 
+    if (serviceMask.EnableMetadataProvider) {
+        sil->AddServiceInitializer(new TMetadataProviderInitializer(runConfig));
+    }
+
     if (serviceMask.EnableCms) {
         sil->AddServiceInitializer(new TCmsServiceInitializer(runConfig));
     }

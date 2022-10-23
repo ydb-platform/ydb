@@ -233,5 +233,10 @@ void DoCreateTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvi
     TActivationContext::AsActorContext().Register(new TCreateTableRPC(p.release()));
 }
 
+template<>
+IActor* TEvCreateTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TCreateTableRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

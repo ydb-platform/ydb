@@ -88,6 +88,8 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/yq/libs/init/init.h>
 #include <ydb/core/yq/libs/mock/yql_mock.h>
+#include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/services/metadata/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
@@ -352,7 +354,50 @@ namespace Tests {
         );
     }
 
-    void TServer::SetupDomains(TAppPrepare &app) {
+    void TServer::SetupRootStoragePools(const TActorId sender) const {
+        if (GetSettings().StoragePoolTypes.empty()) {
+            return;
+        }
+
+        auto& runtime = *GetRuntime();
+        auto& settings = GetSettings();
+
+        auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
+        const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(settings.Domain);
+
+        auto evTx = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
+        transaction->SetWorkingDir("/");
+        auto op = transaction->MutableSubDomain();
+        op->SetName(domain.Name);
+
+        for (const auto& [kind, pool] : settings.StoragePoolTypes) {
+            auto* p = op->AddStoragePools();
+            p->SetKind(kind);
+            p->SetName(pool.GetName());
+        }
+
+        runtime.SendToPipe(tid, sender, evTx.Release(), 0, GetPipeConfigWithRetries());
+
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), tid);
+            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+        }
+
+        auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(1);
+        runtime.SendToPipe(tid, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
+
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
+        }
+    }
+
+    void TServer::SetupDomains(TAppPrepare& app) {
         const ui32 domainId = Settings->Domain;
         ui64 planResolution = Settings->DomainPlanResolution;
         if (!planResolution) {
@@ -578,6 +623,11 @@ namespace Tests {
             auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig);
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid);
+        }
+        if (Settings->IsEnableMetadataProvider()) {
+            auto* actor = NMetadataProvider::CreateService(NMetadataProvider::TConfig());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NMetadataProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 

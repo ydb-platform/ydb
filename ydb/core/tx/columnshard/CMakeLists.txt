@@ -18,6 +18,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   yutil
   tools-enum_parser-enum_serialization_runtime
   cpp-actors-core
+  ydb-services-metadata
   ydb-core-actorlib_impl
   ydb-core-base
   core-blobstorage-dsproxy
@@ -61,6 +62,7 @@ target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/compaction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/eviction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/export_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/external_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/indexing_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/write_actor.cpp

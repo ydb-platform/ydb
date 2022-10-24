@@ -1006,6 +1006,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("compression"); settings.cend() != it)
             readSpec->Compression = it->second;
 
+        if (const auto it = settings.find("csvdelimiter"); settings.cend() != it && !it->second.empty())
+            readSpec->Settings.csv.delimiter = it->second[0];
+
 #define SUPPORTED_FLAGS(xx) \
         xx(skip_unknown_fields, true) \
         xx(import_nested_json, true) \

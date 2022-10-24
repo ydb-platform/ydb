@@ -79,6 +79,25 @@ bool ValidateS3Paths(const TExprNode& node, const TStructExprType*& extraColumns
     return true;
 }
 
+bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TStringBuf format, TStringBuf expectedFormat, TExprContext& ctx, TStringBuf& settingValue) {
+    if (expectedFormat && format != expectedFormat) {
+        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << settingName << " can only be used with " << expectedFormat << " format"));
+        return false;
+    }
+
+    if (value.IsAtom()) {
+        settingValue = value.Content();
+        return true;
+    }
+
+    if (!value.IsCallable({ "String", "Utf8" })) {
+        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << settingName << " must be literal value"));
+        return false;
+    }
+    settingValue = value.Head().Content();
+    return true;
+
+}
 
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
@@ -255,35 +274,25 @@ public:
             return TStatus::Error;
         }
 
-
         if (input->ChildrenSize() > TS3Object::idx_Settings) {
             bool haveProjection = false;
             bool havePartitionedBy = false;
             auto validator = [&](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
-                if ((name == "compression" || name == "projection" || name == "data.interval.unit" || name == "readmaxbytes") && setting.ChildrenSize() != 2) {
+                if (name != "partitionedby"sv && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
                         TStringBuilder() << "Expected single value setting for " << name << ", but got " << setting.ChildrenSize() - 1));
                     return false;
                 }
 
-                if (name == "compression") {
-                    auto& value = setting.Tail();
+                if (name == "compression"sv) {
                     TStringBuf compression;
-                    if (value.IsAtom()) {
-                        compression = value.Content();
-                    } else {
-                        if (!EnsureStringOrUtf8Type(value, ctx)) {
-                            return false;
-                        }
-                        if (!value.IsCallable({"String", "Utf8"})) {
-                            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "Expected literal string as compression value"));
-                            return false;
-                        }
-                        compression = value.Head().Content();
+                    if (!ExtractSettingValue(setting.Tail(), "compression"sv, format, {}, ctx, compression)) {
+                        return false;
                     }
                     return NCommon::ValidateCompressionForInput(compression, ctx);
                 }
-                if (name == "partitionedby") {
+
+                if (name == "partitionedby"sv) {
                     havePartitionedBy = true;
                     if (setting.ChildrenSize() < 2) {
                         ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected at least one column in partitioned_by setting"));
@@ -306,43 +315,37 @@ public:
                     return true;
                 }
 
-                if (name == "data.interval.unit") {
-                    auto& value = setting.Tail();
+                if (name == "data.interval.unit"sv) {
                     TStringBuf unit;
-                    if (value.IsAtom()) {
-                        unit = value.Content();
-                    } else {
-                        if (!EnsureStringOrUtf8Type(value, ctx)) {
-                            return false;
-                        }
-                        if (!value.IsCallable({"String", "Utf8"})) {
-                            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "Expected literal string as compression value"));
-                            return false;
-                        }
-                        unit = value.Head().Content();
+                    if (!ExtractSettingValue(setting.Tail(), "data.interval.unit"sv, format, {}, ctx, unit)) {
+                        return false;
                     }
                     return NCommon::ValidateIntervalUnit(unit, ctx);
                 }
 
-                if (name == "readmaxbytes") {
-                    auto& value = setting.Tail();
-                    if (format != "raw") {
-                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "read_max_bytes can only be used with raw format"));
+                if (name == "readmaxbytes"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "read_max_bytes"sv, format, "raw"sv, ctx, unused)) {
                         return false;
-                    }
-                    if (!value.IsAtom()) {
-                        if (!EnsureStringOrUtf8Type(value, ctx)) {
-                            return false;
-                        }
-                        if (!value.IsCallable({"String", "Utf8"})) {
-                            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "read_max_bytes must be literal value"));
-                            return false;
-                        }
                     }
                     return true;
                 }
 
-                YQL_ENSURE(name == "projection");
+                if (name == "csvdelimiter"sv) {
+                    auto& value = setting.Tail();
+                    TStringBuf delimiter;
+                    if (!ExtractSettingValue(value, "csv_delimiter"sv, format, "csv_with_names"sv, ctx, delimiter)) {
+                        return false;
+                    }
+
+                    if (delimiter.Size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "csv_delimiter must be single character"));
+                        return false;
+                    }
+                    return true;
+                }
+
+                YQL_ENSURE(name == "projection"sv);
                 haveProjection = true;
                 if (!EnsureAtom(setting.Tail(), ctx)) {
                     return false;
@@ -356,7 +359,7 @@ public:
                 return true;
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
-                                     { "compression", "partitionedby", "projection", "data.interval.unit", "readmaxbytes" }, validator, ctx))
+                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "readmaxbytes"sv, "csvdelimiter"sv }, validator, ctx))
             {
                 return TStatus::Error;
             }

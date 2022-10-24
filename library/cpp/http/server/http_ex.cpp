@@ -34,6 +34,7 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
         Put,
         Patch,
         Delete,
+        Options,
     };
 
     enum EMethod foundMethod;
@@ -54,6 +55,9 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
     } else if (strnicmp(s, "DELETE ", 7) == 0) {
         foundMethod = Delete;
         urlStart = s + 7;
+    } else if (strnicmp(s, "OPTIONS ", 8) == 0) {
+        foundMethod = Options;
+        urlStart = s + 8;
     } else {
         foundMethod = NotImplemented;
     }
@@ -98,6 +102,10 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
             }
             break;
 
+        case Options:
+            Output() << "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
+            return false;
+            
         case NotImplemented:
             Output() << "HTTP/1.1 501 Not Implemented\r\n\r\n";
             return false;

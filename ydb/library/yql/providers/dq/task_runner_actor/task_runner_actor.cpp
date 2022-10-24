@@ -293,7 +293,7 @@ private:
         auto cookie = ev->Cookie;
         auto wasFinished = ev->Get()->WasFinished;
         auto toPop = ev->Get()->Size;
-        Invoker->Invoke([cookie,selfId,channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
+        Invoker->Invoke([cookie,selfId,channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId, processInit=this->ProcessInit]() {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto channel = taskRunner->GetOutputChannel(channelId);
@@ -336,6 +336,7 @@ private:
                 NDqProto::TGetStatsResponse pbStats;
                 lastPop.GetStats().UnpackTo(&pbStats);
                 stats.FromProto(pbStats.GetStats());
+                stats.ProcessInit = processInit;
 
                 actorSystem->Send(
                     new IEventHandle(
@@ -469,7 +470,7 @@ private:
             Settings->FreezeDefaults();
             StageId = taskMeta.GetStageId();
         }
-        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName](){
+        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName,this_=this](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto result = taskRunner->Prepare();
@@ -480,6 +481,7 @@ private:
                     "ProcessInit");
                 i64 val = (TInstant::Now()-startTime).MilliSeconds();
                 sensors.push_back({sensorName, val, val, val, val, 1});
+                this_->ProcessInit = TDuration::MilliSeconds(val);
 
                 auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
                     taskRunner->GetSecureParams(),
@@ -579,6 +581,7 @@ private:
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;
+    TDuration ProcessInit = TDuration::Zero();
 };
 
 class TTaskRunnerActorFactory: public ITaskRunnerActorFactory {

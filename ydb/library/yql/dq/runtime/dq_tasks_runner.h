@@ -75,6 +75,7 @@ struct TTaskRunnerStatsBase {
 
     TDuration ComputeCpuTime;
     TRunStatusTimeMetrics RunStatusTimeMetrics; // ComputeCpuTime + RunStatusTimeMetrics == 100% time
+    TDuration ProcessInit;
 
     // profile stats
     TDuration WaitTime; // wall time of waiting for input, scans & output

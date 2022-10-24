@@ -303,6 +303,10 @@ private:
         ADD_COUNTER(InputBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
+        if (stats.GetProcessInit()) {
+            const auto val = static_cast<i64>(stats.GetProcessInit());
+            TaskStat.AddCounter(TaskStat.GetCounterName("TaskRunner", labels, "ProcessInit"), NYql::TCounters::TEntry{val, val, val, val, val});
+        }
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)

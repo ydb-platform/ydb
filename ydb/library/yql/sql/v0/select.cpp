@@ -872,7 +872,7 @@ public:
         if (filter) {
             block = L(block, Y("let", "core", filter));
         }
-        block = L(block, Y("let", "core", Y("AutoDemuxList", partitionByKey)));
+        block = L(block, Y("let", "core", Y("AutoDemux", partitionByKey)));
         if (Having) {
             block = L(block, Y("let", "core",
                 Y("Filter", "core", BuildLambda(Pos, Y("row"), GroundWithExpr(HavingGround, Y("Coalesce", Having, Y("Bool", Q("false"))))))
@@ -1812,7 +1812,7 @@ public:
             auto terms = BuildColumnsTerms(ctx);
             block = L(block, Y("let", "core", Y(ctx.UseUnordered(*this) ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), terms, "res"))));
         }
-        block = L(block, Y("let", "core", Y("AutoDemuxList", Y("EnsurePersistable", "core"))));
+        block = L(block, Y("let", "core", Y("AutoDemux", Y("EnsurePersistable", "core"))));
         return Y("block", Q(L(block, Y("return", "core"))));
     }
 

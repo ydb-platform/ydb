@@ -9194,17 +9194,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    IGraphTransformer::TStatus AutoDemuxListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus AutoDemuxWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureListType(input->Head(), ctx.Expr)) {
+        const TTypeAnnotationNode* itemType = nullptr;
+        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto listType = input->Head().GetTypeAnn()->Cast<TListExprType>();
-        if (listType->GetItemType()->GetKind() == ETypeAnnotationKind::Variant) {
+        if (itemType->GetKind() == ETypeAnnotationKind::Variant) {
             output = ctx.Expr.RenameNode(*input, "Demux");
         } else {
             output = input->HeadPtr();
@@ -10137,16 +10137,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureListType(input->Head(), ctx.Expr)) {
+        const TTypeAnnotationNode* itemType = nullptr;
+        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto listItemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        if (!EnsureVariantType(input->Head().Pos(), *listItemType, ctx.Expr)) {
+        if (!EnsureVariantType(input->Head().Pos(), *itemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto variantType = listItemType->Cast<TVariantExprType>();
+        auto variantType = itemType->Cast<TVariantExprType>();
         const TTypeAnnotationNode* resultType = nullptr;
         if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
             const TTupleExprType* tupleType = variantType->GetUnderlyingType()->Cast<TTupleExprType>();
@@ -11573,7 +11573,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
 
-        Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
+        Functions["AutoDemux"] = &AutoDemuxWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
         Functions["AggrCountUpdate"] = &AggrCountUpdateWrapper;
         Functions["QueueCreate"] = &QueueCreateWrapper;

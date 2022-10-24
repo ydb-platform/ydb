@@ -1,7 +1,7 @@
 #pragma once
-#include "accessor_init.h"
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/services/metadata/abstract/common.h>
+#include <ydb/services/metadata/initializer/accessor_init.h>
 
 namespace NKikimr::NMetadataProvider {
 
@@ -19,19 +19,18 @@ private:
     YDB_READONLY_DEF(Ydb::ResultSet, CurrentSelection);
     TInstant RequestedActuality = TInstant::Zero();
 protected:
-    virtual TString GetTableName() const = 0;
     bool IsReady() const {
         return !!CurrentSnapshot;
     }
+    virtual void OnInitialized() override;
+    virtual void OnSnapshotModified() = 0;
 public:
     using TBase::Handle;
-    virtual bool Handle(TEvRequestResult<TDialogCreateTable>::TPtr& ev) override;
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvRequestResult<TDialogSelect>, Handle);
-            hFunc(TEvRequestResult<TDialogCreateTable>, Handle);
-            hFunc(TEvRequestResult<TDialogCreateSession>, Handle);
+            hFunc(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogSelect>, Handle);
+            hFunc(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogCreateSession>, Handle);
             hFunc(TEvRefresh, Handle);
             default:
                 TBase::StateMain(ev, ctx);
@@ -40,8 +39,8 @@ public:
 
     TDSAccessorRefresher(const TConfig& config, ISnapshotParser::TPtr snapshotConstructor);
 
-    virtual bool Handle(TEvRequestResult<TDialogSelect>::TPtr& ev);
-    void Handle(TEvRequestResult<TDialogCreateSession>::TPtr& ev);
+    bool Handle(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogSelect>::TPtr& ev);
+    void Handle(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogCreateSession>::TPtr& ev);
     void Handle(TEvRefresh::TPtr& ev);
 };
 

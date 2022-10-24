@@ -3,20 +3,15 @@
 
 namespace NKikimr::NMetadataProvider {
 
-bool TDSAccessorNotifier::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
-    if (TBase::Handle(ev)) {
-        auto snapshot = GetCurrentSnapshot();
-        if (!snapshot) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot";
-            return false;
-        }
-        
-        for (auto&& i : Subscribed) {
-            Send(i, new TEvRefreshSubscriberData(snapshot));
-        }
-        return true;
-    } else {
-        return false;
+void TDSAccessorNotifier::OnSnapshotModified() {
+    auto snapshot = GetCurrentSnapshot();
+    if (!snapshot) {
+        ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot";
+        return;
+    }
+
+    for (auto&& i : Subscribed) {
+        Send(i, new TEvRefreshSubscriberData(snapshot));
     }
 }
 

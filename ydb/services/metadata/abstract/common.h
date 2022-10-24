@@ -5,23 +5,15 @@
 #include <library/cpp/actors/core/actor_virtual.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/core/base/events.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/core/base/events.h>
+#include <ydb/services/metadata/initializer/common.h>
 
 namespace NKikimr::NMetadataProvider {
 
 enum EEvSubscribe {
     EvRefreshSubscriberData = EventSpaceBegin(TKikimrEvents::ES_METADATA_PROVIDER),
-    EvCreateTableRequest,
-    EvCreateTableInternalResponse,
-    EvCreateTableResponse,
-    EvSelectRequest,
-    EvSelectInternalResponse,
-    EvSelectResponse,
-    EvCreateSessionRequest,
-    EvCreateSessionInternalResponse,
-    EvCreateSessionResponse,
     EvRefresh,
     EvSubscribeLocal,
     EvUnsubscribeLocal,
@@ -30,7 +22,7 @@ enum EEvSubscribe {
     EvEnd
 };
 
-static_assert(EEvSubscribe::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_PROVIDER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_PIPE)");
+static_assert(EEvSubscribe::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_PROVIDER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_PROVIDER)");
 
 class ISnapshot {
 private:
@@ -38,7 +30,7 @@ private:
 protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::ResultSet& rawData) = 0;
     virtual TString DoSerializeToString() const = 0;
-
+    i32 GetFieldIndex(const Ydb::ResultSet& rawData, const TString& columnId) const;
 public:
     using TPtr = std::shared_ptr<ISnapshot>;
     ISnapshot(const TInstant actuality)
@@ -60,7 +52,7 @@ public:
 class ISnapshotParser {
 protected:
     virtual ISnapshot::TPtr CreateSnapshot(const TInstant actuality) const = 0;
-    virtual Ydb::Table::CreateTableRequest DoGetTableSchema() const = 0;
+    virtual TVector<ITableModifier::TPtr> DoGetTableSchema() const = 0;
     virtual const TString& DoGetTablePath() const = 0;
 public:
     using TPtr = std::shared_ptr<ISnapshotParser>;
@@ -74,7 +66,7 @@ public:
         return result;
     }
 
-    Ydb::Table::CreateTableRequest GetTableSchema() const {
+    TVector<ITableModifier::TPtr> GetTableSchema() const {
         return DoGetTableSchema();
     }
 

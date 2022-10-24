@@ -34,6 +34,7 @@ protected:
     virtual void RegisterState() override {
         Become(&TDSAccessorNotifier::StateMain);
     }
+    virtual void OnSnapshotModified() override;
 public:
     using TBase::Handle;
 
@@ -51,7 +52,6 @@ public:
     }
 
 
-    virtual bool Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) override;
     void Handle(TEvSubscribe::TPtr& context);
     void Handle(TEvUnsubscribe::TPtr& context);
 };
@@ -59,20 +59,9 @@ public:
 class TExternalData: public TDSAccessorNotifier {
 private:
     using TBase = TDSAccessorNotifier;
-    Ydb::Table::CreateTableRequest ExternalCreateTableRequest;
-    TString TableName;
-protected:
-    virtual TString GetTableName() const override {
-        return TableName;
-    }
-    virtual Ydb::Table::CreateTableRequest GetTableSchema() const override {
-        return ExternalCreateTableRequest;
-    }
 public:
     TExternalData(const TConfig& config, ISnapshotParser::TPtr sParser)
-        : TBase(config, sParser)
-        , ExternalCreateTableRequest(sParser->GetTableSchema())
-        , TableName(ExternalCreateTableRequest.path()) {
+        : TBase(config, sParser) {
 
     }
 };

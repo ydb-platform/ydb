@@ -1,8 +1,32 @@
 #include "external_data.h"
+#include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard::NTiers {
 
-std::optional<TString> TCSKVSnapshot::GetValue(const TString& key) const {
+bool TConfigsSnapshot::DoDeserializeFromResultSet(const Ydb::ResultSet& rawData) {
+    const i32 ownerPathIdx = GetFieldIndex(rawData, "ownerPath");
+    const i32 tierNameIdx = GetFieldIndex(rawData, "tierName");
+    const i32 tierConfigIdx = GetFieldIndex(rawData, "tierConfig");
+    if (tierNameIdx < 0 || tierConfigIdx < 0 || ownerPathIdx < 0) {
+        ALS_ERROR(NKikimrServices::TX_COLUMNSHARD) << "incorrect tiers config table structure";
+        return false;
+    }
+    for (auto&& r : rawData.rows()) {
+        TConfig config(r.items()[ownerPathIdx].bytes_value(), r.items()[tierNameIdx].bytes_value());
+        if (!config.DeserializeFromString(r.items()[tierConfigIdx].bytes_value())) {
+            ALS_ERROR(NKikimrServices::TX_COLUMNSHARD) << "cannot parse tier config from snapshot";
+            return false;
+        }
+        if (!Data.emplace(config.GetConfigId(), config).second) {
+            ALS_ERROR(NKikimrServices::TX_COLUMNSHARD) << "tier names duplication: " << config.GetTierName();
+            return false;
+        }
+    }
+    return true;
+}
+
+std::optional<TConfig> TConfigsSnapshot::GetValue(const TString& key) const {
     auto it = Data.find(key);
     if (it == Data.end()) {
         return {};
@@ -11,53 +35,57 @@ std::optional<TString> TCSKVSnapshot::GetValue(const TString& key) const {
     }
 }
 
-bool TCSKVSnapshot::DoDeserializeFromResultSet(const Ydb::ResultSet& rawData) {
-    if (rawData.columns().size() != 2) {
-        Cerr << "incorrect proto columns info" << Endl;
+TVector<NMetadataProvider::ITableModifier::TPtr> TSnapshotConstructor::DoGetTableSchema() const {
+    Ydb::Table::CreateTableRequest request;
+    request.set_session_id("");
+    request.set_path(TablePath);
+    request.add_primary_key("ownerPath");
+    request.add_primary_key("tierName");
+    {
+        auto& column = *request.add_columns();
+        column.set_name("tierName");
+        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+    }
+    {
+        auto& column = *request.add_columns();
+        column.set_name("ownerPath");
+        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+    }
+    {
+        auto& column = *request.add_columns();
+        column.set_name("tierConfig");
+        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+    }
+    NMetadataProvider::ITableModifier::TPtr result(
+        new NMetadataProvider::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request));
+    return { result };
+}
+
+TString NTiers::TConfigsSnapshot::DoSerializeToString() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    for (auto&& i : Data) {
+        result.InsertValue(i.first, i.second.SerializeToJson());
+    }
+    return result.GetStringRobust();
+}
+
+bool NTiers::TConfig::DeserializeFromString(const TString& configProtoStr) {
+    if (!::google::protobuf::TextFormat::ParseFromString(configProtoStr, &ProtoConfig)) {
+        ALS_ERROR(NKikimrServices::TX_COLUMNSHARD) << "cannot parse proto string: " << configProtoStr;
         return false;
-    }
-    i32 keyIdx = -1;
-    i32 valueIdx = -1;
-    ui32 idx = 0;
-    for (auto&& i : rawData.columns()) {
-        if (i.name() == "key") {
-            keyIdx = idx;
-        } else if (i.name() == "value") {
-            valueIdx = idx;
-        }
-        ++idx;
-    }
-    if (keyIdx < 0 || valueIdx < 0) {
-        Cerr << "incorrect table columns";
-        return false;
-    }
-    for (auto&& r : rawData.rows()) {
-        TString key(r.items()[keyIdx].bytes_value());
-        TString value(r.items()[valueIdx].bytes_value());
-        if (!Data.emplace(key, value).second) {
-            Cerr << "keys duplication: " << key;
-            return false;
-        }
     }
     return true;
 }
 
-Ydb::Table::CreateTableRequest TSnapshotConstructor::DoGetTableSchema() const {
-    Ydb::Table::CreateTableRequest request;
-    request.set_session_id("");
-    request.set_path(TablePath);
-    request.add_primary_key("key");
-    {
-        auto& column = *request.add_columns();
-        column.set_name("key");
-        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-    }
-    {
-        auto& column = *request.add_columns();
-        column.set_name("value");
-        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-    }
-    return request;
+NJson::TJsonValue TConfig::SerializeToJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("tierName", TierName);
+    NProtobufJson::Proto2Json(ProtoConfig, result.InsertValue("tierConfig", NJson::JSON_MAP));
+    return result;
+}
+
+bool TConfig::IsSame(const TConfig& item) const {
+    return TierName == item.TierName && ProtoConfig.SerializeAsString() == item.ProtoConfig.SerializeAsString();
 }
 
 }

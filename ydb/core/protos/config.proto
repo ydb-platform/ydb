@@ -574,11 +574,15 @@ message TKQPConfig {
     repeated NKikimrKqp.TKqpSetting Settings = 10;
 }
 
+message TInternalRequestConfig {
+    optional uint32 RetryPeriodStartSeconds = 1 [default = 3];
+    optional uint32 RetryPeriodFinishSeconds = 2 [default = 30];
+}
+
 message TMetadataProviderConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 RefreshPeriodSeconds = 2 [default = 10];
-    optional uint32 RetryPeriodStartSeconds = 3 [default = 3];
-    optional uint32 RetryPeriodFinishSeconds = 4 [default = 30];
+    optional TInternalRequestConfig RequestConfig = 3;
 }
 
 message TMemoryLogConfig {

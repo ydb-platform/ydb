@@ -8,6 +8,8 @@
 
 add_subdirectory(abstract)
 add_subdirectory(ds_table)
+add_subdirectory(initializer)
+add_subdirectory(request)
 
 add_library(ydb-services-metadata)
 target_link_libraries(ydb-services-metadata PUBLIC

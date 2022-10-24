@@ -7,6 +7,7 @@
 #include <util/string/escape.h>
 
 namespace NKikimr::NMetadataProvider {
+using namespace NInternal::NRequest;
 
 bool TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
     const TString startString = CurrentSelection.SerializeAsString();
@@ -27,6 +28,7 @@ bool TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
     Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
     if (!!parsedSnapshot && CurrentSelection.SerializeAsString() != startString) {
         ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "New refresher data: " << CurrentSelection.DebugString();
+        OnSnapshotModified();
         return true;
     }
     return false;
@@ -39,28 +41,23 @@ void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogCreateSession>::TPtr& 
     const TString sessionId = session.session_id();
     Y_VERIFY(sessionId);
     Ydb::Table::ExecuteDataQueryRequest request;
-    request.mutable_query()->set_yql_text("SELECT * FROM `" + EscapeC(GetTableName()) + "`");
+    request.mutable_query()->set_yql_text("SELECT * FROM `" + EscapeC(SnapshotConstructor->GetTablePath()) + "`");
     request.set_session_id(sessionId);
     request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
 
-    Register(new TYDBRequest<TDialogSelect>(std::move(request), SelfId(), Config));
+    Register(new TYDBRequest<TDialogSelect>(std::move(request), SelfId(), Config.GetRequestConfig()));
 }
 
 void TDSAccessorRefresher::Handle(TEvRefresh::TPtr& /*ev*/) {
-    Y_VERIFY(IsInitialized());
-    Register(new TYDBRequest<TDialogCreateSession>(TDialogCreateSession::TRequest(), SelfId(), Config));
+    Register(new TYDBRequest<TDialogCreateSession>(TDialogCreateSession::TRequest(), SelfId(), Config.GetRequestConfig()));
 }
 
-bool TDSAccessorRefresher::Handle(TEvRequestResult<TDialogCreateTable>::TPtr& ev) {
-    if (!TBase::Handle(ev)) {
-        return false;
-    }
+void TDSAccessorRefresher::OnInitialized() {
     Sender<TEvRefresh>().SendTo(SelfId());
-    return true;
 }
 
 TDSAccessorRefresher::TDSAccessorRefresher(const TConfig& config, ISnapshotParser::TPtr snapshotConstructor)
-    : TBase(config)
+    : TBase(config, snapshotConstructor->GetTableSchema())
     , SnapshotConstructor(snapshotConstructor)
 {
 }

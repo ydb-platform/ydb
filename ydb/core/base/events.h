@@ -149,6 +149,7 @@ struct TKikimrEvents : TEvents {
         ES_BLOB_DEPOT,
         ES_DATASHARD_LOAD,
         ES_METADATA_PROVIDER,
+        ES_INTERNAL_REQUEST,
     };
 };
 

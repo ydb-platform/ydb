@@ -7,8 +7,8 @@
 
 
 
-add_library(services-metadata-ds_table)
-target_link_libraries(services-metadata-ds_table PUBLIC
+add_library(services-metadata-request)
+target_link_libraries(services-metadata-request PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
@@ -16,11 +16,9 @@ target_link_libraries(services-metadata-ds_table PUBLIC
   core-grpc_services-local_rpc
   core-grpc_services-base
   ydb-core-grpc_services
-  services-metadata-initializer
 )
-target_sources(services-metadata-ds_table PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_refresh.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_subscribe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/config.cpp
+target_sources(services-metadata-request PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/request_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/config.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/common.cpp
 )

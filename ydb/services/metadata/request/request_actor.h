@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 #include "config.h"
 
 #include <library/cpp/actors/core/actor_virtual.h>
@@ -8,9 +9,8 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/services/metadata/abstract/common.h>
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NInternal::NRequest {
 
 template <class TRequestExt, class TResponseExt, ui32 EvStartExt, ui32 EvResultInternalExt, ui32 EvResultExt>
 class TDialogPolicyImpl {
@@ -23,11 +23,11 @@ public:
 };
 
 using TDialogCreateTable = TDialogPolicyImpl<Ydb::Table::CreateTableRequest, Ydb::Table::CreateTableResponse,
-    EEvSubscribe::EvCreateTableRequest, EEvSubscribe::EvCreateTableInternalResponse, EEvSubscribe::EvCreateTableResponse>;
+    EEvents::EvCreateTableRequest, EEvents::EvCreateTableInternalResponse, EEvents::EvCreateTableResponse>;
 using TDialogSelect = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse,
-    EEvSubscribe::EvSelectRequest, EEvSubscribe::EvSelectInternalResponse, EEvSubscribe::EvSelectResponse>;
+    EEvents::EvSelectRequest, EEvents::EvSelectInternalResponse, EEvents::EvSelectResponse>;
 using TDialogCreateSession = TDialogPolicyImpl<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse,
-    EEvSubscribe::EvCreateSessionRequest, EEvSubscribe::EvCreateSessionInternalResponse, EEvSubscribe::EvCreateSessionResponse>;
+    EEvents::EvCreateSessionRequest, EEvents::EvCreateSessionInternalResponse, EEvents::EvCreateSessionResponse>;
 
 template <class TDialogPolicy>
 class TEvRequestResult: public NActors::TEventLocal<TEvRequestResult<TDialogPolicy>, TDialogPolicy::EvResult> {
@@ -35,10 +35,14 @@ private:
     YDB_READONLY_DEF(typename TDialogPolicy::TResponse, Result);
 public:
     TEvRequestResult(typename TDialogPolicy::TResponse&& result)
-        : Result(std::move(result))
-    {
+        : Result(std::move(result)) {
 
     }
+};
+
+class TEvRequestFinished: public NActors::TEventLocal<TEvRequestFinished, EEvents::EvRequestFinished> {
+public:
+    TEvRequestFinished() = default;
 };
 
 template <class TResponse>
@@ -111,6 +115,7 @@ public:
             return;
         }
         TBase::template Sender<TEvRequestResult<TDialogPolicy>>(std::move(response)).SendTo(ActorFinishId);
+        TBase::template Sender<TEvRequestFinished>().SendTo(ActorFinishId);
         TBase::Die(TActivationContext::AsActorContext());
     }
 

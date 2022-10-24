@@ -1,6 +1,7 @@
 #pragma once
-#include "config.h"
-#include "request_actor.h"
+#include "common.h"
+
+#include <ydb/services/metadata/ds_table/config.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -9,26 +10,21 @@
 
 namespace NKikimr::NMetadataProvider {
 
-class TDSAccessorInitialized;
-
 class TDSAccessorInitialized: public NActors::TActorBootstrapped<TDSAccessorInitialized> {
 private:
-    YDB_READONLY_FLAG(Initialized, false);
+    TDeque<ITableModifier::TPtr> Modifiers;
 protected:
     const TConfig& Config;
-    virtual Ydb::Table::CreateTableRequest GetTableSchema() const = 0;
     virtual void RegisterState() = 0;
+    virtual void OnInitialized() = 0;
 public:
-    TDSAccessorInitialized(const TConfig& config)
-        : Config(config) {
-
-    }
-    void Bootstrap(const NActors::TActorContext& /*ctx*/);
-    virtual bool Handle(TEvRequestResult<TDialogCreateTable>::TPtr& ev);
+    void Bootstrap();
+    TDSAccessorInitialized(const TConfig& config, const TVector<ITableModifier::TPtr>& modifiers);
+    void Handle(NInternal::NRequest::TEvRequestFinished::TPtr& ev);
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvRequestResult<TDialogCreateTable>, Handle);
+            hFunc(NInternal::NRequest::TEvRequestFinished, Handle);
             default:
                 break;
         }

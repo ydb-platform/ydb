@@ -78,6 +78,8 @@ struct TOwnerData {
     TIntrusivePtr<TLogReaderBase> LogReader;
     TIntrusivePtr<TOwnerInflight> InFlight;
 
+    bool OnQuarantine = false;
+
     TOwnerData()
       : InFlight(new TOwnerInflight)
     {}
@@ -138,6 +140,11 @@ struct TOwnerData {
 
     bool HaveRequestsInFlight() const {
         return LogReader || InFlight->ChunkWrites || InFlight->ChunkReads || InFlight->LogWrites;
+    }
+
+    void Reset(bool quarantine = false) {
+        *this = TOwnerData{};
+        OnQuarantine = quarantine;
     }
 };
 

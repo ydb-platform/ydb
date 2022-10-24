@@ -1699,7 +1699,7 @@ TOwner TPDisk::FindNextOwnerId() {
         if (LastOwnerId == start) {
             return 0;
         }
-    } while (OwnerData[LastOwnerId].VDiskId != TVDiskID::InvalidId);
+    } while (OwnerData[LastOwnerId].VDiskId != TVDiskID::InvalidId || OwnerData[LastOwnerId].OnQuarantine);
 
     *Mon.LastOwnerId = LastOwnerId;
     return LastOwnerId;
@@ -1830,7 +1830,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         // TODO(cthulhu): don't allocate more owners than expected
         Keeper.AddOwner(owner, vDiskId);
 
-        OwnerData[owner] = TOwnerData{};
+        OwnerData[owner].Reset(false);
 
         // A new owner is created.
 
@@ -2058,7 +2058,7 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         AtomicDecrement(TotalOwners);
 
         TOwnerRound ownerRound = OwnerData[owner].OwnerRound;
-        OwnerData[owner] = TOwnerData{};
+        OwnerData[owner].Reset(pushedOwnerIntoQuarantine);
         OwnerData[owner].OwnerRound = ownerRound;
         VDiskOwners.erase(vDiskId);
 

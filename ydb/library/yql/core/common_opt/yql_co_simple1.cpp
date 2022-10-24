@@ -3637,8 +3637,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.ChangeChildren(node->Head(), std::move(args));
         }
 
-        if (node->Head().IsCallable("AssumeAllMembersNullableAtOnce")) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+        if (node->Head().IsCallable({"Iterator", "LazyList", "AssumeAllMembersNullableAtOnce"})) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
             return ctx.SwapWithHead(*node);
         }
 

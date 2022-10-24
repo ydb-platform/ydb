@@ -60,6 +60,7 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
         case NKikimrProto::ERROR:
         case NKikimrProto::TIMEOUT:
         case NKikimrProto::NO_GROUP:
+        case NKikimrProto::BLOCKED:
             BLOG_ERROR("Handle::TEvDiscoverResult, result status " << NKikimrProto::EReplyStatus_Name(msg->Status));
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:

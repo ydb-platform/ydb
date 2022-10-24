@@ -10,6 +10,6 @@
 
 Для выполнения YQL рекомендуется использовать команду `ydb yql`.
 
-Команды `ydb scripting yql` и `ydb table query execute` становятся неподдерживаемыми.
+В будущем планируется отказаться от команд `ydb scripting yql` и `ydb table query execute`, предоставив всю необходимую функциональность в рамках `ydb yql`.
 
 {% endnote %}

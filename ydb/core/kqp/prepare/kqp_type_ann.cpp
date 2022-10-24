@@ -892,8 +892,15 @@ TStatus AnnotateOlapAgg(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
         if (opType->Content() == "count") {
             aggTypes.push_back(ctx.MakeType<TItemExprType>(aggName->Content(), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
-        } else if (opType->Content() == "some") {
-            aggTypes.push_back(ctx.MakeType<TItemExprType>(aggName->Content(), structType->FindItemType(colName->Content())));
+        } else if (opType->Content() == "sum") {
+            auto colType = structType->FindItemType(colName->Content());
+            const TTypeAnnotationNode* resultType = nullptr;
+            if(!NTypeAnnImpl::GetSumResultType(node->Pos(), *colType, resultType, ctx)) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                    TStringBuilder() << "Unsupported type: " << FormatType(colType) << ". Expected Data or Optional of Data or Null."));
+                return TStatus::Error;
+            }
+            aggTypes.push_back(ctx.MakeType<TItemExprType>(aggName->Content(), resultType));
         } else {
             ctx.AddError(TIssue(
                 ctx.GetPosition(node->Pos()),

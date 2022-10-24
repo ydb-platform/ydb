@@ -120,6 +120,13 @@ NArrow::TAssign MakeFunction(const TContext& info, const std::string& name,
             castOpts->to_type = std::make_shared<arrow::Int32Type>();
             return TAssign(name, EOperation::CastInt32, std::move(arguments), castOpts);
         }
+        case TId::FUNC_CAST_TO_INT64:
+        {
+            // TODO: support CAST with OrDefault/OrNull logic (second argument is default value)
+            auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
+            castOpts->to_type = std::make_shared<arrow::Int64Type>();
+            return TAssign(name, EOperation::CastInt64, std::move(arguments), castOpts);
+        }
         case TId::FUNC_CAST_TO_TIMESTAMP:
         {
             auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
@@ -128,7 +135,6 @@ NArrow::TAssign MakeFunction(const TContext& info, const std::string& name,
         }
         case TId::FUNC_CAST_TO_INT8:
         case TId::FUNC_CAST_TO_INT16:
-        case TId::FUNC_CAST_TO_INT64:
         case TId::FUNC_CAST_TO_UINT8:
         case TId::FUNC_CAST_TO_UINT16:
         case TId::FUNC_CAST_TO_UINT32:

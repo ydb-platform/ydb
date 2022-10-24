@@ -36,15 +36,15 @@ std::string GetAggregationName(const TExprBase& node, TExprContext& ctx) {
 bool CanBePushedDown(const TExprBase& trait, TExprContext& ctx)
 {
     if (!trait.Maybe<TCoAggApply>()) {
-        YQL_CLOG(WARN, ProviderKqp) << "Expected TCoAggApply in aggregate pushdown to column shard. Got: " << KqpExprToPrettyString(trait, ctx);
+        YQL_CLOG(DEBUG, ProviderKqp) << "Only TCoAggApply can be pushed to column shard. Got: " << KqpExprToPrettyString(trait, ctx);
         return false;
     }
     auto aggApply = trait.Cast<TCoAggApply>();
     auto aggName = aggApply.Name();
-    if (aggName == "count" || aggName == "count_all") {
+    if (aggName == "count" || aggName == "count_all" || aggName == "sum") {
         return true;
     }
-    YQL_CLOG(WARN, ProviderKqp) << "Unsupported type of aggregation: " << aggName.StringValue();
+    YQL_CLOG(DEBUG, ProviderKqp) << "Unsupported type of aggregation: " << aggName.StringValue();
     return false;
 }
 

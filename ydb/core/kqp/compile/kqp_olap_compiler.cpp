@@ -1,6 +1,7 @@
 #include "kqp_olap_compiler.h"
 
 #include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -14,6 +15,14 @@ using EAggFunctionType = TProgram::TAggregateAssignment::EAggregateFunction;
 constexpr ui32 OLAP_PROGRAM_VERSION = 1;
 
 namespace {
+
+struct TAggColInfo {
+    ui64 AggColId = 0;
+    ui64 BaseColId = 0;
+    std::string AggColName;
+    std::string BaseColName;
+    std::string Operation;
+};
 
 class TKqpOlapCompileContext {
 public:
@@ -94,6 +103,7 @@ private:
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
     { "count", TProgram::TAggregateAssignment::AGG_COUNT },
+    { "sum", TProgram::TAggregateAssignment::AGG_SUM },
     { "some", TProgram::TAggregateAssignment::AGG_SOME },
 };
 
@@ -167,50 +177,51 @@ ui32 ConvertParameterToColumn(const TCoParameter& parameter, TKqpOlapCompileCont
     return ssaValue->GetColumn().GetId();
 }
 
-ui32 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ctx)
+ui64 ConvertSafeCastToColumn(const TExprBase& colName, const std::string& targetType, TKqpOlapCompileContext& ctx)
 {
-    auto columnId = GetOrCreateColumnId(cast.Value(), ctx);
-
-    TProgram::TAssignment* ssaValue = ctx.CreateAssignCmd();
-
-    auto newCast = ssaValue->MutableFunction();
-
-    auto maybeDataType = cast.Type().Maybe<TCoDataType>();
-    YQL_ENSURE(maybeDataType.IsValid());
-
-    auto dataType = maybeDataType.Cast();
+    auto columnId = GetOrCreateColumnId(colName, ctx);
+    TProgram::TAssignment* assignCmd = ctx.CreateAssignCmd();
     ui32 castFunction = TProgram::TAssignment::FUNC_UNSPECIFIED;
-    if (dataType.Type().Value() == "Boolean") {
+
+    if (targetType == "Boolean") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_BOOLEAN;
-    } else if (dataType.Type().Value() == "Int8") {
+    } else if (targetType == "Int8") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_INT8;
-    } else if (dataType.Type().Value() == "Int16") {
+    } else if (targetType == "Int16") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_INT16;
-    } else if (dataType.Type().Value() == "Int32") {
+    } else if (targetType == "Int32") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_INT32;
-    } else if (dataType.Type().Value() == "Int64") {
+    } else if (targetType == "Int64") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_INT64;
-    } else if (dataType.Type().Value() == "Uint8") {
+    } else if (targetType == "Uint8") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_UINT8;
-    } else if (dataType.Type().Value() == "Uint16") {
+    } else if (targetType == "Uint16") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_UINT16;
-    } else if (dataType.Type().Value() == "Uint32") {
+    } else if (targetType == "Uint32") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_UINT32;
-    } else if (dataType.Type().Value() == "Uint64") {
+    } else if (targetType == "Uint64") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_UINT64;
-    } else if (dataType.Type().Value() == "Float") {
+    } else if (targetType == "Float") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_FLOAT;
-    } else if (dataType.Type().Value() == "Double") {
+    } else if (targetType == "Double") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_DOUBLE;
-    } else if (dataType.Type().Value() == "Timestamp") {
+    } else if (targetType == "Timestamp") {
         castFunction = TProgram::TAssignment::FUNC_CAST_TO_TIMESTAMP;
     } else {
-        YQL_ENSURE(false, "Unsupported data type for pushed down safe cast: " << dataType.Type().Value());
+        YQL_ENSURE(false, "Unsupported data type for pushed down safe cast: " << targetType);
     }
 
+    auto newCast = assignCmd->MutableFunction();
     newCast->SetId(castFunction);
     newCast->AddArguments()->SetId(columnId);
-    return ssaValue->GetColumn().GetId();
+    return assignCmd->GetColumn().GetId();
+}
+
+ui64 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ctx)
+{
+    auto maybeDataType = cast.Type().Maybe<TCoDataType>();
+    YQL_ENSURE(maybeDataType.IsValid());
+    return ConvertSafeCastToColumn(cast.Value(), maybeDataType.Cast().Type().StringValue(), ctx);
 }
 
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
@@ -369,7 +380,54 @@ void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx
     filter->MutablePredicate()->SetId(condition->GetColumn().GetId());
 }
 
+std::string GetColumnAnnTypeFromAgg(const TKqpOlapAgg& aggNode, const std::string& aggColName)
+{
+    auto itemType = GetSeqItemType(aggNode.Ptr()->GetTypeAnn());
+    YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct, "KqpOlapAgg must contain Struct inside.");
+    auto structType = itemType->Cast<TStructExprType>();
+    auto colType = structType->FindItemType(aggColName);
+    if (colType->GetKind() == ETypeAnnotationKind::Optional) {
+        colType = colType->Cast<TOptionalExprType>()->GetItemType();
+    } else if (colType->GetKind() == ETypeAnnotationKind::Null) {
+        return "";
+    }
+    YQL_ENSURE(colType->GetKind() == ETypeAnnotationKind::Data, "KqpOlapAgg must contain Struct of Data fields inside.");
+    auto dataTypeInfo = NUdf::GetDataTypeInfo(colType->Cast<TDataExprType>()->GetSlot());
+    return dataTypeInfo.Name.data();
+}
+
+std::vector<TAggColInfo> CollectAggregationInfos(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) {
+    std::vector<TAggColInfo> aggColInfos;
+    aggColInfos.reserve(aggNode.Aggregates().Size());
+    for (auto aggIt : aggNode.Aggregates()) {
+        // We need to collect all this info because probably we need add CAST functions before Aggregations
+        auto aggKqp = aggIt.Cast<TKqpOlapAggOperation>();
+        TAggColInfo colInfo;
+        colInfo.AggColName = aggKqp.Name().StringValue().c_str();
+        colInfo.AggColId = ctx.NewColumnId();
+        colInfo.BaseColName = aggKqp.Column().StringValue().c_str();
+        colInfo.Operation = aggKqp.Type().StringValue();
+
+        auto opType = aggKqp.Type().StringValue();
+        if (opType == "sum") {
+            // For SUM we need to extend type because of potential overflow
+            auto sumDataType = GetColumnAnnTypeFromAgg(aggNode, colInfo.AggColName);
+            if (!sumDataType.empty()) {
+                // Not NULL
+                colInfo.BaseColId = ConvertSafeCastToColumn(aggKqp.Column(), sumDataType, ctx);
+            } else {
+                colInfo.BaseColId = GetOrCreateColumnId(aggKqp.Column(), ctx);
+            }
+        } else if (opType != "count" || (opType == "count" && colInfo.BaseColName != "*")) {
+            colInfo.BaseColId = GetOrCreateColumnId(aggKqp.Column(), ctx);
+        }
+        aggColInfos.push_back(colInfo);
+    }
+    return aggColInfos;
+}
+
 void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) {
+    std::vector<TAggColInfo> aggColInfos = CollectAggregationInfos(aggNode, ctx);
     auto* groupBy = ctx.CreateGroupBy();
     auto* projection = ctx.CreateProjection();
 
@@ -378,31 +436,24 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
         auto keyColName = keyCol.StringValue();
         auto aggKeyColId = GetOrCreateColumnId(keyCol, ctx);
         aggKeyCol->SetId(aggKeyColId);
-        aggKeyCol->SetName(keyColName);
 
         auto* projCol = projection->AddColumns();
         projCol->SetId(aggKeyColId);
-        projCol->SetName(keyColName);
     }
 
-    for (auto aggIt : aggNode.Aggregates()) {
-        auto aggKqp = aggIt.Cast<TKqpOlapAggOperation>();
-        std::string aggColName = aggKqp.Name().StringValue().c_str();
-
+    for (auto aggColInfo : aggColInfos) {
         auto* agg = groupBy->AddAggregates();
-        auto aggColId = ctx.NewColumnId();
         auto* aggCol = agg->MutableColumn();
-        aggCol->SetId(aggColId);
-        aggCol->SetName(aggColName.c_str());
+        aggCol->SetId(aggColInfo.AggColId);
+
         auto* projCol = projection->AddColumns();
-        projCol->SetId(aggColId);
-        projCol->SetName(aggColName.c_str());
+        projCol->SetId(aggColInfo.AggColId);
 
         auto* aggFunc = agg->MutableFunction();
-        aggFunc->SetId(ctx.GetAggFuncType(aggKqp.Type().StringValue().c_str()));
+        aggFunc->SetId(ctx.GetAggFuncType(aggColInfo.Operation));
 
-        if (aggKqp.Column() != "*") {
-            aggFunc->AddArguments()->SetId(GetOrCreateColumnId(aggKqp.Column(), ctx));
+        if (aggColInfo.BaseColId != 0) {
+            aggFunc->AddArguments()->SetId(aggColInfo.BaseColId);
         }
     }
 }

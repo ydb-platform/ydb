@@ -7,21 +7,32 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpSort) {
-    Y_UNIT_TEST_NEW_ENGINE(ReverseDefault) {
+    Y_UNIT_TEST(ReverseOptimized) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
             ORDER BY Group DESC, Name DESC;
-        )");
+        )";
 
+        auto result = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); // without `Sort`
+        UNIT_ASSERT(node.IsDefined());
+        auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
+        UNIT_ASSERT(read.IsDefined());
+        UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-
             CompareYson(R"([
                 [[2u];["Tony"];[7200u];["None"]];
                 [[1u];["Paul"];[300u];["None"]];
@@ -30,37 +41,64 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReverseOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_AllowReverseRange");
-        setting.SetValue("True");
-
-        TKikimrRunner kikimr({setting});
+    Y_UNIT_TEST(ReverseOptimizedWithPredicate) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
+            WHERE Group < 2u
             ORDER BY Group DESC, Name DESC;
-        )");
+        )";
 
         auto result = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-        if (UseNewEngine) {
+        UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan"); // without `Sort`
+        UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
+        auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
+        UNIT_ASSERT(read.IsDefined());
+        UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                [[1u];["Paul"];[300u];["None"]];
+                [[1u];["Anna"];[3500u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ReverseFirstKeyOptimized) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString query = R"(
+            SELECT Group, Name, Amount, Comment
+            FROM `/Root/Test`
+            ORDER BY Group DESC;
+        )";
+
+        {
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
             UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); // without `Sort`
-            UNIT_ASSERT(node.IsDefined());
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
             auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
             UNIT_ASSERT(read.IsDefined());
             UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-        } else {
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-            UNIT_ASSERT_C(!result.GetAst().Contains("Sort"), result.GetAst());
         }
 
         {
@@ -74,124 +112,28 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReverseOptimizedWithPredicate) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_AllowReverseRange");
-        setting.SetValue("True");
-
-        TKikimrRunner kikimr({setting});
+    Y_UNIT_TEST(ReverseMixedOrderNotOptimized) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
-            WHERE Group < 2u
-            ORDER BY Group DESC, Name DESC;
-        )");
-
-        auto result = session.ExplainDataQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-        if (UseNewEngine) {
-            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
-
-            NJson::TJsonValue plan;
-            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan"); // without `Sort`
-            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-            auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
-            UNIT_ASSERT(read.IsDefined());
-            UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-        } else {
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-        }
-
-        {
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([
-                [[1u];["Paul"];[300u];["None"]];
-                [[1u];["Anna"];[3500u];["None"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(ReverseFirstKeyOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_AllowReverseRange");
-        setting.SetValue("True");
-
-        TKikimrRunner kikimr({setting});
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
-            ORDER BY Group DESC;
-        )");
-
-        {
-            auto result = session.ExplainDataQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-            if (UseNewEngine) {
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
-
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); // without `Sort`
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-            } else {
-                UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-            }
-        }
-
-        {
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([
-                [[2u];["Tony"];[7200u];["None"]];
-                [[1u];["Paul"];[300u];["None"]];
-                [[1u];["Anna"];[3500u];["None"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(ReverseMixedOrderNotOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_AllowReverseRange");
-        setting.SetValue("True");
-
-        TKikimrRunner kikimr({setting});
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        TString query = Q_(R"(
+        TString query = R"(
             SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
             ORDER BY Group DESC, Name ASC;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            if (UseNewEngine) {
-                UNIT_ASSERT_C(!result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(!result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                UNIT_ASSERT(!node.GetMapSafe().contains("Reverse"));
-            } else {
-                UNIT_ASSERT_C(!result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
+            UNIT_ASSERT(!node.GetMapSafe().contains("Reverse"));
         }
 
         {
@@ -205,39 +147,31 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReverseRangeOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_AllowReverseRange");
-        setting.SetValue("True");
-
-        TKikimrRunner kikimr({setting});
+    Y_UNIT_TEST(ReverseRangeOptimized) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
             WHERE Group < 2
             ORDER BY Group DESC, Name DESC;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            if (UseNewEngine) {
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-            } else {
-                UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
+            auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
+            UNIT_ASSERT(read.IsDefined());
+            UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
         }
 
         {
@@ -250,21 +184,17 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReverseLimitOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_AllowReverseRange");
-        setting.SetValue("True");
-
-        TKikimrRunner kikimr({setting});
+    Y_UNIT_TEST(ReverseLimitOptimized) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
             ORDER BY Group DESC, Name DESC
             LIMIT 1;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -272,22 +202,18 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
 
-            if (UseNewEngine) {
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-                auto limit = FindPlanNodeByKv(node, "Name", "Limit");
-                UNIT_ASSERT(limit.IsDefined());
-                UNIT_ASSERT(limit.GetMapSafe().contains("Limit"));
-            } else {
-                UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
+            auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
+            UNIT_ASSERT(read.IsDefined());
+            UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
+            auto limit = FindPlanNodeByKv(node, "Name", "Limit");
+            UNIT_ASSERT(limit.IsDefined());
+            UNIT_ASSERT(limit.GetMapSafe().contains("Limit"));
         }
 
         {
@@ -299,44 +225,35 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReverseRangeLimitOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_AllowReverseRange");
-        setting.SetValue("True");
-
-        TKikimrRunner kikimr({setting});
+    Y_UNIT_TEST(ReverseRangeLimitOptimized) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
             WHERE Group < 2
             ORDER BY Group DESC, Name DESC
             LIMIT 1;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            if (UseNewEngine) {
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-                auto limit = FindPlanNodeByKv(node, "Name", "Limit");
-                UNIT_ASSERT(limit.IsDefined());
-                UNIT_ASSERT(limit.GetMapSafe().contains("Limit"));
-            } else {
-                UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-            }
-
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
+            auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
+            UNIT_ASSERT(read.IsDefined());
+            UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
+            auto limit = FindPlanNodeByKv(node, "Name", "Limit");
+            UNIT_ASSERT(limit.IsDefined());
+            UNIT_ASSERT(limit.GetMapSafe().contains("Limit"));
             UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
         }
 
@@ -349,21 +266,17 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReverseEightShardOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_AllowReverseRange");
-        setting.SetValue("True");
-
-        TKikimrRunner kikimr({setting});
+    Y_UNIT_TEST(ReverseEightShardOptimized) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             SELECT Key, Text, Data
             FROM `/Root/EightShard`
             ORDER BY Key DESC
             LIMIT 8;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -371,19 +284,15 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
 
-            if (UseNewEngine) {
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-            } else {
-                UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
+            auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
+            UNIT_ASSERT(read.IsDefined());
+            UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
         }
 
         {
@@ -402,12 +311,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortParameter) {
+    Y_UNIT_TEST(TopSortParameter) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             DECLARE $limit AS Uint32;
             DECLARE $offset AS Uint32;
             DECLARE $minKey AS Uint64;
@@ -417,21 +326,17 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             WHERE Key >= $minKey
             ORDER BY Data, Key DESC
             LIMIT $limit OFFSET $offset;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            if (UseNewEngine) {
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-            } else {
-                UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
-            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
         }
 
         {
@@ -460,12 +365,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortExpr) {
+    Y_UNIT_TEST(TopSortExpr) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             DECLARE $limit AS Uint32;
             DECLARE $offset AS Uint32;
             DECLARE $minKey AS Uint64;
@@ -475,21 +380,17 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             WHERE Key >= $minKey
             ORDER BY Data, Key DESC
             LIMIT $limit + 1 OFFSET $offset - 1;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            if (UseNewEngine) {
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-            } else {
-                UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
-            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
         }
 
         {
@@ -518,12 +419,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortExprPk) {
+    Y_UNIT_TEST(TopSortExprPk) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             DECLARE $limit AS Uint32;
             DECLARE $offset AS Uint32;
             DECLARE $minKey AS Uint64;
@@ -533,7 +434,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             WHERE Key >= $minKey
             ORDER BY Key
             LIMIT $limit + 1 OFFSET $offset - 1;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -568,13 +469,13 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ComplexPkExclusiveSecondOptionalPredicate) {
+    Y_UNIT_TEST(ComplexPkExclusiveSecondOptionalPredicate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            TString query = Q_(R"(
+            TString query = R"(
                 DECLARE $x AS Uint32;
                 DECLARE $y AS String?;
 
@@ -583,7 +484,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 WHERE Key1 = $x AND Key2 > $y
                 ORDER BY Key1, Key2
                 LIMIT 10;
-            )");
+            )";
 
             {
                 auto params = db.GetParamsBuilder()
@@ -624,7 +525,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
 
         {
-            TString query = Q_(R"(
+            TString query = R"(
                 DECLARE $x AS Uint32;
                 DECLARE $y AS String?;
 
@@ -633,7 +534,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 WHERE Key1 = $x AND Key2 < $y
                 ORDER BY Key1, Key2
                 LIMIT 10;
-            )");
+            )";
 
             {
                 auto params = db.GetParamsBuilder()
@@ -674,13 +575,13 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ComplexPkInclusiveSecondOptionalPredicate) {
+    Y_UNIT_TEST(ComplexPkInclusiveSecondOptionalPredicate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            TString query = Q_(R"(
+            TString query = R"(
                 DECLARE $x AS Uint32;
                 DECLARE $y AS String?;
 
@@ -689,7 +590,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 WHERE Key1 = $x AND Key2 >= $y
                 ORDER BY Key1, Key2
                 LIMIT 10;
-            )");
+            )";
 
             {
                 auto params = db.GetParamsBuilder()
@@ -730,7 +631,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
 
         {
-            TString query = Q_(R"(
+            TString query = R"(
                 DECLARE $x AS Uint32;
                 DECLARE $y AS String?;
 
@@ -739,7 +640,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 WHERE Key1 = $x AND Key2 <= $y
                 ORDER BY Key1, Key2
                 LIMIT 10;
-            )");
+            )";
 
             {
                 auto params = db.GetParamsBuilder()
@@ -780,12 +681,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortTableExpr) {
+    Y_UNIT_TEST(TopSortTableExpr) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             DECLARE $key AS Uint32;
 
             $fetch = (
@@ -797,7 +698,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             FROM `/Root/EightShard`
             ORDER BY Data DESC, Key
             LIMIT CAST($fetch AS Uint64) ?? 0;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -823,12 +724,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortTableExprOffset) {
+    Y_UNIT_TEST(TopSortTableExprOffset) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             DECLARE $key AS Uint32;
 
             $fetch = (
@@ -840,7 +741,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             FROM `/Root/EightShard`
             ORDER BY Data DESC, Key
             LIMIT 2 OFFSET CAST($fetch AS Uint64) ?? 0;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -866,7 +767,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortResults) {
+    Y_UNIT_TEST(TopSortResults) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -923,7 +824,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        auto queryTemplate = Q_(R"(
+        auto queryTemplate = R"(
             PRAGMA kikimr.OptDisableTopSort = '%s';
 
             DECLARE $filter AS Int32;
@@ -934,10 +835,10 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             WHERE Value1 != $filter
             ORDER BY Value2 DESC, Value3, Key DESC
             LIMIT $limit OFFSET $offset;
-        )");
+        )";
 
-        auto query = Sprintf(queryTemplate.c_str(), "False");
-        auto queryDisabled = Sprintf(queryTemplate.c_str(), "True");
+        auto query = Sprintf(queryTemplate, "False");
+        auto queryDisabled = Sprintf(queryTemplate, "True");
 
         const ui32 QueriesCount = 20;
         for (ui32 i = 0; i < QueriesCount; ++i) {
@@ -968,19 +869,19 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopParameter) {
+    Y_UNIT_TEST(TopParameter) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString query = Q_(R"(
+        TString query = R"(
             DECLARE $limit AS Uint64;
 
             SELECT *
             FROM `/Root/TwoShard`
             ORDER BY Key
             LIMIT $limit;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -988,14 +889,10 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            if (UseNewEngine) {
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-            } else {
-                UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst());
-            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
         }
 
         {
@@ -1015,12 +912,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TopParameterFilter) {
+    Y_UNIT_TEST(TopParameterFilter) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto query = Q_(R"(
+        auto query = R"(
             DECLARE $limit AS Uint64;
             DECLARE $value AS Int32;
 
@@ -1028,7 +925,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             FROM `/Root/TwoShard`
             WHERE Value2 != $value
             LIMIT $limit;
-        )");
+        )";
 
         {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -1038,16 +935,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            if (UseNewEngine) {
-                NJson::TJsonValue plan;
-                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan");
-                UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto limit = FindPlanNodeByKv(node, "Limit", "Min(1001,$limit)");
-                UNIT_ASSERT(limit.IsDefined());
-            } else {
-                UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
-            }
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan");
+            UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
+            auto limit = FindPlanNodeByKv(node, "Limit", "Min(1001,$limit)");
+            UNIT_ASSERT(limit.IsDefined());
         }
 
         {
@@ -1083,7 +976,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     // https://st.yandex-team.ru/KIKIMR-11523
-    Y_UNIT_TEST_NEW_ENGINE(PassLimit) {
+    Y_UNIT_TEST(PassLimit) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1107,7 +1000,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
 
-        auto result = session.ExplainDataQuery(Q1_(R"(
+        auto result = session.ExplainDataQuery(R"(
             declare $idx_id as Utf8;
             declare $limit as Uint64;
 
@@ -1123,44 +1016,40 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                    idx.id, idx.id2, idx.op_id
             FROM $q AS idx
             LEFT JOIN `/Root/ops` AS ops ON idx.op_id = ops.id
-        )")).GetValueSync();
+        )").GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         Cerr << result.GetPlan() << Endl << Endl;
         Cerr << result.GetAst() << Endl;
 
-        if (UseNewEngine) {
-            NJson::TJsonValue plan;
-            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
 
-            auto tableLookup = FindPlanNodeByKv(plan, "Node Type", "Filter-TablePointLookup");
-            UNIT_ASSERT(tableLookup.IsDefined());
+        auto tableLookup = FindPlanNodeByKv(plan, "Node Type", "Filter-TablePointLookup");
+        UNIT_ASSERT(tableLookup.IsDefined());
 
-            auto& filterOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(0).GetMapSafe();
-            UNIT_ASSERT_VALUES_EQUAL("Filter", filterOp.at("Name").GetStringSafe());
-            UNIT_ASSERT_VALUES_EQUAL("$limit", filterOp.at("Limit").GetStringSafe());
+        auto& filterOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(0).GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL("Filter", filterOp.at("Name").GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL("$limit", filterOp.at("Limit").GetStringSafe());
 
-            auto& lookupOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(1).GetMapSafe();
-            UNIT_ASSERT_VALUES_EQUAL("TablePointLookup", lookupOp.at("Name").GetStringSafe());
-            UNIT_ASSERT_VALUES_EQUAL("index", lookupOp.at("Table").GetStringSafe());
-            UNIT_ASSERT(!lookupOp.contains("ReadLimit"));
-        } else {
-            UNIT_ASSERT(result.GetAst().Contains("(Sort (KiPartialTake (Filter"));
-        }
+        auto& lookupOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(1).GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL("TablePointLookup", lookupOp.at("Name").GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL("index", lookupOp.at("Table").GetStringSafe());
+        UNIT_ASSERT(!lookupOp.contains("ReadLimit"));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Offset) {
+    Y_UNIT_TEST(Offset) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q1_(R"(
+        auto result = session.ExecuteDataQuery(R"(
             $data = SELECT * FROM EightShard WHERE Text = "Value1" LIMIT 7;
 
             SELECT * FROM $data LIMIT 3 OFFSET 0;
             SELECT * FROM $data LIMIT 3 OFFSET 3;
             SELECT * FROM $data LIMIT 3 OFFSET 6;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
@@ -1168,18 +1057,18 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(2).RowsCount(), 1);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(OffsetPk) {
+    Y_UNIT_TEST(OffsetPk) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q1_(R"(
+        auto result = session.ExecuteDataQuery(R"(
             $data = SELECT * FROM EightShard WHERE Text = "Value1" ORDER BY Key LIMIT 7;
 
             SELECT * FROM $data ORDER BY Key LIMIT 3 OFFSET 0;
             SELECT * FROM $data ORDER BY Key LIMIT 3 OFFSET 3;
             SELECT * FROM $data ORDER BY Key LIMIT 3 OFFSET 6;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
@@ -1199,18 +1088,18 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         ])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(OffsetTopSort) {
+    Y_UNIT_TEST(OffsetTopSort) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q1_(R"(
+        auto result = session.ExecuteDataQuery(R"(
             $data = SELECT * FROM EightShard WHERE Text = "Value1" ORDER BY Data, Key LIMIT 7;
 
             SELECT * FROM $data ORDER BY Data, Key LIMIT 3 OFFSET 0;
             SELECT * FROM $data ORDER BY Data, Key LIMIT 3 OFFSET 3;
             SELECT * FROM $data ORDER BY Data, Key LIMIT 3 OFFSET 6;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
@@ -1230,12 +1119,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         ])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST_TWIN(UnionAllSortLimit, UseNewEngine) {
+    Y_UNIT_TEST(UnionAllSortLimit) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExplainDataQuery(Q1_(R"(
+        auto result = session.ExplainDataQuery(R"(
             SELECT * FROM Logs WHERE App = "nginx" AND Ts >= 2
 
             UNION ALL
@@ -1244,17 +1133,15 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             ORDER BY App, Ts, Host
             LIMIT 3;
-        )")).ExtractValueSync();
+        )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        // Cerr << result.GetPlan() << Endl;
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
 
         for (auto& read : plan["tables"][0]["reads"].GetArraySafe()) {
             UNIT_ASSERT(read.Has("limit"));
-            UNIT_ASSERT_VALUES_EQUAL(read["limit"], UseNewEngine ? "3" : "\"3\"");
+            UNIT_ASSERT_VALUES_EQUAL(read["limit"], "3");
         }
     }
 }

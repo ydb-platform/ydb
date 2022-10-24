@@ -85,7 +85,6 @@ message GetTaskResult {
         uint64 result_limit = 26;
 
         YandexQuery.Limits limits = 27;
-        string rate_limiter = 28; // Kesus path. If empty, rate limiting is off.
         google.protobuf.Duration execution_limit = 29;
         google.protobuf.Timestamp request_started_at = 30;
         repeated CompressedData dq_graph_compressed = 31;
@@ -96,12 +95,6 @@ message GetTaskResult {
 
 message GetTaskResponse {
     Ydb.Operations.Operation operation = 1; // GetTaskResult
-}
-
-message RateLimiterResources {
-    string rate_limiter = 1; // Kesus path
-    string resource_path = 2;
-    bool delete_resource = 3; // Delete resource when query is finished. Otherwise create
 }
 
 message PingTaskRequest {
@@ -126,7 +119,6 @@ message PingTaskRequest {
     YandexQuery.StreamingDisposition disposition = 19;
     int32 dq_graph_index = 20;
     NYql.NDqProto.StatusIds.StatusCode status_code = 21;
-    RateLimiterResources rate_limiter_resources = 22;
     repeated CompressedData dq_graph_compressed = 23;
     CompressedData ast_compressed = 24;
     CompressedData plan_compressed = 25;

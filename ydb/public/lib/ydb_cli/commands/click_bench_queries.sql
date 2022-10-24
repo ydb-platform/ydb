@@ -1,31 +1,13 @@
---
--- Basic ClickHouse performance test.
--- Queries are adapted from https://github.com/ClickHouse/ClickHouse/blob/master/benchmark/clickhouse/queries.sql
---
--- NB: click_bench separates queries using simple splitting by semicolon.
---
-
--- q1
-SELECT count(*) FROM {table};
--- q2
-SELECT count(*) FROM {table} WHERE AdvEngineID != 0;
--- q3
-SELECT sum(AdvEngineID), count(*), avg(ResolutionWidth) FROM {table};
--- q4
-SELECT sum(UserID) FROM {table};
--- q5
-SELECT CountDistinctEstimate(UserID) FROM {table};
--- q6
-SELECT CountDistinctEstimate(SearchPhrase) FROM {table};
--- q7
-SELECT min(EventDate), max(EventDate) FROM {table};
--- q8
-SELECT AdvEngineID, count(*) as c FROM {table} WHERE AdvEngineID != 0 GROUP BY AdvEngineID ORDER BY c DESC;
--- q9
-SELECT RegionID, CountDistinctEstimate(UserID) AS u FROM {table} GROUP BY RegionID ORDER BY u DESC LIMIT 10;
--- q10
-SELECT RegionID, sum(AdvEngineID), count(*) AS c, avg(ResolutionWidth), CountDistinctEstimate(UserID)
-FROM {table} GROUP BY RegionID ORDER BY c DESC LIMIT 10;
+SELECT COUNT(*) FROM {table};
+SELECT COUNT(*) FROM {table} WHERE AdvEngineID != 0;
+SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM {table};
+SELECT SUM(UserID) FROM {table};
+SELECT COUNT(DISTINCT UserID) FROM {table};
+SELECT COUNT(DISTINCT SearchPhrase) FROM {table};
+SELECT MIN(EventDate), MAX(EventDate) FROM {table};
+SELECT AdvEngineID, COUNT(*) as c FROM {table} WHERE AdvEngineID != 0 GROUP BY AdvEngineID ORDER BY c DESC;
+SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM {table} GROUP BY RegionID ORDER BY u DESC LIMIT 10;
+SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, avg(ResolutionWidth), COUNT(DISTINCT UserID) FROM {table} GROUP BY RegionID ORDER BY c DESC LIMIT 10;
 -- q11
 SELECT MobilePhoneModel, CountDistinctEstimate(UserID) AS u
 FROM {table} WHERE MobilePhoneModel != '' GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10;
@@ -103,13 +85,13 @@ SELECT
     sum(ResolutionWidth + 88), sum(ResolutionWidth + 89)
 FROM {table};
 -- q31
-SELECT SearchEngineID, ClientIP, count(*) AS c, sum(Refresh), avg(ResolutionWidth)
+SELECT SearchEngineID, ClientIP, count(*) AS c, sum(IsRefresh), avg(ResolutionWidth)
 FROM {table} WHERE SearchPhrase != '' GROUP BY SearchEngineID, ClientIP ORDER BY c DESC LIMIT 10;
 -- q32
-SELECT WatchID, ClientIP, count(*) AS c, sum(Refresh), avg(ResolutionWidth)
+SELECT WatchID, ClientIP, count(*) AS c, sum(IsRefresh), avg(ResolutionWidth)
 FROM {table} WHERE SearchPhrase != '' GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;
 -- q33
-SELECT WatchID, ClientIP, count(*) AS c, sum(Refresh), avg(ResolutionWidth)
+SELECT WatchID, ClientIP, count(*) AS c, sum(IsRefresh), avg(ResolutionWidth)
 FROM {table} GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;
 -- q34
 SELECT URL, count(*) AS c FROM {table} GROUP BY URL ORDER BY c DESC LIMIT 10;
@@ -124,27 +106,27 @@ SELECT URL, count(*) AS PageViews
 FROM {table}
 WHERE
     CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND DontCountHits == 0
-    AND Refresh == 0 AND URL != ''
+    AND IsRefresh == 0 AND URL != ''
 GROUP BY URL ORDER BY PageViews DESC LIMIT 10;
 -- q38
 SELECT Title, count(*) AS PageViews
 FROM {table}
 WHERE
     CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND DontCountHits == 0 AND
-    Refresh == 0 AND Title != ''
+    IsRefresh == 0 AND Title != ''
 GROUP BY Title ORDER BY PageViews DESC LIMIT 10;
 -- q39
 SELECT URL, count(*) AS PageViews
 FROM {table}
 WHERE
-    CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND Refresh == 0 AND
+    CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh == 0 AND
     IsLink != 0 AND IsDownload == 0
 GROUP BY URL ORDER BY PageViews DESC LIMIT 1000;
 -- q40
 SELECT TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst, count(*) AS PageViews
 FROM {table}
 WHERE
-    CounterID = 62 AND EventDate >=  Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND Refresh == 0
+    CounterID = 62 AND EventDate >=  Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh == 0
 GROUP BY
     TraficSourceID, SearchEngineID, AdvEngineID, IF(SearchEngineID = 0 AND AdvEngineID = 0, Referer, '') AS Src,
     URL AS Dst
@@ -153,20 +135,20 @@ ORDER BY PageViews DESC LIMIT 1000;
 SELECT URLHash, EventDate, count(*) AS PageViews
 FROM {table}
 WHERE
-    CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND Refresh == 0 AND
+    CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh == 0 AND
     TraficSourceID IN (-1, 6) AND RefererHash = Digest::Md5HalfMix('http://example.ru/')
 GROUP BY URLHash, EventDate ORDER BY PageViews DESC LIMIT 100;
 -- q42
 SELECT WindowClientWidth, WindowClientHeight, count(*) AS PageViews
 FROM {table}
 WHERE
-    CounterID = 62 AND EventDate >=  Date('2013-07-01') AND EventDate <=  Date('2013-07-31') AND Refresh == 0 AND
+    CounterID = 62 AND EventDate >=  Date('2013-07-01') AND EventDate <=  Date('2013-07-31') AND IsRefresh == 0 AND
     DontCountHits == 0 AND URLHash = Digest::Md5HalfMix('http://example.ru/')
 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10000;
 -- q43
 SELECT Minute, count(*) AS PageViews
 FROM {table}
 WHERE
-    CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-02') AND Refresh == 0 AND
+    CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-02') AND IsRefresh == 0 AND
     DontCountHits == 0
 GROUP BY DateTime::ToSeconds(EventTime)/60 As Minute ORDER BY Minute

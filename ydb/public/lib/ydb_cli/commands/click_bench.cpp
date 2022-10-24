@@ -182,6 +182,8 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
     const TString queries = GetQueries(FullTablePath(config.Database, Path, Table));
     i32 queryN = 0;
     bool allOkay = true;
+
+    std::map<ui32, TTestInfo> QueryRuns;
     for (auto& qtoken : StringSplitter(queries).Split(';')) {
         if (!NeedRun(++queryN)) {
             continue;
@@ -218,7 +220,10 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
             }
         }
 
-        auto testInfo = TTestInfo(std::move(timings));
+        auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(timings)));
+        Y_VERIFY(success);
+        auto& testInfo = inserted->second;
+
         report << Sprintf("|   %02u    | %8zu | %7zu | %7.zu | %8.2f | %7.2f |", queryN,
             testInfo.ColdTime.MilliSeconds(), testInfo.Min.MilliSeconds(), testInfo.Max.MilliSeconds(),
             testInfo.Mean, testInfo.Std) << Endl;
@@ -237,6 +242,24 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 
     Cout << Endl << report.Str() << Endl;
     Cout << "Results saved to " << OutFilePath << Endl;
+
+    if (MiniStatFileName) {
+        TOFStream jStream{MiniStatFileName};
+
+        for(ui32 rowId = 0; rowId <= IterationsCount; ++rowId) {
+            ui32 colId = 0;
+            for(auto [_, testInfo] : QueryRuns) {
+                if (colId) {
+                    jStream << ",";
+                }
+                ++colId;
+                jStream << testInfo.Timings.at(rowId).MilliSeconds();
+            }
+
+            jStream << Endl;
+        }
+        jStream.Finish();
+    }
 
     if (collectJsonSensors) {
         TOFStream jStream{JsonReportFileName};
@@ -338,9 +361,12 @@ void TClickBenchCommandRun::Config(TConfig& config) {
     config.Opts->AddLongOption('n', "iterations", "Iterations count (without cold-start run)")
         .DefaultValue(0)
         .StoreResult(&IterationsCount);
-    config.Opts->AddLongOption('j', "json", "Json report file name")
+    config.Opts->AddLongOption("json", "Json report file name")
         .DefaultValue("")
         .StoreResult(&JsonReportFileName);
+    config.Opts->AddLongOption("ministat", "Ministat report file name")
+        .DefaultValue("")
+        .StoreResult(&MiniStatFileName);
     config.Opts->AddLongOption("disable-llvm", "disable llvm")
         .NoArgument()
         .SetFlag(&DisableLlvm);

@@ -39,6 +39,7 @@ public:
     TString OutFilePath;
     ui32 IterationsCount;
     TString JsonReportFileName;
+    TString MiniStatFileName;
     TString Path;
     TString Table;
 };

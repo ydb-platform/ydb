@@ -3,6 +3,7 @@
 #include "tenant_runtime.h"
 
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/console_tenants_manager.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -30,6 +31,19 @@ struct TPoolAllocation {
     TString PoolType;
     ui32 PoolSize;
     ui32 Allocated;
+};
+
+struct TUnitRegistration {
+    TUnitRegistration(const TString &host = "", ui32 port = 0, const TString &kind = "")
+        : Host(host)
+        , Port(port)
+        , Kind(kind)
+    {
+    }
+
+    TString Host;
+    ui32 Port;
+    TString Kind;
 };
 
 inline void CollectSlots(TVector<TSlotRequest> &)
@@ -147,6 +161,143 @@ struct TCreateTenantRequest {
         return *this;
     }
 };
+
+inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots,
+                         THashMap<TString, TPoolAllocation> pools,
+                         THashMap<std::pair<TString, ui32>, TUnitRegistration> registrations,
+                         const Ydb::Cms::GetDatabaseStatusResult &status, bool shared = false)
+{
+    const auto& resources = shared ? status.required_shared_resources() : status.required_resources();
+
+    for (auto &unit : resources.computational_units()) {
+        auto key = std::make_pair(unit.unit_kind(), unit.availability_zone());
+        auto count = unit.count();
+        if (!slots.contains(key))
+            return false;
+        if (slots[key].Required != count)
+            return false;
+        slots[key].Required = 0;
+    }
+
+    for (auto &unit : resources.storage_units()) {
+        auto key = unit.unit_kind();
+        auto size = unit.count();
+        if (!pools.contains(key))
+            return false;
+        if (pools[key].PoolSize != size)
+            return false;
+        pools[key].PoolSize = 0;
+    }
+
+    for (auto &unit : status.allocated_resources().computational_units()) {
+        auto key = std::make_pair(unit.unit_kind(), unit.availability_zone());
+        auto count = unit.count();
+        if (!slots.contains(key))
+            return false;
+        if (slots[key].Allocated != count)
+            return false;
+        slots[key].Allocated = 0;
+    }
+
+    for (auto &unit : status.allocated_resources().storage_units()) {
+        auto key = unit.unit_kind();
+        auto size = unit.count();
+        if (!pools.contains(key))
+            return false;
+        if (pools[key].Allocated != size)
+            return false;
+        pools[key].Allocated = 0;
+    }
+
+    for (auto &unit : status.registered_resources()) {
+        auto key = std::make_pair(unit.host(), unit.port());
+        if (!registrations.contains(key))
+            return false;
+        if (registrations.at(key).Kind != unit.unit_kind())
+            return false;
+        registrations.erase(key);
+    }
+
+    for (auto &pr : slots) {
+        if (pr.second.Required || pr.second.Allocated)
+            return false;
+    }
+
+    for (auto &pr : pools) {
+        if (pr.second.PoolSize || pr.second.Allocated)
+            return false;
+    }
+
+    if (registrations.size())
+        return false;
+
+    return true;
+}
+
+template <typename ...Ts>
+inline void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, bool shared,
+                       Ydb::StatusIds::StatusCode code,
+                       Ydb::Cms::GetDatabaseStatusResult::State state,
+                       TVector<TPoolAllocation> poolTypes,
+                       TVector<TUnitRegistration> unitRegistrations,
+                       Ts... args)
+{
+    THashMap<std::pair<TString, TString>, TSlotState> slots;
+    CollectSlots(slots, args...);
+
+    THashMap<TString, TPoolAllocation> pools;
+    for (auto &pool : poolTypes)
+        pools[pool.PoolType] = pool;
+
+    THashMap<std::pair<TString, ui32>, TUnitRegistration> registrations;
+    for (auto &reg : unitRegistrations)
+        registrations[std::make_pair(reg.Host, reg.Port)] = reg;
+
+    bool ok = false;
+    while (!ok) {
+        auto *event = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
+        event->Record.MutableRequest()->set_path(path);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.SendToConsole(event);
+        auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
+        auto &operation = reply->Record.GetResponse().operation();
+        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
+        if (code != Ydb::StatusIds::SUCCESS)
+            return;
+
+        Ydb::Cms::GetDatabaseStatusResult status;
+        UNIT_ASSERT(operation.result().UnpackTo(&status));
+
+        UNIT_ASSERT_VALUES_EQUAL(status.path(), CanonizePath(path));
+
+        ok = status.state() == state && CompareState(slots, pools, registrations, status, shared);
+        if (!ok) {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvRetryAllocateResources);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainFailed);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainCreated);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainReady);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainRemoved);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolAllocated);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolFailed);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolDeleted);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+    }
+}
+
+template <typename ...Ts>
+inline void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path,
+                       Ydb::StatusIds::StatusCode code,
+                       Ydb::Cms::GetDatabaseStatusResult::State state,
+                       TVector<TPoolAllocation> poolTypes,
+                       TVector<TUnitRegistration> unitRegistrations,
+                       Ts... args)
+{
+    CheckTenantStatus(runtime, path, false, code, state, poolTypes, unitRegistrations, args...);
+}
+
 
 inline void CheckCreateTenant(TTenantTestRuntime &runtime,
                        const TString &token,

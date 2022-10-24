@@ -927,34 +927,6 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         RunTestRestartConsoleAndPools(runtime);
     }
 
-    void RunTestAlterTenantModifyComputationalResourcesForPending(TTenantTestRuntime& runtime) {
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
-            TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}}));
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES, {{"hdd", 1, 1}}, {});
-
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                              {{ {SLOT1_TYPE, ZONE1, 5} }}, {});
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 5, 5, 5}}});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
-                          SLOT1_TYPE, ZONE1, 5, 5);
-    }
-
-    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForPending) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestAlterTenantModifyComputationalResourcesForPending(runtime);
-    }
-
-    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForPendingExtSubdomain) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
-        RunTestAlterTenantModifyComputationalResourcesForPending(runtime);
-    }
-
     void RunTestAlterTenantModifyComputationalResourcesForRunning(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},

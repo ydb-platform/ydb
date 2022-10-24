@@ -19,7 +19,9 @@ TTenantTestConfig::TTenantPoolConfig TenantTenantPoolConfig()
 {
     TTenantTestConfig::TTenantPoolConfig res = {
         // Static slots {tenant, {cpu, memory, network}}
-        {},
+        {
+            {TENANT1_1_NAME, {1, 1, 1}}
+        },
         // NodeType
         "type1"
     };
@@ -30,13 +32,13 @@ TTenantTestConfig DefaultConsoleTestConfig()
 {
     TTenantTestConfig res = {
         // Domains {name, schemeshard {{ subdomain_names }}}
-        {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, TVector<TString>()} }},
+        {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, { TENANT1_1_NAME }} }},
         // HiveId
         HIVE_ID,
         // FakeTenantSlotBroker
         true,
         // FakeSchemeShard
-        false,
+        true,
         // CreateConsole
         true,
         // Nodes {tenant_pool_config, data_center}
@@ -64,21 +66,6 @@ TActorId InitConfigsDispatcher(TTenantTestRuntime &runtime)
         = MakeConfigItem(NKikimrConsole::TConfigItem::LogConfigItem,
                          NKikimrConfig::TAppConfig(), {}, {}, "", "", 2,
                          NKikimrConsole::TConfigItem::MERGE, "");
-
-    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
-        TCreateTenantRequest(TENANT1_1_NAME)
-            .WithPools({{"hdd", 1}}));
-    CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                      Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES,
-                      {{"hdd", 1, 1}}, {});
-    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
-        TCreateTenantRequest(TENANT1_2_NAME)
-            .WithPools({{"hdd", 1}}));
-    CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
-                      Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES,
-                      {{"hdd", 1, 1}}, {});
-
-    ChangeTenant(runtime, TENANT1_1_NAME);
 
     return MakeConfigsDispatcherID(runtime.GetNodeId(0));
 }
@@ -420,34 +407,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         TDispatchOptions options2;
         options2.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options2);
-    }
-
-    Y_UNIT_TEST(TestChangeTenant) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        TAutoPtr<IEventHandle> handle;
-        InitConfigsDispatcher(runtime);
-
-        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
-        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
-
-        // Subscribers get notification.
-        TDispatchOptions options1;
-        options1.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 2);
-        runtime.DispatchEvents(options1);
-
-        SendConfigure(runtime, MakeAddAction(ITEM_DOMAIN_LOG_1));
-
-        // Expect two responses from subscribers and one from dispatcher.
-        TDispatchOptions options2;
-        options2.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 3);
-        runtime.DispatchEvents(options2);
-
-        // Change tenant and expect new notifications.
-        ChangeTenant(runtime, TENANT1_2_NAME, 0, false);
-
-        TDispatchOptions options3;
-        options3.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 3);
-        runtime.DispatchEvents(options3);
     }
 
     Y_UNIT_TEST(TestGetCachedConfig) {

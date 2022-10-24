@@ -1652,6 +1652,22 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregationsInternal(cases);
     }
 
+    Y_UNIT_TEST(Aggregation_ResultDistinctCountRI_GroupByL) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    level, COUNT(DISTINCT resource_id)
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY level
+                ORDER BY level
+            )")
+            .AddExpectedPlanOptions("CombineCore")
+            .SetExpectedReply("[[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]]")
+            ;
+
+        TestAggregations({ testCase });
+    }
+
     Y_UNIT_TEST(Aggregation_ResultCountAll_FilterL) {
         //https://st.yandex-team.ru/KIKIMR-16073
         return;

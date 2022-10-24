@@ -61,6 +61,10 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     auto aggCombine = node.Cast<TCoAggregateCombine>();
+    if (aggCombine.Handlers().Size() == 0) {
+        return node;
+    }
+
     auto maybeRead = aggCombine.Input().Maybe<TKqpReadOlapTableRanges>();
     if (!maybeRead) {
         maybeRead = aggCombine.Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>();
@@ -71,7 +75,6 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     auto read = maybeRead.Cast();
-
     auto aggs = Build<TKqpOlapAggOperationList>(ctx, node.Pos());
     // TODO: TMaybeNode<TKqpOlapAggOperation>;
     for (auto handler: aggCombine.Handlers()) {

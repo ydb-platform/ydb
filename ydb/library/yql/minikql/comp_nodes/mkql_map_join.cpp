@@ -85,6 +85,12 @@ protected:
         return result;
     }
 
+    void GenFillLeftStruct(const std::vector<Value*>& pointers, ICodegeneratorInlineWideNode::TGettersList& output) const {
+        for (auto i = 0U; i < pointers.size(); ++i) {
+            output[LeftRenames[(i << 1U) + 1U]] = [p = pointers[i]](const TCodegenContext&, BasicBlock*& block) { return new LoadInst(p, "value", block); };
+        }
+    }
+
     void GenFillLeftStruct(const ICodegeneratorInlineWideNode::TGettersList& input, ICodegeneratorInlineWideNode::TGettersList& output) const {
         for (auto i = 0U; i < LeftRenames.size(); ++i) {
             const auto& src = input[LeftRenames[i]];
@@ -92,7 +98,8 @@ protected:
         }
     }
 
-    std::array<Value*, 2U> GenFillOutput(ui32 idx, const TCodegenContext& ctx, const ICodegeneratorInlineWideNode::TGettersList& input, ICodegeneratorInlineWideNode::TGettersList& output) const {
+    template<class TLeftSideSource>
+    std::array<Value*, 2U> GenFillOutput(ui32 idx, const TCodegenContext& ctx, const TLeftSideSource& input, ICodegeneratorInlineWideNode::TGettersList& output) const {
         GenFillLeftStruct(input, output);
 
         auto& context = ctx.Codegen->GetContext();
@@ -226,7 +233,9 @@ protected:
     }
 
     std::set<ui32> GetUsedInputs() const {
-        std::set<ui32> unique(LeftKeyColumns.cbegin(), LeftKeyColumns.cend());
+        std::set<ui32> unique;
+        for (auto i = 0U; i < LeftKeyColumns.size(); ++i)
+            unique.emplace(LeftKeyColumns[i]);
         for (auto i = 0U; i < LeftRenames.size(); i += 2U)
             unique.emplace(LeftRenames[i]);
         return unique;
@@ -412,6 +421,7 @@ private:
 template<bool RightRequired, bool IsTuple>
 class TWideMultiMapJoinWrapper : public TWideMapJoinBase<IsTuple>, public TPairStateWideFlowCodegeneratorNode<TWideMultiMapJoinWrapper<RightRequired, IsTuple>> {
 using TBaseComputation = TPairStateWideFlowCodegeneratorNode<TWideMultiMapJoinWrapper<RightRequired, IsTuple>>;
+using TBase = TWideMapJoinBase<IsTuple>;
 public:
     TWideMultiMapJoinWrapper(TComputationMutables& mutables, std::vector<TFunctionDescriptor>&& leftKeyConverters,
         TDictType* dictType, std::vector<EValueRepresentation>&& outputRepresentations, std::vector<ui32>&& leftKeyColumns,
@@ -420,7 +430,12 @@ public:
         : TWideMapJoinBase<IsTuple>(mutables, std::move(leftKeyConverters), dictType, std::move(outputRepresentations)
         , std::move(leftKeyColumns), std::move(leftRenames), std::move(rightRenames), flow, dict, inputWidth)
         , TBaseComputation(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
-    {}
+    {
+        if (!TBase::LeftRenames.empty()) {
+            LeftRenamesStorageIndex = mutables.CurValueIndex;
+            mutables.CurValueIndex += TBase::LeftRenames.size() >> 1U;
+        }
+    }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& iter, NUdf::TUnboxedValue& item, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         auto** fields = ctx.WideFields.data() + this->WideFieldsIndex;
@@ -468,6 +483,13 @@ public:
 
         const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", &ctx.Func->getEntryBlock().back());
 
+        std::vector<Value*> leftStoragePointers;
+        leftStoragePointers.reserve(TBase::LeftRenames.size() >> 1U);
+        auto i = 0U;
+        const auto values = ctx.GetMutables();
+        std::generate_n(std::back_inserter(leftStoragePointers), TBase::LeftRenames.size() >> 1U,
+            [&](){ return GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(resultType, LeftRenamesStorageIndex + i++)}, (TString("left_out_") += ToString(i)).c_str(), &ctx.Func->getEntryBlock().back()); });
+
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
 
         BranchInst::Create(work, block);
@@ -494,6 +516,11 @@ public:
         BranchInst::Create(hasi, part, HasValue(subiter, block), block);
 
         block = part;
+
+        for (const auto ptr : leftStoragePointers) {
+            new StoreInst(GetInvalid(context), ptr, block);
+        }
+
         const auto dict = GetNodeValue(this->Dict, ctx, block);
         BranchInst::Create(loop, block);
 
@@ -501,7 +528,7 @@ public:
 
         const auto current = GetNodeValues(this->Flow, ctx, block);
 
-        const auto output = this->GenFillOutput(static_cast<const IComputationNode*>(this)->GetIndex() + 1U, ctx, current.second, getters);
+        const auto output = this->GenFillOutput(static_cast<const IComputationNode*>(this)->GetIndex() + 1U, ctx, leftStoragePointers, getters);
 
         const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, current.first, ConstantInt::get(resultType, 0), "special", block);
 
@@ -530,6 +557,13 @@ public:
             block = skip;
             UnRefBoxed(subiter, ctx, block);
             new StoreInst(zero, iteraratorPtr, block);
+
+            for (auto i = 0U; i < leftStoragePointers.size(); ++i) {
+                const auto ptr = leftStoragePointers[i];
+                ValueUnRef(TBase::OutputRepresentations[TBase::LeftRenames[(i << 1U) + 1U]], ptr, ctx, block);
+                new StoreInst(GetInvalid(context), ptr, block);
+            }
+
             BranchInst::Create(part, block);
         }
 
@@ -559,6 +593,11 @@ public:
 
             block = left;
 
+            for (auto i = 0U; i < leftStoragePointers.size(); ++i) {
+                const auto item = current.second[TBase::LeftRenames[i << 1U]](ctx, block);
+                new StoreInst(item, leftStoragePointers[i], block);
+            }
+
             new StoreInst(std::get<1U>(output), std::get<0U>(output), block);
             result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::One)), block);
 
@@ -568,6 +607,13 @@ public:
         {
             block = fill;
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(iteraratorPtr, lookup, ctx.Codegen, block);
+
+            for (auto i = 0U; i < leftStoragePointers.size(); ++i) {
+                const auto item = current.second[TBase::LeftRenames[i << 1U]](ctx, block);
+                ValueAddRef(TBase::OutputRepresentations[TBase::LeftRenames[(i << 1U) + 1U]], item, ctx, block);
+                new StoreInst(item, leftStoragePointers[i], block);
+            }
+
             BranchInst::Create(work, block);
         }
 
@@ -580,6 +626,8 @@ private:
         if (const auto flow = this->FlowDependsOn(this->Flow))
             this->DependsOn(flow, this->Dict);
     }
+
+    ui32 LeftRenamesStorageIndex = 0U;
 };
 
 template<bool IsTuple>

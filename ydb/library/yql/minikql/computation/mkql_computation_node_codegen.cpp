@@ -778,12 +778,11 @@ void GenInvalidate(const TCodegenContext& ctx, const std::vector<std::pair<ui32,
     auto& context = ctx.Codegen->GetContext();
     const auto indexType = Type::getInt32Ty(context);
     const auto values = ctx.GetMutables();
-    const auto invv = ConstantInt::get(Type::getInt128Ty(context), 0xFFFFFFFFFFFFFFFFULL);
 
     for (const auto index : invalidationSet) {
         const auto invPtr = GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(indexType, index.first)}, "inv_ptr", block);
         ValueUnRef(index.second, invPtr, ctx, block);
-        new StoreInst(invv, invPtr, block);
+        new StoreInst(GetInvalid(context), invPtr, block);
     }
 }
 

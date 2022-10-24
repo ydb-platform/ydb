@@ -89,7 +89,7 @@ void FqConvert(const RepeatedPtrField<T>& src, RepeatedPtrField<U>& dst) {
 
 void FqConvert(const Ydb::Operations::Operation& src, FQHttp::Error& dst) {
     dst.set_status(static_cast<int>(src.status()));
-    SIMPLE_COPY_RENAME_FIELD(status, message);
+    dst.set_message(Ydb::StatusIds_StatusCode_Name(src.status()));
     SIMPLE_COPY_REPEATABLE_RENAME_FIELD(issues, details);
 }
 
@@ -170,9 +170,15 @@ void FqConvert(const YandexQuery::Query& src, FQHttp::GetQueryResult& dst) {
         FqConvert(result_meta, *dst.mutable_result_sets()->Add());
     }
 
-    SIMPLE_COPY_REPEATABLE_RENAME_FIELD(issue, issues);
-    // append transient issues to issues
-    SIMPLE_COPY_REPEATABLE_RENAME_FIELD(transient_issue, issues);
+    RepeatedPtrField<Ydb::Issue::IssueMessage> mergedIssues(src.issue());
+    mergedIssues.MergeFrom(src.transient_issue());
+
+    if (!mergedIssues.empty()) {
+        FqConvert(mergedIssues, *dst.mutable_issues()->mutable_details());
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(mergedIssues, issues);
+        dst.mutable_issues()->set_message(issues.ToOneLineString());
+    }
 }
 
 void FqConvert(const FQHttp::GetQueryRequest& src, YandexQuery::DescribeQueryRequest& dst) {

@@ -23,7 +23,7 @@ message IssueMessage {
 
 message Error {
     int32 status = 1;
-    Ydb.StatusIds.StatusCode message = 2;
+    string message = 2;
     repeated IssueMessage details = 3;
 }
 
@@ -72,7 +72,7 @@ message GetQueryResult {
     ComputeStatus status = 5;
     google.protobuf.StringValue text = 6;
     QueryMeta meta = 7;
-    repeated IssueMessage issues = 8;
+    Error issues = 8;
     repeated ResultSetMeta result_sets = 9;
 }
 

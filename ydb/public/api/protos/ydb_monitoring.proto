@@ -130,12 +130,12 @@ message LocationStoragePDisk {
 }
 
 message LocationStorageVDisk {
-    string id = 1;
-    LocationStoragePDisk pdisk = 2;
+    repeated string id = 1;
+    repeated LocationStoragePDisk pdisk = 2;
 }
 
 message LocationStorageGroup {
-    string id = 1;
+    repeated string id = 1;
     LocationStorageVDisk vdisk = 2;
 }
 
@@ -183,6 +183,8 @@ message IssueLog {
     repeated string reason = 5;
     string type = 6;
     uint32 level = 7;
+    uint32 listed = 8;
+    uint32 count = 9;
 }
 
 message DatabaseStatus {

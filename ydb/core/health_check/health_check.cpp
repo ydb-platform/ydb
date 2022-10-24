@@ -26,6 +26,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
+#include <regex>
 
 static decltype(auto) make_vslot_tuple(const NKikimrBlobStorage::TVSlotId& id) {
     return std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId());
@@ -92,6 +93,23 @@ public:
     {}
 
     using TGroupId = ui32;
+
+    enum ETags {
+        None,
+        DBState,
+        StorageState,
+        PoolState,
+        GroupState,
+        VDiskState,
+        PDiskState,
+        NodeState,
+        VDiskSpace,
+        PDiskSpace,
+        ComputeState,
+        TabletState,
+        SystemTabletState,
+        OverloadState,
+    };
 
     struct TTenantInfo {
         TString Name;
@@ -183,11 +201,11 @@ public:
     struct TSelfCheckResult {
         struct TIssueRecord {
             Ydb::Monitoring::IssueLog IssueLog;
-            TString Tag;
+            ETags Tag;
         };
 
         Ydb::Monitoring::StatusFlag::Status OverallStatus = Ydb::Monitoring::StatusFlag::GREY;
-        TList<TIssueRecord> IssueLog;
+        TList<TIssueRecord> IssueRecords;
         Ydb::Monitoring::Location Location;
         int Level = 1;
         TString Type;
@@ -218,19 +236,19 @@ public:
                     id << '-' << location.storage().node().port();
                 }
             }
-            if (location.storage().pool().group().vdisk().id()) {
-                id << '-' << location.storage().pool().group().vdisk().id();
+            if (!location.storage().pool().group().vdisk().id().empty()) {
+                id << '-' << location.storage().pool().group().vdisk().id()[0];
             } else {
-                if (location.storage().pool().group().id()) {
-                    id << '-' << location.storage().pool().group().id();
+                if (!location.storage().pool().group().id().empty()) {
+                    id << '-' << location.storage().pool().group().id()[0];
                 } else {
                     if (location.storage().pool().name()) {
                         id << '-' << crc16(location.storage().pool().name());
                     }
                 }
             }
-            if (location.storage().pool().group().vdisk().pdisk().id()) {
-                id << '-' << location.storage().pool().group().vdisk().pdisk().id();
+            if (!location.storage().pool().group().vdisk().pdisk().empty() && location.storage().pool().group().vdisk().pdisk()[0].id()) {
+                id << '-' << location.storage().pool().group().vdisk().pdisk()[0].id();
             }
             if (location.compute().node().id()) {
                 id << '-' << location.compute().node().id();
@@ -253,14 +271,14 @@ public:
 
         void ReportStatus(Ydb::Monitoring::StatusFlag::Status status,
                           const TString& message = {},
-                          const TString& setTag = {},
-                          std::initializer_list<TString> includeTags = {}) {
+                          ETags setTag = ETags::None,
+                          std::initializer_list<ETags> includeTags = {}) {
             OverallStatus = MaxStatus(OverallStatus, status);
             if (IsErrorStatus(status)) {
                 std::vector<TString> reason;
                 if (includeTags.size() != 0) {
-                    for (const TIssueRecord& record : IssueLog) {
-                        for (const TString& tag : includeTags) {
+                    for (const TIssueRecord& record : IssueRecords) {
+                        for (const ETags& tag : includeTags) {
                             if (record.Tag == tag) {
                                 reason.push_back(record.IssueLog.id());
                                 break;
@@ -270,7 +288,7 @@ public:
                 }
                 std::sort(reason.begin(), reason.end());
                 reason.erase(std::unique(reason.begin(), reason.end()), reason.end());
-                TIssueRecord& issueRecord(*IssueLog.emplace(IssueLog.begin()));
+                TIssueRecord& issueRecord(*IssueRecords.emplace(IssueRecords.begin()));
                 Ydb::Monitoring::IssueLog& issueLog(issueRecord.IssueLog);
                 issueLog.set_status(status);
                 issueLog.set_message(message);
@@ -293,9 +311,9 @@ public:
             }
         }
 
-        bool HasTags(std::initializer_list<TString> tags) const {
-            for (const TIssueRecord& record : IssueLog) {
-                for (const TString& tag : tags) {
+        bool HasTags(std::initializer_list<ETags> tags) const {
+            for (const TIssueRecord& record : IssueRecords) {
+                for (const ETags tag : tags) {
                     if (record.Tag == tag) {
                         return true;
                     }
@@ -311,12 +329,12 @@ public:
         void SetOverallStatus(Ydb::Monitoring::StatusFlag::Status status) {
             OverallStatus = status;
         }
-
+        
         void InheritFrom(TSelfCheckResult& lower) {
             if (lower.GetOverallStatus() >= OverallStatus) {
                 OverallStatus = lower.GetOverallStatus();
             }
-            IssueLog.splice(IssueLog.end(), std::move(lower.IssueLog));
+            IssueRecords.splice(IssueRecords.end(), std::move(lower.IssueRecords));
         }
     };
 
@@ -1269,19 +1287,19 @@ public:
     static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
         if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Pool usage over 99%", "overload-state");
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Pool usage over 99%", ETags::OverloadState);
             } else if (poolStats.usage() >= 0.95) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage over 95%", "overload-state");
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage over 95%", ETags::OverloadState);
             } else if (poolStats.usage() >= 0.90) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage over 90%", "overload-state");
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage over 90%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         } else {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage over 99%", "overload-state");
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage over 99%", ETags::OverloadState);
             } else if (poolStats.usage() >= 0.95) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage over 95%", "overload-state");
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage over 95%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
@@ -1300,11 +1318,11 @@ public:
                     }
                     protoTablet.add_id(ToString(tabletId));
                     if (tablet.IsUnresponsive) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet is unresponsive", "system-tablet-state");
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet is unresponsive", ETags::SystemTabletState);
                     } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(5000)) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "System tablet response time is over 5000ms", "system-tablet-state");
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "System tablet response time is over 5000ms", ETags::SystemTabletState);
                     } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(1000)) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "System tablet response time is over 1000ms", "system-tablet-state");
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "System tablet response time is over 1000ms", ETags::SystemTabletState);
                     }
                 }
             }
@@ -1348,14 +1366,14 @@ public:
                             break;
                         case TNodeTabletState::ETabletState::RestartsTooOften:
                             computeTabletStatus.set_state("RESTARTS_TOO_OFTEN");
-                            tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are restarting too often", "tablet-state");
+                            tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are restarting too often", ETags::TabletState);
                             break;
                         case TNodeTabletState::ETabletState::Dead:
                             computeTabletStatus.set_state("DEAD");
                             if (count.Leader) {
-                                tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are dead", "tablet-state");
+                                tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are dead", ETags::TabletState);
                             } else {
-                                tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Followers are dead", "tablet-state");
+                                tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Followers are dead", ETags::TabletState);
                             }
                             break;
                     }
@@ -1401,7 +1419,7 @@ public:
                 loadAverageStatus.set_load(nodeSystemState.loadaverage(0));
                 loadAverageStatus.set_cores(nodeSystemState.numberofcpus());
                 if (loadAverageStatus.load() > loadAverageStatus.cores()) {
-                    laContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "LoadAverage above 100%", "overload-state");
+                    laContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "LoadAverage above 100%", ETags::OverloadState);
                 } else {
                     laContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 }
@@ -1410,7 +1428,7 @@ public:
         } else {
             // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
             //                      TStringBuilder() << "Compute node is not available",
-            //                      "node-state");
+            //                      ETags::NodeState);
         }
         computeNodeStatus.set_id(id);
         computeNodeStatus.set_overall(context.GetOverallStatus());
@@ -1434,7 +1452,7 @@ public:
         } else {
             Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets({&context, "SYSTEM_TABLET"});
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
-                context.ReportStatus(systemStatus, "Compute has issues with system tablets", "compute-state", {"system-tablet-state"});
+                context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::DBState, {ETags::SystemTabletState});
             }
             Ydb::Monitoring::StatusFlag::Status nodesStatus = Ydb::Monitoring::StatusFlag::GREEN;
             for (TNodeId nodeId : *computeNodeIds) {
@@ -1443,7 +1461,7 @@ public:
                 nodesStatus = MaxStatus(nodesStatus, computeNode.overall());
             }
             if (nodesStatus != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(nodesStatus, "Compute is overloaded", "compute-state", {"overload-state"});
+                context.ReportStatus(nodesStatus, "Compute is overloaded", ETags::DBState, {ETags::OverloadState});
             }
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node
@@ -1451,7 +1469,7 @@ public:
                 tabletsStatus = MaxStatus(tabletsStatus, FillTablets(databaseState, nodeId, *computeStatus.mutable_tablets(), context));
             }
             if (tabletsStatus != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(tabletsStatus, "Compute has issues with tablets", "compute-state", {"tablet-state"});
+                context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::DBState, {ETags::TabletState});
             }
         }
         computeStatus.set_overall(context.GetOverallStatus());
@@ -1501,11 +1519,14 @@ public:
 
     void FillPDiskStatus(const TString& pDiskId, const NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
         context.Location.clear_database(); // PDisks are shared between databases
+        if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->empty()) {
+            context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_pdisk();
+        }
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // PDisks are shared between groups
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->clear_id(); // PDisks are shared between vdisks
-        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->set_id(pDiskId);
-        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->set_path(pDiskInfo.path());
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_id(pDiskId);
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_path(pDiskInfo.path());
         storagePDiskStatus.set_id(pDiskId);
 
         if (pDiskInfo.HasState()) {
@@ -1519,7 +1540,7 @@ public:
                 case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
                                          TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
-                                         "pdisk-state");
+                                         ETags::PDiskState);
                     break;
                 case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
                 case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
@@ -1536,7 +1557,7 @@ public:
                 case NKikimrBlobStorage::TPDiskState::Unknown:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                          TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
-                                         "pdisk-state");
+                                         ETags::PDiskState);
                     break;
                 case NKikimrBlobStorage::TPDiskState::Reserved14:
                 case NKikimrBlobStorage::TPDiskState::Reserved15:
@@ -1549,11 +1570,11 @@ public:
             if (pDiskInfo.GetAvailableSize() != 0 && pDiskInfo.GetTotalSize() != 0) { // hotfix until KIKIMR-12659
                 double avail = (double)pDiskInfo.GetAvailableSize() / pDiskInfo.GetTotalSize();
                 if (avail < 0.06) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Available size is less than 6%", "pdisk-space");
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Available size is less than 6%", ETags::PDiskSpace);
                 } else if (avail < 0.09) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Available size is less than 9%", "pdisk-space");
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Available size is less than 9%", ETags::PDiskSpace);
                 } else if (avail < 0.12) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Available size is less than 12%", "pdisk-space");
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Available size is less than 12%", ETags::PDiskSpace);
                 }
             }
         } else {
@@ -1572,12 +1593,12 @@ public:
                 }
                 nodeContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                          TStringBuilder() << "Storage node is not available",
-                                         "node-state");
+                                         ETags::NodeState);
             }
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                  TStringBuilder() << "PDisk is not available",
-                                 "pdisk-state",
-                                 {"node-state"});
+                                 ETags::PDiskState,
+                                 {ETags::NodeState});
         }
 
         storagePDiskStatus.set_overall(context.GetOverallStatus());
@@ -1599,7 +1620,11 @@ public:
     }
 
     void FillVDiskStatus(const TString& vDiskId, const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
-        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->set_id(vDiskId);
+        if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->empty()) {
+            context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id();
+        }
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->set_id(0, vDiskId);
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // you can see VDisks Group Id in vDiskId field
         storageVDiskStatus.set_id(vDiskId);
         TString pDiskId = GetPDiskId(vDiskInfo);
         auto itPDisk = MergedPDiskState.find(pDiskId);
@@ -1610,8 +1635,8 @@ public:
         if (!vDiskInfo.HasVDiskState()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                  TStringBuilder() << "VDisk is not available",
-                                 "vdisk-state",
-                                 {"pdisk-state"});
+                                 ETags::VDiskState,
+                                 {ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -1624,15 +1649,15 @@ public:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecovery:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
                                      TStringBuilder() << "VDisk state is " << NKikimrWhiteboard::EVDiskState_Name(vDiskInfo.GetVDiskState()),
-                                     "vdisk-state");
+                                     ETags::VDiskState);
                 break;
             case NKikimrWhiteboard::EVDiskState::LocalRecoveryError:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecoveryError:
             case NKikimrWhiteboard::EVDiskState::PDiskError:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                      TStringBuilder() << "VDisk state is " << NKikimrWhiteboard::EVDiskState_Name(vDiskInfo.GetVDiskState()),
-                                     "vdisk-state",
-                                     {"pdisk-state"});
+                                     ETags::VDiskState,
+                                     {ETags::PDiskState});
                 break;
         }
 
@@ -1645,19 +1670,19 @@ public:
                     break;
                     context.ReportStatus(GetFlagFromWhiteboardFlag(vDiskInfo.GetDiskSpace()),
                                          TStringBuilder() << "DiskSpace is " << NKikimrWhiteboard::EFlag_Name(vDiskInfo.GetDiskSpace()),
-                                         "vdisk-state",
-                                         {"pdisk-space"});
+                                         ETags::VDiskState,
+                                         {ETags::PDiskSpace});
                 default:
                     context.ReportStatus(GetFlagFromWhiteboardFlag(vDiskInfo.GetDiskSpace()),
                                          TStringBuilder() << "DiskSpace is " << NKikimrWhiteboard::EFlag_Name(vDiskInfo.GetDiskSpace()),
-                                         "vdisk-space",
-                                         {"pdisk-space"});
+                                         ETags::VDiskSpace,
+                                         {ETags::PDiskSpace});
                     break;
             }
         }
 
         if (context.GetOverallStatus() == Ydb::Monitoring::StatusFlag::GREEN && !vDiskInfo.GetReplicated()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Replication in progress", "vdisk-state");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Replication in progress", ETags::VDiskState);
         }
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());
@@ -1666,6 +1691,8 @@ public:
     static const inline TString NONE = "none";
     static const inline TString BLOCK_4_2 = "block-4-2";
     static const inline TString MIRROR_3_DC = "mirror-3-dc";
+    static const int MERGING_IGNORE_SIZE = 4;
+    static const int MERGER_ISSUE_LIMIT = 10;
 
     static void IncrementFor(TStackVec<std::pair<ui32, int>>& realms, ui32 realm) {
         auto itRealm = FindIf(realms, [realm](const std::pair<ui32, int>& p) -> bool {
@@ -1678,8 +1705,337 @@ public:
         }
     }
 
+    struct TMergeIssuesContext {
+        std::unordered_map<ETags, TList<TSelfCheckContext::TIssueRecord>> recordsMap;
+        std::unordered_set<TString> removeIssuesIds;
+        
+        TMergeIssuesContext(TList<TSelfCheckContext::TIssueRecord>& records) {
+            for (auto it = records.begin(); it != records.end(); ) {
+                auto move = it++;
+                recordsMap[move->Tag].splice(recordsMap[move->Tag].end(), records, move);
+            }
+        }
+        
+        void RemoveUnlinkIssues(TList<TSelfCheckContext::TIssueRecord>& records) {
+            bool isRemovingIssuesIteration = true;
+            while (isRemovingIssuesIteration) {
+                isRemovingIssuesIteration = false;
+
+                std::unordered_set<TString> necessaryIssuesIds;
+                for (auto it = records.begin(); it != records.end(); it++) {
+                    auto reasons = it->IssueLog.reason();
+                    for (auto reasonIt = reasons.begin(); reasonIt != reasons.end(); reasonIt++) {
+                        necessaryIssuesIds.insert(*reasonIt);
+                    }
+                }
+
+                for (auto it = records.begin(); it != records.end(); ) {
+                    if (!necessaryIssuesIds.contains(it->IssueLog.id()) && removeIssuesIds.contains(it->IssueLog.id())) {
+                        auto reasons = it->IssueLog.reason();
+                        for (auto reasonIt = reasons.begin(); reasonIt != reasons.end(); reasonIt++) {
+                            removeIssuesIds.insert(*reasonIt);
+                        }
+                        isRemovingIssuesIteration = true;
+                        it = records.erase(it);
+                    } else {
+                        it++;
+                    }
+                }
+            }
+
+            {
+                std::unordered_set<TString> issueIds;
+                for (auto it = records.begin(); it != records.end(); it++) {
+                    issueIds.insert(it->IssueLog.id());
+                }
+
+                for (auto it = records.begin(); it != records.end(); it++) {
+                    auto reasons = it->IssueLog.mutable_reason();
+                    for (auto reasonIt = reasons->begin(); reasonIt != reasons->end(); ) {
+                        if (!issueIds.contains(*reasonIt)) {
+                            reasonIt = reasons->erase(reasonIt);
+                        } else {
+                            reasonIt++;
+                        }
+                    }
+                }
+            }
+        }
+
+        void RenameMergingIssues(TList<TSelfCheckContext::TIssueRecord>& records) {
+            for (auto it = records.begin(); it != records.end(); it++) {
+                if (it->IssueLog.count() > 0) {
+                    TString message = it->IssueLog.message();
+                    switch (it->Tag) {
+                        case ETags::GroupState: {
+                            message = std::regex_replace(message.c_str(), std::regex("^Group has "), "Groups have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^Group is "), "Groups are ");
+                            message = std::regex_replace(message.c_str(), std::regex("^Group "), "Groups ");
+                            break;
+                        }
+                        case ETags::VDiskState: {
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk has "), "VDisk have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk is "), "VDisks are ");
+                            message = std::regex_replace(message.c_str(), std::regex("^VDisk "), "VDisk ");
+                            break;
+                        }
+                        case ETags::PDiskState: {
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk has "), "PDisk have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk is "), "PDisks are ");
+                            message = std::regex_replace(message.c_str(), std::regex("^PDisk "), "PDisk ");
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+                    it->IssueLog.set_message(message);
+                }
+            }
+        }
+
+        void FillRecords(TList<TSelfCheckContext::TIssueRecord>& records) {
+            for(auto it = recordsMap.begin(); it != recordsMap.end(); ++it) {
+                records.splice(records.end(), it->second);
+            }
+            RemoveUnlinkIssues(records);
+            RenameMergingIssues(records);
+        }
+
+        TList<TSelfCheckContext::TIssueRecord>& GetRecords(ETags tag) {
+            return recordsMap[tag];
+        }
+    };
+
+    bool FindRecordsForMerge(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& similar, TList<TSelfCheckContext::TIssueRecord>& Mergeed) {
+        while (!records.empty() && similar.empty()) {
+            similar.splice(similar.end(), records, records.begin());
+            for (auto it = records.begin(); it != records.end(); ) {
+                bool isSimilar = it->IssueLog.status() == similar.begin()->IssueLog.status()
+                    && it->IssueLog.message() == similar.begin()->IssueLog.message()
+                    && it->IssueLog.level() == similar.begin()->IssueLog.level() ;
+                if (isSimilar && similar.begin()->Tag == ETags::VDiskState) {
+                    isSimilar = it->IssueLog.location().storage().node().id() == similar.begin()->IssueLog.location().storage().node().id();
+                }
+                if (isSimilar) {
+                    auto move = it++;
+                    similar.splice(similar.end(), records, move);
+                } else {
+                    ++it;
+                }
+            }
+            
+            if (similar.size() <= MERGING_IGNORE_SIZE) {
+                Mergeed.splice(Mergeed.end(), similar);
+            }
+        }
+
+        return !similar.empty();
+    }
+
+    std::shared_ptr<TList<TSelfCheckContext::TIssueRecord>> FindChildrenRecords(TList<TSelfCheckContext::TIssueRecord>& records, TSelfCheckContext::TIssueRecord& parent) {
+        std::shared_ptr<TList<TSelfCheckContext::TIssueRecord>> children(new TList<TSelfCheckContext::TIssueRecord>);
+        std::unordered_set<TString> childrenIds;
+        for (auto reason: parent.IssueLog.reason()) {
+            childrenIds.insert(reason);
+        }
+
+        for (auto it = records.begin(); it != records.end(); ) {
+            if (childrenIds.contains(it->IssueLog.id())) {
+                auto move = it++;
+                children->splice(children->end(), records, move);
+            } else {
+                it++;
+            }
+        }
+
+        return children;
+    }
+
+    void MoveDataInFirstRecord(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& similar) {
+        auto mainReasons = similar.begin()->IssueLog.mutable_reason();
+        std::unordered_set<TString> ids;
+        ids.insert(similar.begin()->IssueLog.id());
+        std::unordered_set<TString> mainReasonIds;
+        for (auto it = mainReasons->begin(); it != mainReasons->end(); it++) {
+            mainReasonIds.insert(*it);
+        }
+
+        for (auto it = std::next(similar.begin(), 1); it != similar.end(); ) {
+            if (ids.contains(it->IssueLog.id())) {
+                it++;
+                continue;
+            }
+            ids.insert(it->IssueLog.id());
+
+            switch (similar.begin()->Tag) {
+                case ETags::GroupState: {
+                    auto mainGroupIds = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_id();
+                    auto donorGroupIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_id();
+                    mainGroupIds->Add(donorGroupIds->begin(), donorGroupIds->end());
+                    break;
+                }
+                case ETags::VDiskState: {
+                    auto mainVdiskIds = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
+                    auto donorVdiskIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
+                    mainVdiskIds->Add(donorVdiskIds->begin(), donorVdiskIds->end());
+                    break;
+                }
+                case ETags::PDiskState: {
+                    auto mainPdisk = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
+                    auto donorPdisk = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
+                    mainPdisk->Add(donorPdisk->begin(), donorPdisk->end());
+                    break;
+                }
+                default:
+                    break;
+            }
+            
+            auto donorReasons = it->IssueLog.mutable_reason();
+            for (auto donorReasonIt = donorReasons->begin(); donorReasonIt != donorReasons->end(); donorReasonIt++) {
+                if (!mainReasonIds.contains(*donorReasonIt)) {
+                    mainReasons->Add(donorReasonIt->c_str());
+                    mainReasonIds.insert(*donorReasonIt);
+                }
+            }
+
+            context.removeIssuesIds.insert(it->IssueLog.id());
+            it = similar.erase(it);
+        }
+
+        similar.begin()->IssueLog.set_count(ids.size());        
+        similar.begin()->IssueLog.set_listed(ids.size());
+    }
+
+    void MergeLevelRecords(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
+        TList<TSelfCheckContext::TIssueRecord> handled;
+        while (!records.empty()) {
+            TList<TSelfCheckContext::TIssueRecord> similar;
+            if (FindRecordsForMerge(records, similar, handled)) {
+                MoveDataInFirstRecord(context, similar);
+                handled.splice(handled.end(), similar, similar.begin());
+            }
+        }
+        records.splice(records.end(), handled);
+    }
+
+    void MergeLevelRecords(TMergeIssuesContext& context, ETags levelTag) {
+        auto& records = context.GetRecords(levelTag);
+        MergeLevelRecords(context, records);
+    }
+
+    void MergeLevelRecords(TMergeIssuesContext& context, ETags levelTag, ETags upperTag) {
+        auto& levelRecords = context.GetRecords(levelTag);
+        auto& upperRecords = context.GetRecords(upperTag);
+
+        for (auto it = upperRecords.begin(); it != upperRecords.end(); it++) {
+            auto children = FindChildrenRecords(levelRecords, *it);
+            if (children->size() > 1) {
+                MergeLevelRecords(context, *children);
+            }
+            levelRecords.splice(levelRecords.end(), *children);
+        }
+    }
+
+    int GetIssueCount(TSelfCheckContext::TIssueRecord& record) {
+        return record.IssueLog.count() == 0 ? 1 : record.IssueLog.count();
+    }
+
+    void SetIssueCount(TSelfCheckContext::TIssueRecord& record, int value) {
+        if (record.IssueLog.listed() == 0) {
+            record.IssueLog.set_listed(1);
+        }
+        record.IssueLog.set_count(value);
+    }
+
+    int GetIssueListed(TSelfCheckContext::TIssueRecord& record) {
+        return record.IssueLog.listed() == 0 ? 1 : record.IssueLog.listed();
+    }
+
+    void SetIssueListed(TSelfCheckContext::TIssueRecord& record, int value) {
+        if (record.IssueLog.count() == 0) {
+            record.IssueLog.set_count(1);
+        }
+        record.IssueLog.set_listed(value);
+    }
+
+    void RemoveRecordsAboveLimit(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
+        int commonListed = 0;
+        for (auto it = records.begin(); it != records.end(); it++) {
+            if (commonListed == MERGER_ISSUE_LIMIT) {
+                auto removeIt = it;
+                it--;
+                SetIssueCount(*it, GetIssueCount(*it) + GetIssueCount(*removeIt));
+
+                auto reasons = removeIt->IssueLog.reason();
+                for (auto reasonIt = reasons.begin(); reasonIt != reasons.end(); reasonIt++) {
+                    context.removeIssuesIds.insert(*reasonIt);
+                }
+                context.removeIssuesIds.insert(removeIt->IssueLog.id());
+                records.erase(removeIt);
+            } else if (commonListed + GetIssueListed(*it) > MERGER_ISSUE_LIMIT) {
+                auto aboveLimit = commonListed + GetIssueListed(*it) - MERGER_ISSUE_LIMIT;
+                SetIssueListed(*it, GetIssueListed(*it) - aboveLimit);
+
+                switch (it->Tag) {
+                    case ETags::GroupState: {
+                        auto groupIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_id();
+                        while (aboveLimit > 0) {
+                            groupIds->RemoveLast();
+                            aboveLimit--;
+                        }
+                        break;
+                    }
+                    case ETags::VDiskState: {
+                        auto vdiscIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
+                        while (aboveLimit > 0) {
+                            vdiscIds->RemoveLast();
+                            aboveLimit--;
+                        }
+                        break;
+                    }
+                    case ETags::PDiskState: {
+                        auto pdiscs = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
+                        while (aboveLimit > 0) {
+                            pdiscs->RemoveLast();
+                            aboveLimit--;
+                        }
+                        break;
+                    }
+                    default: {}
+                }
+                commonListed = MERGER_ISSUE_LIMIT;
+            } else {
+                commonListed += GetIssueListed(*it);
+            }
+        }
+    }
+
+    void RemoveRecordsAboveLimit(TMergeIssuesContext& context, ETags levelTag) {
+        auto& records = context.GetRecords(levelTag);
+        if (records.size() > 0) {
+            RemoveRecordsAboveLimit(context, records);
+        }
+    }
+
+    void RemoveRecordsAboveLimit(TMergeIssuesContext& context, ETags levelTag, ETags upperTag) {
+        auto& levelRecords = context.GetRecords(levelTag);
+        auto& upperRecords = context.GetRecords(upperTag);
+
+        TList<TSelfCheckResult::TIssueRecord> handled;
+        for (auto it = upperRecords.begin(); it != upperRecords.end(); it++) {
+            auto children = FindChildrenRecords(levelRecords, *it);
+
+            RemoveRecordsAboveLimit(context, *children);
+            handled.splice(handled.end(), *children);
+        }
+        levelRecords.splice(levelRecords.end(), handled);
+    }
+
     void FillGroupStatus(TGroupId groupId, const NKikimrWhiteboard::TBSGroupStateInfo& groupInfo, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
-        context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(ToString(groupId));
+        if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->empty()) {
+            context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
+        }
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
         storageGroupStatus.set_id(ToString(groupId));
         int disksColors[Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE] = {};
         TStackVec<std::pair<ui32, int>> failedRealms;
@@ -1725,35 +2081,46 @@ public:
 
         if (groupInfo.erasurespecies() == NONE) {
             if (failedDisks > 0) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", "group-state", {"vdisk-state"});
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
             }
         } else if (groupInfo.erasurespecies() == BLOCK_4_2) {
             if (failedDisks > 2) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", "group-state", {"vdisk-state"});
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
             } else if (failedDisks > 1) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", "group-state", {"vdisk-state"});
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", ETags::GroupState, {ETags::VDiskState});
             } else if (failedDisks > 0) {
                 if (disksColors[Ydb::Monitoring::StatusFlag::BLUE] == failedDisks) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", "group-state", {"vdisk-state"});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 } else {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", "group-state", {"vdisk-state"});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             }
         } else if (groupInfo.erasurespecies() == MIRROR_3_DC) {
             if (failedRealms.size() > 2 || (failedRealms.size() == 2 && failedRealms[0].second > 1 && failedRealms[1].second > 1)) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", "group-state", {"vdisk-state"});
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
             } else if (failedRealms.size() == 2) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", "group-state", {"vdisk-state"});
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", ETags::GroupState, {ETags::VDiskState});
             } else if (failedDisks > 0) {
                 if (disksColors[Ydb::Monitoring::StatusFlag::BLUE] == failedDisks) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", "group-state", {"vdisk-state"});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 } else {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", "group-state", {"vdisk-state"});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             }
         }
 
         storageGroupStatus.set_overall(context.GetOverallStatus());
+    }
+
+    void MergeRecords(TList<TSelfCheckContext::TIssueRecord>& records) {
+        TMergeIssuesContext mergeContext(records);
+        MergeLevelRecords(mergeContext, ETags::GroupState);
+        MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
+        MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
+        RemoveRecordsAboveLimit(mergeContext, ETags::PDiskState, ETags::VDiskState);
+        RemoveRecordsAboveLimit(mergeContext, ETags::VDiskState, ETags::GroupState);
+        RemoveRecordsAboveLimit(mergeContext, ETags::GroupState);
+        mergeContext.FillRecords(records);
     }
 
     void FillPoolStatus(const TString& poolName, const TStoragePoolState& pool, Ydb::Monitoring::StoragePoolStatus& storagePoolStatus, TSelfCheckContext context) {
@@ -1765,16 +2132,19 @@ public:
                 FillGroupStatus(groupId, *itGroup->second, *storagePoolStatus.add_groups(), {&context, "STORAGE_GROUP"});
             }
         }
+
+        MergeRecords(context.IssueRecords);
+
         switch (context.GetOverallStatus()) {
             case Ydb::Monitoring::StatusFlag::BLUE:
             case Ydb::Monitoring::StatusFlag::YELLOW:
-                context.ReportStatus(context.GetOverallStatus(), "Pool degraded", "pool-state", {"group-state"});
+                context.ReportStatus(context.GetOverallStatus(), "Pool degraded", ETags::PoolState, {ETags::GroupState});
                 break;
             case Ydb::Monitoring::StatusFlag::ORANGE:
-                context.ReportStatus(context.GetOverallStatus(), "Pool has no redundancy", "pool-state", {"group-state"});
+                context.ReportStatus(context.GetOverallStatus(), "Pool has no redundancy", ETags::PoolState, {ETags::GroupState});
                 break;
             case Ydb::Monitoring::StatusFlag::RED:
-                context.ReportStatus(context.GetOverallStatus(), "Pool failed", "pool-state", {"group-state"});
+                context.ReportStatus(context.GetOverallStatus(), "Pool failed", ETags::PoolState, {ETags::GroupState});
                 break;
             default:
                 break;
@@ -1800,13 +2170,13 @@ public:
             switch (context.GetOverallStatus()) {
                 case Ydb::Monitoring::StatusFlag::BLUE:
                 case Ydb::Monitoring::StatusFlag::YELLOW:
-                    context.ReportStatus(context.GetOverallStatus(), "Storage degraded", "storage-state", {"pool-state"});
+                    context.ReportStatus(context.GetOverallStatus(), "Storage degraded", ETags::StorageState, {ETags::PoolState});
                     break;
                 case Ydb::Monitoring::StatusFlag::ORANGE:
-                    context.ReportStatus(context.GetOverallStatus(), "Storage has no redundancy", "storage-state", {"pool-state"});
+                    context.ReportStatus(context.GetOverallStatus(), "Storage has no redundancy", ETags::StorageState, {ETags::PoolState});
                     break;
                 case Ydb::Monitoring::StatusFlag::RED:
-                    context.ReportStatus(context.GetOverallStatus(), "Storage failed", "storage-state", {"pool-state"});
+                    context.ReportStatus(context.GetOverallStatus(), "Storage failed", ETags::StorageState, {ETags::PoolState});
                     break;
                 default:
                     break;
@@ -1876,16 +2246,16 @@ public:
         if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN
                 && databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
             dbContext.ReportStatus(MaxStatus(databaseStatus.compute().overall(), databaseStatus.storage().overall()),
-                "Database has multiple issues", "database-state", {"compute-state", "storage-state"});
+                "Database has multiple issues", ETags::DBState, { ETags::ComputeState, ETags::StorageState});
         } else if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-            dbContext.ReportStatus(databaseStatus.compute().overall(), "Database has compute issues", "database-state", {"compute-state"});
+            dbContext.ReportStatus(databaseStatus.compute().overall(), "Database has compute issues", ETags::DBState, {ETags::ComputeState});
         } else if (databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-            dbContext.ReportStatus(databaseStatus.storage().overall(), "Database has storage issues", "database-state", {"storage-state"});
+            dbContext.ReportStatus(databaseStatus.storage().overall(), "Database has storage issues", ETags::DBState, {ETags::StorageState});
         }
         databaseStatus.set_overall(dbContext.GetOverallStatus());
         context.UpdateMaxStatus(dbContext.GetOverallStatus());
-        context.AddIssues(dbContext.IssueLog);
-        if (!context.HasDegraded && context.Status != Ydb::Monitoring::StatusFlag::GREEN && dbContext.HasTags({"storage-state"})) {
+        context.AddIssues(dbContext.IssueRecords);
+        if (!context.HasDegraded && context.Status != Ydb::Monitoring::StatusFlag::GREEN && dbContext.HasTags({ETags::StorageState})) {
             context.HasDegraded = true;
         }
     }
@@ -1921,7 +2291,7 @@ public:
                 FillStorage(unknownDatabase, *databaseStatus.mutable_storage(), {&storageContext, "STORAGE"});
                 databaseStatus.set_overall(storageContext.GetOverallStatus());
                 context.UpdateMaxStatus(storageContext.GetOverallStatus());
-                context.AddIssues(storageContext.IssueLog);
+                context.AddIssues(storageContext.IssueRecords);
             }
         }
         context.FillSelfCheckResult();

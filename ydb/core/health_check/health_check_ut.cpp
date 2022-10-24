@@ -6,9 +6,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include "health_check.h"
-
-#include <unordered_map>
+#include "health_check.cpp"
 
 namespace NKikimr {
 
@@ -58,27 +56,27 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     };
 
     void AddGroupsInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev,  int groupCount) {
-        auto &pbRecord = (*ev)->Get()->Record;
+        auto& pbRecord = (*ev)->Get()->Record;
         auto pbMatchGroups = pbRecord.mutable_matchinggroups(0);
 
-        auto sample = pbMatchGroups->GetGroups(0);
+        auto sample = pbMatchGroups->groups(0);
         pbMatchGroups->ClearGroups();
 
         auto groupId = GROUP_START_ID;
         for (int i = 0; i < groupCount; i++) {
             auto group = pbMatchGroups->add_groups();
             group->CopyFrom(sample);
-            group->SetGroupID(groupId++);
+            group->set_groupid(groupId++);
         }
     };
 
     void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, int groupCount, int vslotCount) {
-        auto &pbRecord = (*ev)->Get()->Record;
+        auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
 
-        auto groupSample = pbConfig->GetGroup(0);
-        auto vslotSample = pbConfig->GetVSlot(0);
-        auto vslotIdSample = pbConfig->GetGroup(0).GetVSlotId(0);
+        auto groupSample = pbConfig->group(0);
+        auto vslotSample = pbConfig->vslot(0);
+        auto vslotIdSample = pbConfig->group(0).vslotid(0);
         pbConfig->clear_group();
         pbConfig->clear_vslot();
 
@@ -94,7 +92,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             for (int j = 0; j < vslotCount; j++) {
                 auto vslot = pbConfig->add_vslot();
                 vslot->CopyFrom(vslotSample);
-                vslot->SetVDiskIdx(vslotId);
+                vslot->set_vdiskidx(vslotId);
                 vslot->set_groupid(groupId);
                 vslot->mutable_vslotid()->set_vslotid(vslotId);
 
@@ -109,9 +107,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     };
 
     void AddVSlotInVDiskStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, int groupCount, int vslotCount) {
-        auto &pbRecord = (*ev)->Get()->Record;
+        auto& pbRecord = (*ev)->Get()->Record;
 
-        auto sample = pbRecord.GetVDiskStateInfo(0);
+        auto sample = pbRecord.vdiskstateinfo(0);
         pbRecord.clear_vdiskstateinfo();
 
         auto groupId = GROUP_START_ID;
@@ -127,7 +125,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    void ListingTest(int const groupNumber, int const groupVdiscNumber) {
+    void ListingTest(int const groupNumber, int const vdiscPerGroupNumber) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -157,12 +155,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
-                    AddGroupVSlotInControllerConfigResponse(x, groupNumber, groupVdiscNumber);
+                    AddGroupVSlotInControllerConfigResponse(x, groupNumber, vdiscPerGroupNumber);
                     break;
                 }
                 case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateResponse: {
                     auto *x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
-                    AddVSlotInVDiskStateResponse(x, groupNumber, groupVdiscNumber);
+                    AddVSlotInVDiskStateResponse(x, groupNumber, vdiscPerGroupNumber);
                     break;
                 }
             }
@@ -175,33 +173,80 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
-        int groupCount = 0;
+        int groupIssuesCount = 0;
+        int groupIssuesNumber = groupNumber <= NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE ? groupNumber : 1;
         for (const auto& issue_log : result->Result.Getissue_log()) {
-            if (issue_log.Gettype() == "STORAGE_GROUP" && issue_log.Getlocation().Getstorage().Getpool().Getname() == "/Root:test") {
-                groupCount++;
+            if (issue_log.type() == "STORAGE_GROUP" && issue_log.location().storage().pool().name() == "/Root:test") {
+                if (groupNumber <= NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE) {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().group().id_size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.count(), 0);
+                } else {
+                    int groupListed = std::min<int>(groupNumber, (int)NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT);
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().group().id_size(), groupListed);
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), groupListed);
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.count(), groupNumber);
+                }
+                groupIssuesCount++;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(groupCount, groupNumber);
+        UNIT_ASSERT_VALUES_EQUAL(groupIssuesCount, groupIssuesNumber);
 
-        int vdiscCount = 0;
-        for (const auto& issue_log : result->Result.Getissue_log()) {
-            if (issue_log.Gettype() == "VDISK" && issue_log.Getlocation().Getstorage().Getpool().Getname() == "/Root:test") {
-                vdiscCount++;
+        int vdiscCountField = groupNumber <= NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE ? vdiscPerGroupNumber : groupNumber * vdiscPerGroupNumber;
+        int issueVdiscPerGroupNumber = vdiscCountField <= NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE ? vdiscCountField : 1;
+        int issueVdiscNumber = groupIssuesNumber * issueVdiscPerGroupNumber;
+
+        int issueVdiscCount = 0;
+        for (const auto& issue_log : result->Result.issue_log()) {
+            if (issue_log.type() == "VDISK" && issue_log.location().storage().pool().name() == "/Root:test") {
+                issueVdiscCount++;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(vdiscCount, groupNumber * groupVdiscNumber);
+        UNIT_ASSERT_VALUES_EQUAL(issueVdiscCount, issueVdiscNumber);
     }
 
-    Y_UNIT_TEST(GroupsListing) {
-        ListingTest(15, 1);
+    Y_UNIT_TEST(IssuesGroupsListing) {
+        int groupNumber = NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE;
+        ListingTest(groupNumber, 1);
     }
 
-    Y_UNIT_TEST(VCardListing) {
-        ListingTest(1, 20);
+    Y_UNIT_TEST(IssuesVCardListing) {
+        int vcardNumber = NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE;
+        ListingTest(1, vcardNumber);
     }
 
-    Y_UNIT_TEST(GroupsVCardListing) {
-        ListingTest(15, 20);
+    Y_UNIT_TEST(IssuesGroupsVCardListing) {
+        int groupNumber = NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE;
+        int vcardNumber = NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE;
+        ListingTest(groupNumber, vcardNumber);
+    }
+
+    Y_UNIT_TEST(IssuesGroupsMerging) {
+        int groupNumber = NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT;
+        ListingTest(groupNumber, 1);
+    }
+
+    Y_UNIT_TEST(IssuesVCardMerging) {
+        int vcardNumber = NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT;
+        ListingTest(1, vcardNumber);
+    }
+
+    Y_UNIT_TEST(IssuesGroupsVCardMerging) {
+        int groupNumber = NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT;
+        int vcardNumber = NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT;
+        ListingTest(groupNumber, vcardNumber);
+    }
+
+    Y_UNIT_TEST(IssuesGroupsDeleting) {
+        ListingTest(100, 1);
+    }
+
+    Y_UNIT_TEST(IssuesVCardDeleting) {
+        ListingTest(1, 100);
+    }
+
+    Y_UNIT_TEST(IssuesGroupsVCardDeleting) {
+        ListingTest(100, 100);
     }
 }
 

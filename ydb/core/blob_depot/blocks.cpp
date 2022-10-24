@@ -177,10 +177,12 @@ namespace NKikimr::NBlobDepot {
                     }
                     break;
 
-                case NKikimrProto::ALREADY:
-                    // race, but this is not possible in current implementation
-                    // ORLY? :)
-                    Y_FAIL(); // FIXME: fails
+                case NKikimrProto::ALREADY: {
+                    auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+                    r.SetStatus(NKikimrProto::ALREADY);
+                    Finish();
+                    break;
+                }
 
                 case NKikimrProto::ERROR:
                 default:

@@ -51,7 +51,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         settings.Url = cluster.GetUrl();
         TString authToken;
         if (const auto& token = cluster.GetToken()) {
-            authToken = typeCtx->FindCredentialContent("cluster:default_" + cluster.GetName(), "", token);
+            authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + cluster.GetName(), "", token);
         }
         Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
     }

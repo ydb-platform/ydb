@@ -28,7 +28,6 @@ struct TDqState: public TThrRefBase {
     const TFileStoragePtr FileStorage;
     const TString VanillaJobPath;
     const TString VanillaJobMd5;
-    TString YtToken;
     TDqConfiguration::TPtr Settings = MakeIntrusive<TDqConfiguration>();
     bool ExternalUser;
 

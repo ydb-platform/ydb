@@ -815,16 +815,11 @@ namespace {
                 return false;
             }
 
-            if (Types.FindCredential(args[0])) {
+            if (Types.Credentials->FindCredential(args[0])) {
                 return true;
             }
 
-            if (Types.Credentials.empty()) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "No credential table"));
-                return false;
-            }
-
-            Types.Credentials.back()->emplace( TString(args[0]), TCredential(TString(args[1]), TString(args[2]), TString(args[3])) );
+            Types.Credentials->AddCredential(TString(args[0]), TCredential(TString(args[1]), TString(args[2]), TString(args[3])));
             return true;
         }
 
@@ -858,7 +853,7 @@ namespace {
 
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
-                if (auto cred = Types.FindCredential(token)) {
+                if (auto cred = Types.Credentials->FindCredential(token)) {
                     token = cred->Content;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << token << "'."));
@@ -958,13 +953,13 @@ namespace {
 
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
-                if (auto cred = Types.FindCredential(token)) {
+                if (auto cred = Types.Credentials->FindCredential(token)) {
                     token = cred->Content;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << token << "' for folder."));
                     return false;
                 }
-            } else if (auto cred = Types.FindCredential("default_sandbox")) {
+            } else if (auto cred = Types.Credentials->FindCredential("default_sandbox")) {
                 token = cred->Content;
             }
 

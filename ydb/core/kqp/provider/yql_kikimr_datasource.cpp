@@ -301,7 +301,7 @@ public:
 
     bool Initialize(TExprContext& ctx) override {
         TString defaultToken;
-        if (auto credential = Types.FindCredential(TString("default_") + KikimrProviderName)) {
+        if (auto credential = Types.Credentials->FindCredential(TString("default_") + KikimrProviderName)) {
             if (credential->Category != KikimrProviderName) {
                 ctx.AddError(TIssue({}, TStringBuilder()
                     << "Mismatch default credential category, expected: " << KikimrProviderName
@@ -321,7 +321,7 @@ public:
         for (auto& cluster : Gateway->GetClusters()) {
             auto token = defaultToken;
 
-            if (auto credential = Types.FindCredential(TString("default_") + cluster)) {
+            if (auto credential = Types.Credentials->FindCredential(TString("default_") + cluster)) {
                 if (credential->Category != KikimrProviderName) {
                     ctx.AddError(TIssue({}, TStringBuilder()
                         << "Mismatch credential category, for cluster " << cluster

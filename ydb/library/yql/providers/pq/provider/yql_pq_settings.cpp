@@ -43,7 +43,7 @@ void TPqConfiguration::Init(
         clusterSettings.UseSsl = cluster.GetUseSsl();
         clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
 
-        const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
+        const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
         clusterSettings.AuthToken = authToken;
         const auto structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
         Tokens[clusterSettings.ClusterName] = structuredTokenJson;

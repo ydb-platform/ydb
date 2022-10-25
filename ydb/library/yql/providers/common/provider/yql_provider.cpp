@@ -609,7 +609,7 @@ static void GetToken(const TString& string, TString& out, const TTypeAnnotationC
         }
     } else if (p0 == "token" || p0 == "cluster") {
         const auto p1 = string.substr(separator + 1);
-        auto cred = type.FindCredential(p1);
+        auto cred = type.Credentials->FindCredential(p1);
         if (cred == nullptr) {
             if (p0 == "cluster") {
                 TStringBuf clusterName = p1;

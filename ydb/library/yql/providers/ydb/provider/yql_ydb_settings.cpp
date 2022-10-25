@@ -37,7 +37,7 @@ void TYdbConfiguration::Init(
     for (const auto& cluster : config.GetClusterMapping()) {
         this->Dispatch(cluster.GetName(), cluster.GetSettings());
 
-        const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_ydb", cluster.GetToken());
+        const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_ydb", cluster.GetToken());
         const auto structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
         Tokens[cluster.GetName()] = structuredTokenJson;
 

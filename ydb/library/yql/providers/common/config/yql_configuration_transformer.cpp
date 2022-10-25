@@ -138,7 +138,7 @@ bool TProviderConfigurationTransformer::HandleAttr(TPositionHandle pos, const TS
 bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias,
     TExprContext& ctx)
 {
-    auto cred = Types.FindCredential(alias);
+    auto cred = Types.Credentials->FindCredential(alias);
     if (!cred) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown credential: " << alias));
         return false;

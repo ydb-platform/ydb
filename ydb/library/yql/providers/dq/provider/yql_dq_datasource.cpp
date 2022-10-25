@@ -222,22 +222,6 @@ public:
         return *ExecTransformer;
     }
 
-    bool Initialize(TExprContext& ctx) override {
-        auto category = YtProviderName;
-        auto cred = State->TypeCtx->FindCredential(TString("default_").append(category));
-        if (cred) {
-            if (cred->Category != category) {
-                ctx.AddError(TIssue({}, TStringBuilder()
-                    << "Mismatch default credential category, expected: " << category
-                    << ", but found: " << cred->Category));
-                return false;
-            }
-            State->YtToken = cred->Content;
-        }
-
-        return true;
-    }
-
     void Reset() final {
         if (ExecTransformer) {
             ExecTransformer->Rewind();

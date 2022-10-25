@@ -3,6 +3,7 @@
 #include <ydb/library/yql/core/services/yql_plan.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
+#include <ydb/library/yql/core/credentials/yql_credentials.h>
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
@@ -45,8 +46,7 @@ public:
         const TString& runner);
 
     void AddUserDataTable(const TUserDataTable& userDataTable);
-    void AddCredentialsTable(TCredentialTablePtr credentialTable);
-    void SetUserCredentials(const TUserCredentials& userCredentials);
+    void SetCredentials(TCredentials::TPtr credentials);
     void SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig);
     void SetModules(IModuleResolver::TPtr modules);
     void SetUdfResolver(IUdfResolver::TPtr udfResolver);
@@ -73,8 +73,7 @@ private:
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TUserDataTable UserDataTable_;
-    TVector<TCredentialTablePtr> CredentialTables_;
-    TUserCredentials UserCredentials_;
+    TCredentials::TPtr Credentials_;
     const TGatewaysConfig* GatewaysConfig_;
     IModuleResolver::TPtr Modules_;
     IUdfResolver::TPtr UdfResolver_;
@@ -308,8 +307,7 @@ private:
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TUserDataTable& userDataTable,
-        const TVector<TCredentialTablePtr>& credentialTables,
-        const TUserCredentials& userCredentials,
+        const TCredentials::TPtr& credentials,
         const IModuleResolver::TPtr& modules,
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
@@ -352,8 +350,7 @@ private:
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;
-    TVector<TCredentialTablePtr> CredentialTables_;
-    TUserCredentials UserCredentials_;
+    TCredentials::TPtr Credentials_;
     const IUdfResolver::TPtr UdfResolver_;
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;

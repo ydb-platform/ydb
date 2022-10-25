@@ -7,6 +7,7 @@
 
 
 add_subdirectory(common_opt)
+add_subdirectory(credentials)
 add_subdirectory(expr_nodes)
 add_subdirectory(expr_nodes_gen)
 add_subdirectory(extract_predicate)
@@ -35,6 +36,7 @@ target_link_libraries(library-yql-core PUBLIC
   library-yql-ast
   yql-core-file_storage
   yql-core-sql_types
+  yql-core-credentials
   library-yql-minikql
   library-yql-protos
   yql-public-udf

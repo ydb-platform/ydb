@@ -84,7 +84,7 @@ public:
             YQL_ENSURE(State_->Configuration->Urls.cend() != it, "Cluster not found:" << cluster);
 
             TString token;
-            if (const auto cred = State_->Types->FindCredential("default_" + cluster)) {
+            if (const auto cred = State_->Types->Credentials->FindCredential("default_" + cluster)) {
                 token = cred->Content;
             } else {
                 token = State_->Configuration->Tokens[cluster];

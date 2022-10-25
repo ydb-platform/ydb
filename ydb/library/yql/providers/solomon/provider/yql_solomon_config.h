@@ -28,7 +28,7 @@ struct TSolomonConfiguration
             clusters.push_back(cluster.GetName());
             ClusterConfigs[cluster.GetName()] = cluster;
 
-            const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_solomon", cluster.GetToken());
+            const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_solomon", cluster.GetToken());
             Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
         }
 

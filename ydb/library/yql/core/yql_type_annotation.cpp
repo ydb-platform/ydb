@@ -136,28 +136,6 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
     return IGraphTransformer::TStatus::Ok;
 }
 
-const TCredential* TTypeAnnotationContext::FindCredential(const TStringBuf& name) const {
-    for (auto& x : Credentials) {
-        auto data = x->FindPtr(name);
-        if (data) {
-            return data;
-        }
-    }
-    return nullptr;
-}
-
-TString TTypeAnnotationContext::FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const {
-    if (auto cred = FindCredential(name1)) {
-        return cred->Content;
-    }
-
-    if (auto cred = FindCredential(name2)) {
-        return cred->Content;
-    }
-
-    return defaultContent;
-}
-
 TString TTypeAnnotationContext::GetDefaultDataSource() const {
     if (!PureResultDataSource.empty()) {
         YQL_ENSURE(Find(AvailablePureResultDataSources.begin(),

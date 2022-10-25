@@ -6983,14 +6983,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 description.Name = TString(name);
                 description.UserType = userType;
                 description.TypeConfig = typeConfig;
-                for (const auto& cred : ctx.Types.Credentials) {
-                    for (const auto& x : *cred) {
-                        description.SecureParams[TString("token:") + x.first] = x.second.Content;
-                        if (x.first.StartsWith("default_")) {
-                            description.SecureParams[TString("cluster:") + x.first] = x.second.Content;
-                        }
+                ctx.Types.Credentials->ForEach([&description](const TString& name, const TCredential& cred) {
+                    description.SecureParams[TString("token:") + name] = cred.Content;
+                    if (name.StartsWith("default_")) {
+                        description.SecureParams[TString("cluster:") + name] = cred.Content;
                     }
-                }
+                });
 
                 for (const auto& x : ctx.Types.DataSources) {
                     auto tokens = x->GetClusterTokens();
@@ -7001,12 +6999,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     }
                 }
 
-                if (ctx.Types.UserCredentials.OauthToken) {
-                    description.SecureParams["api:oauth"] = ctx.Types.UserCredentials.OauthToken;
+                if (ctx.Types.Credentials->GetUserCredentials().OauthToken) {
+                    description.SecureParams["api:oauth"] = ctx.Types.Credentials->GetUserCredentials().OauthToken;
                 }
 
-                if (ctx.Types.UserCredentials.BlackboxSessionIdCookie) {
-                    description.SecureParams["api:cookie"] = ctx.Types.UserCredentials.BlackboxSessionIdCookie;
+                if (ctx.Types.Credentials->GetUserCredentials().BlackboxSessionIdCookie) {
+                    description.SecureParams["api:cookie"] = ctx.Types.Credentials->GetUserCredentials().BlackboxSessionIdCookie;
                 }
 
                 TVector<IUdfResolver::TFunction*> functions;
@@ -9953,7 +9951,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         } else if (p0 == "token" || p0 == "cluster") {
             const auto p1 = tokenName.substr(separator + 1);
-            auto cred = ctx.Types.FindCredential(p1);
+            auto cred = ctx.Types.Credentials->FindCredential(p1);
             TMaybe<TCredential> clusterCred;
             if (cred == nullptr && p0 == "cluster") {
                 if (p1.StartsWith("default_")) {

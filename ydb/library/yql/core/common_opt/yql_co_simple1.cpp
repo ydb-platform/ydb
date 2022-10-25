@@ -3371,30 +3371,29 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         const auto structType = ExpandType(node->Pos(), *node->GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx);
         ui32 i = 0U;
-        for (const auto& data : optCtx.Types->Credentials)
-            for (const auto& cred : *data) {
-                listBuilder.Callable(++i, "Struct")
-                    .Add(0U, structType)
-                    .List(1U)
-                        .Atom(0U, "Name")
-                        .Callable(1U, "String")
-                            .Atom(0U, cred.first)
-                        .Seal()
+        optCtx.Types->Credentials->ForEach([&](const TString& name, const TCredential& cred) {
+            listBuilder.Callable(++i, "Struct")
+                .Add(0U, structType)
+                .List(1U)
+                    .Atom(0U, "Name")
+                    .Callable(1U, "String")
+                        .Atom(0U, name)
                     .Seal()
-                    .List(2U)
-                        .Atom(0U, "Category")
-                        .Callable(1U, "String")
-                            .Atom(0U, cred.second.Category)
-                        .Seal()
+                .Seal()
+                .List(2U)
+                    .Atom(0U, "Category")
+                    .Callable(1U, "String")
+                        .Atom(0U, cred.Category)
                     .Seal()
-                    .List(3U)
-                        .Atom(0U, "Subcategory")
-                        .Callable(1U, "String")
-                            .Atom(0U, cred.second.Subcategory)
-                        .Seal()
+                .Seal()
+                .List(3U)
+                    .Atom(0U, "Subcategory")
+                    .Callable(1U, "String")
+                        .Atom(0U, cred.Subcategory)
                     .Seal()
-                .Seal();
-            }
+                .Seal()
+            .Seal();
+        });
         listBuilder.Seal();
 
         return result.Build();

@@ -7,7 +7,7 @@
 #include "yql_arrow_resolver.h"
 
 #include <ydb/library/yql/public/udf/udf_validate.h>
-
+#include <ydb/library/yql/core/credentials/yql_credentials.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/yson/node/node.h>
@@ -111,28 +111,6 @@ private:
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
 };
 
-// -- credentials --
-struct TCredential {
-    const TString Category;
-    const TString Subcategory;
-    const TString Content;
-
-    TCredential(const TString& category, const TString& subcategory, const TString& content)
-        : Category(category)
-        , Subcategory(subcategory)
-        , Content(content)
-    {
-    }
-};
-
-using TCredentialTable = THashMap<TString, TCredential>;
-using TCredentialTablePtr = std::shared_ptr<TCredentialTable>;
-
-struct TUserCredentials {
-    TString OauthToken;
-    TString BlackboxSessionIdCookie;
-};
-
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);
 
 using TUdfModulesTable = THashMap<TString, TString>; // external module name -> alias of file
@@ -198,7 +176,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TUserDataStorage::TPtr UserDataStorage;
     TUserDataTable UserDataStorageCrutches;
     TYqlOperationOptions OperationOptions;
-    TVector<TCredentialTablePtr> Credentials;
+    TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();
     TUserCredentials UserCredentials;
     IModuleResolver::TPtr Modules;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
@@ -293,8 +271,6 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool Initialize(TExprContext& ctx);
     bool DoInitialize(TExprContext& ctx);
 
-    const TCredential* FindCredential(const TStringBuf& name) const;
-    TString FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const;
     TString GetDefaultDataSource() const;
 
     TMaybe<ui32> TranslateOperationId(ui64 id) const {

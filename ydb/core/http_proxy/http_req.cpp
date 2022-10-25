@@ -47,6 +47,8 @@ namespace NKikimr::NHttpProxy {
 
     TString StatusToErrorType(NYdb::EStatus status) {
         switch(status) {
+        case NYdb::EStatus::SUCCESS:
+            return "OK";
         case NYdb::EStatus::BAD_REQUEST:
             return "InvalidParameterValueException"; //TODO: bring here issues and parse from them
         case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
@@ -85,6 +87,8 @@ namespace NKikimr::NHttpProxy {
 
     HttpCodes StatusToHttpCode(NYdb::EStatus status) {
         switch(status) {
+        case NYdb::EStatus::SUCCESS:
+            return HTTP_OK;
         case NYdb::EStatus::UNSUPPORTED:
         case NYdb::EStatus::BAD_REQUEST:
             return HTTP_BAD_REQUEST;
@@ -174,6 +178,7 @@ namespace NKikimr::NHttpProxy {
     constexpr TStringBuf IAM_HEADER = "x-yacloud-subjecttoken";
     constexpr TStringBuf AUTHORIZATION_HEADER = "authorization";
     constexpr TStringBuf REQUEST_ID_HEADER = "x-request-id";
+    constexpr TStringBuf REQUEST_ID_HEADER_EXT = "x-amzn-requestid";
     constexpr TStringBuf REQUEST_DATE_HEADER = "x-amz-date";
     constexpr TStringBuf REQUEST_FORWARDED_FOR = "x-forwarded-for";
     constexpr TStringBuf REQUEST_TARGET_HEADER = "x-amz-target";
@@ -589,8 +594,9 @@ namespace NKikimr::NHttpProxy {
             proc->second->Execute(std::move(context), std::move(signature), ctx);
             return true;
         }
-        context.SendBadRequest(NYdb::EStatus::BAD_REQUEST,
-                               TStringBuilder() << "Unknown method name " << name, ctx);
+        context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
+        context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name;
+        context.DoReply(ctx);
         return false;
     }
 
@@ -643,34 +649,58 @@ namespace NKikimr::NHttpProxy {
         return signature;
     }
 
-    void THttpRequestContext::SendBadRequest(NYdb::EStatus status, const TString& errorText,
-                                             const TActorContext& ctx) {
-        ResponseData.Body.SetType(NJson::JSON_MAP);
-        ResponseData.Body["message"] = errorText;
-        ResponseData.Body["__type"] = StatusToErrorType(status);
-
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                      "reply with status: " << status << " message: " << errorText);
-        auto res = Request->CreateResponse(
-                TStringBuilder() << (int)StatusToHttpCode(status),
-                StatusToErrorType(status),
-                strByMime(ContentType),
-                ResponseData.DumpBody(ContentType)
-            );
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));
-    }
-
     void THttpRequestContext::DoReply(const TActorContext& ctx) {
+        auto createResponse = [this](const auto& request,
+                                     TStringBuf status,
+                                     TStringBuf message,
+                                     TStringBuf contentType,
+                                     TStringBuf body) {
+            NHttp::THttpOutgoingResponsePtr response =
+                new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", status, message);
+            response->Set<&NHttp::THttpResponse::Connection>(request->GetConnection());
+            response->Set(REQUEST_ID_HEADER_EXT, RequestId);
+
+            if (!contentType.empty() && !body.empty()) {
+                response->Set<&NHttp::THttpResponse::ContentType>(contentType);
+                if (!request->Endpoint->CompressContentTypes.empty()) {
+                    contentType = contentType.Before(';');
+                    NHttp::Trim(contentType, ' ');
+                    if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
+                        response->EnableCompression();
+                    }
+                }
+            }
+
+            if (response->IsNeedBody() || !body.empty()) {
+                if (request->Method == "HEAD") {
+                    response->Set<&NHttp::THttpResponse::ContentLength>(ToString(body.size()));
+                } else {
+                    response->SetBody(body);
+                }
+            }
+            return response;
+        };
+
         if (ResponseData.Status == NYdb::EStatus::SUCCESS) {
             LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "reply ok");
-            auto res = Request->CreateResponseOK(
-                    ResponseData.DumpBody(ContentType),
-                    strByMime(ContentType)
-                );
-            ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));
         } else {
-            SendBadRequest(ResponseData.Status, ResponseData.ErrorText, ctx);
+            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
+                          "reply with status: " << ResponseData.Status <<
+                          " message: " << ResponseData.ErrorText);
+
+            ResponseData.Body.SetType(NJson::JSON_MAP);
+            ResponseData.Body["message"] = ResponseData.ErrorText;
+            ResponseData.Body["__type"] = StatusToErrorType(ResponseData.Status);
         }
+        auto response = createResponse(
+            Request,
+            TStringBuilder() << (ui32)StatusToHttpCode(ResponseData.Status),
+            StatusToErrorType(ResponseData.Status),
+            strByMime(ContentType),
+            ResponseData.DumpBody(ContentType)
+        );
+
+        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
     void THttpRequestContext::ParseHeaders(TStringBuf str) {

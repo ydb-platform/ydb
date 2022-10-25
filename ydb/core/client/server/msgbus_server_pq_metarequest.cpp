@@ -493,7 +493,10 @@ void TPersQueueGetReadSessionsInfoTopicWorker::Die(const TActorContext& ctx) {
 }
 
 void TPersQueueGetReadSessionsInfoTopicWorker::SendReadSessionsInfoToBalancer(const TActorContext& ctx) {
-    NTabletPipe::TClientConfig clientConfig;
+    auto retryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+    retryPolicy.RetryLimitCount = 5;
+
+    NTabletPipe::TClientConfig clientConfig(retryPolicy);
     BalancerPipe = ctx.RegisterWithSameMailbox(
             NTabletPipe::CreateClient(ctx.SelfID, SchemeEntry.PQGroupInfo->Description.GetBalancerTabletID(), clientConfig)
     );
@@ -666,6 +669,18 @@ void TPersQueueGetReadSessionsInfoTopicWorker::Answer(const TActorContext& ctx, 
             SendReplyAndDie(std::move(response), ctx);
             return;
         }
+
+        for (const auto& partition : SchemeEntry.PQGroupInfo->Description.GetPartitions()) {
+            const ui32 partitionIndex = partition.GetPartitionId();
+            if (partitionToResp.find(partitionIndex) != partitionToResp.end())
+                continue;
+            partitionToResp[partitionIndex] = index++;
+            auto res = topicRes->AddPartitionResult();
+            res->SetPartition(partitionIndex);
+            res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+            res->SetErrorReason("tablet for partition is not running");
+        }
+
         for (const auto& pipeAnswer : PipeAnswers) {
             if (!pipeAnswer.second) {
                 continue;

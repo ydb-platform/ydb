@@ -259,7 +259,11 @@ namespace {
         } else if (config.ParseResult->Has("sa-key-file")) {
             PutAuthMethod( profile, "sa-key-file", config.ParseResult->Get("sa-key-file"));
         } else if (config.ParseResult->Has("user")) {
-            PutAuthStatic( profile, config.ParseResult->Get("user"), config.ParseResult->Get("password-file"), true );
+            TString pass;
+            if (config.ParseResult->Has("password-file")) {
+                pass = config.ParseResult->Get("password-file");
+            }
+            PutAuthStatic( profile, config.ParseResult->Get("user"), pass, true );
         } else {
             return false;
         }
@@ -461,6 +465,9 @@ void TCommandProfileCommon::ValidateAuth(TConfig& config) {
             (size_t)UseMetadataCredentials +
             (size_t)(config.ParseResult->Has("sa-key-file")) +
             (size_t)(config.ParseResult->Has("user") || config.ParseResult->Has("password-file"));
+    if (!config.ParseResult->Has("user") && config.ParseResult->Has("password-file")) {
+        throw TMisuseException() << "You cannot enter password-file without user";
+    }
 
     if (authMethodCount > 1) {
         TStringBuilder str;

@@ -70,6 +70,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         configParser.SetupGlobalOpts(opts);
         NMsgBusProxy::TMsgBusClientConfig mbusConfig;
         mbusConfig.ConfigureLastGetopt(opts, "mb-");
+        opts.AddLongOption("ca-file", "Path to a file containing the PEM encoding of the server root certificates for tls connections.\n").RequiredArgument("PATH");
         NDriverClient::HideOptions(opts);
         opts.AddLongOption('s', "server", "Server address to connect (default $KIKIMR_SERVER)").RequiredArgument("ADDR[:NUM]");
         opts.AddLongOption('k', "token", "Security token").RequiredArgument("TOKEN");

@@ -22,7 +22,7 @@ View the description of the add consumer command:
 
 | Name | Description |
 ---|---
-| `--consumer-name VAL` | Name of the consumer to be added. |
+| `--consumer VAL` | Name of the consumer to be added. |
 | `--starting-message-timestamp VAL` | Time in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format. Consumption starts as soon as the first [message](../../concepts/topic.md#message) is received after the specified time. If the time is not specified, consumption will start from the oldest message in the topic. |
 
 ## Examples {#examples}
@@ -33,7 +33,7 @@ Create a consumer with the `my-consumer` name for the [previously created](topic
 
 ```bash
 {{ ydb-cli }} -p db1 topic consumer add \
-  --consumer-name my-consumer \
+  --consumer my-consumer \
   --starting-message-timestamp 1660568400 \
   my-topic
 ```

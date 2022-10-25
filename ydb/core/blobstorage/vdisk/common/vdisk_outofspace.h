@@ -44,8 +44,8 @@ namespace NKikimr {
             Update(SelfOrderNum, flags);
         }
 
-        void UpdateLocalFreeSpaceShare(ui64 freeSpaceShareMult1000) {
-            AtomicSet(ApproximateFreeSpaceShareMult1000, static_cast<TAtomicBase>(freeSpaceShareMult1000));
+        void UpdateLocalFreeSpaceShare(ui64 freeSpaceShare24bit) {
+            AtomicSet(ApproximateFreeSpaceShare24bit, freeSpaceShare24bit);
         }
 
         void UpdateLocalUsedChunks(ui32 usedChunks) {
@@ -62,7 +62,7 @@ namespace NKikimr {
 
         // free space share as a fraction of 1 -- [0, 1)
         float GetFreeSpaceShare() const {
-            return static_cast<float>(AtomicGet(ApproximateFreeSpaceShareMult1000)) / static_cast<float>(1000);
+            return static_cast<float>(AtomicGet(ApproximateFreeSpaceShare24bit)) / 16'777'216.0f;
         }
 
         ui32 GetLocalUsedChunks() const {
@@ -75,7 +75,7 @@ namespace NKikimr {
         // Cached global flags (obtained by merging AllVDiskFlags)
         TAtomic GlobalFlags = 0;
         // Approximate free space share (to calculate percentage of free/used space)
-        TAtomic ApproximateFreeSpaceShareMult1000 = 0;
+        TAtomic ApproximateFreeSpaceShare24bit = 0;
         // Total VDisks in the group
         const ui32 TotalVDisks;
         // VDisk order number for self

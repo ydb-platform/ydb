@@ -1911,6 +1911,7 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
                 GetFreeChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 GetTotalChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 GetUsedChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
+                AtomicGet(TotalOwners),
                 TString()));
     ActorSystem->Send(evCheckSpace.Sender, result.Release());
     Mon.CheckSpace.CountResponse();
@@ -2883,7 +2884,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             if (errStatus != NKikimrProto::OK) {
                 LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, err.Str());
                 THolder<NPDisk::TEvCheckSpaceResult> result(new NPDisk::TEvCheckSpaceResult(errStatus,
-                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, err.Str()));
+                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, err.Str()));
                 ActorSystem->Send(ev.Sender, result.Release());
                 Mon.CheckSpace.CountResponse();
                 delete request;

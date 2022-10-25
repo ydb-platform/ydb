@@ -1302,15 +1302,17 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
     ui32 FreeChunks;
     ui32 TotalChunks; // contains common limit in shared free space mode, Total != Free + Used
     ui32 UsedChunks; // number of chunks allocated by requesting owner
+    ui32 NumSlots; // number of VSlots over PDisk
     TString ErrorReason;
 
     TEvCheckSpaceResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, ui32 freeChunks,
-            ui32 totalChunks, ui32 usedChunks, const TString &errorReason)
+            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, const TString &errorReason)
         : Status(status)
         , StatusFlags(statusFlags)
         , FreeChunks(freeChunks)
         , TotalChunks(totalChunks)
         , UsedChunks(usedChunks)
+        , NumSlots(numSlots)
         , ErrorReason(errorReason)
     {}
 
@@ -1321,6 +1323,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
         str << " FreeChunks# " << FreeChunks;
         str << " TotalChunks# " << TotalChunks;
         str << " UsedChunks# " << UsedChunks;
+        str << " NumSlots# " << NumSlots;
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << "}";
         return str.Str();

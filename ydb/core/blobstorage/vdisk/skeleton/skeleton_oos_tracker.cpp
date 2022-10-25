@@ -85,7 +85,9 @@ namespace NKikimr {
 
             TotalChunks = msg->TotalChunks;
             FreeChunks = msg->FreeChunks;
-            const ui64 freeSpaceShareMult1000 = ui64(1000) * FreeChunks / Max(ui64(1), TotalChunks);
+            const ui64 a = Min(msg->TotalChunks, msg->FreeChunks / Min(1u, msg->NumSlots));
+            const ui64 b = msg->UsedChunks;
+            const ui64 freeSpaceShareMult1000 = ui64(1 << 24) * a / (a + b);
             VCtx->OutOfSpaceState.UpdateLocal(msg->StatusFlags);
             VCtx->OutOfSpaceState.UpdateLocalFreeSpaceShare(freeSpaceShareMult1000);
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);

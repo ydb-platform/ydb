@@ -108,6 +108,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
     const TTableId& tableId, const TKqpTableKeys& tableKeys, const TKeyDesc& key,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     YQL_ENSURE(tableId.HasSamePath(key.TableId));
     auto& table = tableKeys.GetTable(tableId);
 
@@ -363,6 +364,7 @@ TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::
     const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     TString paramName = rangesParam.GetParamName();
 
     auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName);
@@ -403,6 +405,7 @@ TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::T
     const PhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     if (readRanges.HasKeyRanges()) {
         return FillRangesFromParameter(
             keyColumnTypes, readRanges.GetKeyRanges(), stageInfo, holderFactory, typeEnv
@@ -514,6 +517,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpReadRange& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
     YQL_ENSURE(table);
 
@@ -545,6 +549,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
     YQL_ENSURE(table);
 
@@ -586,6 +591,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
     YQL_ENSURE(table);
     YQL_ENSURE(table->TableKind == ETableKind::Olap);
@@ -799,6 +805,7 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
 THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys, const NKqpProto::TKqpPhyOpLookup& lookup,
     const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     YQL_CLOG(TRACE, ProviderKqp) << "PrunePartitions: " << lookup.DebugString();
 
     if (!lookup.HasKeysValue()) {
@@ -830,6 +837,7 @@ template <typename TEffect>
 THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TKqpTableKeys& tableKeys, const TEffect& effect,
     const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     THashMap<ui64, TShardInfo> shardInfoMap;
     if (effect.HasRowsValue() &&
         effect.GetRowsValue().GetKindCase() == NKqpProto::TKqpPhyValue::kParamValue)

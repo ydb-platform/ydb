@@ -40,6 +40,7 @@ void BuildKqpExecuterResults(const NKqpProto::TKqpPhyTx& tx, TVector<TKqpExecute
 void PrepareKqpTaskParameters(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const TTask& task,
     NDqProto::TDqTask& dqTask, const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory)
 {
+    auto g = typeEnv.BindAllocator();
     for (auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *dqTask.MutableParameters();
         if (auto* taskParam = task.Meta.Params.FindPtr(paramName)) {

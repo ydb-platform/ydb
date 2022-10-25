@@ -1365,9 +1365,9 @@ private:
         auto& funcRegistry = *AppData()->FunctionRegistry;
         NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
         NMiniKQL::TTypeEnvironment typeEnv(alloc);
-
-        NMiniKQL::TMemoryUsageInfo memInfo("PrepareTasks");
+        NMiniKQL::TMemoryUsageInfo memInfo("KqpDataExecuter");
         NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, &funcRegistry);
+        auto unguard = Unguard(alloc);
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];

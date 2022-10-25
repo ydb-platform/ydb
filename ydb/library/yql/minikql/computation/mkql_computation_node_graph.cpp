@@ -231,6 +231,9 @@ public:
     }
 
     ~TComputationGraphBuildingVisitor() {
+        auto g = Env.BindAllocator();
+        NodeFactory.Reset();
+        PatternNodes.Reset();
     }
 
     const TTypeEnvironment& GetTypeEnvironment() const {

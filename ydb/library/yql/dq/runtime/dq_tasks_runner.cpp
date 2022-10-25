@@ -151,8 +151,9 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 }
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
-    const NMiniKQL::TTypeEnvironment& /*typeEnv*/, TVector<IDqOutput::TPtr>&& outputs)
+    const NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs)
 {
+    auto guard = typeEnv.BindAllocator();
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kSink:
             Y_VERIFY(outputDesc.ChannelsSize() == 0);
@@ -254,8 +255,7 @@ public:
         return TaskId;
     }
 
-    void BuildTask(const NDqProto::TDqTask& task, const TDqTaskRunnerParameterProvider& parameterProvider)
-    {
+    void BuildTask(const NDqProto::TDqTask& task, const TDqTaskRunnerParameterProvider& parameterProvider) {
         LOG(TStringBuilder() << "Build task: " << TaskId);
         auto startTime = TInstant::Now();
 
@@ -395,6 +395,7 @@ public:
             ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
                 opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider, &Alloc().Ref()));
         } else {
+            auto guard = BindAllocator();
             ProgramParsed.CompPattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
             ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
                 opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider));
@@ -427,10 +428,14 @@ public:
                     auto it = task.GetParameters().find(name);
                     YQL_ENSURE(it != task.GetParameters().end());
 
+                    auto guard = typeEnv.BindAllocator();
                     TDqDataSerializer::DeserializeParam(it->second, type, graphHolderFactory, structMembers[i]);
                 }
 
-                ValidateParamValue(name, type, structMembers[i]);
+                {
+                    auto guard = typeEnv.BindAllocator();
+                    ValidateParamValue(name, type, structMembers[i]);
+                }
             }
 
             paramNode->SetValue(ProgramParsed.CompGraph->GetContext(), std::move(paramsStructValue));
@@ -607,6 +612,7 @@ public:
         } else if (outputConsumers.size() == 1) {
             Output = std::move(outputConsumers[0]);
         } else {
+            auto guard = BindAllocator();
             Output = CreateOutputMultiConsumer(std::move(outputConsumers));
         }
 
@@ -638,6 +644,7 @@ public:
     ERunStatus Run() final {
         LOG(TStringBuilder() << "Run task: " << TaskId);
         if (!ResultStream) {
+            auto guard = BindAllocator();
             TBindTerminator term(ProgramParsed.CompGraph->GetTerminator());
             ResultStream = ProgramParsed.CompGraph->GetValue();
         }
@@ -730,7 +737,7 @@ public:
         return {ptr->TransformInput, ptr->TransformOutput};
     }
 
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit = {}) override {
         auto guard = Context.TypeEnv ? Context.TypeEnv->BindAllocator() : SelfTypeEnv->BindAllocator();
         if (memoryLimit) {
             guard.GetMutex()->SetLimit(*memoryLimit);
@@ -809,6 +816,7 @@ private:
             }
         };
 
+        auto guard = BindAllocator();
         while (!Output->IsFull()) {
             if (Y_UNLIKELY(CollectProfileStats)) {
                 auto now = TInstant::Now();

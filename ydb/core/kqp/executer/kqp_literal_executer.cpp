@@ -158,6 +158,7 @@ private:
         NMiniKQL::TTypeEnvironment typeEnv(alloc);
         NMiniKQL::TMemoryUsageInfo memInfo("KqpLocalExecuter");
         NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, funcRegistry);
+        auto unguard = Unguard(alloc);
 
         ui64 mkqlMemoryLimit = Request.MkqlMemoryLimit > 0
             ? Request.MkqlMemoryLimit
@@ -189,6 +190,7 @@ private:
 
         Y_DEFER {
             // clear allocator state
+            TGuard<NMiniKQL::TScopedAlloc> guard(alloc);
             Results.crop(0);
             TaskRunners.crop(0);
         };
@@ -250,7 +252,9 @@ private:
 
             if (auto* param = stageInfo.Meta.Tx.Params.Values.FindPtr(name)) {
                 NMiniKQL::TType* typeFromProto;
-                std::tie(typeFromProto, value) = ImportValueFromProto(param->GetType(), param->GetValue(), typeEnv, holderFactory);
+                with_lock (typeEnv.GetAllocator()) {
+                    std::tie(typeFromProto, value) = ImportValueFromProto(param->GetType(), param->GetValue(), typeEnv, holderFactory);
+                }
 #ifndef NDEBUG
                 YQL_ENSURE(ToString(*type) == ToString(*typeFromProto), "" << *type << " != " << *typeFromProto);
 #else
@@ -276,13 +280,15 @@ private:
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);
 
-        for (auto& taskOutput : task.Outputs) {
-            for (ui64 outputChannelId : taskOutput.Channels) {
-                auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
-                auto& channelDesc = TasksGraph.GetChannel(outputChannelId);
+        with_lock (*context.Alloc) { // allocator is used only by outputChannel->PopAll()
+            for (auto& taskOutput : task.Outputs) {
+                for (ui64 outputChannelId : taskOutput.Channels) {
+                    auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
+                    auto& channelDesc = TasksGraph.GetChannel(outputChannelId);
 
-                outputChannel->PopAll(Results[channelDesc.DstInputIndex].Rows);
-                YQL_ENSURE(outputChannel->IsFinished());
+                    outputChannel->PopAll(Results[channelDesc.DstInputIndex].Rows);
+                    YQL_ENSURE(outputChannel->IsFinished());
+                }
             }
         }
     }
@@ -296,16 +302,18 @@ private:
         ui64 rows = 0;
         ui64 bytes = 0;
 
-        TKqpProtoBuilder protoBuilder(context.Alloc, context.TypeEnv, &holderFactory);
-        for (auto& result : Results) {
-            rows += result.Rows.size();
-            auto* protoResult = response.MutableResult()->AddResults();
-            if (result.IsStream) {
-                protoBuilder.BuildStream(result.Rows, result.ItemType, result.ResultItemType.Get(), protoResult);
-            } else {
-                protoBuilder.BuildValue(result.Rows, result.ItemType, protoResult);
+        with_lock (*context.Alloc) {
+            TKqpProtoBuilder protoBuilder(context.Alloc, context.TypeEnv, &holderFactory);
+            for (auto& result : Results) {
+                rows += result.Rows.size();
+                auto* protoResult = response.MutableResult()->AddResults();
+                if (result.IsStream) {
+                    protoBuilder.BuildStream(result.Rows, result.ItemType, result.ResultItemType.Get(), protoResult);
+                } else {
+                    protoBuilder.BuildValue(result.Rows, result.ItemType, protoResult);
+                }
+                bytes += protoResult->ByteSizeLong();
             }
-            bytes += protoResult->ByteSizeLong();
         }
 
         if (Stats) {

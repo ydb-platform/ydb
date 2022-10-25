@@ -22,7 +22,7 @@
 
 Имя | Описание
 ---|---
-`--consumer-name VAL` | Имя читателя, которого нужно добавить.
+`--consumer VAL` | Имя читателя, которого нужно добавить.
 `--starting-message-timestamp VAL` | Время в формате [UNIX timestamp](https://ru.wikipedia.org/wiki/Unix-время). Чтение начнется с первого [сообщения](../../concepts/topic.md#message), полученного после указанного времени. Если время не задано, то чтение начнется с самого старого сообщения в топике.
 
 ## Примеры {#examples}
@@ -33,7 +33,7 @@
 
 ```bash
 {{ ydb-cli }} -p db1 topic consumer add \
-  --consumer-name my-consumer \
+  --consumer my-consumer \
   --starting-message-timestamp 1660568400 \
   my-topic 
 ```

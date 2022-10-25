@@ -1688,7 +1688,10 @@ public:
             for (const auto& lib : ctx.Libraries) {
                 auto node = Y("library", new TAstAtomNodeImpl(Pos, lib.first, TNodeFlags::ArbitraryContent));
                 if (lib.second) {
-                    node = L(node, new TAstAtomNodeImpl(Pos, *lib.second, TNodeFlags::ArbitraryContent));
+                    node = L(node, new TAstAtomNodeImpl(Pos, lib.second->first, TNodeFlags::ArbitraryContent));
+                    if (lib.second->second) {
+                        node = L(node, new TAstAtomNodeImpl(Pos, lib.second->second, TNodeFlags::ArbitraryContent));
+                    }
                 }
 
                 Add(node);

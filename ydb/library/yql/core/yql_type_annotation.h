@@ -76,11 +76,15 @@ public:
         Parameters = node;
     }
 
+    void SetCredentials(TCredentials::TPtr credentials) {
+        Credentials = std::move(credentials);
+    }
+
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
     bool AddFromFile(const TStringBuf& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
-    bool AddFromUrl(const TStringBuf& file, const TStringBuf& url, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
+    bool AddFromUrl(const TStringBuf& file, const TStringBuf& url, const TStringBuf& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
     bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
     bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TString& moduleName, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr) override;
     bool Link(TExprContext& ctx) override;
@@ -100,6 +104,7 @@ private:
     TUserDataStorage::TPtr UserData;
     IUrlLoader::TPtr UrlLoader;
     TMaybe<NYT::TNode> Parameters;
+    TCredentials::TPtr Credentials;
     TExprContext LibsContext;
     TSet<TString> KnownPackages;
     THashMap<TString, ui32> PackageVersions;

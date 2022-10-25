@@ -273,6 +273,7 @@ TProgram::TProgram(
     if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
         modules->AttachUserData(UserDataStorage_);
         modules->SetUrlLoader(new TUrlLoader(FileStorage_));
+        modules->SetCredentials(Credentials_);
     }
     OperationOptions_.Runner = runner;
 }

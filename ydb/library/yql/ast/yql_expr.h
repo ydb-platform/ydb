@@ -2141,7 +2141,7 @@ class IModuleResolver {
 public:
     typedef std::shared_ptr<IModuleResolver> TPtr;
     virtual bool AddFromFile(const TStringBuf& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) = 0;
-    virtual bool AddFromUrl(const TStringBuf& file, const TStringBuf& url, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) = 0;
+    virtual bool AddFromUrl(const TStringBuf& file, const TStringBuf& url, const TStringBuf& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) = 0;
     virtual bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) = 0;
     virtual bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TString& moduleName, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr) = 0;
     virtual bool Link(TExprContext& ctx) = 0;

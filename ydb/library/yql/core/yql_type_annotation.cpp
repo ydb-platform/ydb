@@ -186,7 +186,7 @@ const TExportTable* TModuleResolver::GetModule(const TString& module) const {
     return Modules.FindPtr(normalizedModuleName);
 }
 
-bool TModuleResolver::AddFromUrl(const TStringBuf& file, const TStringBuf& url, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) {
+bool TModuleResolver::AddFromUrl(const TStringBuf& file, const TStringBuf& url, const TStringBuf& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) {
     if (!UserData) {
         ctx.AddError(TIssue(TPosition(), "Loading libraries is prohibited"));
         return false;
@@ -196,6 +196,18 @@ bool TModuleResolver::AddFromUrl(const TStringBuf& file, const TStringBuf& url, 
     block.Type = EUserDataType::URL;
     block.Data = url;
     block.Data = SubstParameters(block.Data);
+    if (tokenName) {
+        if (!Credentials) {
+            ctx.AddError(TIssue(TPosition(), "Missing credentials"));
+            return false;
+        }
+        auto cred = Credentials->FindCredential(tokenName);
+        if (!cred) {
+            ctx.AddError(TIssue(TPosition(), TStringBuilder() << "Unknown token name: " << tokenName));
+            return false;
+        }
+        block.UrlToken = cred->Content;
+    }
     UserData->AddUserDataBlock(file, block);
 
     return AddFromFile(file, ctx, syntaxVersion, packageVersion);

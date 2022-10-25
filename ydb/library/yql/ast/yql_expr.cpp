@@ -1162,8 +1162,8 @@ namespace {
     }
 
     bool CompileLibraryDef(const TAstNode& node, TContext& ctx) {
-        if (node.GetChildrenCount() != 2 && node.GetChildrenCount() != 3) {
-            ctx.AddError(node, "Expected list of size 2 or 3");
+        if (node.GetChildrenCount() < 2 || node.GetChildrenCount() > 4) {
+            ctx.AddError(node, "Expected list of size from 2 to 4");
             return false;
         }
 
@@ -1174,7 +1174,8 @@ namespace {
         }
 
         TString url;
-        if (node.GetChildrenCount() == 3) {
+        TString token;
+        if (node.GetChildrenCount() > 2) {
             const auto file = node.GetChild(2);
             if (!file->IsAtom()) {
                 ctx.AddError(*file, "Expected atom");
@@ -1182,6 +1183,16 @@ namespace {
             }
 
             url = file->GetContent();
+
+            if (node.GetChildrenCount() > 3) {
+                const auto tokenNode = node.GetChild(3);
+                if (!tokenNode->IsAtom()) {
+                    ctx.AddError(*tokenNode, "Expected atom");
+                    return false;
+                }
+
+                token = tokenNode->GetContent();
+            }
         }
 
         if (url) {
@@ -1212,7 +1223,7 @@ namespace {
         }
 
         if (url) {
-            if (!ctx.ModuleResolver->AddFromUrl(name->GetContent(), url, ctx.Expr, ctx.SyntaxVersion, 0)) {
+            if (!ctx.ModuleResolver->AddFromUrl(name->GetContent(), url, token, ctx.Expr, ctx.SyntaxVersion, 0)) {
                 return false;
             }
         } else {

@@ -9540,8 +9540,13 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "AddFolderByUrl", values, false);
         } else if (normalizedPragma == "library") {
-            if (values.size() != 1 && values.size() != 2) {
+            if (values.size() < 1) {
                 Error() << "Expected non-empty file alias";
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return{};
+            }
+            if (values.size() > 3) {
+                Error() << "Expected file alias and optional url and token name as pragma values";
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return{};
             }
@@ -9552,25 +9557,31 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return{};
             }
 
-            TMaybe<TString> file;
-            if (values.size() == 2) {
-                file.ConstructInPlace();
-                if (!values[1].GetLiteral(*file, Ctx)) {
+            TMaybe<std::pair<TString, TString>> fileWithToken;
+            if (values.size() > 1) {
+                fileWithToken.ConstructInPlace();
+                if (!values[1].GetLiteral(fileWithToken->first, Ctx)) {
                     Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                     return{};
                 }
 
                 TSet<TString> names;
-                SubstParameters(*file, Nothing(), &names);
+                SubstParameters(fileWithToken->first, Nothing(), &names);
                 for (const auto& name : names) {
                     auto namedNode = GetNamedNode(name);
                     if (!namedNode) {
                         return{};
                     }
                 }
+                if (values.size() > 2) {
+                    if (!values[2].GetLiteral(fileWithToken->second, Ctx)) {
+                        Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                        return{};
+                    }
+                }
             }
 
-            Ctx.Libraries[alias]=file;
+            Ctx.Libraries[alias] = fileWithToken;
             Ctx.IncrementMonCounter("sql_pragma", "library");
         } else if (normalizedPragma == "directread") {
             Ctx.PragmaDirectRead = true;

@@ -6,10 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(tools)
-add_subdirectory(contrib)
-add_subdirectory(util)
-add_subdirectory(library)
-add_subdirectory(ydb)
-add_subdirectory(certs)
-add_subdirectory(cloud)
+
+add_library(library-testlib-service_mocks INTERFACE)
+target_link_libraries(library-testlib-service_mocks INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  client-yc_private-servicecontrol
+  priv-ydb-v1
+  api-grpc-draft
+  client-yc_private-resourcemanager
+  client-yc_private-iam
+)

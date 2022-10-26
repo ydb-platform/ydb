@@ -6,10 +6,5 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(tools)
-add_subdirectory(contrib)
-add_subdirectory(util)
-add_subdirectory(library)
-add_subdirectory(ydb)
-add_subdirectory(certs)
-add_subdirectory(cloud)
+add_subdirectory(api)
+add_subdirectory(impl)

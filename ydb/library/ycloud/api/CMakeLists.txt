@@ -6,10 +6,16 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(tools)
-add_subdirectory(contrib)
-add_subdirectory(util)
-add_subdirectory(library)
-add_subdirectory(ydb)
-add_subdirectory(certs)
-add_subdirectory(cloud)
+
+add_library(library-ycloud-api INTERFACE)
+target_link_libraries(library-ycloud-api INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  client-yc_private-iam
+  client-yc_private-servicecontrol
+  client-yc_private-resourcemanager
+  cpp-actors-core
+  cpp-grpc-client
+  ydb-core-base
+  ydb-core-grpc_caching
+)

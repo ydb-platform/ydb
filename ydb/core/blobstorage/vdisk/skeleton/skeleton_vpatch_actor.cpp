@@ -214,14 +214,14 @@ namespace NKikimr::NPrivate {
                 ErrorReason = TStringBuilder() << "Recieve not OK status from VGetRange,"
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
                 SendVPatchFoundParts(NKikimrProto::ERROR);
-                ConfirmDying(true);
+                NotifySkeletonAndDie();
                 return;
             }
             if (record.ResultSize() != 1) {
                 ErrorReason = TStringBuilder() << "Expected only one result, but given " << record.ResultSize()
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
                 SendVPatchFoundParts(NKikimrProto::ERROR);
-                ConfirmDying(true);
+                NotifySkeletonAndDie();
                 return;
             }
 
@@ -237,7 +237,7 @@ namespace NKikimr::NPrivate {
 
             SendVPatchFoundParts(NKikimrProto::OK);
             if (FoundOriginalParts.empty()) {
-                ConfirmDying(true);
+                NotifySkeletonAndDie();
             }
         }
 
@@ -580,34 +580,43 @@ namespace NKikimr::NPrivate {
             }
         }
 
-        void ConfirmDying(bool forceDeath) {
+        void NotifySkeletonAndDie() {
             Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId));
-            if (forceDeath) {
-                PassAway();
-            } else {
-                Schedule(CommonLiveTime, new TEvVPatchDyingConfirm);
-            }
+            PassAway();
+        }
+
+        void NotifySkeletonAboutDying() {
+            Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId));
+            Schedule(CommonLiveTime, new TEvVPatchDyingConfirm);
         }
 
         void HandleInStartState(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, before receiving diff";
             STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP11, VDiskLogPrefix << " " << ErrorReason << ";");
             SendVPatchFoundParts(NKikimrProto::ERROR);
-            ConfirmDying(true);
+            NotifySkeletonAndDie();
         }
 
         void HandleInWaitState(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, before receiving diff";
             STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP16, VDiskLogPrefix << " " << ErrorReason << ";");
-            ConfirmDying(false);
+            NotifySkeletonAboutDying();
             Become(&TThis::ErrorState);
         }
 
-        void HandleInDataOrParityStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
+        void HandleInDataStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, after receiving diff";
             STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP12, VDiskLogPrefix << " " << ErrorReason << ";");
             SendVPatchResult(NKikimrProto::ERROR);
-            PassAway();
+            NotifySkeletonAndDie();
+        }
+
+        void HandleInParityStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
+            ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, after receiving diff";
+            STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP12, VDiskLogPrefix << " " << ErrorReason << ";");
+            SendVPatchResult(NKikimrProto::ERROR);
+            NotifySkeletonAboutDying();
+            Become(&TThis::ErrorState);
         }
 
         STATEFN(StartState) {
@@ -624,7 +633,6 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPatchDiff, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInWaitState)
-                sFunc(TEvVPatchDyingConfirm, PassAway)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
             }
         }
@@ -644,7 +652,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVGetResult, HandleVGetResult)
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 IgnoreFunc(TEvBlobStorage::TEvVPatchXorDiffResult)
-                hFunc(TKikimrEvents::TEvWakeup, HandleInDataOrParityStates)
+                hFunc(TKikimrEvents::TEvWakeup, HandleInDataStates)
                 IgnoreFunc(TEvVPatchDyingConfirm)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
             }
@@ -655,7 +663,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVGetResult, HandleVGetResult)
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
-                hFunc(TKikimrEvents::TEvWakeup, HandleInDataOrParityStates)
+                hFunc(TKikimrEvents::TEvWakeup, HandleInParityStates)
                 IgnoreFunc(TEvVPatchDyingConfirm)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
             }

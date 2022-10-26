@@ -11,7 +11,7 @@ items:
   href: adding_storage_groups.md
 - name: Безопасные рестарт и выключение узлов
   href: node_restarting.md
-- name: Включение/выключение SelfHeal
+- name: Включение и выключение SelfHeal
   href: selfheal.md
 - name: Включение/выключение Scrubbing
   href: scrubbing.md

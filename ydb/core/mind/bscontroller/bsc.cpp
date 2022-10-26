@@ -379,11 +379,6 @@ void Out<NKikimr::NBsController::TPDiskId>(IOutputStream &str, const NKikimr::NB
 }
 
 template<>
-void Out<NKikimr::NBsController::TPDiskLocation>(IOutputStream &str, const NKikimr::NBsController::TPDiskLocation &value) {
-    str << value.NodeId << ":" << value.Path.Quote();
-}
-
-template<>
 void Out<NKikimr::NBsController::TVSlotId>(IOutputStream &str, const NKikimr::NBsController::TVSlotId &value) {
     str << value.ToString();
 }

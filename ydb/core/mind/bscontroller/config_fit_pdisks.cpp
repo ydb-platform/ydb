@@ -60,21 +60,20 @@ namespace NKikimr {
             }
             const TPDiskCategory category(type, driveInfo->Kind);
 
-            auto pdiskIt = state.PDiskLocationMap.find(TPDiskLocation{nodeId, fsPath});
-            if (pdiskIt != state.PDiskLocationMap.end()) {
-                throw TExError() << "PDisk found in PDiskLocationMap, fsPath# " << fsPath.Quote()
-                    << " pdiskId# " << pdiskIt->second;
+            if (const auto pdiskId = state.FindPDiskByLocation(nodeId, fsPath)) {
+                throw TExError() << "PDisk found in PDisks by specific path, fsPath# " << fsPath.Quote()
+                    << " pdiskId# " << *pdiskId;
             }
 
             ui32 staticSlotUsage = 0;
-            auto staticPDiskIt = state.StaticPDiskLocationMap.find(TPDiskLocation{nodeId, fsPath});
-            if (staticPDiskIt == state.StaticPDiskLocationMap.end()) {
-                staticPDiskIt = state.StaticPDiskLocationMap.find(TPDiskLocation{nodeId, serial.Serial});
+            auto staticPDiskId = state.FindStaticPDiskByLocation(nodeId, fsPath);
+            if (!staticPDiskId) {
+                staticPDiskId = state.FindStaticPDiskByLocation(nodeId, serial.Serial);
             }
-            if (staticPDiskIt != state.StaticPDiskLocationMap.end()) {
+            if (staticPDiskId) {
                 // PDisk is static one, so take it's pdiskId and guid
                 // and check that parameters match
-                pdiskId = staticPDiskIt->second;
+                pdiskId = *staticPDiskId;
                 driveInfo->Guid = CheckStaticPDisk(state, pdiskId, category, driveInfo->PDiskConfig, &staticSlotUsage);
             }
             // Update FK in DriveSerial table and check for guid
@@ -97,10 +96,7 @@ namespace NKikimr {
                 TInstant::Zero(), NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, serial.Serial,
                 TString(), fsPath, staticSlotUsage);
 
-            const TPDiskLocation location(nodeId, serial.Serial);
-            state.PDiskLocationMap.emplace(location, pdiskId);
-            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP01, "Create new pdisk", (PDiskId, pdiskId),
-                    (Location, location));
+            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP01, "Create new pdisk", (PDiskId, pdiskId), (Path, fsPath));
         }
 
         void TBlobStorageController::ValidatePDiskWithSerial(TConfigState& state, ui32 nodeId, const TSerial& serial,
@@ -127,10 +123,10 @@ namespace NKikimr {
                     << " guid from PDisks# " << pdiskInfo->Guid;
             }
 
-            const TPDiskLocation location(*driveInfo.NodeId, serial.Serial);
-            if (state.PDiskLocationMap.count(location) + state.StaticPDiskLocationMap.count(location) == 0) {
+            const TString& path = serial.Serial;
+            if (!state.FindStaticPDiskByLocation(*driveInfo.NodeId, path) && !state.FindPDiskByLocation(*driveInfo.NodeId, path)) {
                 throw TExError() << "Drive is in ALLOCATED state and PDisk is created,"
-                    " but is not found neither in PDiskLocationMap, nor in StaticPDiskLocationMap";
+                    " but is not found neither in PDisks, nor in StaticPDisks by specific path";
             }
 
             if (nodeId && nodeId != *driveInfo.NodeId) {
@@ -192,15 +188,13 @@ namespace NKikimr {
                     }
 
                     for (const auto& [drive, driveInfo] : hostConfig.Drives) {
-                        const TPDiskLocation location(*nodeId, drive.Path);
                         TPDiskId pdiskId;
                         const TPDiskCategory category(PDiskTypeToPDiskType(driveInfo.Type), driveInfo.Kind);
 
                         // check if we already have spawned some PDisk at this location
-                        auto pdiskIt = state.PDiskLocationMap.find(location);
-                        if (pdiskIt != state.PDiskLocationMap.end()) {
+                        if (const auto found = state.FindPDiskByLocation(*nodeId, drive.Path)) {
                             // yes, we do; find it by id and update some characteristics (that we can update)
-                            pdiskId = pdiskIt->second;
+                            pdiskId = *found;
                             const TPDiskInfo *pdisk = state.PDisks.Find(pdiskId);
                             Y_VERIFY(pdisk);
                             // update PDisk configuration if needed
@@ -220,9 +214,9 @@ namespace NKikimr {
 
                             // no, this disk is not in map yet; see if it is mentioned in static configuration
                             ui32 staticSlotUsage = 0;
-                            if (auto pdiskIt = state.StaticPDiskLocationMap.find(location); pdiskIt != state.StaticPDiskLocationMap.end()) {
+                            if (const auto found = state.FindStaticPDiskByLocation(*nodeId, drive.Path)) {
                                 // yes, take some data from static configuration
-                                pdiskId = pdiskIt->second;
+                                pdiskId = *found;
                                 guid = CheckStaticPDisk(state, pdiskId, category, driveInfo.PDiskConfig, &staticSlotUsage);
                             } else {
                                 pdiskId = FindFirstEmptyPDiskId(state.PDisks, *nodeId);
@@ -249,9 +243,8 @@ namespace NKikimr {
                                 currentSerial, currentSerial, TString(), staticSlotUsage);
 
                             // insert PDisk into location map
-                            state.PDiskLocationMap.emplace(location, pdiskId);
                             STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP02, "Create new pdisk", (PDiskId, pdiskId),
-                                    (Location, location));
+                                (Path, path));
                         }
 
                         state.PDisksToRemove.erase(pdiskId);

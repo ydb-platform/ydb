@@ -15,9 +15,9 @@ namespace NKikimr::NBsController {
                 throw TExPDiskNotFound(host, cmd.GetPDiskId(), TString());
             }
         } else {
-            const auto it = PDiskLocationMap.find(TPDiskLocation(host.GetNodeId(), cmd.GetPath()));
-            if (it != PDiskLocationMap.end() && !PDisksToRemove.count(it->second)) {
-                pdiskId = it->second;
+            const std::optional<TPDiskId> found = FindPDiskByLocation(host.GetNodeId(), cmd.GetPath());
+            if (found && !PDisksToRemove.count(*found)) {
+                pdiskId = *found;
             } else {
                 throw TExPDiskNotFound(host, 0, cmd.GetPath());
             }

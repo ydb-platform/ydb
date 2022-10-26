@@ -819,6 +819,13 @@ NDB::FormatSettings GetFormatSettings(const std::string_view& view) {
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
+        if (json.has("csvdelimiter")) {
+            auto delimiter = json["csvdelimiter"].getString();
+            if (delimiter.size() != 1) {
+                throw yexception() << "CSV delimiter should contain only one symbol. Specified delimiter '" << delimiter << "' is not allowed";
+            }
+            settings.csv.delimiter = delimiter[0];
+        }
     }
     return settings;
 }

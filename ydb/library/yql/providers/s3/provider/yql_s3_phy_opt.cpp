@@ -15,9 +15,9 @@ namespace {
 using namespace NNodes;
 using namespace NDq;
 
-TExprNode::TPtr GetPartitionBy(const TExprNode& settings) {
+TExprNode::TPtr FindChild(const TExprNode& settings, TStringBuf name) {
     for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-        if (settings.Child(i)->Head().IsAtom("partitionedby")) {
+        if (settings.Child(i)->Head().IsAtom(name)) {
             return settings.ChildPtr(i);
         }
     }
@@ -25,14 +25,16 @@ TExprNode::TPtr GetPartitionBy(const TExprNode& settings) {
     return {};
 }
 
-TExprNode::TPtr GetCompression(const TExprNode& settings) {
-    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-        if (settings.Child(i)->Head().IsAtom("compression")) {
-            return settings.ChildPtr(i);
-        }
-    }
+TExprNode::TPtr GetPartitionBy(const TExprNode& settings) {
+    return FindChild(settings, "partitionedby"sv);
+}
 
-    return {};
+TExprNode::TPtr GetCompression(const TExprNode& settings) {
+    return FindChild(settings, "compression"sv);
+}
+
+TExprNode::TPtr GetCsvDelimiter(const TExprNode& settings) {
+    return FindChild(settings, "csvdelimiter"sv);
 }
 
 TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
@@ -91,17 +93,23 @@ public:
         const auto& targetNode = write.Target();
         const auto& cluster = write.DataSink().Cluster().StringValue();
         const auto token = "cluster:default_" + cluster;
-        auto partBy = GetPartitionBy(write.Target().Settings().Ref());
+        const auto& settings = write.Target().Settings().Ref();
+        auto partBy = GetPartitionBy(settings);
         auto keys = GetPartitionKeys(partBy);
 
         auto sinkSettingsBuilder = Build<TExprList>(ctx, targetNode.Pos());
         if (partBy)
             sinkSettingsBuilder.Add(std::move(partBy));
 
-        auto compression = GetCompression(write.Target().Settings().Ref());
+        auto compression = GetCompression(settings);
         const auto& extension = GetExtension(write.Target().Format().Value(), compression ? compression->Tail().Content() : ""sv);
         if (compression)
             sinkSettingsBuilder.Add(std::move(compression));
+
+        auto sinkOutputSettingsBuilder = Build<TExprList>(ctx, targetNode.Pos());
+        if (auto csvDelimiter = GetCsvDelimiter(settings)) {
+            sinkOutputSettingsBuilder.Add(std::move(csvDelimiter));
+        }
 
         if (!FindNode(write.Input().Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << targetNode.Path().StringValue() << "` as stage with sink.";
@@ -119,6 +127,7 @@ public:
                                         .Build()
                                     .Format(write.Target().Format())
                                     .KeyColumns().Build()
+                                    .Settings(sinkOutputSettingsBuilder.Done())
                                     .Build()
                                 .Build()
                             .Outputs<TDqStageOutputsList>()
@@ -167,6 +176,7 @@ public:
                                     .Input("in")
                                     .Format(write.Target().Format())
                                     .KeyColumns().Add(keys).Build()
+                                    .Settings(sinkOutputSettingsBuilder.Done())
                                     .Build()
                                 .Build()
                             .Outputs<TDqStageOutputsList>()
@@ -227,6 +237,7 @@ public:
                 .Input(inputStage.Program().Body().Ptr())
                 .Format(write.Target().Format())
                 .KeyColumns().Add(std::move(keys)).Build()
+                .Settings(sinkOutputSettingsBuilder.Done())
                 .Done();
 
             return Build<TDqQuery>(ctx, write.Pos())
@@ -259,6 +270,7 @@ public:
                                 .Input("in")
                                 .Format(write.Target().Format())
                                 .KeyColumns().Add(std::move(keys)).Build()
+                                .Settings(sinkOutputSettingsBuilder.Done())
                                 .Build()
                             .Build()
                         .Settings().Build()

@@ -146,7 +146,7 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Format", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 3, "Name": "Settings", "Type": "TExprList", "Optional": true}
             ]
         }
     ]

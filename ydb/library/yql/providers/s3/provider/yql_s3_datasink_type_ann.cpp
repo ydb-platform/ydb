@@ -95,7 +95,7 @@ private:
 
         const auto& path = input->Child(TS3Target::idx_Path)->Content();
         if (path.empty() || path.back() != '/') {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Expected non empty path to directory ends with '/'."));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Expected non empty path to directory ending with '/'."));
             return TStatus::Error;
         }
 
@@ -151,10 +151,23 @@ private:
                     return EnsureValidUserSchemaSetting(setting, ctx);
                 }
 
+                if (name == "csvdelimiter") {
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    if (value.Content().Size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "csv_delimiter must be single character"));
+                        return false;
+                    }
+                    return true;
+                }
+
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode", "userschema"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "csvdelimiter"}, validator, ctx)) {
                 return TStatus::Error;
             }
         }

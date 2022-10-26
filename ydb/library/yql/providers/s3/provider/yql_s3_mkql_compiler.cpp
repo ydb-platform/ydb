@@ -17,6 +17,7 @@ TRuntimeNode BuildSerializeCall(
     TRuntimeNode input,
     const std::vector<std::string_view>& keys,
     const std::string_view& format,
+    const std::vector<std::pair<std::string_view, std::string_view>>& settings,
     TType* inputType,
     const TS3Configuration::TPtr& config,
     NCommon::TMkqlBuildContext& ctx)
@@ -41,8 +42,8 @@ TRuntimeNode BuildSerializeCall(
         );
     }
 
-    TString settings;
-    TStringOutput stream(settings);
+    TString settingsAsJson;
+    TStringOutput stream(settingsAsJson);
     NJson::TJsonWriter writer(&stream, NJson::TJsonWriterConfig());
     writer.OpenMap();
     if (!keys.empty()) {
@@ -91,14 +92,18 @@ TRuntimeNode BuildSerializeCall(
     if (const auto blockSize = config->BlockSizeMemoryLimit.Get())
         writer.Write("block_size_limit", *blockSize);
 
+    for (const auto& v : settings) {
+        writer.Write(v.first, v.second);
+    }
+
     writer.CloseMap();
     writer.Flush();
-    if (settings == "{}")
-        settings.clear();
+    if (settingsAsJson == "{}")
+        settingsAsJson.clear();
 
     input = ctx.ProgramBuilder.FromFlow(input);
     const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({input.GetStaticType()})});
-    return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.SerializeFormat", {}, userType, format + settings), {input}));
+    return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.SerializeFormat", {}, userType, format + settingsAsJson), {input}));
 }
 
 TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, const TS3Configuration::TPtr& config, NCommon::TMkqlBuildContext& ctx) {
@@ -107,7 +112,12 @@ TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, const TS3Configuration
     std::vector<std::string_view> keys;
     keys.reserve(wrapper.KeyColumns().Size());
     wrapper.KeyColumns().Ref().ForEachChild([&](const TExprNode& key){ keys.emplace_back(key.Content()); });
-    return BuildSerializeCall(input, keys, wrapper.Format().Value(), inputItemType, config, ctx);
+    std::vector<std::pair<std::string_view, std::string_view>> settings;
+    if (wrapper.Settings()) {
+        settings.reserve(wrapper.Settings().Cast().Size());
+        wrapper.Settings().Cast().Ref().ForEachChild([&](const TExprNode& v){ settings.emplace_back(v.Child(0)->Content(), v.Child(1)->Content()); });
+    }
+    return BuildSerializeCall(input, keys, wrapper.Format().Value(), settings, inputItemType, config, ctx);
 }
 
 }

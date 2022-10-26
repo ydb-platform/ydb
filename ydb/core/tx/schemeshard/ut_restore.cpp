@@ -449,19 +449,69 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
     Y_UNIT_TEST(ShouldSucceedOnSmallBuffer) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        ui64 txId = 100;
+
         runtime.GetAppData().ZstdBlockSizeForTest = 16;
         runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(16);
 
-        const auto data = GenerateZstdTestData("a", 2);
-        const ui32 batchSize = 1;
-
-        Restore(runtime, env, R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Utf8" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
-        )", {data}, batchSize);
+        )");
+        env.TestWaitNotification(runtime, txId);
 
+        bool uploadResponseDropped = false;
+        runtime.SetObserverFunc([&uploadResponseDropped](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvUnsafeUploadRowsResponse) {
+                uploadResponseDropped = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TPortManager portManager;
+        THolder<TS3Mock> s3Mock;
+        const auto data = GenerateZstdTestData("a", 2);
+        const ui32 batchSize = 1;
+        RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data}, batchSize);
+
+        if (!uploadResponseDropped) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&uploadResponseDropped](IEventHandle&) -> bool {
+                return uploadResponseDropped;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        TMaybe<NKikimrTxDataShard::TShardOpResult> result;
+        runtime.SetObserverFunc([&result](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvSchemaChanged) {
+                const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
+                if (record.HasOpResult()) {
+                    result = record.GetOpResult();
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+
+        if (!result) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&result](IEventHandle&) -> bool {
+                return result.Defined();
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetBytesProcessed(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsProcessed(), 2);
+
+        env.TestWaitNotification(runtime, txId);
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
         NKqp::CompareYson(data.YsonStr, content);
     }

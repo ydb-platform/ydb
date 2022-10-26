@@ -478,6 +478,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             TMemoryPool pool(256);
             while (ProcessData(data, pool));
 
+            if (Reader->ReadyBytes()) { // has progress
+                WrittenRows += std::exchange(PendingRows, 0);
+                WrittenBytes += std::exchange(PendingBytes, 0);
+            }
+
+            UploadRows();
             Reader->Confirm();
         } else {
             Y_FAIL("unreachable");
@@ -495,10 +501,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                 return true; // skip empty line
             }
 
-            const auto& record = RequestBuilder.GetRecord();
-            WrittenRows += record->RowsSize();
-
-            UploadRows();
             return false;
         }
 
@@ -515,7 +517,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         TVector<TCell> values;
         TString strError;
 
-        if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, WrittenBytes)) {
+        if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, PendingBytes)) {
             Finish(false, TStringBuilder() << strError << " on line: " << origLine);
             return false;
         }
@@ -527,6 +529,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         RequestBuilder.AddRow(keys, values);
+        ++PendingRows;
+
         return true;
     }
 
@@ -770,6 +774,8 @@ private:
     ui64 ProcessedBytes = 0;
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
+    ui64 PendingBytes = 0;
+    ui64 PendingRows = 0;
 
     const ui32 ReadBatchSize;
     const ui64 ReadBufferSizeLimit;

@@ -34,7 +34,7 @@ void TJsonPathTestBase::RunTestCase(const TString& rawJson, const TString& rawJs
         const TJsonPathPtr jsonPath = ParseJsonPath(rawJsonPath, issues, MAX_PARSE_ERRORS);
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found");
 
-        for (const auto json : {unboxedValueJson, binaryJsonRoot}) {
+        for (const auto& json : {unboxedValueJson, binaryJsonRoot}) {
             const auto result = ExecuteJsonPath(jsonPath, json, TVariablesMap{}, &ValueBuilder);
             UNIT_ASSERT_C(!result.IsError(), "Runtime errors found");
 
@@ -85,7 +85,7 @@ void TJsonPathTestBase::RunRuntimeErrorTestCase(const TString& rawJson, const TS
         const TJsonPathPtr jsonPath = ParseJsonPath(rawJsonPath, issues, MAX_PARSE_ERRORS);
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found");
 
-        for (const auto json : {unboxedValueJson, binaryJsonRoot}) {
+        for (const auto& json : {unboxedValueJson, binaryJsonRoot}) {
             const auto result = ExecuteJsonPath(jsonPath, json, TVariablesMap{}, &ValueBuilder);
             UNIT_ASSERT_C(result.IsError(), "Expected runtime error");
             UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetCode(), error);
@@ -133,7 +133,7 @@ void TJsonPathTestBase::RunVariablesTestCase(const TString& rawJson, const THash
             {unboxedValueJson, unboxedValueVariables},
             {binaryJsonRoot, binaryJsonVariables},
         };
-        for (const auto testCase : testCases) {
+        for (const auto& testCase : testCases) {
             const auto result = ExecuteJsonPath(jsonPath, testCase.first, testCase.second, &ValueBuilder);
             UNIT_ASSERT_C(!result.IsError(), "Runtime errors found");
 

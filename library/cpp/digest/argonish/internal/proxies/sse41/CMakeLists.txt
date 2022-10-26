@@ -6,18 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(internal-proxies-sse41)
-target_link_libraries(internal-proxies-sse41 PUBLIC
-  contrib-libs-cxxsupp
-  internal-proxies-macro
-  argonish-internal-argon2
-  argonish-internal-blake2b
-)
-target_sources_custom(internal-proxies-sse41
-  .sse41
-  SRCS
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/argonish/internal/proxies/sse41/proxy_sse41.cpp
-  CUSTOM_FLAGS
-  -msse4.1
-)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

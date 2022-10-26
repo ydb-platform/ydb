@@ -1,0 +1,82 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-services-ydb-ut)
+target_compile_options(ydb-services-ydb-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-services-ydb-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb
+)
+target_link_libraries(ydb-services-ydb-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  ydb-services-ydb
+  libs-apache-arrow
+  library-cpp-getopt
+  cpp-grpc-client
+  cpp-regex-pcre
+  library-cpp-svnversion
+  kqp-ut-common
+  core-testlib-default
+  yql-minikql-dom
+  yql-minikql-jsonpath
+  public-lib-experimental
+  public-lib-yson_value
+  cpp-client-draft
+  cpp-client-ydb_coordination
+  cpp-client-ydb_export
+  cpp-client-ydb_extension
+  cpp-client-ydb_operation
+  cpp-client-ydb_scheme
+  cpp-client-ydb_monitoring
+)
+target_link_options(ydb-services-ydb-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-services-ydb-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_olap_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_coordination_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_table_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_s3_internal_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_split_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_stats_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/json_udf.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/re2_udf.cpp
+)
+add_test(
+  NAME
+  ydb-services-ydb-ut
+  COMMAND
+  ydb-services-ydb-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-services-ydb-ut)

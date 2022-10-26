@@ -1,0 +1,99 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(common)
+add_subdirectory(fat)
+add_subdirectory(pg)
+add_subdirectory(spilling)
+
+add_executable(ydb-core-kqp-ut)
+target_compile_options(ydb-core-kqp-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-kqp-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp
+)
+target_link_libraries(ydb-core-kqp-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  ydb-core-kqp
+  cpp-threading-local_executor
+  core-client-minikql_compile
+  core-kqp-counters
+  core-kqp-host
+  core-kqp-provider
+  kqp-ut-common
+  cpp-client-draft
+  cpp-client-ydb_proto
+  yql-sql-pg_dummy
+  re2_udf
+  digest_udf
+)
+target_link_options(ydb-core-kqp-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-kqp-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_acl_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_arrow_in_channels_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_document_api_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_explain_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_flip_join_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_index_lookup_join_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_indexes_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_indexes_multishard_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_join_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_limits_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_locks_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_merge_connection_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_mvcc_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_effects_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_flowcontrol_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_inplace_update_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_perf_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_not_null_columns_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_olap_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_params_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_pragma_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_query_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_scan_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_scheme_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_scripting_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_sort_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_stats_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_sqlin_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_sys_view_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_sys_col_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_table_predicate_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_tx_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_types_arrow_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_write_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_yql_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-kqp-ut
+  COMMAND
+  ydb-core-kqp-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-kqp-ut)

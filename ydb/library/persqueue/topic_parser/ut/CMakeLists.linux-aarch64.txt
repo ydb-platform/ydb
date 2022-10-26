@@ -1,0 +1,47 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-library-persqueue-topic_parser-ut)
+target_include_directories(ydb-library-persqueue-topic_parser-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser
+)
+target_link_libraries(ydb-library-persqueue-topic_parser-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  library-persqueue-topic_parser
+  library-cpp-getopt
+  library-cpp-svnversion
+)
+target_link_options(ydb-library-persqueue-topic_parser-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-library-persqueue-topic_parser-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/ut/topic_names_converter_ut.cpp
+)
+add_test(
+  NAME
+  ydb-library-persqueue-topic_parser-ut
+  COMMAND
+  ydb-library-persqueue-topic_parser-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-library-persqueue-topic_parser-ut)

@@ -1,0 +1,33 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(perf)
+target_link_libraries(perf PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  udf-service-exception_policy
+  library-yql-sql
+  yql-sql-v1
+  yql-sql-pg_dummy
+)
+target_link_options(perf PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(perf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp
+)
+vcs_info(perf)

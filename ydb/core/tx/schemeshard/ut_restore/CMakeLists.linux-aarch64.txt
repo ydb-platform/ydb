@@ -1,0 +1,55 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-tx-schemeshard-ut_restore)
+target_compile_options(ydb-core-tx-schemeshard-ut_restore PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-tx-schemeshard-ut_restore PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
+)
+target_link_libraries(ydb-core-tx-schemeshard-ut_restore PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  core-tx-schemeshard
+  contrib-libs-double-conversion
+  cpp-string_utils-quote
+  kqp-ut-common
+  tx-schemeshard-ut_helpers
+  core-wrappers-ut_helpers
+  ydb-core-ydb_convert
+  yql-sql-pg_dummy
+)
+target_link_options(ydb-core-tx-schemeshard-ut_restore PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-tx-schemeshard-ut_restore PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_restore.cpp
+)
+add_test(
+  NAME
+  ydb-core-tx-schemeshard-ut_restore
+  COMMAND
+  ydb-core-tx-schemeshard-ut_restore
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-tx-schemeshard-ut_restore)

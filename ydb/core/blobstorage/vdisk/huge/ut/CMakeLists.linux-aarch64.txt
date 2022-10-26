@@ -1,0 +1,56 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-blobstorage-vdisk-huge-ut)
+target_include_directories(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge
+)
+target_link_libraries(ydb-core-blobstorage-vdisk-huge-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  blobstorage-vdisk-huge
+  library-cpp-getopt
+  library-cpp-svnversion
+  ydb-core-base
+  ydb-core-blobstorage
+  core-blobstorage-groupinfo
+  ydb-core-erasure
+)
+target_link_options(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ctx_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugerecovery_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/top_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-blobstorage-vdisk-huge-ut
+  COMMAND
+  ydb-core-blobstorage-vdisk-huge-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-blobstorage-vdisk-huge-ut)

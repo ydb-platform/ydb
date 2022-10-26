@@ -1,0 +1,55 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(core-tx-schemeshard-ut_user_attributes_reboots)
+target_compile_options(core-tx-schemeshard-ut_user_attributes_reboots PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(core-tx-schemeshard-ut_user_attributes_reboots PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
+)
+target_link_libraries(core-tx-schemeshard-ut_user_attributes_reboots PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  core-tx-schemeshard
+  library-cpp-getopt
+  cpp-regex-pcre
+  library-cpp-svnversion
+  core-testlib-default
+  ydb-core-tx
+  tx-schemeshard-ut_helpers
+  udf-service-exception_policy
+)
+target_link_options(core-tx-schemeshard-ut_user_attributes_reboots PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(core-tx-schemeshard-ut_user_attributes_reboots PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_user_attributes_reboots.cpp
+)
+add_test(
+  NAME
+  core-tx-schemeshard-ut_user_attributes_reboots
+  COMMAND
+  core-tx-schemeshard-ut_user_attributes_reboots
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(core-tx-schemeshard-ut_user_attributes_reboots)

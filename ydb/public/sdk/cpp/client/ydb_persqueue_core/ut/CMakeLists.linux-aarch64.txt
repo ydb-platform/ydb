@@ -1,0 +1,63 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut_utils)
+add_subdirectory(with_offset_ranges_mode_ut)
+
+add_executable(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut)
+target_compile_options(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core
+)
+target_link_libraries(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  cpp-client-ydb_persqueue_core
+  cpp-testing-gmock_in_unittest
+  core-testlib-default
+  public-lib-json_value
+  public-lib-yson_value
+  cpp-client-ydb_driver
+  client-ydb_persqueue_core-impl
+  ydb_persqueue_core-ut-ut_utils
+  client-ydb_persqueue_public-codecs
+)
+target_link_options(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/common_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/read_session_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/basic_usage_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/compress_executor_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/compression_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/retry_policy_ut.cpp
+)
+add_test(
+  NAME
+  ydb-public-sdk-cpp-client-ydb_persqueue_core-ut
+  COMMAND
+  ydb-public-sdk-cpp-client-ydb_persqueue_core-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut)

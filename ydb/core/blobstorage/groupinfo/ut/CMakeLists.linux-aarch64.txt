@@ -1,0 +1,53 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-blobstorage-groupinfo-ut)
+target_include_directories(ydb-core-blobstorage-groupinfo-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo
+)
+target_link_libraries(ydb-core-blobstorage-groupinfo-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  core-blobstorage-groupinfo
+  library-cpp-getopt
+  library-cpp-svnversion
+  ydb-core-base
+  core-blobstorage-base
+  ydb-core-erasure
+)
+target_link_options(ydb-core-blobstorage-groupinfo-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-blobstorage-groupinfo-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-blobstorage-groupinfo-ut
+  COMMAND
+  ydb-core-blobstorage-groupinfo-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-blobstorage-groupinfo-ut)

@@ -1,0 +1,45 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-blobstorage-ut_blobstorage-ut_scrub)
+target_include_directories(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
+)
+target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_scrub PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  blobstorage-ut_blobstorage-lib
+)
+target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/scrub.cpp
+)
+add_test(
+  NAME
+  ydb-core-blobstorage-ut_blobstorage-ut_scrub
+  COMMAND
+  ydb-core-blobstorage-ut_blobstorage-ut_scrub
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-blobstorage-ut_blobstorage-ut_scrub)

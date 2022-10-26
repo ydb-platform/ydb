@@ -1,0 +1,50 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-client-metadata-ut)
+target_compile_options(ydb-core-client-metadata-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-client-metadata-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata
+)
+target_link_libraries(ydb-core-client-metadata-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  core-client-metadata
+  udf-service-stub
+  yql-sql-pg_dummy
+)
+target_link_options(ydb-core-client-metadata-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-client-metadata-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/ut/functions_metadata_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-client-metadata-ut
+  COMMAND
+  ydb-core-client-metadata-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-client-metadata-ut)

@@ -1,0 +1,51 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-base-ut)
+target_include_directories(ydb-core-base-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/base
+)
+target_link_libraries(ydb-core-base-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  ydb-core-base
+  library-cpp-getopt
+  library-cpp-svnversion
+)
+target_link_options(ydb-core-base-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-base-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-base-ut
+  COMMAND
+  ydb-core-base-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-base-ut)

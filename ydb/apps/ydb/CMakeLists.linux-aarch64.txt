@@ -1,0 +1,40 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(commands)
+
+add_executable(ydb)
+target_link_libraries(ydb PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  commands
+  library-cpp-resource
+)
+target_link_options(ydb PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/main.cpp
+  ${CMAKE_BINARY_DIR}/ydb/apps/ydb/6cd42c8765176f399b20eb2533f20a94.cpp
+)
+resources(ydb
+  ${CMAKE_BINARY_DIR}/ydb/apps/ydb/6cd42c8765176f399b20eb2533f20a94.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/version.txt
+  KEYS
+  version.txt
+)
+vcs_info(ydb)

@@ -155,7 +155,8 @@ public:
             ReadySessions[1].push_back(sessionId);
         }
 
-        auto result = LocalSessions.emplace(sessionId, TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos)));
+        auto result = LocalSessions.emplace(sessionId,
+            TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos)));
         SessionsCountPerDatabase[database]++;
         Y_VERIFY(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);

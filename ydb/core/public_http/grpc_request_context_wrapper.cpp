@@ -19,6 +19,10 @@ namespace NKikimr::NPublicHttp {
         return Request.get();
     }
 
+    NProtoBuf::Message* TGrpcRequestContextWrapper::GetRequestMut() {
+        return Request.get();
+    }
+
     NGrpc::TAuthState& TGrpcRequestContextWrapper::GetAuthState() {
         return AuthState;
     }

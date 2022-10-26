@@ -100,7 +100,7 @@ public:
         auto queryResult = TEvExecuteYqlScriptRequest::AllocateResult<TResult>(Request_);
 
         try {
-            ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+            NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
         } catch (const std::exception& ex) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::ExceptionToIssue(ex));

@@ -295,7 +295,7 @@ private:
             try {
                 for (const auto& result : response.GetResults()) {
                     Ydb::ResultSet resultSet;
-                    NGRpcService::ConvertKqpQueryResultToDbResult(result, &resultSet);
+                    NKqp::ConvertKqpQueryResultToDbResult(result, &resultSet);
                     ResultSets.emplace_back(std::move(resultSet));
                 }
             }

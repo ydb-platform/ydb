@@ -214,7 +214,7 @@ private:
         auto result = response.mutable_result();
 
         try {
-            ConvertKqpQueryResultToDbResult(kqpResult, result->mutable_result_set());
+            NKqp::ConvertKqpQueryResultToDbResult(kqpResult, result->mutable_result_set());
         } catch (std::exception ex) {
             ReplyFinishStream(ex.what(), ctx);
         }

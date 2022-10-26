@@ -57,6 +57,8 @@ public:
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
 
+        ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+
         NYql::TIssues issues;
         if (CheckSession(req->session_id(), issues)) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -77,9 +79,8 @@ public:
 
         if (req->parametersSize() != 0) {
             try {
-                NKikimrMiniKQL::TParams params;
-                ConvertYdbParamsToMiniKQLParams(req->parameters(), params);
-                ev->Record.MutableRequest()->MutableParameters()->CopyFrom(params);
+                ConvertYdbParamsToMiniKQLParams(req->parameters(), *ev->Record.MutableRequest()->MutableParameters());
+                //ev->Record.MutableRequest()->MutableYdbParameters()->swap(*req->mutable_parameters());
             } catch (const std::exception& ex) {
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Failed to parse query parameters.");
                 issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYql::ExceptionToIssue(ex)));
@@ -220,11 +221,14 @@ public:
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
-
             auto queryResult = TEvExecuteDataQueryRequest::AllocateResult<Ydb::Table::ExecuteQueryResult>(Request_);
 
             try {
-                ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+                if (kqpResponse.GetYdbResults().size()) {
+                    queryResult->mutable_result_sets()->CopyFrom(kqpResponse.GetYdbResults());
+                } else {
+                    NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+                }
                 ConvertQueryStats(kqpResponse, queryResult);
                 if (kqpResponse.HasTxMeta()) {
                     queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());

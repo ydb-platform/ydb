@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/core/util/ulid.h>
 
@@ -334,6 +335,16 @@ public:
         QueryState->StartTime = TInstant::Now();
         QueryState->UserToken = event.GetUserToken();
         QueryState->QueryDeadlines = GetQueryDeadlines(queryRequest);
+
+        if (!queryRequest.HasParameters() && queryRequest.YdbParametersSize()) {
+            try {
+                ConvertYdbParamsToMiniKQLParams(queryRequest.GetYdbParameters(), *queryRequest.MutableParameters());
+            } catch (const std::exception& ex) {
+                ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST)
+                    << "Failed to parse query parameters. "<< ex.what();
+            }
+        }
+
         QueryState->ParametersSize = queryRequest.GetParameters().ByteSize();
         QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId());
         QueryState->KeepSession = Settings.LongSession || queryRequest.GetKeepSession();
@@ -1460,6 +1471,8 @@ public:
             response->SetPreparedQuery(queryId);
         }
 
+        bool useYdbResponseFormat = QueryState->Request.GetUsePublicResponseDataFormat();
+
         if (QueryState->PreparedQuery) {
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
@@ -1484,7 +1497,11 @@ public:
 
                 auto* protoRes = KikimrResultToProto(txResults[txIndex][resultIndex], {},
                     fillSettings.value_or(FillSettings), arena.get());
-                response->AddResults()->Swap(protoRes);
+                if (useYdbResponseFormat) {
+                    ConvertKqpQueryResultToDbResult(*protoRes, response->AddYdbResults());
+                } else {
+                    response->AddResults()->Swap(protoRes);
+                }
             }
         }
 

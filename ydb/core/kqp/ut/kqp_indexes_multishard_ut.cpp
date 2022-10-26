@@ -112,7 +112,6 @@ void FillTableWithDataColumn(NYdb::NTable::TTableClient& db) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-template<bool UseNewEngine>
 void FillTable(NYdb::NTable::TSession& session) {
     const TString query(Q_(R"(
         UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
@@ -129,12 +128,12 @@ void FillTable(NYdb::NTable::TSession& session) {
 }
 
 Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
-    Y_UNIT_TEST_NEW_ENGINE(SortedRangeReadDesc) {
+    Y_UNIT_TEST(SortedRangeReadDesc) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        FillTable<UseNewEngine>(session);
+        FillTable(session);
 
         {
             const TString query(Q_(R"(
@@ -147,12 +146,12 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndexSelect) {
+    Y_UNIT_TEST(SecondaryIndexSelect) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        FillTable<UseNewEngine>(session);
+        FillTable(session);
 
         {
             const TString query(Q1_(R"(
@@ -253,17 +252,10 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
             auto result = ExecuteDataQuery(session, query);
 
-            if (UseNewEngine) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
-                    [](const NYql::TIssue& issue) {
-                        return issue.Message.Contains("Given predicate is not suitable for used index: index");
-                    }), result.GetIssues().ToString());
-            } else {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
-                    [](const NYql::TIssue& issue) {
-                        return issue.Message.Contains("Given predicate is not suitable for used index");
-                    }), result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+                [](const NYql::TIssue& issue) {
+                    return issue.Message.Contains("Given predicate is not suitable for used index: index");
+                }), result.GetIssues().ToString());
 
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"v2\"]]]");
@@ -276,14 +268,10 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
             auto result = ExecuteDataQuery(session, query);
 
-            if (UseNewEngine) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
-                    [](const NYql::TIssue& issue) {
-                        return issue.Message.Contains("Given predicate is not suitable for used index: index");
-                    }), result.GetIssues().ToString());
-            } else {
-                UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+                [](const NYql::TIssue& issue) {
+                    return issue.Message.Contains("Given predicate is not suitable for used index: index");
+                }), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2000000000u]]]");
         }
@@ -306,7 +294,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        FillTable<false>(session);
+        FillTable(session);
 
         kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
 
@@ -362,7 +350,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[4294967295u];[4u];[\"v4\"]]]");
         }
 
-        FillTable<false>(session);
+        FillTable(session);
 
         { // just for sure, public api got error when alter index
             auto settings = NYdb::NTable::TAlterTableSettings()
@@ -394,7 +382,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
     }
 
-    Y_UNIT_TEST_QUAD(DataColumnUpsertMixedSemantic, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(DataColumnUpsertMixedSemantic, WithMvcc) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
@@ -439,7 +427,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DataColumnWriteNull, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(DataColumnWriteNull, WithMvcc) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
@@ -518,7 +506,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DataColumnWrite, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(DataColumnWrite, WithMvcc) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
@@ -915,7 +903,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DataColumnSelect, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(DataColumnSelect, WithMvcc) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
@@ -1009,7 +997,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DuplicateUpsert, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(DuplicateUpsert, WithMvcc) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
@@ -1042,7 +1030,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SortByPk, WithMvcc, UseNewEngine) {
+    Y_UNIT_TEST_TWIN(SortByPk, WithMvcc) {
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
             .SetEnableMvccSnapshotReads(WithMvcc);
@@ -1051,7 +1039,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
-        FillTable<UseNewEngine>(session);
+        FillTable(session);
 
         AssertSuccessResult(session.ExecuteDataQuery(Q1_(R"(
             UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
@@ -1076,12 +1064,10 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
         // Cerr << explainResult.GetPlan() << Endl;
 
-        if (UseNewEngine) {
-            NJson::TJsonValue plan;
-            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
-            auto node = FindPlanNodeByKv(plan, "Name", "TopSort");
-            UNIT_ASSERT(node.IsDefined());
-        }
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+        auto node = FindPlanNodeByKv(plan, "Name", "TopSort");
+        UNIT_ASSERT(node.IsDefined());
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -1101,7 +1087,6 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    template<bool UseNewEngine>
     void CheckWriteIntoRenamingIndex(bool asyncIndex) {
         TKikimrRunner kikimr;
 
@@ -1220,12 +1205,12 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(WriteIntoRenamingSyncIndex) {
-        CheckWriteIntoRenamingIndex<UseNewEngine>(false);
+    Y_UNIT_TEST(WriteIntoRenamingSyncIndex) {
+        CheckWriteIntoRenamingIndex(false);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(WriteIntoRenamingAsyncIndex) {
-        CheckWriteIntoRenamingIndex<UseNewEngine>(true);
+    Y_UNIT_TEST(WriteIntoRenamingAsyncIndex) {
+        CheckWriteIntoRenamingIndex(true);
     }
 }
 

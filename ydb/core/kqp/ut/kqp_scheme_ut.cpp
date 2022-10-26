@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto db = NYdb::NTable::TTableClient(driver);
             auto session = db.CreateSession().GetValueSync().GetSession();
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
-            
+
             {
                 auto schemeClient = kikimr.GetSchemeClient();
 
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 auto result = session.ExecuteSchemeQuery(dropTableQuery).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
-            
+
             driver.Stop(true);
         }
 
@@ -317,7 +317,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }, 0, Inflight + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
 
-    template <bool UseNewEngine>
     void SchemaVersionMissmatchWithTest(bool write) {
         TKikimrRunner kikimr;
 
@@ -380,7 +379,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    template <bool UseNewEngine>
     void SchemaVersionMissmatchWithIndexTest(bool write) {
         //KIKIMR-14282
         //YDBREQUESTS-1324
@@ -454,10 +452,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto result = session.ExecuteDataQuery(query,
                 TTxControl::BeginTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), (write || UseNewEngine) ? EStatus::SUCCESS : EStatus::ABORTED, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto commit = result.GetTransaction()->Commit().GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), (write || UseNewEngine) ? EStatus::SUCCESS : EStatus::BAD_REQUEST, commit.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
         }
 
         {
@@ -470,23 +468,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithRead) {
-        SchemaVersionMissmatchWithTest<UseNewEngine>(false);
+    Y_UNIT_TEST(SchemaVersionMissmatchWithRead) {
+        SchemaVersionMissmatchWithTest(false);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithWrite) {
-        SchemaVersionMissmatchWithTest<UseNewEngine>(true);
+    Y_UNIT_TEST(SchemaVersionMissmatchWithWrite) {
+        SchemaVersionMissmatchWithTest(true);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithIndexRead) {
-        SchemaVersionMissmatchWithIndexTest<UseNewEngine>(false);
+    Y_UNIT_TEST(SchemaVersionMissmatchWithIndexRead) {
+        SchemaVersionMissmatchWithIndexTest(false);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithIndexWrite) {
-        SchemaVersionMissmatchWithIndexTest<UseNewEngine>(true);
+    Y_UNIT_TEST(SchemaVersionMissmatchWithIndexWrite) {
+        SchemaVersionMissmatchWithIndexTest(true);
     }
 
-    template <bool UseNewEngine>
     void TouchIndexAfterMoveIndex(bool write, bool replace) {
         TKikimrRunner kikimr;
 
@@ -571,23 +568,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveIndexRead) {
-        TouchIndexAfterMoveIndex<UseNewEngine>(false, false);
+    Y_UNIT_TEST(TouchIndexAfterMoveIndexRead) {
+        TouchIndexAfterMoveIndex(false, false);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveIndexWrite) {
-        TouchIndexAfterMoveIndex<UseNewEngine>(true, false);
+    Y_UNIT_TEST(TouchIndexAfterMoveIndexWrite) {
+        TouchIndexAfterMoveIndex(true, false);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveIndexReadReplace) {
-        TouchIndexAfterMoveIndex<UseNewEngine>(false, true);
+    Y_UNIT_TEST(TouchIndexAfterMoveIndexReadReplace) {
+        TouchIndexAfterMoveIndex(false, true);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveIndexWriteReplace) {
-        TouchIndexAfterMoveIndex<UseNewEngine>(true, true);
+    Y_UNIT_TEST(TouchIndexAfterMoveIndexWriteReplace) {
+        TouchIndexAfterMoveIndex(true, true);
     }
 
-    template <bool UseNewEngine>
     void TouchIndexAfterMoveTable(bool write) {
         TKikimrRunner kikimr;
 
@@ -656,12 +652,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveTableRead) {
-        TouchIndexAfterMoveTable<UseNewEngine>(false);
+    Y_UNIT_TEST(TouchIndexAfterMoveTableRead) {
+        TouchIndexAfterMoveTable(false);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveTableWrite) {
-        TouchIndexAfterMoveTable<UseNewEngine>(true);
+    Y_UNIT_TEST(TouchIndexAfterMoveTableWrite) {
+        TouchIndexAfterMoveTable(true);
     }
 
     void CheckInvalidationAfterDropCreateTable(bool withCompatSchema) {

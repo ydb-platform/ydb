@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Runtime) {
+    Y_UNIT_TEST(Runtime) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Auth) {
+    Y_UNIT_TEST(Auth) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Warning) {
+    Y_UNIT_TEST(Warning) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

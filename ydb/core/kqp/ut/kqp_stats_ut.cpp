@@ -133,7 +133,6 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSessionActor) {
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
     auto result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         UPSERT INTO `/Root/TwoShard`
         SELECT Key + 100u AS Key, Value1 FROM `/Root/TwoShard` WHERE Key in (1,2,3,4,5);
@@ -159,7 +158,6 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSessionActor) {
         .Build();
 
     result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         DECLARE $key AS Uint32;
         DECLARE $value AS String;
@@ -173,7 +171,6 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSessionActor) {
     UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 3);
 
     result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
         SELECT * FROM `/Root/TwoShard`;
         UPDATE `/Root/TwoShard` SET Value1 = "XXX" WHERE Key in (3,600);
     )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -198,7 +195,6 @@ Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSessionActor) {
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
     auto result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         UPSERT INTO `/Root/TwoShard`
         SELECT Key + 1u AS Key, Value1 FROM `/Root/TwoShard`;
@@ -222,7 +218,6 @@ Y_UNIT_TEST(DataQueryOldEngine) {
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
     auto result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "false";
 
         UPSERT INTO `/Root/TwoShard`
         SELECT Key + 1u AS Key, Value1 FROM `/Root/TwoShard`;
@@ -240,7 +235,6 @@ Y_UNIT_TEST_TWIN(DataQueryMulti, UseSessionActor) {
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
     auto result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         SELECT 1;
         SELECT 2;
@@ -255,7 +249,7 @@ Y_UNIT_TEST_TWIN(DataQueryMulti, UseSessionActor) {
     UNIT_ASSERT_EQUAL_C(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 0, result.GetQueryPlan());
 }
 
-Y_UNIT_TEST_QUAD(RequestUnitForBadRequestExecute, UseNewEngine, UseSessionActor) {
+Y_UNIT_TEST_TWIN(RequestUnitForBadRequestExecute, UseSessionActor) {
     auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -273,7 +267,7 @@ Y_UNIT_TEST_QUAD(RequestUnitForBadRequestExecute, UseNewEngine, UseSessionActor)
     UNIT_ASSERT(result.GetConsumedRu() > 0);
 }
 
-Y_UNIT_TEST_QUAD(RequestUnitForBadRequestExplicitPrepare, UseNewEngine, UseSessionActor) {
+Y_UNIT_TEST_TWIN(RequestUnitForBadRequestExplicitPrepare, UseSessionActor) {
     auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -290,8 +284,8 @@ Y_UNIT_TEST_QUAD(RequestUnitForBadRequestExplicitPrepare, UseNewEngine, UseSessi
     UNIT_ASSERT(result.GetConsumedRu() > 0);
 }
 
-Y_UNIT_TEST_QUAD(RequestUnitForSuccessExplicitPrepare, UseNewEngine, UseSessionActor) {
-    auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+Y_UNIT_TEST_TWIN(RequestUnitForSuccessExplicitPrepare, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -308,8 +302,8 @@ Y_UNIT_TEST_QUAD(RequestUnitForSuccessExplicitPrepare, UseNewEngine, UseSessionA
     UNIT_ASSERT(result.GetConsumedRu() > 1);
 }
 
-Y_UNIT_TEST_QUAD(RequestUnitForExecute, UseNewEngine, UseSessionActor) {
-    auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+Y_UNIT_TEST_TWIN(RequestUnitForExecute, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

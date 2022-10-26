@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(StrictDml) {
+    Y_UNIT_TEST(StrictDml) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ColumnTypeMismatch) {
+    Y_UNIT_TEST(ColumnTypeMismatch) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT_STRING_CONTAINS(req.GetIssues().ToString(), "Failed to convert 'Value': Uint64 to Optional<String>");
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(FlexibleTypes) {
+    Y_UNIT_TEST(FlexibleTypes) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -360,7 +360,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         CompareYson(R"([["Some text";"Some bytes"]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(BinaryJsonOffsetBound) {
+    Y_UNIT_TEST(BinaryJsonOffsetBound) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(BinaryJsonOffsetNormal) {
+    Y_UNIT_TEST(BinaryJsonOffsetNormal) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JsonNumberPrecision) {
+    Y_UNIT_TEST(JsonNumberPrecision) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

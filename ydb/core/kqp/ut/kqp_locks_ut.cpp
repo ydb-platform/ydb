@@ -7,7 +7,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpLocks) {
-    Y_UNIT_TEST_NEW_ENGINE(Invalidate) {
+    Y_UNIT_TEST(Invalidate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
 
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         CompareYson(R"([[[300u];["Changed"];[1u];["Paul"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InvalidateOnCommit) {
+    Y_UNIT_TEST(InvalidateOnCommit) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
 
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         CompareYson(R"([[[300u];["Changed"];[1u];["Paul"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(DifferentKeyUpdate) {
+    Y_UNIT_TEST(DifferentKeyUpdate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
 
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         UNIT_ASSERT(result.IsSuccess());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(EmptyRange) {
+    Y_UNIT_TEST(EmptyRange) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
 
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         CompareYson(R"([[[2u];#;[11u];["Session2"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(EmptyRangeAlreadyBroken) {
+    Y_UNIT_TEST(EmptyRangeAlreadyBroken) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
 

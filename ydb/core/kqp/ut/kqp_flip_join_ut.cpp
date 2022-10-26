@@ -78,7 +78,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             // join on key-column of left table and non-key column of right one
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t1.Value, t2.Value
                     FROM `/Root/FJ_Table_1` AS t1
@@ -97,13 +96,13 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         });
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/FJ_Table_1", 2);
+            AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
         });
     }
 
     // hierarchy of joins, flip on the last layer
-    Y_UNIT_TEST_NEW_ENGINE(Inner_2) {
+    Y_UNIT_TEST(Inner_2) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -133,13 +132,13 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
-            AssertTableReads(result, "/Root/FJ_Table_3", UseNewEngine ? 4 : 2);
+            AssertTableReads(result, "/Root/FJ_Table_3", 4);
             AssertTableReads(result, "/Root/FJ_Table_4", 1);
         });
     }
 
     // hierarchy of joins, flip on the top layer
-    Y_UNIT_TEST_NEW_ENGINE(Inner_3) {
+    Y_UNIT_TEST(Inner_3) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -174,12 +173,12 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
-            AssertTableReads(result, "/Root/FJ_Table_3", UseNewEngine ? 4 : 2);
+            AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
     }
 
     // simple left semi join, only 2 tables
-    Y_UNIT_TEST_NEW_ENGINE(LeftSemi_1) {
+    Y_UNIT_TEST(LeftSemi_1) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -211,7 +210,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
     }
 
     // hierarchy of joins, flip on the last layer
-    Y_UNIT_TEST_NEW_ENGINE(LeftSemi_2) {
+    Y_UNIT_TEST(LeftSemi_2) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -246,7 +245,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
     }
 
     // hierarchy of joins, flip on the top layer
-    Y_UNIT_TEST_NEW_ENGINE(LeftSemi_3) {
+    Y_UNIT_TEST(LeftSemi_3) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -286,7 +285,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
     }
 
     // simple right semi join, only 2 tables
-    Y_UNIT_TEST_NEW_ENGINE(RightSemi_1) {
+    Y_UNIT_TEST(RightSemi_1) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -312,13 +311,13 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         });
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/FJ_Table_1", UseNewEngine ? 4 : 2);
+            AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
         });
     }
 
     // hierarchy of joins, flip on the last layer
-    Y_UNIT_TEST_NEW_ENGINE(RightSemi_2) {
+    Y_UNIT_TEST(RightSemi_2) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -347,14 +346,14 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         });
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/FJ_Table_1", UseNewEngine ? 4 : 2);
+            AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
             AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
     }
 
     // hierarchy of joins, flip on the top layer
-    Y_UNIT_TEST_NEW_ENGINE(RightSemi_3) {
+    Y_UNIT_TEST(RightSemi_3) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -389,7 +388,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
-            AssertTableReads(result, "/Root/FJ_Table_3", UseNewEngine ? 4 : 2);
+            AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
     }
 
@@ -403,7 +402,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t2.Value
                     FROM `/Root/FJ_Table_1` AS t1
@@ -421,7 +419,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         });
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/FJ_Table_1", 2);
+            AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
         });
     }
@@ -436,7 +434,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t3.Key, t3.Value
                     FROM `/Root/FJ_Table_1` AS t1
@@ -457,7 +454,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         });
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/FJ_Table_1", 2);
+            AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
             AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
@@ -473,7 +470,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk3
@@ -500,7 +496,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
-            AssertTableReads(result, "/Root/FJ_Table_3", 2);
+            AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
     }
 
@@ -514,7 +510,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t2.Value
                     FROM `/Root/FJ_Table_3` AS t1
@@ -533,7 +528,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
-            AssertTableReads(result, "/Root/FJ_Table_3", 2);
+            AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
     }
 
@@ -547,7 +542,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     $join = (
                         SELECT t2.Key AS Key, t2.Fk1 AS Fk1, t2.Fk2 AS Fk2, t2.Value AS Value
@@ -571,7 +565,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         });
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/FJ_Table_1", 3);
+            AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 0);
             AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
@@ -587,7 +581,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk3
@@ -614,7 +607,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/FJ_Table_1", 4);
             AssertTableReads(result, "/Root/FJ_Table_2", 2);
-            AssertTableReads(result, "/Root/FJ_Table_4", 1);
+            AssertTableReads(result, "/Root/FJ_Table_4", 3);
         });
     }
 

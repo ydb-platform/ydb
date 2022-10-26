@@ -1983,7 +1983,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         {
             auto result = db.StreamExecuteScanQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 PRAGMA kikimr.OptEnablePredicateExtract = "false";
                 $keys = SELECT Key FROM `/Root/EightShard`;
                 SELECT * FROM `/Root/KeyValue` WHERE Key IN $keys ORDER BY Key;
@@ -2027,7 +2026,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         {
             auto result = db.StreamExecuteScanQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 PRAGMA kikimr.OptEnablePredicateExtract = "false";
                 $keys = SELECT Key FROM `/Root/KeyValue`;
                 SELECT * FROM `/Root/TestTable` WHERE Key1 IN $keys ORDER BY Key1, Key2;
@@ -2128,7 +2126,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         server->GetRuntime()->SetEventFilter(captureEvents);
 
         sendQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             PRAGMA kikimr.OptEnablePredicateExtract = "false";
             SELECT Value FROM `/Root/Table` WHERE Key IN AsList(1, 2, 3);
         )");

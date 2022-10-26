@@ -978,7 +978,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "key = 3, value = 3\n");
     }
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotTailCleanup, UseNewEngine) {
+    Y_UNIT_TEST(MvccSnapshotTailCleanup) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -988,7 +988,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetKeepSnapshotTimeout(TDuration::Seconds(2))
             .SetControls(controls);
 
@@ -1086,7 +1086,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT_C(failed, "Snapshot was not cleaned up");
     }
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotAndSplit, UseNewEngine) {
+    Y_UNIT_TEST(MvccSnapshotAndSplit) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -1096,7 +1096,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1282,7 +1282,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "} Struct { Bool: false }");
     }
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotReadWithLongPlanQueue, UseNewEngine) {
+    Y_UNIT_TEST(MvccSnapshotReadWithLongPlanQueue) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -1293,7 +1293,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1648,7 +1648,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TVector<THolder<IEventHandle>> BlockedReadSets;
     };
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotLockedWrites, UseNewEngine) {
+    Y_UNIT_TEST(MvccSnapshotLockedWrites) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -1660,7 +1660,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1703,15 +1703,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, Q_(R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2)
-                )")),
-            UseNewEngine ? "<empty>" : "ERROR: UNAVAILABLE");
+                )")), "<empty>");
         observer.Inject = {};
-
-        // Old engine doesn't support LockNodeId
-        // There's nothing to test unless we can write uncommitted data
-        if (!UseNewEngine) {
-            return;
-        }
 
         // Start another snapshot read, it should not see above write (it's uncommitted)
         TString sessionId2, txId2;
@@ -1744,27 +1737,23 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 )")),
             "<empty>");
 
-        if (UseNewEngine) {
-            // Verify new snapshots observe all committed changes
-            // This is only possible with new engine at this time
-            TString sessionId3, txId3;
-            UNIT_ASSERT_VALUES_EQUAL(
-                KqpSimpleBegin(runtime, sessionId3, txId3, Q_(R"(
-                    SELECT key, value FROM `/Root/table-1`
-                    WHERE key >= 1 AND key <= 3
-                    ORDER BY key
-                    )")),
-                "Struct { "
-                "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-                "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-                "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-                "} Struct { Bool: false }");
-        }
+        // Verify new snapshots observe all committed changes
+        // This is only possible with new engine at this time
+        TString sessionId3, txId3;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId3, txId3, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
+            "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+            "} Struct { Bool: false }");
     }
 
     Y_UNIT_TEST(MvccSnapshotLockedWritesRestart) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -1776,7 +1765,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1877,8 +1866,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(MvccSnapshotLockedWritesWithoutConflicts) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -1890,7 +1877,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2020,8 +2007,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(MvccSnapshotLockedWritesWithConflicts) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -2033,7 +2018,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2197,8 +2182,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(MvccSnapshotReadLockedWrites) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -2210,7 +2193,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2362,8 +2345,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(MvccSnapshotLockedWritesWithReadConflicts) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -2375,7 +2356,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2521,8 +2502,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(LockedWriteBulkUpsertConflict) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -2534,7 +2513,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2626,8 +2605,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(LockedWriteReuseAfterCommit) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -2639,7 +2616,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2718,8 +2695,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(LockedWriteDistributedCommitSuccess) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -2731,7 +2706,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2834,8 +2809,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(LockedWriteDistributedCommitAborted) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -2847,7 +2820,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2956,8 +2929,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(LockedWriteDistributedCommitFreeze) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -2969,7 +2940,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3083,8 +3054,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(LockedWriteDistributedCommitCrossConflict) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -3096,7 +3065,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3269,8 +3238,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(LockedWriteCleanupOnSplit) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -3282,7 +3249,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3373,8 +3340,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST(LockedWriteCleanupOnCopyTable) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -3386,7 +3351,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

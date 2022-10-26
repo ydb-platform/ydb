@@ -34,12 +34,12 @@ bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::functio
 
 class TLocalFixture {
 public:
-    TLocalFixture(bool useNewEngine = false) {
+    TLocalFixture() {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
-            .SetEnableKqpSessionActor(useNewEngine)
+            .SetEnableKqpSessionActor(true)
             .SetUseRealThreads(false);
 
         Server = new TServer(serverSettings);
@@ -97,7 +97,7 @@ Y_UNIT_TEST(ResolveTableError) {
     };
     fixture.Runtime->SetObserverFunc(mitm);
 
-    SendRequest(*fixture.Runtime, fixture.Client, MakeSQLRequest("pragma kikimr.UseNewEngine='true'; select * from `/Root/table-1`"));
+    SendRequest(*fixture.Runtime, fixture.Client, MakeSQLRequest("select * from `/Root/table-1`"));
 
     auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fixture.Client);
     auto& record = ev->Get()->Record.GetRef();
@@ -111,8 +111,8 @@ Y_UNIT_TEST(ResolveTableError) {
     UNIT_ASSERT(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE));
 }
 
-Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
-    TLocalFixture fixture(UseNewEngine);
+Y_UNIT_TEST(ProposeError) {
+    TLocalFixture fixture;
     THashSet<TActorId> knownExecuters;
 
     using TMod = std::function<void(NKikimrTxDataShard::TEvProposeTransactionResult&)>;
@@ -189,37 +189,29 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
     test(TEvProposeTransactionResult::ERROR,
          Ydb::StatusIds::ABORTED,
          NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-         UseNewEngine ? "blah-blah-blah" : "Scheme mismatch found while executing query.",
+         "blah-blah-blah",
          [](NKikimrTxDataShard::TEvProposeTransactionResult& x) {
              auto* error = x.MutableError()->Add();
              error->SetKind(NKikimrTxDataShard::TError::SCHEME_CHANGED);
              error->SetReason("blah-blah-blah");
          });
 
-    if (UseNewEngine) {
-        test(TEvProposeTransactionResult::ERROR,
-             Ydb::StatusIds::ABORTED,
-             NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-             "blah-blah-blah",
-             [](NKikimrTxDataShard::TEvProposeTransactionResult& x) {
-                 auto* error = x.MutableError()->Add();
-                 error->SetKind(NKikimrTxDataShard::TError::SCHEME_ERROR);
-                 error->SetReason("blah-blah-blah");
-             });
-    } else {
-        test(TEvProposeTransactionResult::ERROR,
-             Ydb::StatusIds::UNAVAILABLE,
-             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-             "Kikimr cluster or one of its subsystems was unavailable.");
-    }
+    test(TEvProposeTransactionResult::ERROR,
+        Ydb::StatusIds::ABORTED,
+        NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+        "blah-blah-blah",
+        [](NKikimrTxDataShard::TEvProposeTransactionResult& x) {
+            auto* error = x.MutableError()->Add();
+            error->SetKind(NKikimrTxDataShard::TError::SCHEME_ERROR);
+            error->SetReason("blah-blah-blah");
+        });
 
     test(TEvProposeTransactionResult::EXEC_ERROR,
          Ydb::StatusIds::GENERIC_ERROR,
          NYql::TIssuesIds::DEFAULT_ERROR,
-         UseNewEngine ? "Error executing transaction (ExecError): Execution failed" : "Default error");
+         "Error executing transaction (ExecError): Execution failed");
 
-    if (UseNewEngine) {
-        test(TEvProposeTransactionResult::EXEC_ERROR,
+    test(TEvProposeTransactionResult::EXEC_ERROR,
              Ydb::StatusIds::PRECONDITION_FAILED,
              NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
              "Kikimr precondition failed",
@@ -229,16 +221,14 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
                  error->SetReason("blah-blah-blah");
              });
 
-        // verify in old engine
-        test(TEvProposeTransactionResult::RESPONSE_DATA,
-             Ydb::StatusIds::GENERIC_ERROR,
-             NYql::TIssuesIds::DEFAULT_ERROR,
-             "Error executing transaction: transaction failed.");
-    }
+    test(TEvProposeTransactionResult::RESPONSE_DATA,
+            Ydb::StatusIds::GENERIC_ERROR,
+            NYql::TIssuesIds::DEFAULT_ERROR,
+            "Error executing transaction: transaction failed.");
 }
 
-Y_UNIT_TEST_NEW_ENGINE(ProposeRequestUndelivered) {
-    TLocalFixture fixture(UseNewEngine);
+Y_UNIT_TEST(ProposeRequestUndelivered) {
+    TLocalFixture fixture;
     auto mitm = [&](TTestActorRuntimeBase& rt, TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto forwardEvent = ev.Get()->Get<TEvPipeCache::TEvForward>();
@@ -266,9 +256,7 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeRequestUndelivered) {
         "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
 
     UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::DEFAULT_ERROR, "", [] (const TIssue& issue) {
-            return UseNewEngine
-                ? issue.Message.StartsWith("Could not deliver program to shard ")
-                : issue.Message == "Error executing transaction (ProxyShardNotAvailable): One or more of affected datashards not available, request execution cancelled";
+            return issue.Message.StartsWith("Could not deliver program to shard ");
         }), record.GetResponse().DebugString());
 }
 
@@ -313,8 +301,8 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     fn(record);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(ProposeResultLost_RoTx) {
-    TLocalFixture fixture(UseNewEngine);
+Y_UNIT_TEST(ProposeResultLost_RoTx) {
+    TLocalFixture fixture;
     TestProposeResultLost(*fixture.Runtime, fixture.Client,
         Q_("select * from `/Root/table-1`"),
         [](const NKikimrKqp::TEvQueryResponse& record) {
@@ -326,15 +314,13 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeResultLost_RoTx) {
                 "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
 
             UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-                return UseNewEngine
-                    ? issue.Message.StartsWith("Tx state unknown for shard ")
-                    : issue.Message.StartsWith("tx state unknown for shard ");
+                return issue.Message.StartsWith("Tx state unknown for shard ");
             }), record.GetResponse().DebugString());
         });
 }
 
-Y_UNIT_TEST_NEW_ENGINE(ProposeResultLost_RwTx) {
-    TLocalFixture fixture(UseNewEngine);
+Y_UNIT_TEST(ProposeResultLost_RwTx) {
+    TLocalFixture fixture;
     TestProposeResultLost(*fixture.Runtime, fixture.Client,
         Q_(R"(
             upsert into `/Root/table-1` (key, value) VALUES
@@ -349,9 +335,7 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeResultLost_RwTx) {
                "State of operation is unknown."), record.GetResponse().DebugString());
 
                UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-               return UseNewEngine
-                   ? issue.Message.StartsWith("Tx state unknown for shard ")
-                   : issue.Message.StartsWith("tx state unknown for shard ");
+               return issue.Message.StartsWith("Tx state unknown for shard ");
            }), record.GetResponse().DebugString());
         });
 }

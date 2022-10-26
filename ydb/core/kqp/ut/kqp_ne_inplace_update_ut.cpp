@@ -47,7 +47,6 @@ void Test(bool enableInplaceUpdate, const TString& query, TParams&& params, cons
     auto q = TStringBuilder()
         << R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
             PRAGMA kikimr.OptEnableInplaceUpdate = ')" << (enableInplaceUpdate ? "true" : "false") << "';" << Endl
          << query;
 
@@ -57,7 +56,6 @@ void Test(bool enableInplaceUpdate, const TString& query, TParams&& params, cons
     check(NYdb::TProtoAccessor::GetProto(*result.GetStats()));
 
     result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = 'true';
         SELECT Key, ValueStr, ValueInt, ValueDbl FROM `/Root/InplaceUpdate` ORDER BY Key;
     )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -376,7 +374,6 @@ Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     auto query = Sprintf(R"(
-        PRAGMA kikimr.UseNewEngine = 'true';
         PRAGMA kikimr.OptEnableInplaceUpdate = '%s';
 
         DECLARE $Key AS Uint32;

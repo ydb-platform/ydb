@@ -111,7 +111,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             --SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key;
-            PRAGMA Kikimr.UseNewEngine = "false";
             DECLARE $value as Utf8;
             SELECT $value as value;
         )", settings).GetValueSync();
@@ -437,7 +436,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExplainDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT Key, Value FROM `/Root/KeyValue` WHERE Key IN (1, 2, 3, 42) ORDER BY Key;
             SELECT Key, Value FROM `/Root/KeyValue` WHERE Key IN (1, 2, 3, 4*2) ORDER BY Key;
             SELECT count(distinct Value) FROM `/Root/KeyValue` WHERE Key > 20 and Key <= 120;
@@ -462,7 +460,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExplainDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPDATE `/Root/EightShard` SET Data=Data+1;
             UPDATE `/Root/EightShard` SET Data=Data-1 WHERE Key In (100,200,300);
             DELETE FROM `/Root/EightShard` WHERE Key > 350;
@@ -516,14 +513,12 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExplainDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = "false";
             DECLARE $value as Utf8;
             SELECT $value as value;
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto result2 = session.ExplainDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = "true";
             DECLARE $value as Utf8;
             SELECT $value as value;
         )").ExtractValueSync();

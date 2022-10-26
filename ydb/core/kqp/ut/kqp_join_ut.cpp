@@ -61,7 +61,6 @@ static void CreateSampleTables(TSession session) {
     )").GetValueSync().IsSuccess());
 
      UNIT_ASSERT(session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         REPLACE INTO `/Root/Join1_1` (Key, Fk21, Fk22, Value) VALUES
             (1, 101, "One", "Value1"),
@@ -125,7 +124,6 @@ static void CreateRightSemiJoinSampleTables(TSession& session) {
     )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         REPLACE INTO `/Root/RSJ_SimpleKey_1` (Key, Value) VALUES
             (1,    "1.One"),
@@ -180,7 +178,7 @@ static TDataQueryResult ExecQuery(TSession& session, const TString& query, const
 static TParams NoParams = TParamsBuilder().Build();
 
 Y_UNIT_TEST_SUITE(KqpJoin) {
-    Y_UNIT_TEST_NEW_ENGINE(IdxLookupLeftPredicate) {
+    Y_UNIT_TEST(IdxLookupLeftPredicate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -204,24 +202,22 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), kikimr.IsUsingSnapshotReads() && !UseNewEngine ? 2 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
 
         ui32 index = 1;
-        if (UseNewEngine) {
-            UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-            index = 2;
-        }
+        UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
+        index = 2;
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(IdxLookupPartialLeftPredicate) {
+    Y_UNIT_TEST(IdxLookupPartialLeftPredicate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -249,24 +245,22 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         Cerr << stats.DebugString() << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), kikimr.IsUsingSnapshotReads() && !UseNewEngine ? 2 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
 
         ui32 index = 1;
-        if (UseNewEngine) {
-            UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-            index = 2;
-        }
+        UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
+        index = 2;
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 3);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(IdxLookupPartialWithTempTable) {
+    Y_UNIT_TEST(IdxLookupPartialWithTempTable) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -347,7 +341,6 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             $bucket_name = "bucket #1";
             $object_name = "mpobject";
@@ -374,7 +367,6 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $bucket_name AS Utf8;
             DECLARE $object_name AS Utf8;
@@ -401,7 +393,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(IdxLookupSelf) {
+    Y_UNIT_TEST(IdxLookupSelf) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -421,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         AssertTableReads(result, "/Root/Join1_1", 1);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(LeftJoinWithNull) {
+    Y_UNIT_TEST(LeftJoinWithNull) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -444,7 +436,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on not key column => Full Scan
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_FullScan) {
+    Y_UNIT_TEST(RightSemiJoin_FullScan) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -485,7 +477,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on key (simple and full) column => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_SimpleKey) {
+    Y_UNIT_TEST(RightSemiJoin_SimpleKey) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -526,7 +518,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on key (complex and full) column => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_ComplexKey) {
+    Y_UNIT_TEST(RightSemiJoin_ComplexKey) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -578,7 +570,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on key prefix => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_KeyPrefix) {
+    Y_UNIT_TEST(RightSemiJoin_KeyPrefix) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -622,7 +614,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on secondary index => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_SecondaryIndex) {
+    Y_UNIT_TEST(RightSemiJoin_SecondaryIndex) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -688,7 +680,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on complex secondary index => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_ComplexSecondaryIndex) {
+    Y_UNIT_TEST(RightSemiJoin_ComplexSecondaryIndex) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -743,7 +735,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on secondary index prefix => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_ComplexSecondaryIndexPrefix) {
+    Y_UNIT_TEST(RightSemiJoin_ComplexSecondaryIndexPrefix) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -792,7 +784,6 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         }
     }
 
-    template<bool UseNewEngine = false>
     void TestInnerJoinWithPredicate(const TString& predicate, const TString& expected) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
@@ -835,19 +826,19 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(RightTableKeyPredicate) {
-        TestInnerJoinWithPredicate<UseNewEngine>("r.Key > 1", "[[[105];[5];[\"Payload2\"];[105]]]");
+    Y_UNIT_TEST(RightTableKeyPredicate) {
+        TestInnerJoinWithPredicate("r.Key > 1", "[[[105];[5];[\"Payload2\"];[105]]]");
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(RightTableIndexPredicate) {
-        TestInnerJoinWithPredicate<UseNewEngine>("r.Fk > 1", "[[[105];[5];[\"Payload2\"];[105]]]");
+    Y_UNIT_TEST(RightTableIndexPredicate) {
+        TestInnerJoinWithPredicate("r.Fk > 1", "[[[105];[5];[\"Payload2\"];[105]]]");
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(RightTableValuePredicate) {
-        TestInnerJoinWithPredicate<UseNewEngine>("r.Value = \"Payload2\"", "[[[105];[5];[\"Payload2\"];[105]]]");
+    Y_UNIT_TEST(RightTableValuePredicate) {
+        TestInnerJoinWithPredicate("r.Value = \"Payload2\"", "[[[105];[5];[\"Payload2\"];[105]]]");
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinAggregateSingleRow) {
+    Y_UNIT_TEST(JoinAggregateSingleRow) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -883,7 +874,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinAggregate) {
+    Y_UNIT_TEST(JoinAggregate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -924,7 +915,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinConvert) {
+    Y_UNIT_TEST(JoinConvert) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -957,7 +948,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ExclusionJoin) {
+    Y_UNIT_TEST(ExclusionJoin) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -980,7 +971,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         );
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(FullOuterJoin) {
+    Y_UNIT_TEST(FullOuterJoin) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1014,7 +1005,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         );
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(FullOuterJoin2) {
+    Y_UNIT_TEST(FullOuterJoin2) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1038,7 +1029,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(FullOuterJoinSizeCheck) {
+    Y_UNIT_TEST(FullOuterJoinSizeCheck) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1063,7 +1054,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         );
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CrossJoinCount) {
+    Y_UNIT_TEST(CrossJoinCount) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1079,7 +1070,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[88u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinDupColumnRight) {
+    Y_UNIT_TEST(JoinDupColumnRight) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1100,7 +1091,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinDupColumnRightPure) {
+    Y_UNIT_TEST(JoinDupColumnRightPure) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1138,7 +1129,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureInner) {
+    Y_UNIT_TEST(JoinLeftPureInner) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1156,7 +1147,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[5u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureInnerConverted) {
+    Y_UNIT_TEST(JoinLeftPureInnerConverted) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1185,7 +1176,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureFull) {
+    Y_UNIT_TEST(JoinLeftPureFull) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1203,7 +1194,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[11u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureExclusion) {
+    Y_UNIT_TEST(JoinLeftPureExclusion) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1221,7 +1212,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureCross) {
+    Y_UNIT_TEST(JoinLeftPureCross) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1238,7 +1229,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[36u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinMismatchDictKeyTypes) {
+    Y_UNIT_TEST(JoinMismatchDictKeyTypes) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

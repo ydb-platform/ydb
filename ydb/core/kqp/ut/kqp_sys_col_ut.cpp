@@ -33,10 +33,9 @@ TStreamPartIterator ExecuteStreamQuery(TKikimrRunner& kikimr, const TString& que
     return it;
 }
 
-void SelectRowAsteriskCommon(bool useNewEngine) {
+void SelectRowAsteriskCommon() {
     TStringBuilder query;
     query << R"(
-        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"(";
         PRAGMA kikimr.EnableSystemColumns = "true";
         SELECT * FROM `/Root/TwoShard` WHERE Key = 1;
     )";
@@ -46,10 +45,9 @@ void SelectRowAsteriskCommon(bool useNewEngine) {
         FormatResultSetYson(result.GetResultSet(0)));
 }
 
-void SelectRowByIdCommon(bool useNewEngine) {
+void SelectRowByIdCommon() {
     TStringBuilder query;
     query << R"(
-        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"(";
         PRAGMA kikimr.EnableSystemColumns = "true";
         SELECT * FROM `/Root/TwoShard` WHERE _yql_partition_id = 72075186224037888ul;
     )";
@@ -59,10 +57,9 @@ void SelectRowByIdCommon(bool useNewEngine) {
         FormatResultSetYson(result.GetResultSet(0)));
 }
 
-void SelectRangeCommon(bool useNewEngine) {
+void SelectRangeCommon() {
     TStringBuilder query;
     query << R"(
-        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"(";
         PRAGMA kikimr.EnableSystemColumns = "true";
         SELECT _yql_partition_id FROM `/Root/TwoShard` WHERE Key < 3;
     )";
@@ -74,27 +71,15 @@ void SelectRangeCommon(bool useNewEngine) {
 
 Y_UNIT_TEST_SUITE(KqpSysColV0) {
     Y_UNIT_TEST(SelectRowAsterisk) {
-        SelectRowAsteriskCommon(false);
-    }
-
-    Y_UNIT_TEST(SelectRowAsteriskNewEngine) {
-        SelectRowAsteriskCommon(true);
+        SelectRowAsteriskCommon();
     }
 
     Y_UNIT_TEST(SelectRowById) {
-        SelectRowByIdCommon(false);
-    }
-
-    Y_UNIT_TEST(SelectRowByIdNewEngine) {
-        SelectRowByIdCommon(true);
+        SelectRowByIdCommon();
     }
 
     Y_UNIT_TEST(SelectRange) {
-        SelectRangeCommon(false);
-    }
-
-    Y_UNIT_TEST(SelectRangeNewEngine) {
-        SelectRangeCommon(true);
+        SelectRangeCommon();
     }
 
     Y_UNIT_TEST(UpdateAndDelete) {
@@ -205,7 +190,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
 }
 
 Y_UNIT_TEST_SUITE(KqpSysColV1) {
-    Y_UNIT_TEST_NEW_ENGINE(SelectRowAsterisk) {
+    Y_UNIT_TEST(SelectRowAsterisk) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Key = 1;
@@ -216,7 +201,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SelectRowById) {
+    Y_UNIT_TEST(SelectRowById) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/TwoShard` WHERE _yql_partition_id = 72075186224037888ul;
@@ -227,7 +212,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SelectRange) {
+    Y_UNIT_TEST(SelectRange) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT _yql_partition_id FROM `/Root/TwoShard` WHERE Key < 3;
@@ -238,7 +223,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UpdateAndDelete) {
+    Y_UNIT_TEST(UpdateAndDelete) {
         TKikimrRunner kikimr;
         {
             auto query = Q_(R"(
@@ -299,7 +284,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InnerJoinTables) {
+    Y_UNIT_TEST(InnerJoinTables) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             PRAGMA DisableSimpleColumns;
@@ -314,7 +299,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InnerJoinSelect) {
+    Y_UNIT_TEST(InnerJoinSelect) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             PRAGMA DisableSimpleColumns;
@@ -329,7 +314,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InnerJoinSelectAsterisk) {
+    Y_UNIT_TEST(InnerJoinSelectAsterisk) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             PRAGMA DisableSimpleColumns;

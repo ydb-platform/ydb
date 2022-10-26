@@ -7,7 +7,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
-    Y_UNIT_TEST_NEW_ENGINE(CreateTableWithDisabledNotNullDataColumns) {
+    Y_UNIT_TEST(CreateTableWithDisabledNotNullDataColumns) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InsertNotNullPk) {
+    Y_UNIT_TEST(InsertNotNullPk) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UpsertNotNullPk) {
+    Y_UNIT_TEST(UpsertNotNullPk) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReplaceNotNullPk) {
+    Y_UNIT_TEST(ReplaceNotNullPk) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UpdateNotNullPk) {
+    Y_UNIT_TEST(UpdateNotNullPk) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SelectNotNullColumns) {
+    Y_UNIT_TEST(SelectNotNullColumns) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InsertNotNull) {
+    Y_UNIT_TEST(InsertNotNull) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UpsertNotNull) {
+    Y_UNIT_TEST(UpsertNotNull) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReplaceNotNull) {
+    Y_UNIT_TEST(ReplaceNotNull) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UpdateNotNull) {
+    Y_UNIT_TEST(UpdateNotNull) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UpdateOnNotNull) {
+    Y_UNIT_TEST(UpdateOnNotNull) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(AlterAddNotNullColumn) {
+    Y_UNIT_TEST(AlterAddNotNullColumn) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -495,7 +495,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(AlterDropNotNullColumn) {
+    Y_UNIT_TEST(AlterDropNotNullColumn) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(FailedMultiEffects) {
+    Y_UNIT_TEST(FailedMultiEffects) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -563,7 +563,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CreateIndexedTableWithDisabledNotNullDataColumns) {
+    Y_UNIT_TEST(CreateIndexedTableWithDisabledNotNullDataColumns) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -599,7 +599,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryKeyWithNotNullColumn) {
+    Y_UNIT_TEST(SecondaryKeyWithNotNullColumn) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndexWithNotNullDataColumn) {
+    Y_UNIT_TEST(SecondaryIndexWithNotNullDataColumn) {
         auto settings = TKikimrSettings()
             .SetEnableNotNullDataColumns(true);
 
@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinBothTablesWithNotNullPk) {
+    Y_UNIT_TEST(JoinBothTablesWithNotNullPk) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -853,7 +853,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftTableWithNotNullPk) {
+    Y_UNIT_TEST(JoinLeftTableWithNotNullPk) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -921,7 +921,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Describe) {
+    Y_UNIT_TEST(Describe) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();

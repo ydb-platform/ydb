@@ -102,7 +102,7 @@ void CreateTableWithIndexWithState(
 
 
 Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
-    Y_UNIT_TEST_TWIN(HandleNotReadyIndex, UseNewEngine) {
+    Y_UNIT_TEST(HandleNotReadyIndex) {
         using namespace NYql;
         using namespace NYql::NNodes;
 
@@ -139,24 +139,11 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             TExprContext exprCtx;
             VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
                 [&indexName](const TExprNode::TPtr& exprNode) {
-                    if (UseNewEngine) {
-                        if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                            UNIT_ASSERT(!TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName));
-                        }
-                        if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                            UNIT_ASSERT(!TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName));
-                        }
-                    } else {
-                        if (auto maybeupdate = TMaybeNode<TKiUpdateRow>(exprNode)) {
-                            auto update = maybeupdate.Cast();
-                            TStringBuf toUpdate = update.Table().Path().Value();
-                            UNIT_ASSERT(!toUpdate.Contains(indexName));
-                        }
-                        if (auto maybeerase = TMaybeNode<TKiEraseRow>(exprNode)) {
-                            auto erase = maybeerase.Cast();
-                            TStringBuf toErase = erase.Table().Path().Value();
-                            UNIT_ASSERT(!toErase.Contains(indexName));
-                        }
+                    if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
+                        UNIT_ASSERT(!TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName));
+                    }
+                    if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
+                        UNIT_ASSERT(!TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName));
                     }
                     return true;
                 });
@@ -170,7 +157,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(HandleWriteOnlyIndex, UseNewEngine) {
+    Y_UNIT_TEST(HandleWriteOnlyIndex) {
         using namespace NYql;
         using namespace NYql::NNodes;
 
@@ -206,31 +193,14 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             bool indexCleaned = false;
             VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
                 [&indexName, &indexUpdated, &indexCleaned](const TExprNode::TPtr& exprNode) mutable {
-                    if (UseNewEngine) {
-                        if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                            if (TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                                indexUpdated = true;
-                            }
+                    if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
+                        if (TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName)) {
+                            indexUpdated = true;
                         }
-                        if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                            if (TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                                indexCleaned = true;
-                            }
-                        }
-                    } else {
-                        if (auto maybeupdate = TMaybeNode<TKiUpdateRow>(exprNode)) {
-                            auto update = maybeupdate.Cast();
-                            TStringBuf toUpdate = update.Table().Path().Value();
-                            if (toUpdate.Contains(indexName)) {
-                                indexUpdated = true;
-                            }
-                        }
-                        if (auto maybeerase = TMaybeNode<TKiEraseRow>(exprNode)) {
-                            auto erase = maybeerase.Cast();
-                            TStringBuf toErase = erase.Table().Path().Value();
-                            if (toErase.Contains(indexName)) {
-                                indexCleaned = true;
-                            }
+                    }
+                    if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
+                        if (TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName)) {
+                            indexCleaned = true;
                         }
                     }
                     return true;
@@ -249,7 +219,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
 }
 
 Y_UNIT_TEST_SUITE(KqpIndexes) {
-    Y_UNIT_TEST_NEW_ENGINE(NullInIndexTableNoDataRead) {
+    Y_UNIT_TEST(NullInIndexTableNoDataRead) {
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrRunner kikimr({setting});
         auto db = kikimr.GetTableClient();
@@ -273,9 +243,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#];[[7]]]");
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 2 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-            int phase = UseNewEngine ? 1 : 0;
+            int phase = 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).name(), "/Root/SecondaryKeys/Index/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 2);
@@ -283,7 +253,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(NullInIndexTable) {
+    Y_UNIT_TEST(NullInIndexTable) {
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrRunner kikimr({setting});
         auto db = kikimr.GetTableClient();
@@ -303,39 +273,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[#;#;[\"Payload8\"]];[#;[7];[\"Payload7\"]]]");
         }
-// We can't validate it now. Try to improve it after migrate to MVCC
-#if 0
-        if (UseNewEngine) {
-            NKikimrMiniKQL::TResult result;
-            auto& oldClient = kikimr.GetTestClient();
-            bool success = oldClient.FlatQuery(
-                "("
-                    "(let row '('('Key (Int32 '7))))"
-                    "(let pgmReturn (AsList"
-                    "    (EraseRow '/Root/SecondaryKeys row)"
-                    "))"
-                    "(return pgmReturn)"
-                ")",
-            result);
-
-            UNIT_ASSERT(success);
-
-            {
-                const TString query(Q_(R"(
-                    SELECT * FROM `/Root/SecondaryKeys` : Index WHERE Fk IS NULL;
-                )"));
-
-                auto result = session.ExecuteDataQuery(
-                                     query,
-                                     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                              .ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
-            }
-        }
-#endif
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(WriteWithParamsFieldOrder) {
+    Y_UNIT_TEST(WriteWithParamsFieldOrder) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
@@ -392,7 +332,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SelectConcurentTX, UseNewEngine) {
+    Y_UNIT_TEST(SelectConcurentTX) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -473,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::SUCCESS, result2.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(SelectConcurentTX2, UseNewEngine) {
+    Y_UNIT_TEST(SelectConcurentTX2) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -554,7 +494,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::ABORTED, result2.GetIssues().ToString().c_str());
     }
 
-    Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseNewEngine) {
+    Y_UNIT_TEST(UpsertWithoutExtraNullDelete) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -600,34 +540,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
 
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
 
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).name(), "/Root/TestTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).updates().rows(), 1);
 
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).updates().rows(), 1);
-                UNIT_ASSERT(!stats.query_phases(3).table_access(0).has_deletes());
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
-                UNIT_ASSERT(!stats.query_phases(2).table_access(0).has_deletes());
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(!stats.query_phases(3).table_access(0).has_deletes());
         }
 
         {
@@ -645,13 +569,13 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
-            int idx = UseNewEngine ? 3 : 2;
+            int idx = 3;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 2);
 
@@ -680,14 +604,14 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
-            int idx = UseNewEngine ? 3 : 2;
+            int idx = 3;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 2);
 
             // One update of main table
@@ -696,10 +620,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             // No touching index
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            if (!UseNewEngine) { // BUG
-                UNIT_ASSERT(!stats.query_phases(idx).table_access(1).has_updates());
-                UNIT_ASSERT(!stats.query_phases(idx).table_access(1).has_deletes());
-            }
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -724,9 +644,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 2); // BUG
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
 
-            int idx = UseNewEngine ? 1 : 0;
+            int idx = 1;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             // One read of main table
@@ -734,7 +654,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
 
             // One update of index table
-            idx += (UseNewEngine ? 2 : 1);
+            idx += 2;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
@@ -785,7 +705,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     }
 
-    Y_UNIT_TEST_TWIN(UpsertWithNullKeysSimple, UseNewEngine) {
+    Y_UNIT_TEST(UpsertWithNullKeysSimple) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -881,7 +801,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     }
 
-    Y_UNIT_TEST_TWIN(UpsertWithNullKeysComplex, UseNewEngine) {
+    Y_UNIT_TEST(UpsertWithNullKeysComplex) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -1019,417 +939,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     }
 
-    Y_UNIT_TEST(KeyIndex) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
-            .SetKqpSettings({setting});
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        // Table with complex index
-        {
-            auto tableBuilder = db.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::String)
-                .AddNullableColumn("Index", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index", "Key"});
-            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPSERT INTO `/Root/TestTable` (Key, Index) VALUES
-                ("Primary1", "Secondary1");
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            // Empty table no read in stats
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
-            // One update
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
-
-            // Index update without detele
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(!stats.query_phases(2).table_access(1).has_deletes());
-            {
-                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
-                const TString expected = R"([[["Secondary1"];["Primary1"]]])";
-                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-            }
-        }
-
-        {
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPSERT INTO `/Root/TestTable` (Key, Index) VALUES
-                ("Primary1", "Secondary1_1");
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            // One read to find previous index value
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
-            // Update main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            // Update index with deletion
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(stats.query_phases(2).table_access(1).has_deletes());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).deletes().rows(), 1);
-            {
-                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
-                const TString expected = R"([[["Secondary1_1"];["Primary1"]]])";
-                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-            }
-        }
-
-        {
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPDATE `/Root/TestTable` ON (Key, Index) VALUES
-                ("Primary1", "Secondary1_2");
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
-
-            // Update main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
-
-            // Update index
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(stats.query_phases(2).table_access(1).has_deletes());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).deletes().rows(), 1);
-            {
-                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
-                const TString expected = R"([[["Secondary1_2"];["Primary1"]]])";
-                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-            }
-        }
-
-        {
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPDATE `/Root/TestTable` SET Index = "Secondary1_3"
-                WHERE Key = "Primary1";
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(stats.query_phases(1).table_access(1).has_deletes());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).deletes().rows(), 1);
-            {
-                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
-                const TString expected = R"([[["Secondary1_3"];["Primary1"]]])";
-                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(KeyIndex2) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
-            .SetKqpSettings({setting});
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        // pk is <Key,Index>
-        // index is <Index,Key>
-        {
-            auto tableBuilder = db.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::String)
-                .AddNullableColumn("Index", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "Index"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index", "Key"});
-            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPSERT INTO `/Root/TestTable` (Key, Index) VALUES
-                ("Primary1", "Secondary1");
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
-            // Empty table without delete
-            UNIT_ASSERT(!stats.query_phases(2).table_access(1).has_deletes());
-            {
-                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
-                const TString expected = R"([[["Secondary1"];["Primary1"]]])";
-                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-            }
-        }
-
-        {
-            // Upsert on new pk
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPSERT INTO `/Root/TestTable` (Key, Index) VALUES
-                ("Primary1", "Secondary1_1");
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            // read nothing
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
-            // no deletion
-            UNIT_ASSERT(!stats.query_phases(2).table_access(1).has_deletes());
-            {
-                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
-                const TString expected = R"([[["Secondary1"];["Primary1"]];[["Secondary1_1"];["Primary1"]]])";
-                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-            }
-        }
-
-        {
-            // Update on non existing key - do nothing
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPDATE `/Root/TestTable` ON (Key, Index) VALUES
-                ("Primary1", "Secondary1_2");
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 0);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 0);
-            {
-                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
-                const TString expected = R"([[["Secondary1"];["Primary1"]];[["Secondary1_1"];["Primary1"]]])";
-                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(ReplaceWithoutExtraNullDelete) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
-            .SetKqpSettings({setting});
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            auto tableBuilder = db.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::String)
-                .AddNullableColumn("Index2", EPrimitiveType::String)
-                .AddNullableColumn("Value", EPrimitiveType::String);
-            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-            tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
-            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                REPLACE INTO `/Root/TestTable` (Key, Index2, Value) VALUES
-                ("Primary1", "Secondary1", "Value1");
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(!stats.query_phases(2).table_access(1).has_deletes());
-        }
-
-        {
-            const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                REPLACE INTO `/Root/TestTable` (Key, Index2, Value) VALUES
-                ("Primary1", "Secondary1_1", "Value1");
-            )");
-
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                                 execSettings)
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(stats.query_phases(2).table_access(1).has_deletes());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).deletes().rows(), 1);
-        }
-    }
-
-    Y_UNIT_TEST_TWIN(SecondaryIndexUpsert1DeleteUpdate, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexUpsert1DeleteUpdate) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -1617,7 +1127,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexUpsert2Update, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexUpsert2Update) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -1708,7 +1218,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexUpdateOnUsingIndex, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexUpdateOnUsingIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -1775,7 +1285,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexSelectUsingScripting, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexSelectUsingScripting) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -1816,7 +1326,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexOrderBy, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexOrderBy) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -1866,13 +1376,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1899,14 +1403,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
                 UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1932,13 +1429,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
                 UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1963,13 +1454,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -1994,14 +1479,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2025,16 +1503,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
             }
 
             {
@@ -2059,16 +1529,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2093,16 +1555,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2128,16 +1582,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2163,16 +1609,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(!result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(!result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(!result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2186,7 +1624,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexOrderBy2, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexOrderBy2) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -2244,14 +1682,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2290,14 +1721,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2335,15 +1760,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
-
-                if (UseNewEngine) {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
-                } else {
-                    UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-                    UNIT_ASSERT_C(result.GetAst().Contains("Sort"), result.GetAst());
-                    UNIT_ASSERT_C(!result.GetAst().Contains("PartialSort"), result.GetAst());
-                }
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
             {
@@ -2366,7 +1784,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexReplace, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexReplace) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -2445,7 +1863,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexInsert1, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexInsert1) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -2491,7 +1909,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(MultipleSecondaryIndex, UseNewEngine) {
+    Y_UNIT_TEST(MultipleSecondaryIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -2556,7 +1974,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameComulns, UseNewEngine) {
+    Y_UNIT_TEST(MultipleSecondaryIndexWithSameComulns) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -2894,7 +2312,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameComulns, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexWithPrimaryKeySameComulns) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -3168,63 +2586,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(DeleteOnWithSubquery) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetEnableMvcc(true)
-            .SetEnableMvccSnapshotReads(true)
-            .SetKqpSettings({setting});
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);
-
-        const TString query(R"(
-            --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false';
-            DECLARE $keys AS List<Tuple<Int32, String>>;
-            $to_delete = (
-                SELECT Key FROM `/Root/SecondaryComplexKeys` VIEW Index WHERE (Fk1, Fk2) in $keys
-            );
-            DELETE FROM `/Root/SecondaryComplexKeys` ON
-            SELECT * FROM $to_delete;
-        )");
-
-        auto params = TParamsBuilder().AddParam("$keys").BeginList()
-            .AddListItem().BeginTuple().AddElement().Int32(1).AddElement().String("Fk1").EndTuple()
-            .EndList().Build().Build();
-
-        NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/SecondaryComplexKeys/Index/indexImplTable");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-        // In theory we can optimize and remove this read access
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/SecondaryComplexKeys");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).reads().rows(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 2);
-
-        // No guarantee effects will be in the same order
-        if (stats.query_phases(3).table_access(0).name() == "/Root/SecondaryComplexKeys") {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).name(), "/Root/SecondaryComplexKeys/Index/indexImplTable");
-        } else if (stats.query_phases(3).table_access(0).name() == "/Root/SecondaryComplexKeys/Index/indexImplTable") {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).name(), "/Root/SecondaryComplexKeys");
-        } else {
-            Y_FAIL("unexpected table name");
-        }
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).deletes().rows(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).deletes().rows(), 1);
-    }
-
-    Y_UNIT_TEST_TWIN(SecondaryIndexUsingInJoin, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexUsingInJoin) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -3300,10 +2662,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             int indexPhaseId = 1;
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                indexPhaseId = 2;
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            indexPhaseId = 2;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
@@ -3333,10 +2693,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             int indexPhaseId = 1;
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                indexPhaseId = 2;
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            indexPhaseId = 2;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
@@ -3366,10 +2724,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             int indexPhaseId = 1;
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                indexPhaseId = 2;
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            indexPhaseId = 2;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
@@ -3399,10 +2755,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             int indexPhaseId = 1;
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                indexPhaseId = 2;
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            indexPhaseId = 2;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
@@ -3414,7 +2768,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexUsingInJoin2, UseNewEngine) {
+    Y_UNIT_TEST(SecondaryIndexUsingInJoin2) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -3491,10 +2845,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             int indexPhaseId = 1;
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
-                indexPhaseId = 2;
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+            indexPhaseId = 2;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
@@ -3530,10 +2882,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             int indexPhaseId = 1;
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
-                indexPhaseId = 2;
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+            indexPhaseId = 2;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
@@ -3551,7 +2901,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(ForbidViewModification, UseNewEngine) {
+    Y_UNIT_TEST(ForbidViewModification) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -3690,7 +3040,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(DuplicateUpsertInterleave, UseNewEngine) {
+    Y_UNIT_TEST(DuplicateUpsertInterleave) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -3728,7 +3078,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(DuplicateUpsertInterleaveParams, UseNewEngine) {
+    Y_UNIT_TEST(DuplicateUpsertInterleaveParams) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -3816,7 +3166,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(MultipleModifications, UseNewEngine) {
+    Y_UNIT_TEST(MultipleModifications) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -3864,7 +3214,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    template <bool UseNewEngine>
     void CreateTableWithIndexSQL(EIndexTypeSql type) {
         auto kqpSetting = NKikimrKqp::TKqpSetting();
         kqpSetting.SetName("_KqpYqlSyntaxVersion");
@@ -3937,19 +3286,18 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(CreateTableWithImplicitSyncIndexSQL, UseNewEngine) {
-        CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::Global);
+    Y_UNIT_TEST(CreateTableWithImplicitSyncIndexSQL) {
+        CreateTableWithIndexSQL(EIndexTypeSql::Global);
     }
 
-    Y_UNIT_TEST_TWIN(CreateTableWithExplicitSyncIndexSQL, UseNewEngine) {
-        CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::GlobalSync);
+    Y_UNIT_TEST(CreateTableWithExplicitSyncIndexSQL) {
+        CreateTableWithIndexSQL(EIndexTypeSql::GlobalSync);
     }
 
-    Y_UNIT_TEST_TWIN(CreateTableWithExplicitAsyncIndexSQL, UseNewEngine) {
-        CreateTableWithIndexSQL<UseNewEngine>(EIndexTypeSql::GlobalAsync);
+    Y_UNIT_TEST(CreateTableWithExplicitAsyncIndexSQL) {
+        CreateTableWithIndexSQL(EIndexTypeSql::GlobalAsync);
     }
 
-    template <bool UseNewEngine>
     void SelectFromAsyncIndexedTable() {
         auto kqpSetting = NKikimrKqp::TKqpSetting();
         kqpSetting.SetName("_KqpYqlSyntaxVersion");
@@ -3979,8 +3327,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto queryId = session.PrepareDataQuery(query).ExtractValueSync().GetQuery();
 
         const auto variants = TVector<std::pair<TTxSettings, EStatus>>{
-            {TTxSettings::SerializableRW(), UseNewEngine ? EStatus::PRECONDITION_FAILED : EStatus::GENERIC_ERROR},
-            {TTxSettings::OnlineRO(), UseNewEngine ? EStatus::PRECONDITION_FAILED : EStatus::GENERIC_ERROR},
+            {TTxSettings::SerializableRW(), EStatus::PRECONDITION_FAILED},
+            {TTxSettings::OnlineRO(), EStatus::PRECONDITION_FAILED},
             {TTxSettings::StaleRO(), EStatus::SUCCESS},
         };
 
@@ -4005,11 +3353,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(SelectFromAsyncIndexedTable, UseNewEngine) {
-        SelectFromAsyncIndexedTable<UseNewEngine>();
+    Y_UNIT_TEST(SelectFromAsyncIndexedTable) {
+        SelectFromAsyncIndexedTable();
     }
 
-    Y_UNIT_TEST_TWIN(InnerJoinWithNonIndexWherePredicate, UseNewEngine) {
+    Y_UNIT_TEST(InnerJoinWithNonIndexWherePredicate) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
@@ -4077,10 +3425,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             auto& stats = NYdb::TProtoAccessor::GetProto(*result2.GetStats());
 
             int readPhase = 0;
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                readPhase = 1;
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            readPhase = 1;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).name(), "/Root/SecondaryComplexKeys/Index/indexImplTable");
@@ -4095,7 +3441,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     //KIKIMR-8144
-    Y_UNIT_TEST_TWIN(InnerJoinSecondaryIndexLookupAndRightTablePredicateNonIndexColumn, UseNewEngine) {
+    Y_UNIT_TEST(InnerJoinSecondaryIndexLookupAndRightTablePredicateNonIndexColumn) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
@@ -4273,7 +3619,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(DeleteByIndex, UseNewEngine) {
+    Y_UNIT_TEST(DeleteByIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -4364,7 +3710,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseNewEngine) {
+    Y_UNIT_TEST(UpdateDeletePlan) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -4422,7 +3768,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         checkPlan(result.GetPlan(), 1, 1, 1);
     }
 
-    Y_UNIT_TEST_TWIN(UpsertNoIndexColumns, UseNewEngine) {
+    Y_UNIT_TEST(UpsertNoIndexColumns) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -4474,7 +3820,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         CompareYson(R"([[[2]]])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST_TWIN(UpdateIndexSubsetPk, UseNewEngine) {
+    Y_UNIT_TEST(UpdateIndexSubsetPk) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(true)
@@ -4563,7 +3909,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(IndexMultipleRead, UseNewEngine) {
+    Y_UNIT_TEST(IndexMultipleRead) {
         TKikimrRunner kikimr;
 
         auto db = kikimr.GetTableClient();
@@ -4595,7 +3941,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         });
 
         AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
-            .ExpectedReads = UseNewEngine ? 1 : 2,
+            .ExpectedReads = 1,
         });
 
         CompareYson(R"([[[5];[5];["Payload5"]]])", FormatResultSetYson(result.GetResultSet(0)));

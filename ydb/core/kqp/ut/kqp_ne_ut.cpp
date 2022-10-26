@@ -17,7 +17,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -74,7 +73,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto query = R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $key AS Uint64;
 
@@ -129,7 +127,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto query = R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $group AS Uint32?;
             DECLARE $name AS String?;
@@ -176,7 +173,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $low AS Uint64;
             DECLARE $high AS Uint64;
@@ -210,8 +206,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
-
             DECLARE $low AS Uint64;
             DECLARE $high AS Uint64;
 
@@ -243,8 +237,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
-
             DECLARE $low AS Uint64;
 
             SELECT * FROM `/Root/EightShard` WHERE Key > $low ORDER BY Key;
@@ -275,8 +267,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
-
             DECLARE $high AS Uint64;
 
             SELECT * FROM `/Root/EightShard` WHERE Key < $high ORDER BY Key;
@@ -298,7 +288,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Value2 = 0 ORDER BY Value1 DESC, Key;
             SELECT * FROM `/Root/Test` WHERE Group = 1 ORDER BY Amount, Group, Name;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -315,7 +304,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(1)));
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/Test` WHERE Group = 2 ORDER BY Amount, Group, Name;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -331,7 +319,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 $left = (select Key, Value1, Value2 from `/Root/TwoShard` where Value2 = 1);
                 $right = (select Key, Value1, Value2 from `/Root/TwoShard` where Value2 = -1);
                 select Key, Value1, Value2 from $left order by Key;
@@ -356,14 +343,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/TwoShard`
             SELECT Key, Value1, Value2 + 1 AS Value2 FROM `/Root/TwoShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -386,14 +371,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/TwoShard`
             SELECT Key - 3u AS Key, Value1, Value2 + 100 AS Value2 FROM `/Root/TwoShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Value2 > 10 ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -428,7 +411,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         {
             const TString query1(R"(
                 --!syntax_v1
-                PRAGMA Kikimr.UseNewEngine = "true";
                 DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>;
                 UPSERT INTO `/Root/Test1`
                    SELECT * FROM AS_TABLE($items);
@@ -464,7 +446,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         {
             const TString query1(R"(
                 --!syntax_v1
-                PRAGMA Kikimr.UseNewEngine = "true";
                 DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>;
                 SELECT * FROM AS_TABLE($items);
             )");
@@ -495,8 +476,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
-
             UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
                 (10u, "One", -10),
                 (20u, "Two", -20);
@@ -504,7 +483,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertSuccessResult(result);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Value2 <= -10 ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -538,8 +516,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
-
             DECLARE $key1 AS Uint32;
             DECLARE $value1 AS String;
             DECLARE $key2 AS Uint32;
@@ -554,7 +530,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertSuccessResult(result);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Value1 = "New" ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -594,8 +569,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
-
             DECLARE $items AS List<Struct<Key:Uint32?, Value1:String?>>;
 
             UPSERT INTO `/Root/TwoShard`
@@ -604,7 +577,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertSuccessResult(result);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Value1 = "New" ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -623,7 +595,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto queryText = R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             DECLARE $items AS
                 List<Struct<
                     Key1: Uint32?,
@@ -702,7 +673,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT Data, SUM(Key) AS Total FROM `/Root/EightShard` GROUP BY Data ORDER BY Data;
         )", TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -718,7 +688,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT Data, Text, COUNT(Key) AS Total FROM `/Root/EightShard` GROUP BY Data, Text ORDER BY Data, Text;
         )", TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -741,7 +710,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT '42', 42, 5*5;
         )", TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(), execSettings).ExtractValueSync();
 
@@ -761,7 +729,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT 1;
             SELECT 2;
             SELECT 3;
@@ -781,7 +748,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT 1;
             SELECT Key FROM `/Root/TwoShard` ORDER BY Key DESC LIMIT 1;
             SELECT 2;
@@ -800,7 +766,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session1 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
         AssertSuccessResult(result);
@@ -809,13 +774,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto session2 = db.CreateSession().GetValueSync().GetSession();
         result = session2.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES(1, "NewValue");
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
         AssertSuccessResult(result);
 
         result = session1.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Key = 2;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
@@ -835,7 +798,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session1 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
         AssertSuccessResult(result);
@@ -844,13 +806,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto session2 = db.CreateSession().GetValueSync().GetSession();
         result = session2.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES(101, "NewValue");
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
         AssertSuccessResult(result);
 
         result = session1.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/EightShard`;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
@@ -870,7 +830,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
         AssertSuccessResult(result);
@@ -878,7 +837,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto tx = result.GetTransaction();
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/EightShard`;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
         AssertSuccessResult(result);
@@ -890,7 +848,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session1 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
         AssertSuccessResult(result);
@@ -899,13 +856,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto session2 = db.CreateSession().GetValueSync().GetSession();
         result = session2.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES(1, "NewValue");
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
         AssertSuccessResult(result);
 
         result = session1.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/TwoShard` (Key,Value1) VALUES(2, "NewValue");
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
         UNIT_ASSERT(!result.IsSuccess());
@@ -914,7 +869,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
 
         result = session2.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Key <= 2;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
         AssertSuccessResult(result);
@@ -929,7 +883,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/KeyValue`
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -937,7 +890,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto tx = result.GetTransaction();
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT 42;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -951,7 +903,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard`
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -959,7 +910,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto tx = result.GetTransaction();
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT 42;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -973,7 +923,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/KeyValue`
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -983,7 +932,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         {
             auto session2 = db.CreateSession().GetValueSync().GetSession();
             result = session2.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 UPSERT INTO `/Root/KeyValue` (Key, Value)
                     VALUES (3u, "Three")
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -991,7 +939,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT 42;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
@@ -1010,7 +957,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard`
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1020,7 +966,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         {
             auto session2 = db.CreateSession().GetValueSync().GetSession();
             result = session2.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2)
                     VALUES (4u, "Four", 4)
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -1028,7 +973,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT 42;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
@@ -1047,7 +991,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT * FROM `/Root/TwoShard` WHERE Key = 4000000001u;       -- read 2nd shard
 
@@ -1061,7 +1004,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         {
             auto session2 = db.CreateSession().GetValueSync().GetSession();
             result = session2.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES  -- write 2nd shard
                     (4000000001u, "XXX", -101)
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -1073,7 +1015,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT(HasIssue(txResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT Key, Value1, Value2 FROM `/Root/TwoShard` WHERE Key = 11u
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1086,7 +1027,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             UPSERT INTO `/Root/TwoShard`
             SELECT Key + 1u AS Key, Value1 FROM `/Root/TwoShard`;
@@ -1106,7 +1046,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $key AS Uint32;
             DECLARE $value AS String;
@@ -1117,7 +1056,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT COUNT(*) FROM `/Root/TwoShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -1127,7 +1065,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -1153,7 +1090,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (3u, "Three")
         )", TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         AssertSuccessResult(result);
@@ -1161,7 +1097,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto tx = result.GetTransaction();
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT 1=1;
         )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -1180,7 +1115,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/EightShard` WHERE Key = 101 OR Key = 301
             ORDER BY Key;
         )", TTxControl::BeginTx().CommitTx(), execSettings).GetValueSync();
@@ -1214,7 +1148,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             DECLARE $key AS Uint64;
             SELECT * FROM `/Root/EightShard` WHERE Key = $key + 1;
         )", TTxControl::BeginTx().CommitTx(), params, execSettings).GetValueSync();
@@ -1252,7 +1185,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             DECLARE $Key AS UInt32;
 
             UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
@@ -1274,7 +1206,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Value2 <= -10 ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -1296,7 +1227,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/EightShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -1312,7 +1242,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             REPLACE INTO `/Root/TwoShard` (Value1, Key) VALUES
                 ("Newvalue 1", 1u),
@@ -1321,7 +1250,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT * FROM `/Root/TwoShard` WHERE Key <= 5 ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -1335,7 +1263,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             REPLACE INTO `/Root/Logs` (App, Ts, Host, Message) VALUES
                 ("new_app_1", 100, "new_app_host_1.search.yandex.net", "Initialize"),
@@ -1344,7 +1271,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT * FROM `/Root/Logs` WHERE App = "new_app_1" ORDER BY App, Ts, Host;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -1356,7 +1282,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             REPLACE INTO `/Root/Logs` (App, Host, Message) VALUES
                 ("new_app_2", "host_2_1", "Empty"),
@@ -1371,7 +1296,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT t1.Key AS Key, t2.Value2 AS Value
             FROM `/Root/KeyValue` AS t1
@@ -1405,7 +1329,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $data AS List<Struct<Key: Uint64>>;
 
@@ -1430,7 +1353,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             $input = (
                 SELECT Key, CAST(Fk21 AS Uint32) AS Fk21
@@ -1475,14 +1397,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         // add nulls
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES (4u, "Four"), (NULL, "Null");
             REPLACE INTO `/Root/Join2` (Key1, Key2, Name, Value2) VALUES (1, NULL, "Name Null", "Value Null");
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
 
                 SELECT Key1, Key2, Name, Value2
                 FROM `/Root/Join2` AS t1
@@ -1505,8 +1425,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_QUAD(JoinPure, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(JoinPure, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1551,8 +1471,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_QUAD(JoinPureUncomparableKeys, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(JoinPureUncomparableKeys, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1574,8 +1494,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_QUAD(SelfJoin, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(SelfJoin, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1602,7 +1522,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             UPDATE `/Root/TwoShard`
             SET Value1 = "Updated"
@@ -1624,7 +1543,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard` ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -1648,7 +1566,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DELETE FROM `/Root/TwoShard`
             WHERE Value2 = -1;
@@ -1671,7 +1588,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT * FROM `/Root/TwoShard` ORDER BY Key;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -1694,7 +1610,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DELETE FROM `/Root/TwoShard` ON
             SELECT * FROM `/Root/TwoShard` WHERE Value2 = 1;
@@ -1717,7 +1632,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT * FROM `/Root/TwoShard` ORDER BY Key;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -1740,7 +1654,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
 
                 UPDATE `/Root/TwoShard` SET Value1 = "Updated" WHERE Value2 = 1;
                 UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
@@ -1749,7 +1662,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
 
                 SELECT * FROM `/Root/TwoShard` ORDER BY Key;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -1793,7 +1705,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
-                PRAGMA kikimr.UseNewEngine = "true";
 
                 DECLARE $data AS List<Struct<Key: Uint32, Value1: String, Value2: Int32>>;
 
@@ -1803,7 +1714,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
 
                 SELECT * FROM `/Root/TwoShard` WHERE Key > 5 AND Key < 12 ORDER BY Key;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -1822,7 +1732,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto query = R"(
                 --!syntax_v1
-                pragma kikimr.UseNewEngine = "true";
 
                 declare $key as UInt64;
                 declare $text as String;
@@ -1859,7 +1768,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
 
         it = session.ExecuteDataQuery(R"(
-                pragma kikimr.UseNewEngine = "true";
 
                 select Key, Text, Data from `/Root/EightShard` where Text = "foo" order by Key
             )",TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -1896,7 +1804,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
-                PRAGMA Kikimr.UseNewEngine = "true";
                 DECLARE $in AS List<Struct<Key: Uint64, Value: Decimal(22, 9)>>;
 
                 REPLACE INTO `/Root/DecimalTest`
@@ -1905,7 +1812,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-                PRAGMA Kikimr.UseNewEngine = "true";
                 SELECT Key, Value FROM `/Root/DecimalTest` ORDER BY Key
             )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1922,7 +1828,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            pragma kikimr.UseNewEngine = "true";
             select * from `/Root/TwoShard` where Key = 1;
         )", TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1932,7 +1837,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         for (ui64 i : {2u, 3u, 4u, 4000000001u, 4000000002u, 4000000003u}) {
             result = session.ExecuteDataQuery(Sprintf(R"(
-                pragma kikimr.UseNewEngine = "true";
                 select * from `/Root/TwoShard` where Key = %ld;
             )", i), TTxControl::Tx(*tx)).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1956,7 +1860,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 for (auto withSort : {false, true}) { // TODO: passthrough FlatMap
                     TStringBuilder query;
                     query << "--!syntax_v1" << Endl
-                          << "pragma kikimr.UseNewEngine = 'true';" << Endl
                           << "declare $limit as Uint64;" << Endl
                           << "declare $offset as Uint64;" << Endl
                           << "select Key, Value from `/Root/KeyValue`";
@@ -2010,7 +1913,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         // TODO: Take(query result) . ReadTable
 //        test(R"(
-//            pragma kikimr.UseNewEngine = "true";
 //            $limit = (
 //                select Key + 1 from `/Root/KeyValue` where Value = 'Four'
 //            );
@@ -2026,7 +1928,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_INFO);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT Value1, Value2, Key FROM `/Root/TwoShard` WHERE Value2 != 0 ORDER BY Key DESC;
         )", TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -2049,7 +1950,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_INFO);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT Value1, Value2, Key FROM `/Root/TwoShard` WHERE Value2 != 0 ORDER BY Key DESC;
         )", TTxControl::BeginTx(TTxSettings::OnlineRO(TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx())
             .ExtractValueSync();
@@ -2085,7 +1985,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         AssertSuccessResult(session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             REPLACE INTO `FollowersKv` (Key, Value) VALUES
                 (1u, "One"),
@@ -2101,7 +2000,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         // Followers immediate
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM FollowersKv WHERE Key = 21;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -2115,7 +2013,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         // Followers distributed
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM FollowersKv WHERE Value != "One" ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -2131,7 +2028,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         // No followers immediate
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM TwoShard WHERE Key = 2;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -2145,7 +2041,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         // No followers distributed
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM TwoShard WHERE Value2 < 0 ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -2166,7 +2061,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_INFO);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT Value1, Value2, Key FROM `/Root/TwoShard` WHERE Value2 != 0 ORDER BY Key DESC;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -2187,7 +2081,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExplainDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = "true";
             DECLARE $max_key as Uint64;
             DECLARE $min_key as Uint64;
             SELECT * FROM `/Root/KeyValue` WHERE Key <= $max_key AND Key >= $min_key;
@@ -2207,7 +2100,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = "true";
 
             UPSERT INTO `/Root/TwoShard`
             SELECT
@@ -2218,7 +2110,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = "true";
 
             SELECT * FROM `/Root/TwoShard` WHERE Key = 100;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -2258,7 +2149,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             REPLACE INTO `/Root/TableOne` (Key, Value) VALUES
                 (1, 1),
@@ -2396,10 +2286,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 #endif
         };
 
-        TString useNewEngine = "PRAGMA kikimr.UseNewEngine = \"true\";";
-
         for (auto& item: testData) {
-            auto result = session.ExecuteDataQuery(useNewEngine + item.first,
+            auto result = session.ExecuteDataQuery(item.first,
                 TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
             AssertSuccessResult(result);
             auto resultYson = FormatResultSetYson(result.GetResultSet(0));
@@ -2407,7 +2295,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
 
         for (auto& item: testData) {
-            auto it = db.StreamExecuteScanQuery(useNewEngine + item.first).GetValueSync();
+            auto it = db.StreamExecuteScanQuery(item.first).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             CompareYson(item.second, CollectStreamResult(it).ResultSetYson);
@@ -2423,7 +2311,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             DELETE FROM TwoShard WHERE Value1 != TestUdfs::RandString(10);
         )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2441,7 +2328,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (100, 100500), (100500, 100);
             DELETE FROM `/Root/EightShard` ON (Key) VALUES (100);
         )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
@@ -2451,7 +2337,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 //        Cerr << "!!!\n" << stats.DebugString() << Endl;
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT Key, Data
             FROM `/Root/EightShard`
             WHERE Key=100 or Key=100500
@@ -2471,7 +2356,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
 
-            PRAGMA kikimr.UseNewEngine = "true";
 
             $input1 = SELECT * FROM EightShard WHERE Text = "Value1";
             $input2 = SELECT * FROM EightShard WHERE Text = "Value2";
@@ -2512,7 +2396,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             REPLACE INTO `/Root/table1` (key, cached) VALUES
                 ("Key1", "CachedValue1"),
@@ -2521,7 +2404,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
 
             REPLACE INTO `/Root/table2` (
                 key, in_cache, value
@@ -2533,7 +2415,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = "true";
 
             $t1 = SELECT `cached`, `key` FROM `/Root/table1`
                     WHERE `key` = "Key1";
@@ -2563,7 +2444,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
 
-            PRAGMA kikimr.UseNewEngine = "true";
 
             $key = SELECT Fk22 AS Key2 FROM Join1 WHERE Key = 1;
 
@@ -2585,7 +2465,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
 
-            PRAGMA kikimr.UseNewEngine = "true";
 
             $data =
                 SELECT * FROM KeyValue
@@ -2613,7 +2492,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             $data =
                 SELECT Key1, Key2, Name, Value2
@@ -2643,7 +2521,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT t1.Key AS Key, t2.Value2 AS Value, t2.Value2 AS Text
             FROM KeyValue AS t1
@@ -2682,7 +2559,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $items AS List<Struct<
                 Key: String,
@@ -2730,7 +2606,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $rows AS List<Struct<
                 Key : Uint32?,
@@ -2759,7 +2634,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $group AS Uint32;
             DECLARE $name AS String;
@@ -2784,7 +2658,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $groups AS List<Uint32>;
 
@@ -2799,7 +2672,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT * FROM Test;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -2819,7 +2691,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $keys AS List<Uint32>;
 
@@ -2834,7 +2705,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT * FROM TwoShard WHERE Key < 10;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -2854,7 +2724,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = "true";
 
             $keys = SELECT Fk21 AS Key1, Fk22 AS Key2 FROM Join1 WHERE Value = "Value1";
 
@@ -2879,7 +2748,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT * FROM Join2 WHERE Key1 = 101 ORDER BY Key1, Key2;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -2900,7 +2768,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = "true";
 
             $keys =
                 SELECT Group, Name, Amount FROM Test
@@ -2935,7 +2802,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             PRAGMA DisableSimpleColumns;
             SELECT *
             FROM `Join1` AS l JOIN `Join2` AS r ON l.Fk21 = r.Key1 AND r.Key1 = l.Fk21
@@ -2951,8 +2817,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_QUAD(JoinDictWithPure, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(JoinDictWithPure, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2993,7 +2859,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             UPDATE TestTable SET Data = 10 WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -3006,7 +2871,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = 'true';
             SELECT * FROM `/Root/KeyValue`;
             SELECT * FROM `/Root/KeyValue`;
             SELECT * FROM `/Root/Test`;
@@ -3030,7 +2894,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExplainDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             $current_value = SELECT Fk21 FROM Join1 WHERE Key = 2;
 
@@ -3056,7 +2919,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             $max_key = (SELECT Key FROM `/Root/KeyValue` ORDER BY Key DESC LIMIT 1);
             SELECT $max_key ?? 0
@@ -3075,7 +2937,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             SELECT * FROM `/Root/Logs` WHERE App = 'nginx'u AND Ts >= 2 LIMIT 1
         )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -3095,7 +2956,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             DECLARE $app AS Utf8;
 
@@ -3118,7 +2978,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExplainDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             SELECT Fk21 FROM Join1 WHERE Value = "Value1";
             SELECT Fk22 FROM Join1 WHERE Value = "Value2";
@@ -3139,7 +2998,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExplainDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             SELECT Fk21 FROM Join1 WHERE Key = 1;
             SELECT Fk22 FROM Join1 WHERE Value = "Value2";
@@ -3167,7 +3025,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             $data = (
                 SELECT Data FROM EightShard WHERE Key = 401
@@ -3198,7 +3055,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             DECLARE $key AS Uint64;
 
@@ -3275,7 +3131,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExplainDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
             PRAGMA kikimr.OptEnablePredicateExtract = 'false';
 
             DECLARE $app AS Utf8;
@@ -3327,7 +3182,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExplainDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = 'true';
 
             DECLARE $input AS List<Struct<
                 Key: Uint64,
@@ -3365,7 +3219,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
             $subquery = SELECT Key FROM `/Root/KeyValue`;
             $subquery2 = SELECT Amount FROM `/Root/Test`;
 
@@ -3395,7 +3248,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $rows AS List<Struct<
                 Name: String,
@@ -3430,7 +3282,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             DECLARE $value1 AS Int32;
             DECLARE $value2 AS Uint64;
@@ -3472,7 +3323,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             $count1 = SELECT COUNT (*) FROM `/Root/KeyValue`;
             $count2 = SELECT COUNT(*)
@@ -3511,7 +3361,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
-                PRAGMA kikimr.UseNewEngine = "true";
                 $subquery = SELECT Key FROM `/Root/EightShard`;
 
                 SELECT * FROM `/Root/KeyValue`
@@ -3539,7 +3388,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
-                PRAGMA kikimr.UseNewEngine = "true";
                 DECLARE $keys AS List<Uint64>;
 
                 SELECT * FROM `/Root/KeyValue`
@@ -3557,7 +3405,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
-                PRAGMA kikimr.UseNewEngine = "true";
 
                 SELECT * FROM `/Root/KeyValue`
                 WHERE Key = 1;
@@ -3581,7 +3428,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             $values = SELECT Value2 AS Value FROM TwoShard;
 
@@ -3608,7 +3454,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.UseNewEngine = "true";
 
             SELECT ts.Value1 AS c1, kv.Value AS c2, t.Name AS c3
             FROM TwoShard AS ts

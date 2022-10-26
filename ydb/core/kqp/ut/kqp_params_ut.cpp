@@ -7,7 +7,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpParams) {
-    Y_UNIT_TEST_NEW_ENGINE(RowsList) {
+    Y_UNIT_TEST(RowsList) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(MissingParameter) {
+    Y_UNIT_TEST(MissingParameter) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(BadParameterType) {
+    Y_UNIT_TEST(BadParameterType) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(DefaultParameterValue) {
+    Y_UNIT_TEST(DefaultParameterValue) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         CompareYson(R"([[[11u];#]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ParameterTypes) {
+    Y_UNIT_TEST(ParameterTypes) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -274,8 +274,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected: " << expected1 << ", got: " << actual);
     }
 
-    Y_UNIT_TEST_QUAD(InvalidJson, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(InvalidJson, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

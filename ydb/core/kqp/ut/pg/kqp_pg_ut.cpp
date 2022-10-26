@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     auto makePgType = [] (ui32 oid, i32 typlen = -1) { return TPgType(oid, typlen, -1); };
 
-    Y_UNIT_TEST_NEW_ENGINE(CreateTableBulkUpsertAndRead) {
+    Y_UNIT_TEST(CreateTableBulkUpsertAndRead) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

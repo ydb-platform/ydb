@@ -120,8 +120,8 @@ TParams BuildInsertIndexParams(TTableClient& client) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpPerf) {
-    Y_UNIT_TEST_QUAD(Upsert, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(Upsert, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -146,15 +146,15 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         // TODO: Get rid of additional precompute stage for adding optionality to row members in NewEngine
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(Replace, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(Replace, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -179,15 +179,15 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         // Single-phase REPLACE in NewEngine require additional runtime write callable
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(UpdateOn, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(UpdateOn, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -212,15 +212,15 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         // Two-phase UPDATE ON in NewEngine require more complex runtime callables
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 3 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(Insert, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(Insert, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -245,15 +245,15 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         // Three-phase INSERT in NewEngine require more complex runtime callables
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(DeleteOn, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(DeleteOn, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -278,15 +278,15 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         // TODO: Get rid of additional precompute stage for adding optionality to row members in NewEngine
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(Update, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(Update, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -320,8 +320,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(Delete, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(Delete, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -356,8 +356,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(IndexUpsert, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(IndexUpsert, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -376,11 +376,11 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexReplace, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(IndexReplace, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -399,11 +399,11 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexUpdateOn, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(IndexUpdateOn, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -422,11 +422,11 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexDeleteOn, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(IndexDeleteOn, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -445,11 +445,11 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexInsert, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(IndexInsert, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -468,11 +468,11 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 5 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
     }
 
-    Y_UNIT_TEST_QUAD(IdxLookupJoin, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(IdxLookupJoin, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -494,11 +494,11 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 3 : kikimr.IsUsingSnapshotReads() ? 2 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
     }
 
-    Y_UNIT_TEST_QUAD(IdxLookupJoinThreeWay, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(IdxLookupJoinThreeWay, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -521,11 +521,11 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 5 : kikimr.IsUsingSnapshotReads() ? 3 : 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
     }
 
-    Y_UNIT_TEST_QUAD(ComputeLength, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(ComputeLength, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -542,8 +542,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
     }
 
-    Y_UNIT_TEST_QUAD(AggregateToScalar, UseNewEngine, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    Y_UNIT_TEST_TWIN(AggregateToScalar, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -565,10 +565,10 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         CompareYson(R"([[["Anna"];[3800u]]])", FormatResultSetYson(result.GetResultSet(0)));
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
     }
 
-    Y_UNIT_TEST_TWIN(MultiDeleteFromTable, UseNewEngine) {
+    Y_UNIT_TEST(MultiDeleteFromTable) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

@@ -10,7 +10,6 @@ using namespace NYdb::NTable;
 
 void PrepareTables(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
         CREATE TABLE `/Root/Left` (
             Key Int32,
             Fk Int32,
@@ -45,7 +44,6 @@ void PrepareTables(TSession session) {
     )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         REPLACE INTO `/Root/Left` (Key, Fk, Value) VALUES
             (1, 101, "Value1"),
@@ -84,7 +82,6 @@ void PrepareTables(TSession session) {
 
 Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 
-template <bool UseNewEngine>
 void Test(const TString& query, const TString& answer, size_t rightTableReads) {
     TKikimrRunner kikimr;
     auto db = kikimr.GetTableClient();
@@ -101,24 +98,22 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads) {
     CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), kikimr.IsUsingSnapshotReads() && !UseNewEngine ? 2 : 3);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
 
     ui32 index = 1;
-    if (UseNewEngine) {
-        UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-        index = 2;
-    }
+    UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
+    index = 2;
 
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Right");
     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), rightTableReads);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(MultiJoins) {
+Y_UNIT_TEST(MultiJoins) {
     TString query =
         R"(
             SELECT main.idx_processId AS `processId`, main.idx_launchNumber AS `launchNumber`
@@ -161,8 +156,8 @@ Y_UNIT_TEST_NEW_ENGINE(MultiJoins) {
     CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 }
 
-Y_UNIT_TEST_NEW_ENGINE(Inner) {
-    Test<UseNewEngine>(
+Y_UNIT_TEST(Inner) {
+    Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
             FROM `/Root/Left` AS l
@@ -173,12 +168,11 @@ Y_UNIT_TEST_NEW_ENGINE(Inner) {
         )",
         R"([
             [[1];[101];["Value1"];[101];["Value21"]]
-        ])",
-        2);
+        ])", 2);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(Left) {
-    Test<UseNewEngine>(
+Y_UNIT_TEST(Left) {
+    Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
             FROM `/Root/Left` AS l
@@ -191,12 +185,11 @@ Y_UNIT_TEST_NEW_ENGINE(Left) {
             [[3];[103];["Value2"];[103];["Value23"]];
             [[4];[104];["Value2"];#;#];
             [[5];[105];["Value3"];#;#]
-        ])",
-        1);
+        ])", 1);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(LeftOnly) {
-    Test<UseNewEngine>(
+Y_UNIT_TEST(LeftOnly) {
+    Test(
         R"(
             SELECT l.Key, l.Fk, l.Value
             FROM `/Root/Left` AS l
@@ -208,12 +201,11 @@ Y_UNIT_TEST_NEW_ENGINE(LeftOnly) {
         R"([
             [[4];[104];["Value2"]];
             [[5];[105];["Value3"]]
-        ])",
-        UseNewEngine ? 1 : 3);
+        ])", 1);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(LeftSemi) {
-    Test<UseNewEngine>(
+Y_UNIT_TEST(LeftSemi) {
+    Test(
         R"(
             SELECT l.Key, l.Fk, l.Value
             FROM `/Root/Left` AS l
@@ -223,12 +215,11 @@ Y_UNIT_TEST_NEW_ENGINE(LeftSemi) {
         )",
         R"([
             [[3];[103];["Value2"]]
-        ])",
-        UseNewEngine ? 1 : 3);
+        ])", 1);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(RightSemi) {
-    Test<UseNewEngine>(
+Y_UNIT_TEST(RightSemi) {
+    Test(
         R"(
             SELECT r.Key, r.Value
             FROM `/Root/Left` AS l
@@ -240,8 +231,7 @@ Y_UNIT_TEST_NEW_ENGINE(RightSemi) {
         R"([
             [[101];["Value21"]];
             [[103];["Value23"]]
-        ])",
-        3);
+        ])", 3);
 }
 
 } // suite

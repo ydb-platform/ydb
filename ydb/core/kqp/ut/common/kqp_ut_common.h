@@ -37,8 +37,6 @@
     template <bool OPT>                                                                                            \
     void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
-#define Y_UNIT_TEST_NEW_ENGINE(N) Y_UNIT_TEST_TWIN(N, UseNewEngine)
-
 #define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
     template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
     struct TTestRegistration##N {                                                                                                    \
@@ -53,17 +51,15 @@
     template<bool OPT1, bool OPT2>                                                                                                   \
     void N(NUnitTest::TTestContext&)
 
-template <bool UseNewEngine, bool ForceVersionV1 = false>
+template <bool ForceVersionV1>
 TString Query(const TString& tmpl) {
     return TStringBuilder()
         << (ForceVersionV1 ? "--!syntax_v1\n" : "")
-        << "PRAGMA Kikimr.UseNewEngine = '" << (UseNewEngine ? "true" : "false") << "';" << Endl
-        //<< (UseNewEngine ? "PRAGMA Kikimr.UseNewEngine = 'true';" : "")
         << tmpl;
 }
 
-#define Q_(expr) Query<UseNewEngine, false>(expr)
-#define Q1_(expr) Query<UseNewEngine, true>(expr)
+#define Q_(expr) Query<false>(expr)
+#define Q1_(expr) Query<true>(expr)
 
 namespace NKikimr {
 namespace NKqp {

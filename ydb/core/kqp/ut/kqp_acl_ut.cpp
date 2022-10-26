@@ -17,7 +17,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
@@ -46,7 +45,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 SELECT * FROM `/Root/TwoShard`;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             // TODO: Should be UNAUTHORIZED
@@ -54,7 +52,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
         }
         {
             auto result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
                     (10u, "One", -10);
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -87,7 +84,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             SELECT * FROM `/Root/TwoShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
@@ -116,7 +112,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
                 (10u, "One", -10);
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -147,7 +142,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         const char* queryTmpl = R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             CREATE TABLE `/Root/PQ/%s` (
                 id Int64,
                 name String,

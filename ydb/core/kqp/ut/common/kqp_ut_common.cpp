@@ -291,7 +291,6 @@ void TKikimrRunner::CreateSampleTables() {
     )").GetValueSync());
 
     AssertSuccessResult(session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         REPLACE INTO `TwoShard` (Key, Value1, Value2) VALUES
             (1u, "One", -1),
@@ -883,7 +882,6 @@ void CreateSampleTablesWithIndex(TSession& session) {
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
     auto result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
 
         REPLACE INTO `KeyValue` (Key, Value) VALUES
             (3u,   "Three"),
@@ -928,7 +926,6 @@ void WaitForKqpProxyInit(const NYdb::TDriver& driver) {
     while (true) {
         auto it = client.RetryOperationSync([=](TSession session) {
             return session.ExecuteDataQuery(R"(
-                        PRAGMA kikimr.UseNewEngine = "true";
                         SELECT 1;
                     )",
                     TTxControl::BeginTx().CommitTx()

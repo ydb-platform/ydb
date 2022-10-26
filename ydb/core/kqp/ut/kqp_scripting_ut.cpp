@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(rs0.ColumnParser(0).GetUint64(), 2u);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UnsafeTimestampCast) {
+    Y_UNIT_TEST(UnsafeTimestampCast) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("0");
@@ -272,7 +272,6 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         {
             auto result = client.ExecuteYqlScript(R"(
-                PRAGMA Kikimr.UseNewEngine = "true";
                 CREATE TABLE `/Root/ScriptingTest` (
                     Key Uint64,
                     Value String,
@@ -285,35 +284,29 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         auto result = client.ExplainYqlScript(R"(
-            PRAGMA Kikimr.UseNewEngine = "false";
             REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
                 (1, "One"),
                 (2, "Two");
             COMMIT;
 
-            PRAGMA Kikimr.UseNewEngine = "true";
             REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
                 (3, "Three"),
                 (4, "Four");
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            PRAGMA Kikimr.UseNewEngine = "true";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "false";
-            PRAGMA Kikimr.UseNewEngine = "true";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            PRAGMA Kikimr.UseNewEngine = "false";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "false";
-            PRAGMA Kikimr.UseNewEngine = "false";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
@@ -344,7 +337,6 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         settings.Mode(ExplainYqlRequestMode::Plan);
 
         auto result = client.ExplainYqlScript(R"(
-            PRAGMA Kikimr.UseNewEngine = "true";
             CREATE TABLE `/Root/ScriptingTest` (
                 Key Uint64,
                 Value String,
@@ -352,35 +344,29 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             );
             COMMIT;
 
-            PRAGMA Kikimr.UseNewEngine = "false";
             REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
                 (1, "One"),
                 (2, "Two");
             COMMIT;
 
-            PRAGMA Kikimr.UseNewEngine = "true";
             REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
                 (3, "Three"),
                 (4, "Four");
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            PRAGMA Kikimr.UseNewEngine = "true";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "false";
-            PRAGMA Kikimr.UseNewEngine = "true";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            PRAGMA Kikimr.UseNewEngine = "false";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "false";
-            PRAGMA Kikimr.UseNewEngine = "false";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
@@ -450,7 +436,6 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         settings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Full);
 
         auto result = client.ExecuteYqlScript(R"(
-            PRAGMA Kikimr.UseNewEngine = "true";
             CREATE TABLE `/Root/ScriptingTest` (
                 Key Uint64,
                 Value String,
@@ -458,35 +443,29 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             );
             COMMIT;
 
-            PRAGMA Kikimr.UseNewEngine = "false";
             REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
                 (1, "One"),
                 (2, "Two");
             COMMIT;
 
-            PRAGMA Kikimr.UseNewEngine = "true";
             REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
                 (3, "Three"),
                 (4, "Four");
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            PRAGMA Kikimr.UseNewEngine = "true";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "false";
-            PRAGMA Kikimr.UseNewEngine = "true";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            PRAGMA Kikimr.UseNewEngine = "false";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "false";
-            PRAGMA Kikimr.UseNewEngine = "false";
             SELECT count(*) FROM `/Root/ScriptingTest`;
             COMMIT;
 

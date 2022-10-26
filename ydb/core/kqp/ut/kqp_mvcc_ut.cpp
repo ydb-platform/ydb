@@ -9,7 +9,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
-    Y_UNIT_TEST_NEW_ENGINE(TestSnapshotExpiration) {
+    Y_UNIT_TEST(TestSnapshotExpiration) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         UNIT_ASSERT_C(caught, "Failed to wait for snapshot expiration.");
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReadOnlyTxCommitsOnConcurrentWrite) {
+    Y_UNIT_TEST(ReadOnlyTxCommitsOnConcurrentWrite) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReadOnlyTxWithIndexCommitsOnConcurrentWrite) {
+    Y_UNIT_TEST(ReadOnlyTxWithIndexCommitsOnConcurrentWrite) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite1) {
+    Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite1) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite2) {
+    Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite2) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite3) {
+    Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite3) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);

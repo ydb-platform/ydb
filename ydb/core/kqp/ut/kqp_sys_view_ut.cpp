@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         CompareYson(expected, StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(QueryStatsSimple) {
+    Y_UNIT_TEST(QueryStatsSimple) {
         auto checkTable = [&] (const TStringBuf tableName) {
             TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
 

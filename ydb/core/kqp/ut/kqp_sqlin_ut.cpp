@@ -24,7 +24,7 @@ const bool EnableOpt = false;
 
 Y_UNIT_TEST_SUITE(KqpSqlIn) {
 
-    Y_UNIT_TEST_NEW_ENGINE(TableSource) {
+    Y_UNIT_TEST(TableSource) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CantRewrite) {
+    Y_UNIT_TEST(CantRewrite) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             auto params = TParamsBuilder(paramsType);
 
             auto result = ExecQueryAndTestResult(session, query, params.Build(), R"([])");
-            AssertTableReads(result, "/Root/KeyValue", UseNewEngine ? 0 : 6);
+            AssertTableReads(result, "/Root/KeyValue", 0);
         }
 
         // not empty parameters
@@ -99,11 +99,11 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             pl.EndList().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params.Build(), R"([[[1u];["One"]]])");
-            AssertTableReads(result, "/Root/KeyValue", UseNewEngine ? 3 : 6);
+            AssertTableReads(result, "/Root/KeyValue", 3);
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SimpleKey) {
+    Y_UNIT_TEST(SimpleKey) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -142,10 +142,10 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, true /* optionalParams */, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", UseNewEngine ? 3 : 6);
+            AssertTableReads(result, "/Root/KeyValue", 3);
         });
         test(DisableOpt, false /* optionalParams */, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", UseNewEngine ? 3 : 6);
+            AssertTableReads(result, "/Root/KeyValue", 3);
         });
 
         test(EnableOpt, true /* optionalParams */, [](const TDataQueryResult& result) {
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SimpleKey_Negated) {
+    Y_UNIT_TEST(SimpleKey_Negated) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/KeyValue", 6); // not optimized
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(KeySuffix) {
+    Y_UNIT_TEST(KeySuffix) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(KeySuffix_OnlyTail) {
+    Y_UNIT_TEST(KeySuffix_OnlyTail) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/Test", 8); // not optimized
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(KeySuffix_NotPointPrefix) {
+    Y_UNIT_TEST(KeySuffix_NotPointPrefix) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/Test", 4); // not optimized
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ComplexKey) {
+    Y_UNIT_TEST(ComplexKey) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/Test", 6);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(KeyTypeMissmatch_Int) {
+    Y_UNIT_TEST(KeyTypeMissmatch_Int) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -358,10 +358,10 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             R"([[[1u];["Anna"];[3500u];["None"]];
                 [[1u];["Jack"];[100500u];["Just Jack"]];
                 [[1u];["Paul"];[300u];["None"]]])");
-        AssertTableReads(result, "/Root/Test", UseNewEngine ? 3 : 8);
+        AssertTableReads(result, "/Root/Test", 3);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(KeyTypeMissmatch_Str) {
+    Y_UNIT_TEST(KeyTypeMissmatch_Str) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -386,7 +386,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/KeyValue2", 1);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Dict) {
+    Y_UNIT_TEST(Dict) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", UseNewEngine ? 2 : 6);
+            AssertTableReads(result, "/Root/KeyValue", 2);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TupleParameter) {
+    Y_UNIT_TEST(TupleParameter) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", UseNewEngine ? 3 : 8);
+            AssertTableReads(result, "/Root/Test", 3);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TupleLiteral) {
+    Y_UNIT_TEST(TupleLiteral) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", UseNewEngine ? 3 : 8);
+            AssertTableReads(result, "/Root/Test", 3);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TupleSelect) {
+    Y_UNIT_TEST(TupleSelect) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -543,7 +543,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SelectNotAllElements) {
+    Y_UNIT_TEST(SelectNotAllElements) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/SecondaryKeys", 2);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey) {
+    Y_UNIT_TEST(SecondaryIndex_SimpleKey) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey_In_And) {
+    Y_UNIT_TEST(SecondaryIndex_SimpleKey_In_And) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -655,7 +655,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SimpleKey_In_And_In) {
+    Y_UNIT_TEST(SimpleKey_In_And_In) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", UseNewEngine ? 2 : 5);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -694,7 +694,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey_In_And_In) {
+    Y_UNIT_TEST(SecondaryIndex_SimpleKey_In_And_In) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -737,7 +737,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_ComplexKey_In_And_In) {
+    Y_UNIT_TEST(SecondaryIndex_ComplexKey_In_And_In) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleParameter) {
+    Y_UNIT_TEST(SecondaryIndex_TupleParameter) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -826,7 +826,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleLiteral) {
+    Y_UNIT_TEST(SecondaryIndex_TupleLiteral) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -857,7 +857,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleSelect) {
+    Y_UNIT_TEST(SecondaryIndex_TupleSelect) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -897,7 +897,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TupleNotOnlyOfKeys) {
+    Y_UNIT_TEST(TupleNotOnlyOfKeys) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -939,15 +939,15 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", UseNewEngine ? 4 : 8);
+            AssertTableReads(result, "/Root/Test", 4);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", UseNewEngine ? 4 : 8); // todo: should be 4
+            AssertTableReads(result, "/Root/Test", 4);
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Delete) {
+    Y_UNIT_TEST(Delete) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -974,12 +974,12 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/KeyValue", {
-            .ExpectedReads = UseNewEngine ? 0 : 2,
-            .ExpectedDeletes = UseNewEngine ? 3 : 2,
+            .ExpectedReads = 0,
+            .ExpectedDeletes = 3,
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InWithCast) {
+    Y_UNIT_TEST(InWithCast) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1006,11 +1006,11 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         AssertTableStats(result, "/Root/TwoShard", {
-            .ExpectedReads = UseNewEngine ? 1 : 6,
+            .ExpectedReads = 1,
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(PhasesCount) {
+    Y_UNIT_TEST(PhasesCount) {
         TKikimrRunner kikimr;
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 

@@ -130,7 +130,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                 }
             }
 
-            Pos = pos + 1; // for '\n'
+            Pos = pos + 1 /* \n */;
             return READY_DATA;
         }
 
@@ -204,6 +204,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                     ReadyInputBytes = PendingInputBytes;
                     ReadyOutputPos = Buffer.Size();
                     Reset();
+                } else {
+                    const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
+                    if (TString::npos != pos) {
+                        ReadyOutputPos = pos + 1 /* \n */;
+                    }
                 }
             }
 

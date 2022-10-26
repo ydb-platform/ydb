@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+message YandexPassportCookies {
+  string session_id = 1;
+  string ssl_session_id = 2;
+  string host = 3;
+}

@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.resourcemanager.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/servicecontrol/resource.proto";
+
+message Folder {
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    ACTIVE = 1;
+    DELETING = 2;
+    reserved "DELETED"; reserved 3;
+    PENDING_DELETION = 4;
+  }
+
+  string id = 1;
+  string cloud_id = 2;
+
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  Status status = 7;
+}
+
+message ResolvedFolder {
+  string id = 1;
+  repeated servicecontrol.v1.Resource resource_path = 2;
+  string cloud_id = 3;
+  string organization_id = 4;
+}

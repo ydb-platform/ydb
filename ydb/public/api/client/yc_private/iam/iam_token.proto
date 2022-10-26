@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message IamToken {
+  string iam_token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.servicecontrol.v1;
+
+message Resource {
+  string id = 1;
+
+  // The type of the resource, e.g. resource-manager.folder, billing.account, compute.snapshot, etc.
+  string type = 2;
+}
+
+message ResourcePath {
+  repeated Resource path = 1;
+}

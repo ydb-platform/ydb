@@ -6,5 +6,7 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(yc_private)
-add_subdirectory(yc_public)
+add_subdirectory(iam)
+add_subdirectory(operation)
+add_subdirectory(resourcemanager)
+add_subdirectory(servicecontrol)

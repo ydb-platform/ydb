@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/iam/user_account.proto";
+
+service UserAccountService {
+  rpc Get (GetUserAccountRequest) returns (UserAccount) {
+    option (google.api.http) = { get: "/iam/v1/userAccounts/{user_account_id}" };
+  }
+
+  rpc Delete (DeleteUserAccountRequest) returns (ydb.yc.priv.operation.Operation);
+
+  rpc GetSettings (GetSettingsRequest) returns (UserSettings);
+
+  rpc UpdateSettings (UpdateSettingsRequest) returns (UserSettings);
+
+  rpc PresignUrl(PresignUrlRequest) returns (PresignUrlResponse);
+}
+
+message GetUserAccountRequest {
+  string user_account_id = 1;
+}
+
+message DeleteUserAccountRequest {
+  string subject_id = 1;
+}
+
+message DeleteUserAccountMetadata {
+  string subject_id = 1;
+}
+
+message GetSettingsRequest {
+  // Empty list means full settings.
+  repeated string response_json_path = 1;
+  // Optional - get specified subject user settings. By default equals to authenticated subject.
+  string subject_id = 2;
+}
+
+message UserSettings {
+  // JSON-serialized user-settings.
+  string json = 1;
+}
+
+message UpdateSettingsRequest {
+  // Empty list means full settings.
+  repeated string response_json_path = 1;
+  // Serialized JSON Patch (https://tools.ietf.org/html/rfc6902).
+  string json_patch = 2;
+  // Optional - update specified subject user settings. By default equals to authenticated subject.
+  string subject_id = 3;
+}
+
+message PresignUrlRequest {
+  string subject_id = 1;
+  // The formatted string to sign, see https://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
+  repeated string strings_to_sign = 2;
+
+  oneof parameters {
+    Version2Parameters v2_parameters = 4;
+    Version4Parameters v4_parameters = 5;
+  }
+
+  // https://docs.aws.amazon.com/general/latest/gr/signature-version-2.html
+  message Version2Parameters {
+    SignatureMethod signature_method = 1;
+
+    enum SignatureMethod {
+      SIGNATURE_METHOD_UNSPECIFIED = 0;
+      HMAC_SHA1 = 1;
+      HMAC_SHA256 = 2;
+    }
+  }
+
+  // https://docs.aws.amazon.com/general/latest/gr/signature-version-4.html
+  message Version4Parameters {
+    google.protobuf.Timestamp signed_at = 1;
+    string service = 2;
+    string region = 3;
+  }
+
+}
+
+message PresignUrlResponse {
+  string access_key_id = 1;
+  repeated SignedString signed_strings = 2;
+}
+
+message SignedString {
+  string string_to_sign = 1;
+  string signature = 2;
+}

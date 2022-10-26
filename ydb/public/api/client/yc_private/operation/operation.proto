@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package ydb.yc.priv.operation;
+
+import "google/protobuf/any.proto";
+import "google/rpc/status.proto";
+import "google/protobuf/timestamp.proto";
+
+message Operation {
+  string id = 1;
+  string description = 2; // ex: Create VM, Stop VM, Delete Disk, Snapshot Disk, etc
+  google.protobuf.Timestamp created_at = 3;
+  string created_by = 4;
+  google.protobuf.Timestamp modified_at = 5;
+
+  bool done = 6;
+
+  google.protobuf.Any metadata = 7;
+
+  oneof result {
+    google.rpc.Status error = 8; // for error and cancellation
+    google.protobuf.Any response = 9; // for 'Create/Update' should contain entity
+  }
+}

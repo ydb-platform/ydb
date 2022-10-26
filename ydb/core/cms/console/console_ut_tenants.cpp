@@ -39,6 +39,16 @@ TTenantTestConfig::TTenantPoolConfig DefaultTenantPoolConfig()
     return res;
 }
 
+TTenantTestConfig::TTenantPoolConfig FirstWithTenantPoolConfig()
+{
+    TTenantTestConfig::TTenantPoolConfig res = {
+        // Static slots {tenant, {cpu, memory, network}}
+        {{ {TENANT1_1_NAME, {1, 1, 1}}}},
+        "node-type"
+    };
+    return res;
+}
+
 TTenantTestConfig::TTenantPoolConfig FirstTenantPoolConfig()
 {
     TTenantTestConfig::TTenantPoolConfig res = {
@@ -57,7 +67,7 @@ TTenantTestConfig DefaultConsoleTestConfig()
         // HiveId
         HIVE_ID,
         // FakeTenantSlotBroker
-        false,
+        true,
         // FakeSchemeShard
         false,
         // CreateConsole
@@ -673,23 +683,26 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 
 
 Y_UNIT_TEST_SUITE(TConsoleTests) {
+    void RestartTenantPool(TTenantTestRuntime& runtime) {
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
+                                      runtime.Sender,
+                                      new TEvents::TEvPoisonPill));
+
+        runtime.CreateTenantPool(0, FirstWithTenantPoolConfig());
+    }
+
     void RunTestCreateTenant(TTenantTestRuntime& runtime, bool shared = false) {
         using EType = TCreateTenantRequest::EType;
 
         CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
             TCreateTenantRequest(TENANT1_1_NAME, shared ? EType::Shared : EType::Common)
-                .WithSlots({{SLOT1_TYPE, ZONE1, 3}, {SLOT2_TYPE, ZONE1, 2}, {SLOT3_TYPE, ZONE1, 1}})
                 .WithPools({{"hdd", 1}, {"hdd-1", 2}}));
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 10, 10, 10}}});
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, shared, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {},
-                          SLOT1_TYPE, ZONE1, 3, 3,
-                          SLOT2_TYPE, ZONE1, 2, 2,
-                          SLOT3_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {});
 
         CheckPoolScope(runtime, TENANT1_1_NAME + ":hdd");
         CheckPoolScope(runtime, TENANT1_1_NAME + ":hdd-1");
@@ -791,59 +804,20 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         RunTestCreateTenantWrongPool(runtime);
     }
 
-    void RunTestCreateTenantWrongComputationalUnit(TTenantTestRuntime& runtime) {
-        // Unknown unit kind
-        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
-                          {{"hdd", 1}, {"hdd-1", 2}},
-                          "wrong", ZONE1, 3);
-        // Unknown zone
-        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
-                          {{"hdd", 1}, {"hdd-1", 2}},
-                          SLOT1_TYPE, "unknown-zone", 3);
-        // Disallowed zone
-        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
-                          {{"hdd", 1}, {"hdd-1", 2}},
-                          SLOT1_TYPE, ZONE2, 3);
-        // OK
-        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}, {"hdd-1", 2}},
-                          SLOT1_TYPE, ZONE1, 3);
-    }
-
-    Y_UNIT_TEST(TestCreateTenantWrongComputationalUnit) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestCreateTenantWrongComputationalUnit(runtime);
-    }
-
-    Y_UNIT_TEST(TestCreateTenantWrongComputationalUnitExtSubdomain) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
-        RunTestCreateTenantWrongComputationalUnit(runtime);
-    }
-
     void RunTestCreateTenantAlreadyExists(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, "/dc-1/users/tenant-1", Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 3,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 1);
+                          {{"hdd", 1}});
+
+        RestartTenantPool(runtime);
 
         CheckCreateTenant(runtime, "/dc-1/users/tenant-1", Ydb::StatusIds::ALREADY_EXISTS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 3,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 1);
+                          {{"hdd", 1}});
 
         CheckCreateTenant(runtime, "dc-1/users/tenant-1", Ydb::StatusIds::ALREADY_EXISTS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 3,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 1);
+                          {{"hdd", 1}});
 
         CheckCreateTenant(runtime, "//dc-1/users///tenant-1/", Ydb::StatusIds::ALREADY_EXISTS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 3,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 1);
+                          {{"hdd", 1}});
 
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_CREATE_REQUESTS, 4);
         CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_CREATE_RESPONSES, 1);
@@ -891,27 +865,20 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                                       new TEvents::TEvPoisonPill));
 
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          SLOT2_TYPE, ZONE_ANY, 8);
+                          {{"hdd", 1}});
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 5, 5, 5},
-                                   {TENANT1_1_NAME, 10, 10, 10}}});
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
-                          SLOT2_TYPE, ZONE_ANY, 8, 5);
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {});
 
         RestartConsole(runtime);
         runtime.CreateTenantPool(1);
         runtime.CreateTenantPool(2);
         runtime.CreateTenantPool(3);
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 16, 16, 16}}});
-
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
-                          SLOT2_TYPE, ZONE_ANY, 8, 8);
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {});
 
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 1);
     }
@@ -925,76 +892,6 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     Y_UNIT_TEST(TestRestartConsoleAndPoolsExtSubdomain) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
         RunTestRestartConsoleAndPools(runtime);
-    }
-
-    void RunTestAlterTenantModifyComputationalResourcesForRunning(TTenantTestRuntime& runtime) {
-        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 5,
-                          SLOT2_TYPE, ZONE1, 8,
-                          SLOT3_TYPE, ZONE1, 10);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 45, 45, 45}}});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
-                          SLOT1_TYPE, ZONE1, 5, 5,
-                          SLOT2_TYPE, ZONE1, 8, 8,
-                          SLOT3_TYPE, ZONE1, 10, 8);
-
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                              {{ {SLOT1_TYPE, ZONE1, 5} }},
-                              {{ {SLOT2_TYPE, ZONE1, 3},
-                                {SLOT3_TYPE, ZONE1, 7} }});
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 27, 27, 27}}});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
-                          SLOT1_TYPE, ZONE1, 10, 8,
-                          SLOT2_TYPE, ZONE1, 5, 5,
-                          SLOT3_TYPE, ZONE1, 3, 3);
-
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                              {},
-                              {{ {SLOT1_TYPE, ZONE1, 10},
-                                {SLOT2_TYPE, ZONE1, 5},
-                                {SLOT3_TYPE, ZONE1, 3} }});
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8}}});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {});
-
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                              {{ {SLOT1_TYPE, ZONE1, 1},
-                                {SLOT2_TYPE, ZONE1, 2},
-                                {SLOT3_TYPE, ZONE1, 3} }},
-                              {});
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 14, 14, 14}}});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1,
-                          SLOT2_TYPE, ZONE1, 2, 2,
-                          SLOT3_TYPE, ZONE1, 3, 3);
-
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 3);
-        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 3);
-    }
-
-    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForRunning) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestAlterTenantModifyComputationalResourcesForRunning(runtime);
-    }
-
-    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForRunningExtSubdomain) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
-        RunTestAlterTenantModifyComputationalResourcesForRunning(runtime);
     }
 
     void RunTestAlterTenantModifyStorageResourcesForPending(TTenantTestRuntime& runtime) {
@@ -1077,37 +974,34 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
     void RunTestAlterTenantModifyStorageResourcesForRunning(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}, {"hdd-1", 3}},
-                          SLOT1_TYPE, ZONE1, 1);
+                          {{"hdd", 1}, {"hdd-1", 3}});
+
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
 
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{"hdd", 2}, {"hdd-1", 3}}, {});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 3, 3}, {"hdd-1", 6, 6}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 3, 3}, {"hdd-1", 6, 6}}, {});
 
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {}, false);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 3, 3}, {"hdd-1", 6, 6}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 3, 3}, {"hdd-1", 6, 6}}, {});
 
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{"hdd-2", 1}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 3, 3}, {"hdd-1", 6, 6}, {"hdd-2", 1, 1}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 3, 3}, {"hdd-1", 6, 6}, {"hdd-2", 1, 1}}, {});
 
         // Wrong unit kind.
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
@@ -1156,13 +1050,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         // create tenant
         CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
             TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
-                .WithPools({{"hdd", 1}})
-                .WithSlots(SLOT1_TYPE, ZONE1, 1));
+                .WithPools({{"hdd", 1}}));
+
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}}, {});
 
         // mark pool as borrowed
         MakePoolBorrowed(runtime, TENANT1_1_NAME, "hdd");
@@ -1180,13 +1074,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         // create tenant
         CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
             TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
-                .WithPools({{"hdd", 1}})
-                .WithSlots(SLOT1_TYPE, ZONE1, 1));
+                .WithPools({{"hdd", 1}}));
+
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}}, {});
 
         // mark pool as borrowed
         MakePoolBorrowed(runtime, TENANT1_1_NAME, "hdd");
@@ -1214,10 +1108,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         // check status
         CheckTenantStatus(runtime, TENANT1_1_NAME, true, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 2, 2}, {"hdd-1", 3, 3}}, {},
-                          SLOT1_TYPE, ZONE1, 3, 3,
-                          SLOT2_TYPE, ZONE1, 2, 2,
-                          SLOT3_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 2, 2}, {"hdd-1", 3, 3}}, {});
+
         // check counters
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 1);
         CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1);
@@ -1257,30 +1149,12 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
     void RunTestListTenants(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 1);
-        CheckCreateTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 1);
-        CheckCreateTenant(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 1);
-        CheckCreateTenant(runtime, TENANT1_4_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 1);
-        CheckCreateTenant(runtime, TENANT1_5_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 1);
+                          {{"hdd", 1}});
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 1, 1, 1},
-                                   {TENANT1_2_NAME, 1, 1, 1},
-                                   {TENANT1_3_NAME, 1, 1, 1},
-                                   {TENANT1_4_NAME, 1, 1, 1},
-                                   {TENANT1_5_NAME, 1, 1, 1}}});
+        RestartTenantPool(runtime);
 
         CheckListTenants(runtime,
-                         {{ TENANT1_1_NAME, TENANT1_2_NAME, TENANT1_3_NAME, TENANT1_4_NAME, TENANT1_5_NAME }});
+                         {{ TENANT1_1_NAME }});
 
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_LIST_REQUESTS, 1);
     }
@@ -1299,20 +1173,19 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
 
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 3}},
-                          SLOT1_TYPE, ZONE1, 1);
+                          {{"hdd", 3}});
+
+        RestartTenantPool(runtime);
 
         NKikimrConsole::TConfig config = GetCurrentConfig(runtime);
         config.MutableTenantsConfig()->SetDefaultStorageUnitsQuota(2);
         CheckSetConfig(runtime, config, Ydb::StatusIds::SUCCESS);
 
         CheckCreateTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 2}},
-                          SLOT1_TYPE, ZONE1, 1);
+                          {{"hdd", 2}});
 
         CheckCreateTenant(runtime, TENANT1_3_NAME, Ydb::StatusIds::BAD_REQUEST,
-                          {{"hdd", 3}},
-                          SLOT1_TYPE, ZONE1, 1);
+                          {{"hdd", 3}});
     }
 
     Y_UNIT_TEST(TestSetDefaultComputationalUnitsQuota) {
@@ -2097,14 +1970,14 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCreateTenant(runtime, TENANT1_1_NAME,
                           Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}, {"hdd-1", 3}},
-                          TVector<std::pair<TString, TString>>({{"name1", "value1"}, {"name2", "value2"}}),
-                          SLOT1_TYPE, ZONE1, 1);
+                          TVector<std::pair<TString, TString>>({{"name1", "value1"}, {"name2", "value2"}}));
+
+
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
-
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
 
         UNIT_ASSERT(CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}}));
 

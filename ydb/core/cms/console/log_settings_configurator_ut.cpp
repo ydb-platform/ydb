@@ -14,7 +14,7 @@ TTenantTestConfig::TTenantPoolConfig TenantTenantPoolConfig()
 {
     TTenantTestConfig::TTenantPoolConfig res = {
         // Static slots {tenant, {cpu, memory, network}}
-        {},
+        {{ {TENANT1_1_NAME, {1, 1, 1}} }},
         // NodeType
         "type1"
     };
@@ -25,13 +25,13 @@ TTenantTestConfig DefaultConsoleTestConfig()
 {
     TTenantTestConfig res = {
         // Domains {name, schemeshard {{ subdomain_names }}}
-        {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, TVector<TString>()} }},
+        {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, { TENANT1_1_NAME } } }},
         // HiveId
         HIVE_ID,
         // FakeTenantSlotBroker
         true,
         // FakeSchemeShard
-        false,
+        true,
         // CreateConsole
         true,
         // Nodes {tenant_pool_config, data_center}
@@ -60,15 +60,6 @@ NKikimrConsole::TConfigItem ITEM_TENANT2_TYPE1_LOG_1;
 TVector<TComponentSettings>
 InitLogSettingsConfigurator(TTenantTestRuntime &runtime)
 {
-    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
-        TCreateTenantRequest(TENANT1_1_NAME)
-            .WithPools({{"hdd", 1}}));
-    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
-        TCreateTenantRequest(TENANT1_2_NAME)
-            .WithPools({{"hdd", 1}}));
-
-    ChangeTenant(runtime, TENANT1_1_NAME);
-
     runtime.Register(CreateLogSettingsConfigurator());
     TDispatchOptions options;
     options.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
@@ -110,10 +101,6 @@ InitLogSettingsConfigurator(TTenantTestRuntime &runtime)
     ITEM_TENANT1_TYPE1_LOG_1
         = MakeConfigItem(NKikimrConsole::TConfigItem::LogConfigItem,
                          NKikimrConfig::TAppConfig(), {}, {}, TENANT1_1_NAME, "type1", 9,
-                         NKikimrConsole::TConfigItem::MERGE, "");
-    ITEM_TENANT2_TYPE1_LOG_1
-        = MakeConfigItem(NKikimrConsole::TConfigItem::LogConfigItem,
-                         NKikimrConfig::TAppConfig(), {}, {}, TENANT1_2_NAME, "type1", 10,
                          NKikimrConsole::TConfigItem::MERGE, "");
 
     auto logSettings = runtime.GetLogSettings(0);
@@ -313,33 +300,6 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
         for (auto &set : settings)
             set = TComponentSettings(PRI_ALERT, PRI_ALERT, 10);
         settings[NKikimrServices::CMS_CONFIGS].Raw.X.Level = PRI_TRACE;
-        CompareSettings(runtime, settings);
-    }
-
-    Y_UNIT_TEST(TestChangeTenant)
-    {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        auto settings = InitLogSettingsConfigurator(runtime);
-
-        SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
-        SetDefaults(ITEM_TENANT2_LOG_1, PRI_ALERT, PRI_ALERT, 10);
-        AddEntry(ITEM_TENANT2_LOG_1, "CMS_CLUSTER", 5, Max<ui32>(), Max<ui32>());
-        AddEntry(ITEM_TENANT2_LOG_1, "CMS_CONFIGS", Max<ui32>(), 5, Max<ui32>());
-        AddEntry(ITEM_TENANT2_LOG_1, "CMS_TENANTS", Max<ui32>(), Max<ui32>(), 5);
-        ConfigureAndWaitUpdate(runtime,
-                               MakeAddAction(ITEM_DOMAIN_LOG_1),
-                               MakeAddAction(ITEM_TENANT2_LOG_1));
-        CompareSettings(runtime, settings);
-
-        ChangeTenant(runtime, TENANT1_2_NAME, 0, false);
-        WaitForUpdate(runtime);
-
-        for (auto &set : settings)
-            set = TComponentSettings(PRI_ALERT, PRI_ALERT, 10);
-        settings[NKikimrServices::CMS_CLUSTER].Raw.X.Level = 5;
-        settings[NKikimrServices::CMS_CONFIGS].Raw.X.Level = PRI_TRACE;
-        settings[NKikimrServices::CMS_CONFIGS].Raw.X.SamplingLevel = 5;
-        settings[NKikimrServices::CMS_TENANTS].Raw.X.SamplingRate = 5;
         CompareSettings(runtime, settings);
     }
 }

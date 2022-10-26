@@ -19,6 +19,7 @@ target_link_libraries(common-unicode_base-lib PUBLIC
   cpp-deprecated-split
   cpp-string_utils-levenshtein_diff
   cpp-unicode-normalization
+  cpp-unicode-set
   yql-public-udf
   library-yql-utils
 )

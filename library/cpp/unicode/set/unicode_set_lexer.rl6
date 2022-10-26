@@ -1,0 +1,125 @@
+#include <library/cpp/unicode/set/unicode_set_lexer.h>
+
+#include <util/generic/yexception.h>
+
+namespace NUnicode {
+namespace NPrivate {
+
+%%{
+    machine unicode_set_lexer;
+
+    alphtype unsigned short;
+
+    action IncorrectCategoryError {
+        throw yexception() << "incorrect category";
+    }
+
+    action IncorrectEscapedCodepointError {
+        throw yexception() << "incorrect escaped codepoint";
+    }
+
+    action IncorrectQuotedPairError {
+        throw yexception() << "incorrect quoted pair";
+    }
+
+    id = alpha (alnum | '_')*;
+    escape = [%\\];
+
+    category = (':' id ':') <>^IncorrectCategoryError;
+    xdigit8 = xdigit{8} @^IncorrectEscapedCodepointError;
+    xdigit4 = xdigit{4} @^IncorrectEscapedCodepointError;
+    xdigit2 = xdigit{2} @^IncorrectEscapedCodepointError;
+    symbol = any @^IncorrectQuotedPairError;
+
+    main := |*
+        '^' => {
+            return YieldToken(USTT_NEGATION);
+        };
+        '-' => {
+            return YieldToken(USTT_RANGE);
+        };
+        '[' => {
+            return YieldToken(USTT_LBRACKET);
+        };
+        ']' => {
+            return YieldToken(USTT_RBRACKET);
+        };
+        category => {
+            return YieldToken(USTT_CATEGORY, ts + 1, te - ts -2);
+        };
+        escape 'U' xdigit8 => {
+            return YieldToken(USTT_CODEPOINT32, ts + 2, 8);
+        };
+        escape 'u' xdigit4 => {
+            return YieldToken(USTT_CODEPOINT16, ts + 2, 4);
+        };
+        escape 'x' xdigit2 => {
+            return YieldToken(USTT_CODEPOINT8, ts + 2, 2);
+        };
+        escape symbol => {
+            return YieldToken(USTT_QUOTED_PAIR, *(ts + 1));
+        };
+        any => {
+            return YieldToken(USTT_SYMBOL, *ts);
+        };
+    *|;
+
+}%%
+
+namespace {
+
+%% write data;
+
+}
+
+TUnicodeSetLexer::TUnicodeSetLexer(const TWtringBuf& data)
+    : Data(data)
+    , cs(0)
+    , act(0)
+    , ts(NULL)
+    , te(NULL)
+    , p(Data.data())
+    , pe(Data.data() + Data.size())
+    , eof(pe)
+    , UseLast(false)
+{
+    %% write init;
+}
+
+EUnicodeSetTokenType TUnicodeSetLexer::GetToken() {
+    if (UseLast) {
+        UseLast = false;
+        return LastToken.Type;
+    }
+
+    %% write exec;
+
+    return YieldToken(USTT_EOS);
+}
+
+EUnicodeSetTokenType TUnicodeSetLexer::YieldToken(EUnicodeSetTokenType type) {
+    Reset();
+    LastToken = TUnicodeSetToken(type);
+    return type;
+}
+
+EUnicodeSetTokenType TUnicodeSetLexer::YieldToken(EUnicodeSetTokenType type, wchar16 symbol) {
+    Reset();
+    LastToken = TUnicodeSetToken(type, symbol);
+    return type;
+}
+
+EUnicodeSetTokenType TUnicodeSetLexer::YieldToken(EUnicodeSetTokenType type, const wchar16* dataBegin, size_t dataSize) {
+    Reset();
+    LastToken = TUnicodeSetToken(type, dataBegin, dataSize);
+    return type;
+}
+
+void TUnicodeSetLexer::Reset() {
+    p = te;
+    ts = NULL;
+    te = NULL;
+}
+
+} // NPrivate
+} // NUnicode

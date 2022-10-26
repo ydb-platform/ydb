@@ -6,6 +6,7 @@
 
 #include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
 #include <library/cpp/unicode/normalization/normalization.h>
+#include <library/cpp/unicode/set/unicode_set.h>
 
 #include <library/cpp/deprecated/split/split_iterator.h>
 #include <util/string/join.h>
@@ -13,7 +14,9 @@
 #include <util/string/split.h>
 #include <util/string/subst.h>
 #include <util/charset/wide.h>
+#include <util/charset/utf8.h>
 #include <util/string/strip.h>
+#include <util/string/ascii.h>
 #include <util/charset/unidata.h>
 
 using namespace NYql;
@@ -41,6 +44,16 @@ namespace {
     XX(NormalizeNFKD, NFKD)   \
     XX(NormalizeNFKC, NFKC)
 
+#define IS_CATEGORY_UDF_MAP(XX) \
+    XX(IsAscii, IsAscii)   \
+    XX(IsSpace, IsSpace)        \
+    XX(IsUpper, IsUpper)        \
+    XX(IsLower, IsLower)        \
+    XX(IsDigit, IsDigit)        \
+    XX(IsAlpha, IsAlpha)        \
+    XX(IsAlnum, IsAlnum)        \
+    XX(IsHex, IsHexdigit)
+
 #define NORMALIZE_UDF(name, mode)                                                 \
     SIMPLE_UDF(T##name, TUtf8(TAutoMap<TUtf8>)) {                                 \
         const auto& inputRef = args[0].AsStringRef();                             \
@@ -49,7 +62,26 @@ namespace {
         return valueBuilder->NewString(output);                                   \
     }
 
+#define IS_CATEGORY_UDF(udfName, function)                                                \
+    SIMPLE_UDF(T##udfName, bool(TAutoMap<TUtf8>)) {                                       \
+        Y_UNUSED(valueBuilder);                                                           \
+        const TStringBuf input(args[0].AsStringRef());                                    \
+        bool result = true;                                                               \
+        wchar32 rune;                                                                     \
+        const unsigned char* cur = reinterpret_cast<const unsigned char*>(input.begin()); \
+        const unsigned char* last = reinterpret_cast<const unsigned char*>(input.end());  \
+        while (cur != last) {                                                             \
+            ReadUTF8CharAndAdvance(rune, cur, last);                                      \
+            if (!function(rune)) {                                                        \
+                result = false;                                                           \
+                break;                                                                    \
+            }                                                                             \
+        }                                                                                 \
+        return TUnboxedValuePod(result);                                                  \
+    }
+
     NORMALIZE_UDF_MAP(NORMALIZE_UDF)
+    IS_CATEGORY_UDF_MAP(IS_CATEGORY_UDF)
 
     SIMPLE_UDF(TIsUtf, bool(TOptional<char*>)) {
         Y_UNUSED(valueBuilder);
@@ -449,9 +481,35 @@ namespace {
         return valueBuilder->NewString(WideToUTF8(result));
     }
 
+    SIMPLE_UDF(TIsUnicodeSet, bool(TAutoMap<TUtf8>, TUtf8)) {
+        Y_UNUSED(valueBuilder);
+        const TStringBuf input(args[0].AsStringRef());
+        const TUtf16String& customCategory = UTF8ToWide(args[1].AsStringRef());
+        TUnicodeSet unicodeSet;
+        try {
+            unicodeSet.Parse(customCategory);
+        } catch (...) {
+            UdfTerminate((TStringBuilder() << "Failed to parse unicode set: " << CurrentExceptionMessage()).c_str());
+        }
+        bool result = true;
+        wchar32 rune;
+        const unsigned char* cur = reinterpret_cast<const unsigned char*>(input.begin());
+        const unsigned char* last = reinterpret_cast<const unsigned char*>(input.end());
+        while (cur != last) {
+            ReadUTF8CharAndAdvance(rune, cur, last);
+            if (!unicodeSet.Has(rune)) {
+                result = false;
+                break;
+            }
+        }
+        return TUnboxedValuePod(result);
+    }
+
 #define REGISTER_NORMALIZE_UDF(name, mode) T##name,
+#define REGISTER_IS_CATEGORY_UDF(name, function) T##name,
 #define EXPORTED_UNICODE_BASE_UDF \
     NORMALIZE_UDF_MAP(REGISTER_NORMALIZE_UDF) \
+    IS_CATEGORY_UDF_MAP(REGISTER_IS_CATEGORY_UDF) \
     TIsUtf, \
     TGetLength, \
     TSubstring, \
@@ -474,5 +532,6 @@ namespace {
     TToTitle, \
     TToUint64, \
     TTryToUint64, \
-    TStrip
+    TStrip, \
+    TIsUnicodeSet
 }

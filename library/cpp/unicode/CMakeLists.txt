@@ -8,3 +8,4 @@
 
 add_subdirectory(normalization)
 add_subdirectory(punycode)
+add_subdirectory(set)

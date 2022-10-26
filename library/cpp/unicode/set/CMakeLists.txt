@@ -1,0 +1,33 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(cpp-unicode-set)
+target_link_libraries(cpp-unicode-set PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+)
+target_sources(cpp-unicode-set PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/set.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/quoted_pair.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_parser.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_token.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/generated/category_ranges.cpp
+)
+generate_enum_serilization(cpp-unicode-set
+  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_token.h
+  INCLUDE_HEADERS
+  library/cpp/unicode/set/unicode_set_token.h
+)
+target_ragel_lexers(cpp-unicode-set
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_lexer.rl6
+  -CG2
+)

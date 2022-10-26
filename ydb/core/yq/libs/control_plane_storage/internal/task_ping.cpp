@@ -279,6 +279,10 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             internal.set_dq_graph_index(request.dq_graph_index());
         }
 
+        if (request.has_resources()) {
+            *internal.mutable_resources() = request.resources();
+        }
+
         if (job.ByteSizeLong() > maxRequestSize) {
             ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Job proto exceeded the size limit: " << job.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(job).ToString();
         }

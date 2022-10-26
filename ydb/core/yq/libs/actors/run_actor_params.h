@@ -68,7 +68,8 @@ struct TRunActorParams { // TODO2 : Change name
         TDuration executionTtl,
         TInstant requestStartedAt,
         ui32 restartCount,
-        const TString& jobId
+        const TString& jobId,
+        const Fq::Private::TaskResources& resources
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -126,6 +127,7 @@ struct TRunActorParams { // TODO2 : Change name
     TInstant RequestStartedAt;
     ui32 RestartCount;
     const TString JobId;
+    Fq::Private::TaskResources Resources;
 };
 
 } /* NYq */

@@ -37,6 +37,7 @@ message QueryInternal {
     Fq.Private.CompressedData ast_compressed = 18;
     Fq.Private.CompressedData plan_compressed = 19;
     repeated Fq.Private.CompressedData dq_graph_compressed = 20;
+    Fq.Private.TaskResources resources = 21;
 }
 
 message JobInternal {

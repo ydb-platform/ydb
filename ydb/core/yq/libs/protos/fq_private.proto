@@ -22,6 +22,23 @@ message CompressedData {
     bytes data = 2;
 }
 
+message TaskResources {
+
+    enum ResourceState {
+        UNSPECIFIED = 0; // on start
+        NOT_NEEDED = 1;  // is not configured to use - skip it
+        PREPARE = 2;    // resource creating in progress (retriable)
+        READY = 3;     // created and ready to go
+        CLEANUP = 4;   // is being destroyin (cleanup)
+    }
+
+    ResourceState rate_limiter = 1;
+    ResourceState compilation = 2;
+    ResourceState read_rules = 3;
+
+    string rate_limiter_path = 10;
+}
+
 message GetTaskRequest {
     string tenant = 1;
     string owner_id = 2; // guid, should be refreshed on node restart
@@ -89,6 +106,8 @@ message GetTaskResult {
         google.protobuf.Timestamp request_started_at = 30;
         repeated CompressedData dq_graph_compressed = 31;
         uint32 restart_count = 32;
+
+        TaskResources resources = 33;
     }
     repeated Task tasks = 1;
 }
@@ -127,6 +146,7 @@ message PingTaskRequest {
     google.protobuf.Timestamp finished_at = 102;
     google.protobuf.Timestamp deadline = 103;
     string tenant = 104;
+    TaskResources resources = 33;
 }
 
 message PingTaskResult {

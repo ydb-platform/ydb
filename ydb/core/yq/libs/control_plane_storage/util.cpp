@@ -163,6 +163,7 @@ bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request)
         || request.dq_graph_index()
         || request.state_load_mode()
         || request.has_disposition()
+        || request.has_resources()
     ;
 }
 

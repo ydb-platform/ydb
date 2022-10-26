@@ -892,6 +892,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
             internal.clear_binding();
             internal.clear_connection();
+            internal.clear_resources();
 
             // TODO: move to run actor priority selection
             TSet<TString> disabledConnections;

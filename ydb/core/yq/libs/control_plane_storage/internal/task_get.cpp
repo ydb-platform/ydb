@@ -412,6 +412,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
             *newTask->mutable_result_set_meta() = task.Query.result_set_meta();
             newTask->set_scope(task.Scope);
+            *newTask->mutable_resources() = task.Internal.resources();
         }
 
         return result;

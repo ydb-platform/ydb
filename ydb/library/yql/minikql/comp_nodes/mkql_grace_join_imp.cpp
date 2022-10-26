@@ -678,6 +678,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
 
     }
 
+    return false;
 
  }
 

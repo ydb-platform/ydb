@@ -446,6 +446,26 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         ShouldSucceedOnMultipleFrames(1);
     }
 
+    Y_UNIT_TEST(ShouldSucceedOnSmallBuffer) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().ZstdBlockSizeForTest = 16;
+        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(16);
+
+        const auto data = GenerateZstdTestData("a", 2);
+        const ui32 batchSize = 1;
+
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data}, batchSize);
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldExpandBuffer) {
         TTestBasicRuntime runtime;
 

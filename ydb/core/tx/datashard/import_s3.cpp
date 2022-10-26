@@ -189,7 +189,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                         return ERROR;
                     }
 
-                    Buffer.Reserve(Buffer.Capacity() + ZSTD_BLOCKSIZE_MAX);
+                    Buffer.Reserve(Buffer.Capacity() + AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX));
                 }
 
                 PendingInputBytes += input.pos; // inc after decompress

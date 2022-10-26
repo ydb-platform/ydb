@@ -18,7 +18,7 @@ namespace NDq {
 
 struct TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
-    struct TEvStateRequest : public NActors::TEventPB<TEvState, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
+    struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
 
     struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {};
 

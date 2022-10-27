@@ -281,6 +281,10 @@ TProgram::TProgram(
 TProgram::~TProgram() {
     try {
         CloseLastSession();
+        // Token resolver may keep some references to provider internal's. So reset it to release provider's data
+        if (FileStorage_) {
+            FileStorage_->SetTokenResolver({});
+        }
         // stop all non complete execution before deleting TExprCtx
         DataProviders_.clear();
     } catch (...) {
@@ -1268,11 +1272,6 @@ void TProgram::CloseLastSession() {
         if (dp.CloseSession) {
             dp.CloseSession(sessionId);
         }
-    }
-
-    // Token resolver may keep some references to provider internal's. So reset it to release provider's data
-    if (FileStorage_) {
-        FileStorage_->SetTokenResolver({});
     }
 }
 

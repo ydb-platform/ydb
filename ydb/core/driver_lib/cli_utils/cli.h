@@ -41,6 +41,6 @@ namespace NDriverClient {
     void HideOptions(NLastGetopt::TOpts& opts, const TString& prefix);
     void HideOptions(NLastGetopt::TOpts& opts);
     int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories);
-    TString NewClientCommandsDescription(std::shared_ptr<TModuleFactories> factories);
+    TString NewClientCommandsDescription(const TString& name, std::shared_ptr<TModuleFactories> factories);
 }
 }

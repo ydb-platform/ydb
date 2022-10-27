@@ -23,8 +23,8 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-TClientCommandRootCommon::TClientCommandRootCommon(const TClientSettings& settings)
-    : TClientCommandRootBase("ydb")
+TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
+    : TClientCommandRootBase(name)
     , Settings (settings)
 {
     ValidateSettings();

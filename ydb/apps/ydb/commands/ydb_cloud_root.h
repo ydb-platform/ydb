@@ -7,7 +7,7 @@ namespace NConsoleClient {
 
 class TClientCommandRoot : public TClientCommandRootCommon {
 public:
-    TClientCommandRoot(const TClientSettings& settings);
+    TClientCommandRoot(const TString& name, const TClientSettings& settings);
 
 private:
     void FillConfig(TConfig& config) override;
@@ -16,7 +16,7 @@ private:
 
 class TYCloudClientCommandRoot : public TClientCommandRoot {
 public:
-    TYCloudClientCommandRoot(const TClientSettings& settings);
+    TYCloudClientCommandRoot(const TString& name, const TClientSettings& settings);
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
 };

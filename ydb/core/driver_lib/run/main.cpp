@@ -21,6 +21,8 @@
 #include <sys/mman.h>
 #endif
 
+#include <filesystem>
+
 namespace NKikimr {
 
 int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
@@ -82,7 +84,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
                 .NoArgument().Handler(&PrintAllocatorInfoAndExit);
         opts.SetFreeArgsMin(1);
         opts.SetFreeArgTitle(0, "<command>", TDriverModeParser::CommandsCsv());
-        opts.SetCmdLineDescr(NDriverClient::NewClientCommandsDescription(factories));
+        opts.SetCmdLineDescr(NDriverClient::NewClientCommandsDescription(std::filesystem::path(argv[0]).stem().string(), factories));
 
         opts.AddHelpOption('h');
         opts.ArgPermutation_ = NLastGetopt::REQUIRE_ORDER;

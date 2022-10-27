@@ -6,6 +6,8 @@
 #include <util/string/strip.h>
 #include <util/system/env.h>
 
+#include <filesystem>
+
 namespace NKikimr {
 namespace NDriverClient {
 
@@ -15,8 +17,8 @@ extern void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<T
 
 class TClientCommandRoot : public TClientCommandRootKikimrBase {
 public:
-    TClientCommandRoot(std::shared_ptr<TModuleFactories> factories)
-        : TClientCommandRootKikimrBase("kikimr")
+    TClientCommandRoot(const TString& name, std::shared_ptr<TModuleFactories> factories)
+        : TClientCommandRootKikimrBase(name)
     {
         AddCommand(std::make_unique<TClientCommandAdmin>());
         AddCommand(std::make_unique<TClientCommandDb>());
@@ -80,14 +82,14 @@ private:
 };
 
 int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories) {
-    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(std::move(factories));
+    auto commandsRoot = MakeHolder<TClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), std::move(factories));
     TClientCommand::TConfig config(argc, argv);
     // TODO: process flags from environment KIKIMR_FLAGS before command line processing
     return commandsRoot->Process(config);
 }
 
-TString NewClientCommandsDescription(std::shared_ptr<TModuleFactories> factories) {
-    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(std::move(factories));
+TString NewClientCommandsDescription(const TString& name, std::shared_ptr<TModuleFactories> factories) {
+    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(name, std::move(factories));
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options] <subcommand>" << Endl << Endl

@@ -5,11 +5,13 @@
 #include <ydb/public/sdk/cpp/client/iam/iam.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 
+#include <filesystem>
+
 namespace NYdb {
 namespace NConsoleClient {
 
-TClientCommandRoot::TClientCommandRoot(const TClientSettings& settings)
-    : TClientCommandRootCommon(settings)
+TClientCommandRoot::TClientCommandRoot(const TString& name, const TClientSettings& settings)
+    : TClientCommandRootCommon(name, settings)
 {
 }
 
@@ -45,8 +47,8 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
     };
 }
 
-TYCloudClientCommandRoot::TYCloudClientCommandRoot(const TClientSettings& settings)
-    : TClientCommandRoot(settings)
+TYCloudClientCommandRoot::TYCloudClientCommandRoot(const TString& name, const TClientSettings& settings)
+    : TClientCommandRoot(name, settings)
 {
     AddCommand(std::make_unique<TCommandUpdate>());
     AddCommand(std::make_unique<TCommandVersion>());
@@ -101,7 +103,7 @@ int NewYCloudClient(int argc, char** argv) {
     settings.MentionUserAccount = false;
     settings.YdbDir = "ydb";
 
-    THolder<TYCloudClientCommandRoot> commandsRoot = MakeHolder<TYCloudClientCommandRoot>(settings);
+    auto commandsRoot = MakeHolder<TYCloudClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client for Yandex.Cloud");
     TClientCommand::TConfig config(argc, argv);
     return commandsRoot->Process(config);

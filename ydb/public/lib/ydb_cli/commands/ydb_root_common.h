@@ -27,7 +27,7 @@ struct TClientSettings {
 
 class TClientCommandRootCommon : public TClientCommandRootBase {
 public:
-    TClientCommandRootCommon(const TClientSettings& settings);
+    TClientCommandRootCommon(const TString& name, const TClientSettings& settings);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     void ParseAddress(TConfig& config) override;

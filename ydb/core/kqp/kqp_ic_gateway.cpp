@@ -1652,16 +1652,20 @@ public:
     TFuture<TMkqlResult> ExecuteMkql(const TString& cluster, const TString& program,
         TKqpParamsMap&& params, const TMkqlSettings& settings, const TKqpSnapshot& snapshot) override
     {
+        YQL_ENSURE(false, "Unexpected exec mkql in OldEngine mode.");
+
         return RunInternal(cluster, program, std::move(params), false, false, settings, snapshot);
     }
 
     TFuture<TMkqlResult> ExecuteMkqlPrepared(const TString& cluster, const TString& program,
         TKqpParamsMap&& params, const TMkqlSettings& settings, const TKqpSnapshot& snapshot) override
     {
+        YQL_ENSURE(false, "Unexpected exeс prepared mkql in OldEngine mode.");
         return RunInternal(cluster, program, std::move(params), false, true, settings, snapshot);
     }
 
     TFuture<TMkqlResult> PrepareMkql(const TString& cluster, const TString& program) override {
+        YQL_ENSURE(false, "Unexpected prepare mkql in OldEngine mode.");
         return RunInternal(cluster, program, TKqpParamsMap(), true, false, TMkqlSettings());
     }
 

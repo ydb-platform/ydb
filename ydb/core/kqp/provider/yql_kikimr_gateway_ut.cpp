@@ -118,48 +118,6 @@ void TestLoadTableMetadataCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     UNIT_ASSERT_VALUES_EQUAL(metadata.KeyColumnNames[1], "UserSubkey");
 }
 
-void TestRunSimpleCommon(TIntrusivePtr<IKqpGateway> gateway) {
-    const TString program(R"(
-        (
-            (let key '(
-                '('Group (Uint32 '1))
-                '('Name (String 'Paul))
-            ))
-            (let row '(
-                'Group
-                'Name
-                'Amount
-            ))
-            (let table '(
-                '"/Root/Test/TestTable2"
-                '"0"
-                '""
-            ))
-            (let data (SelectRow table key row))
-            (let r (SetResult 'Result data))
-            (let pgmReturn (AsList r))
-            (return pgmReturn)
-        )
-    )");
-
-    auto responseFuture = gateway->ExecuteMkql(TestCluster, program, TKqpParamsMap(),
-        IKqpGateway::TMkqlSettings(), IKqpGateway::TKqpSnapshot::InvalidSnapshot);
-    responseFuture.Wait();
-    auto response = responseFuture.GetValue();
-    response.Issues().PrintTo(Cerr);
-    UNIT_ASSERT(response.Success());
-
-    auto result = ConvertResult(response.Result.GetValue(), response.Result.GetType());
-    const TOptional resOpt = result.GetMember<TOptional>("Result");
-    UNIT_ASSERT(resOpt.HasItem());
-    const TOptional rowOpt = resOpt.GetItem<TOptional>();
-    UNIT_ASSERT(rowOpt.HasItem());
-    TStruct row = rowOpt.GetItem<TStruct>();
-    UNIT_ASSERT_VALUES_EQUAL(row.GetMember<TOptional>("Group").GetItem<ui32>(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(row.GetMember<TOptional>("Name").GetItem<TStringBuf>(), "Paul");
-    UNIT_ASSERT_VALUES_EQUAL(row.GetMember<TOptional>("Amount").GetItem<ui64>(), 300);
-}
-
 void CheckPolicies(Tests::TClient& client, const TString& tableName) {
     auto describeResult = client.Ls(tableName);
     UNIT_ASSERT(describeResult->Record.GetPathDescription().HasTableStats());
@@ -318,12 +276,6 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestLoadTableMetadataCommon(GetIcGateway(kikimr.GetTestServer()));
-    }
-
-    Y_UNIT_TEST(TestRunSimple) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-        CreateSampleTables(kikimr);
-        TestRunSimpleCommon(GetIcGateway(kikimr.GetTestServer()));
     }
 
     Y_UNIT_TEST(TestCreateTable) {

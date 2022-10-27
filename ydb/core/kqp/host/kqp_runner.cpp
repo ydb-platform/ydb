@@ -294,6 +294,8 @@ public:
         const NKikimrKqp::TPreparedKql& kql, TExprContext& ctx,
         const IKikimrQueryExecutor::TExecuteSettings& settings) override
     {
+        YQL_ENSURE(false, "Unexpected query execute in OldEngine mode.");
+
         YQL_ENSURE(queryExpr->Type() == TExprNode::World);
         YQL_ENSURE(cluster == Cluster);
 
@@ -410,6 +412,8 @@ private:
         {
             return PrepareQueryNewEngine(cluster, dataQuery, ctx, settings, sysColumnsEnabled);
         }
+
+        YQL_ENSURE(false, "Unexpected query prepare in OldEngine mode.");
 
         // OldEngine only
         YQL_ENSURE(!engine.has_value() || *engine == TKqpTransactionInfo::EEngine::OldEngine);

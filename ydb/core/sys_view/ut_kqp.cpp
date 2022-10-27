@@ -1335,21 +1335,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(OldEngineSystemView) {
-        TTestEnv env;
-        CreateRootTable(env);
-
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        auto result = session.ExecuteDataQuery(
-            "PRAGMA Kikimr.UseNewEngine='false'; "
-            "SELECT * from `/Root/.sys/partition_stats`", TTxControl::BeginTx().CommitTx()
-        ).GetValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        result.GetIssues().PrintTo(Cerr);
-    }
-
     Y_UNIT_TEST(Describe) {
         TTestEnv env;
         CreateRootTable(env);

@@ -135,7 +135,6 @@ public:
     }
 
     void SetZerosCount(ui64 zerosCount) {
-        DECODE_ENSURE(zerosCount >= 0, "zeros count must be positive");
         ZerosCount_ = zerosCount;
     }
 

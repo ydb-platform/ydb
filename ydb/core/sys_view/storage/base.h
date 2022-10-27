@@ -90,7 +90,7 @@ namespace NKikimr::NSysView {
 
         TCell MakeCellFrom(const TString& value, NScheme::TTypeId type) {
             Y_VERIFY(type == NScheme::NTypeIds::String || type == NScheme::NTypeIds::String4k ||
-                NScheme::NTypeIds::String2m || type == NScheme::NTypeIds::Utf8);
+                type == NScheme::NTypeIds::String2m || type == NScheme::NTypeIds::Utf8);
             return TCell(value.data(), value.size());
         }
 

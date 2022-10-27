@@ -406,6 +406,10 @@ message TEvUnlockTabletExecutionResult {
 }
 
 message TEvInvalidateStoragePools {
+    repeated string StoragePoolName = 1; // if none given, invalidate all pools
+}
+
+message TEvInvalidateStoragePoolsReply {
 }
 
 message TEvRequestTabletIdSequence {

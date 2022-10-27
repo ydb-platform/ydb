@@ -2335,10 +2335,26 @@ THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     TabletCounters = TabletCountersPtr.Get();
 }
 
-void THive::Handle(TEvHive::TEvInvalidateStoragePools::TPtr&) {
-    for (auto& pr : StoragePools) {
-        pr.second.Invalidate();
+void THive::Handle(TEvHive::TEvInvalidateStoragePools::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    if (record.StoragePoolNameSize()) {
+        for (const auto& name : record.GetStoragePoolName()) {
+            if (const auto it = StoragePools.find(name); it != StoragePools.end()) {
+                it->second.Invalidate();
+            }
+        }
+    } else {
+        for (auto& [_, pool] : StoragePools) {
+            pool.Invalidate();
+        }
     }
+
+    auto reply = std::make_unique<TEvHive::TEvInvalidateStoragePoolsReply>();
+    auto handle = std::make_unique<IEventHandle>(ev->Sender, SelfId(), reply.release());
+    if (ev->InterconnectSession) {
+        handle->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+    }
+    TActivationContext::Send(handle.release());
 }
 
 void THive::InitDefaultChannelBind(TChannelBind& bind) {

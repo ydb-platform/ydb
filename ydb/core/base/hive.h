@@ -75,6 +75,7 @@ namespace NKikimr {
             EvInitMigrationReply,
             EvQueryMigrationReply,
             EvTabletOwnersReply,
+            EvInvalidateStoragePoolsReply,
 
             EvEnd
         };
@@ -746,6 +747,10 @@ namespace NKikimr {
 
         struct TEvInvalidateStoragePools : TEventPB<TEvInvalidateStoragePools, NKikimrHive::TEvInvalidateStoragePools, EvInvalidateStoragePools> {
             TEvInvalidateStoragePools() = default;
+        };
+
+        struct TEvInvalidateStoragePoolsReply : TEventPB<TEvInvalidateStoragePoolsReply, NKikimrHive::TEvInvalidateStoragePoolsReply, EvInvalidateStoragePoolsReply> {
+            TEvInvalidateStoragePoolsReply() = default;
         };
 
         struct TEvRequestHiveNodeStats : TEventPB<TEvRequestHiveNodeStats, NKikimrHive::TEvRequestHiveNodeStats, EvRequestHiveNodeStats> {

@@ -1282,6 +1282,7 @@ message TEvControllerSelectGroupsResult {
         optional uint32 ErasureSpecies = 1;
         optional uint32 GroupID = 2;
         optional string StoragePoolName = 3; // if it was selected from the storage pool
+        optional bool PhysicalGroup = 12; // related to TChannelBind.PhysicalGroupsOnly
 
         reserved 4;
 

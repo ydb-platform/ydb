@@ -22,8 +22,6 @@ namespace NCloud {
 
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_IAM_TOKEN_SERVICE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_SERVICE_ACCOUNT_SERVICE)");
 
-        // https://a.yandex-team.ru/arc/trunk/arcadia/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/iam_token_service.proto
-
         struct TEvCreateForServiceAccountRequest : TEvGrpcProtoRequest<TEvCreateForServiceAccountRequest, EvCreateForServiceAccountRequest, yandex::cloud::priv::iam::v1::CreateIamTokenForServiceAccountRequest> {};
         struct TEvCreateResponse : TEvGrpcProtoResponse<TEvCreateResponse, EvCreateResponse, yandex::cloud::priv::iam::v1::CreateIamTokenResponse> {};
     };

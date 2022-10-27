@@ -4,8 +4,6 @@ import "google/protobuf/timestamp.proto";
 
 package NKikimrProto.NFolderService;
 
-// copied from cloud/bitbucket/private-api/yandex/cloud/priv/resourcemanager/v1/folder_service.proto
-
 message Folder {
 
   enum Status {

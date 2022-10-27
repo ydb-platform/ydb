@@ -12,7 +12,6 @@ target_link_libraries(library-testlib-service_mocks INTERFACE
   contrib-libs-cxxsupp
   yutil
   client-yc_private-servicecontrol
-  priv-ydb-v1
   api-grpc-draft
   client-yc_private-resourcemanager
   client-yc_private-iam

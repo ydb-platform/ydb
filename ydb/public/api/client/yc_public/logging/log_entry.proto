@@ -7,7 +7,6 @@ import "google/protobuf/timestamp.proto";
 import "ydb/public/api/client/yc_public/logging/log_resource.proto";
 import "ydb/public/api/client/yc_public/common/validation.proto";
 
-option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud/logging/v1;logging";
 option java_package = "yandex.cloud.api.logging.v1";
 
 message LogEntry {

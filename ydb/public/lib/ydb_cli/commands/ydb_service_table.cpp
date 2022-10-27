@@ -55,7 +55,7 @@ TCommandTtl::TCommandTtl()
     : TClientCommandTree("ttl", {}, "Ttl operations")
 {
     AddCommand(std::make_unique<TCommandTtlSet>());
-    AddCommand(std::make_unique<TCommandTtlDrop>());
+    AddCommand(std::make_unique<TCommandTtlReset>());
 }
 
 TCommandIndexAdd::TCommandIndexAdd()
@@ -1076,22 +1076,22 @@ int TCommandTtlSet::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandTtlDrop::TCommandTtlDrop()
-    : TYdbCommand("drop", {}, "Drop ttl settings from the specified table")
+TCommandTtlReset::TCommandTtlReset()
+    : TYdbCommand("reset", {"drop"}, "Reset ttl settings of the specified table")
 {}
 
-void TCommandTtlDrop::Config(TConfig& config) {
+void TCommandTtlReset::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandTtlDrop::Parse(TConfig& config) {
+void TCommandTtlReset::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParsePath(config, 0);
 }
 
-int TCommandTtlDrop::Run(TConfig& config) {
+int TCommandTtlReset::Run(TConfig& config) {
     NTable::TTableClient client(CreateDriver(config));
 
     auto settings = NTable::TAlterTableSettings()

@@ -228,9 +228,9 @@ private:
     TDuration RunInterval = TDuration::Zero();
 };
 
-class TCommandTtlDrop : public TYdbCommand, public TCommandWithPath {
+class TCommandTtlReset : public TYdbCommand, public TCommandWithPath {
 public:
-    TCommandTtlDrop();
+    TCommandTtlReset();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;

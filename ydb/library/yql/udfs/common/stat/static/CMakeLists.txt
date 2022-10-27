@@ -16,27 +16,9 @@ target_compile_options(common-stat-static PRIVATE
 target_link_libraries(common-stat-static PUBLIC
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-protobuf
-  util-draft
   yql-public-udf
-)
-target_proto_messages(common-stat-static PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/tdigest.proto
+  library-cpp-tdigest
 )
 target_sources(common-stat-static PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/static_udf.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/tdigest.cpp
-)
-target_proto_addincls(common-stat-static
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(common-stat-static
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
 )

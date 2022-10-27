@@ -1,5 +1,7 @@
 #include "tdigest.h"
-#include <ydb/library/yql/udfs/common/stat/static/tdigest.pb.h>
+
+#include <library/cpp/tdigest/tdigest.pb.h>
+
 #include <cmath>
 
 // TODO: rewrite to https://github.com/tdunning/t-digest/blob/master/src/main/java/com/tdunning/math/stats/MergingDigest.java

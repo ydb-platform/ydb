@@ -2,7 +2,8 @@
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include "tdigest.h"
+
+#include <library/cpp/tdigest/tdigest.h>
 
 using namespace NYql;
 using namespace NUdf;

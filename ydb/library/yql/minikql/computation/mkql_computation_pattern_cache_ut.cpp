@@ -31,7 +31,7 @@ TComputationNodeFactory GetListTestFactory() {
     };
 }
 
-TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     if (list) {
         return pb.ToFlow(TRuntimeNode(list, false));
     } else {
@@ -46,10 +46,10 @@ TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
 }
 
 template<bool Wide>
-TRuntimeNode CreateFilter(TProgramBuilder& pb, size_t vecSize, TCallable *list);
+TRuntimeNode CreateFilter(TProgramBuilder& pb, size_t vecSize, TCallable* list);
 
 template<>
-TRuntimeNode CreateFilter<false>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateFilter<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -62,7 +62,7 @@ TRuntimeNode CreateFilter<false>(TProgramBuilder& pb, size_t vecSize, TCallable 
 }
 
 template<>
-TRuntimeNode CreateFilter<true>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateFilter<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -83,10 +83,10 @@ TRuntimeNode CreateFilter<true>(TProgramBuilder& pb, size_t vecSize, TCallable *
 }
 
 template<bool Wide>
-TRuntimeNode CreateMap(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr);
+TRuntimeNode CreateMap(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr);
 
 template<>
-TRuntimeNode CreateMap<false>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateMap<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -99,7 +99,7 @@ TRuntimeNode CreateMap<false>(TProgramBuilder& pb, size_t vecSize, TCallable *li
 }
 
 template<>
-TRuntimeNode CreateMap<true>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateMap<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -120,10 +120,10 @@ TRuntimeNode CreateMap<true>(TProgramBuilder& pb, size_t vecSize, TCallable *lis
 }
 
 template<bool Wide>
-TRuntimeNode CreateCondense(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr);
+TRuntimeNode CreateCondense(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr);
 
 template<>
-TRuntimeNode CreateCondense<false>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateCondense<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -138,7 +138,7 @@ TRuntimeNode CreateCondense<false>(TProgramBuilder& pb, size_t vecSize, TCallabl
 }
 
 template<>
-TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -161,10 +161,10 @@ TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable
 }
 
 template<bool Wide>
-TRuntimeNode CreateChopper(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr);
+TRuntimeNode CreateChopper(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr);
 
 template<>
-TRuntimeNode CreateChopper<false>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateChopper<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -183,7 +183,7 @@ TRuntimeNode CreateChopper<false>(TProgramBuilder& pb, size_t vecSize, TCallable
 };
 
 template<>
-TRuntimeNode CreateChopper<true>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateChopper<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -209,10 +209,10 @@ TRuntimeNode CreateChopper<true>(TProgramBuilder& pb, size_t vecSize, TCallable 
 };
 
 template<bool Wide>
-TRuntimeNode CreateCombine(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr);
+TRuntimeNode CreateCombine(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr);
 
 template<>
-TRuntimeNode CreateCombine<false>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateCombine<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -233,7 +233,7 @@ TRuntimeNode CreateCombine<false>(TProgramBuilder& pb, size_t vecSize, TCallable
 };
 
 template<>
-TRuntimeNode CreateCombine<true>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateCombine<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
 
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
@@ -262,10 +262,10 @@ TRuntimeNode CreateCombine<true>(TProgramBuilder& pb, size_t vecSize, TCallable 
 };
 
 template<bool Wide>
-TRuntimeNode CreateChain1Map(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr);
+TRuntimeNode CreateChain1Map(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr);
 
 template<>
-TRuntimeNode CreateChain1Map<false>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateChain1Map<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -279,7 +279,7 @@ TRuntimeNode CreateChain1Map<false>(TProgramBuilder& pb, size_t vecSize, TCallab
 }
 
 template<>
-TRuntimeNode CreateChain1Map<true>(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
+TRuntimeNode CreateChain1Map<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -299,7 +299,7 @@ TRuntimeNode CreateChain1Map<true>(TProgramBuilder& pb, size_t vecSize, TCallabl
 }
 
 template<bool Wide>
-TRuntimeNode CreateDiscard(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+TRuntimeNode CreateDiscard(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -315,7 +315,7 @@ TRuntimeNode CreateDiscard(TProgramBuilder& pb, size_t vecSize, TCallable *list 
 }
 
 template<bool Wide>
-TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -336,7 +336,7 @@ TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable *list = n
 }
 
 template<bool Flow>
-TRuntimeNode CreateNarrowFlatMap(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+TRuntimeNode CreateNarrowFlatMap(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -351,7 +351,7 @@ TRuntimeNode CreateNarrowFlatMap(TProgramBuilder& pb, size_t vecSize, TCallable 
     );
 }
 
-TRuntimeNode CreateNarrowMultiMap(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+TRuntimeNode CreateNarrowMultiMap(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -366,7 +366,7 @@ TRuntimeNode CreateNarrowMultiMap(TProgramBuilder& pb, size_t vecSize, TCallable
 }
 
 template<bool WithPayload>
-TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -383,7 +383,7 @@ TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCal
     );
 }
 
-TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
     auto flow = CreateFlow(pb, vecSize, list);
 
@@ -441,14 +441,17 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
 
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
         auto entry = std::make_shared<TPatternCacheEntry>();
-        TScopedAlloc &alloc = entry->Alloc;
-        TTypeEnvironment &typeEnv = entry->Env;
+        TScopedAlloc& alloc = entry->Alloc;
+        TTypeEnvironment& typeEnv = entry->Env;
 
         TProgramBuilder pb(typeEnv, *functionRegistry);
 
         const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
         const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
-        auto progReturn = f(pb, vecSize, list);
+        TRuntimeNode progReturn;
+        with_lock(alloc) {
+            progReturn = f(pb, vecSize, list);
+        }
 
         TExploringNodeVisitor explorer;
         explorer.Walk(progReturn.GetNode(), typeEnv);
@@ -579,7 +582,10 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
 
             TProgramBuilder pb(typeEnv, *functionRegistry);
 
-            auto progReturn  = pb.NewDataLiteral<NYql::NUdf::EDataSlot::String>("qwerty");
+            TRuntimeNode progReturn;
+            with_lock(alloc) {
+                progReturn  = pb.NewDataLiteral<NYql::NUdf::EDataSlot::String>("qwerty");
+            }
 
             TExploringNodeVisitor explorer;
             explorer.Walk(progReturn.GetNode(), typeEnv);

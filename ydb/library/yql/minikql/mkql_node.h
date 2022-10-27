@@ -463,6 +463,10 @@ public:
     void ClearCookies() const;
 
     NUdf::TUnboxedValuePod NewStringValue(const NUdf::TStringRef& data) const {
+        Y_VERIFY_DEBUG(TlsAllocState);
+        Y_VERIFY_DEBUG(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
+            << "typeEnv's: " << Alloc.Ref().GetInfo() << " Tls: " << TlsAllocState->GetInfo()
+        ).data());
         if (data.Size() > NUdf::TUnboxedValue::InternalBufferSize) {
             auto value = NewString(data.Size());
             std::memcpy(value.Data(), data.Data(), data.Size());
@@ -479,6 +483,10 @@ public:
     TScopedAlloc& GetAllocator() const { return Alloc; }
 
     const NUdf::TStringValue& NewString(ui32 size) const {
+        Y_VERIFY_DEBUG(TlsAllocState);
+        Y_VERIFY_DEBUG(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
+            << "typeEnv's: " << Alloc.Ref().GetInfo() << " Tls: " << TlsAllocState->GetInfo()
+        ).data());
         Strings.emplace(size);
         return Strings.top();
     }

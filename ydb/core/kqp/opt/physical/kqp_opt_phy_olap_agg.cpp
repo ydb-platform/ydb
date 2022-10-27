@@ -176,7 +176,7 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
 
-    auto newRead = Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
+    return Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
         .Table(read.Table())
         .Ranges(read.Ranges())
         .Columns(read.Columns())
@@ -184,19 +184,6 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .ExplainPrompt(read.ExplainPrompt())
         .Process(newProcessLambda)
         .Done();
-
-    auto member = Build<TCoMap>(ctx, node.Pos())
-        .Input(newRead)
-        .Lambda()
-            .Args({"row"})
-            .Body<TCoMember>()
-                .Struct("row")
-                .Name(dqPhyLength.Name())
-                .Build()
-            .Build()
-        .Done();
-
-    return member;
 }
 
 } // namespace NKikimr::NKqp::NOpt

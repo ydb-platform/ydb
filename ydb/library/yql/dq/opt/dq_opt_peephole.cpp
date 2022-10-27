@@ -679,14 +679,15 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
 
     auto dqPhyLength = node.Cast<TDqPhyLength>();
 
-    auto zero = Build<TCoUint64>(ctx, node.Pos())
-        .Literal().Build("0")
-        .Done();
-
     return Build<TCoCondense>(ctx, node.Pos())
         .Input(dqPhyLength.Input())
-        .State<TCoUint64>()
-            .Literal().Build("0")
+        .State<TCoAsStruct>()
+            .Add<TCoNameValueTuple>()
+                .Name(dqPhyLength.Name())
+                .Value<TCoUint64>()
+                    .Literal().Build("0")
+                    .Build()
+                .Build()
             .Build()
         .SwitchHandler()
             .Args({"item", "state"})
@@ -694,14 +695,22 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
             .Build()
         .UpdateHandler()
             .Args({"item", "state"})
-            .Body<TCoAggrAdd>()
-                .Left("state")
-                .Right<TCoUint64>()
-                    .Literal().Build("1")
+            .Body<TCoAsStruct>()
+                .Add<TCoNameValueTuple>()
+                    .Name(dqPhyLength.Name())
+                    .Value<TCoAggrAdd>()
+                        .Left<TCoMember>()
+                            .Struct("state")
+                            .Name(dqPhyLength.Name())
+                            .Build()
+                        .Right<TCoUint64>()
+                            .Literal().Build("1")
+                            .Build()
+                        .Build()
+                    .Build()
                 .Build()
             .Build()
-        .Build()
-    .Done();
+        .Done();
 }
 
 } // namespace NYql::NDq

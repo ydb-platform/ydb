@@ -59,6 +59,14 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("secret-key", secretKeyHelp)
         .RequiredArgument("STRING");
 
+    TStringBuilder profileHelp;
+    profileHelp << "Named profile in \"" << AwsCredentialsFile << "\" file" << Endl
+        << "  Search order:" << Endl
+        << "    1. This option" << Endl
+        << "    2. \"AWS_PROFILE\" environment variable";
+    config.Opts->AddLongOption("aws-profile", profileHelp)
+        .RequiredArgument("STRING").DefaultValue(AwsDefaultProfileName);
+
     TStringBuilder itemHelp;
     itemHelp << "[At least one] Item specification" << Endl
         << "  Possible property names:" << Endl
@@ -81,6 +89,7 @@ void TCommandImportFromS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseFormats();
 
+    ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");
     ParseAwsSecretKey(config, "secret-key");
 

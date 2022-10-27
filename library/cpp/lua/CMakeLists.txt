@@ -6,6 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(archiver)
-add_subdirectory(enum_parser)
-add_subdirectory(rescompiler)
+
+add_library(library-cpp-lua)
+target_link_libraries(library-cpp-lua PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-json
+  contrib-libs-lua
+  cpp-string_utils-ztstrbuf
+)
+target_sources(library-cpp-lua PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/lua/eval.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/lua/json.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/lua/wrapper.cpp
+)

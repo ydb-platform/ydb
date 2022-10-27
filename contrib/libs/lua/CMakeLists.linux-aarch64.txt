@@ -1,0 +1,41 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(contrib-libs-lua)
+target_compile_options(contrib-libs-lua PRIVATE
+  -DLUA_USE_LINUX
+  -Wno-everything
+)
+target_include_directories(contrib-libs-lua PUBLIC
+  ${CMAKE_BINARY_DIR}/contrib/libs/lua
+)
+target_include_directories(contrib-libs-lua PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/lua-5.2.0/src
+)
+target_link_libraries(contrib-libs-lua PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-archive
+)
+target_sources(contrib-libs-lua PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/lib.cpp
+)
+add_custom_command(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
+  DEPENDS
+  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua
+  COMMAND
+  ${TOOLS_ROOT}/tools/archiver/archiver
+  -q
+  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua
+  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua:
+  -o
+  ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
+)

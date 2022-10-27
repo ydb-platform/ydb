@@ -6,6 +6,27 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(archiver)
-add_subdirectory(enum_parser)
-add_subdirectory(rescompiler)
+
+add_executable(archiver)
+target_link_libraries(archiver PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-archive
+  cpp-digest-md5
+  cpp-getopt-small
+)
+target_link_options(archiver PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(archiver PRIVATE
+  ${CMAKE_SOURCE_DIR}/tools/archiver/main.cpp
+)
+vcs_info(archiver)

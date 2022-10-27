@@ -12,6 +12,7 @@ add_library(common)
 target_link_libraries(common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-config
   library-cpp-getopt
   cpp-json-writer
   cpp-yaml-as

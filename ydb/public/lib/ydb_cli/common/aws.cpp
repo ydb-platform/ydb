@@ -1,53 +1,37 @@
 #include "aws.h"
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
-const TString TCommandWithAwsCredentials::AwsCredentialsFile= "~/.aws/credentials";
+const TString TCommandWithAwsCredentials::AwsCredentialsFile = "~/.aws/credentials";
+const TString TCommandWithAwsCredentials::AwsDefaultProfileName = "default";
 
-const TString& TCommandWithAwsCredentials::ReadAwsCredentialsFile() {
-    if (!FileContent) {
-        TString credentialsFile = AwsCredentialsFile;
-        FileContent = ReadFromFile(credentialsFile, "AWS Credentials");
-    }
+TString TCommandWithAwsCredentials::ReadIniKey(const TString& iniKey) {
+    using namespace NConfig;
 
-    return FileContent.GetRef();
-}
+    const auto fileName = "AWS Credentials";
+    const auto& profileName = AwsProfile.GetOrElse(AwsDefaultProfileName);
 
-static bool IsSkipSymbol(char s) {
-    switch (s) {
-    case ' ':
-    case '\t':
-    case '=':
-        return true;
-    }
-    return false;
-}
-
-static TStringBuf GetKey(TStringBuf content, const TString& key) {
-    TStringBuf line;
-    while (content.ReadLine(line)) {
-        if (!line.SkipPrefix(key)) {
-            continue;
+    try {
+        if (!Config) {
+            TString filePath = AwsCredentialsFile;
+            const auto content = ReadFromFile(filePath, fileName);
+            Config.ConstructInPlace(TConfig::ReadIni(content));
         }
 
-        while (!line.empty() && IsSkipSymbol(line.front())) {
-            line.Skip(1);
+        const auto& profiles = Config->Get<TDict>();
+        if (!profiles.contains(profileName)) {
+            throw yexception() << fileName << " file does not contain a profile '" << profileName << "'";
         }
 
-        return line;
+        const auto& profile = profiles.At(profileName).Get<TDict>();
+        if (!profile.contains(iniKey)) {
+            throw yexception() << "Invalid profile '" << profileName << "' in " << fileName << " file";
+        }
+
+        return profile.At(iniKey).As<TString>();
+    } catch (const TConfigError& ex) {
+        throw yexception() << "Invalid " << fileName << " file: " << ex.what();
     }
-
-    throw TMisuseException() << "Cannot find \"" << key << "\" key";
 }
 
-void TCommandWithAwsCredentials::ReadAwsAccessKey() {
-    AwsAccessKey = GetKey(ReadAwsCredentialsFile(), "aws_access_key_id");
-}
-
-void TCommandWithAwsCredentials::ReadAwsSecretKey() {
-    AwsSecretKey = GetKey(ReadAwsCredentialsFile(), "aws_secret_access_key");
-}
-
-}
 }

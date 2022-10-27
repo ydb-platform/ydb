@@ -1587,13 +1587,6 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 );
         }
 
-        TVector<TString> rootDomains;
-        for (auto &domain : appData->DomainsInfo->Domains)
-            rootDomains.emplace_back("/" + domain.second->Name);
-
-        const bool ignoreServeRootDomain = ScopeId.IsTenantScope();
-        const bool serveRootDomain = !ignoreServeRootDomain && config.GetServeRootDomains();
-
         auto stringsFromProto = [](TVector<TString>& vec, const auto& proto) {
             if (!proto.empty()) {
                 vec.reserve(proto.size());
@@ -1614,8 +1607,6 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4());
             stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
 
-            if (serveRootDomain)
-                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
             endpoints.push_back(std::move(desc));
         }
@@ -1629,9 +1620,6 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4());
             stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
             desc->TargetNameOverride = config.GetPublicTargetNameOverride();
-
-            if (serveRootDomain)
-                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
 
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
             endpoints.push_back(std::move(desc));
@@ -1648,8 +1636,6 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 stringsFromProto(desc->AddressesV4, sx.GetPublicAddressesV4());
                 stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
 
-                if (serveRootDomain)
-                    desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
                 endpoints.push_back(std::move(desc));
             }
@@ -1664,8 +1650,6 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
                 desc->TargetNameOverride = sx.GetPublicTargetNameOverride();
 
-                if (serveRootDomain)
-                    desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
                 endpoints.push_back(std::move(desc));
             }

@@ -1,6 +1,7 @@
 #include "test_client.h"
 
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/public/lib/base/msgbus.h>
@@ -614,7 +615,7 @@ namespace Tests {
 
         TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
         tenantPoolConfig->AddStaticSlot(domainName);
-        appData.TenantName = domainName;
+        appData.TenantName = CanonizePath(domainName);
 
         auto poolId = Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeIdx, appData.SystemPoolId,
                                         TMailboxType::Revolving, 0);

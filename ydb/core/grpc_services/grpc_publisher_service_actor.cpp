@@ -3,8 +3,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 using namespace NActors;
 
@@ -51,5 +50,4 @@ IActor* CreateGrpcPublisherServiceActor(TVector<TIntrusivePtr<TGrpcEndpointDescr
     return new TGrpcPublisherServiceActor(std::move(endpoints));
 }
 
-}
-}
+} // namespace NKikimr::NGRpcService

@@ -24,15 +24,19 @@ public:
 
     void AddState(EPDiskState state);
     EPDiskStatus Compute(EPDiskStatus current, TString& reason) const;
+
     EPDiskState GetState() const {
         return State;
     }
+
     EPDiskState GetPrevState() const {
         return PrevState;
     }
+
     ui64 GetStateCounter() const {
         return StateCounter;
     }
+
     void Reset();
 
 private:

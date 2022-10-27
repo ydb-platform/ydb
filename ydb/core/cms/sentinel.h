@@ -22,9 +22,6 @@ struct TEvSentinel {
 
         EvBSCPipeDisconnected,
 
-        EvGetSentinelStateRequest,
-        EvGetSentinelStateResponse,
-
         EvEnd,
     };
 
@@ -51,9 +48,6 @@ struct TEvSentinel {
     };
 
     struct TEvBSCPipeDisconnected: public TEventLocal<TEvBSCPipeDisconnected, EvBSCPipeDisconnected> {};
-
-    using TEvGetSentinelStateRequest = TEvCms::TEvGetSentinelStateRequest;
-    using TEvGetSentinelStateResponse = TEvCms::TEvGetSentinelStateResponse;
 
 }; // TEvSentinel
 

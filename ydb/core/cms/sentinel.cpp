@@ -953,7 +953,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         );
     }
 
-    void Handle(TEvSentinel::TEvGetSentinelStateRequest::TPtr& ev, const TActorContext &ctx) {
+    void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr& ev, const TActorContext &ctx) {
         THolder<TEvCms::TEvGetSentinelStateResponse> Response;
         Response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
         auto &rec = Response->Record;
@@ -1070,7 +1070,7 @@ public:
             cFunc(TEvSentinel::TEvUpdateState::EventType, UpdateState);
             cFunc(TEvSentinel::TEvStateUpdated::EventType, OnStateUpdated);
             hFunc(TEvSentinel::TEvStatusChanged, Handle);
-            HFunc(TEvSentinel::TEvGetSentinelStateRequest, Handle);
+            HFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
             cFunc(TEvSentinel::TEvBSCPipeDisconnected::EventType, OnPipeDisconnected);
 
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);

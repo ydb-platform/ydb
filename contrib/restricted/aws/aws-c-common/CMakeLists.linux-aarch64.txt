@@ -73,6 +73,7 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/task_scheduler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_scheduler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_shared.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/uri.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/uuid.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/xml_parser.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/arm/asm/cpuid.c

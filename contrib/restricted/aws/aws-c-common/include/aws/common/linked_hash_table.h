@@ -17,6 +17,7 @@ struct aws_linked_hash_table {
     struct aws_linked_list list;
     struct aws_hash_table table;
     aws_hash_callback_destroy_fn *user_on_value_destroy;
+    aws_hash_callback_destroy_fn *user_on_key_destroy;
 };
 
 /**

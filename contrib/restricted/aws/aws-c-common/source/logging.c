@@ -283,6 +283,18 @@ struct aws_logger *aws_logger_get(void) {
     return s_root_logger_ptr;
 }
 
+struct aws_logger *aws_logger_get_conditional(aws_log_subject_t subject, enum aws_log_level level) {
+    if (s_root_logger_ptr == NULL) {
+        return NULL;
+    }
+
+    if (s_root_logger_ptr->vtable->get_log_level(s_root_logger_ptr, subject) < level) {
+        return NULL;
+    }
+
+    return s_root_logger_ptr;
+}
+
 void aws_logger_clean_up(struct aws_logger *logger) {
     AWS_ASSERT(logger->vtable->clean_up != NULL);
 

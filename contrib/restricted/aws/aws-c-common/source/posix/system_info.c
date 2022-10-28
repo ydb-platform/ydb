@@ -421,9 +421,9 @@ void aws_backtrace_print(FILE *fp, void *call_site_data) {
     fprintf(fp, "No call stack information available\n");
 }
 
-size_t aws_backtrace(void **stack_frames, size_t size) {
+size_t aws_backtrace(void **stack_frames, size_t num_frames) {
     (void)stack_frames;
-    (void)size;
+    (void)num_frames;
     return 0;
 }
 

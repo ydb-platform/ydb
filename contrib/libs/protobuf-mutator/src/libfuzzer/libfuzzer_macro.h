@@ -82,14 +82,15 @@
   using PostProcessorRegistration =                    \
       protobuf_mutator::libfuzzer::PostProcessorRegistration<Proto>;
 
-#define DEFINE_PROTO_FUZZER_IMPL(use_binary, arg)                              \
-  static void TestOneProtoInput(arg);                                          \
-  using FuzzerProtoType = std::remove_const<std::remove_reference<             \
-      std::function<decltype(TestOneProtoInput)>::argument_type>::type>::type; \
-  DEFINE_CUSTOM_PROTO_MUTATOR_IMPL(use_binary, FuzzerProtoType)                \
-  DEFINE_CUSTOM_PROTO_CROSSOVER_IMPL(use_binary, FuzzerProtoType)              \
-  DEFINE_TEST_ONE_PROTO_INPUT_IMPL(use_binary, FuzzerProtoType)                \
-  DEFINE_POST_PROCESS_PROTO_MUTATION_IMPL(FuzzerProtoType)                     \
+#define DEFINE_PROTO_FUZZER_IMPL(use_binary, arg)                 \
+  static void TestOneProtoInput(arg);                             \
+  using FuzzerProtoType =                                         \
+      protobuf_mutator::libfuzzer::macro_internal::GetFirstParam< \
+          decltype(&TestOneProtoInput)>::type;                    \
+  DEFINE_CUSTOM_PROTO_MUTATOR_IMPL(use_binary, FuzzerProtoType)   \
+  DEFINE_CUSTOM_PROTO_CROSSOVER_IMPL(use_binary, FuzzerProtoType) \
+  DEFINE_TEST_ONE_PROTO_INPUT_IMPL(use_binary, FuzzerProtoType)   \
+  DEFINE_POST_PROCESS_PROTO_MUTATION_IMPL(FuzzerProtoType)        \
   static void TestOneProtoInput(arg)
 
 namespace protobuf_mutator {
@@ -122,6 +123,19 @@ struct PostProcessorRegistration {
         });
   }
 };
+
+namespace macro_internal {
+
+template <typename T>
+struct GetFirstParam;
+
+template <class Arg>
+struct GetFirstParam<void (*)(Arg)> {
+  using type = typename std::remove_const<
+      typename std::remove_reference<Arg>::type>::type;
+};
+
+}  // namespace macro_internal
 
 }  // namespace libfuzzer
 }  // namespace protobuf_mutator

@@ -93,7 +93,7 @@ struct aws_json_value *aws_json_value_new_object(struct aws_allocator *allocator
  * Gets the string of a string aws_json_value.
  * @param value The string aws_json_value.
  * @param output The string
- * @return AWS_OP_SUCESS if the value is a string, otherwise AWS_OP_ERR.
+ * @return AWS_OP_SUCCESS if the value is a string, otherwise AWS_OP_ERR.
  */
 AWS_COMMON_API
 int aws_json_value_get_string(const struct aws_json_value *value, struct aws_byte_cursor *output);
@@ -102,7 +102,7 @@ int aws_json_value_get_string(const struct aws_json_value *value, struct aws_byt
  * Gets the number of a number aws_json_value.
  * @param value The number aws_json_value.
  * @param output The number
- * @return AWS_OP_SUCESS if the value is a number, otherwise AWS_OP_ERR.
+ * @return AWS_OP_SUCCESS if the value is a number, otherwise AWS_OP_ERR.
  */
 AWS_COMMON_API
 int aws_json_value_get_number(const struct aws_json_value *value, double *output);
@@ -111,7 +111,7 @@ int aws_json_value_get_number(const struct aws_json_value *value, double *output
  * Gets the boolean of a boolean aws_json_value.
  * @param value The boolean aws_json_value.
  * @param output The boolean
- * @return AWS_OP_SUCESS if the value is a boolean, otherwise AWS_OP_ERR.
+ * @return AWS_OP_SUCCESS if the value is a boolean, otherwise AWS_OP_ERR.
  */
 AWS_COMMON_API
 int aws_json_value_get_boolean(const struct aws_json_value *value, bool *output);
@@ -166,6 +166,37 @@ bool aws_json_value_has_key(const struct aws_json_value *object, struct aws_byte
  */
 AWS_COMMON_API
 int aws_json_value_remove_from_object(struct aws_json_value *object, struct aws_byte_cursor key);
+
+/**
+ * @brief callback for iterating members of an object
+ * Iteration can be controlled as follows:
+ * - return AWS_OP_SUCCESS and out_should_continue is set to true (default value) -
+ *   continue iteration without error
+ * - return AWS_OP_SUCCESS and out_continue is set to false -
+ *   stop iteration without error
+ * - return AWS_OP_ERR - stop iteration with error
+ */
+typedef int(aws_json_on_member_encountered_const_fn)(
+    const struct aws_byte_cursor *key,
+    const struct aws_json_value *value,
+    bool *out_should_continue,
+    void *user_data);
+
+/**
+ * @brief iterates through members of the object.
+ * iteration is sequential in order fields were initially parsed.
+ * @param object object to iterate over.
+ * @param on_member callback for when member is encountered.
+ * @param user_data user data to pass back in callback.
+ * @return AWS_OP_SUCCESS when iteration finishes completely or exits early,
+ * AWS_OP_ERR if value is not an object.
+ */
+AWS_COMMON_API
+int aws_json_const_iterate_object(
+    const struct aws_json_value *object,
+    aws_json_on_member_encountered_const_fn *on_member,
+    void *user_data);
+
 // ====================
 
 // ====================
@@ -211,10 +242,59 @@ size_t aws_json_get_array_size(const struct aws_json_value *array);
  */
 AWS_COMMON_API
 int aws_json_value_remove_array_element(struct aws_json_value *array, size_t index);
+
+/**
+ * @brief callback for iterating values of an array.
+ * Iteration can be controlled as follows:
+ * - return AWS_OP_SUCCESS and out_should_continue is set to true (default value) -
+ *   continue iteration without error
+ * - return AWS_OP_SUCCESS and out_continue is set to false -
+ *   stop iteration without error
+ * - return AWS_OP_ERR - stop iteration with error
+ */
+typedef int(aws_json_on_value_encountered_const_fn)(
+    size_t index,
+    const struct aws_json_value *value,
+    bool *out_should_continue,
+    void *user_data);
+
+/**
+ * @brief iterates through values of an array.
+ * iteration is sequential starting with 0th element.
+ * @param array array to iterate over.
+ * @param on_value callback for when value is encountered.
+ * @param user_data user data to pass back in callback.
+ * @return AWS_OP_SUCCESS when iteration finishes completely or exits early,
+ * AWS_OP_ERR if value is not an array.
+ */
+AWS_COMMON_API
+int aws_json_const_iterate_array(
+    const struct aws_json_value *array,
+    aws_json_on_value_encountered_const_fn *on_value,
+    void *user_data);
+
 // ====================
 
 // ====================
 // Checks
+
+/**
+ * Checks whether two json values are equivalent.
+ * @param a first value to compare.
+ * @param b second value to compare.
+ * @param is_case_sensitive case sensitive compare or not.
+ * @return True is values are equal, false otherwise
+ */
+AWS_COMMON_API
+bool aws_json_value_compare(const struct aws_json_value *a, const struct aws_json_value *b, bool is_case_sensitive);
+
+/**
+ * Duplicates json value.
+ * @param value first value to compare.
+ * @return duplicated value. NULL and last error set if value cannot be duplicated.
+ */
+AWS_COMMON_API
+struct aws_json_value *aws_json_value_duplicate(const struct aws_json_value *value);
 
 /**
  * Checks if the aws_json_value is a string.

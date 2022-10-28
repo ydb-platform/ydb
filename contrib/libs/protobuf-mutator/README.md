@@ -118,20 +118,20 @@ may corrupt the reproducer so it stops triggering the bug.
 Note: You can add callback for any nested message and you can add multiple callbacks for
 the same message type.
 ```
-DEFINE_PROTO_FUZZER(const MyMessageType& input) {
-  static PostProcessorRegistration reg1 = {
-      [](MyMessageType* message, unsigned int seed) {
-        TweakMyMessage(message, seed);
-      }};
-  static PostProcessorRegistration reg2 = {
-      [](MyMessageType* message, unsigned int seed) {
-        DifferentTweakMyMessage(message, seed);
-      }};
-  static PostProcessorRegistration reg_nested = {
-      [](MyMessageType::Nested* message, unsigned int seed) {
-        TweakMyNestedMessage(message, seed);
-      }};
+static PostProcessorRegistration<MyMessageType> reg1 = {
+    [](MyMessageType* message, unsigned int seed) {
+      TweakMyMessage(message, seed);
+    }};
+static PostProcessorRegistration<MyMessageType> reg2 = {
+    [](MyMessageType* message, unsigned int seed) {
+      DifferentTweakMyMessage(message, seed);
+    }};
+static PostProcessorRegistration<MyMessageType::Nested> reg_nested = {
+    [](MyMessageType::Nested* message, unsigned int seed) {
+      TweakMyNestedMessage(message, seed);
+    }};
 
+DEFINE_PROTO_FUZZER(const MyMessageType& input) {
   // Code which needs to be fuzzed.
   ConsumeMyMessageType(input);
 }
@@ -141,6 +141,14 @@ DEFINE_PROTO_FUZZER(const MyMessageType& input) {
 string should be UTF-8, however only "proto3" enforces that. So if fuzzer is
 applied to "proto2" type libprotobuf-mutator will generate any strings including
 invalid UTF-8. If it's a "proto3" message type, only valid UTF-8 will be used.
+
+## Extensions
+Currently the library does not mutate
+[extensions](https://developers.google.com/protocol-buffers/docs/proto#extensions).
+This can be a problem if extension contains required fields so the library will not
+be able to change the message into valid initialized state.
+You can use [post processing hooks](#mutation-post-processing-experimental) to
+cleanup/initialize the message as workaround.
 
 ## Users of the library
 * [Chromium](https://cs.chromium.org/search/?q=DEFINE_.*._PROTO_FUZZER%5C\()

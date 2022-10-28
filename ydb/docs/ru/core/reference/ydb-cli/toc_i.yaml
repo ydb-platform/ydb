@@ -69,6 +69,16 @@ items:
     #   href: commands/tools/dump.md
     # - name: Восстановление бэкапа
     #   href: commands/tools/restore.md
+  - name: Управление фоновыми операциями
+    items:
+    - name: Получение списка фоновых операций
+      href: operation-list.md
+    - name: Получение статуса фоновой операции
+      href: operation-get.md
+    - name: Отмена фоновой операции
+      href: operation-cancel.md
+    - name: Удаление фоновой операции из списка
+      href: operation-forget.md
   - name: Управление профилями
     include: { mode: link, path: profile/toc_p.yaml }
   - name: Информационные сервисы

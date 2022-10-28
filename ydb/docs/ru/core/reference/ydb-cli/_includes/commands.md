@@ -35,10 +35,10 @@
 [import file tsv](../export_import/import-file.md) | Импорт данных из TSV-файла
 [import s3](../export_import/s3_import.md) | Импорт данных из хранилища S3
 [init](../profile/create.md) | Инициализация CLI, создание [профиля](../profile/index.md)
-operation cancel | Прерывание исполнения фоновой операции
-operation forget | Удаление фоновой операции из истории
-operation get | Статус фоновой операции
-operation list | Список фоновых операций
+[operation cancel](../operation-cancel.md) | Прерывание исполнения фоновой операции
+[operation forget](../operation-forget.md) | Удаление фоновой операции из списка
+[operation get](../operation-get.md) | Статус фоновой операции
+[operation list](../operation-list.md) | Список фоновых операций
 [scheme describe](../commands/scheme-describe.md) | Описание объекта схемы данных
 [scheme ls](../commands/scheme-ls.md) | Список объектов схемы данных
 [scheme mkdir](../commands/dir.md#mkdir) | Создание директории

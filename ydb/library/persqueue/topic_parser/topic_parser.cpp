@@ -206,8 +206,6 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
             isRootDb = true;
             root = PQPrefix;
             SkipPathPrefix(topicPath, PQPrefix);
-        } else {
-            SkipPathPrefix(topicPath, databaseBuf);
         }
     } else if (IsPathPrefix(topicPath, PQPrefix)) {
         isRootDb = true;

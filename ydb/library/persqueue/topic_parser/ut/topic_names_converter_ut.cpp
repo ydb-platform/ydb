@@ -167,6 +167,12 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
         );
         UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "account-topic");
 
+        converter = converterFactory.MakeDiscoveryConverter(
+                "account/account/account", {}, "dc1", "account"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "account/account");
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetSecondaryPath("account"), "/account/account/account");
+
         }
 
     Y_UNIT_TEST(FirstClass) {

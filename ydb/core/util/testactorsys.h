@@ -17,6 +17,8 @@
 
 namespace NKikimr {
 
+class TTestExecutorPool;
+
 class TTestActorSystem {
     class TTestSchedulerThread : public ISchedulerThread {
         TTestActorSystem *Context;
@@ -157,6 +159,8 @@ class TTestActorSystem {
             HandlePtr->reset(ev.Release());
         }
     };
+
+    friend class TTestExecutorPool;
 
 public:
     std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> FilterFunction;
@@ -641,7 +645,7 @@ public:
         ActorName.erase(nameIt);
 
         // unregister actor through the executor
-        info->ExecutorThread->UnregisterActor(&mbox.Header, actorId.LocalId());
+        info->ExecutorThread->UnregisterActor(&mbox.Header, actorId);
 
         // terminate unregistered actor
         info->ExecutorThread->DropUnregistered();

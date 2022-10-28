@@ -65,6 +65,7 @@ namespace NActors {
         // for workers
         virtual ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
         virtual void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) = 0;
+        virtual TMailboxHeader *ResolveMailbox(ui32 hint) = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.

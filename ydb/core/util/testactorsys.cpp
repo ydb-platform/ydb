@@ -27,6 +27,11 @@ public:
         Y_FAIL();
     }
 
+    TMailboxHeader *ResolveMailbox(ui32 hint) override {
+        const auto it = Context->Mailboxes.find({NodeId, PoolId, hint});
+        return it != Context->Mailboxes.end() ? &it->second.Header : nullptr;
+    }
+
     void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, NActors::TWorkerId /*workerId*/) override {
         Context->Schedule(deadline, ev, cookie, NodeId);
     }

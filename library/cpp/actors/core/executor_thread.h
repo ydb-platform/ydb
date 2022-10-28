@@ -42,7 +42,7 @@ namespace NActors {
         TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(),
                                const TActorId& parentId = TActorId());
         TActorId RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId = TActorId());
-        void UnregisterActor(TMailboxHeader* mailbox, ui64 localActorId);
+        void UnregisterActor(TMailboxHeader* mailbox, TActorId actorId);
         void DropUnregistered();
         const std::vector<THolder<IActor>>& GetUnregistered() const { return DyingActors; }
 

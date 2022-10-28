@@ -863,6 +863,7 @@ namespace NActors {
 
         // Should never be called
         void ReclaimMailbox(TMailboxType::EType, ui32, TWorkerId, ui64) override { Y_FAIL(); }
+        TMailboxHeader *ResolveMailbox(ui32) override { Y_FAIL(); }
         void Schedule(TInstant, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
         void Schedule(TMonotonic, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
         void Schedule(TDuration, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }

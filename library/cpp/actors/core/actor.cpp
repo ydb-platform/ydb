@@ -175,7 +175,7 @@ namespace NActors {
 
     void IActor::PassAway() {
         auto& cx = *TlsActivationContext;
-        cx.ExecutorThread.UnregisterActor(&cx.Mailbox, SelfActorId.LocalId());
+        cx.ExecutorThread.UnregisterActor(&cx.Mailbox, SelfActorId);
     }
 
     double IActor::GetElapsedTicksAsSeconds() const {

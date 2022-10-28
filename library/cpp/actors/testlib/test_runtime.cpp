@@ -307,6 +307,10 @@ namespace NActors {
             Node->MailboxTable->ReclaimMailbox(mailboxType, hint, revolvingCounter);
         }
 
+        TMailboxHeader *ResolveMailbox(ui32 hint) override {
+            return Node->MailboxTable->Get(hint);
+        }
+
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
             DoSchedule(deadline, ev, cookie, workerId);
         }

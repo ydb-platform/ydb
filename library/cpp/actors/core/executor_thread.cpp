@@ -61,8 +61,9 @@ namespace NActors {
         return Ctx.Executor->Register(actor, mailbox, hint, parentId ? parentId : CurrentRecipient);
     }
 
-    void TExecutorThread::UnregisterActor(TMailboxHeader* mailbox, ui64 localActorId) {
-        IActor* actor = mailbox->DetachActor(localActorId);
+    void TExecutorThread::UnregisterActor(TMailboxHeader* mailbox, TActorId actorId) {
+        Y_VERIFY_DEBUG(actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
+        IActor* actor = mailbox->DetachActor(actorId.LocalId());
         Ctx.DecrementActorsAliveByActivity(actor->GetActivityType());
         DyingActors.push_back(THolder(actor));
     }

@@ -23,6 +23,7 @@ namespace NActors {
         TExecutorPoolBaseMailboxed(ui32 poolId, ui32 maxActivityType);
         ~TExecutorPoolBaseMailboxed();
         void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingWriteCounter) override;
+        TMailboxHeader *ResolveMailbox(ui32 hint) override;
         bool Send(TAutoPtr<IEventHandle>& ev) override;
         bool SendWithContinuousExecution(TAutoPtr<IEventHandle>& ev) override;
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) override;

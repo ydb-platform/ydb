@@ -41,6 +41,10 @@ namespace NActors {
         MailboxTable->ReclaimMailbox(mailboxType, hint, revolvingWriteCounter);
     }
 
+    TMailboxHeader *TExecutorPoolBaseMailboxed::ResolveMailbox(ui32 hint) {
+        return MailboxTable->Get(hint);
+    }
+
     ui64 TExecutorPoolBaseMailboxed::AllocateID() {
         return ActorSystem->AllocateIDSpace(1);
     }

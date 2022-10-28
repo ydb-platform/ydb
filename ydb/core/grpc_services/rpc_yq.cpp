@@ -151,6 +151,7 @@ protected:
 
         NYq::TEvAuditService::TExtraInfo extraInfo{
             .Token = Token,
+            .CloudId = response.AuditDetails.CloudId,
             .FolderId = FolderId,
             .User = User,
             .PeerName = PeerName,

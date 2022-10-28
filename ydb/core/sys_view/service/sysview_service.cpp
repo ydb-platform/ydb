@@ -5,10 +5,10 @@
 
 #include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/mind/tenant_pool.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -346,8 +346,6 @@ public:
         TopByRequestUnits1Hour = MakeHolder<TServiceQueryHistory<TRequestUnitsGreater>>(
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE, now);
 
-        ctx.Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe());
-
         ScanLimiter = MakeIntrusive<TScanLimiter>(ConcurrentScansLimit);
 
         if (AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
@@ -375,7 +373,6 @@ public:
     STFUNC(StateWork) {
         Y_UNUSED(ctx);
         switch(ev->GetTypeRewrite()) {
-            hFunc(TEvTenantPool::TEvTenantPoolStatus, Handle);
             hFunc(TEvSysView::TEvCollectQueryStats, Handle);
             hFunc(TEvSysView::TEvGetQueryStats, Handle);
             hFunc(TEvSysView::TEvGetScanLimiter, Handle);
@@ -908,26 +905,6 @@ private:
         }
     }
 
-    void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev) {
-        auto& record = ev->Get()->Record;
-        SVLOG_D("Handle TEvTenantPool::TEvTenantPoolStatus: service id# " << SelfId());
-
-        Tenants.clear();
-        for (auto& slot : record.GetSlots()) {
-            Tenants.insert(slot.GetAssignedTenant());
-        }
-        HasTenants = true;
-
-        TopByDuration1Minute->Clear();
-        TopByDuration1Hour->Clear();
-        TopByReadBytes1Minute->Clear();
-        TopByReadBytes1Hour->Clear();
-        TopByCpuTime1Minute->Clear();
-        TopByCpuTime1Hour->Clear();
-        TopByRequestUnits1Minute->Clear();
-        TopByRequestUnits1Hour->Clear();
-    }
-
     void Handle(TEvSysView::TEvCollectQueryStats::TPtr& ev) {
         const auto& database = ev->Get()->Database;
 
@@ -982,9 +959,8 @@ private:
             startBucket = record.GetStartBucket();
         }
 
-        if (!HasTenants ||
-            !record.HasTenantName() ||
-            !Tenants.contains(record.GetTenantName()))
+        if (!record.HasTenantName() ||
+            record.GetTenantName() != AppData()->TenantName)
         {
             Send(ev->Sender, std::move(result), 0, ev->Cookie);
             return;
@@ -1110,9 +1086,6 @@ private:
 
     THolder<TServiceQueryHistory<TRequestUnitsGreater>> TopByRequestUnits1Minute;
     THolder<TServiceQueryHistory<TRequestUnitsGreater>> TopByRequestUnits1Hour;
-
-    bool HasTenants = false;
-    THashSet<TString> Tenants;
 
     struct TDbCountersState {
         TIntrusivePtr<IDbCounters> Counters;

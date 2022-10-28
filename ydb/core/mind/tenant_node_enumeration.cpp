@@ -1,5 +1,5 @@
 #include "tenant_node_enumeration.h"
-#include "tenant_pool.h"
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/path.h>
@@ -24,37 +24,15 @@ static ui32 ExtractDefaultGroupForPath(const TString &path) {
 }
 
 class TTenantNodeEnumerationPublisher : public TActorBootstrapped<TTenantNodeEnumerationPublisher> {
-    TMap<TString, TActorId> PublishActors;
+    void StartPublishing() {
+        const TString assignedPath = MakeTenantNodeEnumerationPath(AppData()->TenantName);
+        const ui32 statestorageGroupId = ExtractDefaultGroupForPath(AppData()->TenantName);
+        if (statestorageGroupId == Max<ui32>())
+            return;
 
-    void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev) {
-        const auto &record = ev->Get()->Record;
-
-        TMap<TString, TActorId> toRemove;
-        toRemove.swap(PublishActors);
-
-        for (auto &x : record.GetSlots()) {
-            if (const TString &assigned = x.GetAssignedTenant()) {
-                auto it = toRemove.find(assigned);
-                if (it != toRemove.end()) {
-                    PublishActors.emplace(*it);
-                    toRemove.erase(it);
-                } else {
-                    const TString assignedPath = MakeTenantNodeEnumerationPath(assigned);
-                    const ui32 statestorageGroupId = ExtractDefaultGroupForPath(assigned);
-                    if (statestorageGroupId == Max<ui32>())
-                        continue;
-
-                    const TActorId publishActor = Register(CreateBoardPublishActor(assignedPath, TString(), SelfId(), statestorageGroupId, 0, true));
-
-                    PublishActors.emplace(assigned, publishActor);
-                }
-            }
-        }
-
-        for (auto &xpair : toRemove) {
-            Send(xpair.second, new TEvents::TEvPoisonPill());
-        }
+        Register(CreateBoardPublishActor(assignedPath, TString(), SelfId(), statestorageGroupId, 0, true));
     }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TENANT_NODES_ENUMERATION;
@@ -64,14 +42,8 @@ public:
     {}
 
     void Bootstrap() {
-        Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe());
-        Become(&TThis::StateWait);
-    }
-
-    STATEFN(StateWait) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTenantPool::TEvTenantPoolStatus, Handle);
-        }
+        StartPublishing();
+        PassAway();
     }
 };
 

@@ -1,5 +1,6 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
+#include "space_monitor.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -114,32 +115,36 @@ namespace NKikimr::NBlobDepot {
 
             ui64 accum = 0;
             for (const auto& [groupId, group] : groups) {
-                //const ui64 allocatedBytes = Groups[groupId].AllocatedBytes;
-                const ui64 groupWeight = 1;
-                accum += groupWeight;
-                options.emplace_back(accum, &group);
+                if (const ui64 w = SpaceMonitor->GetGroupAllocationWeight(groupId)) {
+                    accum += w;
+                    options.emplace_back(accum, &group);
+                }
             }
 
-            THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
-            for (ui32 i = 0, count = ev->Get()->Record.GetCount(); i < count; ++i) {
-                const ui64 selection = RandomNumber(accum);
-                const auto it = std::upper_bound(options.begin(), options.end(), selection,
-                    [](ui64 x, const auto& y) { return x < std::get<0>(y); });
-                const auto& [_, group] = *it;
+            if (accum) {
+                THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
+                for (ui32 i = 0, count = ev->Get()->Record.GetCount(); i < count; ++i) {
+                    const ui64 selection = RandomNumber(accum);
+                    const auto it = std::upper_bound(options.begin(), options.end(), selection,
+                        [](ui64 x, const auto& y) { return x < std::get<0>(y); });
+                    const auto& [_, group] = *it;
 
-                const size_t channelIndex = RandomNumber(group->Channels.size());
-                TChannelInfo* const channel = group->Channels[channelIndex];
+                    const size_t channelIndex = RandomNumber(group->Channels.size());
+                    TChannelInfo* const channel = group->Channels[channelIndex];
 
-                const ui64 value = channel->NextBlobSeqId++;
+                    const ui64 value = channel->NextBlobSeqId++;
 
-                // fill in range item
-                auto& range = issuedRanges[channel->Index];
-                if (!range || range->GetEnd() != value) {
-                    range = givenIdRange->AddChannelRanges();
-                    range->SetChannel(channel->Index);
-                    range->SetBegin(value);
+                    // fill in range item
+                    auto& range = issuedRanges[channel->Index];
+                    if (!range || range->GetEnd() != value) {
+                        range = givenIdRange->AddChannelRanges();
+                        range->SetChannel(channel->Index);
+                        range->SetBegin(value);
+                    }
+                    range->SetEnd(value + 1);
                 }
-                range->SetEnd(value + 1);
+            } else {
+                Y_VERIFY_DEBUG(false); // TODO(alexvru): handle this situation somehow -- agent needs to retry this query?
             }
 
             // register issued ranges in agent and global records

@@ -52,6 +52,27 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    ui64 TSpaceMonitor::GetGroupAllocationWeight(ui32 groupId) const {
+        const auto it = Groups.find(groupId);
+        if (it == Groups.end()) {
+            Y_VERIFY_DEBUG(false);
+            return 0;
+        }
+
+        const TGroupRecord& group = it->second;
+        if (group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+            return 0; // do not write data to this group
+        }
+
+        const float weight = group.ApproximateFreeSpaceShare < 0.25
+            ? group.ApproximateFreeSpaceShare * 3
+            : (group.ApproximateFreeSpaceShare + 2) / 3;
+
+        const bool isCyan = group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan);
+
+        return weight * 16'777'216.0f * (isCyan ? 0.5f : 1.0f /* cyan penalty */);
+    }
+
     void TBlobDepot::KickSpaceMonitor() {
         SpaceMonitor->Kick();
     }

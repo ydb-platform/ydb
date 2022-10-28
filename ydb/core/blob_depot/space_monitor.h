@@ -25,6 +25,8 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvStatusResult::TPtr ev);
         void Kick();
 
+        ui64 GetGroupAllocationWeight(ui32 groupId) const;
+
     private:
         void Init();
     };

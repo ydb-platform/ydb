@@ -39,3 +39,5 @@ add_custom_command(
   -o
   ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
 )
+target_sources(contrib-libs-lua PRIVATE ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc)
+

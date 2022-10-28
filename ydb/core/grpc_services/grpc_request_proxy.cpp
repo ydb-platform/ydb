@@ -4,9 +4,9 @@
 #include "operation_helpers.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
@@ -32,33 +32,11 @@ TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
 }
 
 struct TDatabaseInfo {
-    enum class TDatabaseType {
-        Root,
-        Tenant,
-        Serverless
-    };
-    NKikimrTenantPool::EState State;
-    TDatabaseType DatabaseType;
     THolder<TSchemeBoardEvents::TEvNotifyUpdate> SchemeBoardResult;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 
     bool IsDatabaseReady() const {
-        if (SchemeBoardResult == nullptr) {
-            return false;
-        }
-        if (DatabaseType == TDatabaseType::Tenant) {
-            switch (State) {
-                case NKikimrTenantPool::STATE_UNKNOWN:
-                case NKikimrTenantPool::TENANT_OK:
-                    return true;
-                    break;
-                case NKikimrTenantPool::TENANT_ASSIGNED:
-                case NKikimrTenantPool::TENANT_UNKNOWN:
-                    return false;
-                    break;
-            }
-        }
-        return true;
+        return SchemeBoardResult != nullptr;
     }
 };
 
@@ -90,7 +68,6 @@ public:
     }
 
 private:
-    void HandlePoolStatus(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev, const TActorContext& ctx);
     void HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx);
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
@@ -305,7 +282,6 @@ private:
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
-    ctx.Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe());
     AllowYdbRequestsWithoutDatabase = AppData(ctx)->FeatureFlags.GetAllowYdbRequestsWithoutDatabase();
 
     // Subscribe for TableService config changes
@@ -329,11 +305,13 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
 
     RootDatabase = DatabaseFromDomain();
     Y_VERIFY(!RootDatabase.empty());
-
-    TDatabaseInfo& database = Databases[RootDatabase];
-    database.DatabaseType = TDatabaseInfo::TDatabaseType::Root;
-    database.State = NKikimrTenantPool::EState::TENANT_OK;
+    Databases.try_emplace(RootDatabase);
     DoStartUpdate(RootDatabase);
+
+    if (RootDatabase != AppData()->TenantName && !AppData()->TenantName.empty()) {
+        Databases.try_emplace(AppData()->TenantName);
+        DoStartUpdate(AppData()->TenantName);
+    }
 
     Become(&TThis::StateFunc);
 }
@@ -350,41 +328,6 @@ void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TAct
         }
         if (queue.empty()) {
             DeferredEvents.erase(itDeferredEvents);
-        }
-    }
-}
-
-void TGRpcRequestProxyImpl::HandlePoolStatus(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev, const TActorContext& ctx) {
-    const auto &event = ev->Get()->Record;
-    LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "Received tenant pool status, serving tenants: " << event.ShortDebugString());
-
-    SubDomainKeys.clear();
-    for (auto it = Databases.begin(); it != Databases.end();) {
-        if (it->second.DatabaseType != TDatabaseInfo::TDatabaseType::Root) {
-            it = Databases.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    for (const auto& slot : event.GetSlots()) {
-        if (slot.GetAssignedTenant().empty()) {
-            continue;
-        }
-        const auto& subDomainKey = TSubDomainKey(slot.GetDomainKey());
-        if (subDomainKey) {
-            SubDomainKeys.insert(subDomainKey);
-        }
-        TString databaseName = CanonizePath(slot.GetAssignedTenant());
-        auto itDatabase = Databases.try_emplace(databaseName);
-        if (itDatabase.second) {
-            TDatabaseInfo& database = itDatabase.first->second;
-            database.State = slot.GetState();
-            database.DatabaseType = TDatabaseInfo::TDatabaseType::Tenant;
-            DoStartUpdate(databaseName);
-        }
-        TDatabaseInfo& database = itDatabase.first->second;
-        if (database.IsDatabaseReady()) {
-            ReplayEvents(databaseName, ctx);
         }
     }
 }
@@ -445,18 +388,20 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {
     TString databaseName = ev->Get()->Path;
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "SchemeBoardUpdate " << databaseName);
-
-    // non-serverless databases should be in the cache already
     auto itDatabase = Databases.try_emplace(CanonizePath(databaseName));
     TDatabaseInfo& database = itDatabase.first->second;
-    if (itDatabase.second) {
-        database.State = NKikimrTenantPool::EState::TENANT_OK;
-        database.DatabaseType = TDatabaseInfo::TDatabaseType::Serverless;
-    }
     database.SchemeBoardResult = ev->Release();
     const NKikimrScheme::TEvDescribeSchemeResult& describeScheme(database.SchemeBoardResult->DescribeSchemeResult);
     database.SecurityObject = new TSecurityObject(describeScheme.GetPathDescription().GetSelf().GetOwner(),
         describeScheme.GetPathDescription().GetSelf().GetEffectiveACL(), false);
+
+    if (databaseName == AppData()->TenantName
+        && describeScheme.GetPathDescription().HasDomainDescription()
+        && describeScheme.GetPathDescription().GetDomainDescription().HasDomainKey())
+    {
+        auto& domainKey = describeScheme.GetPathDescription().GetDomainDescription().GetDomainKey();
+        SubDomainKeys.insert(TSubDomainKey(domainKey));
+    }
 
     if (describeScheme.GetPathDescription().HasDomainDescription()
         && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
@@ -556,7 +501,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
     bool handled = true;
     // handle internal events
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvTenantPool::TEvTenantPoolStatus, HandlePoolStatus);
         hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, HandleProxyService);
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);

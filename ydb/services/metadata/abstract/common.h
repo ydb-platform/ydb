@@ -15,6 +15,7 @@ namespace NKikimr::NMetadataProvider {
 enum EEvSubscribe {
     EvRefreshSubscriberData = EventSpaceBegin(TKikimrEvents::ES_METADATA_PROVIDER),
     EvRefresh,
+    EvEnrichSnapshot,
     EvSubscribeLocal,
     EvUnsubscribeLocal,
     EvSubscribeExternal,
@@ -28,9 +29,8 @@ class ISnapshot {
 private:
     YDB_READONLY_DEF(TInstant, Actuality);
 protected:
-    virtual bool DoDeserializeFromResultSet(const Ydb::ResultSet& rawData) = 0;
+    virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) = 0;
     virtual TString DoSerializeToString() const = 0;
-    i32 GetFieldIndex(const Ydb::ResultSet& rawData, const TString& columnId) const;
 public:
     using TPtr = std::shared_ptr<ISnapshot>;
     ISnapshot(const TInstant actuality)
@@ -38,7 +38,7 @@ public:
 
     }
 
-    bool DeserializeFromResultSet(const Ydb::ResultSet& rawData) {
+    bool DeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) {
         return DoDeserializeFromResultSet(rawData);
     }
 
@@ -53,25 +53,23 @@ class ISnapshotParser {
 protected:
     virtual ISnapshot::TPtr CreateSnapshot(const TInstant actuality) const = 0;
     virtual TVector<ITableModifier::TPtr> DoGetTableSchema() const = 0;
-    virtual const TString& DoGetTablePath() const = 0;
+    virtual const TVector<TString>& DoGetTables() const = 0;
+    mutable std::optional<TString> SnapshotId;
 public:
     using TPtr = std::shared_ptr<ISnapshotParser>;
 
-    ISnapshot::TPtr ParseSnapshot(const Ydb::ResultSet& rawData, const TInstant actuality) const {
-        ISnapshot::TPtr result = CreateSnapshot(actuality);
-        Y_VERIFY(result);
-        if (!result->DeserializeFromResultSet(rawData)) {
-            return nullptr;
-        }
-        return result;
-    }
-
+    TString GetSnapshotId() const;
+    ISnapshot::TPtr ParseSnapshot(const Ydb::Table::ExecuteQueryResult& rawData, const TInstant actuality) const;
     TVector<ITableModifier::TPtr> GetTableSchema() const {
         return DoGetTableSchema();
     }
 
-    const TString& GetTablePath() const {
-        return DoGetTablePath();
+    virtual NThreading::TFuture<ISnapshot::TPtr> EnrichSnapshotData(ISnapshot::TPtr original) const {
+        return NThreading::MakeFuture(original);
+    }
+
+    const TVector<TString>& GetTables() const {
+        return DoGetTables();
     }
 
     virtual ~ISnapshotParser() = default;

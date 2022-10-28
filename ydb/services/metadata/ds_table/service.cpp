@@ -15,16 +15,16 @@ IActor* CreateService(const TConfig& config) {
 }
 
 void TService::Handle(TEvSubscribeExternal::TPtr& ev) {
-    auto it = Accessors.find(ev->Get()->GetSnapshotParser()->GetTablePath());
+    auto it = Accessors.find(ev->Get()->GetSnapshotParser()->GetSnapshotId());
     if (it == Accessors.end()) {
         THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, ev->Get()->GetSnapshotParser());
-        it = Accessors.emplace(ev->Get()->GetSnapshotParser()->GetTablePath(), Register(actor.Release())).first;
+        it = Accessors.emplace(ev->Get()->GetSnapshotParser()->GetSnapshotId(), Register(actor.Release())).first;
     }
     Send<TEvSubscribe>(it->second, ev->Sender);
 }
 
 void TService::Handle(TEvUnsubscribeExternal::TPtr& ev) {
-    auto it = Accessors.find(ev->Get()->GetSnapshotParser()->GetTablePath());
+    auto it = Accessors.find(ev->Get()->GetSnapshotParser()->GetSnapshotId());
     if (it != Accessors.end()) {
         Send<TEvUnsubscribe>(it->second, ev->Sender);
     }

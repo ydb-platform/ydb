@@ -51,18 +51,6 @@ TVector<TString> TestSchemaKey() {
     return {"timestamp", "resource_type", "resource_id", "uid"};
 }
 
-THashMap<TString, NYdb::NLogStore::TTierConfig> TestTierConfigs() {
-    using NYdb::NLogStore::TTierConfig;
-    using NYdb::NLogStore::TCompression;
-    using NYdb::NLogStore::EColumnCompression;
-
-    THashMap<TString, TTierConfig> out;
-    out.emplace("default", TTierConfig{ TCompression{ EColumnCompression::LZ4, {}} });
-    out.emplace("tier_zstd1", TTierConfig{ TCompression{ EColumnCompression::ZSTD, 1} });
-    out.emplace("tier_zstd5", TTierConfig{ TCompression{ EColumnCompression::ZSTD, 5} });
-    return out;
-}
-
 }
 
 Y_UNIT_TEST_SUITE(YdbLogStore) {
@@ -136,56 +124,6 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     Y_UNIT_TEST(LogStore) {
         for (auto pk0 : allowedTypes) {
             CreateDropStore(pk0);
-        }
-    }
-
-    Y_UNIT_TEST(LogStoreTiers) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
-        EnableDebugLogs(server);
-
-        auto connection = ConnectToServer(server);
-        NYdb::NLogStore::TLogStoreClient logStoreClient(connection);
-
-        {
-            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), TestSchemaKey(),
-                NYdb::NLogStore::TCompression{NYdb::NLogStore::EColumnCompression::ZSTD, 1});
-            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
-            schemaPresets["default"] = logSchema;
-            NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets, TestTierConfigs());
-            auto res = logStoreClient.CreateLogStore("/Root/LogStore", std::move(storeDescr)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
-        }
-
-        {
-            auto res = logStoreClient.DescribeLogStore("/Root/LogStore").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
-            auto descr = res.GetDescription();
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetShardsCount(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().count("default"), 1);
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetOwner(), "root@builtin");
-
-            const auto& schema = descr.GetSchemaPresets().begin()->second;
-            UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
-            UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns().size(), 4);
-            UNIT_ASSERT_EQUAL(schema.GetDefaultCompression().Codec, NYdb::NLogStore::EColumnCompression::ZSTD);
-            UNIT_ASSERT_VALUES_EQUAL(schema.GetDefaultCompression().Level, 1);
-
-            const auto& tiers = descr.GetTierConfigs();
-            auto expectedTiers = TestTierConfigs();
-            UNIT_ASSERT_VALUES_EQUAL(tiers.size(), expectedTiers.size());
-
-            for (auto& [name, cfg] : expectedTiers) {
-                UNIT_ASSERT_VALUES_EQUAL(tiers.count(name), 1);
-                UNIT_ASSERT_EQUAL(tiers.find(name)->second.Compression.Codec, cfg.Compression.Codec);
-                UNIT_ASSERT_VALUES_EQUAL(tiers.find(name)->second.Compression.Level, cfg.Compression.Level);
-            }
-        }
-
-        {
-            auto res = logStoreClient.DropLogStore("/Root/LogStore").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
     }
 

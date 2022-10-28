@@ -104,11 +104,9 @@ void TSchema::SerializeTo(Ydb::LogStore::Schema& schema) const {
     DefaultCompression.SerializeTo(*schema.mutable_default_compression());
 }
 
-TLogStoreDescription::TLogStoreDescription(ui32 shardsCount, const THashMap<TString, TSchema>& schemaPresets,
-                                           const THashMap<TString, TTierConfig>& tierConfigs)
+TLogStoreDescription::TLogStoreDescription(ui32 shardsCount, const THashMap<TString, TSchema>& schemaPresets)
     : ShardsCount(shardsCount)
     , SchemaPresets(schemaPresets)
-    , TierConfigs(tierConfigs)
 {}
 
 TLogStoreDescription::TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult&& desc,
@@ -123,13 +121,6 @@ TLogStoreDescription::TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult
     }
     PermissionToSchemeEntry(desc.self().permissions(), &Permissions);
     PermissionToSchemeEntry(desc.self().effective_permissions(), &EffectivePermissions);
-    for (const auto& tier : desc.tiers()) {
-        TTierConfig cfg;
-        if (tier.has_compression()) {
-            cfg.Compression = CompressionFromProto(tier.compression());
-        }
-        TierConfigs.emplace(tier.name(), std::move(cfg));
-    }
 }
 
 void TLogStoreDescription::SerializeTo(Ydb::LogStore::CreateLogStoreRequest& request) const {
@@ -139,11 +130,6 @@ void TLogStoreDescription::SerializeTo(Ydb::LogStore::CreateLogStoreRequest& req
         presetSchema.SerializeTo(*pb.mutable_schema());
     }
     request.set_shards_count(ShardsCount);
-    for (const auto& [tierName, tierCfg] : TierConfigs) {
-        auto& pb = *request.add_tiers();
-        pb.set_name(tierName);
-        tierCfg.Compression.SerializeTo(*pb.mutable_compression());
-    }
 }
 
 TDescribeLogStoreResult::TDescribeLogStoreResult(TStatus&& status, Ydb::LogStore::DescribeLogStoreResult&& desc,
@@ -178,13 +164,6 @@ TLogTableDescription::TLogTableDescription(const TSchema& schema, const TLogTabl
     : Schema(schema)
     , Sharding(sharding)
     , TtlSettings(ttlSettings)
-{}
-
-TLogTableDescription::TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding,
-    const THashMap<TString, TTier>& tiers)
-    : SchemaPresetName(schemaPresetName)
-    , Sharding(sharding)
-    , Tiers(tiers)
 {}
 
 TLogTableDescription::TLogTableDescription(Ydb::LogStore::DescribeLogTableResult&& desc,

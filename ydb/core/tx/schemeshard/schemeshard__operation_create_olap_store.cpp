@@ -12,13 +12,6 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool PrepareTier(const NKikimrSchemeOp::TStorageTierConfig& proto, TString& errStr) {
-    Y_UNUSED(proto);
-    Y_UNUSED(errStr);
-    // TODO
-    return true;
-}
-
 // TODO: make it a part of TOlapSchema
 bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& schema, TString& errStr) {
     schema.NextColumnId = proto.GetNextColumnId();
@@ -107,7 +100,7 @@ bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& sche
         errStr = "At least one key column is required";
         return false;
     }
-
+#if 0
     for (auto& tierConfig : proto.GetStorageTiers()) {
         TString tierName = tierConfig.GetName();
         if (schema.Tiers.count(tierName)) {
@@ -120,6 +113,7 @@ bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& sche
             return false;
         }
     }
+#endif
 
     schema.Engine = proto.GetEngine();
 

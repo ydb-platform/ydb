@@ -1,8 +1,10 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tx/tiering/external_data.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -737,7 +739,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     }
 
     ActiveIndexingOrCompaction = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(GetActualIndexInfo(), indexChanges,
         Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
     return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
 }
@@ -775,7 +777,7 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
     }
 
     ActiveIndexingOrCompaction = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(GetActualIndexInfo(), indexChanges,
         Settings.CacheDataAfterCompaction);
     return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager);
 }
@@ -791,24 +793,28 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         return {};
     }
 
-    THashMap<ui64, NOlap::TTiersInfo> regularTtls;
-    if (pathTtls.empty()) {
+    THashMap<ui64, NOlap::TTiersInfo> regularTtls = pathTtls;
+    if (regularTtls.empty()) {
         regularTtls = Ttl.MakeIndexTtlMap(TInstant::Now(), force);
     }
+    const bool tiersUsage = regularTtls.empty() && Tiers && Tiers->IsActive();
+    if (tiersUsage) {
+        regularTtls = Tiers->GetTiering();
+    }
 
-    if (pathTtls.empty() && regularTtls.empty()) {
+    if (regularTtls.empty()) {
         LOG_S_TRACE("TTL not started. No tables to activate it on (or delayed) at tablet " << TabletID());
         return {};
+    } else {
+        for (auto&& i : regularTtls) {
+            LOG_S_DEBUG(i.first << "/" << i.second.GetDebugString() << ";tablet=" << TabletID());
+        }
     }
 
     LOG_S_DEBUG("Prepare TTL at tablet " << TabletID());
 
     std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
-    if (pathTtls.empty()) {
-        indexChanges = PrimaryIndex->StartTtl(regularTtls);
-    } else {
-        indexChanges = PrimaryIndex->StartTtl(pathTtls);
-    }
+    indexChanges = PrimaryIndex->StartTtl(regularTtls);
 
     if (!indexChanges) {
         LOG_S_NOTICE("Cannot prepare TTL at tablet " << TabletID());
@@ -821,7 +827,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     bool needWrites = !indexChanges->PortionsToEvict.empty();
 
     ActiveTtl = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges, false);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(GetActualIndexInfo(tiersUsage), indexChanges, false);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
 }
 
@@ -871,33 +877,11 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         return {};
     }
 
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), changes, false);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(GetActualIndexInfo(), changes, false);
     ev->PutStatus = NKikimrProto::OK; // No new blobs to write
 
     ActiveCleanup = true;
     return ev;
-}
-
-static NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
-    NOlap::TCompression out;
-    if (compression.HasCompressionCodec()) {
-        switch (compression.GetCompressionCodec()) {
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-                out.Codec = arrow::Compression::UNCOMPRESSED;
-                break;
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                out.Codec = arrow::Compression::LZ4_FRAME;
-                break;
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
-                out.Codec = arrow::Compression::ZSTD;
-                break;
-        }
-    }
-
-    if (compression.HasCompressionLevel()) {
-        out.Level = compression.GetCompressionLevel();
-    }
-    return out;
 }
 
 NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
@@ -921,22 +905,20 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
     }
 
     if (schema.HasDefaultCompression()) {
-        NOlap::TCompression compression = ConvertCompression(schema.GetDefaultCompression());
+        NOlap::TCompression compression = NTiers::TManager::ConvertCompression(schema.GetDefaultCompression());
         indexInfo.SetDefaultCompression(compression);
     }
 
-    for (auto& tierConfig : schema.GetStorageTiers()) {
-        auto& tierName = tierConfig.GetName();
-        TierConfigs[tierName] = TTierConfig{tierConfig};
-
-        NOlap::TStorageTier tier{ .Name = tierName };
-        if (tierConfig.HasCompression()) {
-            tier.Compression = ConvertCompression(tierConfig.GetCompression());
+    EnableTiering = schema.GetEnableTiering();
+    if (OwnerPath && !Tiers && EnableTiering) {
+        Tiers = std::make_shared<TTiersManager>(TabletID(), OwnerPath);
+    }
+    if (!!Tiers) {
+        if (EnableTiering) {
+            Tiers->Start(Tiers);
+        } else {
+            Tiers->Stop();
         }
-        if (TierConfigs[tierName].NeedExport()) {
-            S3Actors[tierName] = {}; // delayed actor creation
-        }
-        indexInfo.AddStorageTier(std::move(tier));
     }
 
     return indexInfo;
@@ -973,30 +955,16 @@ void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMeta
     }
 }
 
-TActorId TColumnShard::GetS3ActorForTier(const TString& tierName, const TString& phase) const {
-    auto it = S3Actors.find(tierName);
-    if (it == S3Actors.end()) {
-        LOG_S_ERROR("No S3 actor for tier '" << tierName << "' (on " << phase << ") at tablet " << TabletID());
-        return {};
-    }
-    auto s3 = it->second;
-    if (!s3) {
-        LOG_S_ERROR("Not started S3 actor for tier '" << tierName << "' (on " << phase << ") at tablet " << TabletID());
-        return {};
-    }
-    return s3;
-}
-
 void TColumnShard::ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
     TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const {
-    if (auto s3 = GetS3ActorForTier(tierName, "export")) {
+    if (auto s3 = GetS3ActorForTier(tierName)) {
         auto event = std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, s3, std::move(blobsInfo));
         ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
     }
 }
 
 void TColumnShard::ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const {
-    if (auto s3 = GetS3ActorForTier(tierName, "forget")) {
+    if (auto s3 = GetS3ActorForTier(tierName)) {
         auto forget = std::make_unique<TEvPrivate::TEvForget>();
         forget->Evicted = std::move(blobs);
         ctx.Send(s3, forget.release());
@@ -1005,7 +973,7 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const TString& tierName
 
 bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
                                    NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges) {
-    if (auto s3 = GetS3ActorForTier(tierName, "get exported")) {
+    if (auto s3 = GetS3ActorForTier(tierName)) {
         auto get = std::make_unique<TEvPrivate::TEvGetExported>();
         get->DstActor = dst;
         get->DstCookie = cookie;
@@ -1017,41 +985,41 @@ bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 
     return false;
 }
 
-ui32 TColumnShard::InitS3Actors(const TActorContext& ctx, bool init) {
-    ui32 count = 0;
-#ifndef KIKIMR_DISABLE_S3_OPS
-    for (auto& [tierName, actor] : S3Actors) {
-        if (!init && actor) {
-            continue;
-        }
-
-        Y_VERIFY(!actor);
-        Y_VERIFY(TierConfigs.count(tierName));
-        auto& tierConfig = TierConfigs[tierName];
-        Y_VERIFY(tierConfig.NeedExport());
-
-        actor = ctx.Register(CreateS3Actor(TabletID(), ctx.SelfID, tierName));
-        ctx.Send(actor, new TEvPrivate::TEvS3Settings(tierConfig.S3Settings()));
-        ++count;
+void TColumnShard::Die(const TActorContext& ctx) {
+    // TODO
+    if (!!Tiers) {
+        Tiers->Stop();
     }
-#else
-    Y_UNUSED(ctx);
-    Y_UNUSED(init);
-#endif
-    return count;
+    NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
+    UnregisterMediatorTimeCast();
+    return IActor::Die(ctx);
 }
 
-void TColumnShard::StopS3Actors(const TActorContext& ctx) {
-#ifndef KIKIMR_DISABLE_S3_OPS
-    for (auto& [_, actor] : S3Actors) {
-        if (actor) {
-            ctx.Send(actor, new TEvents::TEvPoisonPill);
-            actor = {};
+TActorId TColumnShard::GetS3ActorForTier(const TString& tierName) const {
+    if (!Tiers) {
+        return {};
+    }
+    return Tiers->GetStorageActorId(tierName);
+}
+
+void TColumnShard::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
+    if (!Tiers) {
+        Tiers = std::make_shared<TTiersManager>(TabletID(), OwnerPath);
+    }
+    Tiers->TakeConfigs(ev->Get()->GetSnapshot());
+    if (EnableTiering) {
+        Tiers->Start(Tiers);
+    }
+}
+
+NOlap::TIndexInfo TColumnShard::GetActualIndexInfo(const bool tiersUsage) const {
+    auto indexInfo = PrimaryIndex->GetIndexInfo();
+    if (tiersUsage && Tiers && Tiers->IsActive()) {
+        for (auto&& i : *Tiers) {
+            indexInfo.AddStorageTier(i.second.BuildTierStorage());
         }
     }
-#else
-    Y_UNUSED(ctx);
-#endif
+    return indexInfo;
 }
 
 }

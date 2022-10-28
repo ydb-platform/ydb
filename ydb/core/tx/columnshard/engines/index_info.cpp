@@ -246,4 +246,12 @@ std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() c
     return {};
 }
 
+bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
+    auto it = ColumnNames.find(name);
+    if (it == ColumnNames.end()) {
+        return false;
+    }
+    return MinMaxIdxColumnsIds.count(it->second);
+}
+
 }

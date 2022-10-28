@@ -25,19 +25,20 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 struct TTestSchema {
-    static const constexpr char * DefaultTtlColumn = "saved_at";
+    static inline const TString DefaultTtlColumn = "saved_at";
 
     struct TStorageTier {
+        YDB_ACCESSOR(TString, TtlColumn, DefaultTtlColumn);
+        YDB_OPT(ui32, EvictAfterSeconds);
+    public:
         TString Name;
         TString Codec;
         std::optional<int> CompressionLevel;
-        std::optional<ui32> EvictAfterSeconds;
-        TString TtlColumn;
         std::optional<NKikimrSchemeOp::TS3Settings> S3;
 
         TStorageTier(const TString& name = {})
             : Name(name)
-            , TtlColumn(DefaultTtlColumn)
+            
         {}
 
         NKikimrSchemeOp::EColumnCodec GetCodecId() const {
@@ -62,12 +63,6 @@ struct TTestSchema {
             }
             return *this;
         }
-
-        TStorageTier& SetTtl(ui32 seconds, const TString& column = DefaultTtlColumn) {
-            EvictAfterSeconds = seconds;
-            TtlColumn = column;
-            return *this;
-        }
     };
 
     struct TTableSpecials : public TStorageTier {
@@ -78,7 +73,7 @@ struct TTestSchema {
         }
 
         bool HasTtl() const {
-            return !HasTiers() && EvictAfterSeconds;
+            return !HasTiers() && HasEvictAfterSeconds();
         }
 
         TTableSpecials WithCodec(const TString& codec) {
@@ -211,37 +206,15 @@ struct TTestSchema {
                 schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
             }
 
-            for (auto& tier : specials.Tiers) {
-                auto* t = schema->AddStorageTiers();
-                t->SetName(tier.Name);
-                if (tier.HasCodec()) {
-                    t->MutableCompression()->SetCompressionCodec(tier.GetCodecId());
-                }
-                if (tier.CompressionLevel) {
-                    t->MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
-                }
-                if (tier.S3) {
-                    t->MutableObjectStorage()->CopyFrom(*tier.S3);
-                }
-            }
+            schema->SetEnableTiering(specials.HasTiers());
         }
 
-        if (specials.HasTiers()) {
-            auto* ttlSettings = table->MutableTtlSettings();
-            ttlSettings->SetVersion(1);
-            auto* tiering = ttlSettings->MutableTiering();
-            for (auto& tier : specials.Tiers) {
-                auto* t = tiering->AddTiers();
-                t->SetName(tier.Name);
-                t->MutableEviction()->SetColumnName(tier.TtlColumn);
-                t->MutableEviction()->SetExpireAfterSeconds(*tier.EvictAfterSeconds);
-            }
-        } else  if (specials.HasTtl()) {
+        if (specials.HasTtl()) {
             auto* ttlSettings = table->MutableTtlSettings();
             ttlSettings->SetVersion(1);
             auto* enable = ttlSettings->MutableEnabled();
-            enable->SetColumnName(specials.TtlColumn);
-            enable->SetExpireAfterSeconds(*specials.EvictAfterSeconds);
+            enable->SetColumnName(specials.GetTtlColumn());
+            enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
         }
 
         TString out;
@@ -258,18 +231,10 @@ struct TTestSchema {
         auto* ttlSettings = table->MutableTtlSettings();
         ttlSettings->SetVersion(version);
 
-        if (specials.HasTiers()) {
-            auto* tiering = ttlSettings->MutableTiering();
-            for (auto& tier : specials.Tiers) {
-                auto* t = tiering->AddTiers();
-                t->SetName(tier.Name);
-                t->MutableEviction()->SetColumnName(tier.TtlColumn);
-                t->MutableEviction()->SetExpireAfterSeconds(*tier.EvictAfterSeconds);
-            }
-        } else if (specials.HasTtl()) {
+        if (specials.HasTtl()) {
             auto* enable = ttlSettings->MutableEnabled();
-            enable->SetColumnName(specials.TtlColumn);
-            enable->SetExpireAfterSeconds(*specials.EvictAfterSeconds);
+            enable->SetColumnName(specials.GetTtlColumn());
+            enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
         } else {
             ttlSettings->MutableDisabled();
         }
@@ -288,6 +253,8 @@ struct TTestSchema {
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
         return out;
     }
+
+    static NMetadataProvider::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials, const TString& tablePath, const ui32 tablePathId);
 
     static TString CommitTxBody(ui64 metaShard, const TVector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;
@@ -336,6 +303,7 @@ struct TTestSchema {
 };
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
+void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadataProvider::ISnapshot::TPtr snapshot);
 void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap);
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
                const TString& data, std::shared_ptr<arrow::Schema> schema = {});

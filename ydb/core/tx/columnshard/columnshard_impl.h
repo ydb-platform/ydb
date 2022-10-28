@@ -7,14 +7,15 @@
 #include "blob_manager.h"
 #include "inflight_request_tracker.h"
 
-#include <ydb/core/tx/tx_processing.h>
-#include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -38,9 +39,6 @@ IActor* CreateReadActor(ui64 tabletId,
                         ui64 requestCookie);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
-#ifndef KIKIMR_DISABLE_S3_OPS
-IActor* CreateS3Actor(ui64 tabletId, const TActorId& parent, const TString& tierName);
-#endif
 
 struct TSettings {
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
@@ -119,7 +117,6 @@ class TColumnShard
     void Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
-
     void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
@@ -127,7 +124,8 @@ class TColumnShard
     void Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvForget::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
-
+    void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
+    
     ITransaction* CreateTxInitSchema();
     ITransaction* CreateTxRunGc();
 
@@ -141,12 +139,12 @@ class TColumnShard
         Y_UNUSED(ctx);
     }
 
-    void Die(const TActorContext& ctx) override {
-        // TODO
-        NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
-        UnregisterMediatorTimeCast();
-        return IActor::Die(ctx);
+    const NTiers::TManager& GetTierManagerVerified(const TString& tierName) const {
+        Y_VERIFY(!!Tiers);
+        return Tiers->GetManagerVerified(tierName);
     }
+
+    void Die(const TActorContext& ctx) override;
 
     void BecomeBroken(const TActorContext& ctx);
     void SwitchToWork(const TActorContext& ctx);
@@ -177,6 +175,8 @@ class TColumnShard
         TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
     }
 
+    NOlap::TIndexInfo GetActualIndexInfo(const bool tiersUsage = true) const;
+
 protected:
     STFUNC(StateInit) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
@@ -203,6 +203,7 @@ protected:
     STFUNC(StateWork) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
+            hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -316,21 +317,6 @@ private:
         }
     };
 
-    struct TTierConfig {
-        using TTierProto = NKikimrSchemeOp::TStorageTierConfig;
-        using TS3SettingsProto = NKikimrSchemeOp::TS3Settings;
-
-        TTierProto Proto;
-
-        bool NeedExport() const {
-            return Proto.HasObjectStorage();
-        }
-
-        const TS3SettingsProto& S3Settings() const {
-            return Proto.GetObjectStorage();
-        }
-    };
-
     struct TLongTxWriteInfo {
         ui64 WriteId;
         NLongTxService::TLongTxId LongTxId;
@@ -367,14 +353,15 @@ private:
     TActorId CompactionActor;   // It's memory bounded to 1: we have no memory for parallel compation.
     TActorId EvictionActor;
     TActorId StatsReportPipe;
-    THashMap<TString, TActorId> S3Actors;
+
+    bool EnableTiering = false;
+    std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     TBatchCache BatchCache;
-    THashMap<TString, TTierConfig> TierConfigs;
     THashSet<NOlap::TUnifiedBlobId> DelayedForgetBlobs;
     TTtl Ttl;
 
@@ -458,14 +445,12 @@ private:
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
-    TActorId GetS3ActorForTier(const TString& tierName, const TString& phase) const;
+    TActorId GetS3ActorForTier(const TString& tierName) const;
     void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
         TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const;
     void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const;
     bool GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
                          NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges);
-    ui32 InitS3Actors(const TActorContext& ctx, bool init);
-    void StopS3Actors(const TActorContext& ctx);
 
     std::unique_ptr<TEvPrivate::TEvIndexing> SetupIndexation();
     std::unique_ptr<TEvPrivate::TEvCompaction> SetupCompaction();
@@ -479,7 +464,6 @@ private:
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
     void SendPeriodicStats();
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_ACTOR;

@@ -1,7 +1,9 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "defs.h"
-#include "columnshard_impl.h"
+#include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/defs.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/wrappers/s3_wrapper.h>

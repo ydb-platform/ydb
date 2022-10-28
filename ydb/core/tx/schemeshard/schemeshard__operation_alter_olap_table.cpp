@@ -49,11 +49,6 @@ TColumnTableInfo::TPtr ParseParams(
             tableSchema = &presetProto.GetSchema();
         }
 
-        THashSet<TString> knownTiers;
-        for (const auto& tier : tableSchema->GetStorageTiers()) {
-            knownTiers.insert(tier.GetName());
-        }
-
         THashMap<ui32, TOlapSchema::TColumn> columns;
         THashMap<TString, ui32> columnsByName;
         for (const auto& col : tableSchema->GetColumns()) {
@@ -65,7 +60,7 @@ TColumnTableInfo::TPtr ParseParams(
             columnsByName[name] = id;
         }
 
-        if (!ValidateTtlSettings(alter.GetAlterTtlSettings(), columns, columnsByName, knownTiers, errStr)) {
+        if (!ValidateTtlSettings(alter.GetAlterTtlSettings(), columns, columnsByName, errStr)) {
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }

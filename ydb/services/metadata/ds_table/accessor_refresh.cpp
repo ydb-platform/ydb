@@ -9,14 +9,14 @@
 namespace NKikimr::NMetadataProvider {
 using namespace NInternal::NRequest;
 
-bool TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
+void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
     const TString startString = CurrentSelection.SerializeAsString();
 
     auto currentFullReply = ev->Get()->GetResult();
     Ydb::Table::ExecuteQueryResult qResult;
     currentFullReply.operation().result().UnpackTo(&qResult);
-    Y_VERIFY(qResult.result_sets().size() == 1);
-    CurrentSelection = qResult.result_sets()[0];
+    Y_VERIFY((size_t)qResult.result_sets().size() == SnapshotConstructor->GetTables().size());
+    *CurrentSelection.mutable_result_sets() = std::move(*qResult.mutable_result_sets());
     auto parsedSnapshot = SnapshotConstructor->ParseSnapshot(CurrentSelection, RequestedActuality);
     if (!!parsedSnapshot) {
         CurrentSnapshot = parsedSnapshot;
@@ -24,14 +24,30 @@ bool TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot parse current snapshot";
     }
 
-    RequestedActuality = TInstant::Zero();
-    Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
     if (!!parsedSnapshot && CurrentSelection.SerializeAsString() != startString) {
         ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "New refresher data: " << CurrentSelection.DebugString();
-        OnSnapshotModified();
-        return true;
+        NActors::TActorIdentity actorId = SelfId();
+        SnapshotConstructor->EnrichSnapshotData(parsedSnapshot).Subscribe(
+            [actorId](NThreading::TFuture<ISnapshot::TPtr> f) {
+                if (f.HasValue() && !f.HasException()) {
+                    actorId.Send(actorId, new TEvEnrichSnapshotResult(f.GetValueSync()));
+                } else {
+                    actorId.Send(actorId, new TEvEnrichSnapshotResult("cannot enrich snapshot"));
+                }
+            }
+        );
     }
-    return false;
+}
+
+void TDSAccessorRefresher::Handle(TEvEnrichSnapshotResult::TPtr& ev) {
+    RequestedActuality = TInstant::Zero();
+    Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
+    if (ev->Get()->IsSuccess()) {
+        CurrentSnapshot = ev->Get()->GetEnrichedSnapshot();
+        OnSnapshotModified();
+    } else {
+        ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "enrich problem: " << ev->Get()->GetErrorText();
+    }
 }
 
 void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogCreateSession>::TPtr& ev) {
@@ -41,7 +57,14 @@ void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogCreateSession>::TPtr& 
     const TString sessionId = session.session_id();
     Y_VERIFY(sessionId);
     Ydb::Table::ExecuteDataQueryRequest request;
-    request.mutable_query()->set_yql_text("SELECT * FROM `" + EscapeC(SnapshotConstructor->GetTablePath()) + "`");
+    TStringBuilder sb;
+    auto& tables = SnapshotConstructor->GetTables();
+    Y_VERIFY(tables.size());
+    for (auto&& i : tables) {
+        sb << "SELECT * FROM `" + EscapeC(i) + "`;";
+    }
+
+    request.mutable_query()->set_yql_text(sb);
     request.set_session_id(sessionId);
     request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
 

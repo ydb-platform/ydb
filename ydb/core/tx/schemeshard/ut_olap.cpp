@@ -153,13 +153,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    StorageTiers { Name: "tier0" }
-                    StorageTiers { Name: "tier0" }
+                    EnableTiering : true
                 }
             }
         )";
 
-        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema1, {NKikimrScheme::StatusSchemeError});
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema1, {NKikimrScheme::StatusAccepted});
     }
 
     Y_UNIT_TEST(CreateStoreWithDirs) {
@@ -310,9 +309,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                StorageTiers { Name: "tierX" }
+                EnableTiering : true
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {NKikimrScheme::StatusAccepted});
     }
 
     Y_UNIT_TEST(CustomDefaultPresets) {
@@ -393,9 +392,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    StorageTiers { Name: "tier0" }
-                    StorageTiers { Name: "tier1" Compression { CompressionCodec: ColumnCodecZSTD CompressionLevel: 5 } }
-                    StorageTiers { Name: "tier2" Compression { CompressionCodec: ColumnCodecZSTD CompressionLevel: 10 } }
+                    EnableTiering : true
                 }
             }
         )";
@@ -466,7 +463,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )";
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema4,
-                            {NKikimrScheme::StatusInvalidParameter});
+                            {NKikimrScheme::StatusAccepted});
     }
 
     Y_UNIT_TEST(AlterStore) {
@@ -536,8 +533,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    StorageTiers { Name: "tier0" }
-                    StorageTiers { Name: "tier1" }
+                    EnableTiering : true
                 }
             }
         )";

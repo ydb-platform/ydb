@@ -20,8 +20,6 @@ public:
         TDescription() = default;
 
         TDescription(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl) {
-            TDuration prevEvicSec;
-
             if (ttl.HasEnabled()) {
                 auto& enabled = ttl.GetEnabled();
                 ColumnName = enabled.GetColumnName();
@@ -29,23 +27,6 @@ public:
 
                 Evictions.reserve(1);
                 Evictions.emplace_back(TEviction{{}, expireSec});
-            } else if (ttl.HasTiering()) {
-                Evictions.reserve(ttl.GetTiering().TiersSize());
-
-                for (auto& tier : ttl.GetTiering().GetTiers()) {
-                    auto& eviction = tier.GetEviction();
-                    Y_VERIFY(ColumnName.empty() || ColumnName == eviction.GetColumnName());
-                    ColumnName = eviction.GetColumnName();
-                    auto evictSec = TDuration::Seconds(eviction.GetExpireAfterSeconds());
-
-                    // Ignore next tier if it has smaller eviction time. Prefer first tier with same eviction time.
-                    if (evictSec > prevEvicSec) {
-                        Evictions.emplace_back(TEviction{tier.GetName(), evictSec});
-                        prevEvicSec = evictSec;
-                    }
-                }
-
-                Evictions.shrink_to_fit();
             }
 
             if (Enabled()) {

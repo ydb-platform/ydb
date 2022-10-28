@@ -1,16 +1,22 @@
 #include "common.h"
+#include <util/string/join.h>
 
 namespace NKikimr::NMetadataProvider {
 
-i32 ISnapshot::GetFieldIndex(const Ydb::ResultSet& rawData, const TString& columnId) const {
-    i32 idx = 0;
-    for (auto&& i : rawData.columns()) {
-        if (i.name() == columnId) {
-            return idx;
-        }
-        ++idx;
+TString ISnapshotParser::GetSnapshotId() const {
+    if (!SnapshotId) {
+        SnapshotId = JoinSeq(",", GetTables());
     }
-    return -1;
+    return *SnapshotId;
+}
+
+ISnapshot::TPtr ISnapshotParser::ParseSnapshot(const Ydb::Table::ExecuteQueryResult& rawData, const TInstant actuality) const {
+    ISnapshot::TPtr result = CreateSnapshot(actuality);
+    Y_VERIFY(result);
+    if (!result->DeserializeFromResultSet(rawData)) {
+        return nullptr;
+    }
+    return result;
 }
 
 }

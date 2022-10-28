@@ -42,6 +42,12 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.UpdateCurrentTime(TInstant::Now());
 }
 
+void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadataProvider::ISnapshot::TPtr snapshot) {
+    auto event = std::make_unique<NMetadataProvider::TEvRefreshSubscriberData>(snapshot);
+
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+}
+
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap) {
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
         NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.TxId, txBody);
@@ -283,6 +289,39 @@ TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveF
 
     return TSerializedTableRange(TConstArrayRef<TCell>(cellsFrom), inclusiveFrom,
                                  TConstArrayRef<TCell>(cellsTo), inclusiveTo);
+}
+
+NMetadataProvider::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecials& specials, const TString& tablePath, const ui32 tablePathId) {
+    std::unique_ptr<NColumnShard::NTiers::TConfigsSnapshot> cs(new NColumnShard::NTiers::TConfigsSnapshot(Now()));
+    for (auto&& tier : specials.Tiers) {
+        {
+            NColumnShard::NTiers::TTierConfig tConfig;
+            tConfig.SetOwnerPath("/Root");
+            tConfig.SetTierName(tier.Name);
+            tConfig.MutableProtoConfig().SetName(tier.Name);
+            auto& cProto = tConfig.MutableProtoConfig();
+            if (tier.S3) {
+                *cProto.MutableObjectStorage() = *tier.S3;
+            }
+            if (tier.Codec) {
+                cProto.MutableCompression()->SetCompressionCodec(tier.GetCodecId());
+            }
+            if (tier.CompressionLevel) {
+                cProto.MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
+            }
+            cs->MutableTierConfigs().emplace(tConfig.GetConfigId(), tConfig);
+        }
+        {
+            NColumnShard::NTiers::TTieringRule tRule;
+            tRule.SetOwnerPath("/Root");
+            tRule.SetDurationForEvict(TDuration::Seconds(tier.GetEvictAfterSecondsUnsafe()));
+            tRule.SetTablePath(tablePath).SetTablePathId(tablePathId);
+            tRule.SetTierName(tier.Name);
+            tRule.SetColumn(tier.GetTtlColumn());
+            cs->MutableTableTierings()[tablePath].AddRule(std::move(tRule));
+        }
+    }
+    return cs;
 }
 
 }

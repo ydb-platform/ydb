@@ -86,6 +86,8 @@ struct TTiersInfo {
     TString Column;
     std::vector<TTierTimeBorder> TierBorders; // Ordered tiers from hottest to coldest
 
+    TString GetDebugString() const;
+
     TTiersInfo(const TString& column, TInstant border = {}, const TString& tierName = {})
         : Column(column)
     {

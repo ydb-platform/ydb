@@ -17,7 +17,9 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx)
     ctx.Send(IndexingActor, new TEvents::TEvPoisonPill);
     ctx.Send(CompactionActor, new TEvents::TEvPoisonPill);
     ctx.Send(EvictionActor, new TEvents::TEvPoisonPill);
-    StopS3Actors(ctx);
+    if (Tiers) {
+        Tiers->Stop();
+    }
 }
 
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
@@ -27,7 +29,6 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID));
     CompactionActor = ctx.Register(CreateCompactionActor(TabletID(), ctx.SelfID));
     EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID));
-    InitS3Actors(ctx, true);
 
     SignalTabletActive(ctx);
 }

@@ -178,13 +178,7 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
         return MinMaxIdxColumnsIds;
     }
 
-    bool AllowTtlOverColumn(const TString& name) const {
-        auto it = ColumnNames.find(name);
-        if (it == ColumnNames.end()) {
-            return false;
-        }
-        return MinMaxIdxColumnsIds.count(it->second);
-    }
+    bool AllowTtlOverColumn(const TString& name) const;
 
     bool IsSorted() const { return SortingKey.get(); }
     bool IsReplacing() const { return ReplaceKey.get(); }

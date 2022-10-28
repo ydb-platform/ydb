@@ -18,7 +18,6 @@ target_link_libraries(core-tx-columnshard PUBLIC
   yutil
   tools-enum_parser-enum_serialization_runtime
   cpp-actors-core
-  ydb-services-metadata
   ydb-core-actorlib_impl
   ydb-core-base
   core-blobstorage-dsproxy
@@ -29,9 +28,9 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-core-tablet
   ydb-core-tablet_flat
   tx-columnshard-engines
+  core-tx-tiering
   tx-long_tx_service-public
   ydb-core-util
-  ydb-core-wrappers
   api-protos
   dq-actors-compute
 )
@@ -59,14 +58,13 @@ target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_costs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_private_events.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/compaction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/eviction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/export_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/external_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/indexing_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/write_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/s3_actor.cpp
 )
 generate_enum_serilization(core-tx-columnshard
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.h

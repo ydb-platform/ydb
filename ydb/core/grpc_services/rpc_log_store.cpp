@@ -241,14 +241,7 @@ private:
                 LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
-            for (const auto& tier : req->tiers()) {
-                auto* toTier = toSchemaPreset->MutableSchema()->AddStorageTiers();
-                toTier->SetName(tier.name());
-                if (!ConvertCompressionFromPublicToInternal(tier.compression(), *toTier->MutableCompression(), error)) {
-                    LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
-                    return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-                }
-            }
+            toSchemaPreset->MutableSchema()->SetEnableTiering(req->enable_tiering());
         }
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
@@ -297,7 +290,6 @@ private:
                 const auto& storeDescription = pathDescription.GetColumnStoreDescription();
                 describeLogStoreResult.set_shards_count(storeDescription.GetColumnShardCount());
 
-                bool firstPreset = true;
                 for (const auto& schemaPreset : storeDescription.GetSchemaPresets()) {
                     auto* toSchemaPreset = describeLogStoreResult.add_schema_presets();
                     toSchemaPreset->set_name(schemaPreset.GetName());
@@ -306,15 +298,6 @@ private:
                     if (!ConvertSchemaFromInternalToPublic(schemaPreset.GetSchema(), *toSchemaPreset->mutable_schema(), status, error)) {
                         LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
                         return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-                    }
-                    if (firstPreset) {
-                        // Preset's tiers are the same. We take first ones.
-                        firstPreset = false;
-                        for (auto& tier : schemaPreset.GetSchema().GetStorageTiers()) {
-                            auto* to = describeLogStoreResult.add_tiers();
-                            to->set_name(tier.GetName());
-                            ConvertCompressionFromInternalToPublic(tier.GetCompression(), *to->mutable_compression());
-                        }
                     }
                 }
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeLogStoreResult, ctx);

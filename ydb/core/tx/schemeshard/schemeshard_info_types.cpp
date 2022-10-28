@@ -2023,9 +2023,6 @@ TOlapStoreInfo::TOlapStoreInfo(
             col.KeyOrder = preset.KeyColumnIds.size();
             preset.KeyColumnIds.push_back(col.Id);
         }
-        for (const auto& tierConfig : presetProto.GetSchema().GetStorageTiers()) {
-            preset.Tiers.insert(tierConfig.GetName());
-        }
         preset.Engine = presetProto.GetSchema().GetEngine();
         preset.NextColumnId = presetProto.GetSchema().GetNextColumnId();
         preset.Version = presetProto.GetSchema().GetVersion();

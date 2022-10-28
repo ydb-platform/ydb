@@ -39,14 +39,6 @@ struct TCompression {
     void SerializeTo(Ydb::LogStore::Compression& compression) const;
 };
 
-struct TTierConfig {
-    TCompression Compression;
-};
-
-struct TTier {
-    TTtlSettings Eviction;
-};
-
 struct TCreateLogStoreSettings : public TOperationRequestSettings<TCreateLogStoreSettings> {
     using TSelf = TCreateLogStoreSettings;
 };
@@ -117,8 +109,7 @@ private:
 
 class TLogStoreDescription {
 public:
-    TLogStoreDescription(ui32 shardsCount, const THashMap<TString, TSchema>& schemaPresets,
-                         const THashMap<TString, TTierConfig>& tierConfigs = {});
+    TLogStoreDescription(ui32 shardsCount, const THashMap<TString, TSchema>& schemaPresets);
     TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult&& desc, const TDescribeLogStoreSettings& describeSettings);
     void SerializeTo(Ydb::LogStore::CreateLogStoreRequest& request) const;
     const THashMap<TString, TSchema>& GetSchemaPresets() const {
@@ -136,17 +127,12 @@ public:
     const TVector<NScheme::TPermissions>& GetEffectivePermissions() const {
         return EffectivePermissions;
     }
-    const THashMap<TString, TTierConfig>& GetTierConfigs() const {
-        return TierConfigs;
-    }
-
 private:
     ui32 ShardsCount;
     THashMap<TString, TSchema> SchemaPresets;
     TString Owner;
     TVector<NScheme::TPermissions> Permissions;
     TVector<NScheme::TPermissions> EffectivePermissions;
-    THashMap<TString, TTierConfig> TierConfigs;
 };
 
 struct TLogTableSharding {
@@ -171,8 +157,6 @@ public:
         const TMaybe<TTtlSettings>& ttlSettings = {});
     TLogTableDescription(const TSchema& schema, const TLogTableSharding& sharding,
         const TMaybe<TTtlSettings>& ttlSettings = {});
-    TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding,
-        const THashMap<TString, TTier>& tiers);
     TLogTableDescription(Ydb::LogStore::DescribeLogTableResult&& desc, const TDescribeLogTableSettings& describeSettings);
     void SerializeTo(Ydb::LogStore::CreateLogTableRequest& request) const;
     const TSchema& GetSchema() const {
@@ -204,7 +188,6 @@ private:
     const TSchema Schema;
     const TLogTableSharding Sharding;
     const TMaybe<TTtlSettings> TtlSettings;
-    THashMap<TString, TTier> Tiers;
     TString Owner;
     TVector<NScheme::TPermissions> Permissions;
     TVector<NScheme::TPermissions> EffectivePermissions;

@@ -804,7 +804,6 @@ struct TOlapSchema {
     TColumns Columns;
     TColumnsByName ColumnsByName;
     TVector<ui32> KeyColumnIds;
-    THashSet<TString> Tiers; // TODO: hash map with tier config
     NKikimrSchemeOp::EColumnTableEngine Engine = NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES;
     ui32 NextColumnId = 1;
     ui64 Version = 1;
@@ -2796,7 +2795,6 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
 bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
     const THashMap<ui32, TOlapSchema::TColumn>& columns,
     const THashMap<TString, ui32>& columnsByName,
-    const THashSet<TString>& knownTiers,
     TString& errStr);
 bool ValidateTtlSettingsChange(
     const NKikimrSchemeOp::TColumnDataLifeCycle& oldTtl,

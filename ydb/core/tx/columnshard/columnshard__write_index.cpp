@@ -128,10 +128,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 }
 
                 // Mark exported blobs
-                Y_VERIFY(Self->TierConfigs.count(tierName));
-                auto& config = Self->TierConfigs[tierName];
-
-                if (config.NeedExport()) {
+                auto& tManager = Self->GetTierManagerVerified(tierName);
+                if (tManager.NeedExport()) {
                     for (auto& rec : portionInfo.Records) {
                         auto& blobId = rec.BlobRange.BlobId;
                         if (!BlobsToExport.count(blobId)) {

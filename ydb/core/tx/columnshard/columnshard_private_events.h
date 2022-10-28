@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob_manager.h"
+#include "defs.h"
 
 #include <ydb/core/protos/counters_columnshard.pb.h>
 
@@ -38,11 +39,11 @@ struct TEvPrivate {
         bool CacheData{false};
         TDuration Duration;
 
-        TEvWriteIndex(const NOlap::TIndexInfo& indexInfo,
+        TEvWriteIndex(NOlap::TIndexInfo&& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
             bool cacheData,
             THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>>&& cachedBlobs = {})
-            : IndexInfo(indexInfo)
+            : IndexInfo(std::move(indexInfo))
             , IndexChanges(indexChanges)
             , CachedBlobs(std::move(cachedBlobs))
             , CacheData(cacheData)

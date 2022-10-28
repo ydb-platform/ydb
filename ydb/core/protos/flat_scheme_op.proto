@@ -426,10 +426,9 @@ message TColumnTableSchema {
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
     optional TCompressionOptions DefaultCompression = 8;
 
-    // Storage tiers specification (not ordered list).
-    // You could use any combination of the tiers in TColumnDataLifeCycle.Tiering in any order.
-    // If storage tier's Compression is not set it would be derived from table's DefaultCompression.
-    repeated TStorageTierConfig StorageTiers = 9;
+    // Storage tiers usage flag.
+    // Tiers detail information contains in storage_path/parent/.external_info/tiers
+    optional bool EnableTiering = 10 [default = false];
 }
 
 message TAlterColumnTableSchema {

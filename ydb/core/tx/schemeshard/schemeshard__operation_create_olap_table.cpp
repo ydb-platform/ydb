@@ -70,7 +70,6 @@ TColumnTableInfo::TPtr CreateColumnTable(
 
     Y_VERIFY(pSchema, "Expected to find a preset schema");
 
-    THashSet<TString> storageTiers;
     if (op.HasSchema()) {
         auto& opSchema = op.GetSchema();
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
@@ -176,20 +175,7 @@ TColumnTableInfo::TPtr CreateColumnTable(
             return nullptr;
         }
 
-        storageTiers.clear();
-        for (auto tier : opSchema.GetStorageTiers()) {
-            auto& name = tier.GetName();
-            if (!pSchema->Tiers.count(name)) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder() << "Specified schema tier does not match schema preset: '" << name << "'";
-                return nullptr;
-            }
-            storageTiers.insert(name);
-        }
-
         op.ClearSchema();
-    } else {
-        storageTiers = pSchema->Tiers;
     }
 
     if (op.HasRESERVED_TtlSettingsPresetName() || op.HasRESERVED_TtlSettingsPresetId()) {
@@ -204,7 +190,7 @@ TColumnTableInfo::TPtr CreateColumnTable(
 
     // Validate ttl settings and schema compatibility
     if (op.HasTtlSettings()) {
-        if (!ValidateTtlSettings(op.GetTtlSettings(), pSchema->Columns, pSchema->ColumnsByName, storageTiers, errStr)) {
+        if (!ValidateTtlSettings(op.GetTtlSettings(), pSchema->Columns, pSchema->ColumnsByName, errStr)) {
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }

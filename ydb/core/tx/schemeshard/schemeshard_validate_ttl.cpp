@@ -158,44 +158,20 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
 bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
     const THashMap<ui32, TOlapSchema::TColumn>& columns,
     const THashMap<TString, ui32>& columnsByName,
-    const THashSet<TString>& knownTiers,
     TString& errStr)
 {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
 
-    THashSet<TString> prevTiers;
-
     switch (ttl.GetStatusCase()) {
-    case TTtlProto::kTiering: {
-        for (auto& tier : ttl.GetTiering().GetTiers()) {
-            auto& name = tier.GetName();
-            if (name.empty()) {
-                errStr = "Unnamed tier in TTL policy";
-                return false;
-            }
-            if (!knownTiers.count(name)) {
-                errStr = Sprintf("Unknown tier in TTL policy: '%s'", name.data());
-                return false;
-            }
-            if (prevTiers.count(name)) {
-                errStr = Sprintf("The same tier name in TTL policy: '%s'", name.data());
-                return false;
-            }
-            prevTiers.insert(name);
-
-            if (!ValidateColumnTableTtl(tier.GetEviction(), {}, columns, columnsByName, errStr)) {
-                return false;
-            }
-        }
-        break;
-    }
-    case TTtlProto::kEnabled:
-        return ValidateColumnTableTtl(ttl.GetEnabled(), {}, columns, columnsByName, errStr);
-    case TTtlProto::kDisabled:
-        break;
-    default:
-        errStr = "TTL status must be specified";
-        return false;
+        case TTtlProto::kTiering:
+            break;
+        case TTtlProto::kEnabled:
+            return ValidateColumnTableTtl(ttl.GetEnabled(), {}, columns, columnsByName, errStr);
+        case TTtlProto::kDisabled:
+            break;
+        default:
+            errStr = "TTL status must be specified";
+            return false;
     }
 
     return true;
@@ -217,19 +193,6 @@ bool ValidateTtlSettingsChange(
     if (ttl.GetStatusCase() == NKikimrSchemeOp::TColumnDataLifeCycle::kEnabled) {
         newTtlColName = ttl.GetEnabled().GetColumnName();
         oldTtlColName = oldTtl.GetEnabled().GetColumnName();
-    } else if (ttl.GetStatusCase() == NKikimrSchemeOp::TColumnDataLifeCycle::kTiering) {
-        if (ttl.GetTiering().TiersSize() != oldTtl.GetTiering().TiersSize()) {
-            errStr = "Changing of tiers count is not supported yet";
-            return false;
-        }
-
-        if (ttl.GetTiering().TiersSize() != 1) {
-            errStr = "Changing of multiple tiers is not supported yet";
-            return false;
-        }
-
-        newTtlColName = ttl.GetTiering().GetTiers()[0].GetEviction().GetColumnName();
-        oldTtlColName = oldTtl.GetTiering().GetTiers()[0].GetEviction().GetColumnName();
     }
 
     if (newTtlColName != oldTtlColName) {

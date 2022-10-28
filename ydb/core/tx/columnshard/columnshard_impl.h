@@ -435,6 +435,7 @@ private:
     void LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLongTxId& longTxId);
     bool RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
     bool RemoveTx(NTable::TDatabase& database, ui64 txId);
+    void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
 
     void EnqueueProgressTx(const TActorContext& ctx);
     void EnqueueBackgroundActivities(bool periodic = false, bool insertOnly = false);

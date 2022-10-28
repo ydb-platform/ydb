@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         // commit
         ui64 planStep = 100;
         ui64 txId = 42;
-        insertTable.Commit(dbTable, planStep, txId, metaShard, {TWriteId{writeId}});
+        insertTable.Commit(dbTable, planStep, txId, metaShard, {TWriteId{writeId}}, [](ui64){ return true; });
 
         auto committed = insertTable.GetCommitted();
         UNIT_ASSERT_EQUAL(committed.size(), 1);

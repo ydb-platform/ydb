@@ -66,20 +66,8 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         NOlap::TInsertedData insertData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time);
         ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
         if (ok) {
-            auto writesToAbort = Self->InsertTable->OldWritesToAbort(time);
-            std::vector<TWriteId> failedAborts;
-            for (auto& writeId : writesToAbort) {
-                if (!Self->RemoveLongTxWrite(db, writeId)) {
-                    failedAborts.push_back(writeId);
-                }
-                Self->BatchCache.EraseInserted(TWriteId(writeId));
-            }
-            for (auto& writeId : failedAborts) {
-                writesToAbort.erase(writeId);
-            }
-            if (!writesToAbort.empty()) {
-                Self->InsertTable->Abort(dbTable, {}, writesToAbort);
-            }
+            THashSet<TWriteId> writesToAbort = Self->InsertTable->OldWritesToAbort(time);
+            Self->TryAbortWrites(db, dbTable, std::move(writesToAbort));
 
             // TODO: It leads to write+erase for aborted rows. Abort() inserts rows, EraseAborted() erases them.
             // It's not optimal but correct.

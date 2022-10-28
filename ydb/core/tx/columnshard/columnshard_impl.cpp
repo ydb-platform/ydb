@@ -336,6 +336,22 @@ bool TColumnShard::RemoveTx(NTable::TDatabase& database, ui64 txId) {
     return true;
 }
 
+void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
+    std::vector<TWriteId> failedAborts;
+    for (auto& writeId : writesToAbort) {
+        if (!RemoveLongTxWrite(db, writeId)) {
+            failedAborts.push_back(writeId);
+        }
+        BatchCache.EraseInserted(TWriteId(writeId));
+    }
+    for (auto& writeId : failedAborts) {
+        writesToAbort.erase(writeId);
+    }
+    if (!writesToAbort.empty()) {
+        InsertTable->Abort(dbTable, {}, writesToAbort);
+    }
+}
+
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
     if (LastSchemaSeqNo < seqNo) {
         LastSchemaSeqNo = seqNo;
@@ -519,10 +535,8 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
         // TODO: Allow to read old snapshots after DROP
         TBlobGroupSelector dsGroupSelector(Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-        auto abortedWrites = InsertTable->DropPath(dbTable, pathId);
-        for (auto& writeId : abortedWrites) {
-            RemoveLongTxWrite(db, writeId);
-        }
+        THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, pathId);
+        TryAbortWrites(db, dbTable, std::move(writesToAbort));
 
         table->DropVersion = version;
         Schema::SaveTableDropVersion(db, pathId, version.Step, version.TxId);

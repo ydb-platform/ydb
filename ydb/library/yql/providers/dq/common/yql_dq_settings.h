@@ -28,6 +28,7 @@ struct TDqSettings {
         static constexpr ui64 OutputChunkMaxSize = 4_MB;
         static constexpr ui64 ChunkSizeLimit = 128_MB;
         static constexpr bool EnableDqReplicate = false;
+        static constexpr ui64 ParallelOperationsLimit = 16;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -75,6 +76,7 @@ struct TDqSettings {
     NCommon::TConfSetting<TString, false> WatermarksMode;
     NCommon::TConfSetting<ui64, false> WatermarksGranularityMs;
     NCommon::TConfSetting<bool, false> UseAggPhases;
+    NCommon::TConfSetting<ui64, false> ParallelOperationsLimit;
 
     NCommon::TConfSetting<TString, false> WorkerFilter;
 

@@ -21,6 +21,10 @@ items:
       href: commands/secondary_index.md
     - name: Переименование таблиц
       href: commands/tools/rename.md
+    - name: Установка параметров TTL
+      href: table-ttl-set.md
+    - name: Удаление параметров TTL
+      href: table-ttl-drop.md
   - name: Работа с данными
     items:
     - name: Получение плана исполнения запроса и AST

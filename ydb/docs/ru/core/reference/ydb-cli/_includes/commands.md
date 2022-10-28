@@ -60,8 +60,8 @@ table drop | Удаление таблицы
 [table query execute](../table-query-execute.md) | Исполнение YQL-запроса
 [table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
 [table readtable](../commands/readtable.md) | Потоковое чтение таблицы
-table ttl drop | Удаление параметров TTL
-table ttl set | Установка параметров TTL
+[table ttl set](../table-ttl-set.md) | Установка параметров TTL
+[table ttl drop](../table-ttl-drop.md) | Удаление параметров TTL
 tools copy | Копирование таблиц
 [tools dump](../export_import/tools_dump.md) | Выгрузка директории или таблицы в файловую систему
 [tools rename](../commands/tools/rename.md) | Переименование таблиц

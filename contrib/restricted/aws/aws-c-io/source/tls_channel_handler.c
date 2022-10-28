@@ -314,7 +314,7 @@ int aws_tls_ctx_options_init_client_mtls_pkcs12_from_path(
     struct aws_tls_ctx_options *options,
     struct aws_allocator *allocator,
     const char *pkcs12_path,
-    struct aws_byte_cursor *pkcs_pwd) {
+    const struct aws_byte_cursor *pkcs_pwd) {
 
 #ifdef __APPLE__
     aws_tls_ctx_options_init_default_client(options, allocator);
@@ -615,7 +615,7 @@ void aws_tls_connection_options_set_callbacks(
 int aws_tls_connection_options_set_server_name(
     struct aws_tls_connection_options *conn_options,
     struct aws_allocator *allocator,
-    struct aws_byte_cursor *server_name) {
+    const struct aws_byte_cursor *server_name) {
 
     if (conn_options->server_name != NULL) {
         aws_string_destroy(conn_options->server_name);

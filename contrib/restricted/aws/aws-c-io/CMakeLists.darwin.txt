@@ -65,6 +65,5 @@ target_sources(restricted-aws-aws-c-io PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/stream.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/tls_channel_handler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/tls_channel_handler_shared.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/uri.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/bsd/kqueue_event_loop.c
 )

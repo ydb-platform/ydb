@@ -185,6 +185,8 @@ void aws_tls_init_static_state(struct aws_allocator *alloc) {
          * https://github.com/aws/s2n-tls/blob/2ad65c11a96368591fe809cd27fd1e390b2c8ce3/api/s2n.h#L211-L212 */
         AWS_LOGF_DEBUG(AWS_LS_IO_TLS, "static: s2n is already initialized");
         s_s2n_initialized_externally = true;
+    } else {
+        s_s2n_initialized_externally = false;
     }
 
     if (!s_s2n_initialized_externally) {

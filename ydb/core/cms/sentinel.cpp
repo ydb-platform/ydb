@@ -19,8 +19,7 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 #if defined LOG_T || \
     defined LOG_D || \
@@ -190,7 +189,8 @@ void TPDiskInfo::AddState(EPDiskState state) {
 
 TClusterMap::TClusterMap(TCmsStatePtr state)
     : State(state)
-{}
+{
+}
 
 void TClusterMap::AddPDisk(const TPDiskID& id) {
     Y_VERIFY(State->ClusterInfo->HasNode(id.NodeId));
@@ -324,8 +324,8 @@ public:
         : TSentinelChildBase<TDerived>(parent, cmsState)
         , SentinelState(sentinelState)
     {
-        for (auto& pdisk : SentinelState->PDisks) {
-            pdisk.second.ClearTouched();
+        for (auto& [_, info] : SentinelState->PDisks) {
+            info.ClearTouched();
         }
     }
 
@@ -408,15 +408,14 @@ public:
         Become(&TThis::StateWork);
     }
 
-    STFUNC(StateWork) {
-        Y_UNUSED(ctx);
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvSentinel::TEvRetry::EventType, RequestBSConfig);
-            cFunc(TEvSentinel::TEvBSCPipeDisconnected::EventType, OnPipeDisconnected);
+            sFunc(TEvSentinel::TEvRetry, RequestBSConfig);
+            sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
 
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
 
@@ -593,24 +592,23 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        for (const auto& pdisk : SentinelState->PDisks) {
-            if (WaitNodes.insert(pdisk.first.NodeId).second) {
-                RequestPDiskState(pdisk.first.NodeId);
+        for (const auto& [id, _] : SentinelState->PDisks) {
+            if (WaitNodes.insert(id.NodeId).second) {
+                RequestPDiskState(id.NodeId);
             }
         }
 
         Become(&TThis::StateWork, Config.UpdateStateTimeout, new TEvSentinel::TEvTimeout());
     }
 
-    STFUNC(StateWork) {
-        Y_UNUSED(ctx);
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvSentinel::TEvTimeout::EventType, TimedOut);
+            sFunc(TEvSentinel::TEvTimeout, TimedOut);
 
             hFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
 
             hFunc(TEvents::TEvUndelivered, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
 
@@ -702,15 +700,14 @@ public:
         Become(&TThis::StateWork);
     }
 
-    STFUNC(StateWork) {
-        Y_UNUSED(ctx);
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvSentinel::TEvRetry::EventType, RequestStatusChange);
-            cFunc(TEvSentinel::TEvBSCPipeDisconnected::EventType, OnPipeDisconnected);
+            sFunc(TEvSentinel::TEvRetry, RequestStatusChange);
+            sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
 
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
 
@@ -904,10 +901,10 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
         TString issues;
         THashSet<TPDiskID, TPDiskIDHash> disallowed;
-
         TClusterMap::TPDiskIDSet allowed = changed.GetAllowedPDisks(all, issues, disallowed);
-        Copy(alwaysAllowed.begin(), alwaysAllowed.end(), std::inserter(allowed, allowed.begin()));
-        for (const TPDiskID& id : allowed) {
+        std::move(alwaysAllowed.begin(), alwaysAllowed.end(), std::inserter(allowed, allowed.begin()));
+
+        for (const auto& id : allowed) {
             Y_VERIFY(SentinelState->PDisks.contains(id));
             TPDiskInfo& info = SentinelState->PDisks.at(id);
 
@@ -939,7 +936,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             }
         }
 
-        for (const TPDiskID& id : disallowed) {
+        for (const auto& id : disallowed) {
             Y_VERIFY(SentinelState->PDisks.contains(id));
             SentinelState->PDisks.at(id).DisallowChanging();
         }
@@ -953,29 +950,28 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         );
     }
 
-    void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr& ev, const TActorContext &ctx) {
-        THolder<TEvCms::TEvGetSentinelStateResponse> Response;
-        Response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
-        auto &rec = Response->Record;
-        rec.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+    void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr& ev) {
+        auto response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
 
-        auto& sentinelConfig = *rec.MutableSentinelConfig();
-        Config.Serialize(sentinelConfig);
+        auto& record = response->Record;
+        record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+        Config.Serialize(*record.MutableSentinelConfig());
 
         if (SentinelState) {
-            for (auto it = SentinelState->PDisks.begin(); it != SentinelState->PDisks.end(); ++it) {
-                auto &entry = *rec.AddPDisks();
-                entry.MutableId()->SetNodeId(it->first.NodeId);
-                entry.MutableId()->SetDiskId(it->first.DiskId);
-                entry.MutableInfo()->SetState(it->second.GetState());
-                entry.MutableInfo()->SetPrevState(it->second.GetPrevState());
-                entry.MutableInfo()->SetStateCounter(it->second.GetStateCounter());
-                entry.MutableInfo()->SetStatus(it->second.GetStatus());
-                entry.MutableInfo()->SetChangingAllowed(it->second.IsChangingAllowed());
-                entry.MutableInfo()->SetTouched(it->second.IsTouched());
+            for (const auto& [id, info] : SentinelState->PDisks) {
+                auto& entry = *record.AddPDisks();
+                entry.MutableId()->SetNodeId(id.NodeId);
+                entry.MutableId()->SetDiskId(id.DiskId);
+                entry.MutableInfo()->SetState(info.GetState());
+                entry.MutableInfo()->SetPrevState(info.GetPrevState());
+                entry.MutableInfo()->SetStateCounter(info.GetStateCounter());
+                entry.MutableInfo()->SetStatus(info.GetStatus());
+                entry.MutableInfo()->SetChangingAllowed(info.IsChangingAllowed());
+                entry.MutableInfo()->SetTouched(info.IsTouched());
             }
         }
-        ctx.Send(ev->Sender, Response.Release());
+
+        Send(ev->Sender, std::move(response));
     }
 
     void Handle(TEvSentinel::TEvStatusChanged::TPtr& ev) {
@@ -1011,8 +1007,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             Send(actor, new TEvSentinel::TEvBSCPipeDisconnected());
         }
 
-        for (const auto& pdisk : SentinelState->PDisks) {
-            if (const TActorId& actor = pdisk.second.StatusChanger) {
+        for (const auto& [_, info] : SentinelState->PDisks) {
+            if (const TActorId& actor = info.StatusChanger) {
                 Send(actor, new TEvSentinel::TEvBSCPipeDisconnected());
             }
         }
@@ -1027,8 +1023,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             Send(actor, new TEvents::TEvPoisonPill());
         }
 
-        for (const auto& pdisk : SentinelState->PDisks) {
-            if (const TActorId& actor = pdisk.second.StatusChanger) {
+        for (const auto& [_, info] : SentinelState->PDisks) {
+            if (const TActorId& actor = info.StatusChanger) {
                 Send(actor, new TEvents::TEvPoisonPill());
             }
         }
@@ -1062,18 +1058,17 @@ public:
         Become(&TThis::StateWork);
     }
 
-    STFUNC(StateWork) {
-        Y_UNUSED(ctx);
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvSentinel::TEvUpdateConfig::EventType, UpdateConfig);
-            cFunc(TEvSentinel::TEvConfigUpdated::EventType, OnConfigUpdated);
-            cFunc(TEvSentinel::TEvUpdateState::EventType, UpdateState);
-            cFunc(TEvSentinel::TEvStateUpdated::EventType, OnStateUpdated);
+            sFunc(TEvSentinel::TEvUpdateConfig, UpdateConfig);
+            sFunc(TEvSentinel::TEvConfigUpdated, OnConfigUpdated);
+            sFunc(TEvSentinel::TEvUpdateState, UpdateState);
+            sFunc(TEvSentinel::TEvStateUpdated, OnStateUpdated);
             hFunc(TEvSentinel::TEvStatusChanged, Handle);
-            HFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
-            cFunc(TEvSentinel::TEvBSCPipeDisconnected::EventType, OnPipeDisconnected);
+            hFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
+            sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
 
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
 
@@ -1094,5 +1089,4 @@ IActor* CreateSentinel(TCmsStatePtr state) {
     return new NSentinel::TSentinel(state);
 }
 
-} // NCms
-} // NKikimr
+} // NKikimr::NCms

@@ -86,12 +86,12 @@ select Unicode::RemoveAll("abandon", "an"); -- "bdo"
 ```
 
 * ```Unicode::ToCodePointList(Utf8{Flags:AutoMap}) -> List<Uint32>```
-  
+
   Разбить строку на unicode'ую последовательность codepoint'ов.
 * ```Unicode::FromCodePointList(List<Uint32>{Flags:AutoMap}) -> Utf8```
 
   Сформировать unicode строку из codepoint'ов.
-  
+
 ```sql
 select Unicode::ToCodePointList("Щавель"); -- [1065, 1072, 1074, 1077, 1083, 1100]
 select Unicode::FromCodePointList(AsList(99,111,100,101,32,112,111,105,110,116,115,32,99,111,110,118,101,114,116,101,114)); -- "code points converter"  
@@ -140,4 +140,31 @@ select Unicode::JoinFromList(["One", "two", "three", "four", "five"], ";"); -- "
 select Unicode::ToUint64("77741"); -- 77741
 select Unicode::ToUint64("-77741"); -- 18446744073709473875
 select Unicode::TryToUint64("asdh831"); -- Null
+```
+
+* ```Unicode::Strip(string:Utf8{Flags:AutoMap}) -> Utf8```
+
+  Вырезает из строки крайние символы Unicode-категории Space.
+```sql
+select Unicode::Strip("\u200ыкль\u2002"u); -- "ыкль"
+```
+
+* ```Unicode::IsAscii(string:Utf8{Flags:AutoMap}) -> Bool```
+
+  Проверяет, состоит ли utf-8 строка исключительно из символов ascii.
+* ```Unicode::IsSpace(string:Utf8{Flags:AutoMap}) -> Bool```
+* ```Unicode::IsUpper(string:Utf8{Flags:AutoMap}) -> Bool```
+* ```Unicode::IsLower(string:Utf8{Flags:AutoMap}) -> Bool```
+* ```Unicode::IsAlpha(string:Utf8{Flags:AutoMap}) -> Bool```
+* ```Unicode::IsAlnum(string:Utf8{Flags:AutoMap}) -> Bool```
+* ```Unicode::IsHex(string:Utf8{Flags:AutoMap}) -> Bool```
+
+  Проверяют, отвечает ли utf-8 строка указанному условию.
+
+* ```Unicode::IsUnicodeSet(string:Utf8{Flags:AutoMap}, unicode_set:Utf8) -> Bool```
+
+  Проверяет, состоит ли utf-8 строка ```string``` исключительно из символов, указанных в ```unicode_set```. Символы в ```unicode_set``` нужно указывать в квадратных скобках.
+```sql
+select Unicode::IsUnicodeSet("ваоао"u, "[вао]"u); -- true
+select Unicode::IsUnicodeSet("ваоао"u, "[ваб]"u); -- false
 ```

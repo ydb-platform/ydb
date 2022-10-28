@@ -19,8 +19,6 @@ bool IsLeapYear(ui32 year);
 
 ui32 GetMonthLength(ui32 month, bool isLeap);
 
-void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out);
-
 bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf);
 
 NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef buf);

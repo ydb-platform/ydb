@@ -237,6 +237,17 @@ struct TPgValue {
     TString Content_;
 };
 
+struct TUuidValue {
+    TString ToString() const;
+    TUuidValue(const Ydb::Value& uuidValueProto);
+    TUuidValue(const TString& uuidString);
+
+    union {
+        char Bytes[16];
+        ui64 Halfs[2];
+    } Buf_;
+};
+
 //! Representation of YDB value.
 class TValue {
     friend class TValueParser;
@@ -290,6 +301,7 @@ public:
     const TString& GetJson() const;
     TDecimalValue GetDecimal() const;
     TPgValue GetPg() const;
+    TUuidValue GetUuid() const;
     const TString& GetJsonDocument() const;
     const TString& GetDyNumber() const;
 
@@ -316,6 +328,7 @@ public:
     TMaybe<TString> GetOptionalYson() const;
     TMaybe<TString> GetOptionalJson() const;
     TMaybe<TDecimalValue> GetOptionalDecimal() const;
+    TMaybe<TUuidValue> GetOptionalUuid() const;
     TMaybe<TString> GetOptionalJsonDocument() const;
     TMaybe<TString> GetOptionalDyNumber() const;
 
@@ -394,6 +407,7 @@ public:
     TDerived& Json(const TString& value);
     TDerived& Decimal(const TDecimalValue& value);
     TDerived& Pg(const TPgValue& value);
+    TDerived& Uuid(const TUuidValue& value);
     TDerived& JsonDocument(const TString& value);
     TDerived& DyNumber(const TString& value);
 
@@ -419,6 +433,7 @@ public:
     TDerived& OptionalUtf8(const TMaybe<TString>& value);
     TDerived& OptionalYson(const TMaybe<TString>& value);
     TDerived& OptionalJson(const TMaybe<TString>& value);
+    TDerived& OptionalUuid(const TMaybe<TUuidValue>& value);
     TDerived& OptionalJsonDocument(const TMaybe<TString>& value);
     TDerived& OptionalDyNumber(const TMaybe<TString>& value);
 

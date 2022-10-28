@@ -11,6 +11,7 @@
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/binary_json/read.h>
+#include <ydb/library/uuid/uuid.h>
 #include <ydb/library/dynumber/dynumber.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -311,54 +312,6 @@ bool WriteInterval(IOutputStream& out, i64 signedValue) {
     return true;
 }
 
-static void WriteHexDigit(ui8 digit, IOutputStream& out) {
-    if (digit <= 9) {
-        out << char('0' + digit);
-    }
-    else {
-        out << char('a' + digit - 10);
-    }
-}
-
-static void WriteHex(ui16 bytes, IOutputStream& out, bool reverseBytes = false) {
-    if (reverseBytes) {
-        WriteHexDigit((bytes >> 4) & 0x0f, out);
-        WriteHexDigit(bytes & 0x0f, out);
-        WriteHexDigit((bytes >> 12) & 0x0f, out);
-        WriteHexDigit((bytes >> 8) & 0x0f, out);
-    } else {
-        WriteHexDigit((bytes >> 12) & 0x0f, out);
-        WriteHexDigit((bytes >> 8) & 0x0f, out);
-        WriteHexDigit((bytes >> 4) & 0x0f, out);
-        WriteHexDigit(bytes & 0x0f, out);
-    }
-}
-
-static void UuidToString(ui16 dw[8], IOutputStream& out) {
-    WriteHex(dw[1], out);
-    WriteHex(dw[0], out);
-    out << '-';
-    WriteHex(dw[2], out);
-    out << '-';
-    WriteHex(dw[3], out);
-    out << '-';
-    WriteHex(dw[4], out, true);
-    out << '-';
-    WriteHex(dw[5], out, true);
-    WriteHex(dw[6], out, true);
-    WriteHex(dw[7], out, true);
-}
-
-}
-
-void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
-    union {
-        char bytes[16];
-        ui64 half[2];
-    } buf;
-    buf.half[0] = low;
-    buf.half[1] = hi;
-    out.Write(buf.bytes, 16);
 }
 
 NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePod value) {
@@ -417,7 +370,7 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
     case NUdf::EDataSlot::Uuid: {
         ui16 dw[8];
         std::memcpy(dw, value.AsStringRef().Data(), sizeof(dw));
-        UuidToString(dw, out);
+        NUuid::UuidToString(dw, out);
         break;
     }
 
@@ -969,89 +922,10 @@ ui32 ParseNumber(ui32& pos, NUdf::TStringRef buf, ui32& value, i8 dig_cnt) {
     return count;
 }
 
-static bool GetDigit(char c, ui32& digit) {
-    digit = 0;
-    if ('0' <= c && c <= '9') {
-        digit = c - '0';
-    }
-    else if ('a' <= c && c <= 'f') {
-        digit = c - 'a' + 10;
-    }
-    else if ('A' <= c && c <= 'F') {
-        digit = c - 'A' + 10;
-    }
-    else {
-        return false; // non-hex character
-    }
-    return true;
-}
-
-bool IsValidUuid(NUdf::TStringRef buf) {
-    if (buf.Size() != 36) {
-        return false;
-    }
-
-    for (size_t i = 0; i < buf.Size(); ++i) {
-        const char c = buf.Data()[i];
-
-        if (c == '-') {
-            if (i != 8 && i != 13 && i != 18 && i != 23) {
-                return false;
-            }
-        } else if (!std::isxdigit(c)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-
-static bool ParseUuidToArray(NUdf::TStringRef buf, ui16* dw, bool shortForm) {
-    if (buf.Size() != (shortForm ? 32 : 36)) {
-        return false;
-    }
-
-    size_t partId = 0;
-    ui64 partValue = 0;
-    size_t digitCount = 0;
-
-    for (size_t i = 0; i < buf.Size(); ++i) {
-        const char c = buf.Data()[i];
-
-        if (!shortForm && (i == 8 || i == 13 || i == 18 || i == 23)) {
-            if (c == '-') {
-                continue;
-            } else {
-                return false;
-            }
-        }
-
-        ui32 digit = 0;
-        if (!GetDigit(c, digit)) {
-            return false;
-        }
-
-        partValue = partValue * 16 + digit;
-
-        if (++digitCount == 4) {
-            dw[partId++] = partValue;
-            digitCount = 0;
-        }
-    }
-
-    std::swap(dw[0], dw[1]);
-    for (ui32 i = 4; i < 8; ++i) {
-        dw[i] = ((dw[i] >> 8) & 0xff) | ((dw[i] & 0xff) << 8);
-    }
-
-    return true;
-}
-
 NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm) {
     ui16 dw[8];
 
-    if (!ParseUuidToArray(buf, dw, shortForm)) {
+    if (!NUuid::ParseUuidToArray(buf, dw, shortForm)) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1061,7 +935,7 @@ NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm) {
 bool ParseUuid(NUdf::TStringRef buf, void* out, bool shortForm) {
     ui16 dw[8];
 
-    if (!ParseUuidToArray(buf, dw, shortForm)) {
+    if (!NUuid::ParseUuidToArray(buf, dw, shortForm)) {
         return false;
     }
 
@@ -1685,7 +1559,7 @@ bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf) {
     case NUdf::EDataSlot::JsonDocument:
         return NDom::IsValidJson(buf);
     case NUdf::EDataSlot::Uuid:
-        return IsValidUuid(buf);
+        return NUuid::IsValidUuid(buf);
 
     case NUdf::EDataSlot::DyNumber:
         return NDyNumber::IsValidDyNumberString(buf);

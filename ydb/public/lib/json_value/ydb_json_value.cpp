@@ -189,6 +189,9 @@ namespace NYdb {
             case EPrimitiveType::Json:
                 Writer.WriteString(Parser.GetJson());
                 break;
+            case EPrimitiveType::Uuid:
+                Writer.WriteString(Parser.GetUuid().ToString());
+                break;
             case EPrimitiveType::JsonDocument:
                 Writer.WriteString(Parser.GetJsonDocument());
                 break;
@@ -551,6 +554,10 @@ namespace {
             case EPrimitiveType::Json:
                 EnsureType(jsonValue, NJson::JSON_STRING);
                 ValueBuilder.Json(jsonValue.GetString());
+                break;
+            case EPrimitiveType::Uuid:
+                EnsureType(jsonValue, NJson::JSON_STRING);
+                ValueBuilder.Uuid(jsonValue.GetString());
                 break;
             case EPrimitiveType::JsonDocument:
                 EnsureType(jsonValue, NJson::JSON_STRING);

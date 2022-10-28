@@ -29,6 +29,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/lib/json_value/ydb_json_value.h>
+
 #include "ydb_common_ut.h"
 
 #include <util/generic/ymath.h>
@@ -1962,6 +1965,68 @@ tx_meta {
             }
         }
     }
+
+    Y_UNIT_TEST(SdkUuid) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        auto client = NYdb::NTable::TTableClient(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT CAST("5ca32c22-841b-11e8-adc0-fa7ae01bbebc" AS Uuid);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT(result.IsSuccess());
+
+        TString expectedJson = R"({"column0":"5ca32c22-841b-11e8-adc0-fa7ae01bbebc"}
+)";
+        UNIT_ASSERT_VALUES_EQUAL(expectedJson, NYdb::FormatResultSetJson(result.GetResultSet(0), NYdb::EBinaryStringEncoding::Base64));
+
+        UNIT_ASSERT_VALUES_EQUAL(R"([[["5ca32c22-841b-11e8-adc0-fa7ae01bbebc"]]])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(SdkUuidViaParams) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        auto client = NYdb::NTable::TTableClient(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto param = client.GetParamsBuilder()
+            .AddParam("$in")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("u").Uuid(TUuidValue("5ca32c22-841b-11e8-adc0-fa7ae01bbebc"))
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+        auto result = session.ExecuteDataQuery(R"(
+            DECLARE $in AS List<Struct<u: Uuid>>;
+            SELECT * FROM AS_TABLE($in);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), param).ExtractValueSync();
+
+        UNIT_ASSERT(result.IsSuccess());
+
+        TString expectedJson = R"({"u":"5ca32c22-841b-11e8-adc0-fa7ae01bbebc"}
+)";
+        UNIT_ASSERT_VALUES_EQUAL(expectedJson, NYdb::FormatResultSetJson(result.GetResultSet(0), NYdb::EBinaryStringEncoding::Base64));
+
+        UNIT_ASSERT_VALUES_EQUAL(R"([["5ca32c22-841b-11e8-adc0-fa7ae01bbebc"]])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
 
     Y_UNIT_TEST(ExecuteQueryWithParametersBadRequest) {
         TKikimrWithGrpcAndRootSchema server;

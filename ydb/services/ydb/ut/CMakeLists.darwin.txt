@@ -30,6 +30,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   yql-minikql-dom
   yql-minikql-jsonpath
   public-lib-experimental
+  public-lib-json_value
   public-lib-yson_value
   cpp-client-draft
   cpp-client-ydb_coordination

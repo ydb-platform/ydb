@@ -1,6 +1,7 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
@@ -1311,6 +1312,20 @@ Y_UNIT_TEST_SUITE(YdbValue) {
         UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
             R"([{"Name":"Sergey","Value":1},null,[true],[[10,null]],"12.345"])");
     }
+
+    Y_UNIT_TEST(CorrectUuid) {
+        TString uuidStr = "5ca32c22-841b-11e8-adc0-fa7ae01bbebc";
+        TUuidValue uuid(uuidStr);
+        UNIT_ASSERT_VALUES_EQUAL(uuidStr, uuid.ToString());
+    }
+
+    Y_UNIT_TEST(IncorrectUuid) {
+        UNIT_ASSERT_EXCEPTION(TUuidValue(""), TContractViolation);
+        UNIT_ASSERT_EXCEPTION(TUuidValue("0123456789abcdef0123456789abcdef0123456789abcdef"), TContractViolation);
+        UNIT_ASSERT_EXCEPTION(TUuidValue("5ca32c22+841b-11e8-adc0-fa7ae01bbebc"), TContractViolation);
+        UNIT_ASSERT_EXCEPTION(TUuidValue("5ca32-c22841b-11e8-adc0-fa7ae01bbebc"), TContractViolation);
+    }
+
 }
 
 } // namespace NYdb

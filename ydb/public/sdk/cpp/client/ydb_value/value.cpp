@@ -13,6 +13,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/uuid/uuid.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/map.h>
@@ -950,6 +951,32 @@ bool TPgValue::IsText() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TUuidValue::TUuidValue(const Ydb::Value& valueProto) {
+    Buf_.Halfs[0] = valueProto.low_128();
+    Buf_.Halfs[1] = valueProto.high_128();
+}
+
+TUuidValue::TUuidValue(const TString& uuidString) {
+    ui16 dw[8];
+    if (!NKikimr::NUuid::ParseUuidToArray(uuidString, dw, false)) {
+        ThrowFatalError(TStringBuilder() << "Unable to parse string as uuid");
+    }
+    static_assert(sizeof(dw) == sizeof(Buf_.Bytes));
+    std::memcpy(Buf_.Bytes, dw, sizeof(dw));
+}
+
+TString TUuidValue::ToString() const {
+    TStringStream s;
+    ui16 dw[8];
+    static_assert(sizeof(dw) == sizeof(Buf_.Bytes));
+    std::memcpy(dw, Buf_.Bytes, sizeof(dw));
+    NKikimr::NUuid::UuidToString(dw, s);
+    return s.Str();
+  
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TValue::TImpl {
 public:
     TImpl(const TType& type, const Ydb::Value& valueProto)
@@ -1133,6 +1160,11 @@ public:
     const TString& GetJson() const {
         CheckPrimitive(NYdb::EPrimitiveType::Json);
         return GetProto().text_value();
+    }
+
+    TUuidValue GetUuid() const {
+        CheckPrimitive(NYdb::EPrimitiveType::Uuid);
+        return TUuidValue(GetProto());
     }
 
     const TString& GetJsonDocument() const {
@@ -1491,6 +1523,8 @@ private:
             case NYdb::EPrimitiveType::JsonDocument:
             case NYdb::EPrimitiveType::DyNumber:
                 return Ydb::Value::kTextValue;
+            case NYdb::EPrimitiveType::Uuid:
+                return Ydb::Value::kLow128;
             default:
                 FatalError(TStringBuilder() << "Unexpected primitive type: " << primitiveTypeId);
                 return Ydb::Value::kBytesValue;
@@ -1620,6 +1654,10 @@ const TString& TValueParser::GetJson() const {
     return Impl_->GetJson();
 }
 
+TUuidValue TValueParser::GetUuid() const {
+    return Impl_->GetUuid();
+}
+
 const TString& TValueParser::GetJsonDocument() const {
     return Impl_->GetJsonDocument();
 }
@@ -1730,6 +1768,10 @@ TMaybe<TString> TValueParser::GetOptionalYson() const {
 
 TMaybe<TString> TValueParser::GetOptionalJson() const {
     RET_OPT_VALUE(TString, Json);
+}
+
+TMaybe<TUuidValue> TValueParser::GetOptionalUuid() const {
+    RET_OPT_VALUE(TUuidValue, Uuid);
 }
 
 TMaybe<TString> TValueParser::GetOptionalJsonDocument() const {
@@ -2006,6 +2048,12 @@ public:
     void Json(const TString& value) {
         FillPrimitiveType(EPrimitiveType::Json);
         GetValue().set_text_value(value);
+    }
+
+    void Uuid(const TUuidValue& value) {
+        FillPrimitiveType(EPrimitiveType::Uuid);
+        GetValue().set_low_128(value.Buf_.Halfs[0]);
+        GetValue().set_high_128(value.Buf_.Halfs[1]);
     }
 
     void JsonDocument(const TString& value) {
@@ -2707,6 +2755,12 @@ TDerived& TValueBuilderBase<TDerived>::Json(const TString& value) {
 }
 
 template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Uuid(const TUuidValue& value) {
+    Impl_->Uuid(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::JsonDocument(const TString& value) {
     Impl_->JsonDocument(value);
     return static_cast<TDerived&>(*this);
@@ -2854,6 +2908,11 @@ TDerived& TValueBuilderBase<TDerived>::OptionalYson(const TMaybe<TString>& value
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalJson(const TMaybe<TString>& value) {
     SET_OPT_VALUE_MAYBE(Json);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalUuid(const TMaybe<TUuidValue>& value) {
+    SET_OPT_VALUE_MAYBE(Uuid);
 }
 
 template<typename TDerived>

@@ -2,6 +2,7 @@
 
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/uuid/uuid.h>
 
 #include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -49,7 +50,7 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
             }
 
             if (type.GetData().GetScheme() == NYql::NProto::TypeIds::Uuid) {
-                using NKikimr::NMiniKQL::UuidHalfsToByteString;
+                using NKikimr::NUuid::UuidHalfsToByteString;
 
                 TStringStream stream;
                 UuidHalfsToByteString(value.GetLow128(), value.GetHi128(), stream);

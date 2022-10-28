@@ -11,17 +11,34 @@ namespace NKikimr::NMiniKQL {
 struct TPatternCacheEntry {
     TScopedAlloc Alloc;
     TTypeEnvironment Env;
+    bool UseAlloc;
+
+    TRuntimeNode ProgramNode;
+
+    ui32 ProgramInputsCount;
+    TRuntimeNode ProgramParams;
+    TVector<TType*> InputItemTypes;
+    TVector<TType*> OutputItemTypes;
+    TVector<TNode*> EntryPoints; // last entry node stands for parameters
+
+    TStructType* ParamsStruct;
     IComputationPattern::TPtr Pattern;
 
-    TPatternCacheEntry()
+    TPatternCacheEntry(bool useAlloc = true)
         : Alloc(__LOCATION__)
         , Env(Alloc)
+        , UseAlloc(useAlloc)
     {
+        // Release Alloc since it was implicitly acquired in Alloc's ctor
         Alloc.Release();
     }
 
     ~TPatternCacheEntry() {
-        Alloc.Acquire();
+        if (UseAlloc) {
+            // If alloc was used it should be acquired so dtors of all member fields will use it to free memory
+            // Release of Alloc will be called implicitly in Alloc's dtor
+            Alloc.Acquire();
+        }
     }
 };
 
@@ -33,12 +50,12 @@ class TComputationPatternLRUCache {
     std::atomic<size_t> TotalKeysSize = 0;
     std::atomic<size_t> TotalValuesSize = 0;
 public:
-    TComputationPatternLRUCache(size_t size = 100)
+    TComputationPatternLRUCache(size_t size = 1000)
         : Cache(size)
     {}
 
-    static std::shared_ptr<TPatternCacheEntry> CreateCacheEntry() {
-        return std::make_shared<TPatternCacheEntry>();
+    static std::shared_ptr<TPatternCacheEntry> CreateCacheEntry(bool useAlloc = true) {
+        return std::make_shared<TPatternCacheEntry>(useAlloc);
     }
 
     std::shared_ptr<TPatternCacheEntry> Find(const TString& serialized) {

@@ -23,6 +23,7 @@
 #undef SIZEOF_SIZE_T
 extern "C" {
 #include "postgres.h"
+#include "access/xact.h"
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_collation_d.h"
 #include "utils/builtins.h"
@@ -67,6 +68,7 @@ struct TMainContext {
     MemoryContextData Data;
     MemoryContext PrevCurrentMemoryContext = nullptr;
     MemoryContext PrevErrorContext = nullptr;
+    TimestampTz StartTimestamp;
 };
 
 ui32 GetFullVarSize(const text* s) {
@@ -2787,6 +2789,7 @@ void* PgInitializeMainContext() {
         &MkqlMethods,
         nullptr,
         "mkql");
+    ctx->StartTimestamp = GetCurrentTimestamp();
     return ctx;
 }
 
@@ -2801,6 +2804,7 @@ void PgAcquireThreadContext(void* ctx) {
         main->PrevCurrentMemoryContext = CurrentMemoryContext;
         main->PrevErrorContext = ErrorContext;
         CurrentMemoryContext = ErrorContext = (MemoryContext)&main->Data;
+        SetParallelStartTimestamps(main->StartTimestamp, main->StartTimestamp);
     }
 }
 

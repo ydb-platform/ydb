@@ -518,6 +518,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Take", &TProgramBuilder::Take},
         {"Limit", &TProgramBuilder::Take},
 
+        {"WideTakeBlocks", &TProgramBuilder::WideTakeBlocks},
+        {"WideSkipBlocks", &TProgramBuilder::WideSkipBlocks},
+
         {"Append", &TProgramBuilder::Append},
         {"Insert", &TProgramBuilder::Append},
         {"Prepend", &TProgramBuilder::Prepend},

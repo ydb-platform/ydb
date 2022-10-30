@@ -2677,6 +2677,38 @@ bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& typ
     return true;
 }
 
+bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx) {
+    if (!EnsureWideFlowType(node, ctx)) {
+        return false;
+    }
+
+    auto& items = node.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    if (items.empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Expected at least one column"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isScalar;
+    for (const auto& type : items) {
+        if (!EnsureBlockOrScalarType(node.Pos(), *type, ctx)) {
+            return false;
+        }
+
+        blockItemTypes.push_back(GetBlockItemType(*type, isScalar));
+    }
+
+    if (!isScalar) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Last column should be a scalar"));
+        return false;
+    }
+
+    if (!EnsureSpecificDataType(node.Pos(), *blockItemTypes.back(), EDataSlot::Uint64, ctx)) {
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx) {
     if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);

@@ -4563,6 +4563,47 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
         .Build();
 }
 
+TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!types.ArrowResolver) {
+        return node;
+    }
+
+    if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
+        return node;
+    }
+
+    auto flowItemType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
+    if (flowItemType->GetKind() != ETypeAnnotationKind::Multi) {
+        return node;
+    }
+
+    const auto& allTypes = flowItemType->Cast<TMultiExprType>()->GetItems();
+    if (AnyOf(allTypes, [](const TTypeAnnotationNode* type) { return type->GetKind() == ETypeAnnotationKind::Block; })) {
+        return node;
+    }
+
+    bool supported = false;
+    YQL_ENSURE(types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Head().Pos()),
+                                                      TVector<const TTypeAnnotationNode*>(allTypes.begin(), allTypes.end()),
+                                                      supported, ctx));
+    if (!supported) {
+        return node;
+    }
+
+    TStringBuf newName = node->Content() == "Skip" ? "WideSkipBlocks" : "WideTakeBlocks";
+    YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
+    return ctx.Builder(node->Pos())
+        .Callable("WideFromBlocks")
+            .Callable(0, newName)
+                .Callable(0, "WideToBlocks")
+                    .Add(0, node->HeadPtr())
+                .Seal()
+                .Add(1, node->ChildPtr(1))
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("ExpandMap")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
@@ -6233,6 +6274,8 @@ struct TPeepHoleRules {
         {"WideMap", &OptimizeWideMapBlocks},
         {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
+        {"Skip", &OptimizeSkipTakeToBlocks},
+        {"Take", &OptimizeSkipTakeToBlocks},
     };
 
     TPeepHoleRules()

@@ -11691,6 +11691,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         Functions["WideToBlocks"] = &WideToBlocksWrapper;
         Functions["WideFromBlocks"] = &WideFromBlocksWrapper;
+        Functions["WideSkipBlocks"] = &WideSkipTakeBlocksWrapper;
+        Functions["WideTakeBlocks"] = &WideSkipTakeBlocksWrapper;
         Functions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;

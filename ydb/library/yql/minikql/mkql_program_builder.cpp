@@ -226,6 +226,24 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
     return multiOptional;
 }
 
+std::vector<TType*> ValidateBlockFlowType(const TType* flowType) {
+    const auto* inputTupleType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flowType)->GetItemType());
+    MKQL_ENSURE(inputTupleType->GetElementsCount() > 0, "Expected at least one column");
+    std::vector<TType*> flowItems;
+    flowItems.reserve(inputTupleType->GetElementsCount());
+    bool isScalar;
+    for (size_t i = 0; i < inputTupleType->GetElementsCount(); ++i) {
+        auto blockType = AS_TYPE(TBlockType, inputTupleType->GetElementType(i));
+        isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
+        auto withoutBlock = blockType->GetItemType();
+        flowItems.push_back(withoutBlock);
+    }
+
+    MKQL_ENSURE(isScalar, "Last column should be scalar");
+    MKQL_ENSURE(AS_TYPE(TDataType, flowItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+    return flowItems;
+}
+
 } // namespace
 
 std::string_view ScriptTypeAsStr(EScriptType type) {
@@ -1449,29 +1467,20 @@ TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
 }
 
 TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode flow) {
-    TType* outputTupleType;
-    {
-        const auto* inputTupleType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType());
-        MKQL_ENSURE(inputTupleType->GetElementsCount() > 0, "Expected at least one column");
-        std::vector<TType*> outputTupleItems;
-        outputTupleItems.reserve(inputTupleType->GetElementsCount());
-        bool isScalar;
-        for (size_t i = 0; i < inputTupleType->GetElementsCount(); ++i) {
-            auto blockType = AS_TYPE(TBlockType, inputTupleType->GetElementType(i));
-            isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-            auto withoutBlock = blockType->GetItemType();
-            outputTupleItems.push_back(withoutBlock);
-        }
-
-        MKQL_ENSURE(isScalar, "Last column should be scalar");
-        MKQL_ENSURE(AS_TYPE(TDataType, outputTupleItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-        outputTupleItems.pop_back();
-        outputTupleType = NewTupleType(outputTupleItems);
-    }
-
+    auto outputTupleItems = ValidateBlockFlowType(flow.GetStaticType());
+    outputTupleItems.pop_back();
+    TType* outputTupleType = NewTupleType(outputTupleItems);
     TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputTupleType));
     callableBuilder.Add(flow);
     return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::WideSkipBlocks(TRuntimeNode flow, TRuntimeNode count) {
+    return BuildWideSkipTakeBlocks(__func__, flow, count);
+}
+
+TRuntimeNode TProgramBuilder::WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count) {
+    return BuildWideSkipTakeBlocks(__func__, flow, count);
 }
 
 TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
@@ -2449,6 +2458,18 @@ TRuntimeNode TProgramBuilder::BuildMinMax(const std::string_view& callableName, 
     const auto half = size >> 1U;
     const std::array<TRuntimeNode, 2U> args = {{ BuildMinMax(callableName, data, half), BuildMinMax(callableName, data + half, size - half) }};
     return BuildMinMax(callableName, args.data(), args.size());
+}
+
+TRuntimeNode TProgramBuilder::BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count) {
+    ValidateBlockFlowType(flow.GetStaticType());
+
+    MKQL_ENSURE(count.GetStaticType()->IsData(), "Expected data");
+    MKQL_ENSURE(static_cast<const TDataType&>(*count.GetStaticType()).GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
+
+    TCallableBuilder callableBuilder(Env, callableName, flow.GetStaticType());
+    callableBuilder.Add(flow);
+    callableBuilder.Add(count);
+    return TRuntimeNode(callableBuilder.Build(), false);
 }
 
 TRuntimeNode TProgramBuilder::Min(const TArrayRef<const TRuntimeNode>& args) {

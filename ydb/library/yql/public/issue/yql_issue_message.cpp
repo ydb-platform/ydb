@@ -73,7 +73,7 @@ void IssueToMessage(const TIssue& topIssue, TIssueMessage* issueMessage) {
             endPosition.set_row(issue.EndPosition.Row);
             endPosition.set_column(issue.EndPosition.Column);
         }
-        message.set_message(issue.Message);
+        message.set_message(issue.GetMessage());
         message.set_issue_code(issue.GetCode());
         message.set_severity(issue.GetSeverity());
 

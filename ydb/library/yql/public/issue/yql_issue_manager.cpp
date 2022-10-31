@@ -38,15 +38,15 @@ void TIssueManager::LeaveScope() {
     if (subIssue->GetSubIssues().size() == 1) {
         auto nestedIssue = subIssue->GetSubIssues().front();
         if (!nestedIssue->GetSubIssues().empty() && nestedIssue->Position == subIssue->Position && nestedIssue->EndPosition == subIssue->EndPosition) {
-            auto msg = subIssue->Message;
-            if (nestedIssue->Message) {
+            auto msg = subIssue->GetMessage();
+            if (nestedIssue->GetMessage()) {
                 if (msg) {
                     msg.append(", ");
                 }
-                msg.append(nestedIssue->Message);
+                msg.append(nestedIssue->GetMessage());
             }
             subIssue = nestedIssue;
-            subIssue->Message = msg;
+            subIssue->SetMessage(msg);
         }
     }
     RawIssues_.pop();
@@ -149,7 +149,7 @@ bool TIssueManager::RaiseWarning(TIssue issue) {
                 if (WarningToErrorTreatMessage_) {
                     TIssue newIssue;
                     newIssue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
-                    newIssue.Message = WarningToErrorTreatMessage_.GetRef();
+                    newIssue.SetMessage(WarningToErrorTreatMessage_.GetRef());
                     newIssue.AddSubIssue(new TIssue(issue));
                     issue = newIssue;
                 }
@@ -196,7 +196,7 @@ void TIssueManager::AddIssues(const TIssues& issues) {
 
 void TIssueManager::AddIssues(const TPosition& pos, const TIssues& issues) {
     for (auto& issue: issues) {
-        if (auto p = CheckUniqAndLimit(TIssue(pos, issue.Message))) {
+        if (auto p = CheckUniqAndLimit(TIssue(pos, issue.GetMessage()))) {
             CompletedIssues_.AddIssue(*p);
         }
     }

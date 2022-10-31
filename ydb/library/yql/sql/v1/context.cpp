@@ -236,7 +236,7 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
     auto& curIssue = Issues.back();
     curIssue.Severity = severity;
     curIssue.IssueCode = code;
-    IssueMsgHolder.Reset(new TStringOutput(Issues.back().Message));
+    IssueMsgHolder.Reset(new TStringOutput(*Issues.back().MutableMessage()));
     return *IssueMsgHolder;
 }
 

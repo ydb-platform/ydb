@@ -1,9 +1,12 @@
 #include "yql_issue.h"
+#include "yql_issue_message.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
+
+#include <util/charset/utf8.h>
 
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
@@ -46,13 +49,13 @@ void ensureMessageTypesSame(const Descriptor* a, const Descriptor* b, THashSet<T
 Y_UNIT_TEST_SUITE(IssueTest) {
     Y_UNIT_TEST(Ascii) {
         TIssue issue1("тест abc");
-        UNIT_ASSERT_VALUES_EQUAL(issue1.Message, "тест abc");
+        UNIT_ASSERT_VALUES_EQUAL(issue1.GetMessage(), "тест abc");
         TIssue issue2("\xFF abc");
-        UNIT_ASSERT_VALUES_EQUAL(issue2.Message, "? abc");
+        UNIT_ASSERT_VALUES_EQUAL(issue2.GetMessage(), "? abc");
         TIssue issue3("");
-        UNIT_ASSERT_VALUES_EQUAL(issue3.Message, "");
+        UNIT_ASSERT_VALUES_EQUAL(issue3.GetMessage(), "");
         TIssue issue4("abc");
-        UNIT_ASSERT_VALUES_EQUAL(issue4.Message, "abc");
+        UNIT_ASSERT_VALUES_EQUAL(issue4.GetMessage(), "abc");
     }
 }
 
@@ -135,5 +138,48 @@ Y_UNIT_TEST_SUITE(ToOneLineStringTest) {
         issues.AddIssue(issue);
         issues.AddIssue(TPosition(100, 2, "abc.file"), "my\nmessage");
         UNIT_ASSERT_STRINGS_EQUAL(issues.ToOneLineString(), "[ { file.abc:34:12: Error: error subissue: { <main>: Error: suberror } } { abc.file:2:100: Error: my message } ]");
+    }
+}
+
+Y_UNIT_TEST_SUITE(ToMessage) {
+    Y_UNIT_TEST(NonUtf8) {
+        TString s;
+        int chars[] = {
+            0x7f,
+            0xf8,
+            0xf7,
+            0xff,
+            0xf8,
+            0x1f,
+            0xff,
+            0xf2,
+            0xaf,
+            0xbf,
+            0xfe,
+            0xfa,
+            0xf5,
+            0x7f,
+            0xfe,
+            0xfa,
+            0x27,
+            0x20,
+            0x7d,
+            0x20,
+            0x5d,
+            0x2e
+        };
+        for (int i : chars) {
+            s.append(static_cast<char>(i));
+        }
+        UNIT_ASSERT(!IsUtf(s));
+        TIssue issue;
+        issue.SetMessage(s);
+
+        Ydb::Issue::IssueMessage msg;
+        IssueToMessage(issue, &msg);
+        TString serialized;
+        UNIT_ASSERT(msg.SerializeToString(&serialized));
+        Ydb::Issue::IssueMessage msg2;
+        UNIT_ASSERT(msg2.ParseFromString(serialized));
     }
 }

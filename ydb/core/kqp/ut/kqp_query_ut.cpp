@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-            return issue.Message.Contains("ATOM evaluation is not supported in YDB queries.");
+            return issue.GetMessage().Contains("ATOM evaluation is not supported in YDB queries.");
         }));
     }
 
@@ -999,7 +999,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-                return issue.Message.Contains("EVALUATE IF is not supported in YDB queries.");
+                return issue.GetMessage().Contains("EVALUATE IF is not supported in YDB queries.");
             }));
         }
 
@@ -1011,7 +1011,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-                return issue.Message.Contains("EVALUATE is not supported in YDB queries.");
+                return issue.GetMessage().Contains("EVALUATE is not supported in YDB queries.");
             }));
         }
 
@@ -1049,7 +1049,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
-                return issue.Message.Contains("ATOM evaluation is not supported in YDB queries.");
+                return issue.GetMessage().Contains("ATOM evaluation is not supported in YDB queries.");
             }));
         }
     }
@@ -1066,7 +1066,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-            return issue.Message.Contains("Execution failed");
+            return issue.GetMessage().Contains("Execution failed");
         }));
     }
 
@@ -1099,7 +1099,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-            return issue.Message.Contains("not supported");
+            return issue.GetMessage().Contains("not supported");
         }));
 
         result = session.ExecuteDataQuery(Q_(R"(
@@ -1108,7 +1108,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-            return issue.Message.Contains("not supported");
+            return issue.GetMessage().Contains("not supported");
         }));
 
         result = session.ExecuteDataQuery(Q_(R"(
@@ -1117,7 +1117,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-            return issue.Message.Contains("not supported");
+            return issue.GetMessage().Contains("not supported");
         }));
     }
 

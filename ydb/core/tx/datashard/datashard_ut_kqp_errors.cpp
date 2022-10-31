@@ -21,7 +21,7 @@ bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::functio
 
     for (auto& issue : issues) {
         WalkThroughIssues(issue, false, [&] (const TIssue& issue, int) {
-            if (!hasIssue && issue.GetCode() == code && (!message || message == issue.Message)) {
+            if (!hasIssue && issue.GetCode() == code && (!message || message == issue.GetMessage())) {
                 hasIssue = !predicate || predicate(issue);
             }
         });
@@ -255,7 +255,7 @@ Y_UNIT_TEST(ProposeRequestUndelivered) {
         "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
 
     UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::DEFAULT_ERROR, "", [] (const TIssue& issue) {
-            return issue.Message.StartsWith("Could not deliver program to shard ");
+            return issue.GetMessage().StartsWith("Could not deliver program to shard ");
         }), record.GetResponse().DebugString());
 }
 
@@ -313,7 +313,7 @@ Y_UNIT_TEST(ProposeResultLost_RoTx) {
                 "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
 
             UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-                return issue.Message.StartsWith("Tx state unknown for shard ");
+                return issue.GetMessage().StartsWith("Tx state unknown for shard ");
             }), record.GetResponse().DebugString());
         });
 }
@@ -334,7 +334,7 @@ Y_UNIT_TEST(ProposeResultLost_RwTx) {
                "State of operation is unknown."), record.GetResponse().DebugString());
 
                UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-               return issue.Message.StartsWith("Tx state unknown for shard ");
+               return issue.GetMessage().StartsWith("Tx state unknown for shard ");
            }), record.GetResponse().DebugString());
         });
 }

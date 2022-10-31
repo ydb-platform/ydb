@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
                 [](const NYql::TIssue& issue) {
-                    return issue.Message.Contains("Given predicate is not suitable for used index: index");
+                    return issue.GetMessage().Contains("Given predicate is not suitable for used index: index");
                 }), result.GetIssues().ToString());
 
             UNIT_ASSERT(result.IsSuccess());
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
                 [](const NYql::TIssue& issue) {
-                    return issue.Message.Contains("Given predicate is not suitable for used index: index");
+                    return issue.GetMessage().Contains("Given predicate is not suitable for used index: index");
                 }), result.GetIssues().ToString());
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2000000000u]]]");

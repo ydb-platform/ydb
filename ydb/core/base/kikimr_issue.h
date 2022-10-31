@@ -35,7 +35,7 @@ inline NYql::TIssue MakeIssue(NKikimrIssues::TIssuesIds::EIssueCode id, const TS
     NYql::TIssue issue;
 
     SetIssueCode(id, issue);
-    issue.Message = message;
+    issue.SetMessage(message);
 
     return issue;
 }

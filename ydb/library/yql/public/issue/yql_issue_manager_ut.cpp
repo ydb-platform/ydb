@@ -56,10 +56,10 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         auto issues = issueManager.GetIssues();
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
         auto scopeIssue = issues.begin();
-        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A");
+        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->GetMessage(), "A");
         auto subIssues = scopeIssue->GetSubIssues();
         UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "IssueOne");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetMessage(), "IssueOne");
     }
 
     Y_UNIT_TEST(OneErrorTwoLevelsTest) {
@@ -72,13 +72,13 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         auto issues = issueManager.GetIssues();
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
         auto scopeIssue = issues.begin();
-        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A");
+        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->GetMessage(), "A");
         auto subIssues = scopeIssue->GetSubIssues();
         UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "B");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetMessage(), "B");
 
         UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues()[0]->Message, "IssueOne");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues()[0]->GetMessage(), "IssueOne");
     }
 
     Y_UNIT_TEST(MultiErrorsMultiLevelsTest) {
@@ -98,11 +98,11 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         auto subIssues = scopeIssue->GetSubIssues();
         UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues().size(), 0); //WarningScope1
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "WarningScope1");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetMessage(), "WarningScope1");
         UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues()[0]->Message, "ErrorScope3");
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[1]->Message, "ErrorScope2");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues()[0]->GetMessage(), "ErrorScope3");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[1]->GetMessage(), "ErrorScope2");
         auto ref = R"___(<main>: Error: A
     <main>: Error: WarningScope1
     <main>:1:1: Error: B
@@ -122,10 +122,10 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         auto issues = issueManager.GetIssues();
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
         auto scopeIssue = issues.begin();
-        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A");
+        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->GetMessage(), "A");
         auto subIssues = scopeIssue->GetSubIssues();
         UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "ErrorScope1");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetMessage(), "ErrorScope1");
     }
 
     Y_UNIT_TEST(FuseScopesTest) {

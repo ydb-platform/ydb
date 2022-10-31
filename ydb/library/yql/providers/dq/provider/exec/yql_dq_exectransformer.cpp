@@ -1220,7 +1220,7 @@ private:
                 }
 
                 if (error) {
-                    issue.Message = "Too big result " + trStr;
+                    issue.SetMessage("Too big result " + trStr);
                     issue.Severity = TSeverityIds::S_ERROR;
                 }
                 ctx.IssueManager.RaiseIssue(issue);
@@ -1652,7 +1652,7 @@ private:
                         }
 
                         if (neverFallback) {
-                            issue.Message = "Too big precompute result";
+                            issue.SetMessage("Too big precompute result");
                             issue.Severity = TSeverityIds::S_ERROR;
                         }
                         ctx.IssueManager.RaiseIssue(issue);

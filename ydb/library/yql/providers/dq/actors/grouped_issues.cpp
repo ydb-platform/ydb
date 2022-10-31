@@ -14,7 +14,7 @@ NYql::TIssues NYql::NDq::GroupedIssues::ToIssues() {
     });
 
     for (auto& [issue, meta]: issueVector) {
-        auto modified_issue_message = issue.Message + " " + meta.InfoString();
+        auto modified_issue_message = issue.GetMessage() + " " + meta.InfoString();
         auto modified_issue = NYql::TIssue(issue.Position, issue.EndPosition, modified_issue_message);
         issues.AddIssue(modified_issue);
     }

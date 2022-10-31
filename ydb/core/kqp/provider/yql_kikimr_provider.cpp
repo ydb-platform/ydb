@@ -642,8 +642,8 @@ bool AddDmlIssue(const TIssue& issue, bool strictDml, TExprContext& ctx) {
     if (strictDml) {
         TIssue newIssue;
         newIssue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
-        newIssue.Message = "Detected violation of logical DML constraints. YDB transactions don't see their own"
-            " changes, make sure you perform all table reads before any modifications.";
+        newIssue.SetMessage("Detected violation of logical DML constraints. YDB transactions don't see their own"
+            " changes, make sure you perform all table reads before any modifications.");
 
         newIssue.AddSubIssue(new TIssue(issue));
 

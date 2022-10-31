@@ -4697,7 +4697,7 @@ TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
 TString NormalizeName(const TStringBuf& name) {
     TString result(name);
     TMaybe<TIssue> error = NormalizeName(TPosition(), result);
-    YQL_ENSURE(error.Empty(), "" << error->Message);
+    YQL_ENSURE(error.Empty(), "" << error->GetMessage());
     return result;
 }
 
@@ -4954,7 +4954,7 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
             ctx.NewAtom(position, ToString(err.Position.Row)),
             ctx.NewAtom(position, ToString(err.Position.Column)),
             ctx.NewAtom(position, err.Position.File),
-            ctx.NewAtom(position, err.Message)
+            ctx.NewAtom(position, err.GetMessage())
         });
     }
 

@@ -196,7 +196,7 @@ void TIssues::PrintWithProgramTo(
             out << Purple() << issue.Range() << Old();
             auto color = (issue.GetSeverity() ==  TSeverityIds::S_WARNING) ? Yellow() : LightRed();
             auto severityName = SeverityToString(issue.GetSeverity());
-            out << color << ": "<< severityName << ": " << issue.Message << Old() << '\n';
+            out << color << ": "<< severityName << ": " << issue.GetMessage() << Old() << '\n';
             Indent(out, shift);
             if (issue.Position.HasValue()) {
                 out << '\t' << lines[issue.Position.Row] << '\n';

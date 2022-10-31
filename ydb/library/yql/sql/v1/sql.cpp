@@ -7234,7 +7234,7 @@ bool TGroupByClause::Build(const TRule_group_by_clause& node) {
         TString mode = Id(node.GetBlock6().GetRule_an_id2(), *this);
         TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), mode);
         if (!normalizeError.Empty()) {
-            Error() << normalizeError->Message;
+            Error() << normalizeError->GetMessage();
             Ctx.IncrementMonCounter("sql_errors", "NormalizeGroupByModeError");
             return false;
         }
@@ -9412,7 +9412,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     TString normalizedPragma(pragma);
     TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), normalizedPragma);
     if (!normalizeError.Empty()) {
-        Error() << normalizeError->Message;
+        Error() << normalizeError->GetMessage();
         Ctx.IncrementMonCounter("sql_errors", "NormalizePragmaError");
         return {};
     }

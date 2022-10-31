@@ -63,14 +63,6 @@ TIssue TruncateIssueLevels(const TIssue& topIssue, TTruncateIssueOpts opts) {
     }
     leafs.clear();
 
-    auto copyIssue = [](TIssue& target, const TIssue& src) {
-        target.Message = src.Message;
-        target.IssueCode = src.IssueCode;
-        target.Severity = src.Severity;
-        target.Position = src.Position;
-        target.EndPosition = src.EndPosition;
-    };
-
     TIssue result;
     for (auto& i: issues) {
         const auto srcIssue = std::get<0>(i);
@@ -82,7 +74,7 @@ TIssue TruncateIssueLevels(const TIssue& topIssue, TTruncateIssueOpts opts) {
 
         if (0 == level) {
             targetIssue = &result;
-            copyIssue(*targetIssue, *srcIssue);
+            targetIssue->CopyWithoutSubIssues(*srcIssue);
         } else if (visible) {
             auto& parentRec = issues.at(visibleParent);
             auto& parentTargetIssue = std::get<1>(parentRec);
@@ -96,12 +88,12 @@ TIssue TruncateIssueLevels(const TIssue& topIssue, TTruncateIssueOpts opts) {
                     parentSkipIssue = newIssue.Get();
                 }
                 auto newIssue = MakeIntrusive<TIssue>(TString{});
-                copyIssue(*newIssue, *srcIssue);
+                newIssue->CopyWithoutSubIssues(*srcIssue);
                 parentSkipIssue->AddSubIssue(newIssue);
                 targetIssue = newIssue.Get();
             } else {
                 auto newIssue = MakeIntrusive<TIssue>(TString{});
-                copyIssue(*newIssue, *srcIssue);
+                newIssue->CopyWithoutSubIssues(*srcIssue);
                 parentTargetIssue->AddSubIssue(newIssue);
                 targetIssue = newIssue.Get();
             }
@@ -111,4 +103,3 @@ TIssue TruncateIssueLevels(const TIssue& topIssue, TTruncateIssueOpts opts) {
 }
 
 } // namspace NYql
-

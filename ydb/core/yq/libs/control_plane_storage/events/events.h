@@ -120,7 +120,7 @@ namespace {
         for (const auto& issue: issues) {
             NYql::WalkThroughIssues(issue, false, [&size](const auto& issue, ui16) {
                 size += sizeof(issue);
-                size += issue.Message.size();
+                size += issue.GetMessage().size();
             });
         }
         size += issues.Size() * sizeof(NYql::TIssue);

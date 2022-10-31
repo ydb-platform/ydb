@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
             [] (const NYql::TIssue& issue) {
-                return issue.Message.Contains("exceeds limit");
+                return issue.GetMessage().Contains("exceeds limit");
         }));
     }
 
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
             [] (const NYql::TIssue& issue) {
-                return issue.Message.Contains("larger than the allowed threshold");
+                return issue.GetMessage().Contains("larger than the allowed threshold");
         }));
     }
 
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
             [] (const NYql::TIssue& issue) {
-                return issue.Message.Contains("Transaction total read size");
+                return issue.GetMessage().Contains("Transaction total read size");
             }));
 
         result = session.ExecuteDataQuery(Q_(R"(
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
             [] (const NYql::TIssue& issue) {
-                return issue.Message.Contains("Memory limit exceeded");
+                return issue.GetMessage().Contains("Memory limit exceeded");
             }));
     }
 

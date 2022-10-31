@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TIssuesBufferTest) {
 
         const auto dumps = buffer.Dump();
         UNIT_ASSERT_VALUES_EQUAL(dumps.size(), 1);
-        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->Message, "issue1");
+        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->GetMessage(), "issue1");
     }
 
     Y_UNIT_TEST(TestPushWithOverflow) {
@@ -41,8 +41,8 @@ Y_UNIT_TEST_SUITE(TIssuesBufferTest) {
 
         const auto dumps = buffer.Dump();
         UNIT_ASSERT_VALUES_EQUAL(dumps.size(), 2);
-        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->Message, "issue2");
-        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(1).Issues.begin()->Message, "issue3");
+        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->GetMessage(), "issue2");
+        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(1).Issues.begin()->GetMessage(), "issue3");
     }
 
     Y_UNIT_TEST(TestSmallBuffer) {
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TIssuesBufferTest) {
 
         const auto dumps = buffer.Dump();
         UNIT_ASSERT_VALUES_EQUAL(dumps.size(), 1);
-        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->Message, "issue3");
+        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->GetMessage(), "issue3");
     }
 
     Y_UNIT_TEST(TestUseAfterDump) {
@@ -79,8 +79,8 @@ Y_UNIT_TEST_SUITE(TIssuesBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(buffer.GetAllAddedIssuesCount(), 4);
         const auto dumps = buffer.Dump();
         UNIT_ASSERT_VALUES_EQUAL(dumps.size(), 2);
-        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->Message, "issue3");
-        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(1).Issues.begin()->Message, "issue4");
+        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->GetMessage(), "issue3");
+        UNIT_ASSERT_STRINGS_EQUAL(dumps.at(1).Issues.begin()->GetMessage(), "issue4");
     }
 }
 

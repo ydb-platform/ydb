@@ -146,7 +146,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
         TBase::Writer.OnListItem();
         TBase::Writer.OnStringScalar(err.Position.File);
         TBase::Writer.OnListItem();
-        TBase::Writer.OnStringScalar(err.Message);
+        TBase::Writer.OnStringScalar(err.GetMessage());
         TBase::Writer.OnEndList();
     }
 

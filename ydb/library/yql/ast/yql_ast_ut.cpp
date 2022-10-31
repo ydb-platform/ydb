@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT(false == ast.IsOk());
         UNIT_ASSERT(false == !!ast.Root);
         UNIT_ASSERT(false == ast.Issues.Empty());
-        UNIT_ASSERT_STRINGS_EQUAL(ast.Issues.begin()->Message, expectedError);
+        UNIT_ASSERT_STRINGS_EQUAL(ast.Issues.begin()->GetMessage(), expectedError);
     }
 
     Y_UNIT_TEST(BadArbitraryAtom) {

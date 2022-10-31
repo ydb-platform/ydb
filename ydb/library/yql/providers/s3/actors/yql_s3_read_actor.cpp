@@ -547,7 +547,7 @@ private:
         } catch (const TDtorException&) {
             throw;
         } catch (const std::exception& err) {
-            exceptIssue.Message = TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what();
+            exceptIssue.SetMessage(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what());
             fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
@@ -565,7 +565,7 @@ private:
             Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));
         }
 
-        if (exceptIssue.Message) {
+        if (exceptIssue.GetMessage()) {
             Issues.AddIssue(exceptIssue);
         }
 

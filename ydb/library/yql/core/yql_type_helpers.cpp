@@ -93,7 +93,7 @@ const TTypeAnnotationNode* GetSequenceItemType(NNodes::TExprBase listNode, bool 
     TIssue error;
     if (!SilentGetSequenceItemType({}, *listNode.Ref().GetTypeAnn(), allowMultiIO, itemType, error)) {
         // position is not used
-        YQL_ENSURE(false, "" << error.Message);
+        YQL_ENSURE(false, "" << error.GetMessage());
     }
     return itemType;
 }

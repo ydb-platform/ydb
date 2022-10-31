@@ -782,8 +782,8 @@ namespace {
                 TAstNode::NewLiteralAtom(TPosition(), err.Position.File, pool, TNodeFlags::ArbitraryContent) :
                 TAstNode::NewAtom(TPosition(), err.Position.File, pool, TNodeFlags::ArbitraryContent);
             auto message = refAtoms ?
-                TAstNode::NewLiteralAtom(TPosition(), err.Message, pool, TNodeFlags::ArbitraryContent) :
-                TAstNode::NewAtom(TPosition(), err.Message, pool, TNodeFlags::ArbitraryContent);
+                TAstNode::NewLiteralAtom(TPosition(), err.GetMessage(), pool, TNodeFlags::ArbitraryContent) :
+                TAstNode::NewAtom(TPosition(), err.GetMessage(), pool, TNodeFlags::ArbitraryContent);
             return TAstNode::NewList(TPosition(), pool, self, row, column, file, message);
         }
 

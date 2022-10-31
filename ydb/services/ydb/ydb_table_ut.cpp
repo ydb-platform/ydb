@@ -54,7 +54,7 @@ bool HasIssue(const NYql::TIssues& issues, ui32 code, std::string_view message,
 
     for (auto& issue : issues) {
         NYql::WalkThroughIssues(issue, false, [&] (const NYql::TIssue& issue, int) {
-            if (!hasIssue && issue.GetCode() == code && (message.empty() || message == issue.Message)) {
+            if (!hasIssue && issue.GetCode() == code && (message.empty() || message == issue.GetMessage())) {
                 hasIssue = !predicate || predicate(issue);
             }
         });

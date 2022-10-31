@@ -109,10 +109,10 @@ class TIssue;
 using TIssuePtr = TIntrusivePtr<TIssue>;
 class TIssue: public TThrRefBase {
     TVector<TIntrusivePtr<TIssue>> Children_;
+    TString Message;
 public:
     TPosition Position;
     TPosition EndPosition;
-    TString Message;
     TIssueCode IssueCode = 0U;
     ESeverity Severity = TSeverityIds::S_ERROR;
 
@@ -120,18 +120,18 @@ public:
 
     template <typename T>
     explicit TIssue(const T& message)
-        : Position(TPosition())
+        : Message(message)
+        , Position(TPosition())
         , EndPosition(TPosition())
-        , Message(message)
     {
         SanitizeNonAscii(Message);
     }
 
     template <typename T>
     TIssue(TPosition position, const T& message)
-        : Position(position)
+        : Message(message)
+        , Position(position)
         , EndPosition(position)
-        , Message(message)
     {
         SanitizeNonAscii(Message);
     }
@@ -142,9 +142,9 @@ public:
 
     template <typename T>
     TIssue(TPosition position, TPosition endPosition, const T& message)
-        : Position(position)
+        : Message(message)
+        , Position(position)
         , EndPosition(endPosition)
-        , Message(message)
     {
         SanitizeNonAscii(Message);
     }
@@ -169,12 +169,22 @@ public:
         return *this;
     }
 
+    TIssue& SetMessage(const TString& msg) {
+        Message = msg;
+        SanitizeNonAscii(Message);
+        return *this;
+    }
+
     ESeverity GetSeverity() const {
         return Severity;
     }
 
     TIssueCode GetCode() const {
         return IssueCode;
+    }
+
+    const TString& GetMessage() const {
+        return Message;
     }
 
     TIssue& AddSubIssue(TIntrusivePtr<TIssue> issue) {
@@ -193,6 +203,20 @@ public:
         TStringStream out;
         PrintTo(out, oneLine);
         return out.Str();
+    }
+
+    // Unsafe method. Doesn't call SanitizeNonAscii(Message)
+    TString* MutableMessage() {
+        return &Message;
+    }
+
+    TIssue& CopyWithoutSubIssues(const TIssue& src) {
+        Message = src.Message;
+        IssueCode = src.IssueCode;
+        Severity = src.Severity;
+        Position = src.Position;
+        EndPosition = src.EndPosition;
+        return *this;
     }
 };
 
@@ -246,7 +270,7 @@ public:
     inline void AddIssues(const TPosition& pos, const TIssues& errors) {
         Issues_.reserve(Issues_.size() + errors.Size());
         for (const auto& e: errors) {
-            Issues_.push_back(TIssue(pos, e.Message));
+            Issues_.push_back(TIssue(pos, e.GetMessage()));
         }
     }
 

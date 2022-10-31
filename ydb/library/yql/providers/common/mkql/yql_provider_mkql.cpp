@@ -1464,18 +1464,18 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto rightTupleType = rightItemType->Cast<TMultiExprType>();
         const auto outputTupleType = outputItemType->Cast<TMultiExprType>();
 
-        node.Child(3)->ForEachChild([&](TExprNode& child){ 
-            leftKeyColumns.emplace_back(*GetFieldPosition(*leftTupleType, child.Content())); 
+        node.Child(3)->ForEachChild([&](TExprNode& child){
+            leftKeyColumns.emplace_back(*GetFieldPosition(*leftTupleType, child.Content()));
             });
-        node.Child(4)->ForEachChild([&](TExprNode& child){ 
+        node.Child(4)->ForEachChild([&](TExprNode& child){
             rightKeyColumns.emplace_back(*GetFieldPosition(*rightTupleType, child.Content())); });
         bool s = false;
-        node.Child(5)->ForEachChild([&](TExprNode& child){ 
+        node.Child(5)->ForEachChild([&](TExprNode& child){
             leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *leftTupleType : *outputTupleType, child.Content())); });
         s = false;
         node.Child(6)->ForEachChild([&](TExprNode& child){
-            rightRenames.emplace_back(*GetFieldPosition((s = !s) ?  *rightTupleType : *outputTupleType, child.Content())); 
-            
+            rightRenames.emplace_back(*GetFieldPosition((s = !s) ?  *rightTupleType : *outputTupleType, child.Content()));
+
             });
 
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
@@ -1708,7 +1708,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         TMaybe<ui64> itemsCount;
         bool isCompact;
         if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) {
-            ythrow TNodeException(node) << error->Message;
+            ythrow TNodeException(node) << error->GetMessage();
         }
 
         const auto factory = *isHashed ? &TProgramBuilder::ToHashedDict : &TProgramBuilder::ToSortedDict;
@@ -1726,7 +1726,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         TMaybe<ui64> itemsCount;
         bool isCompact;
         if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) {
-            ythrow TNodeException(node) << error->Message;
+            ythrow TNodeException(node) << error->GetMessage();
         }
 
         const auto factory = *isHashed ? &TProgramBuilder::SqueezeToHashedDict : &TProgramBuilder::SqueezeToSortedDict;
@@ -1744,7 +1744,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         TMaybe<ui64> itemsCount;
         bool isCompact;
         if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) {
-            ythrow TNodeException(node) << error->Message;
+            ythrow TNodeException(node) << error->GetMessage();
         }
 
         const auto factory = *isHashed ? &TProgramBuilder::NarrowSqueezeToHashedDict : &TProgramBuilder::NarrowSqueezeToSortedDict;
@@ -2123,12 +2123,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("Error", [](const TExprNode& node, TMkqlBuildContext& ctx)->NKikimr::NMiniKQL::TRuntimeNode {
         const auto err = node.GetTypeAnn()->Cast<TErrorExprType>()->GetError();
-        ythrow TNodeException(ctx.ExprCtx.AppendPosition(err.Position)) << err.Message;
+        ythrow TNodeException(ctx.ExprCtx.AppendPosition(err.Position)) << err.GetMessage();
     });
 
     AddCallable("ErrorType", [](const TExprNode& node, TMkqlBuildContext& ctx)->NKikimr::NMiniKQL::TRuntimeNode {
         const auto err = node.GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TErrorExprType>()->GetError();
-        ythrow TNodeException(ctx.ExprCtx.AppendPosition(err.Position)) << err.Message;
+        ythrow TNodeException(ctx.ExprCtx.AppendPosition(err.Position)) << err.GetMessage();
     });
 
     AddCallable("Join", [](const TExprNode& node, TMkqlBuildContext& ctx) {

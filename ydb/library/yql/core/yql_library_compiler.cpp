@@ -94,8 +94,8 @@ bool CompileLibrary(const TString& alias, const TString& script, TExprContext& c
         for (const auto& originalError : res.Issues) {
             TIssue error(originalError);
             TStringBuilder message;
-            message << error.Message << " (at " << alias << ")";
-            error.Message = message;
+            message << error.GetMessage() << " (at " << alias << ")";
+            error.SetMessage(message);
             ctx.AddError(error);
         }
         return false;

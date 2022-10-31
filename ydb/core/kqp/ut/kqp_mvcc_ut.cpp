@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
 
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
                 [](const NYql::TIssue& issue){
-                    return issue.Message.Contains("stale snapshot");
+                    return issue.GetMessage().Contains("stale snapshot");
                 }), result.GetIssues().ToString());
 
             caught = true;

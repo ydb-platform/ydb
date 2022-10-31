@@ -392,7 +392,7 @@ Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
     if constexpr (EnableInplaceUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-            return issue.Message.Contains("READ_SIZE_EXECEEDED");
+            return issue.GetMessage().Contains("READ_SIZE_EXECEEDED");
         }));
     } else {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

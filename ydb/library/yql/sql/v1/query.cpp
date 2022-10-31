@@ -477,7 +477,7 @@ public:
             TString hintName = hint.first;
             TMaybe<TIssue> normalizeError = NormalizeName(Pos, hintName);
             if (!normalizeError.Empty()) {
-                ctx.Error() << normalizeError->Message;
+                ctx.Error() << normalizeError->GetMessage();
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
@@ -536,7 +536,7 @@ public:
             TString hintName = hint.first;
             TMaybe<TIssue> normalizeError = NormalizeName(Pos, hintName);
             if (!normalizeError.Empty()) {
-                ctx.Error() << normalizeError->Message;
+                ctx.Error() << normalizeError->GetMessage();
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }

@@ -3191,7 +3191,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     if (ns.empty()) {
         TMaybe<TIssue> error = NormalizeName(pos, normalizedName);
         if (!error.Empty()) {
-            return new TInvalidBuiltin(pos, error->Message);
+            return new TInvalidBuiltin(pos, error->GetMessage());
         }
 
         auto coreFunc = coreFuncs.find(normalizedName);
@@ -3439,7 +3439,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             auto aggNormalizedName = *args[0]->GetLiteral("String");
             auto error = NormalizeName(pos, aggNormalizedName);
             if (!error.Empty()) {
-                return new TInvalidBuiltin(pos, error->Message);
+                return new TInvalidBuiltin(pos, error->GetMessage());
             }
 
             if (aggNormalizedName == "aggregateby") {

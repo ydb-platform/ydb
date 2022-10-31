@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TWrapperTests) {
         PGParse(TString(" \n  SELECT1"), events);
         UNIT_ASSERT(!events.Result);
         UNIT_ASSERT(events.Issue);
-        auto msg = events.Issue->Message;
+        auto msg = events.Issue->GetMessage();
         UNIT_ASSERT_NO_DIFF(msg, "syntax error at or near \"SELECT1\"");
         UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 2);
         UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 3);
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TMTWrapperTests) {
                     PGParse(TString(" \n  SELECT1"), events);
                     Y_ENSURE(!events.Result);
                     Y_ENSURE(events.Issue);
-                    auto msg = events.Issue->Message;
+                    auto msg = events.Issue->GetMessage();
                     Y_ENSURE(msg == "syntax error at or near \"SELECT1\"");
                     Y_ENSURE(events.Issue->Position.Row == 2);
                     Y_ENSURE(events.Issue->Position.Column == 3);

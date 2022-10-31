@@ -1433,7 +1433,7 @@ private:
             Out_ << pos.Row << ':' << pos.Column << ':';
         }
 
-        EscapeArbitraryAtom(type.GetError().Message, '\'', &Out_);
+        EscapeArbitraryAtom(type.GetError().GetMessage(), '\'', &Out_);
         Out_ << '>';
     }
 

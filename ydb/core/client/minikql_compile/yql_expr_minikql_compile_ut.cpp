@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         TConvertResult result;
         UNIT_ASSERT(!TryProgramText2Bin(programText, services, result));
         UNIT_ASSERT(!result.Errors.Empty());
-        UNIT_ASSERT_NO_DIFF(result.Errors.begin()->Message, "At function: SelectRange");
+        UNIT_ASSERT_NO_DIFF(result.Errors.begin()->GetMessage(), "At function: SelectRange");
     }
 
     Y_UNIT_TEST(Extract) {

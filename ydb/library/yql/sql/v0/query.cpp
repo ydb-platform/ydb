@@ -329,7 +329,7 @@ public:
         for (auto& hint: Hints) {
             TMaybe<TIssue> normalizeError = NormalizeName(Pos, hint);
             if (!normalizeError.Empty()) {
-                ctx.Error() << normalizeError->Message;
+                ctx.Error() << normalizeError->GetMessage();
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }

@@ -378,7 +378,7 @@ bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRul
         }
         iManager.AddScope([this]() {
             TIssuePtr issueHolder = new TIssue();
-            issueHolder->Message = TStringBuilder() << "Parse " << SourceSyntax_;
+            issueHolder->SetMessage(TStringBuilder() << "Parse " << SourceSyntax_);
             issueHolder->Severity = TSeverityIds::S_INFO;
             return issueHolder;
         });

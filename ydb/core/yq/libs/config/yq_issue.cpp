@@ -8,28 +8,28 @@ namespace NYq {
 NYql::TIssue MakeFatalIssue(TIssuesIds::EIssueCode id, const TString& message) {
     NYql::TIssue issue;
     issue.SetCode(id, NYql::TSeverityIds::S_FATAL);
-    issue.Message = message;
+    issue.SetMessage(message);
     return issue;
 }
 
 NYql::TIssue MakeErrorIssue(TIssuesIds::EIssueCode id, const TString& message) {
     NYql::TIssue issue;
     issue.SetCode(id, NYql::TSeverityIds::S_ERROR);
-    issue.Message = message;
+    issue.SetMessage(message);
     return issue;
 }
 
 NYql::TIssue MakeWarningIssue(TIssuesIds::EIssueCode id, const TString& message) {
     NYql::TIssue issue;
     issue.SetCode(id, NYql::TSeverityIds::S_WARNING);
-    issue.Message = message;
+    issue.SetMessage(message);
     return issue;
 }
 
 NYql::TIssue MakeInfoIssue(TIssuesIds::EIssueCode id, const TString& message) {
     NYql::TIssue issue;
     issue.SetCode(id, NYql::TSeverityIds::S_INFO);
-    issue.Message = message;
+    issue.SetMessage(message);
     return issue;
 }
 

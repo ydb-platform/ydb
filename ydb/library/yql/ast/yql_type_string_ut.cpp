@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
         UNIT_ASSERT(res == nullptr);
         UNIT_ASSERT(!errors.Empty());
         errors.PrintWithProgramTo(Cerr, "-memory-", TString(prog));
-        UNIT_ASSERT_STRINGS_EQUAL(errors.begin()->Message, expectedError);
+        UNIT_ASSERT_STRINGS_EQUAL(errors.begin()->GetMessage(), expectedError);
         UNIT_ASSERT_VALUES_EQUAL(errors.begin()->Position.Column, column);
     }
 

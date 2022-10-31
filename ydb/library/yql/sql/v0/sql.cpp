@@ -4574,7 +4574,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     TString normalizedPragma(pragma);
     TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), normalizedPragma);
     if (!normalizeError.Empty()) {
-        Error() << normalizeError->Message;
+        Error() << normalizeError->GetMessage();
         Ctx.IncrementMonCounter("sql_errors", "NormalizePragmaError");
         return {};
     }

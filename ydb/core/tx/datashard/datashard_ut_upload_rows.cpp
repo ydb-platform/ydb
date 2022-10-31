@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         // Upsert some initial values
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
-        TString sessionId = CreateSession(runtime, sender);
+        TString sessionId = CreateSessionRPC(runtime);
 
         // Begin transaction reading key 3
         TString txId;

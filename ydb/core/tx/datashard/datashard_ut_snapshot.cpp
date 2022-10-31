@@ -1009,7 +1009,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
             auto reqSender = runtime.AllocateEdgeActor();
-            sessionId = CreateSession(runtime, reqSender);
+            sessionId = CreateSessionRPC(runtime);
             auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -1124,7 +1124,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
             auto reqSender = runtime.AllocateEdgeActor();
-            sessionId = CreateSession(runtime, reqSender);
+            sessionId = CreateSessionRPC(runtime);
             auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -1313,7 +1313,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
             auto reqSender = runtime.AllocateEdgeActor();
-            sessionId = CreateSession(runtime, reqSender);
+            sessionId = CreateSessionRPC(runtime);
             auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -1349,7 +1349,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Arrange for a distributed tx stuck at readset exchange
         auto senderBlocker = runtime.AllocateEdgeActor();
-        TString sessionIdBlocker = CreateSession(runtime, senderBlocker);
+        TString sessionIdBlocker = CreateSessionRPC(runtime);
         TString txIdBlocker;
         {
             auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"(
@@ -1695,9 +1695,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We should have been acquiring locks
         TLockSnapshot snapshot = observer.Last;
@@ -1720,9 +1718,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // Perform another read using the first snapshot tx, it must see its own writes
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1731,10 +1727,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
 
         // Now commit with additional changes (temporarily needed to trigger lock commits)
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1752,11 +1746,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-            "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
     }
 
     Y_UNIT_TEST(MvccSnapshotLockedWritesRestart) {
@@ -1801,9 +1793,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We should have been acquiring locks
         TLockSnapshot snapshot = observer.Last;
@@ -1831,9 +1821,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // Perform another read using the first snapshot tx, it must see its own writes
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1842,10 +1830,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
 
         // Now commit with additional changes (temporarily needed to trigger lock commits)
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1863,11 +1849,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-            "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
     }
 
     Y_UNIT_TEST(MvccSnapshotLockedWritesWithoutConflicts) {
@@ -1910,9 +1894,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -1952,9 +1934,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // Send a dummy upsert that we will be used as commit carrier for tx 123
         observer.InjectClearTasks = true;
@@ -1974,10 +1954,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, { items { uint32_value: 2 } items { uint32_value: 21 } }");
 
         // Send a dummy upsert that we will be used as commit carrier for tx 234
         observer.InjectClearTasks = true;
@@ -1997,10 +1974,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 22 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }");
 
         // The still open read tx must have broken locks now
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2050,9 +2025,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -2092,9 +2065,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // Verify the open tx can commit writes (not broken yet)
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2121,11 +2092,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 22 } } } "
-            "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
 
         // Send a dummy upsert that we will be used as commit carrier for tx 123
         // It must not be able to commit, since it was broken by tx 234
@@ -2229,9 +2198,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -2391,9 +2358,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -2436,10 +2401,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } Struct { Optional { Uint32: 201 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 21 } items { uint32_value: 201 } }");
         observer.Inject = {};
 
         // Commit changes in tx 123
@@ -2464,10 +2427,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 22 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }");
         observer.Inject = {};
 
         // Read uncommitted rows in tx 234 with the limit 1
@@ -2482,9 +2443,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 ORDER BY key
                 LIMIT 1
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } items { uint32_value: 1 } }");
         observer.Inject = {};
 
         // Read uncommitted rows in tx 234 with the limit 1
@@ -2542,9 +2501,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -2644,9 +2601,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -2735,9 +2690,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -2790,20 +2743,18 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 21 } }");
+
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, Q_(R"(
                 SELECT key, value FROM `/Root/table-2`
                 WHERE key >= 10 AND key <= 30
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 10 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 20 } } Struct { Optional { Uint32: 21 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 10 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 21 } }");
+
     }
 
     Y_UNIT_TEST(LockedWriteDistributedCommitAborted) {
@@ -2848,9 +2799,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -2910,19 +2859,16 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, Q_(R"(
                 SELECT key, value FROM `/Root/table-2`
                 WHERE key >= 10 AND key <= 30
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 10 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 20 } } Struct { Optional { Uint32: 22 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 10 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 22 } }");
     }
 
     Y_UNIT_TEST(LockedWriteDistributedCommitFreeze) {
@@ -2967,9 +2913,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -3030,9 +2974,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         observer.UnblockReadSets();
 
@@ -3091,9 +3033,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -3189,9 +3129,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         observer.UnblockReadSets();
 
@@ -3214,22 +3152,19 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
-            "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 21 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 21 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 21 } }");
+
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, Q_(R"(
                 SELECT key, value FROM `/Root/table-2`
                 WHERE key >= 10 AND key <= 30
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 10 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 20 } } Struct { Optional { Uint32: 21 } } } "
-            "List { Struct { Optional { Uint32: 30 } } Struct { Optional { Uint32: 21 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 10 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 21 } }, "
+            "{ items { uint32_value: 30 } items { uint32_value: 21 } }");
     }
 
     Y_UNIT_TEST(LockedWriteCleanupOnSplit) {
@@ -3272,9 +3207,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -3373,9 +3306,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -3446,10 +3377,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 21 } }");
 
         // Check table copy does not have those changes
         UNIT_ASSERT_VALUES_EQUAL(
@@ -3458,9 +3387,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
     }
 
     Y_UNIT_TEST_TWIN(LockedWriteWithAsyncIndex, WithRestart) {

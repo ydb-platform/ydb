@@ -686,7 +686,7 @@ key = 4, value = (empty maybe)
             (3, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp));
         )");
 
-        TString sessionId = CreateSession(runtime, sender);
+        TString sessionId = CreateSessionRPC(runtime);
 
         TString txId;
         {

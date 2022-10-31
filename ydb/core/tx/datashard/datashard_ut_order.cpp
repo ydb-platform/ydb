@@ -1435,7 +1435,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -1571,7 +1571,7 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -1706,7 +1706,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, UseMvcc) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -1816,7 +1816,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, UseMvcc) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -1937,7 +1937,7 @@ Y_UNIT_TEST(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -2082,7 +2082,7 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -2223,7 +2223,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -2369,7 +2369,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -2553,7 +2553,7 @@ Y_UNIT_TEST_TWIN(TestCopyTableNoDeadlock, UseMvcc) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -3210,7 +3210,7 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -3978,7 +3978,7 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, UseMvcc) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -4089,7 +4089,7 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, UseMvcc) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1)"));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -4238,9 +4238,9 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     auto prevObserver = runtime.SetObserverFunc(blockCommits);
 
     auto sender1 = runtime.AllocateEdgeActor();
-    TString sessionId1 = CreateSession(runtime, sender1, "/Root");
+    TString sessionId1 = CreateSessionRPC(runtime, "/Root");
     auto sender2 = runtime.AllocateEdgeActor();
-    TString sessionId2 = CreateSession(runtime, sender2, "/Root");
+    TString sessionId2 = CreateSessionRPC(runtime, "/Root");
 
     SendRequest(runtime, sender1, MakeBeginRequest(sessionId1, Q_(R"(
         SELECT * FROM `/Root/table-1`
@@ -4330,7 +4330,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
 
     SimulateSleep(server, TDuration::Seconds(1));
 
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
 
     // Start transaction by reading from both tables, we will only set locks
     // to currently existing variables
@@ -4403,7 +4403,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
     SimulateSleep(server, TDuration::Seconds(1));
 
     // Start transaction by reading from both tables
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
     TString txId;
     {
         Cerr << "... performing the first select" << Endl;
@@ -4419,7 +4419,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
 
     // Arrange for another distributed tx stuck at readset exchange
     auto senderBlocker = runtime.AllocateEdgeActor();
-    TString sessionIdBlocker = CreateSession(runtime, senderBlocker);
+    TString sessionIdBlocker = CreateSessionRPC(runtime);
     TString txIdBlocker;
     {
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"(
@@ -4534,7 +4534,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
 
     // Arrange for a distributed tx stuck at readset exchange
     auto senderBlocker = runtime.AllocateEdgeActor();
-    TString sessionIdBlocker = CreateSession(runtime, senderBlocker);
+    TString sessionIdBlocker = CreateSessionRPC(runtime);
     TString txIdBlocker;
     {
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"(
@@ -4588,7 +4588,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
     SimulateSleep(server, TDuration::Seconds(1));
 
     // Start a transaction by reading from both tables
-    TString sessionId = CreateSession(runtime, sender);
+    TString sessionId = CreateSessionRPC(runtime);
     TString txId;
     {
         Cerr << "... performing the first select" << Endl;
@@ -4650,7 +4650,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
 
     auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
         auto reqSender = runtime.AllocateEdgeActor();
-        sessionId = CreateSession(runtime, reqSender);
+        sessionId = CreateSessionRPC(runtime);
         auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -5045,7 +5045,7 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
 
     auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
         auto reqSender = runtime.AllocateEdgeActor();
-        sessionId = CreateSession(runtime, reqSender);
+        sessionId = CreateSessionRPC(runtime);
         auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -5183,7 +5183,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
 
     auto beginTx = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
         auto reqSender = runtime.AllocateEdgeActor();
-        sessionId = CreateSession(runtime, reqSender);
+        sessionId = CreateSessionRPC(runtime);
         auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -5417,9 +5417,7 @@ Y_UNIT_TEST(UncommittedReads) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
     // Make sure we are at the max immediate write edge for current step and it's confirmed
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2)"));

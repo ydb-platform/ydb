@@ -336,8 +336,9 @@ public:
         }
 
         /* set NodeId using reverse order */
+        ui64 firstPlanNodeId = SerializerCtx.PlanNodeId - QueryPlanNodes.size() + 1;
         for (auto& [id, planNode] : QueryPlanNodes) {
-            planNode.NodeId = SerializerCtx.PlanNodeId - id + 1;
+            planNode.NodeId = firstPlanNodeId + SerializerCtx.PlanNodeId - id;
         }
     }
 

@@ -97,13 +97,13 @@
                         "Parent Relationship": "InitPlan"
                     },
                     {
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 11,
                         "Plans": [
                             {
                                 "Tables": [
                                     "base_write_multi_usage_script_script/Temp"
                                 ],
-                                "PlanNodeId": 3,
+                                "PlanNodeId": 10,
                                 "Operators": [
                                     {
                                         "Name": "Upsert",
@@ -121,13 +121,13 @@
                         "Node Type": "Effect"
                     },
                     {
-                        "PlanNodeId": 2,
+                        "PlanNodeId": 9,
                         "Plans": [
                             {
                                 "Tables": [
                                     "base_write_multi_usage_script_script/Input1"
                                 ],
-                                "PlanNodeId": 1,
+                                "PlanNodeId": 8,
                                 "Operators": [
                                     {
                                         "Name": "Delete",

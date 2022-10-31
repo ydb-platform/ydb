@@ -84,13 +84,13 @@
                         "Parent Relationship": "InitPlan"
                     },
                     {
-                        "PlanNodeId": 2,
+                        "PlanNodeId": 7,
                         "Plans": [
                             {
                                 "Tables": [
                                     "base_write_multi_usage_key_script_script/Temp"
                                 ],
-                                "PlanNodeId": 1,
+                                "PlanNodeId": 6,
                                 "Operators": [
                                     {
                                         "Name": "Upsert",

@@ -159,16 +159,16 @@
                         "Parent Relationship": "InitPlan"
                     },
                     {
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 9,
                         "Plans": [
                             {
-                                "PlanNodeId": 3,
+                                "PlanNodeId": 8,
                                 "Plans": [
                                     {
-                                        "PlanNodeId": 2,
+                                        "PlanNodeId": 7,
                                         "Plans": [
                                             {
-                                                "PlanNodeId": 1,
+                                                "PlanNodeId": 6,
                                                 "Operators": [
                                                     {
                                                         "Iterator": "%kqp%tx_result_binding_0_0",
@@ -323,16 +323,16 @@
                         "Parent Relationship": "InitPlan"
                     },
                     {
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 9,
                         "Plans": [
                             {
-                                "PlanNodeId": 3,
+                                "PlanNodeId": 8,
                                 "Plans": [
                                     {
-                                        "PlanNodeId": 2,
+                                        "PlanNodeId": 7,
                                         "Plans": [
                                             {
-                                                "PlanNodeId": 1,
+                                                "PlanNodeId": 6,
                                                 "Operators": [
                                                     {
                                                         "Iterator": "%kqp%tx_result_binding_0_0",

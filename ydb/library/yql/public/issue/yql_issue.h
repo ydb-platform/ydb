@@ -270,7 +270,10 @@ public:
     inline void AddIssues(const TPosition& pos, const TIssues& errors) {
         Issues_.reserve(Issues_.size() + errors.Size());
         for (const auto& e: errors) {
-            Issues_.push_back(TIssue(pos, e.GetMessage()));
+            TIssue& issue = Issues_.emplace_back();
+            *issue.MutableMessage() = e.GetMessage(); // No need to sanitize message, it has already been sanitized.
+            issue.Position = pos;
+            issue.SetCode(e.IssueCode, e.Severity);
         }
     }
 

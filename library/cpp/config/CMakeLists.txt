@@ -31,11 +31,13 @@ add_custom_command(
   OUTPUT
   ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
   DEPENDS
+  ${TOOLS_ROOT}/tools/archiver/archiver
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua
   COMMAND
   ${TOOLS_ROOT}/tools/archiver/archiver
   -q
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua
-  :
+  -x
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua:
   -o
   ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
 )

@@ -30,11 +30,14 @@ add_custom_command(
   OUTPUT
   ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
   DEPENDS
+  ${TOOLS_ROOT}/tools/archiver/archiver
+  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua
   ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua
   COMMAND
   ${TOOLS_ROOT}/tools/archiver/archiver
   -q
-  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua
+  -x
+  ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua:
   ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua:
   -o
   ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc

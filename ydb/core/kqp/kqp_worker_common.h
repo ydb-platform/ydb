@@ -127,4 +127,8 @@ void SlowLogQuery(const TActorContext &ctx, const NYql::TKikimrConfiguration* co
 NYql::EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest);
 NYql::TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings);
 
+inline bool IsDocumentApiRestricted(const TString& requestType) {
+    return requestType != "_document_api_request"sv;
+}
+
 }

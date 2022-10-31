@@ -84,6 +84,7 @@ struct TKqpQueryState {
 
     ui64 CurrentTx = 0;
     TString TraceId;
+    bool IsDocumentApiRestricted = false;
 
     TInstant StartTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
@@ -332,6 +333,7 @@ public:
         QueryState->Sender = ev->Sender;
         QueryState->ProxyRequestId = proxyRequestId;
         QueryState->TraceId = requestInfo.GetTraceId();
+        QueryState->IsDocumentApiRestricted = IsDocumentApiRestricted(event.GetRequestType());
         QueryState->StartTime = TInstant::Now();
         QueryState->UserToken = event.GetUserToken();
         QueryState->QueryDeadlines = GetQueryDeadlines(queryRequest);
@@ -480,6 +482,10 @@ public:
 
             default:
                 YQL_ENSURE(false);
+        }
+
+        if (query) {
+            query->Settings.DocumentApiRestricted = QueryState->IsDocumentApiRestricted;
         }
 
         auto compileDeadline = QueryState->QueryDeadlines.TimeoutAt;

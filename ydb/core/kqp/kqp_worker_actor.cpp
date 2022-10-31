@@ -41,8 +41,6 @@ void FailForcedNewEngineExecutionForTests(bool fail) {
 
 namespace {
 
-constexpr std::string_view DocumentApiRequestType = "_document_api_request"sv;
-
 using TQueryResult = IKqpHost::TQueryResult;
 
 struct TKqpQueryState {
@@ -2039,10 +2037,6 @@ private:
         }
 
         return Nothing();
-    }
-
-    static bool IsDocumentApiRestricted(const TString& requestType) {
-        return requestType != DocumentApiRequestType;
     }
 
     static TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {

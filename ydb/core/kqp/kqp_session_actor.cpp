@@ -103,6 +103,15 @@ struct TKqpQueryState {
     bool Commited = false;
 
     NTopic::TTopicOperations TopicOperations;
+    TDuration CpuTime;
+
+    std::optional<NCpuTime::TCpuTimer> GetTimer() {
+        return {CpuTime};
+    }
+};
+
+class TTimer {
+
 };
 
 struct TKqpCleanupCtx {
@@ -301,6 +310,7 @@ public:
         }
 
         MakeNewQueryState();
+        auto timer = QueryState->GetTimer();
         QueryState->Request.Swap(event.MutableRequest());
         auto& queryRequest = QueryState->Request;
 
@@ -509,6 +519,7 @@ public:
 
     void HandleCompile(TEvKqp::TEvCompileResponse::TPtr& ev) {
         auto compileResult = ev->Get()->CompileResult;
+        auto timer = QueryState->GetTimer();
         QueryState->Orbit = std::move(ev->Get()->Orbit);
         QueryState->MaxReadType = compileResult->MaxReadType;
 
@@ -554,7 +565,6 @@ public:
             AcquireMvccSnapshot();
             return;
         }
-
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();
@@ -1183,6 +1193,7 @@ public:
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        auto timer = QueryState->GetTimer();
         QueryState->Orbit = std::move(ev->Get()->Orbit);
 
         auto* response = ev->Get()->Record.MutableResponse();
@@ -1223,6 +1234,7 @@ public:
                     break;
             }
 
+            timer.reset();
             ReplyQueryError(requestInfo, status, "", MessageFromIssues(issues));
             return;
         }
@@ -1312,7 +1324,7 @@ public:
         auto* stats = &QueryState->Stats;
 
         stats->SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
-        //stats->SetWorkerCpuTimeUs(QueryState->CpuTime.MicroSeconds());
+        stats->SetWorkerCpuTimeUs(QueryState->CpuTime.MicroSeconds());
         if (QueryState->CompileResult) {
             stats->MutableCompilation()->Swap(&QueryState->CompileStats);
         }

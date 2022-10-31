@@ -5,19 +5,39 @@
 #include <unordered_map>
 
 #ifndef NDEBUG
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+using TMkqlLocation = TSourceLocation;
+
+}
+}
+
+#define __MKQL_LOCATION__ __LOCATION__
 #   define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \
-        ::NKikimr::NMiniKQL::Take(MemInfo, (Mem), (Size), TStringBuilder() << __LOCATION__)
-#   define MKQL_MEM_TAKE4(MemInfo, Mem, Size, Message) \
-        ::NKikimr::NMiniKQL::Take(MemInfo, (Mem), (Size), TStringBuilder() << __LOCATION__ << ", " << Message)
+        ::NKikimr::NMiniKQL::Take(MemInfo, (Mem), (Size), __MKQL_LOCATION__)
+#   define MKQL_MEM_TAKE4(MemInfo, Mem, Size, Location) \
+        ::NKikimr::NMiniKQL::Take(MemInfo, (Mem), (Size), Location)
 #   define MKQL_MEM_RETURN(MemInfo, Mem, Size) \
         ::NKikimr::NMiniKQL::Return(MemInfo, (Mem), (Size))
 #   define MKQL_MEM_RETURN_PTR(MemInfo, Mem) \
         ::NKikimr::NMiniKQL::Return(MemInfo, (Mem))
 #else
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+using TMkqlLocation = int;
+
+}
+}
+
+#define __MKQL_LOCATION__ 0
 #   define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \
         Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size);
-#   define MKQL_MEM_TAKE4(MemInfo, Mem, Size, Message) \
-    Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size);
+#   define MKQL_MEM_TAKE4(MemInfo, Mem, Size, Location) \
+    Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size); Y_UNUSED(Location);
 #   define MKQL_MEM_RETURN(MemInfo, Mem, Size) \
         Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size);
 #   define MKQL_MEM_RETURN_PTR(MemInfo, Mem) \
@@ -35,7 +55,7 @@ class TMemoryUsageInfo : public TThrRefBase
 {
     struct TAllocationInfo {
         ui64 Size;
-        TString Location;
+        TMkqlLocation Location;
         bool IsDeleted;
     };
 public:
@@ -64,7 +84,7 @@ public:
     }
 
 #ifndef NDEBUG
-    inline void Take(const void* mem, ui64 size, TString location) {
+    inline void Take(const void* mem, ui64 size, TMkqlLocation location) {
         Allocated_ += size;
         Peak_ = Max(Peak_, Allocated_ - Freed_);
         if (size == 0) {
@@ -78,7 +98,7 @@ public:
         }
         auto res = AllocationsMap_.insert({mem, { size, std::move(location), false }});
         Y_VERIFY_DEBUG(res.second, "Duplicate allocation at: %p, "
-                                   "already allocated at: %s", mem, res.first->second.Location.data());
+                                   "already allocated at: %s", mem, (TStringBuilder() << res.first->second.Location).c_str());
         //Clog << Title_ << " take: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
     }
 #endif
@@ -103,7 +123,7 @@ public:
 
         Y_VERIFY_DEBUG(size == it->second.Size,
                     "Deallocating wrong size at: %p, "
-                    "allocated at: %s", mem, it->second.Location.data());
+                    "allocated at: %s", mem, (TStringBuilder() << it->second.Location).c_str());
         if (AllowMissing_) {
             it->second.IsDeleted = true;
         } else {
@@ -188,12 +208,12 @@ private:
 };
 
 #ifndef NDEBUG
-inline void Take(TMemoryUsageInfo& memInfo, const void* mem, ui64 size, TString location)
+inline void Take(TMemoryUsageInfo& memInfo, const void* mem, ui64 size, TMkqlLocation location)
 {
     memInfo.Take(mem, size, std::move(location));
 }
 
-inline void Take(TMemoryUsageInfo* memInfo, const void* mem, ui64 size, TString location)
+inline void Take(TMemoryUsageInfo* memInfo, const void* mem, ui64 size, TMkqlLocation location)
 {
     memInfo->Take(mem, size, std::move(location));
 }

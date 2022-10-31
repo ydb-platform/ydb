@@ -798,8 +798,7 @@ public:
         : TBase(std::forward<Args>(args)...)
     {
         M_.MemInfo = memInfo;
-        MKQL_MEM_TAKE(memInfo, this, sizeof(TDerived),
-                "TDerived: " << DebugString());
+        MKQL_MEM_TAKE(memInfo, this, sizeof(TDerived), __MKQL_LOCATION__);
     }
 
     ~TComputationValue() {

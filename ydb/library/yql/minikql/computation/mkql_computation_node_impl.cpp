@@ -31,7 +31,7 @@ TUnboxedImmutableComputationNode::TUnboxedImmutableComputationNode(TMemoryUsageI
     , UnboxedValue(std::move(value))
     , RepresentationKind(UnboxedValue.HasValue() ? (UnboxedValue.IsBoxed() ? EValueRepresentation::Boxed : (UnboxedValue.IsString() ? EValueRepresentation::String : EValueRepresentation::Embedded)) : EValueRepresentation::Embedded)
 {
-    MKQL_MEM_TAKE(MemInfo, this, sizeof(*this), "TOwnerType: " << DebugString());
+    MKQL_MEM_TAKE(MemInfo, this, sizeof(*this), __MKQL_LOCATION__);
 }
 
 TUnboxedImmutableComputationNode::~TUnboxedImmutableComputationNode() {

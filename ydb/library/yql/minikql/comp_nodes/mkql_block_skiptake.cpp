@@ -28,6 +28,7 @@ public:
             state = Count->GetValue(ctx);
         }
 
+        Y_VERIFY(output[Width - 1]);
         auto count = state.Get<ui64>();
         ui64 blockSize = 0;
         for (;;) {
@@ -46,6 +47,9 @@ public:
 
         ui64 tailSize = blockSize - count;
         for (size_t i = 0; i < Width - 1; ++i) {
+            if (!output[i]) {
+                continue;
+            }
             auto& datum = TArrowBlock::From(*output[i]).GetDatum();
             if (datum.is_scalar()) {
                 continue;
@@ -94,11 +98,15 @@ public:
             return EFetchResult::Finish;
         }
 
+        Y_VERIFY(output[Width - 1]);
         auto result = Flow->FetchValues(ctx, output);
         if (result == EFetchResult::One) {
             ui64 blockSize = TArrowBlock::From(*output[Width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
             if (blockSize > count) {
                 for (size_t i = 0; i < Width - 1; ++i) {
+                    if (!output[i]) {
+                        continue;
+                    }
                     auto& datum = TArrowBlock::From(*output[i]).GetDatum();
                     if (datum.is_scalar()) {
                         continue;

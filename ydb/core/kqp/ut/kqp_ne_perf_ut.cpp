@@ -120,8 +120,8 @@ TParams BuildInsertIndexParams(TTableClient& client) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpPerf) {
-    Y_UNIT_TEST_TWIN(Upsert, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(Upsert) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -153,8 +153,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(Replace, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(Replace) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -186,8 +186,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(UpdateOn, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(UpdateOn) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -219,8 +219,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(Insert, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(Insert) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -252,8 +252,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DeleteOn, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(DeleteOn) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -285,8 +285,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(Update, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(Update) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -320,8 +320,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(Delete, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(Delete) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -356,8 +356,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(IndexUpsert, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(IndexUpsert) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -379,8 +379,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
     }
 
-    Y_UNIT_TEST_TWIN(IndexReplace, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(IndexReplace) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -402,8 +402,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
     }
 
-    Y_UNIT_TEST_TWIN(IndexUpdateOn, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(IndexUpdateOn) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -425,8 +425,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
     }
 
-    Y_UNIT_TEST_TWIN(IndexDeleteOn, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(IndexDeleteOn) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -448,8 +448,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
     }
 
-    Y_UNIT_TEST_TWIN(IndexInsert, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(IndexInsert) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -471,8 +471,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
     }
 
-    Y_UNIT_TEST_TWIN(IdxLookupJoin, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(IdxLookupJoin) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -497,8 +497,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
     }
 
-    Y_UNIT_TEST_TWIN(IdxLookupJoinThreeWay, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(IdxLookupJoinThreeWay) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -524,8 +524,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
     }
 
-    Y_UNIT_TEST_TWIN(ComputeLength, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(ComputeLength) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -542,8 +542,8 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
     }
 
-    Y_UNIT_TEST_TWIN(AggregateToScalar, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(AggregateToScalar) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

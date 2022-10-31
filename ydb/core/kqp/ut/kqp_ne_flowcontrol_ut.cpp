@@ -49,7 +49,7 @@ void CreateSampleTables(TKikimrRunner& kikimr) {
 
 Y_UNIT_TEST_SUITE(KqpFlowControl) {
 
-void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity, bool useSessionActor) {
+void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     NKikimrConfig::TAppConfig appCfg;
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(limit);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(limit);
@@ -59,7 +59,6 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity, bool useSessionAct
     // TODO: KIKIMR-14294
     auto kikimrSettings = TKikimrSettings()
         .SetAppConfig(appCfg)
-        .SetEnableKqpSessionActor(useSessionActor)
         .SetKqpSettings({})
         .SetEnableKqpScanQueryStreamLookup(false);
     TKikimrRunner kikimr{kikimrSettings};
@@ -111,16 +110,16 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity, bool useSessionAct
     UNIT_ASSERT_EQUAL(hasBlockedByCapacity, writesBlockedNoSpace > 0);
 }
 
-Y_UNIT_TEST_TWIN(FlowControl_Unlimited, UseSessionActor) {
-    DoFlowControlTest(100ul << 20, false, UseSessionActor);
+Y_UNIT_TEST(FlowControl_Unlimited) {
+    DoFlowControlTest(100ul << 20, false);
 }
 
-Y_UNIT_TEST_TWIN(FlowControl_BigLimit, UseSessionActor) {
-    DoFlowControlTest(1ul << 10, false, UseSessionActor);
+Y_UNIT_TEST(FlowControl_BigLimit) {
+    DoFlowControlTest(1ul << 10, false);
 }
 
-Y_UNIT_TEST_TWIN(FlowControl_SmallLimit, UseSessionActor) {
-    DoFlowControlTest(1ul, true, UseSessionActor);
+Y_UNIT_TEST(FlowControl_SmallLimit) {
+    DoFlowControlTest(1ul, true);
 }
 
 //Y_UNIT_TEST(SlowClient) {

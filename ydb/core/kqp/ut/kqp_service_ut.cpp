@@ -9,13 +9,11 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpService) {
-    Y_UNIT_TEST_TWIN(Shutdown, UseSessionActor) {
+    Y_UNIT_TEST(Shutdown) {
         const ui32 Inflight = 50;
         const TDuration WaitDuration = TDuration::Seconds(1);
 
-        auto settings = TKikimrSettings()
-            .SetEnableKqpSessionActor(UseSessionActor);
-        auto kikimr = MakeHolder<TKikimrRunner>(settings);
+        auto kikimr = MakeHolder<TKikimrRunner>();
 
         NPar::LocalExecutor().RunAdditionalThreads(Inflight);
         auto driverConfig = kikimr->GetDriverConfig();
@@ -66,10 +64,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST_TWIN(CloseSessionsWithLoad, UseSessionActor) {
-        auto settings = TKikimrSettings()
-            .SetEnableKqpSessionActor(UseSessionActor);
-        auto kikimr = std::make_shared<TKikimrRunner>(settings);
+    Y_UNIT_TEST(CloseSessionsWithLoad) {
+        auto kikimr = std::make_shared<TKikimrRunner>();
         auto db = kikimr->GetTableClient();
 
         const ui32 SessionsCount = 50;
@@ -144,11 +140,11 @@ Y_UNIT_TEST_SUITE(KqpService) {
         return futures;
     }
 
-    Y_UNIT_TEST_TWIN(SessionBusy, UseSessionActor) {
+    Y_UNIT_TEST(SessionBusy) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor, {}, appConfig);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -164,11 +160,11 @@ Y_UNIT_TEST_SUITE(KqpService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SessionBusyRetryOperation, UseSessionActor) {
+    Y_UNIT_TEST(SessionBusyRetryOperation) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor, {}, appConfig);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
 
         ui32 queriesCount = 10;
@@ -196,11 +192,11 @@ Y_UNIT_TEST_SUITE(KqpService) {
          UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(SessionBusyRetryOperationSync, UseSessionActor) {
+    Y_UNIT_TEST(SessionBusyRetryOperationSync) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor, {}, appConfig);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
 
         ui32 queriesCount = 10;

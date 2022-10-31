@@ -988,7 +988,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetKeepSnapshotTimeout(TDuration::Seconds(2))
             .SetControls(controls);
 
@@ -1096,7 +1095,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1293,7 +1291,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1660,7 +1657,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1765,7 +1761,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1877,7 +1872,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2018,7 +2012,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2193,7 +2186,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2356,7 +2348,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2513,7 +2504,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2616,7 +2606,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2706,7 +2695,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2820,7 +2808,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2940,7 +2927,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3065,7 +3051,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3249,7 +3234,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3351,7 +3335,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(true)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

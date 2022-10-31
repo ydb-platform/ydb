@@ -488,10 +488,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SimpleQueryOlap, UseSessionActor) {
+    Y_UNIT_TEST(SimpleQueryOlap) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -520,10 +519,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SimpleLookupOlap, UseSessionActor) {
+    Y_UNIT_TEST(SimpleLookupOlap) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -551,10 +549,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SimpleRangeOlap, UseSessionActor) {
+    Y_UNIT_TEST(SimpleRangeOlap) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -583,10 +580,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CompositeRangeOlap, UseSessionActor) {
+    Y_UNIT_TEST(CompositeRangeOlap) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -742,10 +738,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         session.Close();
     }
 
-    Y_UNIT_TEST_TWIN(QueryOltpAndOlap, UseSessionActor) {
+    Y_UNIT_TEST(QueryOltpAndOlap) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -775,10 +770,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(EmptyRange, UseSessionActor) {
+    Y_UNIT_TEST(EmptyRange) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -798,10 +792,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(StreamResultToYson(it), "[]");
     }
 
-    Y_UNIT_TEST_TWIN(Aggregation, UseSessionActor) {
+    Y_UNIT_TEST(Aggregation) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -872,13 +865,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(PushdownFilter, UseSessionActor) {
+    Y_UNIT_TEST(PushdownFilter) {
         static bool enableLog = false;
 
         auto doTest = [](std::optional<bool> viaSettings, std::optional<bool> viaPragma, bool pushdownPresent) {
             auto settings = TKikimrSettings()
-                .SetWithSampleTables(false)
-                .SetEnableKqpSessionActor(UseSessionActor);
+                .SetWithSampleTables(false);
 
             if (enableLog) {
                 Cerr << "Run test:" << Endl;
@@ -971,10 +963,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(PKDescScan, UseSessionActor) {
+    Y_UNIT_TEST(PKDescScan) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
@@ -1047,10 +1038,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(expectedYson, ysonResult);
     }
 
-    Y_UNIT_TEST_TWIN(ExtractRanges, UseSessionActor) {
+    Y_UNIT_TEST(ExtractRanges) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -1079,10 +1069,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(rows.size() == 6);
     }
 
-    Y_UNIT_TEST_TWIN(ExtractRangesReverse, UseSessionActor) {
+    Y_UNIT_TEST(ExtractRangesReverse) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -1124,11 +1113,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(rows.size() == expectedCount);
     }
 
-    Y_UNIT_TEST_TWIN(PredicatePushdown, UseSessionActor) {
+    Y_UNIT_TEST(PredicatePushdown) {
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
@@ -1855,10 +1843,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregations({ testCase });
     }
 
-    Y_UNIT_TEST_TWIN(StatsSysView, UseSessionActor) {
+    Y_UNIT_TEST(StatsSysView) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
 
@@ -1897,10 +1884,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             0.3*0.9*100*1000); // >= 90% of 100K inserted rows
     }
 
-    Y_UNIT_TEST_TWIN(StatsSysViewTable, UseSessionActor) {
+    Y_UNIT_TEST(StatsSysViewTable) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
 
@@ -2360,10 +2346,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
     }
 
-    Y_UNIT_TEST_TWIN(StatsSysViewColumns, UseSessionActor) {
+    Y_UNIT_TEST(StatsSysViewColumns) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
 
@@ -2421,10 +2406,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(StatsSysViewRanges, UseSessionActor) {
+    Y_UNIT_TEST(StatsSysViewRanges) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
 
@@ -2507,10 +2491,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(StatsSysViewFilter, UseSessionActor) {
+    Y_UNIT_TEST(StatsSysViewFilter) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
@@ -2581,10 +2564,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(StatsSysViewAggregation, UseSessionActor) {
+    Y_UNIT_TEST(StatsSysViewAggregation) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
 
@@ -2758,11 +2740,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(PredicatePushdownWithParameters, UseSessionActor) {
+    Y_UNIT_TEST(PredicatePushdownWithParameters) {
         constexpr bool logQueries = true;
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
@@ -2843,10 +2824,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(readRange.IsDefined());
     }
 
-    Y_UNIT_TEST_TWIN(PredicatePushdownParameterTypesValidation, UseSessionActor) {
+    Y_UNIT_TEST(PredicatePushdownParameterTypesValidation) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
@@ -2900,10 +2880,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(PredicatePushdownCastErrors, UseSessionActor) {
+    Y_UNIT_TEST(PredicatePushdownCastErrors) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableKqpSessionActor(UseSessionActor);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;

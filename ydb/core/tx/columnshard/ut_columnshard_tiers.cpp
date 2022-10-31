@@ -206,7 +206,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableKqpSessionActor(true)
             .SetEnableOlapSchemaOperations(true);
         ;
 
@@ -280,7 +279,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableKqpSessionActor(true)
             .SetEnableOlapSchemaOperations(true);
         ;
 

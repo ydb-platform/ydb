@@ -82,13 +82,8 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings()
     {
         // default value for tests, can be overwritten by SetFeatureFlags()
-        SetEnableKqpSessionActor(false);
+        Y_VERIFY(AppConfig.MutableTableServiceConfig()->GetEnableKqpSessionActor());
         this->SetEnableKqpScanQueryStreamLookup(true);
-    }
-
-    TKikimrSettings& SetEnableKqpSessionActor(bool enable) {
-        AppConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(enable);
-        return *this;
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -160,12 +155,11 @@ private:
     THolder<NYdb::TDriver> Driver;
 };
 
-inline TKikimrRunner KikimrRunnerEnableSessionActor(bool enable, TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
+inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
     const NKikimrConfig::TAppConfig& appConfig = {})
 {
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig)
-        .SetEnableKqpSessionActor(enable)
         .SetKqpSettings(kqpSettings);
 
     return TKikimrRunner{settings};

@@ -380,9 +380,9 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         checkTable("`/Root/.sys/top_queries_by_cpu_time_one_hour`");
     }
 
-    Y_UNIT_TEST_TWIN(QueryStatsScan, UseSessionActor) {
+    Y_UNIT_TEST(QueryStatsScan) {
         auto checkTable = [&] (const TStringBuf tableName) {
-            auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+            auto kikimr = DefaultKikimrRunner();
             auto client = kikimr.GetTableClient();
 
             {

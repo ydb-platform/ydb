@@ -12,8 +12,7 @@ namespace {
 
 TKikimrRunner RunnerWithArrowFormatEnabled() {
     auto settings = TKikimrSettings()
-        .SetEnableArrowFormatAtDatashard(true)
-        .SetEnableKqpSessionActor(true);
+        .SetEnableArrowFormatAtDatashard(true);
 
     return TKikimrRunner{settings};
 }

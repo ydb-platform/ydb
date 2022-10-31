@@ -39,7 +39,6 @@ public:
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
-            .SetEnableKqpSessionActor(true)
             .SetUseRealThreads(false);
 
         Server = new TServer(serverSettings);

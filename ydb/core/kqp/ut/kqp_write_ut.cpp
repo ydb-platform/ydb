@@ -9,12 +9,12 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpWrite) {
-    Y_UNIT_TEST_TWIN(UpsertNullKey, UseSessionActor) {
+    Y_UNIT_TEST(UpsertNullKey) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
 
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor, {setting});
+        auto kikimr = DefaultKikimrRunner({setting});
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -85,8 +85,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(Insert, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(Insert) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -202,8 +202,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_TWIN(InsertRevert, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(InsertRevert) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -323,8 +323,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[1u]];[[2u]];[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_TWIN(ProjectReplace, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(ProjectReplace) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -371,8 +371,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
     }
 
-    Y_UNIT_TEST_TWIN(CastValues, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(CastValues) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -406,8 +406,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_TWIN(CastValuesOptional, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST(CastValuesOptional) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

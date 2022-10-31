@@ -86,7 +86,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(QueryCacheTtl) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetCompileQueryCacheTTLSec(2);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(true);
 
         TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
@@ -970,7 +969,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableQueryLimits()->SetResultRowsLimit(6);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(true);
 
         TKikimrRunner kikimr(appConfig, {setting});
         auto db = kikimr.GetTableClient();

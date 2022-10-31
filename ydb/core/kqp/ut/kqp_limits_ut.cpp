@@ -66,7 +66,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(DatashardProgramSize) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
-        app.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 0, 0, 0);
@@ -103,7 +102,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             SELECT * FROM AS_TABLE($rows);
         )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        // UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
     }
 
@@ -111,7 +111,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto app = NKikimrConfig::TAppConfig();
         auto& queryLimits = *app.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetComputeNodeMemoryLimitBytes(1'000'000'000);
-        app.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 100, 10, 1'000'000, 1, 2);
 
@@ -141,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             SELECT * FROM `/Root/LargeTable`;
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNDETERMINED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE));
     }
 
@@ -149,7 +148,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
         app.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(5).MilliSeconds());
-        app.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 0, 0, 0);
@@ -182,7 +180,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        //UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
     }
 
@@ -292,7 +291,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(20);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(appConfig);
 
@@ -334,7 +332,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetReadsetCountLimit(50);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(appConfig);
         CreateLargeTable(kikimr, 10, 10, 100);
@@ -367,8 +364,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetEnableMvccSnapshotReads(false)
-            .SetEnableKqpSessionActor(false);
+            .SetEnableMvccSnapshotReads(false);
 
         TKikimrRunner kikimr(serverSettings);
         CreateLargeTable(kikimr, 20, 10, 1'000'000, 1);
@@ -400,7 +396,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetComputeNodeMemoryLimitBytes(100'000'000);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(appConfig);
 
@@ -449,7 +444,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(QueryExecTimeout) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10'000'000'000);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(false);
 
         TKikimrRunner kikimr(appConfig);
 

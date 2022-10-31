@@ -148,7 +148,8 @@ inline bool TEvent::Test() const
 
 inline bool TEvent::Wait(TInstant deadline)
 {
-    return EventCount_.Await([=] () {
+    return EventCount_.Await(
+        [&] {
             return Set_.load(std::memory_order_acquire);
         },
         deadline);

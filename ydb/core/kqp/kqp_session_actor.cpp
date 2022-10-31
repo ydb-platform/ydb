@@ -767,23 +767,7 @@ public:
         Cleanup(IsFatalError(record.GetYdbStatus()));
     }
 
-    IKqpGateway::TExecPhysicalRequest PreparePureRequest(TKqpQueryState *queryState) {
-        IKqpGateway::TExecPhysicalRequest request;
-        request.NeedTxId = false;
-        if (queryState) {
-            auto now = TAppData::TimeProvider->Now();
-            request.Timeout = queryState->QueryDeadlines.TimeoutAt - now;
-            if (auto cancelAt = queryState->QueryDeadlines.CancelAt) {
-                request.CancelAfter = cancelAt - now;
-            }
-
-            EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
-            request.StatsMode = GetStatsMode(statsMode);
-        }
-        return request;
-    }
-
-    IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState) {
+    IKqpGateway::TExecPhysicalRequest PrepareRequest(TKqpQueryState *queryState) {
         IKqpGateway::TExecPhysicalRequest request;
 
         if (queryState) {
@@ -795,35 +779,43 @@ public:
 
             EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
             request.StatsMode = GetStatsMode(statsMode);
-
-            request.Snapshot = queryState->TxCtx->GetSnapshot();
-            request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
-        } else {
-            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         }
 
         const auto& limits = GetQueryLimits(Settings);
         request.MaxAffectedShards = limits.PhaseLimits.AffectedShardsLimit;
         request.TotalReadSizeLimitBytes = limits.PhaseLimits.TotalReadSizeLimitBytes;
         request.MkqlMemoryLimit = limits.PhaseLimits.ComputeNodeMemoryLimitBytes;
+        return request;
+    }
+
+
+    IKqpGateway::TExecPhysicalRequest PreparePureRequest(TKqpQueryState *queryState) {
+        auto request = PrepareRequest(queryState);
+        request.NeedTxId = false;
+        return request;
+    }
+
+    IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState) {
+        auto request = PrepareRequest(queryState);
+
+        if (queryState) {
+            request.Snapshot = queryState->TxCtx->GetSnapshot();
+            request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
+        } else {
+            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+        }
 
         return request;
     }
 
     IKqpGateway::TExecPhysicalRequest PrepareScanRequest(TKqpQueryState *queryState) {
-        IKqpGateway::TExecPhysicalRequest request;
+        auto request = PrepareRequest(queryState);
 
-        request.Timeout = queryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
-        if (!request.Timeout) {
-            // TODO: Just cancel request.
-            request.Timeout = TDuration::MilliSeconds(1);
-        }
         request.MaxComputeActors = Config->_KqpMaxComputeActors.Get().GetRef();
-        EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
-        request.StatsMode = GetStatsMode(statsMode);
         request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
         request.LlvmEnabled = Config->GetEnableLlvm() != EOptionalFlag::Disabled;
-        request.Snapshot = QueryState->TxCtx->GetSnapshot();
+        YQL_ENSURE(queryState);
+        request.Snapshot = queryState->TxCtx->GetSnapshot();
 
         return request;
     }

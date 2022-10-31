@@ -33,6 +33,8 @@ public:
     ui64 GetGroup() const { return Group; }
     ui64 GetStep() const { return Step; }
     ui64 GetTxId() const { return TxId; }
+    ui64 GetLockId() const { return LockId; }
+    ui64 GetLockOffset() const { return LockOffset; }
     const TPathId& GetPathId() const { return PathId; }
     EKind GetKind() const { return Kind; }
     const TString& GetBody() const { return Body; }
@@ -51,10 +53,12 @@ public:
     void Out(IOutputStream& out) const;
 
 private:
-    ui64 Order;
-    ui64 Group;
-    ui64 Step;
-    ui64 TxId;
+    ui64 Order = Max<ui64>();
+    ui64 Group = 0;
+    ui64 Step = 0;
+    ui64 TxId = 0;
+    ui64 LockId = 0;
+    ui64 LockOffset = 0;
     TPathId PathId;
     EKind Kind;
     TString Body;
@@ -73,6 +77,9 @@ class TChangeRecordBuilder {
 
 public:
     explicit TChangeRecordBuilder(EKind kind);
+
+    TChangeRecordBuilder& WithLockId(ui64 lockId);
+    TChangeRecordBuilder& WithLockOffset(ui64 lockOffset);
 
     TChangeRecordBuilder& WithOrder(ui64 order);
     TChangeRecordBuilder& WithGroup(ui64 group);

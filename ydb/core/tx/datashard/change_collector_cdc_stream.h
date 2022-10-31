@@ -1,15 +1,14 @@
 #pragma once
 
 #include "change_collector_base.h"
-#include "change_collector_helpers.h"
 #include "datashard_user_table.h"
 
 namespace NKikimr {
 namespace NDataShard {
 
 class TCdcStreamChangeCollector: public TBaseChangeCollector {
-    TMaybe<NTable::TRowState> GetCurrentState(ui32 tid, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const NTable::TTag> keyTags, TArrayRef<const NTable::TTag> valueTags);
+    TMaybe<NTable::TRowState> GetCurrentState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> valueTags);
     static NTable::TRowState PatchState(const NTable::TRowState& oldState, NTable::ERowOp rop,
         const THashMap<NTable::TTag, NTable::TPos>& tagToPos, const THashMap<NTable::TTag, NTable::TUpdateOp>& updates);
 
@@ -34,7 +33,6 @@ private:
     TRowVersion ReadVersion;
 
     mutable TMaybe<bool> CachedNeedToReadKeys;
-    TRowsCache RowsCache;
 
 }; // TCdcStreamChangeCollector
 

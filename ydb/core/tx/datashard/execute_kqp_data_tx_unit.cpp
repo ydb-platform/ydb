@@ -274,7 +274,15 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         AddLocksToResult(op, ctx);
 
-        op->ChangeRecords() = std::move(dataTx->GetCollectedChanges());
+        auto changes = std::move(dataTx->GetCollectedChanges());
+        if (guardLocks.LockTxId) {
+            if (changes) {
+                DataShard.AddLockChangeRecords(guardLocks.LockTxId, std::move(changes));
+            }
+        } else {
+            // FIXME: handle lock changes commit
+            op->ChangeRecords() = std::move(changes);
+        }
 
         KqpUpdateDataShardStatCounters(DataShard, dataTx->GetCounters());
         auto statsMode = kqpTx.GetRuntimeSettings().GetStatsMode();

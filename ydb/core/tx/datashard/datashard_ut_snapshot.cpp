@@ -1620,6 +1620,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     }
                     break;
                 }
+                case TEvChangeExchange::TEvApplyRecords::EventType: {
+                    if (BlockApplyRecords) {
+                        Cerr << "... blocked ApplyRecords" << Endl;
+                        BlockedApplyRecords.push_back(THolder(ev.Release()));
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
             }
             return PrevObserver(Runtime, ev);
         }
@@ -1643,6 +1651,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         bool InjectClearTasks = false;
         bool BlockReadSets = false;
         TVector<THolder<IEventHandle>> BlockedReadSets;
+        bool BlockApplyRecords = false;
+        TVector<THolder<IEventHandle>> BlockedApplyRecords;
     };
 
     Y_UNIT_TEST(MvccSnapshotLockedWrites) {
@@ -3451,6 +3461,152 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "Struct { "
             "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
             "} Struct { Bool: false }");
+    }
+
+    Y_UNIT_TEST_TWIN(LockedWriteWithAsyncIndex, WithRestart) {
+        constexpr bool UseNewEngine = true;
+
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        WaitTxNotification(server, sender,
+            AsyncAlterAddIndex(server, "/Root", "/Root/table-1",
+                TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}));
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        TLockHandle lock1handle(123, runtime.GetActorSystem(0));
+        TLockHandle lock2handle(234, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to keys 1 and 2 using tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to keys 1 and 2 using tx 234
+        observer.Inject.LockId = 234;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 12), (2, 22)
+                )")),
+            "<empty>");
+        auto locks2 = observer.LastLocks;
+        observer.Inject = {};
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-1` VIEW by_value
+                WHERE value in (1, 11, 21, 12, 22)
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        if (WithRestart) {
+            observer.BlockApplyRecords = true;
+        }
+
+        // Commit changes in tx 123
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace().Locks = locks1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0)
+                )")),
+            "<empty>");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        if (WithRestart) {
+            UNIT_ASSERT(!observer.BlockedApplyRecords.empty());
+            observer.BlockedApplyRecords.clear();
+            observer.BlockApplyRecords = false;
+
+            auto shards = GetTableShards(server, sender, "/Root/table-1");
+            RebootTablet(runtime, shards.at(0), sender);
+
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-1` VIEW by_value
+                WHERE value in (1, 11, 21, 12, 22)
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 11 } } } "
+            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
+            "} Struct { Bool: false }");
+
+        // Commit changes in tx 234
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace().Locks = locks2;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0)
+                )")),
+            "ERROR: ABORTED");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
     }
 
 }

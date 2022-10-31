@@ -1,5 +1,6 @@
 #include "change_collector_cdc_stream.h"
 #include "datashard_impl.h"
+#include "datashard_user_db.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
@@ -48,10 +49,11 @@ namespace {
         case ERowOp::Upsert:
         case ERowOp::Reset:
             return state;
+        case ERowOp::Absent:
         case ERowOp::Erase:
             return nullptr;
         default:
-            Y_FAIL_S("Unexpected row op: " << static_cast<ui8>(state->GetRowState()));
+            Y_FAIL_S("Unexpected row op: " << static_cast<int>(state->GetRowState()));
         }
     }
 
@@ -96,7 +98,6 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
 {
     Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
-    const auto localTableId = Self->GetLocalTableId(tableId);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
     const auto& keyTags = userTable->KeyColumnIds;
@@ -114,8 +115,6 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
     }
 
-    bool read = false;
-
     for (const auto& [pathId, stream] : userTable->CdcStreams) {
         if (stream.State == NKikimrSchemeOp::ECdcStreamStateDisabled) {
             continue;
@@ -132,7 +131,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         case NKikimrSchemeOp::ECdcStreamModeOldImage:
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: {
             const auto valueTags = MakeValueTags(userTable->Columns);
-            const auto oldState = GetCurrentState(localTableId, key, keyTags, valueTags);
+            const auto oldState = GetCurrentState(tableId, key, valueTags);
 
             if (!oldState) {
                 return false;
@@ -150,7 +149,6 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 }
             }
 
-            read = true;
             break;
         }
         default:
@@ -158,23 +156,18 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         }
     }
 
-    if (read) {
-        RowsCache.UpdateCachedRow(localTableId, rop, key, updates);
-    }
-
     return true;
 }
 
 void TCdcStreamChangeCollector::Reset() {
     TBaseChangeCollector::Reset();
-    RowsCache.Reset();
 }
 
-TMaybe<TRowState> TCdcStreamChangeCollector::GetCurrentState(ui32 tid, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const TTag> keyTags, TArrayRef<const TTag> valueTags)
+TMaybe<TRowState> TCdcStreamChangeCollector::GetCurrentState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const TTag> valueTags)
 {
     TRowState row;
-    const auto ready = RowsCache.SelectRow(Db, tid, key, MakeTagToPos(keyTags), valueTags, row, ReadVersion);
+    const auto ready = UserDb.SelectRow(tableId, key, valueTags, row);
 
     if (ready == EReady::Page) {
         return Nothing();
@@ -198,9 +191,11 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
             auto it = updates.find(tag);
             if (it != updates.end()) {
                 newState.Set(pos, it->second.Op, it->second.AsCell());
-            } else if (rop == ERowOp::Upsert && oldState.GetRowState() != ERowOp::Erase) {
-                newState.Set(pos, oldState.GetCellOp(pos), oldState.Get(pos));
+            } else if (rop == ERowOp::Upsert) {
+                // Copy value from the old state, this also handles schema default values
+                newState.Set(pos, ECellOp::Set, oldState.Get(pos));
             } else {
+                // FIXME: reset fills columns with schema defaults, which are currently always null
                 newState.Set(pos, ECellOp::Null, TCell());
             }
         }

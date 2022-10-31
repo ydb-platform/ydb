@@ -161,6 +161,20 @@ namespace NKqpHelpers {
         return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
     }
 
+    inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query) {
+        auto reqSender = runtime.AllocateEdgeActor();
+        auto ev = ExecRequest(runtime, reqSender, MakeSimpleStaleRoRequest(query));
+        auto& response = ev->Get()->Record.GetRef();
+        if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.GetYdbStatus();
+        }
+        if (response.GetResponse().GetResults().size() == 0) {
+            return "<empty>";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+    }
+
     inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {
         auto reqSender = runtime.AllocateEdgeActor();
         sessionId = CreateSession(runtime, reqSender);

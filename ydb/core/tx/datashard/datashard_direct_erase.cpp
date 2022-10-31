@@ -1,5 +1,6 @@
 #include "change_collector.h"
 #include "datashard_direct_erase.h"
+#include "datashard_user_db.h"
 #include "erase_rows_condition.h"
 
 #include <ydb/core/base/appdata.h>
@@ -58,6 +59,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
     }
 
+    std::optional<TDataShardUserDb> userDb;
+
     THolder<IEraseRowsCondition> condition;
     if (params) {
         condition.Reset(CreateEraseRowsCondition(request));
@@ -65,7 +68,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             condition->Prepare(params.Txc->DB.GetRowScheme(localTableId), 0);
         }
 
-        params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, params.Txc->DB, tableInfo, true));
+        userDb.emplace(*self, params.Txc->DB, params.ReadVersion);
+        params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, params.Txc->DB, tableInfo, true));
     }
 
     if (auto collector = params.GetChangeCollector()) {

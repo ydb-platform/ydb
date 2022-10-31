@@ -9,16 +9,17 @@ namespace NMiniKQL {
 class IChangeCollector {
 public:
     // basic change record's info
-    struct TChange: public std::tuple<ui64, TPathId, ui64, TPathId, ui64> {
-        using std::tuple<ui64, TPathId, ui64, TPathId, ui64>::tuple;
-
-        ui64 Order() const { return std::get<0>(*this); }
-        const TPathId& PathId() const { return std::get<1>(*this); }
-        ui64 BodySize() const { return std::get<2>(*this); }
-        const TPathId& TableId() const { return std::get<3>(*this); }
-        ui64 SchemaVersion() const { return std::get<4>(*this); }
-
-        void SetPathId(const TPathId& value) { std::get<1>(*this) = value; }
+    struct TChange {
+        ui64 Order;
+        ui64 Group;
+        ui64 Step;
+        ui64 TxId;
+        TPathId PathId;
+        ui64 BodySize;
+        TPathId TableId;
+        ui64 SchemaVersion;
+        ui64 LockId = 0;
+        ui64 LockOffset = 0;
     };
 
 public:
@@ -27,6 +28,7 @@ public:
     virtual bool NeedToReadKeys() const = 0;
     virtual void SetReadVersion(const TRowVersion& readVersion) = 0;
     virtual void SetWriteVersion(const TRowVersion& writeVersion) = 0;
+    virtual void SetWriteTxId(ui64 txId) = 0;
 
     virtual bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) = 0;
@@ -41,10 +43,10 @@ public:
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NMiniKQL::IChangeCollector::TChange, o, x) {
     o << "{"
-      << " Order: " << x.Order()
-      << " PathId: " << x.PathId()
-      << " BodySize: " << x.BodySize()
-      << " TableId: " << x.TableId()
-      << " SchemaVersion: " << x.SchemaVersion()
+      << " Order: " << x.Order
+      << " PathId: " << x.PathId
+      << " BodySize: " << x.BodySize
+      << " TableId: " << x.TableId
+      << " SchemaVersion: " << x.SchemaVersion
     << " }";
 }

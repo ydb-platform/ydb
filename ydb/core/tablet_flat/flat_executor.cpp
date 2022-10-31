@@ -1641,6 +1641,9 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     } else if (done) {
         Y_VERIFY(!txc.IsRescheduled());
         Y_VERIFY(!seat->RequestedMemory);
+        for (auto it = txc.OnCommit_.begin(); it != txc.OnCommit_.end(); ++it) {
+            (*it)();
+        }
         seat->OnCommitted = std::move(txc.OnCommitted_);
         CommitTransactionLog(seat, env, prod.Change, cpuTimer, ctx);
     } else {
@@ -1648,6 +1651,9 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
         if (!env.ToLoad && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
                     << NFmt::Do(*seat->Self) << " postoned w/o demands");
+        }
+        for (auto it = txc.OnRollback_.rbegin(); it != txc.OnRollback_.rend(); ++it) {
+            (*it)();
         }
         PostponeTransaction(seat, env, prod.Change, cpuTimer, ctx);
     }

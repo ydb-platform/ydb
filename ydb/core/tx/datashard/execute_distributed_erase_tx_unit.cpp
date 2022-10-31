@@ -3,6 +3,7 @@
 #include "datashard_distributed_erase.h"
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
+#include "datashard_user_db.h"
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
@@ -44,7 +45,8 @@ public:
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(op.Get());
 
         if (eraseTx->HasDependents()) {
-            THolder<IChangeCollector> changeCollector{CreateChangeCollector(DataShard, txc.DB, request.GetTableId(), false)};
+            TDataShardUserDb userDb(DataShard, txc.DB, readVersion);
+            THolder<IChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, txc.DB, request.GetTableId(), false)};
 
             if (changeCollector) {
                 changeCollector->SetWriteVersion(writeVersion);

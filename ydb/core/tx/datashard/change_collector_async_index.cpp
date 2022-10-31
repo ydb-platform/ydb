@@ -1,5 +1,6 @@
 #include "change_collector_async_index.h"
 #include "datashard_impl.h"
+#include "datashard_user_db.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
@@ -13,12 +14,6 @@ class TCachedTagsBuilder {
     using TCachedTags = TAsyncIndexChangeCollector::TCachedTags;
 
 public:
-    void MakeKeyTagToPos(const TVector<TTag>& keyTags) {
-        for (TPos pos = 0; pos < keyTags.size(); ++pos) {
-            KeyTagToPos.emplace(keyTags.at(pos), pos);
-        }
-    }
-
     void AddIndexTags(const TVector<TTag>& tags) {
         IndexTags.insert(tags.begin(), tags.end());
     }
@@ -40,13 +35,11 @@ public:
 
         Y_VERIFY(!tags.empty());
         Y_VERIFY(!IndexTags.empty());
-        Y_VERIFY(!KeyTagToPos.empty());
 
-        return TCachedTags(std::move(KeyTagToPos), std::move(tags), std::make_pair(0, IndexTags.size() - 1));
+        return TCachedTags(std::move(tags), std::make_pair(0, IndexTags.size() - 1));
     }
 
 private:
-    THashMap<TTag, TPos> KeyTagToPos;
     THashSet<TTag> IndexTags;
     THashSet<TTag> DataTags;
 };
@@ -76,7 +69,6 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
 {
     Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
-    const auto localTableId = Self->GetLocalTableId(tableId);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
     Y_VERIFY_S(key.size() == userTable->KeyColumnIds.size(), "Count doesn't match"
@@ -92,11 +84,10 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
     }
 
-    const auto& keyTagToPos = GetKeyTagToPos(tableId);
     const auto tagsToSelect = GetTagsToSelect(tableId, rop);
 
     TRowState row;
-    const auto ready = RowsCache.SelectRow(Db, localTableId, key, keyTagToPos, tagsToSelect, row, ReadVersion);
+    const auto ready = UserDb.SelectRow(tableId, key, tagsToSelect, row);
 
     if (ready == EReady::Page) {
         return false;
@@ -183,13 +174,11 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         }
     }
 
-    RowsCache.UpdateCachedRow(localTableId, rop, key, updates);
     return true;
 }
 
 void TAsyncIndexChangeCollector::Reset() {
     TBaseChangeCollector::Reset();
-    RowsCache.Reset();
 }
 
 auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
@@ -197,7 +186,6 @@ auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
 
     TCachedTagsBuilder builder;
-    builder.MakeKeyTagToPos(userTable->KeyColumnIds);
 
     for (const auto& [_, index] : userTable->Indexes) {
         if (index.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
@@ -209,15 +197,6 @@ auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
     }
 
     return CachedTags.emplace(tableId, builder.Build()).first;
-}
-
-const THashMap<TTag, TPos>& TAsyncIndexChangeCollector::GetKeyTagToPos(const TTableId& tableId) const {
-    auto it = CachedTags.find(tableId);
-    if (it == CachedTags.end()) {
-        it = CacheTags(tableId);
-    }
-
-    return it->second.KeyTagToPos;
 }
 
 TArrayRef<TTag> TAsyncIndexChangeCollector::GetTagsToSelect(const TTableId& tableId, ERowOp rop) const {

@@ -512,8 +512,9 @@ void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, TEvDat
     stats.SetCpuTimeUsec(totalCpuTime.MicroSeconds());
 }
 
-ui64 TDataShard::AllocateChangeRecordOrder(NIceDb::TNiceDb& db) {
-    const ui64 result = NextChangeRecordOrder++;
+ui64 TDataShard::AllocateChangeRecordOrder(NIceDb::TNiceDb& db, ui64 count) {
+    const ui64 result = NextChangeRecordOrder;
+    NextChangeRecordOrder = result + count;
     PersistSys(db, Schema::Sys_NextChangeRecordOrder, NextChangeRecordOrder);
 
     return result;
@@ -529,24 +530,83 @@ ui64 TDataShard::AllocateChangeRecordGroup(NIceDb::TNiceDb& db) {
     return result;
 }
 
+ui64 TDataShard::GetNextChangeRecordLockOffset(ui64 lockId) {
+    auto it = LockChangeRecords.find(lockId);
+    if (it == LockChangeRecords.end() || it->second.empty()) {
+        return 0;
+    }
+
+    return it->second.back().LockOffset + 1;
+}
+
 void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistChangeRecord"
         << ": record: " << record
         << ", at tablet: " << TabletID());
 
-    db.Table<Schema::ChangeRecords>().Key(record.GetOrder()).Update(
-        NIceDb::TUpdate<Schema::ChangeRecords::Group>(record.GetGroup()),
-        NIceDb::TUpdate<Schema::ChangeRecords::PlanStep>(record.GetStep()),
-        NIceDb::TUpdate<Schema::ChangeRecords::TxId>(record.GetTxId()),
-        NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
-        NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-        NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()),
-        NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
-        NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
-        NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
-    db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
-        NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
-        NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()));
+    if (record.GetLockId() == 0) {
+        db.Table<Schema::ChangeRecords>().Key(record.GetOrder()).Update(
+            NIceDb::TUpdate<Schema::ChangeRecords::Group>(record.GetGroup()),
+            NIceDb::TUpdate<Schema::ChangeRecords::PlanStep>(record.GetStep()),
+            NIceDb::TUpdate<Schema::ChangeRecords::TxId>(record.GetTxId()),
+            NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
+            NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
+            NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()),
+            NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
+            NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
+            NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
+        db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()));
+    } else {
+        db.Table<Schema::LockChangeRecords>().Key(record.GetLockId(), record.GetLockOffset()).Update(
+            NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
+            NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
+            NIceDb::TUpdate<Schema::LockChangeRecords::BodySize>(record.GetBody().size()),
+            NIceDb::TUpdate<Schema::LockChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
+            NIceDb::TUpdate<Schema::LockChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
+            NIceDb::TUpdate<Schema::LockChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
+        db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()));
+    }
+}
+
+void TDataShard::PersistCommitLockChangeRecords(TTransactionContext& txc, ui64 order, ui64 lockId, ui64 group, const TRowVersion& rowVersion) {
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistCommitLockChangeRecords"
+        << ": order# " << order
+        << ", lockId# " << lockId
+        << ", group# " << group
+        << ", version# " << rowVersion
+        << ", at tablet: " << TabletID());
+
+    auto it = LockChangeRecords.find(lockId);
+    Y_VERIFY_S(it != LockChangeRecords.end() && !it->second.empty(), "Cannot commit lock " << lockId << " change records: there are no pending change records");
+
+    auto& entry = CommittedLockChangeRecords[lockId];
+    Y_VERIFY_S(entry.Order == Max<ui64>(), "Cannot commit lock " << lockId << " change records multiple times");
+    entry.Order = order;
+    entry.Group = group;
+    entry.Step = rowVersion.Step;
+    entry.TxId = rowVersion.TxId;
+    entry.Count = it->second.size();
+
+    NIceDb::TNiceDb db(txc.DB);
+
+    db.Table<Schema::ChangeRecordCommits>().Key(order).Update(
+        NIceDb::TUpdate<Schema::ChangeRecordCommits::LockId>(lockId),
+        NIceDb::TUpdate<Schema::ChangeRecordCommits::Group>(group),
+        NIceDb::TUpdate<Schema::ChangeRecordCommits::PlanStep>(rowVersion.Step),
+        NIceDb::TUpdate<Schema::ChangeRecordCommits::TxId>(rowVersion.TxId));
+
+    txc.OnCommit([this, lockId]() {
+        // We expect operation to enqueue transformed change records,
+        // so we no longer need original uncommitted records.
+        LockChangeRecords.erase(lockId);
+    });
+    txc.OnRollback([this, lockId]() {
+        CommittedLockChangeRecords.erase(lockId);
+    });
 }
 
 void TDataShard::MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId) {
@@ -560,13 +620,22 @@ void TDataShard::MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId
         NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(pathId.LocalPathId));
 }
 
+void TDataShard::MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId) {
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "MoveChangeRecord"
+        << ": lockId: " << lockId
+        << ", lockOffset: " << lockOffset
+        << ": pathId: " << pathId
+        << ", at tablet: " << TabletID());
+
+    db.Table<Schema::LockChangeRecords>().Key(lockId, lockOffset).Update(
+        NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(pathId.OwnerId),
+        NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(pathId.LocalPathId));
+}
+
 void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "RemoveChangeRecord"
         << ": order: " << order
         << ", at tablet: " << TabletID());
-
-    db.Table<Schema::ChangeRecords>().Key(order).Delete();
-    db.Table<Schema::ChangeRecordDetails>().Key(order).Delete();
 
     auto it = ChangesQueue.find(order);
     if (it == ChangesQueue.end()) {
@@ -575,6 +644,24 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     }
 
     const auto& record = it->second;
+
+    if (record.LockId) {
+        db.Table<Schema::LockChangeRecords>().Key(record.LockId, record.LockOffset).Delete();
+        db.Table<Schema::LockChangeRecordDetails>().Key(record.LockId, record.LockOffset).Delete();
+        // Delete ChangeRecordCommits row when the last record is removed
+        auto it = CommittedLockChangeRecords.find(record.LockId);
+        if (it != CommittedLockChangeRecords.end()) {
+            Y_VERIFY_DEBUG(it->second.Count > 0);
+            if (it->second.Count > 0 && 0 == --it->second.Count) {
+                db.Table<Schema::ChangeRecordCommits>().Key(it->second.Order).Delete();
+                CommittedLockChangeRecords.erase(it);
+                LockChangeRecords.erase(record.LockId);
+            }
+        }
+    } else {
+        db.Table<Schema::ChangeRecords>().Key(order).Delete();
+        db.Table<Schema::ChangeRecordDetails>().Key(order).Delete();
+    }
 
     Y_VERIFY(record.BodySize <= ChangesQueueBytes);
     ChangesQueueBytes -= record.BodySize;
@@ -625,15 +712,15 @@ void TDataShard::EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChang
 
     TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
     for (const auto& record : records) {
-        forward.emplace_back(record.Order(), record.PathId(), record.BodySize());
+        forward.emplace_back(record.Order, record.PathId, record.BodySize);
 
-        if (auto res = ChangesQueue.emplace(record.Order(), record); res.second) {
-            Y_VERIFY(ChangesQueueBytes <= (Max<ui64>() - record.BodySize()));
-            ChangesQueueBytes += record.BodySize();
+        if (auto res = ChangesQueue.emplace(record.Order, record); res.second) {
+            Y_VERIFY(ChangesQueueBytes <= (Max<ui64>() - record.BodySize));
+            ChangesQueueBytes += record.BodySize;
 
-            if (record.SchemaVersion()) {
+            if (record.SchemaVersion) {
                 res.first->second.SchemaSnapshotAcquired = SchemaSnapshotManager.AcquireReference(
-                    TSchemaSnapshotKey(record.TableId(), record.SchemaVersion()));
+                    TSchemaSnapshotKey(record.TableId, record.SchemaVersion));
             }
         }
     }
@@ -643,6 +730,48 @@ void TDataShard::EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChang
 
     Y_VERIFY(OutChangeSender);
     Send(OutChangeSender, new TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
+}
+
+void TDataShard::AddLockChangeRecords(ui64 lockId, TVector<NMiniKQL::IChangeCollector::TChange>&& records) {
+    if (!records) {
+        return;
+    }
+
+    auto orderedByLockOffset = [](auto& records) -> bool {
+        auto it = records.begin();
+        ui64 prevOffset = it->LockOffset;
+        while (++it != records.end()) {
+            ui64 offset = it->LockOffset;
+            if (!(prevOffset < offset)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    Y_VERIFY_DEBUG(orderedByLockOffset(records));
+
+    auto& lockChanges = LockChangeRecords[lockId];
+    if (lockChanges.empty()) {
+        lockChanges = std::move(records);
+        return;
+    }
+
+    Y_VERIFY_DEBUG(lockChanges.back().LockOffset < records.front().LockOffset);
+
+    lockChanges.reserve(lockChanges.size() + records.size());
+    for (auto& record : records) {
+        lockChanges.emplace_back(std::move(record));
+    }
+}
+
+const TVector<NMiniKQL::IChangeCollector::TChange>& TDataShard::GetLockChangeRecords(ui64 lockId) const {
+    auto it = LockChangeRecords.find(lockId);
+    if (it == LockChangeRecords.end()) {
+        static TVector<NMiniKQL::IChangeCollector::TChange> empty;
+        return empty;
+    }
+
+    return it->second;
 }
 
 void TDataShard::CreateChangeSender(const TActorContext& ctx) {
@@ -727,6 +856,9 @@ bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChang
 
     while (!rowset.EndOfSet()) {
         const ui64 order = rowset.GetValue<Schema::ChangeRecords::Order>();
+        const ui64 group = rowset.GetValue<Schema::ChangeRecords::Group>();
+        const ui64 step = rowset.GetValue<Schema::ChangeRecords::PlanStep>();
+        const ui64 txId = rowset.GetValue<Schema::ChangeRecords::TxId>();
         const ui64 bodySize = rowset.GetValue<Schema::ChangeRecords::BodySize>();
         const ui64 schemaVersion = rowset.GetValue<Schema::ChangeRecords::SchemaVersion>();
         const auto pathId = TPathId(
@@ -738,13 +870,163 @@ bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChang
             rowset.GetValue<Schema::ChangeRecords::TablePathId>()
         );
 
-        records.emplace_back(order, pathId, bodySize, tableId, schemaVersion);
+        records.push_back(NMiniKQL::IChangeCollector::TChange{
+            .Order = order,
+            .Group = group,
+            .Step = step,
+            .TxId = txId,
+            .PathId = pathId,
+            .BodySize = bodySize,
+            .TableId = tableId,
+            .SchemaVersion = schemaVersion,
+        });
+
         if (!rowset.Next()) {
             return false;
         }
     }
 
     return true;
+}
+
+bool TDataShard::LoadLockChangeRecords(NIceDb::TNiceDb& db) {
+    using Schema = TDataShard::Schema;
+
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadLockChangeRecords"
+        << " at tablet: " << TabletID());
+
+    auto rowset = db.Table<Schema::LockChangeRecords>().Range().Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+
+    while (!rowset.EndOfSet()) {
+        const ui64 lockId = rowset.GetValue<Schema::LockChangeRecords::LockId>();
+        const ui64 lockOffset = rowset.GetValue<Schema::LockChangeRecords::LockOffset>();
+        const ui64 bodySize = rowset.GetValue<Schema::LockChangeRecords::BodySize>();
+        const ui64 schemaVersion = rowset.GetValue<Schema::LockChangeRecords::SchemaVersion>();
+        const auto pathId = TPathId(
+            rowset.GetValue<Schema::LockChangeRecords::PathOwnerId>(),
+            rowset.GetValue<Schema::LockChangeRecords::LocalPathId>()
+        );
+        const auto tableId = TPathId(
+            rowset.GetValue<Schema::LockChangeRecords::TableOwnerId>(),
+            rowset.GetValue<Schema::LockChangeRecords::TablePathId>()
+        );
+
+        LockChangeRecords[lockId].push_back(NMiniKQL::IChangeCollector::TChange{
+            .Order = Max<ui64>(),
+            .Group = 0,
+            .Step = 0,
+            .TxId = 0,
+            .PathId = pathId,
+            .BodySize = bodySize,
+            .TableId = tableId,
+            .SchemaVersion = schemaVersion,
+            .LockId = lockId,
+            .LockOffset = lockOffset,
+        });
+
+        if (!rowset.Next()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TDataShard::LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records) {
+    using Schema = TDataShard::Schema;
+
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadChangeRecordCommits"
+        << " at tablet: " << TabletID());
+
+    bool needSort = false;
+
+    auto rowset = db.Table<Schema::ChangeRecordCommits>().Range().Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+
+    while (!rowset.EndOfSet()) {
+        const ui64 order = rowset.GetValue<Schema::ChangeRecordCommits::Order>();
+        const ui64 lockId = rowset.GetValue<Schema::ChangeRecordCommits::LockId>();
+        const ui64 group = rowset.GetValue<Schema::ChangeRecordCommits::Group>();
+        const ui64 step = rowset.GetValue<Schema::ChangeRecordCommits::PlanStep>();
+        const ui64 txId = rowset.GetValue<Schema::ChangeRecordCommits::TxId>();
+
+        auto& entry = CommittedLockChangeRecords[lockId];
+        entry.Order = order;
+        entry.Group = group;
+        entry.Step = step;
+        entry.TxId = txId;
+
+        for (auto& record : LockChangeRecords[lockId]) {
+            records.push_back(NMiniKQL::IChangeCollector::TChange{
+                .Order = order + record.LockOffset,
+                .Group = group,
+                .Step = step,
+                .TxId = txId,
+                .PathId = record.PathId,
+                .BodySize = record.BodySize,
+                .TableId = record.TableId,
+                .SchemaVersion = record.SchemaVersion,
+                .LockId = record.LockId,
+                .LockOffset = record.LockOffset,
+            });
+            entry.Count++;
+            needSort = true;
+        }
+
+        LockChangeRecords.erase(lockId);
+
+        if (!rowset.Next()) {
+            return false;
+        }
+    }
+
+    if (needSort) {
+        std::sort(records.begin(), records.end(), [](const auto& a, const auto& b) -> bool {
+            return a.Order < b.Order;
+        });
+    }
+
+    return true;
+}
+
+void TDataShard::ScheduleRemoveLockChanges(ui64 lockId) {
+    if (LockChangeRecords.contains(lockId) && !CommittedLockChangeRecords.contains(lockId)) {
+        bool wasEmpty = PendingLockChangeRecordsToRemove.empty();
+        PendingLockChangeRecordsToRemove.push_back(lockId);
+        if (wasEmpty) {
+            Send(SelfId(), new TEvPrivate::TEvRemoveLockChangeRecords);
+        }
+    }
+}
+
+void TDataShard::ScheduleRemoveAbandonedLockChanges() {
+    bool wasEmpty = PendingLockChangeRecordsToRemove.empty();
+
+    for (const auto& pr : LockChangeRecords) {
+        ui64 lockId = pr.first;
+
+        if (CommittedLockChangeRecords.contains(lockId)) {
+            // Skip committed lock changes
+            continue;
+        }
+
+        auto lock = SysLocksTable().GetRawLock(lockId);
+        if (lock && lock->IsPersistent()) {
+            // Skip lock changes attached to persistent locks
+            continue;
+        }
+
+        PendingLockChangeRecordsToRemove.push_back(lockId);
+    }
+
+    if (wasEmpty && !PendingLockChangeRecordsToRemove.empty()) {
+        Send(SelfId(), new TEvPrivate::TEvRemoveLockChangeRecords);
+    }
 }
 
 void TDataShard::PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation &op) {

@@ -122,6 +122,8 @@ void TDataShardLocksDb::PersistRemoveLock(ui64 lockId) {
     NIceDb::TNiceDb db(DB);
     db.Table<Schema::Locks>().Key(lockId).Delete();
     HasChanges_ = true;
+
+    Self.ScheduleRemoveLockChanges(lockId);
 }
 
 void TDataShardLocksDb::PersistAddRange(ui64 lockId, ui64 rangeId, const TPathId& tableId, ui64 flags, const TString& data) {

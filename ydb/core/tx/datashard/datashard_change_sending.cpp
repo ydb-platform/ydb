@@ -16,14 +16,24 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
         for (const auto& [_, records] : Self->ChangeRecordsRequested) {
             for (const auto& record : records) {
+                auto itQueue = Self->ChangesQueue.find(record.Order);
+                if (itQueue == Self->ChangesQueue.end()) {
+                    continue;
+                }
+
                 if (bodiesSize && (bodiesSize + record.BodySize) > MemLimit) {
                     break;
                 }
 
                 bodiesSize += record.BodySize;
 
-                ok = ok && db.Table<Schema::ChangeRecords>().Key(record.Order).Precharge();
-                ok = ok && db.Table<Schema::ChangeRecordDetails>().Key(record.Order).Precharge();
+                if (itQueue->second.LockId) {
+                    ok = ok && db.Table<Schema::LockChangeRecords>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Precharge();
+                    ok = ok && db.Table<Schema::LockChangeRecordDetails>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Precharge();
+                } else {
+                    ok = ok && db.Table<Schema::ChangeRecords>().Key(record.Order).Precharge();
+                    ok = ok && db.Table<Schema::ChangeRecordDetails>().Key(record.Order).Precharge();
+                }
             }
         }
 
@@ -38,59 +48,130 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
             auto it = records.begin();
             while (it != records.end()) {
-                if (MemUsage && (MemUsage + it->BodySize) > MemLimit) {
-                    break;
-                }
-
-                auto basic = db.Table<Schema::ChangeRecords>().Key(it->Order).Select();
-                auto details = db.Table<Schema::ChangeRecordDetails>().Key(it->Order).Select();
-
-                if (!basic.IsReady() || !details.IsReady()) {
-                    return false;
-                }
-
-                if (!basic.IsValid() && !details.IsValid()) {
+                auto itQueue = Self->ChangesQueue.find(it->Order);
+                if (itQueue == Self->ChangesQueue.end()) {
                     RecordsToForget[recipient].emplace_back(it->Order);
                     it = records.erase(it);
                     continue;
                 }
 
-                Y_VERIFY_S(basic.IsValid() && details.IsValid(), "Inconsistent basic and details"
-                    << ", basic.IsValid: " << basic.IsValid()
-                    << ", details.IsValid: " << details.IsValid()
-                    << ", recipient: " << recipient
-                    << ", records.size: " << records.size()
-                    << ", it->Order: " << it->Order
-                    << ", it->BodySize: " << it->BodySize);
-
-                const auto schemaVersion = basic.GetValue<Schema::ChangeRecords::SchemaVersion>();
-                const auto tableId = TPathId(
-                    basic.GetValue<Schema::ChangeRecords::TableOwnerId>(),
-                    basic.GetValue<Schema::ChangeRecords::TablePathId>()
-                );
-
-                TUserTable::TCPtr schema;
-                if (schemaVersion) {
-                    const auto snapshotKey = TSchemaSnapshotKey(tableId, schemaVersion);
-                    if (const auto* snapshot = Self->GetSchemaSnapshotManager().FindSnapshot(snapshotKey)) {
-                        schema = snapshot->Schema;
-                    }
+                if (MemUsage && (MemUsage + it->BodySize) > MemLimit) {
+                    break;
                 }
-                
-                RecordsToSend[recipient].emplace_back(TChangeRecordBuilder(details.GetValue<Schema::ChangeRecordDetails::Kind>())
-                    .WithOrder(it->Order)
-                    .WithGroup(basic.GetValue<Schema::ChangeRecords::Group>())
-                    .WithStep(basic.GetValue<Schema::ChangeRecords::PlanStep>())
-                    .WithTxId(basic.GetValue<Schema::ChangeRecords::TxId>())
-                    .WithPathId(TPathId(
-                        basic.GetValue<Schema::ChangeRecords::PathOwnerId>(),
-                        basic.GetValue<Schema::ChangeRecords::LocalPathId>()
-                    ))
-                    .WithTableId(tableId)
-                    .WithSchemaVersion(schemaVersion)
-                    .WithSchema(schema)
-                    .WithBody(details.GetValue<Schema::ChangeRecordDetails::Body>())
-                    .Build());
+
+                if (itQueue->second.LockId) {
+                    auto itCommit = Self->CommittedLockChangeRecords.find(itQueue->second.LockId);
+                    if (itCommit == Self->CommittedLockChangeRecords.end()) {
+                        Y_VERIFY_DEBUG_S(false, "Unexpected change record " << it->Order << " from an uncommitted lock " << itQueue->second.LockId);
+                        RecordsToForget[recipient].emplace_back(it->Order);
+                        it = records.erase(it);
+                        continue;
+                    }
+
+                    auto basic = db.Table<Schema::LockChangeRecords>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Select();
+                    auto details = db.Table<Schema::LockChangeRecordDetails>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Select();
+
+                    if (!basic.IsReady() || !details.IsReady()) {
+                        return false;
+                    }
+
+                    if (!basic.IsValid() && !details.IsValid()) {
+                        RecordsToForget[recipient].emplace_back(it->Order);
+                        it = records.erase(it);
+                        continue;
+                    }
+
+                    Y_VERIFY_S(basic.IsValid() && details.IsValid(), "Inconsistent basic and details"
+                        << ", basic.IsValid: " << basic.IsValid()
+                        << ", details.IsValid: " << details.IsValid()
+                        << ", recipient: " << recipient
+                        << ", records.size: " << records.size()
+                        << ", it->Order: " << it->Order
+                        << ", it->BodySize: " << it->BodySize
+                        << ", LockId: " << itQueue->second.LockId
+                        << ", LockOffset: " << itQueue->second.LockOffset);
+
+                    const auto schemaVersion = basic.GetValue<Schema::LockChangeRecords::SchemaVersion>();
+                    const auto tableId = TPathId(
+                        basic.GetValue<Schema::LockChangeRecords::TableOwnerId>(),
+                        basic.GetValue<Schema::LockChangeRecords::TablePathId>()
+                    );
+
+                    TUserTable::TCPtr schema;
+                    if (schemaVersion) {
+                        const auto snapshotKey = TSchemaSnapshotKey(tableId, schemaVersion);
+                        if (const auto* snapshot = Self->GetSchemaSnapshotManager().FindSnapshot(snapshotKey)) {
+                            schema = snapshot->Schema;
+                        }
+                    }
+
+                    RecordsToSend[recipient].emplace_back(TChangeRecordBuilder(details.GetValue<Schema::LockChangeRecordDetails::Kind>())
+                        .WithOrder(it->Order)
+                        .WithGroup(itCommit->second.Group)
+                        .WithStep(itCommit->second.Step)
+                        .WithTxId(itCommit->second.TxId)
+                        .WithPathId(TPathId(
+                            basic.GetValue<Schema::LockChangeRecords::PathOwnerId>(),
+                            basic.GetValue<Schema::LockChangeRecords::LocalPathId>()
+                        ))
+                        .WithTableId(tableId)
+                        .WithSchemaVersion(schemaVersion)
+                        .WithSchema(schema)
+                        .WithBody(details.GetValue<Schema::LockChangeRecordDetails::Body>())
+                        .WithLockId(itQueue->second.LockId)
+                        .WithLockOffset(itQueue->second.LockOffset)
+                        .Build());
+                } else {
+                    auto basic = db.Table<Schema::ChangeRecords>().Key(it->Order).Select();
+                    auto details = db.Table<Schema::ChangeRecordDetails>().Key(it->Order).Select();
+
+                    if (!basic.IsReady() || !details.IsReady()) {
+                        return false;
+                    }
+
+                    if (!basic.IsValid() && !details.IsValid()) {
+                        RecordsToForget[recipient].emplace_back(it->Order);
+                        it = records.erase(it);
+                        continue;
+                    }
+
+                    Y_VERIFY_S(basic.IsValid() && details.IsValid(), "Inconsistent basic and details"
+                        << ", basic.IsValid: " << basic.IsValid()
+                        << ", details.IsValid: " << details.IsValid()
+                        << ", recipient: " << recipient
+                        << ", records.size: " << records.size()
+                        << ", it->Order: " << it->Order
+                        << ", it->BodySize: " << it->BodySize);
+
+                    const auto schemaVersion = basic.GetValue<Schema::ChangeRecords::SchemaVersion>();
+                    const auto tableId = TPathId(
+                        basic.GetValue<Schema::ChangeRecords::TableOwnerId>(),
+                        basic.GetValue<Schema::ChangeRecords::TablePathId>()
+                    );
+
+                    TUserTable::TCPtr schema;
+                    if (schemaVersion) {
+                        const auto snapshotKey = TSchemaSnapshotKey(tableId, schemaVersion);
+                        if (const auto* snapshot = Self->GetSchemaSnapshotManager().FindSnapshot(snapshotKey)) {
+                            schema = snapshot->Schema;
+                        }
+                    }
+                    
+                    RecordsToSend[recipient].emplace_back(TChangeRecordBuilder(details.GetValue<Schema::ChangeRecordDetails::Kind>())
+                        .WithOrder(it->Order)
+                        .WithGroup(basic.GetValue<Schema::ChangeRecords::Group>())
+                        .WithStep(basic.GetValue<Schema::ChangeRecords::PlanStep>())
+                        .WithTxId(basic.GetValue<Schema::ChangeRecords::TxId>())
+                        .WithPathId(TPathId(
+                            basic.GetValue<Schema::ChangeRecords::PathOwnerId>(),
+                            basic.GetValue<Schema::ChangeRecords::LocalPathId>()
+                        ))
+                        .WithTableId(tableId)
+                        .WithSchemaVersion(schemaVersion)
+                        .WithSchema(schema)
+                        .WithBody(details.GetValue<Schema::ChangeRecordDetails::Body>())
+                        .Build());
+                }
 
                 MemUsage += it->BodySize;
                 it = records.erase(it);

@@ -21,9 +21,23 @@ public:
         const THashMap<TPathId, TPathId> remap = DataShard.GetRemapIndexes(move);
 
         for (auto& record: changeRecords) {
-            if (remap.contains(record.PathId())) { // here could be the records for already deleted indexes, so skip them
-                record.SetPathId(remap.at(record.PathId()));
-                DataShard.MoveChangeRecord(db, record.Order(), record.PathId());
+            // We skip records for deleted indexes
+            if (remap.contains(record.PathId)) {
+                record.PathId = remap.at(record.PathId);
+                if (record.LockId) {
+                    DataShard.MoveChangeRecord(db, record.LockId, record.LockOffset, record.PathId);
+                } else {
+                    DataShard.MoveChangeRecord(db, record.Order, record.PathId);
+                }
+            }
+        }
+
+        for (auto& pr : DataShard.GetLockChangeRecords()) {
+            for (auto& record : pr.second) {
+                if (remap.contains(record.PathId)) {
+                    record.PathId = remap.at(record.PathId);
+                    DataShard.MoveChangeRecord(db, record.LockId, record.LockOffset, record.PathId);
+                }
             }
         }
     }
@@ -47,6 +61,21 @@ public:
 
         ChangeRecords.clear();
         if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
+            return EExecutionStatus::Restart;
+        }
+
+        auto lockChangeRecords = DataShard.TakeLockChangeRecords();
+        auto committedLockChangeRecords = DataShard.TakeCommittedLockChangeRecords();
+
+        if (!DataShard.LoadLockChangeRecords(db)) {
+            DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
+            DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
+            return EExecutionStatus::Restart;
+        }
+
+        if (!DataShard.LoadChangeRecordCommits(db, ChangeRecords)) {
+            DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
+            DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
             return EExecutionStatus::Restart;
         }
 

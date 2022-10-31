@@ -92,7 +92,6 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_async_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_cdc_stream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange_split.cpp
@@ -170,6 +169,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_schema_snapshots.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_snapshots.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_unsafe_upload.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_db.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_compute.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_effects.cpp
@@ -222,6 +222,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_cleanup_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/remove_lock_change_records.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/remove_locks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_avl_tree.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_ops.cpp

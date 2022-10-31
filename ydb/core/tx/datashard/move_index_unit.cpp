@@ -22,9 +22,22 @@ public:
         const auto remapNewId = PathIdFromPathId(move.GetReMapIndex().GetDstPathId());
 
         for (auto& record: changeRecords) {
-            if (record.PathId() == remapPrevId) {
-                record.SetPathId(remapNewId);
-                DataShard.MoveChangeRecord(db, record.Order(), record.PathId());
+            if (record.PathId == remapPrevId) {
+                record.PathId = remapNewId;
+                if (record.LockId) {
+                    DataShard.MoveChangeRecord(db, record.LockId, record.LockOffset, record.PathId);
+                } else {
+                    DataShard.MoveChangeRecord(db, record.Order, record.PathId);
+                }
+            }
+        }
+
+        for (auto& pr : DataShard.GetLockChangeRecords()) {
+            for (auto& record : pr.second) {
+                if (record.PathId == remapPrevId) {
+                    record.PathId = remapNewId;
+                    DataShard.MoveChangeRecord(db, record.LockId, record.LockOffset, record.PathId);
+                }
             }
         }
     }
@@ -48,6 +61,21 @@ public:
 
         ChangeRecords.clear();
         if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
+            return EExecutionStatus::Restart;
+        }
+
+        auto lockChangeRecords = DataShard.TakeLockChangeRecords();
+        auto committedLockChangeRecords = DataShard.TakeCommittedLockChangeRecords();
+
+        if (!DataShard.LoadLockChangeRecords(db)) {
+            DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
+            DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
+            return EExecutionStatus::Restart;
+        }
+
+        if (!DataShard.LoadChangeRecordCommits(db, ChangeRecords)) {
+            DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
+            DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
             return EExecutionStatus::Restart;
         }
 

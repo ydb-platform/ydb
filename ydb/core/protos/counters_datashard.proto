@@ -415,4 +415,5 @@ enum ETxTypes {
     TXTYPE_READ = 69                                      [(TxTypeOpts) = {Name: "TxRead"}];
     TXTYPE_SPLIT_REPLICATION_SOURCE_OFFSETS = 70          [(TxTypeOpts) = {Name: "TxSplitReplicationSourceOffsets"}];
     TXTYPE_REMOVE_LOCK = 71                               [(TxTypeOpts) = {Name: "TxRemoveLock"}];
+    TXTYPE_REMOVE_LOCK_CHANGE_RECORDS = 72                [(TxTypeOpts) = {Name: "TxRemoveLockChangeRecords"}];
 }

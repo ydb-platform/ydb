@@ -1,5 +1,6 @@
 #include "change_collector.h"
 #include "datashard_common_upload.h"
+#include "datashard_user_db.h"
 
 namespace NKikimr {
 namespace NDataShard {
@@ -59,8 +60,10 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
     const bool breakWriteConflicts = BreakLocks && self->SysLocksTable().HasWriteLocks(fullTableId);
 
+    TDataShardUserDb userDb(*self, txc.DB, readVersion);
+
     if (CollectChanges) {
-        ChangeCollector.Reset(CreateChangeCollector(*self, txc.DB, tableInfo, true));
+        ChangeCollector.Reset(CreateChangeCollector(*self, userDb, txc.DB, tableInfo, true));
     }
 
     if (ChangeCollector) {

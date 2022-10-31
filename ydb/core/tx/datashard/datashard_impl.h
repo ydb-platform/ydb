@@ -214,6 +214,7 @@ class TDataShard
     class TTxPersistFullCompactionTs;
     class TTxRemoveLock;
     class TTxGetOpenTxs;
+    class TTxRemoveLockChangeRecords;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -317,6 +318,7 @@ class TDataShard
             EvRemoveChangeRecords,
             EvReplicationSourceOffsets,
             EvMediatorRestoreBackup,
+            EvRemoveLockChangeRecords,
             EvEnd
         };
 
@@ -458,6 +460,8 @@ class TDataShard
         };
 
         struct TEvMediatorRestoreBackup : public TEventLocal<TEvMediatorRestoreBackup, EvMediatorRestoreBackup> {};
+
+        struct TEvRemoveLockChangeRecords : public TEventLocal<TEvRemoveLockChangeRecords, EvRemoveLockChangeRecords> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -816,12 +820,65 @@ class TDataShard
             using TColumns = TableColumns<LockId, ConflictId>;
         };
 
+        struct LockChangeRecords : Table<101> {
+            struct LockId :        Column<1, NScheme::NTypeIds::Uint64> {};
+            struct LockOffset :    Column<2, NScheme::NTypeIds::Uint64> {};
+            struct PathOwnerId :   Column<3, NScheme::NTypeIds::Uint64> {};
+            struct LocalPathId :   Column<4, NScheme::NTypeIds::Uint64> {};
+            struct BodySize :      Column<5, NScheme::NTypeIds::Uint64> {};
+            struct SchemaVersion : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct TableOwnerId :  Column<7, NScheme::NTypeIds::Uint64> {};
+            struct TablePathId :   Column<8, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<LockId, LockOffset>;
+            using TColumns = TableColumns<
+                LockId,
+                LockOffset,
+                PathOwnerId,
+                LocalPathId,
+                BodySize,
+                SchemaVersion,
+                TableOwnerId,
+                TablePathId
+            >;
+        };
+
+        struct LockChangeRecordDetails : Table<102> {
+            struct LockId :     Column<1, NScheme::NTypeIds::Uint64> {};
+            struct LockOffset : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct Kind :       Column<3, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::EKind; };
+            struct Body :       Column<4, NScheme::NTypeIds::String> { using Type = TString; };
+
+            using TKey = TableKey<LockId, LockOffset>;
+            using TColumns = TableColumns<LockId, LockOffset, Kind, Body>;
+        };
+
+        // Maps [Order ... Order+N-1] change records in the shard order
+        // to [0 ... N-1] change records from LockId
+        struct ChangeRecordCommits : Table<103> {
+            struct Order :         Column<1, NScheme::NTypeIds::Uint64> {};
+            struct LockId :        Column<2, NScheme::NTypeIds::Uint64> {};
+            struct Group :         Column<3, NScheme::NTypeIds::Uint64> {};
+            struct PlanStep :      Column<4, NScheme::NTypeIds::Uint64> {};
+            struct TxId :          Column<5, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<Order>;
+            using TColumns = TableColumns<
+                Order,
+                LockId,
+                Group,
+                PlanStep,
+                TxId
+            >;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
             SrcChangeSenderActivations, DstChangeSenderActivations,
             ReplicationSourceOffsets, ReplicationSources, DstReplicationSourceOffsetsReceived,
-            UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts>;
+            UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
+            LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1075,6 +1132,8 @@ class TDataShard
     void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvGetOpenTxs::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPrivate::TEvRemoveLockChangeRecords::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1517,18 +1576,27 @@ public:
 
     void PersistLastLoanTableTid(NIceDb::TNiceDb& db, ui32 localTid);
 
-    ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db);
+    ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db, ui64 count = 1);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
+    ui64 GetNextChangeRecordLockOffset(ui64 lockId);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
+    void PersistCommitLockChangeRecords(TTransactionContext& txc, ui64 order, ui64 lockId, ui64 group, const TRowVersion& rowVersion);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
+    void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     void EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChange>&& records);
+    void AddLockChangeRecords(ui64 lockId, TVector<NMiniKQL::IChangeCollector::TChange>&& records);
+    const TVector<NMiniKQL::IChangeCollector::TChange>& GetLockChangeRecords(ui64 lockId) const;
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
     void SuspendChangeSender(const TActorContext& ctx);
     const TActorId& GetChangeSender() const { return OutChangeSender; }
     bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records);
+    bool LoadLockChangeRecords(NIceDb::TNiceDb& db);
+    bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records);
+    void ScheduleRemoveLockChanges(ui64 lockId);
+    void ScheduleRemoveAbandonedLockChanges();
 
 
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
@@ -2281,17 +2349,23 @@ private:
         TPathId TableId;
         ui64 SchemaVersion;
         bool SchemaSnapshotAcquired;
+        ui64 LockId;
+        ui64 LockOffset;
 
-        explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId, ui64 schemaVersion)
+        explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
+                ui64 schemaVersion, ui64 lockId = 0, ui64 lockOffset = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
             , SchemaSnapshotAcquired(false)
+            , LockId(lockId)
+            , LockOffset(lockOffset)
         {
         }
 
         explicit TEnqueuedRecord(const NMiniKQL::IChangeCollector::TChange& record)
-            : TEnqueuedRecord(record.BodySize(), record.TableId(), record.SchemaVersion())
+            : TEnqueuedRecord(record.BodySize, record.TableId,
+                    record.SchemaVersion, record.LockId, record.LockOffset)
         {
         }
     };
@@ -2312,6 +2386,20 @@ private:
     ui64 ChangesQueueBytes = 0;
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;
+
+    struct TCommittedLockChangeRecords {
+        ui64 Order = Max<ui64>();
+        ui64 Group;
+        ui64 Step;
+        ui64 TxId;
+
+        // The number of records that are not deleted yet
+        size_t Count = 0;
+    };
+
+    THashMap<ui64, TVector<NMiniKQL::IChangeCollector::TChange>> LockChangeRecords; // ui64 is lock id
+    THashMap<ui64, TCommittedLockChangeRecords> CommittedLockChangeRecords; // ui64 is lock id
+    TVector<ui64> PendingLockChangeRecordsToRemove;
 
     // in
     THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id
@@ -2355,6 +2443,35 @@ private:
 
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
 
+public:
+    auto& GetLockChangeRecords() {
+        return LockChangeRecords;
+    }
+
+    auto TakeLockChangeRecords() {
+        auto result = std::move(LockChangeRecords);
+        LockChangeRecords.clear();
+        return result;
+    }
+
+    void SetLockChangeRecords(THashMap<ui64, TVector<NMiniKQL::IChangeCollector::TChange>>&& lockChangeRecords) {
+        LockChangeRecords = std::move(lockChangeRecords);
+    }
+
+    auto& GetCommittedLockChangeRecords() {
+        return CommittedLockChangeRecords;
+    }
+
+    auto TakeCommittedLockChangeRecords() {
+        auto result = std::move(CommittedLockChangeRecords);
+        CommittedLockChangeRecords.clear();
+        return result;
+    }
+
+    void SetCommittedLockChangeRecords(THashMap<ui64, TCommittedLockChangeRecords>&& committedLockChangeRecords) {
+        CommittedLockChangeRecords = std::move(committedLockChangeRecords);
+    }
+
 protected:
     // Redundant init state required by flat executor implementation
     void StateInit(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
@@ -2379,6 +2496,7 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvSubscribeReadStepResult, Handle);
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
+            HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
@@ -2494,6 +2612,7 @@ protected:
             fFunc(TEvDataShard::EvReplicationSourceOffsetsCancel, HandleByReplicationSourceOffsetsServer);
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
             HFunc(TEvDataShard::TEvGetOpenTxs, Handle);
+            HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,

@@ -897,22 +897,25 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
 
     const ui64 writeTxId = GetWriteTxId(tableId);
 
-    if (writeTxId == 0) {
-        if (auto collector = GetChangeCollector(tableId)) {
+    if (auto collector = GetChangeCollector(tableId)) {
+        if (writeTxId == 0) {
             collector->SetWriteVersion(GetWriteVersion(tableId));
-            if (collector->NeedToReadKeys()) {
-                collector->SetReadVersion(GetReadVersion(tableId));
-            }
-
-            if (!collector->Collect(tableId, NTable::ERowOp::Upsert, key, ops)) {
-                collector->Reset();
-                throw TNotReadyTabletException();
-            }
+        } else {
+            collector->SetWriteTxId(writeTxId);
+        }
+        if (collector->NeedToReadKeys()) {
+            collector->SetReadVersion(GetReadVersion(tableId));
         }
 
+        if (!collector->Collect(tableId, NTable::ERowOp::Upsert, key, ops)) {
+            collector->Reset();
+            throw TNotReadyTabletException();
+        }
+    }
+
+    if (writeTxId == 0) {
         Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, GetWriteVersion(tableId));
     } else {
-        // TODO: integrate with change collector somehow
         Db.UpdateTx(localTid, NTable::ERowOp::Upsert, key, ops, writeTxId);
     }
 
@@ -932,22 +935,25 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
 
     const ui64 writeTxId = GetWriteTxId(tableId);
 
-    if (writeTxId == 0) {
-        if (auto collector = GetChangeCollector(tableId)) {
+    if (auto collector = GetChangeCollector(tableId)) {
+        if (writeTxId == 0) {
             collector->SetWriteVersion(GetWriteVersion(tableId));
-            if (collector->NeedToReadKeys()) {
-                collector->SetReadVersion(GetReadVersion(tableId));
-            }
-
-            if (!collector->Collect(tableId, NTable::ERowOp::Erase, key, {})) {
-                collector->Reset();
-                throw TNotReadyTabletException();
-            }
+        } else {
+            collector->SetWriteTxId(writeTxId);
+        }
+        if (collector->NeedToReadKeys()) {
+            collector->SetReadVersion(GetReadVersion(tableId));
         }
 
+        if (!collector->Collect(tableId, NTable::ERowOp::Erase, key, {})) {
+            collector->Reset();
+            throw TNotReadyTabletException();
+        }
+    }
+
+    if (writeTxId == 0) {
         Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId));
     } else {
-        // TODO: integrate with change collector somehow
         Db.UpdateTx(localTid, NTable::ERowOp::Erase, key, { }, writeTxId);
     }
 

@@ -709,16 +709,9 @@ void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writ
             sysLocks.CommitLock(lockKey);
 
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
-            auto localTid = dataShard.GetLocalTableId(tableId);
-            Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << origin);
-
             auto txId = lockProto.GetLockId();
-            if (!txc.DB.HasOpenTx(localTid, txId)) {
-                continue;
-            }
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLocks: commit txId# " << txId << " in localTid# " << localTid);
-            txc.DB.CommitTx(localTid, txId, writeVersion);
+            tx->GetDataTx()->CommitChanges(tableId, txId, writeVersion, txc);
         }
     } else {
         KqpEraseLocks(origin, tx, sysLocks);

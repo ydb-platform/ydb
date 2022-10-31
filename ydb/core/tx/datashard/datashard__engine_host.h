@@ -100,6 +100,8 @@ public:
     void SetIsImmediateTx();
     void SetIsRepeatableSnapshot();
 
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion, TTransactionContext& txc);
+
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
 

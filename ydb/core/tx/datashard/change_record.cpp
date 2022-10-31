@@ -268,11 +268,23 @@ void TChangeRecord::Out(IOutputStream& out) const {
         << " Body: " << Body.size() << "b"
         << " TableId: " << TableId
         << " SchemaVersion: " << SchemaVersion
+        << " LockId: " << LockId
+        << " LockOffset: " << LockOffset
     << " }";
 }
 
 TChangeRecordBuilder::TChangeRecordBuilder(EKind kind) {
     Record.Kind = kind;
+}
+
+TChangeRecordBuilder& TChangeRecordBuilder::WithLockId(ui64 lockId) {
+    Record.LockId = lockId;
+    return *this;
+}
+
+TChangeRecordBuilder& TChangeRecordBuilder::WithLockOffset(ui64 lockOffset) {
+    Record.LockOffset = lockOffset;
+    return *this;
 }
 
 TChangeRecordBuilder& TChangeRecordBuilder::WithOrder(ui64 order) {

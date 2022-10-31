@@ -33,6 +33,8 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
 
         Self->KillChangeSender(ctx);
         Self->ChangesQueue.clear();
+        Self->LockChangeRecords.clear();
+        Self->CommittedLockChangeRecords.clear();
         ChangeRecords.clear();
 
         bool done = ReadEverything(txc);
@@ -418,6 +420,18 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::LockChangeRecords::TableId)) {
+        if (!Self->LoadLockChangeRecords(db)) {
+            return false;
+        }
+    }
+
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecordCommits::TableId)) {
+        if (!Self->LoadChangeRecordCommits(db, ChangeRecords)) {
+            return false;
+        }
+    }
+
     Self->ReplicatedTables.clear();
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ReplicationSources::TableId)) {
         auto rowset = db.Table<Schema::ReplicationSources>().Select();
@@ -501,6 +515,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     Self->SubscribeNewLocks();
+
+    Self->ScheduleRemoveAbandonedLockChanges();
 
     return true;
 }

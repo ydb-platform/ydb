@@ -180,6 +180,10 @@ public:
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
 
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion, TTransactionContext& txc) {
+        EngineBay.CommitChanges(tableId, lockId, writeVersion, txc);
+    }
+
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
     void ResetCollectedChanges() { EngineBay.ResetCollectedChanges(); }
 

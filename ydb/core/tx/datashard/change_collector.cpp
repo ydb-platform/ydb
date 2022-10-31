@@ -2,6 +2,7 @@
 #include "change_collector_async_index.h"
 #include "change_collector_cdc_stream.h"
 #include "datashard_impl.h"
+#include "datashard_user_db.h"
 
 #include <util/generic/vector.h>
 
@@ -10,9 +11,17 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TChangeCollectorProxy: public IChangeCollector {
+class TChangeCollectorProxy: public IDataShardChangeCollector {
 public:
-    void AddUnderlying(THolder<IChangeCollector> collector) {
+    TChangeCollectorProxy(TDataShard& dataShard, bool isImmediateTx)
+        : DataShard(dataShard)
+    {
+        if (!isImmediateTx) {
+            Group = 0;
+        }
+    }
+
+    void AddUnderlying(THolder<IBaseChangeCollector> collector) {
         Underlying.emplace_back(std::move(collector));
     }
 
@@ -33,8 +42,15 @@ public:
     }
 
     void SetWriteVersion(const TRowVersion& writeVersion) override {
+        WriteVersion = writeVersion;
         for (auto& collector : Underlying) {
             collector->SetWriteVersion(writeVersion);
+        }
+    }
+
+    void SetWriteTxId(ui64 txId) override {
+        for (auto& collector : Underlying) {
+            collector->SetWriteTxId(txId);
         }
     }
 
@@ -53,6 +69,10 @@ public:
     const TVector<TChange>& GetCollected() const override {
         CollectedBuf.clear();
 
+        if (!LockChanges.empty()) {
+            std::copy(LockChanges.begin(), LockChanges.end(), std::back_inserter(CollectedBuf));
+        }
+
         for (const auto& collector : Underlying) {
             const auto& collected = collector->GetCollected();
             std::copy(collected.begin(), collected.end(), std::back_inserter(CollectedBuf));
@@ -63,6 +83,10 @@ public:
 
     TVector<TChange>&& GetCollected() override {
         CollectedBuf.clear();
+
+        if (!LockChanges.empty()) {
+            std::move(LockChanges.begin(), LockChanges.end(), std::back_inserter(CollectedBuf));
+        }
 
         for (auto& collector : Underlying) {
             auto collected = std::move(collector->GetCollected());
@@ -80,13 +104,47 @@ public:
         CollectedBuf.clear();
     }
 
+    void CommitLockChanges(ui64 lockId, const TVector<TChange>& changes, TTransactionContext& txc) override {
+        if (changes.empty()) {
+            return;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        ui64 count = changes.back().LockOffset + 1;
+        ui64 order = DataShard.AllocateChangeRecordOrder(db, count);
+
+        if (!Group) {
+            Group = DataShard.AllocateChangeRecordGroup(db);
+            for (auto& collector : Underlying) {
+                collector->SetGroup(*Group);
+            }
+        }
+
+        LockChanges.reserve(LockChanges.size() + changes.size());
+        for (const auto& change : changes) {
+            TChange fixed = change;
+            fixed.Order = order + change.LockOffset;
+            fixed.Group = *Group;
+            fixed.Step = WriteVersion.Step;
+            fixed.TxId = WriteVersion.TxId;
+            LockChanges.push_back(fixed);
+        }
+
+        DataShard.PersistCommitLockChangeRecords(txc, order, lockId, *Group, WriteVersion);
+    }
+
 private:
-    TVector<THolder<IChangeCollector>> Underlying;
+    TDataShard& DataShard;
+    TMaybe<ui64> Group;
+    TRowVersion WriteVersion = TRowVersion::Min();
+    TVector<THolder<IBaseChangeCollector>> Underlying;
+    TVector<TChange> LockChanges;
     mutable TVector<TChange> CollectedBuf;
 
 }; // TChangeCollectorProxy
 
-IChangeCollector* CreateChangeCollector(TDataShard& dataShard, NTable::TDatabase& db, const TUserTable& table, bool isImmediateTx) {
+IDataShardChangeCollector* CreateChangeCollector(TDataShard& dataShard, IDataShardUserDb& userDb, NTable::TDatabase& db, const TUserTable& table, bool isImmediateTx) {
     const bool hasAsyncIndexes = table.HasAsyncIndexes();
     const bool hasCdcStreams = table.HasCdcStreams();
 
@@ -94,23 +152,23 @@ IChangeCollector* CreateChangeCollector(TDataShard& dataShard, NTable::TDatabase
         return nullptr;
     }
 
-    auto proxy = MakeHolder<TChangeCollectorProxy>();
+    auto proxy = MakeHolder<TChangeCollectorProxy>(dataShard, isImmediateTx);
 
     if (hasAsyncIndexes) {
-        proxy->AddUnderlying(MakeHolder<TAsyncIndexChangeCollector>(&dataShard, db, isImmediateTx));
+        proxy->AddUnderlying(MakeHolder<TAsyncIndexChangeCollector>(&dataShard, userDb, db, isImmediateTx));
     }
 
     if (hasCdcStreams) {
-        proxy->AddUnderlying(MakeHolder<TCdcStreamChangeCollector>(&dataShard, db, isImmediateTx));
+        proxy->AddUnderlying(MakeHolder<TCdcStreamChangeCollector>(&dataShard, userDb, db, isImmediateTx));
     }
 
     return proxy.Release();
 }
 
-IChangeCollector* CreateChangeCollector(TDataShard& dataShard, NTable::TDatabase& db, ui64 tableId, bool isImmediateTx) {
+IDataShardChangeCollector* CreateChangeCollector(TDataShard& dataShard, IDataShardUserDb& userDb, NTable::TDatabase& db, ui64 tableId, bool isImmediateTx) {
     Y_VERIFY(dataShard.GetUserTables().contains(tableId));
     const TUserTable& tableInfo = *dataShard.GetUserTables().at(tableId);
-    return CreateChangeCollector(dataShard, db, tableInfo, isImmediateTx);
+    return CreateChangeCollector(dataShard, userDb, db, tableInfo, isImmediateTx);
 }
 
 } // NDataShard

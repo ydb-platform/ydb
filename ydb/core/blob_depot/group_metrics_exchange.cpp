@@ -1,4 +1,5 @@
 #include "blob_depot_tablet.h"
+#include "data.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -47,6 +48,8 @@ namespace NKikimr::NBlobDepot {
                 to->SetWriteThroughput(to->GetWriteThroughput() + from.GetWriteThroughput());
             };
 
+            std::unordered_set<ui32> processedDataGroups;
+
             for (const auto& channel : Info()->Channels) {
                 if (auto *entry = channel.LatestEntry(); entry && channel.Channel < Channels.size()) {
                     TChannelInfo& ch = Channels[channel.Channel];
@@ -58,14 +61,15 @@ namespace NKikimr::NBlobDepot {
                                 break;
 
                             case NKikimrBlobDepot::TChannelKind::Data:
-                                dataColor = Min(dataColor, p.GetSpaceColor());
-                                params->SetAvailableSize(params->GetAvailableSize() + p.GetAvailableSize());
-                                params->SetAllocatedSize(params->GetAllocatedSize() + p.GetAllocatedSize());
-                                if (p.HasAssuredResources()) {
-                                    addResources(params->MutableAssuredResources(), p.GetAssuredResources());
-                                }
-                                if (p.HasCurrentResources()) {
-                                    addResources(params->MutableCurrentResources(), p.GetCurrentResources());
+                                if (processedDataGroups.insert(entry->GroupID).second) { // count each data group exactly once
+                                    dataColor = Min(dataColor, p.GetSpaceColor());
+                                    params->SetAvailableSize(params->GetAvailableSize() + p.GetAvailableSize());
+                                    if (p.HasAssuredResources()) {
+                                        addResources(params->MutableAssuredResources(), p.GetAssuredResources());
+                                    }
+                                    if (p.HasCurrentResources()) {
+                                        addResources(params->MutableCurrentResources(), p.GetCurrentResources());
+                                    }
                                 }
                                 break;
 
@@ -76,6 +80,16 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
+            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate>();
+            auto& wb = ev->Record;
+            wb.SetGroupID(Config.GetVirtualGroupId());
+            wb.SetAllocatedSize(Data->GetTotalStoredDataSize());
+            wb.SetAvailableSize(params->GetAvailableSize());
+            wb.SetReadThroughput(0);
+            wb.SetWriteThroughput(0);
+            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
+
+            params->SetAllocatedSize(Data->GetTotalStoredDataSize());
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), response.release());
         }
     }

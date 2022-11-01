@@ -13,11 +13,11 @@
 
 namespace NKikimr {
 
+namespace NNodeWhiteboard {
+
 using TTabletId = ui64;
 using TFollowerId = ui32;
 using TNodeId = ui32;
-
-namespace NNodeWhiteboard {
 
 struct TEvWhiteboard{
     enum EEv {

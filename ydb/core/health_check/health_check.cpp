@@ -54,6 +54,10 @@ struct hash<NKikimrBlobStorage::TVSlotId> {
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
 namespace NKikimr {
+
+using NNodeWhiteboard::TNodeId;
+using NNodeWhiteboard::TTabletId;
+
 namespace NHealthCheck {
 
 using namespace NActors;
@@ -194,7 +198,7 @@ public:
         TPathId ResourcePathId = {};
         TVector<TNodeId> ComputeNodeIds;
         TVector<TString> StoragePoolNames;
-        THashMap<std::pair<TTabletId, TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
+        THashMap<std::pair<TTabletId, NNodeWhiteboard::TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
     };
 

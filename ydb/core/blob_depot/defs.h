@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/testing/group_overseer/group_overseer.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/protos/blob_depot.pb.h>

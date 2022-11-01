@@ -26,6 +26,9 @@ void Out<std::pair<ui64, ui32>>(IOutputStream& out, const std::pair<ui64, ui32>&
 }
 
 namespace NKikimr {
+
+using NNodeWhiteboard::TTabletId;
+
 class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     struct TEvPrivate {
         enum EEv {

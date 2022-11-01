@@ -50,6 +50,10 @@ static constexpr bool ENABLE_DETAILED_HIVE_LOG = false;
 const char *DOMAIN_NAME = "dc-1";
 
 namespace NKikimr {
+
+using NNodeWhiteboard::TTabletId;
+using NNodeWhiteboard::TFollowerId;
+
 namespace {
     using namespace NActors;
 

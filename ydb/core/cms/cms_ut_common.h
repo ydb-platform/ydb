@@ -16,6 +16,7 @@
 namespace NKikimr {
 namespace NCmsTest {
 
+using NNodeWhiteboard::TTabletId;
 using TNodeTenantsMap = THashMap<ui32, TVector<TString>>;
 
 struct TFakeNodeInfo {

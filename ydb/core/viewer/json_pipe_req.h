@@ -31,7 +31,7 @@ protected:
         ui32 Requests = 0;
     };
 
-    std::unordered_map<TTabletId, TPipeInfo> PipeInfo;
+    std::unordered_map<NNodeWhiteboard::TTabletId, TPipeInfo> PipeInfo;
 
     struct TDelayedRequest {
         std::unique_ptr<IEventHandle> Event;
@@ -47,7 +47,7 @@ protected:
         return clientConfig;
     }
 
-    TActorId ConnectTabletPipe(TTabletId tabletId) {
+    TActorId ConnectTabletPipe(NNodeWhiteboard::TTabletId tabletId) {
         TPipeInfo& pipeInfo = PipeInfo[tabletId];
         if (!pipeInfo.PipeClient) {
             auto pipe = NTabletPipe::CreateClient(TBase::SelfId(), tabletId, GetPipeClientConfig());
@@ -87,7 +87,7 @@ protected:
         }
     }
 
-    void RequestHiveDomainStats(TTabletId hiveId) {
+    void RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
         TActorId pipeClient = ConnectTabletPipe(hiveId);
         THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
         request->Record.SetReturnFollowers(Followers);
@@ -95,20 +95,20 @@ protected:
         SendRequestToPipe(pipeClient, request.Release(), hiveId);
     }
 
-    void RequestHiveNodeStats(TTabletId hiveId) {
+    void RequestHiveNodeStats(NNodeWhiteboard::TTabletId hiveId) {
         TActorId pipeClient = ConnectTabletPipe(hiveId);
         THolder<TEvHive::TEvRequestHiveNodeStats> request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
         request->Record.SetReturnMetrics(Metrics);
         SendRequestToPipe(pipeClient, request.Release(), hiveId);
     }
 
-    void RequestHiveStorageStats(TTabletId hiveId) {
+    void RequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId) {
         TActorId pipeClient = ConnectTabletPipe(hiveId);
         THolder<TEvHive::TEvRequestHiveStorageStats> request = MakeHolder<TEvHive::TEvRequestHiveStorageStats>();
         SendRequestToPipe(pipeClient, request.Release(), hiveId);
     }
 
-    TTabletId GetConsoleId() {
+    NNodeWhiteboard::TTabletId GetConsoleId() {
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
         auto group = domains->GetDefaultStateStorageGroup(domain->DomainUid);
@@ -128,7 +128,7 @@ protected:
         SendRequestToPipe(pipeClient, request.Release());
     }
 
-    TTabletId GetBSControllerId() {
+    NNodeWhiteboard::TTabletId GetBSControllerId() {
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
         ui32 stateStorageGroup = domains->GetDefaultStateStorageGroup(domain->DomainUid);
@@ -189,7 +189,7 @@ protected:
         PipeInfo.clear();
     }
 
-    ui32 FailPipeConnect(TTabletId tabletId) {
+    ui32 FailPipeConnect(NNodeWhiteboard::TTabletId tabletId) {
         auto itPipeInfo = PipeInfo.find(tabletId);
         if (itPipeInfo != PipeInfo.end()) {
             ui32 requests = itPipeInfo->second.Requests;

@@ -33,7 +33,6 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_common.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_coordination.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_discovery.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_experimental.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_export.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_formats.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_import.proto

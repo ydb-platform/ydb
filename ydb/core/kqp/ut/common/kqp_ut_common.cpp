@@ -534,22 +534,6 @@ void FillProfile(NYdb::NTable::TScanQueryPart& streamPart, NYson::TYsonWriter& w
     Y_UNUSED(profileIndex);
 }
 
-void FillProfile(NYdb::NExperimental::TStreamPart& streamPart, NYson::TYsonWriter& writer, TVector<TString>* profiles,
-    ui32 profileIndex)
-{
-    if (streamPart.HasProfile()) {
-        if (profiles) {
-            profiles->emplace_back(streamPart.ExtractProfile());
-        } else {
-            writer.OnListItem();
-            writer.OnBeginMap();
-            writer.OnKeyedItem(TStringBuilder() << "_profile_" << profileIndex);
-            writer.OnStringScalar(streamPart.ExtractProfile());
-            writer.OnEndMap();
-        }
-    }
-}
-
 void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) {
     auto columns = resultSet.GetColumnsMeta();
 
@@ -592,10 +576,6 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles) {
     writer.OnEndList();
 
     return out.Str();
-}
-
-TString StreamResultToYson(NYdb::NExperimental::TStreamPartIterator& it, TVector<TString>* profiles) {
-    return StreamResultToYsonImpl(it, profiles);
 }
 
 TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it) {
@@ -710,10 +690,6 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
 
     res.ResultSetYson = out.Str();
     return res;
-}
-
-TCollectedStreamResult CollectStreamResult(NYdb::NExperimental::TStreamPartIterator& it) {
-    return CollectStreamResultImpl(it);
 }
 
 TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it) {

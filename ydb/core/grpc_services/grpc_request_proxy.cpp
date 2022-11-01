@@ -524,7 +524,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvS3ListingRequest, PreHandle);
         HFunc(TEvBiStreamPingRequest, PreHandle);
-        HFunc(TEvExperimentalStreamQueryRequest, PreHandle);
         HFunc(TEvStreamPQWriteRequest, PreHandle);
         HFunc(TEvStreamPQMigrationReadRequest, PreHandle);
         HFunc(TEvStreamTopicWriteRequest, PreHandle);

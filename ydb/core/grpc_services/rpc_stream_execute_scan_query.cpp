@@ -41,23 +41,6 @@ struct TParseRequestError {
         , Issues(issues) {}
 };
 
-bool NeedReportStats(const Ydb::Experimental::ExecuteStreamQueryRequest& req) {
-    switch (req.profile_mode()) {
-        case Experimental::ExecuteStreamQueryRequest_ProfileMode_PROFILE_MODE_UNSPECIFIED:
-        case Experimental::ExecuteStreamQueryRequest_ProfileMode_NONE:
-            return false;
-
-        case Experimental::ExecuteStreamQueryRequest_ProfileMode_BASIC:
-        case Experimental::ExecuteStreamQueryRequest_ProfileMode_FULL:
-        case Experimental::ExecuteStreamQueryRequest_ProfileMode_PROFILE:
-            return true;
-
-        case Experimental::ExecuteStreamQueryRequest_ProfileMode_ExecuteStreamQueryRequest_ProfileMode_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case Experimental::ExecuteStreamQueryRequest_ProfileMode_ExecuteStreamQueryRequest_ProfileMode_INT_MAX_SENTINEL_DO_NOT_USE_:
-            YQL_ENSURE(false);
-    }
-}
-
 bool NeedReportStats(const Ydb::Table::ExecuteScanQueryRequest& req) {
     switch (req.mode()) {
         case ExecuteScanQueryRequest_Mode_MODE_UNSPECIFIED:
@@ -129,52 +112,6 @@ bool FillKqpParameters(const ::google::protobuf::Map<TString, Ydb::TypedValue>& 
     return true;
 }
 
-bool FillKqpRequest(const Ydb::Experimental::ExecuteStreamQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
-    TParseRequestError& error)
-{
-    if (!FillKqpParameters(req.parameters(), *kqpRequest.MutableRequest()->MutableParameters(), error)) {
-        return false;
-    }
-
-    auto& query = req.yql_text();
-
-    NYql::TIssues issues;
-    if (!CheckQuery(query, issues)) {
-        error = TParseRequestError(Ydb::StatusIds::BAD_REQUEST, issues);
-        return false;
-    }
-
-    if (req.explain()) {
-        kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
-    } else {
-        kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    }
-
-    kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
-    kqpRequest.MutableRequest()->SetQuery(query);
-    kqpRequest.MutableRequest()->SetKeepSession(false);
-    switch (req.profile_mode()) {
-        case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_PROFILE_MODE_UNSPECIFIED:
-        case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_NONE:
-            kqpRequest.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE);
-            break;
-        case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_BASIC:
-            kqpRequest.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
-            break;
-        case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_FULL:
-            kqpRequest.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
-            break;
-        case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_PROFILE:
-            kqpRequest.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
-            break;
-        default:
-            YQL_ENSURE(false, "Unknown profile_mode "
-                << Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_Name(req.profile_mode()));
-    }
-
-    return true;
-}
-
 bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
     TParseRequestError& error)
 {
@@ -230,14 +167,6 @@ bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::
         }
     }
 
-    return true;
-}
-
-bool FillProfile(Ydb::Experimental::ExecuteStreamQueryResponse& response,
-    const NYql::NDqProto::TDqExecutionStats& profile)
-{
-    response.set_status(Ydb::StatusIds::SUCCESS);
-    response.mutable_result()->set_profile(profile.Utf8DebugString());
     return true;
 }
 
@@ -395,43 +324,27 @@ private:
             auto& kqpResponse = record.GetResponse();
             response.set_status(Ydb::StatusIds::SUCCESS);
 
-            if constexpr (std::is_same_v<TResponse, Ydb::Table::ExecuteScanQueryPartialResponse>) {
-                bool reportStats = NeedReportStats(*Request_->GetProtoRequest());
-                bool reportPlan = reportStats && NeedReportPlan(*Request_->GetProtoRequest());
+            bool reportStats = NeedReportStats(*Request_->GetProtoRequest());
+            bool reportPlan = reportStats && NeedReportPlan(*Request_->GetProtoRequest());
 
-                if (reportStats) {
-                    if (kqpResponse.HasQueryStats()) {
-                        for (const auto& execStats: ExecutionProfiles_) {
-                            record.MutableResponse()->MutableQueryStats()->AddExecutions()->Swap(execStats.get());
-                        }
-
-                        record.MutableResponse()->SetQueryPlan(reportPlan
-                            ? SerializeAnalyzePlan(kqpResponse.GetQueryStats())
-                            : "");
-
-                        FillQueryStats(*response.mutable_result()->mutable_query_stats(), kqpResponse);
-                        ExecutionProfiles_.clear();
-                    } else if (reportPlan) {
-                        response.mutable_result()->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
-                    }
-
-                    if (reportPlan) {
-                        response.mutable_result()->mutable_query_stats()->set_query_ast(kqpResponse.GetQueryAst());
-                    }
-
-                    Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-                    Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
-                }
-            } else {
+            if (reportStats) {
                 if (kqpResponse.HasQueryStats()) {
-                    NKqpProto::TKqpStatsQuery queryStats;
                     for (const auto& execStats: ExecutionProfiles_) {
-                        /* copy as ExecutionProfiles_ vector will be used and cleared later */
-                        queryStats.AddExecutions()->CopyFrom(*execStats);
+                        record.MutableResponse()->MutableQueryStats()->AddExecutions()->Swap(execStats.get());
                     }
-                    response.mutable_result()->set_query_plan(SerializeAnalyzePlan(queryStats));
-                } else {
-                    response.mutable_result()->set_query_plan(kqpResponse.GetQueryPlan());
+
+                    record.MutableResponse()->SetQueryPlan(reportPlan
+                        ? SerializeAnalyzePlan(kqpResponse.GetQueryStats())
+                        : "");
+
+                    FillQueryStats(*response.mutable_result()->mutable_query_stats(), kqpResponse);
+                    ExecutionProfiles_.clear();
+                } else if (reportPlan) {
+                    response.mutable_result()->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
+                }
+
+                if (reportPlan) {
+                    response.mutable_result()->mutable_query_stats()->set_query_ast(kqpResponse.GetQueryAst());
                 }
 
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
@@ -634,12 +547,6 @@ private:
 };
 
 } // namespace
-
-void TGRpcRequestProxy::Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    ui64 rpcBufferSize = GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
-    ctx.Register(new TStreamExecuteScanQueryRPC<TEvExperimentalStreamQueryRequest,
-        Ydb::Experimental::ExecuteStreamQueryResponse>(ev->Release().Release(), rpcBufferSize));
-}
 
 void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     ui64 rpcBufferSize = f.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();

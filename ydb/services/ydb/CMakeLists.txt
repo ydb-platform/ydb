@@ -33,7 +33,6 @@ target_link_libraries(ydb-services-ydb PUBLIC
 target_sources(ydb-services-ydb PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_clickhouse_internal.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_dummy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_experimental.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_export.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore.cpp

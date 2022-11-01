@@ -2,7 +2,6 @@
 
 #include <ydb/core/testlib/test_client.h>
 
-#include <ydb/public/lib/experimental/ydb_experimental.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -170,7 +169,6 @@ struct TCollectedStreamResult {
     ui64 RowsCount = 0;
 };
 
-TCollectedStreamResult CollectStreamResult(NYdb::NExperimental::TStreamPartIterator& it);
 TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it);
 
 enum class EIndexTypeSql {
@@ -231,7 +229,6 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
     return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
 }
 
-TString StreamResultToYson(NYdb::NExperimental::TStreamPartIterator& it, TVector<TString>* profiles = nullptr);
 TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it);
 TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it);
 TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it);

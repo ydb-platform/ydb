@@ -2,8 +2,6 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 
-#include <ydb/public/lib/experimental/ydb_experimental.h>
-
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NKqp {
@@ -143,9 +141,8 @@ void SlowClient() {
         }
     }
 
-    NExperimental::TStreamQueryClient db(kikimr.GetDriver());
-
-    auto it = db.ExecuteStreamQuery("SELECT Key, Value FROM `/Root/KeyValue`").GetValueSync();
+    auto db = kikimr.GetTableClient();
+    auto it = db.StreamExecuteScanQuery("SELECT Key, Value FROM `/Root/KeyValue`").GetValueSync();
     auto part = it.ReadNext().GetValueSync();
 
     auto counters = kikimr.GetTestServer().GetRuntime()->GetAppData(0).Counters;

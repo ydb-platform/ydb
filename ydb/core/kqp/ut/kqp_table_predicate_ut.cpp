@@ -300,7 +300,7 @@ void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
         ).GetValueSync().IsSuccess()
     );
 
-    NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver());
+    auto streamDb = kikimr.GetTableClient();
 
     for (auto& item: predicates) {
         TString disablePredicateExtractor = R"(
@@ -314,11 +314,11 @@ void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
 
         Cerr << "Execute query" << Endl << query << Endl;
 
-        auto it = streamDb.ExecuteStreamQuery(disablePredicateExtractor + query).GetValueSync();
+        auto it = streamDb.StreamExecuteScanQuery(disablePredicateExtractor + query).GetValueSync();
         UNIT_ASSERT(it.IsSuccess());
 
         auto expectedYson = StreamResultToYson(it);
-        it = streamDb.ExecuteStreamQuery(query).GetValueSync();
+        it = streamDb.StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT(it.IsSuccess());
 
         auto resultYson = StreamResultToYson(it);
@@ -1212,7 +1212,6 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
     Y_UNIT_TEST(MergeRanges) {
         TKikimrRunner kikimr;
-        NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TStreamExecScanQuerySettings scanSettings;

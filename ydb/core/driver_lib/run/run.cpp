@@ -94,7 +94,6 @@
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
-#include <ydb/services/ydb/ydb_experimental.h>
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
 #include <ydb/services/ydb/ydb_logstore.h>
@@ -552,8 +551,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["pqcd"] = &hasPQCD;
         TServiceCfg hasS3Internal = false;
         names["s3_internal"] = &hasS3Internal;
-        TServiceCfg hasExperimental = false;
-        names["experimental"] = &hasExperimental;
         TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
         TServiceCfg hasRateLimiter = false;
@@ -693,11 +690,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasTableService) {
             server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxyId,
                 hasTableService.IsRlAllowed()));
-        }
-
-        if (hasExperimental) {
-            server.AddService(new NGRpcService::TGRpcYdbExperimentalService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasExperimental.IsRlAllowed()));
         }
 
         if (hasClickhouseInternal) {

@@ -2,8 +2,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <ydb/public/lib/experimental/ydb_experimental.h>
-
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <util/generic/size_literals.h>

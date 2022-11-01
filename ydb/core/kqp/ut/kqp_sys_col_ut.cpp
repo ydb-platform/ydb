@@ -26,13 +26,6 @@ TDataQueryResult ExecuteDataQuery(const TString& query) {
     return ExecuteDataQuery(kikimr, query);
 }
 
-TStreamPartIterator ExecuteStreamQuery(TKikimrRunner& kikimr, const TString& query) {
-    NExperimental::TStreamQueryClient db{ kikimr.GetDriver() };
-    auto it = db.ExecuteStreamQuery(query).GetValueSync();
-    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-    return it;
-}
-
 void SelectRowAsteriskCommon() {
     TStringBuilder query;
     query << R"(
@@ -43,6 +36,13 @@ void SelectRowAsteriskCommon() {
     UNIT_ASSERT(result.GetResultSets().size());
     CompareYson(R"([[[1u];["One"];[-1]]])",
         FormatResultSetYson(result.GetResultSet(0)));
+}
+
+TScanQueryPartIterator ExecuteStreamQuery(TKikimrRunner& kikimr, const TString& query) {
+    auto db = kikimr.GetTableClient();
+    auto it = db.StreamExecuteScanQuery(query).GetValueSync();
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    return it;
 }
 
 void SelectRowByIdCommon() {

@@ -25,19 +25,6 @@ using namespace NThreading;
 
 namespace {
 
-void FillAstAndPlan(NKikimrKqp::TPreparedKql& kql, const TExprNode::TPtr& queryExpr, TExprContext& ctx) {
-    TStringStream astStream;
-    auto ast = ConvertToAst(*queryExpr, ctx, TExprAnnotationFlags::None, true);
-    ast.Root->PrettyPrintTo(astStream, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
-    kql.SetAst(astStream.Str());
-
-    NJsonWriter::TBuf writer;
-    writer.SetIndentSpaces(2);
-
-    WriteKqlPlan(writer, queryExpr);
-    kql.SetPlan(writer.Str());
-}
-
 class TAsyncRunResult : public TKqpAsyncResultBase<IKikimrQueryExecutor::TQueryResult, false> {
 public:
     using TResult = IKikimrQueryExecutor::TQueryResult;
@@ -325,12 +312,6 @@ public:
         YQL_ENSURE(cluster == Cluster);
         YQL_ENSURE(phyQuery->GetType() == NKqpProto::TKqpPhyQuery::TYPE_DATA);
 
-        if (!Config->HasAllowKqpNewEngine()) {
-            ctx.AddError(TIssue(TPosition(), "NewEngine execution is not allowed on this cluster."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(
-                ctx.IssueManager.GetIssues()));
-        }
-
         return ExecutePhysicalDataQuery(world, std::move(phyQuery), ctx, settings);
     }
 
@@ -391,111 +372,7 @@ private:
         }
 
         bool sysColumnsEnabled = TransformCtx->Config->SystemColumnsEnabled();
-
-        std::optional<TKqpTransactionInfo::EEngine> engine;
-        if (settings.UseNewEngine.Defined()) {
-            engine = *settings.UseNewEngine
-                ? TKqpTransactionInfo::EEngine::NewEngine
-                : TKqpTransactionInfo::EEngine::OldEngine;
-        }
-        if (!engine.has_value() && Config->UseNewEngine.Get().Defined()) {
-            engine = Config->UseNewEngine.Get().Get()
-                ? TKqpTransactionInfo::EEngine::NewEngine
-                : TKqpTransactionInfo::EEngine::OldEngine;
-        }
-        if (!engine.has_value() && Config->HasKqpForceNewEngine()) {
-            engine = TKqpTransactionInfo::EEngine::NewEngine;
-        }
-
-        if ((queryCtx->Type == EKikimrQueryType::Scan) ||
-            (engine.has_value() && *engine == TKqpTransactionInfo::EEngine::NewEngine))
-        {
-            return PrepareQueryNewEngine(cluster, dataQuery, ctx, settings, sysColumnsEnabled);
-        }
-
-        YQL_ENSURE(false, "Unexpected query prepare in OldEngine mode.");
-
-        // OldEngine only
-        YQL_ENSURE(!engine.has_value() || *engine == TKqpTransactionInfo::EEngine::OldEngine);
-
-        for (const auto& [name, table] : TransformCtx->Tables->GetTables()) {
-            if (!table.Metadata->SysView.empty()) {
-                ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), TStringBuilder()
-                    << "Table " << table.Metadata->Name << " is a system view. "
-                    << "System views are not supported by data queries."
-                ));
-                return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
-            }
-        }
-
-        auto program = BuildKiProgram(dataQuery, *TransformCtx->Tables, ctx, sysColumnsEnabled);
-
-        KqlOptimizeTransformer->Rewind();
-
-        TExprNode::TPtr optimizedProgram = program.Ptr();
-        auto status = InstantTransform(*KqlOptimizeTransformer, optimizedProgram, ctx);
-        if (status != IGraphTransformer::TStatus::Ok || !TMaybeNode<TKiProgram>(optimizedProgram)) {
-            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), "Failed to optimize KQL query."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
-        }
-
-        YQL_ENSURE(optimizedProgram->GetTypeAnn());
-
-        queryCtx->QueryTraits = CollectQueryTraits(TKiProgram(optimizedProgram), ctx);
-
-        KqlTypeAnnTransformer->Rewind();
-
-        TExprNode::TPtr finalProgram;
-        bool hasNonDeterministicFunctions;
-        TPeepholeSettings peepholeSettings;
-        peepholeSettings.WithNonDeterministicRules = false;
-        status = PeepHoleOptimizeNode<false>(optimizedProgram, finalProgram, ctx, TypesCtx, KqlTypeAnnTransformer.Get(),
-            hasNonDeterministicFunctions, peepholeSettings);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), "Failed to peephole optimize KQL query."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
-        }
-
-        status = ReplaceNonDetFunctionsWithParams(finalProgram, ctx);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()),
-                "Failed to replace non deterministic functions with params for KQL query."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
-        }
-
-        KqlPrepareTransformer->Rewind();
-
-        NKikimrKqp::TKqlSettings kqlSettings;
-        kqlSettings.SetCommitTx(settings.CommitTx);
-        kqlSettings.SetRollbackTx(settings.RollbackTx);
-
-        TransformCtx->Reset();
-        TransformCtx->Settings = kqlSettings;
-
-        if (!TxState->Tx().EffectiveIsolationLevel) {
-            TxState->Tx().EffectiveIsolationLevel = kqlSettings.GetIsolationLevel();
-        }
-
-        TransformCtx->QueryCtx->PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_V1);
-        auto kql = TransformCtx->QueryCtx->PreparingQuery->AddKqls();
-        kql->MutableSettings()->CopyFrom(TransformCtx->Settings);
-
-        FillAstAndPlan(*kql, finalProgram, ctx);
-
-        auto operations = TableOperationsToProto(dataQuery.Operations(), ctx);
-        for (auto& op : operations) {
-            const auto tableName = op.GetTable();
-            auto operation = static_cast<TYdbOperation>(op.GetOperation());
-
-            *kql->AddOperations() = std::move(op);
-
-            const auto& desc = TransformCtx->Tables->GetTable(cluster, tableName);
-            TableDescriptionToTableInfo(desc, operation, *kql->MutableTableInfo());
-        }
-
-        TransformCtx->PreparingKql = kql;
-
-        return MakeIntrusive<TAsyncRunResult>(finalProgram, ctx, *KqlPrepareTransformer, *TransformCtx);
+        return PrepareQueryNewEngine(cluster, dataQuery, ctx, settings, sysColumnsEnabled);
     }
 
     TIntrusivePtr<TAsyncQueryResult> PrepareQueryNewEngine(const TString& cluster, const TKiDataQuery& dataQuery,
@@ -513,12 +390,6 @@ private:
                 break;
             default:
                 YQL_ENSURE(false, "PrepareQueryNewEngine, unexpected query type: " << queryType);
-        }
-
-        if (!Config->HasAllowKqpNewEngine() && queryType == EKikimrQueryType::Dml) {
-            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()),
-                "NewEngine execution is not allowed on this cluster."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
 
         auto kqlQuery = BuildKqlQuery(dataQuery, *TransformCtx->Tables, ctx, sysColumnsEnabled, OptimizeCtx);

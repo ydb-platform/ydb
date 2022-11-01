@@ -7,7 +7,6 @@
 
 
 add_subdirectory(common)
-add_subdirectory(fat)
 add_subdirectory(pg)
 add_subdirectory(spilling)
 

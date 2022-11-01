@@ -1183,15 +1183,15 @@ public:
     }
 
     void ForceTxOldEngine(const TString& txId) override {
-        if (auto tx = FindTransaction(txId)) {
-            (*tx)->ForceOldEngine();
-        }
-   }
+        Y_UNUSED(txId);
+        Y_ENSURE(false, "Unsupported ForceTxOldEngine");
+    }
 
     void ForceTxNewEngine(const TString& txId, ui32 percent, ui32 level) override {
-        if (auto tx = FindTransaction(txId)) {
-            (*tx)->ForceNewEngine(percent, level);
-        }
+        Y_UNUSED(txId);
+        Y_UNUSED(percent);
+        Y_UNUSED(level);
+        Y_ENSURE(false, "Unsupported ForceTxNewEngine");
     }
 
     TMaybe<TKqpTransactionInfo> GetTransactionInfo(const TString& txId) override {
@@ -2292,7 +2292,6 @@ TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     txInfo.QueriesCount = QueriesCount;
 
     txInfo.TxEngine = DeferredEffects.GetEngine();
-    txInfo.ForceNewEngineState = ForceNewEngineSettings;
 
     return txInfo;
 }

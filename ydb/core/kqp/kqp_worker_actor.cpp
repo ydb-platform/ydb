@@ -34,11 +34,6 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NRuCalc;
 
-static std::atomic<bool> FailForcedNewEngineExecution = false;
-void FailForcedNewEngineExecutionForTests(bool fail) {
-    FailForcedNewEngineExecution = fail;
-}
-
 namespace {
 
 using TQueryResult = IKqpHost::TQueryResult;
@@ -63,13 +58,6 @@ struct TKqpQueryState {
     NKqpProto::TKqpStatsCompile CompileStats;
     ui32 ReplyFlags = 0;
     bool KeepSession = false;
-    bool InteractiveTx = true;
-
-    bool OldEngineFallback = false;
-    bool NewEngineCompatibleQuery = false;
-
-    TKqpForceNewEngineState ForceNewEngineState;
-    std::optional<TQueryTraits> QueryTraits;
 
     TMaybe<NKikimrKqp::TRlPath> RlPath;
 };
@@ -198,13 +186,6 @@ public:
         Y_UNUSED(ctx);
     }
 
-    void HandleReady(TEvKqp::TEvCompileResponse::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
-            << "Unexpected compile response while in Ready state.");
-    }
-
     void HandleReady(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
         auto& event = ev->Get()->Record;
@@ -295,17 +276,39 @@ public:
             return;
         }
 
+        // Most of the queries should be executed directly via session_actor
         switch (queryRequest.GetAction()) {
-            case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
-            case NKikimrKqp::QUERY_ACTION_BEGIN_TX:
-            case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
-            case NKikimrKqp::QUERY_ACTION_ROLLBACK_TX:
+            case NKikimrKqp::QUERY_ACTION_EXECUTE:
+            case NKikimrKqp::QUERY_ACTION_EXPLAIN:
+            case NKikimrKqp::QUERY_ACTION_VALIDATE:
+            case NKikimrKqp::QUERY_ACTION_PARSE:
                 break;
+
             default:
-                if (!queryRequest.HasType()) {
-                    onBadRequest("Query type not specified");
+                onError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() <<
+                    "Unexpected query action type in KQP worker: " << (ui32)queryRequest.GetAction());
+                return;
+        }
+
+        if (queryRequest.GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE) {
+            switch (queryRequest.GetType()) {
+                case NKikimrKqp::QUERY_TYPE_SQL_DDL:
+                case NKikimrKqp::QUERY_TYPE_AST_DML:
+                case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
+                case NKikimrKqp::QUERY_TYPE_AST_SCAN:
+                case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
+                    break;
+
+                default:
+                    onError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() <<
+                        "Unexpected execute query type in KQP worker: " << (ui32)queryRequest.GetType());
                     return;
-                }
+            }
+        }
+
+        if (!queryRequest.HasType()) {
+            onBadRequest("Query type not specified");
+            return;
         }
 
         switch (queryRequest.GetAction()) {
@@ -323,71 +326,11 @@ public:
                 break;
         }
 
-        HandleQueryRequest(timer, false, ctx);
+        HandleQueryRequest(timer, ctx);
     }
 
-    void HandleQueryRequest(NCpuTime::TCpuTimer& timer, bool fallbackToOldEngine, const TActorContext& ctx) {
-        auto& queryRequest = QueryState->Request;
-
-        if (fallbackToOldEngine) {
-            QueryState->ForceNewEngineState.ForcedNewEngine = false;
-            QueryState->OldEngineFallback = true;
-        }
-
-        auto replyError = [this, &ctx] (NYql::EYqlIssueCode status, const TString& info) {
-            QueryState->AsyncQueryResult = MakeKikimrResultHolder(NCommon::ResultFromError<TQueryResult>(
-                YqlIssue(TPosition(), status, info)));
-
-            ContinueQueryProcess(ctx);
-            Become(&TKqpWorkerActor::PerformQueryState);
-        };
-
-        if (queryRequest.HasTxControl()) {
-            const auto& txControl = queryRequest.GetTxControl();
-
-            switch (txControl.tx_selector_case()) {
-                case Ydb::Table::TransactionControl::kTxId: {
-                    QueryState->TxId = txControl.tx_id();
-
-                    auto txInfo = KqpHost->GetTransactionInfo(QueryState->TxId);
-                    if (!txInfo) {
-                        replyError(TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND, TStringBuilder() << "Transaction not found: " << QueryState->TxId);
-                        return;
-                    }
-
-                    YQL_ENSURE(!QueryState->OldEngineFallback);
-                    QueryState->ForceNewEngineState = txInfo->ForceNewEngineState;
-                    break;
-                }
-
-                case Ydb::Table::TransactionControl::kBeginTx: {
-                    if (txControl.commit_tx()) {
-                        QueryState->InteractiveTx = false;
-                    }
-                    if (QueryState->OldEngineFallback) {
-                        YQL_ENSURE(!QueryState->InteractiveTx);
-                    }
-                    break;
-                }
-
-                case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET: {
-                    replyError(TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "wrong TxControl: tx_selector must be set");
-                    return;
-                }
-            }
-        } else {
-            // some kind of internal query? or verify here?
-        }
-
+    void HandleQueryRequest(NCpuTime::TCpuTimer& timer, const TActorContext& ctx) {
         StopIdleTimer(ctx);
-
-        if (CompileQuery(ctx)) {
-            if (QueryState) {
-                QueryState->CpuTime += timer.GetTime();
-            }
-            return;
-        }
-
         PerformQuery(ctx);
         if (QueryState) {
             QueryState->CpuTime += timer.GetTime();
@@ -422,103 +365,8 @@ public:
         }
     }
 
-    void HandleCompileQuery(TEvKqp::TEvCompileResponse::TPtr &ev, const TActorContext &ctx) {
-        auto compileResult = ev->Get()->CompileResult;
-
-        Y_VERIFY(compileResult);
-        Y_VERIFY(QueryState);
-
-        if (compileResult->Status != Ydb::StatusIds::SUCCESS) {
-            if (ReplyQueryCompileError(compileResult, ctx)) {
-                StartIdleTimer(ctx);
-                Become(&TKqpWorkerActor::ReadyState);
-            } else {
-                FinalCleanup(ctx);
-            }
-
-            return;
-        }
-
-        QueryState->QueryTraits = compileResult->QueryTraits;
-
-        if (!QueryState->ForceNewEngineState.ForcedNewEngine.has_value()) {
-            // first query in tx
-            QueryState->ForceNewEngineState.ForceNewEnginePercent = ev->Get()->ForceNewEnginePercent;
-            QueryState->ForceNewEngineState.ForceNewEngineLevel = ev->Get()->ForceNewEngineLevel;
-        }
-
-        auto& queryRequest = QueryState->Request;
-
-        QueryState->CompileStats.Swap(&ev->Get()->Stats);
-
-        if (queryRequest.GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE) {
-            if (ReplyPrepareResult(compileResult, ctx)) {
-                StartIdleTimer(ctx);
-                Become(&TKqpWorkerActor::ReadyState);
-            } else {
-                FinalCleanup(ctx);
-            }
-
-            return;
-        }
-
-        QueryState->QueryCompileResult = compileResult;
-
-        switch (queryRequest.GetAction()) {
-            case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
-                break;
-
-            default:
-                Y_VERIFY_S(false, "Unexpected action on successful compile result: "
-                    << NKikimrKqp::EQueryAction_Name(queryRequest.GetAction()));
-                break;
-        }
-
-        NCpuTime::TCpuTimer timer;
-        PerformQuery(ctx);
-
-        // PerformQuery can reset QueryState
-        if (QueryState) {
-            QueryState->CpuTime += timer.GetTime();
-        }
-    }
-
-    void HandleCompileQuery(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
-        ReplyBusy(ev, ctx);
-    }
-
-    void HandleCompileQuery(TEvKqp::TEvCloseSessionRequest::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-
-        Y_VERIFY(QueryState);
-        ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId,
-            TKqpRequestInfo(QueryState->TraceId, SessionId), Ydb::StatusIds::BAD_SESSION,
-                "Session is being closed", ctx);
-
-        Counters->ReportWorkerClosedError(Settings.DbCounters);
-        FinalCleanup(ctx);
-    }
-
-    void HandleCompileQuery(TEvKqp::TEvPingSessionRequest::TPtr &ev, const TActorContext &ctx) {
-        ui64 proxyRequestId = ev->Cookie;
-        ReplyPingStatus(ev->Sender, proxyRequestId, false, ctx);
-    }
-
-    void HandleCompileQuery(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-    }
-
     void HandlePerformQuery(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
         ReplyBusy(ev, ctx);
-    }
-
-    void HandlePerformQuery(TEvKqp::TEvCompileResponse::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
-            << "Unexpected compile response while in PerformQuery state.");
     }
 
     void HandlePerformQuery(TEvKqp::TEvCloseSessionRequest::TPtr &ev, const TActorContext &ctx) {
@@ -543,46 +391,6 @@ public:
         if (ev->Get()->Finished) {
             QueryState->QueryResult = QueryState->AsyncQueryResult->GetResult();
             QueryState->AsyncQueryResult.Reset();
-
-            if (!QueryState->OldEngineFallback) {
-                auto& x = QueryState->ForceNewEngineState;
-                if (x.ForcedNewEngine && *x.ForcedNewEngine) {
-                    auto status = GetYdbStatus(QueryState->QueryResult);
-                    bool failForTests = FailForcedNewEngineExecution.load(std::memory_order_relaxed);
-
-                    if (status != Ydb::StatusIds::SUCCESS || failForTests) {
-                        if (x.ForceNewEngineLevel == 0 || x.ForceNewEngineLevel == 1) {
-                            bool shouldFallback = status != Ydb::StatusIds::CANCELLED
-                                               && status != Ydb::StatusIds::ABORTED
-                                               && status != Ydb::StatusIds::OVERLOADED
-                                               && status != Ydb::StatusIds::PRECONDITION_FAILED
-                                               && status != Ydb::StatusIds::UNAVAILABLE
-                                               && status != Ydb::StatusIds::UNDETERMINED;
-                            if (shouldFallback) {
-                                QueryState->ForceNewEngineState = {};
-                                QueryState->NewEngineCompatibleQuery = false;
-
-                                GetServiceCounters(AppData()->Counters, "kqp")->GetCounter("Requests/OldEngineFallback", true)->Inc();
-
-                                LOG_ERROR_S(ctx, NKikimrServices::KQP_WORKER, "OldEngine fallback request"
-                                    << ", satus: " << Ydb::StatusIds::StatusCode_Name(status)
-                                    << ", issues: " << QueryState->QueryResult.Issues().ToString());
-
-                                NCpuTime::TCpuTimer timer;
-                                HandleQueryRequest(timer, true, ctx);
-                                return;
-                            }
-                        }
-
-                        if (failForTests) {
-                            QueryState->QueryResult.SetStatus(NYql::TIssuesIds::DEFAULT_ERROR);
-                            QueryState->QueryResult.AddIssue(YqlIssue(TPosition(), TIssuesIds::DEFAULT_ERROR, "Failed for test."));
-                            GetServiceCounters(AppData()->Counters, "kqp")->GetCounter("Requests/ForceNewEngineExecError", true)->Inc();
-                        }
-                    }
-                }
-            }
-
             QueryCleanup(ctx);
         } else {
             NCpuTime::TCpuTimer timer(QueryState->CpuTime);
@@ -615,16 +423,6 @@ public:
 
             ReplyProcessError(ev->Sender, proxyRequestId, requestInfo,
                 busyStatus, "Pending previous query completion", ctx);
-        }
-    }
-
-    void HandlePerformCleanup(TEvKqp::TEvCompileResponse::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-
-        Y_VERIFY(CleanupState);
-        if (!CleanupState->Final) {
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
-                << "Unexpected compile response while in PerformCleanup state.");
         }
     }
 
@@ -684,7 +482,6 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvQueryRequest, HandleReady);
-                HFunc(TEvKqp::TEvCompileResponse, HandleReady);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 HFunc(TEvKqp::TEvPingSessionRequest, HandleReady);
                 HFunc(TEvKqp::TEvContinueProcess, HandleReady);
@@ -699,29 +496,10 @@ public:
         }
     }
 
-    STFUNC(CompileQueryState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvQueryRequest, HandleCompileQuery);
-                HFunc(TEvKqp::TEvCompileResponse, HandleCompileQuery);
-                HFunc(TEvKqp::TEvCloseSessionRequest, HandleCompileQuery);
-                HFunc(TEvKqp::TEvPingSessionRequest, HandleCompileQuery);
-                HFunc(TEvKqp::TEvIdleTimeout, HandleCompileQuery);
-                HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
-                HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
-            default:
-                UnexpectedEvent("CompileQueryState", ev, ctx);
-            }
-        } catch (const yexception& ex) {
-            InternalError(ex.what(), ctx);
-        }
-    }
-
     STFUNC(PerformQueryState) {
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvQueryRequest, HandlePerformQuery);
-                HFunc(TEvKqp::TEvCompileResponse, HandlePerformQuery);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformQuery);
@@ -740,7 +518,6 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvQueryRequest, HandlePerformCleanup);
-                HFunc(TEvKqp::TEvCompileResponse, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformCleanup);
@@ -822,64 +599,6 @@ private:
         return KqpHost->BeginTransaction(isolation, readonly);
     }
 
-    bool CompileQuery(const TActorContext& ctx) {
-        if (!Settings.LongSession) {
-            return false;
-        }
-
-        Y_VERIFY(QueryState);
-        auto& queryRequest = QueryState->Request;
-
-        switch (queryRequest.GetType()) {
-            case NKikimrKqp::QUERY_TYPE_SQL_DML:
-            case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
-                break;
-
-            default:
-                return false;
-        }
-
-        TMaybe<TKqpQueryId> query;
-        TMaybe<TString> uid;
-
-        bool keepInCache = false;
-        switch (queryRequest.GetAction()) {
-            case NKikimrKqp::QUERY_ACTION_EXECUTE:
-                query = TKqpQueryId(Settings.Cluster, Settings.Database, queryRequest.GetQuery(), /*scan*/ false);
-                keepInCache = queryRequest.GetQueryCachePolicy().keep_in_cache();
-                break;
-
-            case NKikimrKqp::QUERY_ACTION_PREPARE:
-                query = TKqpQueryId(Settings.Cluster, Settings.Database, queryRequest.GetQuery(), /*scan*/ false);
-                keepInCache = true;
-                break;
-
-            case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
-                uid = queryRequest.GetPreparedQuery();
-                keepInCache = queryRequest.GetQueryCachePolicy().keep_in_cache();
-                break;
-
-            default:
-                return false;
-        }
-
-        if (query) {
-            query->Settings.DocumentApiRestricted = IsDocumentApiRestricted(QueryState->RequestType);
-        }
-
-        auto compileDeadline = QueryState->QueryDeadlines.TimeoutAt;
-        if (QueryState->QueryDeadlines.CancelAt) {
-            compileDeadline = Min(compileDeadline, QueryState->QueryDeadlines.CancelAt);
-        }
-
-        auto compileRequestActor = CreateKqpCompileRequestActor(ctx.SelfID, QueryState->UserToken, uid,
-            std::move(query), keepInCache, compileDeadline, Settings.DbCounters);
-        ctx.ExecutorThread.RegisterActor(compileRequestActor);
-
-        Become(&TKqpWorkerActor::CompileQueryState);
-        return true;
-    }
-
     void PerformQuery(const TActorContext& ctx) {
         Y_VERIFY(QueryState);
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
@@ -944,10 +663,6 @@ private:
                     Counters->ReportTxCreated(Settings.DbCounters);
 
                     QueryState->TxId = beginTxResult.TxId;
-                    if (commit) {
-                        QueryState->InteractiveTx = false;
-                    }
-
                     break;
                 }
 
@@ -959,13 +674,6 @@ private:
 
         auto action = queryRequest.GetAction();
         auto queryType = queryRequest.GetType();
-        if (QueryState->QueryCompileResult) {
-            if (action == NKikimrKqp::QUERY_ACTION_EXECUTE) {
-                Y_VERIFY(queryType == NKikimrKqp::QUERY_TYPE_SQL_DML);
-                queryType = NKikimrKqp::QUERY_TYPE_PREPARED_DML;
-                action = NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
-            }
-        }
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXECUTE: {
@@ -999,191 +707,8 @@ private:
                 break;
             }
 
-            case NKikimrKqp::QUERY_ACTION_PREPARE: {
-                if (!PrepareQuery(ctx, queryRequest.GetQuery(), queryType, commit)) {
-                    onBadRequest(QueryState->Error);
-                    return;
-                }
-                break;
-            }
-
-            case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED: {
-                // NOTE: For compatibility with old clients, remove once not used.
-                const TString& query = queryRequest.HasPreparedQuery()
-                     ? queryRequest.GetPreparedQuery()
-                     : queryRequest.GetQuery();
-
-                TPreparedQueryConstPtr preparedQuery;
-
-                if (QueryState->QueryCompileResult) {
-                    Y_VERIFY(queryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML);
-
-                    bool newEngineCompatibleTx = !QueryState->OldEngineFallback
-                        && QueryState->ForceNewEngineState.ForceNewEnginePercent > 0;
-
-                    bool forcedOldEngine = false;
-
-                    if (newEngineCompatibleTx &&
-                        QueryState->ForceNewEngineState.ForcedNewEngine.has_value() &&
-                        QueryState->ForceNewEngineState.ForcedNewEngine.value() == false)
-                    {
-                        // newEngineCompatibleTx = false;
-                        forcedOldEngine = true;
-                    }
-
-                    QueryState->NewEngineCompatibleQuery = (bool) QueryState->QueryCompileResult->PreparedQueryNewEngine
-                        && newEngineCompatibleTx;
-
-                    // select engine according to deferred effects
-                    auto effectsEngine = KqpHost->GetTransactionInfo(QueryState->TxId)->TxEngine;
-
-                    if (newEngineCompatibleTx) {
-                        if (QueryState->ForceNewEngineState.ForceNewEngineLevel == 0) {
-                            if (QueryState->InteractiveTx || !QueryState->QueryTraits) {
-                                newEngineCompatibleTx = false;
-                                QueryState->NewEngineCompatibleQuery = false;
-                            } else {
-                                const auto& traits = QueryState->QueryTraits.value();
-                                if (!traits.ReadOnly || traits.WithJoin || traits.WithSqlIn || traits.WithIndex) {
-                                    newEngineCompatibleTx = false;
-                                    QueryState->NewEngineCompatibleQuery = false;
-                                }
-                            }
-                        } else if (QueryState->ForceNewEngineState.ForceNewEngineLevel == 1) {
-                            if (QueryState->InteractiveTx || !QueryState->QueryTraits) {
-                                newEngineCompatibleTx = false;
-                                QueryState->NewEngineCompatibleQuery = false;
-                            } else {
-                                const auto& traits = QueryState->QueryTraits.value();
-                                if (!traits.ReadOnly) {
-                                    newEngineCompatibleTx = false;
-                                    QueryState->NewEngineCompatibleQuery = false;
-                                }
-                            }
-                        } else if (QueryState->ForceNewEngineState.ForceNewEngineLevel == 2) {
-                            if (!QueryState->QueryTraits.has_value() || !QueryState->QueryTraits->ReadOnly) {
-                                QueryState->NewEngineCompatibleQuery = false;
-                                // but Tx is still NE Compatible, i.e. RO-queries can be executed with NewEngine
-                            }
-
-                            if (commit) {
-                                if (effectsEngine) {
-                                    if (*effectsEngine == TKqpTransactionInfo::EEngine::NewEngine) {
-                                        QueryState->NewEngineCompatibleQuery = true;
-                                    } else {
-                                        QueryState->NewEngineCompatibleQuery = false;
-                                    }
-                                } else {
-                                    // Y_VERIFY(false);
-                                }
-                            }
-                        } else if (QueryState->ForceNewEngineState.ForceNewEngineLevel == 3) {
-                            newEngineCompatibleTx = true;
-                            QueryState->NewEngineCompatibleQuery = true;
-                        } else {
-                            YQL_ENSURE(false);
-                        }
-                    }
-
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "-- NE Compatible: "
-                        << " tx: " << newEngineCompatibleTx
-                        << ", query: " << QueryState->NewEngineCompatibleQuery
-                        << ", interactive: " << QueryState->InteractiveTx
-                        << ", preparedNewEngine: " << (bool) QueryState->QueryCompileResult->PreparedQueryNewEngine
-                        << ", effects: " << (effectsEngine ? (int) *effectsEngine : -1)
-                        << ", forcedNewEngine: " << (QueryState->ForceNewEngineState.ForcedNewEngine
-                            ? ToString(*QueryState->ForceNewEngineState.ForcedNewEngine)
-                            : "<none>")
-                        << ", traits: " << (QueryState->QueryCompileResult->QueryTraits
-                            ? QueryState->QueryCompileResult->QueryTraits->ToString()
-                            : "<none>")
-                        << ", commit: " << commit
-                        << ", text: " << queryRequest.GetQuery());
-
-                    if (newEngineCompatibleTx && !forcedOldEngine) {
-                        if (QueryState->NewEngineCompatibleQuery) {
-                            if (QueryState->ForceNewEngineState.ForcedNewEngine && *QueryState->ForceNewEngineState.ForcedNewEngine) {
-                                preparedQuery = QueryState->QueryCompileResult->PreparedQueryNewEngine;
-                                LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, "Force NewEngine query execution (as part of tx)");
-                            } else if (!effectsEngine && QueryState->ForceNewEngineState.ForceNewEnginePercent >= RandomNumber((ui32) 100)) {
-                                preparedQuery = QueryState->QueryCompileResult->PreparedQueryNewEngine;
-                                QueryState->ForceNewEngineState.ForcedNewEngine = true;
-
-                                KqpHost->ForceTxNewEngine(
-                                    QueryState->TxId,
-                                    QueryState->ForceNewEngineState.ForceNewEnginePercent,
-                                    QueryState->ForceNewEngineState.ForceNewEngineLevel
-                                );
-                                LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, "Force NewEngine query execution (new tx)");
-                            } else {
-                                QueryState->ForceNewEngineState.ForcedNewEngine = false;
-                                KqpHost->ForceTxOldEngine(QueryState->TxId);
-                                preparedQuery = QueryState->QueryCompileResult->PreparedQuery;
-                                LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, "Force OldEngine query execution (new tx)");
-                            }
-                        } else {
-                            if (!QueryState->ForceNewEngineState.ForcedNewEngine.has_value()) {
-                                QueryState->ForceNewEngineState.ForcedNewEngine = false;
-                                KqpHost->ForceTxOldEngine(QueryState->TxId);
-                            }
-
-                            preparedQuery = QueryState->QueryCompileResult->PreparedQuery;
-                        }
-                    } else {
-                        preparedQuery = QueryState->QueryCompileResult->PreparedQuery;
-                    }
-                } else if (Settings.LongSession) {
-                    onError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Prepared query not found: " << query);
-                    return;
-                } else {
-                    NKikimrKqp::TPreparedQuery tmp;
-                    if (!tmp.ParseFromString(query)) {
-                        onBadRequest("Failed to parse prepared query.");
-                        return;
-                    }
-                    preparedQuery = std::make_shared<const NKikimrKqp::TPreparedQuery>(std::move(tmp));
-                }
-
-                YQL_ENSURE(preparedQuery);
-
-                QueryState->Request.SetQuery(preparedQuery->GetText());
-
-                if (!ExecutePreparedQuery(preparedQuery, queryType, std::move(*QueryState->Request.MutableParameters()),
-                    commit, GetStatsMode(queryRequest, EKikimrStatsMode::Basic)))
-                {
-                    onBadRequest(QueryState->Error);
-                    return;
-                }
-                break;
-            }
-
-            case NKikimrKqp::QUERY_ACTION_BEGIN_TX: {
-                TQueryResult result;
-                result.SetSuccess();
-                QueryState->AsyncQueryResult = MakeKikimrResultHolder(std::move(result));
-                ContinueQueryProcess(ctx);
-                Become(&TKqpWorkerActor::PerformQueryState);
-                return;
-            }
-
-            case NKikimrKqp::QUERY_ACTION_COMMIT_TX: {
-                if (!CommitTx(commit, GetStatsMode(queryRequest, EKikimrStatsMode::Basic))) {
-                    onBadRequest(QueryState->Error);
-                    return;
-                }
-                break;
-            }
-
-            case NKikimrKqp::QUERY_ACTION_ROLLBACK_TX: {
-                if (!RollbackTx(commit)) {
-                    onBadRequest(QueryState->Error);
-                    return;
-                }
-                break;
-            }
-
             default: {
-                onBadRequest("Unknown query action");
+                onBadRequest(TStringBuilder() << "Unknown query action: " << (ui32)queryRequest.GetAction());
                 return;
             }
         }
@@ -1273,7 +798,6 @@ private:
         auto statsMode = GetStatsMode(queryRequest, EKikimrStatsMode::Basic);
 
         switch (type) {
-            case NKikimrKqp::QUERY_TYPE_SQL_DML:
             case NKikimrKqp::QUERY_TYPE_AST_DML: {
                 bool isSql = (type == NKikimrKqp::QUERY_TYPE_SQL_DML);
 
@@ -1283,7 +807,6 @@ private:
                 execSettings.Deadlines = QueryState->QueryDeadlines;
                 execSettings.Limits = GetQueryLimits(Settings);
                 execSettings.StrictDml = false;
-                execSettings.UseNewEngine = UseNewEngine();
                 execSettings.DocumentApiRestricted = IsDocumentApiRestricted(QueryState->RequestType);
 
                 QueryState->AsyncQueryResult = KqpHost->ExecuteDataQuery(QueryState->TxId, query, isSql,
@@ -1313,7 +836,6 @@ private:
                 break;
             }
 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN: {
                 bool isSql = (type == NKikimrKqp::QUERY_TYPE_SQL_SCAN);
 
@@ -1329,7 +851,7 @@ private:
             }
 
             default: {
-                QueryState->Error = "Unexpected query type.";
+                QueryState->Error = TStringBuilder() << "Unexpected query type: " << (ui32)type;
                 return false;
             }
         }
@@ -1393,7 +915,6 @@ private:
         switch (type) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML: {
                 IKqpHost::TPrepareSettings prepareSettings;
-                // prepareSettings.UseNewEngine = use default settings
                 prepareSettings.DocumentApiRestricted = IsDocumentApiRestricted(QueryState->RequestType);
                 QueryState->AsyncQueryResult = KqpHost->PrepareDataQuery(query, prepareSettings);
                 break;
@@ -1424,41 +945,6 @@ private:
             QueryState->Error = "Unexpected query type.";
             return false;
         }
-    }
-
-    bool CommitTx(bool commit, EKikimrStatsMode statsMode) {
-        if (!commit) {
-            QueryState->Error = "Commit should be true for commit transaction request.";
-            return false;
-        }
-        if (QueryState->TxId.empty()) {
-            QueryState->Error = "Empty tx_id for commit transaction request.";
-            return false;
-        }
-
-        IKikimrQueryExecutor::TExecuteSettings execSettings;
-        execSettings.CommitTx = true;
-        execSettings.StatsMode = statsMode;
-        execSettings.Deadlines = QueryState->QueryDeadlines;
-        execSettings.Limits = GetQueryLimits(Settings);
-        execSettings.UseNewEngine = UseNewEngine();
-
-        QueryState->AsyncQueryResult = KqpHost->CommitTransaction(QueryState->TxId, execSettings);
-        return true;
-    }
-
-    bool RollbackTx(bool commit) {
-        if (commit) {
-            QueryState->Error = "Commit should be false for rollback transaction request.";
-            return false;
-        }
-        if (QueryState->TxId.empty()) {
-            QueryState->Error = "Empty tx_id for rollback transaction request.";
-            return false;
-        }
-
-        QueryState->AsyncQueryResult = KqpHost->RollbackTransaction(QueryState->TxId, CreateRollbackSettings());
-        return true;
     }
 
     void ContinueQueryProcess(const TActorContext &ctx) {
@@ -1609,22 +1095,6 @@ private:
             Counters->ReportQueryReadSets(Settings.DbCounters, queryResult.QueryStats.GetReadSetsCount());
             Counters->ReportQueryMaxShardReplySize(Settings.DbCounters, queryResult.QueryStats.GetMaxShardReplySize());
             Counters->ReportQueryMaxShardProgramSize(Settings.DbCounters, queryResult.QueryStats.GetMaxShardProgramSize());
-
-            if (QueryState->QueryCompileResult && QueryState->QueryCompileResult->PreparedQueryNewEngine
-                && QueryState->NewEngineCompatibleQuery)
-            {
-                ui64 computeCpuTimeUs = 0;
-                for (auto& execution : queryResult.QueryStats.GetExecutions()) {
-                    computeCpuTimeUs += execution.GetCpuTimeUs();
-                }
-
-                // query can be executed with NewEngine
-                if (QueryState->ForceNewEngineState.ForcedNewEngine && *QueryState->ForceNewEngineState.ForcedNewEngine) {
-                    Counters->ReportNewEngineForcedQueryStats(queryRequest.GetAction(), queryDuration, computeCpuTimeUs);
-                } else {
-                    Counters->ReportNewEngineCompatibleQueryStats(queryRequest.GetAction(), queryDuration, computeCpuTimeUs);
-                }
-            }
         }
 
         if (queryResult.SqlVersion) {
@@ -2022,21 +1492,8 @@ private:
         IKikimrQueryExecutor::TExecuteSettings settings;
         settings.RollbackTx = true;
         settings.Deadlines.TimeoutAt = TInstant::Now() + TDuration::Minutes(1);
-        settings.UseNewEngine = UseNewEngine();
 
         return settings;
-    }
-
-    TMaybe<bool> UseNewEngine() const {
-        YQL_ENSURE(QueryState);
-
-        if (auto txInfo = KqpHost->GetTransactionInfo(QueryState->TxId)) {
-            if (auto engine = txInfo->TxEngine; engine.has_value()) {
-                return *engine == TKqpTransactionInfo::EEngine::NewEngine;
-            }
-        }
-
-        return Nothing();
     }
 
     static TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {

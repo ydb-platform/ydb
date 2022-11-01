@@ -7,12 +7,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-struct TKqpForceNewEngineState {
-    ui32 ForceNewEnginePercent = 0;
-    ui32 ForceNewEngineLevel = 0;
-    std::optional<bool> ForcedNewEngine;
-};
-
 struct TKqpTransactionInfo {
     enum class EKind {
         Pure,
@@ -39,7 +33,6 @@ public:
     TDuration TotalDuration;
     TDuration ServerDuration;
     ui32 QueriesCount = 0;
-    TKqpForceNewEngineState ForceNewEngineState;
 };
 
 } // namespace NKqp

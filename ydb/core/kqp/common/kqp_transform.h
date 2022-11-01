@@ -221,26 +221,9 @@ public:
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
-        ForceNewEngineSettings = {};
     }
 
     TKqpTransactionInfo GetInfo() const;
-
-    void ForceOldEngine() {
-        auto engine = DeferredEffects.GetEngine();
-        YQL_ENSURE(!engine || engine == TKqpTransactionInfo::EEngine::OldEngine);
-        YQL_ENSURE(!ForceNewEngineSettings.ForcedNewEngine || *ForceNewEngineSettings.ForcedNewEngine == false);
-        ForceNewEngineSettings.ForcedNewEngine = false;
-    }
-
-    void ForceNewEngine(ui32 percent, ui32 level) {
-        auto engine = DeferredEffects.GetEngine();
-        YQL_ENSURE(!engine || engine == TKqpTransactionInfo::EEngine::NewEngine);
-        YQL_ENSURE(!ForceNewEngineSettings.ForcedNewEngine.has_value());
-        ForceNewEngineSettings.ForcedNewEngine = true;
-        ForceNewEngineSettings.ForceNewEnginePercent = percent;
-        ForceNewEngineSettings.ForceNewEngineLevel = level;
-    }
 
     void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
         switch (settings.tx_mode_case()) {
@@ -296,8 +279,6 @@ public:
     TIntrusivePtr<TParamsState> ParamsState;
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
-
-    TKqpForceNewEngineState ForceNewEngineSettings;
 };
 
 class TLogExprTransformer {

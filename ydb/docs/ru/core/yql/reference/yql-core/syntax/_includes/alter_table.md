@@ -50,7 +50,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 {% if feature_changefeed %}
 
-## Добавление или удаление потока изменений{#changefeed}
+## Добавление или удаление потока изменений {#changefeed}
 
 `ADD CHANGEFEED <name> WITH (option = value[, ...])` — добавляет [поток изменений (changefeed)](../../../../concepts/cdc) с указанным именем и параметрами.
 

@@ -52,11 +52,11 @@ You can also add or remove a secondary index using the {{ ydb-short-name }} CLI 
 
 ## Adding and deleting a changefeed {#changefeed}
 
-`ADD CHANGEFEED <name> WITH (option = value[, ...])` adds a [changefeed](../../../../concepts/cdc) with the specified name and parameters.
+`ADD CHANGEFEED <name> WITH (option = value[, ...])`: Adds a [changefeed](../../../../concepts/cdc) with the specified name and options.
 
-### Changefeed parameters {#changefeed-options}
+**Changefeed options**
 
-* `MODE`: Operation mode. Specifies what exactly is to be written to a changefeed each time the table data is altered.
+* `MODE`: Operation mode. Specifies what to write to a changefeed each time table data is altered.
    * `KEYS_ONLY`: Only the primary key components and change flag are written.
    * `UPDATES`: Updated column values that result from updates are written.
    * `NEW_IMAGE`: Any column values resulting from updates are written.
@@ -65,7 +65,7 @@ You can also add or remove a secondary index using the {{ ydb-short-name }} CLI 
 * `FORMAT`: Data write format.
    * `JSON`: The record structure is given on the [changefeed description](../../../../concepts/cdc#record-structure) page.
 
-The code below adds a changefeed named `updates_feed` where the values of updated table columns will be exported in JSON format:
+The code below adds a changefeed named `updates_feed`, where the values of updated table columns will be exported in JSON format:
 
 ```sql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (

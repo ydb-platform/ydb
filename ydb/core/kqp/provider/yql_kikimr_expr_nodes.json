@@ -117,7 +117,8 @@
                 {"Index": 7, "Name": "PartitionBy", "Type": "TCoAtomList"},
                 {"Index": 8, "Name": "ColumnFamilies", "Type": "TExprList"},
                 {"Index": 9, "Name": "TableSettings", "Type": "TCoNameValueTupleList"},
-                {"Index": 10, "Name": "Changefeeds", "Type": "TCoChangefeedList"}
+                {"Index": 10, "Name": "Changefeeds", "Type": "TCoChangefeedList"},
+                {"Index": 11, "Name": "TableType", "Type": "TCoAtom"}
             ]
         },
         {
@@ -128,7 +129,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Actions", "Type": "TCoNameValueTupleList"}
+                {"Index": 3, "Name": "Actions", "Type": "TCoNameValueTupleList"},
+                {"Index": 4, "Name": "TableType", "Type": "TCoAtom"}
             ]
         },
         {
@@ -139,7 +141,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 4, "Name": "TableType", "Type": "TCoAtom"}
             ]
         },
         {

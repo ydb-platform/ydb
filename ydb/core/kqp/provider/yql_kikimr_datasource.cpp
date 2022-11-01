@@ -103,7 +103,7 @@ public:
             const TString& tableName = it.first.second;
             TKikimrTableDescription& table = SessionCtx->Tables().GetTable(clusterName, tableName);
 
-            if (table.Metadata) {
+            if (table.Metadata || table.GetTableType() != ETableType::Table) {
                 continue;
             }
 

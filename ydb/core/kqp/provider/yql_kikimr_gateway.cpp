@@ -370,4 +370,13 @@ Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {
         : Ydb::FeatureFlag::DISABLED;
 }
 
+ETableType GetTableTypeFromString(const TStringBuf& tableType) {
+    if (tableType == "table") {
+        return ETableType::Table;
+    } else if (tableType == "tableStore") {
+        return ETableType::TableStore;
+    }
+    return ETableType::Unknown;
+}
+
 } // namespace NYql

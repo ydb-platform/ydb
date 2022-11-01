@@ -174,7 +174,6 @@ struct TTableSettings {
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
     TResetableSetting<TTtlSettings, void> TtlSettings;
-    TMaybe<TString> StoreType;
     TMaybe<TString> PartitionByHashFunction;
 
     bool IsSet() const;
@@ -279,6 +278,19 @@ enum class EKikimrTableKind : ui32 {
     Olap = 3
 };
 
+enum class ETableType : ui32 {
+    Unknown = 0,
+    Table = 1,
+    TableStore = 2
+};
+
+ETableType GetTableTypeFromString(const TStringBuf& tableType);
+
+enum class EStoreType : ui32 {
+    Row = 0,
+    Column = 1
+};
+
 struct TKikimrTableMetadata : public TThrRefBase {
     bool DoesExist = false;
     TString Cluster;
@@ -288,6 +300,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     ui64 SchemaVersion = 0;
     THashMap<TString, TString> Attributes;
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
+    ETableType TableType = ETableType::Table;
+    EStoreType StoreType = EStoreType::Row;
 
     ui64 RecordsCount = 0;
     ui64 DataSize = 0;
@@ -467,6 +481,27 @@ struct TDropGroupSettings {
     bool Force = false;
 };
 
+struct TAlterColumnTableSettings {
+    TString Table;
+};
+
+struct TCreateTableStoreSettings {
+    TString TableStore;
+    ui32 ShardsCount = 0;
+    TMap<TString, TKikimrColumnMetadata> Columns;
+    TVector<TString> KeyColumnNames;
+    TVector<TString> ColumnOrder;
+    TVector<TIndexDescription> Indexes;
+};
+
+struct TAlterTableStoreSettings {
+    TString TableStore;
+};
+
+struct TDropTableStoreSettings {
+    TString TableStore;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -625,6 +660,14 @@ public:
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, const TAlterColumnTableSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster, const TCreateTableStoreSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterTableStore(const TString& cluster, const TAlterTableStoreSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster, const TDropTableStoreSettings& settings) = 0;
 
     virtual TVector<TString> GetCollectedSchemeData() = 0;
 

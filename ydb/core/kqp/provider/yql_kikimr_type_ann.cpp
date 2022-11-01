@@ -557,12 +557,21 @@ private:
     virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
+        TString tableType = TString(create.TableType());
 
         auto columnTypeError = GetColumnTypeErrorFn(ctx);
 
         TKikimrTableMetadataPtr meta = new TKikimrTableMetadata(cluster, table);
         meta->DoesExist = true;
         meta->ColumnOrder.reserve(create.Columns().Size());
+
+        auto tableTypeEnum = GetTableTypeFromString(tableType);
+        if (tableTypeEnum == ETableType::Unknown) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                << "Unknown table type: " << tableType << "."));
+            return TStatus::Error;
+        }
+        meta->TableType = tableTypeEnum;
 
         for (auto atom : create.PrimaryKey()) {
             meta->KeyColumnNames.emplace_back(atom.Value());
@@ -821,7 +830,10 @@ private:
                     "Can't reset TTL settings"));
                 return TStatus::Error;
             } else if (name == "storeType") {
-                meta->TableSettings.StoreType = TString(setting.Value().Cast<TCoAtom>().Value());
+                TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
+                if (storeType && to_lower(storeType.GetRef()) == "column") {
+                    meta->StoreType = EStoreType::Column;
+                }
             } else if (name == "partitionByHashFunction") {
                 meta->TableSettings.PartitionByHashFunction = TString(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
@@ -833,12 +845,17 @@ private:
             }
         }
 
-        if (!EnsureModifyPermissions(cluster, table, create.Pos(), ctx)) {
+        if (meta->TableType == ETableType::TableStore && meta->StoreType != EStoreType::Column) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
+                    TStringBuilder() << "TABLESTORE recuires STORE = COLUMN setting now"));
             return TStatus::Error;
         }
 
+        if (!EnsureModifyPermissions(cluster, table, create.Pos(), ctx)) {
+            return TStatus::Error;
+        }
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, table);
-        if (tableDesc.DoesExist() && !tableDesc.Metadata->IsSameTable(*meta)) {
+        if (meta->TableType == ETableType::Table && tableDesc.DoesExist() && !tableDesc.Metadata->IsSameTable(*meta)) {
             ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
                 << "Table name conflict: " << NCommon::FullTableName(cluster, table)
                 << " is used to reference multiple tables."));
@@ -859,12 +876,14 @@ private:
             return TStatus::Error;
         }
 
-        if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) {
-            return TStatus::Error;
-        }
+        if (table->GetTableType() == ETableType::Table) {
+            if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) {
+                return TStatus::Error;
+            }
 
-        if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
-            return TStatus::Error;
+            if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
+                return TStatus::Error;
+            }
         }
 
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());

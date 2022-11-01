@@ -73,6 +73,11 @@ namespace NSQLTranslationV1 {
         DropColumn
     };
 
+    enum class ETableType {
+        Table,
+        TableStore
+    };
+
     class TContext;
     class ITableKeys;
     class ISource;
@@ -1169,6 +1174,7 @@ namespace NSQLTranslationV1 {
         TVector<TFamilyEntry> ColumnFamilies;
         TVector<TChangefeedDescription> Changefeeds;
         TTableSettings TableSettings;
+        ETableType TableType = ETableType::Table;
     };
 
     struct TAlterTableParameters {
@@ -1185,6 +1191,7 @@ namespace NSQLTranslationV1 {
         TVector<TChangefeedDescription> AlterChangefeeds;
         TVector<TIdentifier> DropChangefeeds;
         TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
+        ETableType TableType = ETableType::Table;
 
         bool IsEmpty() const {
             return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
@@ -1363,7 +1370,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped);
     TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped);
     TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
-    TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, TScopedStatePtr scoped);
+    TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool isTabletore, TScopedStatePtr scoped);
     TNodePtr BuildCreateUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped);
     TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, TScopedStatePtr scoped);
     TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped);

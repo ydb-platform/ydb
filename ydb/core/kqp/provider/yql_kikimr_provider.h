@@ -216,10 +216,13 @@ public:
 
     void RequireStats() { NeedsStats = true; }
     bool GetNeedsStats() const { return NeedsStats; }
+    ETableType GetTableType() const { return TableType; }
+    void SetTableType(ETableType tableType) { TableType = tableType; }
 
 private:
     THashMap<TString, const TTypeAnnotationNode*> ColumnTypes;
     bool NeedsStats = false;
+    ETableType TableType;
 };
 
 class TKikimrTablesData : public TThrRefBase {
@@ -228,7 +231,8 @@ public:
     TKikimrTablesData(const TKikimrTablesData&) = delete;
     TKikimrTablesData& operator=(const TKikimrTablesData&) = delete;
 
-    TKikimrTableDescription& GetOrAddTable(const TString& cluster, const TString& database, const TString& table);
+    TKikimrTableDescription& GetOrAddTable(const TString& cluster, const TString& database, const TString& table,
+        ETableType tableType = ETableType::Table);
     TKikimrTableDescription& GetTable(const TString& cluster, const TString& table);
 
     const TKikimrTableDescription* EnsureTableExists(const TString& cluster, const TString& table,

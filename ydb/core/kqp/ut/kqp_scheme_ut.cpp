@@ -2878,41 +2878,251 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateTableStoreSimple) {
+    Y_UNIT_TEST(CreateAlterDropTableStore) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableStoreName = "/Root/ColumnTableTest";
+        TString tableStoreName = "/Root/TableStoreTest";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
-            CREATE TABLE `)" << tableStoreName << R"(` (
+            CREATE TABLESTORE `)" << tableStoreName << R"(` (
                 Key Uint64,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
             WITH (
                 STORE = COLUMN,
-                PARTITION_BY_HASH_FUNCTION = "asd"
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+#if 0 // TODO
+        auto query2 = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLESTORE `)" << tableStoreName << R"(`
+                SET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10)
+            ;)";
+        result = session.ExecuteSchemeQuery(query2).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+#endif
+        auto query3 = TStringBuilder() << R"(
+            --!syntax_v1
+            DROP TABLESTORE `)" << tableStoreName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query3).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+#if 0 // TODO
+    Y_UNIT_TEST(CreateDropInheritedColumnTable) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableTest";
+        TString tableStoreName = "/Root/TableStoreTest";
+        TString columnTableName = "/Root/TableStoreTest/ColumnTableTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
+            WITH (
+                STORE = ROW,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query2 = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLESTORE `)" << tableStoreName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        result = session.ExecuteSchemeQuery(query2).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query3 = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << columnTableName << R"(` ()
+            INHERITS `)" << tableName << R"(`
+            PARTITION BY HASH(Key)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
+            )
+            TABLESTORE `)" << tableStoreName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query3).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query4 = TStringBuilder() << R"(
+            --!syntax_v1
+            DROP TABLE `)" << tableName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query4).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query5 = TStringBuilder() << R"(
+            --!syntax_v1
+            DROP TABLE `)" << columnTableName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query5).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+#endif
+
+    Y_UNIT_TEST(CreateTableStoreNegative) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableStoreName = "/Root/TableStoreTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLESTORE `)" << tableStoreName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE = ROW,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+
+        auto query2 = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLESTORE `)" << tableStoreName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        result = session.ExecuteSchemeQuery(query2).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+
+        auto query3 = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLESTORE `)" << tableStoreName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE = COLUMN
+            );)";
+        result = session.ExecuteSchemeQuery(query3).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CreateTableStoreWithWrongFunction) {
+    Y_UNIT_TEST(CreateAlterDropColumnTableInStore) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableStoreName = "/Root/ColumnTableTest";
+        TString tableStoreName = "/Root/TableStoreTest";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
-            CREATE TABLE `)" << tableStoreName << R"(` (
+            CREATE TABLESTORE `)" << tableStoreName << R"(` (
                 Key Uint64,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
             WITH (
                 STORE = COLUMN,
-                PARTITION_BY_HASH_FUNCTION = "some_function"
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+#if 0 // TODO
+        TString tableName = "/Root/TableStoreTest/ColumnTableTest";
+        auto query2 = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH (Key)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        result = session.ExecuteSchemeQuery(query2).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query3 = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query3).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query4 = TStringBuilder() << R"(
+            --!syntax_v1
+            DROP TABLE `)" << tableName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query4).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+#endif
+
+        auto query5 = TStringBuilder() << R"(
+            --!syntax_v1
+            DROP TABLESTORE `)" << tableStoreName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query5).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+#if 0 // TODO
+    Y_UNIT_TEST(CreateDropColumnTable) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/ColumnTableTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query2 = TStringBuilder() << R"(
+            --!syntax_v1
+            DROP TABLE `)" << tableName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query2).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+#endif
+
+    Y_UNIT_TEST(CreateDropColumnTableNegative) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/ColumnTableTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 0
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());

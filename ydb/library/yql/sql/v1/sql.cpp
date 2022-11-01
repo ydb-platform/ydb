@@ -8603,16 +8603,16 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core4().GetRule_create_table_stmt1();
             const bool isTablestore = rule.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE;
-            if (isTablestore) {
-                Context().Error(GetPos(rule.GetToken2())) << "CREATE TABLESTORE is not supported yet";
-                return false;
-            }
+
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
             }
 
             TCreateTableParameters params;
+            if (isTablestore) {
+                params.TableType = ETableType::TableStore;
+            }
 
             if (!CreateTableEntry(rule.GetRule_create_table_entry5(), params)) {
                 return false;
@@ -8624,12 +8624,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (rule.HasBlock8()) {
-                Context().Error(GetPos(rule.GetBlock8().GetRule_table_inherits1().GetToken1())) << "INHERITS clause is not supported yet";
+                Context().Error(GetPos(rule.GetBlock8().GetRule_table_inherits1().GetToken1()))
+                    << "INHERITS clause is not supported yet";
                 return false;
             }
 
-            if (rule.HasBlock9()) {
-                Context().Error(GetPos(rule.GetBlock9().GetRule_table_partition_by1().GetToken1())) << "PARTITION BY clause is not supported yet";
+            if (rule.HasBlock9() && isTablestore) {
+                Context().Error(GetPos(rule.GetBlock9().GetRule_table_partition_by1().GetToken1()))
+                    << "PARTITION BY is not supported for TABLESTORE";
                 return false;
             }
 
@@ -8640,7 +8642,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (rule.HasBlock11()) {
-                Context().Error(GetPos(rule.GetBlock11().GetRule_table_tablestore1().GetToken1())) << "TABLESTORE clause is not supported yet";
+                Context().Error(GetPos(rule.GetBlock11().GetRule_table_tablestore1().GetToken1()))
+                    << "TABLESTORE clause is not supported yet";
                 return false;
             }
 
@@ -8651,10 +8654,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core5().GetRule_drop_table_stmt1();
             const bool isTablestore = rule.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE;
-            if (isTablestore) {
-                Context().Error(GetPos(rule.GetToken2())) << "DROP TABLESTORE is not supported yet";
-                return false;
-            }
             if (rule.HasBlock3()) {
                 Context().Error(GetPos(rule.GetToken1())) << "IF EXISTS in " << humanStatementName
                     << " is not supported.";
@@ -8665,7 +8664,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildDropTable(Ctx.Pos(), tr, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildDropTable(Ctx.Pos(), tr, isTablestore, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore6: {
@@ -8737,12 +8736,16 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore15: {
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1();
+            const bool isTablestore = rule.GetToken2().GetId() == SQLv1LexerTokens::TOKEN_TABLESTORE;
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
             }
 
             TAlterTableParameters params;
+            if (isTablestore) {
+                params.TableType = ETableType::TableStore;
+            }
             if (!AlterTableAction(rule.GetRule_alter_table_action4(), params)) {
                 return false;
             }

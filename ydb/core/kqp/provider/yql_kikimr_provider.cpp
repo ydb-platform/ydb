@@ -121,7 +121,7 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
     const TString& table, TPositionHandle pos, TExprContext& ctx) const
 {
     auto desc = Tables.FindPtr(std::make_pair(cluster, table));
-    if (desc && desc->DoesExist()) {
+    if (desc && (desc->GetTableType() != ETableType::Table || desc->DoesExist())) {
         return desc;
     }
 
@@ -132,7 +132,7 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
     return nullptr;
 }
 
-TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table) {
+TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table, ETableType tableType) {
     if (!Tables.FindPtr(std::make_pair(cluster, table))) {
         auto& desc = Tables[std::make_pair(cluster, table)];
 
@@ -141,6 +141,7 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
         if (NKikimr::TrySplitPathByDb(table, database, pathPair, error)) {
             desc.RelativePath = pathPair.second;
         }
+        desc.SetTableType(tableType);
 
         return desc;
     }

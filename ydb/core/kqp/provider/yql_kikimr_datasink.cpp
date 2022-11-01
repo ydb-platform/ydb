@@ -139,7 +139,10 @@ private:
                 auto mode = settings.Mode.Cast();
 
                 if (mode == "drop") {
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    auto tableType = settings.TableType.IsValid()
+                        ? GetTableTypeFromString(settings.TableType.Cast())
+                        : ETableType::Table; // v0 support
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
                     return TStatus::Ok;
                 } else if (
                     mode == "upsert" ||
@@ -190,6 +193,11 @@ private:
                 }
 
                 auto mode = settings.Mode.Cast();
+
+                auto tableType = settings.TableType.IsValid()
+                    ? GetTableTypeFromString(settings.TableType.Cast())
+                    : ETableType::Table; // v0 support
+
                 if (mode == "create") {
                     if (!settings.Columns) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
@@ -197,7 +205,7 @@ private:
                         return TStatus::Error;
                     }
 
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
                     return TStatus::Ok;
                 } else if (mode == "alter") {
                     if (!settings.AlterActions) {
@@ -206,7 +214,7 @@ private:
                         return TStatus::Error;
                     }
 
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
                     return TStatus::Ok;
                 }
 
@@ -494,11 +502,15 @@ public:
 
                 if (mode == "drop") {
                     YQL_ENSURE(!settings.Columns);
+                    auto tableType = settings.TableType.IsValid()
+                        ? settings.TableType.Cast()
+                        : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0 support
                     return Build<TKiDropTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Settings(settings.Other)
+                        .TableType(tableType)
                         .Done()
                         .Ptr();
                 } else if (mode == "update") {
@@ -537,6 +549,9 @@ public:
             case TKikimrKey::Type::TableScheme: {
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
+                auto tableType = settings.TableType.IsValid()
+                    ? settings.TableType.Cast()
+                    : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0 support
                 auto mode = settings.Mode.Cast();
                 if (mode == "create") {
                     YQL_ENSURE(settings.Columns);
@@ -563,6 +578,7 @@ public:
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
                         .TableSettings(settings.TableSettings.Cast())
+                        .TableType(tableType)
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {
@@ -581,6 +597,7 @@ public:
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Actions(settings.AlterActions.Cast())
+                        .TableType(tableType)
                         .Done()
                         .Ptr();
                 } else {

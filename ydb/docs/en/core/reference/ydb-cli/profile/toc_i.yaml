@@ -1,5 +1,5 @@
 items:
-- name: Creating a profile
+- name: Creating and updating profile
   href: create.md
 - name: Using a profile in requests
   href: use.md

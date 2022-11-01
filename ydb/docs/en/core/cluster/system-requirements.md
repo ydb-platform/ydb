@@ -30,6 +30,6 @@ The number of servers and disks is determined by the fault-tolerance requirement
 
 ## Software configuration {#software}
 
-A {{ ydb-short-name }} server can run on servers with Linux kernel 4.4 or higher and libc 2.30 (Ubuntu 20.04, Debian 11, Fedora34).
+A {{ ydb-short-name }} server can be run on servers running a Linux operating system with kernel 4.19 and higher and libc 2.30 (Ubuntu 20.04, Debian 11, Fedora34).
 
 MacOS and Windows operating systems are currently not supported.

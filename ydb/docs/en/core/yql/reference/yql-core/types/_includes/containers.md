@@ -1,8 +1,8 @@
 # Containers
 
-YQL supports containers as a way to define a complex data structure organized in a certain way.
-Values of container types can be passed to YQL queries as input parameters, or returned from YQL queries as output result set columns.
-Container types cannot be used as the types of columns in {{ ydb-short-name }} tables.
+YQL supports container types to define complex data structures organized in various ways.
+Values of container types can be passed to YQL queries as input parameters or returned from YQL queries as columns of the set of results.
+Container types can't be used as column data types for {{ ydb-short-name }} tables.
 
 | Type | Declaration,</br>example | Description |
 | ------------ | ---------------- | ------------- |
@@ -16,13 +16,12 @@ Container types cannot be used as the types of columns in {{ ydb-short-name }} t
 | Variant on structure | `Variant<Name1:Type1, Name2:Type2>`,</br>`Variant<value:Int32,error:String>` | A structure known to have exactly one element filled |
 | Enumeration | `Enum<Name1, Name2>`,</br>`Enum<value,error>` | A container with exactly one enumeration element selected and defined only by its name. |
 
-If needed, you can nest containers into each other in arbitrary combinations, for example: `List<TupleInt32,Int32>`.
+If necessary, you can nest containers in any combination, for example, `List<Tuple<Int32,Int32>>`.
 
-[In certain contexts, optional values](../optional.md) can also be considered a container type (`Optional<Type>`) that behaves as a list of length 0 or 1.
+In certain contexts, [optional values](../optional.md) can also be considered a container type (`Optional<Type>`) that behaves like a list of length 0 or 1.
 
 To create literals of list containers, dictionary containers, set containers, tuple containers, or structure containers, you can use the [operator notation](../../builtins/basic.md#containerliteral).
 To create a variant literal over a tuple or structure, use the function [Variant](../../builtins/basic.md#variant).
 To create an enumeration literal, use the function [Enum](../../builtins/basic.md#enum).
 
-To access container elements, use a [dot or square brackets](../../syntax/expressions.md#items-access), depending on the container type.
-
+To access the container elements, use a [dot or square brackets](../../syntax/expressions.md#items-access), depending on the container type.

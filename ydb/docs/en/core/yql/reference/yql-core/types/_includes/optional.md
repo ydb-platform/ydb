@@ -15,8 +15,8 @@ The following operations are most often performed on optional data types:
 
 {% note info %}
 
-Currently container types (including the `Optional<T>` containers and more complex types based on them) cannot be used as the types of columns in {{ ydb-short-name }} tables.
-YQL queries may return the values of container types, and can take them as input parameters.
+Container types (including `Optional<T>` containers and more complex types derived from them) can't currently be used as column data types when creating {{ ydb-short-name }} tables.
+YQL queries can return values of container types and accept them as input parameters.
 
 {% endnote %}
 

@@ -61,6 +61,16 @@ items:
     #   href: commands/tools/dump.md
     # - name: Restore backup
     #   href: commands/tools/restore.md
+  - name: Managing long running operations
+    items:
+    - name: Getting a list of long running operations
+      href: operation-list.md
+    - name: Obtaining the status of long running operations
+      href: operation-get.md
+    - name: Canceling long running operations
+      href: operation-cancel.md
+    - name: Deleting long running operations from the list
+      href: operation-forget.md
   - name: Managing profiles
     include: { mode: link, path: profile/toc_p.yaml }
   - name: Information services
@@ -79,5 +89,3 @@ items:
       href: commands/workload/stock.md
     - name: Key-Value load
       href: workload-kv.md
-
-

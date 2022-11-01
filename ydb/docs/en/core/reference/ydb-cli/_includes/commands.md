@@ -50,14 +50,14 @@ Any command can be run from the command line with the `--help` option to get hel
 | scheme permissions revoke | Revoking a permission |
 | scheme permissions set | Setting permissions |
 | [scheme rmdir](../commands/dir.md#rmdir) | Deleting a directory |
-| scripting yql | Executing a YQL script |
+| [scripting yql](../scripting-yql.md) | Executing a YQL script |
 | table attribute add | Adding a table attribute |
 | table attribute drop | Deleting a table attribute |
 | table drop | Deleting a table |
 | [table index add global-async](../commands/secondary_index.md#add) | Adding an asynchronous index |
 | [table index add global-sync](../commands/secondary_index.md#add) | Adding a synchronous index |
 | [table index drop](../commands/secondary_index.md#drop) | Deleting an index |
-| [table query execute](../commands/query.md) | Executing a YQL query |
+| [table query execute](../table-query-execute.md) | Executing a YQL query |
 | [table query explain](../commands/explain-plan.md) | YQL query execution plan |
 | [table readtable](../commands/readtable.md) | Streaming table reads |
 | table ttl drop | Deleting TTL parameters |

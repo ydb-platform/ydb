@@ -23,8 +23,6 @@ items:
       href: commands/tools/rename.md
   - name: Operations with data
     items:
-    - name: Making a DB query
-      href: commands/query.md
     - name: Getting a query execution plan and AST
       href: commands/explain-plan.md
     - name: Streaming table reads
@@ -53,6 +51,16 @@ items:
       href: topic-write.md
     - name: Message pipeline processing
       href: topic-pipeline.md
+  - name: YQL execution
+    items:
+    - name: Overview
+      href: yql-query-overview.md
+    - name: Running a script (with streaming support)
+      href: yql.md
+    - name: Running a script
+      href: scripting-yql.md
+    - name: Running a query
+      href: table-query-execute.md
 #  - name: Utilities
 #    items:
     # - name: Copy tables

@@ -55,14 +55,18 @@ namespace NKqpHelpers {
     }
 
     inline Ydb::Table::ExecuteDataQueryRequest MakeSimpleRequestRPC(
-        const TString& sql, const TString& sessionId, const TString& txId, bool commit_tx) {
+        const TString& sql, const TString& sessionId, const TString& txId, bool commitTx, bool staleRo = false) {
 
         Ydb::Table::ExecuteDataQueryRequest request;
         request.set_session_id(sessionId);
-        request.mutable_tx_control()->set_commit_tx(commit_tx);
+        request.mutable_tx_control()->set_commit_tx(commitTx);
         if (txId.empty()) {
             // txId is empty, start a new tx
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
+            if (!staleRo) {
+                request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
+            } else {
+                request.mutable_tx_control()->mutable_begin_tx()->mutable_stale_read_only();
+            }
         } else {
             // continue new tx.
             request.mutable_tx_control()->set_tx_id(txId);
@@ -200,10 +204,10 @@ namespace NKqpHelpers {
         return request;
     }
 
-    inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query) {
+    inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false) {
         TString sessionId = CreateSessionRPC(runtime);
         TString txId;
-        auto response = ExecuteDataQueryRPCResponse(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */));
+        auto response = ExecuteDataQueryRPCResponse(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */, staleRo));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -217,17 +221,7 @@ namespace NKqpHelpers {
     }
 
     inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query) {
-        auto reqSender = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, reqSender, MakeSimpleStaleRoRequest(query));
-        auto& response = ev->Get()->Record.GetRef();
-        if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            return TStringBuilder() << "ERROR: " << response.GetYdbStatus();
-        }
-        if (response.GetResponse().GetResults().size() == 0) {
-            return "<empty>";
-        }
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        return KqpSimpleExec(runtime, query, true);
     }
 
     inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {

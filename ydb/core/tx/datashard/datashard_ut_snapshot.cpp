@@ -3433,9 +3433,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE key >= 1 AND key <= 3
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         // We will reuse this snapshot
         auto snapshot = observer.Last.MvccSnapshot;
@@ -3477,9 +3475,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE value in (1, 11, 21, 12, 22)
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
         if (WithRestart) {
             observer.BlockApplyRecords = true;
@@ -3516,10 +3512,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 WHERE value in (1, 11, 21, 12, 22)
                 ORDER BY key
                 )")),
-            "Struct { "
-            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 11 } } } "
-            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 21 } } } "
-            "} Struct { Bool: false }");
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 21 } }");
 
         // Commit changes in tx 234
         observer.InjectClearTasks = true;

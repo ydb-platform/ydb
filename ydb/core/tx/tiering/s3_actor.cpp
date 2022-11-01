@@ -32,8 +32,8 @@ public:
         return Event->Blobs;
     }
 
-    TUnifiedBlobId AddExported(const TString& bucket, const TUnifiedBlobId& srcBlob) {
-        Event->SrcToDstBlobs[srcBlob] = TUnifiedBlobId(srcBlob, TUnifiedBlobId::S3_BLOB, bucket);
+    TUnifiedBlobId AddExported(const TString& bucket, const TUnifiedBlobId& srcBlob, const ui64 pathId) {
+        Event->SrcToDstBlobs[srcBlob] = TUnifiedBlobId(srcBlob, TUnifiedBlobId::S3_BLOB, bucket, pathId);
         return Event->SrcToDstBlobs[srcBlob];
     }
 
@@ -119,7 +119,7 @@ public:
         auto& ex = Exports[exportNo];
 
         for (auto& [blobId, blob] : ex.Blobs()) {
-            TString key = ex.AddExported(Bucket, blobId).GetS3Key();
+            TString key = ex.AddExported(Bucket, blobId, blob.PathId).GetS3Key();
             Y_VERIFY(!ExportingKeys.count(key)); // TODO
 
             ex.RegisterKey(key);

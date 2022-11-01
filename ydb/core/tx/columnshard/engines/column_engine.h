@@ -101,6 +101,16 @@ struct TTiersInfo {
     }
 };
 
+struct TPortionEvictionFeatures {
+    const TString TargetTierName;
+    const ui64 PathId;      // portion path id for cold-storage-key construct
+    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId)
+        : TargetTierName(targetTierName)
+        , PathId(pathId) {
+
+    }
+};
+
 class TColumnEngineChanges {
 public:
     enum EType {
@@ -131,7 +141,7 @@ public:
     TVector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
     TVector<TPortionInfo> AppendedPortions; // New portions after indexing or compaction
     TVector<TPortionInfo> PortionsToDrop;
-    TVector<std::pair<TPortionInfo, TString>> PortionsToEvict; // {portion, target tier name}
+    TVector<std::pair<TPortionInfo, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}
     TVector<TColumnRecord> EvictedRecords;
     TVector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
     THashMap<TBlobRange, TString> Blobs;
@@ -183,7 +193,7 @@ public:
     }
 
     static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
-    GroupedBlobRanges(const TVector<std::pair<TPortionInfo, TString>>& portions) {
+    GroupedBlobRanges(const TVector<std::pair<TPortionInfo, TPortionEvictionFeatures>>& portions) {
         Y_VERIFY(portions.size());
 
         THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
@@ -195,44 +205,6 @@ public:
             }
         }
         return sameBlobRanges;
-    }
-
-    friend IOutputStream& operator << (IOutputStream& out, const TColumnEngineChanges& changes) {
-        if (ui32 switched = changes.SwitchedPortions.size()) {
-            out << "switch " << switched << " portions";
-            for (auto& portionInfo : changes.SwitchedPortions) {
-                out << portionInfo;
-            }
-            out << "; ";
-        }
-        if (ui32 added = changes.AppendedPortions.size()) {
-            out << "add " << added << " portions";
-            for (auto& portionInfo : changes.AppendedPortions) {
-                out << portionInfo;
-            }
-            out << "; ";
-        }
-        if (ui32 moved = changes.PortionsToMove.size()) {
-            out << "move " << moved << " portions";
-            for (auto& [portionInfo, granule] : changes.PortionsToMove) {
-                out << portionInfo << " (to " << granule << ")";
-            }
-            out << "; ";
-        }
-        if (ui32 evicted = changes.PortionsToEvict.size()) {
-            out << "evict " << evicted << " portions";
-            for (auto& [portionInfo, tier] : changes.PortionsToEvict) {
-                out << portionInfo << " (to " << tier << ")";
-            }
-            out << "; ";
-        }
-        if (ui32 dropped = changes.PortionsToDrop.size()) {
-            out << "drop " << dropped << " portions";
-            for (auto& portionInfo : changes.PortionsToDrop) {
-                out << portionInfo;
-            }
-        }
-        return out;
     }
 };
 

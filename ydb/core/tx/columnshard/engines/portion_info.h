@@ -54,7 +54,6 @@ struct TPortionInfo {
     bool Valid() const { return !Empty() && Meta.Produced != TPortionMeta::UNSPECIFIED && HasMinMax(FirstPkColumn); }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
     bool CanHaveDups() const { return !Valid() || IsInserted(); }
-
     ui32 NumRecords() const { return Records.size(); }
 
     ui64 Portion() const {

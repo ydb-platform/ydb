@@ -9,8 +9,8 @@ namespace NKikimr::NOlap {
 class IBlobGroupSelector;
 class TUnifiedBlobId;
 
-TString DsIdToS3Key(const TUnifiedBlobId& dsid);
-TUnifiedBlobId S3KeyToDsId(const TString& s, TString& error);
+TString DsIdToS3Key(const TUnifiedBlobId& dsid, const ui64 pathId);
+TUnifiedBlobId S3KeyToDsId(const TString& s, TString& error, ui64& pathId);
 
 // Encapsulates different types of blob ids to simplify dealing with blobs for the
 // components that do not need to know where the blob is stored
@@ -92,12 +92,12 @@ class TUnifiedBlobId {
 
         TS3BlobId() = default;
 
-        TS3BlobId(const TUnifiedBlobId& dsBlob, const TString& bucket)
+        TS3BlobId(const TUnifiedBlobId& dsBlob, const TString& bucket, const ui64 pathId)
             : Bucket(bucket)
         {
             Y_VERIFY(dsBlob.IsDsBlob());
             DsBlobId = std::get<TDsBlobId>(dsBlob.Id);
-            Key = DsIdToS3Key(dsBlob);
+            Key = DsIdToS3Key(dsBlob, pathId);
         }
 
         bool operator == (const TS3BlobId& other) const {
@@ -143,8 +143,8 @@ public:
     {}
 
     // Make S3 blob Id from DS one
-    TUnifiedBlobId(const TUnifiedBlobId& blob, EBlobType type, const TString& bucket)
-        : Id(TS3BlobId(blob, bucket))
+    TUnifiedBlobId(const TUnifiedBlobId& blob, EBlobType type, const TString& bucket, const ui64 pathId)
+        : Id(TS3BlobId(blob, bucket, pathId))
     {
         Y_VERIFY(type == S3_BLOB);
     }

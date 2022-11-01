@@ -125,8 +125,14 @@ struct TEvPrivate {
 
     struct TEvExport : public TEventLocal<TEvExport, EvExport> {
         struct TExportBlobInfo {
+            const ui64 PathId = 0;
             TString Data;
             bool Evicting = false;
+            TExportBlobInfo(const ui64 pathId)
+                : PathId(pathId)
+            {
+
+            }
         };
         using TBlobDataMap = THashMap<TUnifiedBlobId, TExportBlobInfo>;
 

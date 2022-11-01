@@ -48,7 +48,11 @@ public:
         BlobsToRead.erase(blobId);
 
         Y_VERIFY(Event);
-        Event->Blobs[blobId].Data = blobData;
+        {
+            auto it = Event->Blobs.find(blobId);
+            Y_VERIFY(it != Event->Blobs.end());
+            it->second.Data = blobData;
+        }
 
         if (BlobsToRead.empty()) {
             SendResultAndDie(ctx);

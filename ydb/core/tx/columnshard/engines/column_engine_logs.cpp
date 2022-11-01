@@ -824,7 +824,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
                             keep = true;
                             if (allowEviction && info.TierName != border.TierName) {
                                 evicttionSize += info.BlobsSizes().first;
-                                changes->PortionsToEvict.emplace_back(info, border.TierName);
+                                changes->PortionsToEvict.emplace_back(info, TPortionEvictionFeatures(border.TierName, pathId));
                             }
                             break;
                         }
@@ -1960,16 +1960,16 @@ TVector<TString> TColumnEngineForLogs::EvictBlobs(const TIndexInfo& indexInfo,
     Y_VERIFY(changes->EvictedRecords.empty()); // dst meta
 
     TVector<TString> newBlobs;
-    TVector<std::pair<TPortionInfo, TString>> evicted;
+    TVector<std::pair<TPortionInfo, TPortionEvictionFeatures>> evicted;
     evicted.reserve(changes->PortionsToEvict.size());
 
-    for (auto& [portionInfo, tierName] : changes->PortionsToEvict) {
+    for (auto& [portionInfo, evFeatures] : changes->PortionsToEvict) {
         Y_VERIFY(!portionInfo.Empty());
         Y_VERIFY(portionInfo.IsActive());
 
-        if (UpdateEvictedPortion(portionInfo, indexInfo, tierName, changes->Blobs, changes->EvictedRecords, newBlobs)) {
-            Y_VERIFY(portionInfo.TierName == tierName);
-            evicted.emplace_back(std::move(portionInfo), TString{});
+        if (UpdateEvictedPortion(portionInfo, indexInfo, evFeatures.TargetTierName, changes->Blobs, changes->EvictedRecords, newBlobs)) {
+            Y_VERIFY(portionInfo.TierName == evFeatures.TargetTierName);
+            evicted.emplace_back(std::move(portionInfo), evFeatures);
         }
     }
 

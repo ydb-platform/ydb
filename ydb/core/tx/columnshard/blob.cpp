@@ -8,34 +8,42 @@
 namespace NKikimr::NOlap {
 
 // Format: "S3-f(logoBlobId)-group"
-// Example: "S3-72075186224038245_51_31595_2_0_11952_0-2181038103"
-TString DsIdToS3Key(const TUnifiedBlobId& dsid) {
-    TString res = TString("S3") + dsid.GetLogoBlobId().ToString();
-    res[2] = '-'; // replace '['
-    res[res.size() - 1] = '-'; // replace ']'
-
-    for (size_t i = 0; i < res.size(); ++i) {
-        switch (res[i]) {
+// Example: "S3-42-72075186224038245_51_31595_2_0_11952_0-2181038103"
+TString DsIdToS3Key(const TUnifiedBlobId& dsid, const ui64 pathId) {
+    TString blobId = dsid.GetLogoBlobId().ToString();
+    for (auto&& c : blobId) {
+        switch (c) {
             case ':':
-                res[i] = '_';
+                c = '_';
+                break;
+            case '[':
+            case ']':
+                c = '-';
         }
     }
-
-    res += ToString(dsid.GetDsGroup());
-    return res;
+    TString result =
+        "S3-" +
+        ::ToString(pathId) +
+        blobId +
+        ::ToString(dsid.GetDsGroup())
+        ;
+    return result;
 }
 
-TUnifiedBlobId S3KeyToDsId(const TString& s, TString& error) {
+TUnifiedBlobId S3KeyToDsId(const TString& s, TString& error, ui64& pathId) {
     TVector<TString> keyBucket;
     Split(s, "-", keyBucket);
 
     ui32 dsGroup;
-    if (keyBucket.size() != 3 || keyBucket[0] != "S3" || !TryFromString<ui32>(keyBucket[2], dsGroup)) {
+    if (keyBucket.size() != 4 || keyBucket[0] != "S3"
+        || !TryFromString<ui32>(keyBucket[3], dsGroup)
+        || !TryFromString<ui64>(keyBucket[1], pathId))
+    {
         error = TStringBuilder() << "Wrong S3 key '" << s << "'";
         return TUnifiedBlobId();
     }
 
-    TString blobId = "[" + keyBucket[1] + "]";
+    TString blobId = "[" + keyBucket[2] + "]";
     for (size_t i = 0; i < blobId.size(); ++i) {
         switch (blobId[i]) {
             case '_':
@@ -134,12 +142,13 @@ TUnifiedBlobId ParseS3BlobId(const TString& s, TString& error) {
         return TUnifiedBlobId();
     }
 
-    TUnifiedBlobId dsBlobId = S3KeyToDsId(keyBucket[0], error);
+    ui64 pathId;
+    TUnifiedBlobId dsBlobId = S3KeyToDsId(keyBucket[0], error, pathId);
     if (!dsBlobId.IsValid()) {
         return TUnifiedBlobId();
     }
 
-    return TUnifiedBlobId(dsBlobId, TUnifiedBlobId::S3_BLOB, keyBucket[1]);
+    return TUnifiedBlobId(dsBlobId, TUnifiedBlobId::S3_BLOB, keyBucket[1], pathId);
 }
 
 }

@@ -252,8 +252,28 @@ private:
         TActor<TDqPqReadActor>::PassAway();
     }
 
+    void MaybeScheduleNextIdleCheck(TInstant systemTime) {
+        if (!WatermarkTracker) {
+            return;
+        }
+
+        const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
+        if (!nextIdleCheckAt) {
+            return;
+        }
+
+        if (!NextIdlenesCheckAt.Defined() || nextIdleCheckAt != *NextIdlenesCheckAt) {
+            NextIdlenesCheckAt = *nextIdleCheckAt;
+            SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
+            Schedule(*nextIdleCheckAt, new TEvPrivate::TEvSourceDataReady());
+        }
+    }
+
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
+
+        const auto now = TInstant::Now();
+        MaybeScheduleNextIdleCheck(now);
 
         i64 usedSpace = 0;
         if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
@@ -271,6 +291,16 @@ private:
 
         for (auto& event : events) {
             std::visit(TPQEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
+        }
+
+        if (WatermarkTracker) {
+            const auto watermark = WatermarkTracker->HandleIdleness(now);
+
+            if (watermark) {
+                const auto t = watermark;
+                SRC_LOG_T("Fake watermark " << t << " was produced");
+                PushWatermarkToReady(*watermark);
+            }
         }
 
         if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
@@ -303,11 +333,12 @@ private:
             return;
         }
 
-        WatermarkTracker = std::make_unique<TDqSourceWatermarkTracker<TPartitionKey>>(
+        WatermarkTracker.ConstructInPlace(
             TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
             StartingMessageTimestamp,
-            GetPartitionsToRead().size() // TODO: for the internal LB there is a problem here. See YQ-1384
-        );
+            SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
+            TDuration::MicroSeconds(SourceParams.GetWatermarks().GetLateArrivalDelayUs()),
+            TInstant::Now());
     }
 
     NYdb::NPersQueue::TReadSessionSettings GetReadSessionSettings() const {
@@ -386,6 +417,17 @@ private:
         return true;
     }
 
+    void PushWatermarkToReady(TInstant watermark) {
+        SRC_LOG_D("New watermark " << watermark << " was generated");
+
+        if (Y_UNLIKELY(ReadyBuffer.empty() || ReadyBuffer.back().Watermark.Defined())) {
+            ReadyBuffer.emplace(watermark, 0);
+            return;
+        }
+
+        ReadyBuffer.back().Watermark = watermark;
+    }
+
     struct TPQEventProcessor {
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
@@ -440,7 +482,7 @@ private:
         void operator()(NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent&) { }
 
         TReadyBatch& GetActiveBatch(const TPartitionKey& partitionKey, TInstant time) {
-            if (Y_UNLIKELY(Self.ReadyBuffer.empty())) {
+            if (Y_UNLIKELY(Self.ReadyBuffer.empty() || Self.ReadyBuffer.back().Watermark.Defined())) {
                 Self.ReadyBuffer.emplace(Nothing(), BatchCapacity);
             }
 
@@ -451,15 +493,16 @@ private:
                 return activeBatch;
             }
 
-            const auto maybeNewWatermark = Self.WatermarkTracker->NotifyNewPartitionTime(partitionKey, time);
+            const auto maybeNewWatermark = Self.WatermarkTracker->NotifyNewPartitionTime(
+                partitionKey,
+                time,
+                TInstant::Now());
             if (!maybeNewWatermark) {
                 // Watermark wasn't moved => use current active batch
                 return activeBatch;
             }
 
-            SRC_LOG_D("New watermark " << *maybeNewWatermark << " was generated");
-            activeBatch.Watermark = maybeNewWatermark; // Write watermark to current batch
-
+            Self.PushWatermarkToReady(*maybeNewWatermark);
             return Self.ReadyBuffer.emplace(Nothing(), BatchCapacity); // And open new batch
         }
 
@@ -514,7 +557,8 @@ private:
     bool SubscribedOnEvent = false;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
-    std::unique_ptr<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
+    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
+    TMaybe<TInstant> NextIdlenesCheckAt;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(

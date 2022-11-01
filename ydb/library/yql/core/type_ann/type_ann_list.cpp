@@ -6044,7 +6044,7 @@ namespace {
 
     IGraphTransformer::TStatus HoppingTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureMinArgsCount(*input, 5, ctx.Expr) || !EnsureMaxArgsCount(*input, 6, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -6110,14 +6110,12 @@ namespace {
             return convertStatus;
         }
 
-        if (input->ChildrenSize() == 6) {
-            const auto& dataWatermarksNodePtr = input->ChildRef(5);
-            if (dataWatermarksNodePtr->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(dataWatermarksNodePtr->Pos()), TStringBuilder()
-                    << "Expected unit type, but got: "
-                    << *dataWatermarksNodePtr->GetTypeAnn()));
-                return IGraphTransformer::TStatus::Error;
-            }
+        const auto& dataWatermarksNodePtr = input->ChildRef(5);
+        if (dataWatermarksNodePtr->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(dataWatermarksNodePtr->Pos()), TStringBuilder()
+                << "Expected unit type, but got: "
+                << *dataWatermarksNodePtr->GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());

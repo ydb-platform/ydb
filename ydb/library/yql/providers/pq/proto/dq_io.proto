@@ -17,6 +17,8 @@ enum EClusterType {
 message TWatermarks {
     bool Enabled = 1;
     uint64 GranularityUs = 2;
+    uint64 LateArrivalDelayUs = 3;
+    bool IdlePartitionsEnabled = 4;
 }
 
 message TDqPqTopicSource {

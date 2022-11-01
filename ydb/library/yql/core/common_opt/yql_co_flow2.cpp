@@ -1609,6 +1609,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             .Interval(self.Interval())
             .Delay(self.Delay())
             .DataWatermarks(self.DataWatermarks())
+            .Version(self.Version())
             .Done().Ptr();
     };
 

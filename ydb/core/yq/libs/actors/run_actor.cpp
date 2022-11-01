@@ -469,7 +469,7 @@ private:
                 RateLimiterResourceCreatorId = Register(CreateRateLimiterResourceCreator(SelfId(), Params.Owner, Params.QueryId, Params.Scope, Params.TenantName));
             }
             return;
-        }     
+        }
 
         if (QueryStateUpdateRequest.resources().compilation() == Fq::Private::TaskResources::PREPARE) {
             if (!ProgramRunnerId) {
@@ -477,7 +477,7 @@ private:
             }
             return;
         }
-        
+
         if (QueryStateUpdateRequest.resources().read_rules() == Fq::Private::TaskResources::PREPARE) {
             if (!ReadRulesCreatorId) {
                 ReadRulesCreatorId = Register(
@@ -1355,6 +1355,8 @@ private:
         apply("_EnablePrecompute", "1");
         apply("WatermarksMode", "disable");
         apply("WatermarksGranularityMs", "1000");
+        apply("WatermarksLateArrivalDelayMs", "5000");
+        apply("WatermarksIdlePartitions", "true");
 
         switch (Params.QueryType) {
         case YandexQuery::QueryContent::STREAMING: {

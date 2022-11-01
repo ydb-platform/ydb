@@ -200,9 +200,14 @@ public:
                         srcDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         srcDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
-                    } else if (name == WatermarksGranularityUsSetting) {
+                    } else if (name == WatermarksEnableSetting) {
                         srcDesc.MutableWatermarks()->SetEnabled(true);
+                    } else if (name == WatermarksGranularityUsSetting) {
                         srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
+                    } else if (name == WatermarksLateArrivalDelayUsSetting) {
+                        srcDesc.MutableWatermarks()->SetLateArrivalDelayUs(FromString<ui64>(Value(setting)));
+                    } else if (name == WatermarksIdlePartitionsSetting) {
+                        srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     }
                 }
 
@@ -292,8 +297,23 @@ public:
         }
 
         if (dqSettings.WatermarksMode.Get().GetOrElse("") == "default") {
-            const auto granularity = TDuration::MilliSeconds(dqSettings.WatermarksGranularityMs.Get().GetOrElse(1000));
+            Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
+
+            const auto granularity = TDuration::MilliSeconds(dqSettings
+                .WatermarksGranularityMs
+                .Get()
+                .GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs));
             Add(props, WatermarksGranularityUsSetting, ToString(granularity.MicroSeconds()), pos, ctx);
+
+            const auto lateArrivalDelay = TDuration::MilliSeconds(dqSettings
+                .WatermarksLateArrivalDelayMs
+                .Get()
+                .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
+            Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
+        }
+
+        if (dqSettings.WatermarksEnableIdlePartitions.Get().GetOrElse(false)) {
+            Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)

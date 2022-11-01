@@ -13,56 +13,118 @@ public:
     TDqSourceWatermarkTracker(
             TDuration granularity,
             TInstant startWatermark,
-            ui32 expectedPartitionsCount)
+            bool idlePartitionsEnabled,
+            TDuration lateArrivalDelay,
+            TInstant systemTime)
         : Granularity(granularity)
         , StartWatermark(ToDiscreteTime(startWatermark))
-        , ExpectedPartitionsCount(expectedPartitionsCount) {}
+        , IdlePartitionsEnabled(idlePartitionsEnabled)
+        , LateArrivalDelay(lateArrivalDelay)
+        , LastTimeNotifiedAt(systemTime) {}
 
-    TMaybe<TInstant> NotifyNewPartitionTime(const TPartitionKey& partitionKey, TInstant time) {
-        auto granularPartitionTime = ToDiscreteTime(time);
-
-        auto iter = Data.find(partitionKey);
-        if (iter == Data.end()) {
-            Data[partitionKey] = granularPartitionTime;
+    TMaybe<TInstant> NotifyNewPartitionTime(
+        const TPartitionKey& partitionKey,
+        TInstant partitionTime,
+        TInstant systemTime)
+    {
+        auto [iter, _] = Data.try_emplace(partitionKey);
+        if (UpdatePartitionTime(iter->second, partitionTime, systemTime)) {
             return RecalcWatermark();
         }
 
-        if (granularPartitionTime <= iter->second) {
+        return Nothing();
+    }
+
+    TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
+        if (!Watermark) {
+            return Watermark = StartWatermark;
+        }
+
+        if (!IdlePartitionsEnabled || !ShouldCheckIdlenessNow(systemTime)) {
             return Nothing();
         }
 
-        iter->second = granularPartitionTime;
+        if (AllPartitionsAreIdle(systemTime)) {
+            return TryProduceFakeWatermark(systemTime);
+        }
+
         return RecalcWatermark();
     }
+
+    TMaybe<TInstant> GetNextIdlenessCheckAt(TInstant systemTime) {
+        return IdlePartitionsEnabled
+            ? ToDiscreteTime(systemTime + Granularity)
+            : TMaybe<TInstant>();
+    }
+private:
+    struct TPartitionState {
+        TInstant Time;  // partition time, notified outside
+        TInstant TimeNotifiedAt; // system time when notification was received
+        TInstant Watermark;
+    };
 
 private:
     TInstant ToDiscreteTime(TInstant time) const {
         return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity.MicroSeconds());
     }
 
-    TMaybe<TInstant> RecalcWatermark() {
-        if (!Watermark) {
-            // We have to inject start watermark before first data item, because some graph nodes can't start
-            // data processing without knowing what the current watermark is.
-            Watermark = StartWatermark;
-            return Watermark;
+    bool AllPartitionsAreIdle(TInstant systemTime) const {
+        return LastTimeNotifiedAt + LateArrivalDelay <= systemTime;
+    }
+
+    bool ShouldCheckIdlenessNow(TInstant systemTime) {
+        const auto discreteSystemTime = ToDiscreteTime(systemTime);
+        if (discreteSystemTime < NextIdlenessCheckAt) {
+            return false;
         }
 
-        if (Data.size() < ExpectedPartitionsCount) {
-            // Each partition should notify time at least once before we are able to move watermark
+        NextIdlenessCheckAt = discreteSystemTime + Granularity;
+        return true;
+    }
+
+    TMaybe<TInstant> RecalcWatermark() {
+        const auto maxPartitionSeenTimeIter = MaxElementBy(
+            Data.begin(),
+            Data.end(),
+            [](const auto iter){ return iter.second.Time; });
+
+        if (maxPartitionSeenTimeIter == Data.end()) {
             return Nothing();
         }
 
-        auto minTime = Data.begin()->second;
-        for (const auto& [_, time] : Data) {
-            if (time < minTime) {
-                minTime = time;
-            }
+        const auto newWatermark = ToDiscreteTime(maxPartitionSeenTimeIter->second.Time - LateArrivalDelay);
+
+        if (!Watermark) {
+            // We have to inject start watermark before first data item, because some graph nodes can't start
+            // data processing without knowing what the current watermark is.
+            return Watermark = Max(StartWatermark, newWatermark);
         }
 
-        if (minTime > Watermark) {
-            Watermark = minTime;
-            return Watermark;
+        if (newWatermark > *Watermark) {
+            return Watermark = newWatermark;
+        }
+
+        return Nothing();
+    }
+
+    bool UpdatePartitionTime(TPartitionState& state, TInstant partitionTime, TInstant sysTime) {
+        state.Time = partitionTime;
+        state.TimeNotifiedAt = sysTime;
+        LastTimeNotifiedAt = sysTime;
+
+        const auto watermark = ToDiscreteTime(partitionTime);
+        if (watermark >= state.Watermark) {
+            state.Watermark = watermark;
+            return true;
+        }
+
+        return false;
+    }
+
+    TMaybe<TInstant> TryProduceFakeWatermark(TInstant systemTime) {
+        const auto fakeWatermark = ToDiscreteTime(systemTime - LateArrivalDelay);
+        if (fakeWatermark > Watermark) {
+            return Watermark = fakeWatermark;
         }
 
         return Nothing();
@@ -71,10 +133,13 @@ private:
 private:
     const TDuration Granularity;
     const TInstant StartWatermark;
-    const ui32 ExpectedPartitionsCount;
+    const bool IdlePartitionsEnabled;
+    const TDuration LateArrivalDelay;
 
-    THashMap<TPartitionKey, TInstant> Data;
+    THashMap<TPartitionKey, TPartitionState> Data;
     TMaybe<TInstant> Watermark;
+    TInstant LastTimeNotifiedAt; // last system time when tracker received notification for any partition
+    TMaybe<TInstant> NextIdlenessCheckAt;
 };
 
 }

@@ -1460,7 +1460,8 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
             HoppingWindowSpec->Hop,
             HoppingWindowSpec->Interval,
             HoppingWindowSpec->Delay,
-            Q("False"));
+            Q("False"),
+            Q("v1"));
 
         return Y("Aggregate", label, Q(keysTuple), Q(aggrArgs),
             Q(Y(Q(Y(BuildQuotedAtom(Pos, "hopping"), hoppingTraits)))));

@@ -2089,7 +2089,8 @@ TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
         Hop,
         Interval,
         Interval,
-        Q("true"));
+        Q("true"),
+        Q("v2"));
 }
 
 bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {

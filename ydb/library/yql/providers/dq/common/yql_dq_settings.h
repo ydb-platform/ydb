@@ -28,6 +28,8 @@ struct TDqSettings {
         static constexpr ui64 OutputChunkMaxSize = 4_MB;
         static constexpr ui64 ChunkSizeLimit = 128_MB;
         static constexpr bool EnableDqReplicate = false;
+        static constexpr bool WatermarksGranularityMs = 1000;
+        static constexpr bool WatermarksLateArrivalDelayMs = 5000;
         static constexpr ui64 ParallelOperationsLimit = 16;
     };
 
@@ -74,7 +76,9 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> EnableDqReplicate;
     NCommon::TConfSetting<bool, false> EnableGraceJoin;
     NCommon::TConfSetting<TString, false> WatermarksMode;
+    NCommon::TConfSetting<bool, false> WatermarksEnableIdlePartitions;
     NCommon::TConfSetting<ui64, false> WatermarksGranularityMs;
+    NCommon::TConfSetting<ui64, false> WatermarksLateArrivalDelayMs;
     NCommon::TConfSetting<bool, false> UseAggPhases;
     NCommon::TConfSetting<ui64, false> ParallelOperationsLimit;
 
@@ -117,8 +121,10 @@ struct TDqSettings {
         SAVE_SETTING(WorkerFilter);
         SAVE_SETTING(ComputeActorType);
         SAVE_SETTING(WatermarksMode);
+        SAVE_SETTING(WatermarksEnableIdlePartitions);
         SAVE_SETTING(EnableGraceJoin);
         SAVE_SETTING(WatermarksGranularityMs);
+        SAVE_SETTING(WatermarksLateArrivalDelayMs);
         SAVE_SETTING(UseAggPhases);
 
 #undef SAVE_SETTING

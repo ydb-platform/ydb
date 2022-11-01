@@ -1842,7 +1842,8 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
             LegacyHoppingWindowSpec->Hop,
             LegacyHoppingWindowSpec->Interval,
             LegacyHoppingWindowSpec->Delay,
-            LegacyHoppingWindowSpec->DataWatermarks ? Q("true") : Q("false"));
+            LegacyHoppingWindowSpec->DataWatermarks ? Q("true") : Q("false"),
+            Q("v1"));
 
         options = L(options, Q(Y(Q("hopping"), hoppingTraits)));
     }

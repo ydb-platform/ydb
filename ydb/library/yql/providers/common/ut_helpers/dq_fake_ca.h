@@ -216,8 +216,10 @@ struct TFakeCASetup {
         const TReadValueParser<T> parser,
         ui64 size,
         i64 eachReadFreeSpace = 1000,
-        TDuration timeout = TDuration::Seconds(30))
+        TDuration timeout = TDuration::Seconds(30),
+        bool onlyData = false)
     {
+        ui32 dataItemsCt = 0;
         std::vector<std::variant<T, TInstant>> result;
         TInstant startedAt = TInstant::Now();
         DoWithRetry([&](){
@@ -225,21 +227,24 @@ struct TFakeCASetup {
                 auto batch = AsyncInputRead<T>(parser, nextDataFuture, eachReadFreeSpace);
                 for (const auto& item : batch) {
                     result.emplace_back(item);
+                    if (!onlyData || std::holds_alternative<T>(item)) {
+                        dataItemsCt++;
+                    }
                 }
 
                 if (TInstant::Now() > startedAt + timeout) {
                     return;
                 }
 
-                if (result.size() < size) {
+                if (dataItemsCt < size) {
                     nextDataFuture.Wait(timeout);
-                    ythrow yexception() << "Not enough data";
+                    ythrow yexception() << "Not enough items";
                 }
             },
             TRetryOptions(std::numeric_limits<ui32>::max()),
             true);
 
-        UNIT_ASSERT_EQUAL_C(result.size(), size, "Waited for " << size << " items but only " << result.size() << " received");
+        UNIT_ASSERT_C(dataItemsCt >= size, "Waited for " << size << " items but only " << dataItemsCt << " received");
 
         return result;
     }

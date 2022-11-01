@@ -147,50 +147,6 @@ namespace {
         }
     }
 
-    void SetupProfileSetting(const TString& name, bool existingProfile, const TString& profileName,
-            std::shared_ptr<IProfile> profile, TClientCommand::TConfig& config, bool interactive, bool cmdLine) {
-        
-        if (cmdLine) {
-            if (config.ParseResult->Has(name)) {
-                profile->SetValue(name, config.ParseResult->Get(name));
-                return;
-            }
-        }
-        if (!interactive) {
-            return;
-        }
-
-        Cout << Endl << "Pick desired action to configure " << name << " in profile \"" << profileName << "\":" << Endl;
-
-        TNumericOptionsPicker picker;
-        picker.AddOption(
-            TStringBuilder() << "Set a new " << name << " value",
-            [&name, &profileName, &profile]() {
-                Cout << "Please enter new " << name << " value: ";
-                TString newValue;
-                Cin >> newValue;
-                if (newValue) {
-                    Cout << "Setting " << name << " value \"" << newValue << "\" for profile \"" << profileName
-                        << "\"" << Endl;
-                    profile->SetValue(name, newValue);
-                }
-            }
-        );
-        picker.AddOption(
-            TStringBuilder() << "Don't save " << name << " for profile \"" << profileName << "\"",
-            [&name, &profile]() {
-                profile->RemoveValue(name);
-            }
-        );
-        if (existingProfile && profile->Has(name)) {
-            picker.AddOption(
-                TStringBuilder() << "Use current " << name << " value \"" << profile->GetValue(name).as<TString>() << "\"",
-                []() {}
-            );
-        }
-        picker.PickOptionAndDoAction();
-    }
-
     void PutAuthMethod(std::shared_ptr<IProfile> profile, const TString& id, const TString& value) {
         profile->RemoveValue(AuthNode);
         YAML::Node authValue;
@@ -243,151 +199,6 @@ namespace {
         }
     }
 
-    bool SetAuthFromCommandLine( std::shared_ptr<IProfile> profile, TClientCommand::TConfig& config) {
-        if (config.ParseResult->Has("iam-endpoint")) {
-            profile->SetValue("iam-endpoint", config.ParseResult->Get("iam-endpoint"));
-        }
-        if (config.ParseResult->Has("token-file")) {
-            PutAuthMethod( profile, "token-file", config.ParseResult->Get("token-file"));
-        } else if (config.ParseResult->Has("iam-token-file")) {
-            // no error here, we take the iam-token-file option as just a token-file authentication
-            PutAuthMethod( profile, "token-file", config.ParseResult->Get("iam-token-file")); 
-        }else if (config.ParseResult->Has("yc-token-file")) {
-            PutAuthMethod( profile, "yc-token-file", config.ParseResult->Get("yc-token-file"));
-        } else if (config.ParseResult->Has("use-metadata-credentials")) {
-            PutAuthMethodWithoutPars( profile, "use-metadata-credentials");
-        } else if (config.ParseResult->Has("sa-key-file")) {
-            PutAuthMethod( profile, "sa-key-file", config.ParseResult->Get("sa-key-file"));
-        } else if (config.ParseResult->Has("user")) {
-            TString pass;
-            if (config.ParseResult->Has("password-file")) {
-                pass = config.ParseResult->Get("password-file");
-            }
-            PutAuthStatic( profile, config.ParseResult->Get("user"), pass, true );
-        } else {
-            return false;
-        }
-        return true;
-    }
-
-    void SetupProfileAuthentication(bool existingProfile, const TString& profileName, std::shared_ptr<IProfile> profile,
-            TClientCommand::TConfig& config, bool interactive, bool cmdLine) {
-        
-        if (cmdLine) {
-            if (SetAuthFromCommandLine( profile, config )) {
-                return;
-            }
-        }
-        if (!interactive) {
-            return;
-        }
-        Cout << Endl << "Pick desired action to configure authentication method:" << Endl;
-        TNumericOptionsPicker picker;
-        if (config.UseStaticCredentials) {
-            picker.AddOption(
-                "Use static credentials (user & password)",
-                [&profile, &profileName]() {
-                    SetStaticCredentials(profile, profileName);
-            }
-            );
-        }
-        if (config.UseIamAuth) {
-            picker.AddOption(
-                "Use IAM token (iam-token) cloud.yandex.ru/docs/iam/concepts/authorization/iam-token",
-                [&profile, &profileName]() {
-                    SetAuthMethod("iam-token", "IAM token", profile, profileName);
-                }
-            );
-            picker.AddOption(
-                "Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts."
-                " cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token",
-                [&profile, &profileName]() {
-                    SetAuthMethod("yc-token", "OAuth token of a Yandex Passport user", profile, profileName);
-                }
-            );
-            picker.AddOption(
-                "Use metadata service on a virtual machine (use-metadata-credentials)"
-                " cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm",
-                [&profile, &profileName]() {
-                    Cout << "Setting metadata service usage for profile \"" << profileName << "\"" << Endl;
-                    PutAuthMethodWithoutPars( profile, "use-metadata-credentials" );
-                }
-            );
-            picker.AddOption(
-                "Use service account key file (sa-key-file)"
-                " cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa",
-                [&profile, &profileName]() {
-                    SetAuthMethod("sa-key-file", "Path to service account key file", profile, profileName);
-                }
-            );
-        }
-        if (config.UseOAuthToken) {
-            picker.AddOption(
-                "Set new OAuth token (ydb-token)",
-                [&profile, &profileName]() {
-                    SetAuthMethod("ydb-token", "OAuth YDB token", profile, profileName);
-                }
-            );
-        }
-        picker.AddOption(
-            TStringBuilder() << "Don't save authentication data for profile \"" << profileName << "\"",
-            [&profile]() {
-                profile->RemoveValue(AuthNode);
-            }
-        );
-        if (existingProfile && profile->Has(AuthNode)) {
-            auto& authValue = profile->GetValue(AuthNode);
-            if (authValue["method"]) {
-                TString method = authValue["method"].as<TString>();
-                TStringBuilder description;
-                description << "Use current settings with method \"" << method << "\"";
-                if (method == "iam-token" || method == "yc-token" || method == "ydb-token") {
-                    description << " and value \"" << BlurSecret(authValue["data"].as<TString>()) << "\"";
-                } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file") {
-                    description << " and value \"" << authValue["data"].as<TString>() << "\"";
-                }
-                picker.AddOption(
-                    description,
-                    []() {}
-                );
-            }
-        }
-
-        picker.PickOptionAndDoAction();
-    }
-
-    void ConfigureProfile(const TString& profileName, std::shared_ptr<IProfileManager> profileManager,
-            TClientCommand::TConfig& config, bool interactive, bool cmdLine ) {
-        bool existingProfile = profileManager->HasProfile(profileName);
-        auto profile = profileManager->GetProfile(profileName);
-        if (interactive) {
-            Cout << "Configuring " << (existingProfile ? "existing" : "new")
-                << " profile \"" << profileName << "\"." << Endl;
-        }
-        SetupProfileSetting("endpoint", existingProfile, profileName, profile, config, interactive, cmdLine );
-        SetupProfileSetting("database", existingProfile, profileName, profile, config, interactive, cmdLine );
-        SetupProfileAuthentication(existingProfile, profileName, profile, config, interactive, cmdLine );
-
-        if (interactive) {
-            TString activeProfileName = profileManager->GetActiveProfileName();
-            if (profileName != activeProfileName) {
-                Cout << Endl << "Activate profile \"" << profileName << "\" to use by default? (current active profile is ";
-                TString currentActiveProfile = profileManager->GetActiveProfileName();
-                if (currentActiveProfile) {
-                    Cout << "\"" << currentActiveProfile << "\"";
-                } else {
-                    Cout << "not set";
-                }
-                Cout << ") y/n: ";
-                if (AskYesOrNo()) {
-                    profileManager->SetActiveProfile(profileName);
-                    Cout << "Profile \"" << profileName << "\" was set as active." << Endl;
-                }
-            }
-            Cout << "Configuration process for profile \"" << profileName << "\" is complete." << Endl;
-        }
-    }
-
     void PrintProfileContent(std::shared_ptr<IProfile> profile) {
         if (profile->Has("endpoint")) {
             Cout << "  endpoint: " << profile->GetValue("endpoint").as<TString>() << Endl;
@@ -432,7 +243,7 @@ namespace {
 }
 
 TCommandInit::TCommandInit()
-    : TClientCommand("init", {}, "YDB CLI initialization")
+    : TCommandProfileCommon("init", {}, "YDB CLI initialization")
 {}
 
 void TCommandInit::Config(TConfig& config) {
@@ -457,55 +268,236 @@ TCommandProfileCommon::TCommandProfileCommon(const TString& name, const std::ini
     : TClientCommand(name, aliases, description)
 {}
 
-void TCommandProfileCommon::ValidateAuth(TConfig& config) {
+void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::shared_ptr<IProfileManager> profileManager,
+                      TConfig& config, bool interactive, bool cmdLine) {
+    bool existingProfile = profileManager->HasProfile(profileName);
+    auto profile = profileManager->GetProfile(profileName);
+    if (interactive) {
+        Cout << "Configuring " << (existingProfile ? "existing" : "new")
+             << " profile \"" << profileName << "\"." << Endl;
+    }
+    SetupProfileSetting("endpoint", Endpoint, existingProfile, profileName, profile, interactive, cmdLine);
+    SetupProfileSetting("database", Database, existingProfile, profileName, profile, interactive, cmdLine);
+    SetupProfileAuthentication(existingProfile, profileName, profile, config, interactive, cmdLine);
+
+    if (interactive) {
+        TString activeProfileName = profileManager->GetActiveProfileName();
+        if (profileName != activeProfileName) {
+            Cout << Endl << "Activate profile \"" << profileName << "\" to use by default? (current active profile is ";
+            TString currentActiveProfile = profileManager->GetActiveProfileName();
+            if (currentActiveProfile) {
+                Cout << "\"" << currentActiveProfile << "\"";
+            } else {
+                Cout << "not set";
+            }
+            Cout << ") y/n: ";
+            if (AskYesOrNo()) {
+                profileManager->SetActiveProfile(profileName);
+                Cout << "Profile \"" << profileName << "\" was set as active." << Endl;
+            }
+        }
+        Cout << "Configuration process for profile \"" << profileName << "\" is complete." << Endl;
+    }
+}
+
+void TCommandProfileCommon::SetupProfileSetting(const TString& name, const TString& value, bool existingProfile, const TString& profileName,
+                         std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine) {
+    if (cmdLine) {
+        if (value) {
+            profile->SetValue(name, value);
+            return;
+        }
+    }
+    if (!interactive) {
+        return;
+    }
+
+    Cout << Endl << "Pick desired action to configure " << name << " in profile \"" << profileName << "\":" << Endl;
+
+    TNumericOptionsPicker picker;
+    picker.AddOption(
+            TStringBuilder() << "Set a new " << name << " value",
+            [&name, &profileName, &profile]() {
+                Cout << "Please enter new " << name << " value: ";
+                TString newValue;
+                Cin >> newValue;
+                if (newValue) {
+                    Cout << "Setting " << name << " value \"" << newValue << "\" for profile \"" << profileName
+                         << "\"" << Endl;
+                    profile->SetValue(name, newValue);
+                }
+            }
+    );
+    picker.AddOption(
+            TStringBuilder() << "Don't save " << name << " for profile \"" << profileName << "\"",
+            [&name, &profile]() {
+                profile->RemoveValue(name);
+            }
+    );
+    if (existingProfile && profile->Has(name)) {
+        picker.AddOption(
+                TStringBuilder() << "Use current " << name << " value \"" << profile->GetValue(name).as<TString>() << "\"",
+                []() {}
+        );
+    }
+    picker.PickOptionAndDoAction();
+}
+
+void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, const TString& profileName, std::shared_ptr<IProfile> profile,
+                                TConfig& config, bool interactive, bool cmdLine) {
+
+    if (cmdLine) {
+        if (SetAuthFromCommandLine(profile)) {
+            return;
+        }
+    }
+    if (!interactive) {
+        return;
+    }
+    Cout << Endl << "Pick desired action to configure authentication method:" << Endl;
+    TNumericOptionsPicker picker;
+    if (config.UseStaticCredentials) {
+        picker.AddOption(
+                "Use static credentials (user & password)",
+                [&profile, &profileName]() {
+                    SetStaticCredentials(profile, profileName);
+                }
+        );
+    }
+    if (config.UseIamAuth) {
+        picker.AddOption(
+                "Use IAM token (iam-token) cloud.yandex.ru/docs/iam/concepts/authorization/iam-token",
+                [&profile, &profileName]() {
+                    SetAuthMethod("iam-token", "IAM token", profile, profileName);
+                }
+        );
+        picker.AddOption(
+                "Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts."
+                " cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token",
+                [&profile, &profileName]() {
+                    SetAuthMethod("yc-token", "OAuth token of a Yandex Passport user", profile, profileName);
+                }
+        );
+        picker.AddOption(
+                "Use metadata service on a virtual machine (use-metadata-credentials)"
+                " cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm",
+                [&profile, &profileName]() {
+                    Cout << "Setting metadata service usage for profile \"" << profileName << "\"" << Endl;
+                    PutAuthMethodWithoutPars( profile, "use-metadata-credentials" );
+                }
+        );
+        picker.AddOption(
+                "Use service account key file (sa-key-file)"
+                " cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa",
+                [&profile, &profileName]() {
+                    SetAuthMethod("sa-key-file", "Path to service account key file", profile, profileName);
+                }
+        );
+    }
+    if (config.UseOAuthToken) {
+        picker.AddOption(
+                "Set new OAuth token (ydb-token)",
+                [&profile, &profileName]() {
+                    SetAuthMethod("ydb-token", "OAuth YDB token", profile, profileName);
+                }
+        );
+    }
+    picker.AddOption(
+            TStringBuilder() << "Don't save authentication data for profile \"" << profileName << "\"",
+            [&profile]() {
+                profile->RemoveValue(AuthNode);
+            }
+    );
+    if (existingProfile && profile->Has(AuthNode)) {
+        auto& authValue = profile->GetValue(AuthNode);
+        if (authValue["method"]) {
+            TString method = authValue["method"].as<TString>();
+            TStringBuilder description;
+            description << "Use current settings with method \"" << method << "\"";
+            if (method == "iam-token" || method == "yc-token" || method == "ydb-token") {
+                description << " and value \"" << BlurSecret(authValue["data"].as<TString>()) << "\"";
+            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file") {
+                description << " and value \"" << authValue["data"].as<TString>() << "\"";
+            }
+            picker.AddOption(
+                    description,
+                    []() {}
+            );
+        }
+    }
+
+    picker.PickOptionAndDoAction();
+}
+
+bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> profile) {
+    if (IamEndpoint) {
+        profile->SetValue("iam-endpoint", IamEndpoint);
+    }
+    if (TokenFile) {
+        PutAuthMethod( profile, "token-file", TokenFile);
+    } else if (IamTokenFile) {
+        // no error here, we take the iam-token-file option as just a token-file authentication
+        PutAuthMethod( profile, "token-file", IamTokenFile);
+    }else if (YcTokenFile) {
+        PutAuthMethod( profile, "yc-token-file", YcTokenFile);
+    } else if (UseMetadataCredentials) {
+        PutAuthMethodWithoutPars( profile, "use-metadata-credentials");
+    } else if (SaKeyFile) {
+        PutAuthMethod( profile, "sa-key-file", SaKeyFile);
+    } else if (User) {
+        PutAuthStatic( profile, User, PasswordFile, true );
+    } else {
+        return false;
+    }
+    return true;
+}
+
+void TCommandProfileCommon::ValidateAuth() {
     size_t authMethodCount =
-            (size_t)(config.ParseResult->Has("token-file")) +
-            (size_t)(config.ParseResult->Has("iam-token-file")) +
-            (size_t)(config.ParseResult->Has("yc-token-file")) +
-            (size_t)UseMetadataCredentials +
-            (size_t)(config.ParseResult->Has("sa-key-file")) +
-            (size_t)(config.ParseResult->Has("user") || config.ParseResult->Has("password-file"));
-    if (!config.ParseResult->Has("user") && config.ParseResult->Has("password-file")) {
+            (bool) (TokenFile) + (bool) (IamTokenFile) +
+            (bool) (YcTokenFile) + UseMetadataCredentials +
+            (bool) (SaKeyFile) +
+            (User || PasswordFile);
+
+    if (!User && PasswordFile) {
         throw TMisuseException() << "You cannot enter password-file without user";
     }
 
     if (authMethodCount > 1) {
         TStringBuilder str;
         str << authMethodCount << " authentication methods were provided via options:";
-        if (config.ParseResult->Has("token-file")) {
-            str << " TokenFile (" << config.ParseResult->Get("token-file") << ")";
+        if (TokenFile) {
+            str << " TokenFile (" << TokenFile << ")";
         }
-        if (config.ParseResult->Has("iam-token-file")) {
-            str << " IamTokenFile (" << config.ParseResult->Get("iam-token-file") << ")";
+        if (IamTokenFile) {
+            str << " IamTokenFile (" << IamTokenFile << ")";
         }
-        if (config.ParseResult->Has("yc-token-file")) {
-            str << " YCTokenFile (" << config.ParseResult->Get("yc-token-file") << ")";
+        if (YcTokenFile) {
+            str << " YCTokenFile (" << YcTokenFile << ")";
         }
         if (UseMetadataCredentials) {
             str << " Metadata credentials" << ")";
         }
-        if (config.ParseResult->Has("sa-key-file")) {
-            str << " SAKeyFile (" << config.ParseResult->Get("sa-key-file") << ")";
+        if (SaKeyFile) {
+            str << " SAKeyFile (" << SaKeyFile << ")";
         }
-        if (config.ParseResult->Has("user")) {
-            str << " User (" << config.ParseResult->Get("user") << ")";
+        if (User) {
+            str << " User (" << User << ")";
         }
-        if (config.ParseResult->Has("password-file")) {
-            str << " Password file (" << config.ParseResult->Get("password-file") << ")";
+        if (PasswordFile) {
+            str << " Password file (" << PasswordFile << ")";
         }
 
         throw TMisuseException() << str << ". Choose exactly one of them";
     }
 }
 
-bool TCommandProfileCommon::AnyProfileOptionInCommandLine(TConfig& config) {
-    return (config.ParseResult->Has("endpoint") || config.ParseResult->Has("database") ||
-            config.ParseResult->Has("token-file") || config.ParseResult->Has("iam-token-file") || config.ParseResult->Has("yc-token-file") ||
-            config.ParseResult->Has("sa-key-file") || config.ParseResult->Has("use-metadata-credentials") ||
-            config.ParseResult->Has("user") || config.ParseResult->Has("password-file") ||
-            config.ParseResult->Has("iam-endpoint"));
+bool TCommandProfileCommon::AnyProfileOptionInCommandLine() {
+    return Endpoint || Database || TokenFile ||
+           IamTokenFile || YcTokenFile ||
+           SaKeyFile || UseMetadataCredentials || User ||
+           PasswordFile || IamEndpoint;
 }
-
 
 TCommandCreateProfile::TCommandCreateProfile()
     : TCommandProfileCommon("create", {}, "Create new configuration profile or re-configure existing one")
@@ -518,23 +510,24 @@ void TCommandProfileCommon::Config(TConfig& config) {
     SetFreeArgTitle(0, "<name>", "Profile name");
     NLastGetopt::TOpts& opts = *config.Opts;
 
-    opts.AddLongOption('e', "endpoint", "Endpoint to save in the profile").RequiredArgument("STRING");
-    opts.AddLongOption('d', "database", "Database to save in the profile").RequiredArgument("PATH");
+    opts.AddLongOption('e', "endpoint", "Endpoint to save in the profile").RequiredArgument("STRING").StoreResult(&Endpoint);
+    opts.AddLongOption('d', "database", "Database to save in the profile").RequiredArgument("PATH").StoreResult(&Database);
 
-    opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH");
-    opts.AddLongOption("iam-token-file", "Access token file").RequiredArgument("PATH").Hidden();
+    opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH").StoreResult(&TokenFile);
+    opts.AddLongOption("iam-token-file", "Access token file").RequiredArgument("PATH").Hidden().StoreResult(&IamTokenFile);
     if (config.UseIamAuth) {
-        opts.AddLongOption("yc-token-file", "YC OAuth refresh token file").RequiredArgument("PATH");
+        opts.AddLongOption("yc-token-file", "YC OAuth refresh token file").RequiredArgument("PATH").StoreResult(&YcTokenFile);
         opts.AddLongOption("use-metadata-credentials", "Metadata service authentication").Optional().StoreTrue(&UseMetadataCredentials);
-        opts.AddLongOption("sa-key-file", "YC Service account key file").RequiredArgument("PATH");
+        opts.AddLongOption("sa-key-file", "YC Service account key file").RequiredArgument("PATH").StoreResult(&SaKeyFile);
     }
 
     if (config.UseStaticCredentials) {
-        opts.AddLongOption("user", "User name").RequiredArgument("STR");
-        opts.AddLongOption("password-file", "Password file").RequiredArgument("PATH");
+        opts.AddLongOption("user", "User name").RequiredArgument("STR").StoreResult(&User);
+        opts.AddLongOption("password-file", "Password file").RequiredArgument("PATH").StoreResult(&PasswordFile);
     }
     if (config.UseIamAuth) {
-        opts.AddLongOption("iam-endpoint", "Endpoint of IAM service to refresh token in YC OAuth or YC Service account authentication modes").RequiredArgument("STR");
+        opts.AddLongOption("iam-endpoint", "Endpoint of IAM service to refresh token in YC OAuth or YC Service account authentication modes")
+        .RequiredArgument("STR").StoreResult(&IamEndpoint);
     }
 }
 
@@ -547,13 +540,13 @@ void TCommandCreateProfile::Parse(TConfig& config) {
     if (config.ParseResult->GetFreeArgCount()) {
         ProfileName = config.ParseResult->GetFreeArgs()[0];
     }
-    ValidateAuth(config);
+    ValidateAuth();
 }
 
 int TCommandCreateProfile::Run(TConfig& config) {
 //    Y_UNUSED(config);
     TString profileName = ProfileName;
-    Interactive = !AnyProfileOptionInCommandLine(config) || !profileName;
+    Interactive = !AnyProfileOptionInCommandLine() || !profileName;
     auto profileManager = CreateYdbProfileManager(config.YdbDir);
     if (Interactive) {
         Cout << "Welcome! This command will take you through configuration profile creation process." << Endl;
@@ -877,25 +870,24 @@ void TCommandUpdateProfile::Config(TConfig& config) {
     }
 }
 
-void TCommandUpdateProfile::ValidateNoOptions(TConfig& config) {
+void TCommandUpdateProfile::ValidateNoOptions() {
     size_t authMethodCount =
-            (size_t)(config.ParseResult->Has("token-file")) +
-            (size_t)(config.ParseResult->Has("iam-token-file")) +
-            (size_t)(config.ParseResult->Has("yc-token-file")) +
-            (size_t)UseMetadataCredentials +
-            (size_t)(config.ParseResult->Has("sa-key-file")) +
-            (size_t)(config.ParseResult->Has("user") || config.ParseResult->Has("password-file"));
-    if (authMethodCount > 0 && ParseResult->Has("no-auth")) {
+            (bool) (TokenFile) + (bool) (IamTokenFile) +
+            (bool) (YcTokenFile) + UseMetadataCredentials +
+            (bool) (SaKeyFile) +
+            (User || PasswordFile);
+
+    if (authMethodCount > 0 && NoAuth) {
         throw TMisuseException() << "You cannot enter authentication options and the \"--no-auth\" option at the same time";
     }
     TStringBuilder str;
-    if (config.ParseResult->Has("endpoint") && config.ParseResult->Has("no-endpoint")) {
+    if (Endpoint && NoEndpoint) {
         str << "\"--endpoint\" and \"--no-endpoint\"";
     } else {
-        if (config.ParseResult->Has("database") && config.ParseResult->Has("no-database")) {
+        if (Database && NoDatabase) {
             str << "\"--database and \"--no-database\"";
         } else {
-            if (config.ParseResult->Has("iam-endpoint") && config.ParseResult->Has("no-iam-endpoint")) {
+            if (IamEndpoint && NoIamEndpoint) {
                 str << "\"--iam-endpoint\" and \"--no-iam-endpoint\"";
             }
         }
@@ -923,8 +915,8 @@ void TCommandUpdateProfile::DropNoOptions(std::shared_ptr<IProfile> profile) {
 void TCommandUpdateProfile::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ProfileName = config.ParseResult->GetFreeArgs()[0];
-    ValidateAuth(config);
-    ValidateNoOptions(config);
+    ValidateAuth();
+    ValidateNoOptions();
 }
 
 int TCommandUpdateProfile::Run(TConfig& config) {
@@ -955,7 +947,7 @@ void TCommandReplaceProfile::Config(TConfig& config) {
 void TCommandReplaceProfile::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ProfileName = config.ParseResult->GetFreeArgs()[0];
-    ValidateAuth(config);
+    ValidateAuth();
 }
 
 int TCommandReplaceProfile::Run(TConfig& config) {

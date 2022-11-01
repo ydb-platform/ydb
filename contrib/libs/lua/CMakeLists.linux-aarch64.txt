@@ -25,6 +25,7 @@ target_link_libraries(contrib-libs-lua PUBLIC
 )
 target_sources(contrib-libs-lua PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/lua/lib.cpp
+  ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
 )
 add_custom_command(
   OUTPUT
@@ -42,5 +43,3 @@ add_custom_command(
   -o
   ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
 )
-target_sources(contrib-libs-lua PRIVATE ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc)
-

@@ -26,6 +26,7 @@ target_sources(library-cpp-config PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/config/markup.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/config/ini.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/config/domscheme.cpp
+  ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
 )
 add_custom_command(
   OUTPUT

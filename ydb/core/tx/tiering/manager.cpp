@@ -216,6 +216,9 @@ NMetadataProvider::ISnapshotParser::TPtr TTiersManager::GetExternalDataManipulat
 
 THashMap<ui64, NKikimr::NOlap::TTiersInfo> TTiersManager::GetTiering() const {
     THashMap<ui64, NKikimr::NOlap::TTiersInfo> result;
+    if (!Snapshot) {
+        return result;
+    }
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(Snapshot);
     Y_VERIFY(snapshotPtr);
     for (auto&& i : snapshotPtr->GetTableTierings()) {

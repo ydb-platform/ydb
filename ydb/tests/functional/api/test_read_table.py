@@ -259,11 +259,12 @@ class TestReadTableSuccessStories(AbstractReadTableTest):
 
         chunks = 0
         for chunk in stream:
+            assert chunk.columns
             assert not chunk.rows
             assert chunk.snapshot is not None
             chunks += 1
 
-        assert chunks > 0
+        assert chunks == 1
 
 
 class TestReadTableTruncatedResults(AbstractReadTableTest):

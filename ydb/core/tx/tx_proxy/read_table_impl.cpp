@@ -1697,6 +1697,7 @@ private:
 
         TxProxyMon->ReportStatusStreamData->Inc();
         ctx.Send(Settings.Owner, x.Release(), 0, Settings.Cookie);
+        SentResultSet = true;
 
         if (state.QuotaReserved > 0) {
             Y_VERIFY(Quota.Reserved > 0 && Quota.Allocated > 0);
@@ -1712,6 +1713,65 @@ private:
         }
 
         ProcessQuotaRequests(ctx);
+    }
+
+    void SendEmptyResponseData(const TActorContext& ctx) {
+        TString data;
+        ui32 apiVersion = 0;
+
+        switch (Settings.DataFormat) {
+            case EReadTableFormat::OldResultSet:
+                // we don't support empty result sets
+                return;
+
+            case EReadTableFormat::YdbResultSet: {
+                Ydb::ResultSet res;
+                for (auto& col : Columns) {
+                    auto* meta = res.add_columns();
+                    meta->set_name(col.Name);
+
+                    if (col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                        auto pgType = meta->mutable_type()->mutable_optional_type()->mutable_item()
+                            ->mutable_pg_type();
+                        pgType->set_oid(NPg::PgTypeIdFromTypeDesc(col.PType.GetTypeDesc()));
+                    } else {
+                        auto id = static_cast<NYql::NProto::TypeIds>(col.PType.GetTypeId());
+                        if (id == NYql::NProto::Decimal) {
+                            auto decimalType = meta->mutable_type()->mutable_optional_type()->mutable_item()
+                                ->mutable_decimal_type();
+                            //TODO: Pass decimal params here
+                            decimalType->set_precision(22);
+                            decimalType->set_scale(9);
+                        } else {
+                            meta->mutable_type()->mutable_optional_type()->mutable_item()
+                                ->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+                        }
+                    }
+                }
+                bool ok = res.SerializeToString(&data);
+                Y_VERIFY(ok, "Unexpected failure to serialize Ydb::ResultSet");
+                apiVersion = NKikimrTxUserProxy::TReadTableTransaction::YDB_V1;
+                break;
+            }
+        }
+
+        auto x = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(TEvTxUserProxy::TResultStatus::ExecResponseData);
+        x->Record.SetStatusCode(NKikimrIssues::TStatusIds::TRANSIENT);
+
+        if (PlanStep) {
+            x->Record.SetStep(PlanStep);
+        }
+        x->Record.SetTxId(TxId);
+
+        x->Record.SetSerializedReadTableResponse(data);
+        x->Record.SetReadTableResponseVersion(apiVersion);
+
+        // N.B. we use shard id 0 for virtualized quota management
+        x->Record.SetDataShardTabletId(0);
+
+        TxProxyMon->ReportStatusStreamData->Inc();
+        ctx.Send(Settings.Owner, x.Release(), 0, Settings.Cookie);
+        SentResultSet = true;
     }
 
     void ProcessStreamComplete(TShardState& state, TEvDataShard::TEvProposeTransactionResult::TPtr&, const TActorContext& ctx) {
@@ -1741,6 +1801,9 @@ private:
 
             if (ShardList.empty()) {
                 // There are no shards left to stream
+                if (!SentResultSet && Settings.RequireResultSet) {
+                    SendEmptyResponseData(ctx);
+                }
                 return ReplyAndDie(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, ctx);
             }
         } else {
@@ -2874,6 +2937,8 @@ private:
     bool ResolveInProgress = false;
 
     bool ResolveShardsScheduled = false;
+
+    bool SentResultSet = false;
 
     ui64 RemainingRows = Max<ui64>();
 

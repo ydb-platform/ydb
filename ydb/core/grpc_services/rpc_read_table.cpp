@@ -42,19 +42,6 @@ static ui64 CalcRuConsumption(const TString& data) {
     return mb * 128; // 128 ru for 1 MiB
 }
 
-static void NullSerializeReadTableResponse(Ydb::StatusIds::StatusCode status, ui64 planStep, ui64 txId, TString* output) {
-    Ydb::Impl::ReadTableResponse readTableResponse;
-    readTableResponse.set_status(status);
-
-    if (planStep && txId) {
-        auto* snapshot = readTableResponse.mutable_snapshot();
-        snapshot->set_plan_step(planStep);
-        snapshot->set_tx_id(txId);
-    }
-
-    Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
-}
-
 static void NullSerializeReadTableResponse(const TString& input, Ydb::StatusIds::StatusCode status, ui64 planStep, ui64 txId, TString* output) {
     Ydb::Impl::ReadTableResponse readTableResponse;
     readTableResponse.set_status(status);
@@ -516,6 +503,7 @@ private:
             settings.Owner = SelfId();
             settings.TablePath = req->path();
             settings.Ordered = req->ordered();
+            settings.RequireResultSet = true;
             if (req->row_limit()) {
                 settings.MaxRows = req->row_limit();
             }
@@ -575,11 +563,6 @@ private:
         if (status != Ydb::StatusIds::SUCCESS) {
             TString out;
             NullSerializeReadTableResponse(message, status, &out);
-            Request_->SendSerializedResult(std::move(out), status);
-        } else if (!SentSerializedResult && PlanStep && TxId) {
-            // Send an empty result with the snapshot
-            TString out;
-            NullSerializeReadTableResponse(status, PlanStep, TxId, &out);
             Request_->SendSerializedResult(std::move(out), status);
         }
         Request_->FinishStream();
@@ -747,7 +730,6 @@ private:
         }
 
         Request_->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
-        SentSerializedResult = true;
 
         LeftInGRpcAdaptorQueue_++;
         if (LeftInGRpcAdaptorQueue_ > QuotaLimit_) {
@@ -792,7 +774,6 @@ private:
     };
     TDeque<TBuffEntry> SendBuffer_;
     bool HasPendingSuccess = false;
-    bool SentSerializedResult = false;
 };
 
 void DoReadTableRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {

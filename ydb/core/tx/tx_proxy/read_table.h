@@ -26,6 +26,7 @@ namespace NTxProxy {
         TString UserToken;
         EReadTableFormat DataFormat = EReadTableFormat::YdbResultSet;
         bool Ordered = false;
+        bool RequireResultSet = false;
     };
 
     IActor* CreateReadTableSnapshotWorker(const TReadTableSettings& settings);

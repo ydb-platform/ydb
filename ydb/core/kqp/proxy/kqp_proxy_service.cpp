@@ -854,9 +854,8 @@ public:
 
                 str << Endl;
 
-                str << "EnableSessionActor: "
-                    << (TableServiceConfig.GetEnableKqpSessionActor() ? "true" : "false") << Endl;
-                str << "Active workers/session_actors count on node: " << LocalSessions->size() << Endl;
+                str << "EnableSessionActor: always on" << Endl;
+                str << "Active session_actors count on node: " << LocalSessions->size() << Endl;
 
                 const auto& sessionsShutdownInFlight = LocalSessions->GetShutdownInFlight();
                 if (!sessionsShutdownInFlight.empty()) {
@@ -1119,10 +1118,8 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* workerActor = TableServiceConfig.GetEnableKqpSessionActor() && config->HasKqpForceNewEngine()
-                ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters)
-                : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
-        auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(workerActor, TMailboxType::HTSwap, AppData()->UserPoolId);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
+        auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(sessionId, workerId, database, dbCounters, supportsBalancing);
 
         KQP_PROXY_LOG_D(requestInfo << "Created new session"

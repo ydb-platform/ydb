@@ -81,8 +81,6 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 
     TKikimrSettings()
     {
-        // default value for tests, can be overwritten by SetFeatureFlags()
-        Y_VERIFY(AppConfig.MutableTableServiceConfig()->GetEnableKqpSessionActor());
         this->SetEnableKqpScanQueryStreamLookup(true);
     }
 

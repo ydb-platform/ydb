@@ -3391,8 +3391,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
     Y_UNIT_TEST_TWIN(LockedWriteWithAsyncIndex, WithRestart) {
-        constexpr bool UseNewEngine = true;
-
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -3404,7 +3402,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

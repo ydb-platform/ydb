@@ -1182,7 +1182,7 @@ message TTableServiceConfig {
     optional uint32 ForceNewEngineLevel = 22 [default = 0];
     optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
     optional TQueryReplayConfig QueryReplayConfig = 21;
-    optional bool EnableKqpSessionActor = 23 [default = true];
+    reserved 23; // optional bool EnableKqpSessionActor = 23 [default = true];
 };
 
 // Config describes immediate controls and allows

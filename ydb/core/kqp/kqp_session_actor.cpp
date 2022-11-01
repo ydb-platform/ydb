@@ -110,10 +110,6 @@ struct TKqpQueryState {
     }
 };
 
-class TTimer {
-
-};
-
 struct TKqpCleanupCtx {
     ui64 AbortedTransactionsCount = 0;
     ui64 TransactionsToBeAborted = 0;
@@ -567,7 +563,7 @@ public:
         }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
-        ExecuteOrDefer();
+        ExecuteOrDefer(timer);
     }
 
     void AcquirePersistentSnapshot() {
@@ -973,7 +969,7 @@ public:
         return false;
     }
 
-    void ExecuteOrDefer() {
+    void ExecuteOrDefer(std::optional<NCpuTime::TCpuTimer> timer = {}) {
         auto& txCtx = *QueryState->TxCtx;
 
         bool haveWork = QueryState->PreparedQuery &&
@@ -1020,6 +1016,7 @@ public:
                 ++QueryState->CurrentTx;
             }
         } else {
+            timer.reset();
             ReplySuccess();
         }
     }
@@ -1258,7 +1255,7 @@ public:
             exec->Swap(txResult.MutableStats());
         }
 
-        ExecuteOrDefer();
+        ExecuteOrDefer(timer);
     }
 
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {

@@ -1,6 +1,7 @@
 #include "cms_impl.h"
 #include "info_collector.h"
 #include "library/cpp/actors/core/actor.h"
+#include "library/cpp/actors/core/hfunc.h"
 #include "scheme.h"
 #include "sentinel.h"
 #include "erasure_checkers.h"
@@ -1313,12 +1314,20 @@ bool TCms::RemoveNotification(const TString &id, const TString &user, bool remov
 
 void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
 {
-    if (Queue.empty()) {
-        auto collector = CreateInfoCollector(SelfId(), State->Config.InfoCollectionTimeout);
-        ctx.ExecutorThread.RegisterActor(collector);
+    if (Queue.empty() && NextQueue.empty()) {
+        ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvStartCollecting);
     }
 
-    Queue.push(ev);
+    NextQueue.push(ev);
+}
+
+void TCms::StartCollecting(const TActorContext &ctx) 
+{
+    Y_VERIFY(Queue.empty());
+    std::swap(NextQueue, Queue);
+
+    auto collector = CreateInfoCollector(SelfId(), State->Config.InfoCollectionTimeout);
+    ctx.ExecutorThread.RegisterActor(collector);
 }
 
 void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx)
@@ -1396,6 +1405,11 @@ void TCms::ProcessQueue(const TActorContext &ctx)
         ProcessRequest(Queue.front(), ctx);
         Queue.pop();
     }
+
+    // Process events received while collecting
+    if (!NextQueue.empty()) {
+        StartCollecting(ctx);
+    }
 }
 
 void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
@@ -1409,6 +1423,7 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
         HFuncTraced(TEvCms::TEvNotification, Handle);
         HFuncTraced(TEvCms::TEvResetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvSetMarkerRequest, Handle);
+        HFuncTraced(TEvCms::TEvGetClusterInfoRequest, Handle);
 
     default:
         Y_FAIL("Unexpected request type");
@@ -1426,6 +1441,13 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 
     if (State->Sentinel)
         ctx.Send(State->Sentinel, new TEvSentinel::TEvBSCPipeDisconnected);
+}
+
+void TCms::Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx) {
+    TAutoPtr<TEvCms::TEvGetClusterInfoResponse> resp = new TEvCms::TEvGetClusterInfoResponse;
+    resp->Info = ClusterInfo;
+
+    ctx.Send(ev->Sender, resp.Release());
 }
 
 void TCms::Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev, const TActorContext &ctx) {

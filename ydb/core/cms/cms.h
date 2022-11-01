@@ -74,6 +74,8 @@ struct TEvCms {
         EvSetMarkerResponse,
         EvResetMarkerResponse,
         EvStoreWalleTaskFailed,
+        EvGetClusterInfoRequest,
+        EvGetClusterInfoResponse,
 
         EvEnd
     };
@@ -253,6 +255,20 @@ struct TEvCms {
         TString ToString() const override
         {
             return Sprintf("%s { TaskId: %s }", ToStringHeader().data(), TaskId.data());
+        }
+    };
+    
+    struct TEvGetClusterInfoRequest : public TEventLocal<TEvGetClusterInfoRequest, EvGetClusterInfoRequest> {
+        TString ToString() const override {
+            return "Get Cluster Info Request";
+        }
+    };
+
+    struct TEvGetClusterInfoResponse : public TEventLocal<TEvGetClusterInfoResponse, EvGetClusterInfoResponse> {
+        TClusterInfoPtr Info; 
+
+        TString ToString() const override {
+            return "Get Cluster Info Response";
         }
     };
 

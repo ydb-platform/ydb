@@ -263,7 +263,7 @@ public:
             return;
         }
 
-        bool replied = ExecutePhyTx(/*query*/ nullptr, /*tx*/ nullptr, /*commit*/ true);
+        bool replied = ExecutePhyTx(/*query*/ nullptr, /*tx*/ nullptr, /*commit*/ true, /*timer*/ {});
 
         if (!replied) {
             Become(&TKqpSessionActor::ExecuteState);
@@ -1011,7 +1011,7 @@ public:
 
         bool commit = QueryState->Commit && QueryState->CurrentTx >= phyQuery.TransactionsSize() - 1;
         if (tx || commit) {
-            bool replied = ExecutePhyTx(&phyQuery, std::move(tx), commit);
+            bool replied = ExecutePhyTx(&phyQuery, std::move(tx), commit, timer);
             if (!replied) {
                 ++QueryState->CurrentTx;
             }
@@ -1021,7 +1021,9 @@ public:
         }
     }
 
-    bool ExecutePhyTx(const NKqpProto::TKqpPhyQuery* query, std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit) {
+    bool ExecutePhyTx(const NKqpProto::TKqpPhyQuery* query, std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit,
+        std::optional<NCpuTime::TCpuTimer> timer)
+    {
         auto& txCtx = *QueryState->TxCtx;
 
         auto calcPure = [](const auto& tx) {
@@ -1069,6 +1071,7 @@ public:
             YQL_ENSURE(commit);
 
             if (txCtx.DeferredEffects.Empty() && !txCtx.Locks.HasLocks() && !txCtx.TopicOperations.HasOperations()) {
+                timer.reset();
                 ReplySuccess();
                 return true;
             }

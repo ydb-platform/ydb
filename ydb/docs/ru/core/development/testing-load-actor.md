@@ -2,7 +2,7 @@
 
 С помощью нагружающих акторов вы можете запустить нагрузку изнутри системы.
 
-На каждой ноде кластера {{ ydb-short-name }} есть актор-сервис, который получает proto с описанием нагрузки, присваивает ему Tag (если не указан явно), и создает соответствующий нагружающий актор.
+На каждой ноде кластера {{ ydb-short-name }} есть актор-сервис `TLoadActor`, который получает proto с описанием нагрузки, присваивает ему Tag (если не указан явно), и создает соответствующий нагружающий актор.
 
 Вы можете создать любое количество нагружающих акторов на любой из нод. Комбинация акторов разных [типов](#load-actor-type) позволяет запускать множество видов нагрузки. Можно комбинировать место подачи нагрузки (с одной ноды на все, со всех нод на все, со всех нод на одну), а также разные типы нагрузки (на одной ноде актор с большими редкими чтениями, на другой с частыми мелкими записями).
 
@@ -24,23 +24,39 @@
 
 Вы можете запустить нагрузку следующими способами:
 
-* .
-* .
+* kikimr-bin
+* bash-scripts - по своей сути удобная обёртка над явным вызовом `kikimr bs-load-test`
 
-В обоих случаях необходимо создать proto-файл с текстовым описанием нагрузки. Пример файла:
+В обоих случаях подачи нагрузки через [kikimr]{#kikimr-bin-load} необходимо создать proto-файл с текстовым описанием нагрузки. Пример файла:
 
 ```proto
-message TBsTestLoadRequest {
-    repeated uint32 NodeId = 1;
-    optional NKikimrBlobStorage.TEvTestLoadRequest Event = 2;
-};
+NodeId: 1
+Event:
+    KqpLoadStart: {
+        DurationSeconds: 30
+        WindowDuration: 1
+        WorkingDir: "/slice/db"
+        NumOfSessions: 64
+        UniformPartitionsCount: 1000
+        DeleteTableOnFinish: 1
+        WorkloadType: 0
+        Kv: {
+            InitRowCount: 1000
+            PartitionsByLoad: true
+            MaxFirstKey: 18446744073709551615
+            StringLen: 8
+            ColumnsCnt: 2
+            RowsCnt: 1
+        }
+    }
+}
 ```
 
 ### kikimr/tools/storage_perf
 
 ### kikimr/tools/kqp_load
 
-### kikimr bin
+### kikimr bin {kikimr-bin-load}
 
 ```bash
 kikimr bs-load-test -s $SERVER --protobuf "$PROTO"
@@ -48,14 +64,102 @@ kikimr bs-load-test -s $SERVER --protobuf "$PROTO"
 
 ### ui
 
-на странице load actor
+<span style="color:grey">в процессе реализации, готово не до конца</span>
+
+![пример UI](../_assets/load_actor_ui.jpeg)
+Уже сейчас - можно на ноде по прото-описанию создать нагружающего актора либо на одной текущей ноде, либо сразу на всех нодах тенанта (если страница принадлежит тенанту). В перспективе появятся кнопки, подставляющие разные дефолтные прото-конфиги нагрузки.
 
 ## Примеры {#load-examples}
 
 ### Запуск нагрузки {#load-examples-start}
 
-LoadStart
+```proto
+NodeId: 1
+Event: { KqpLoadStart: {
+    DurationSeconds: 30
+    WindowDuration: 1
+    WorkingDir: "/slice/db"
+    NumOfSessions: 64
+    UniformPartitionsCount: 1000
+    DeleteTableOnFinish: 1
+    WorkloadType: 0
+    Kv: {
+        InitRowCount: 1000
+        PartitionsByLoad: true
+        MaxFirstKey: 18446744073709551615
+        StringLen: 8
+        ColumnsCnt: 2
+        RowsCnt: 1
+    }
+}}
+```
+
+```proto
+NodeId: ${NODEID}
+Event: { LoadStart: {
+    DurationSeconds: ${DURATION}
+    ScheduleThresholdUs: 0
+    ScheduleRoundingUs: 0
+    Tablets: {
+        Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
+        Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
+        WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }
+        MaxInFlightRequests: 1
+
+        ReadSizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
+        ReadIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
+        MaxInFlightReadRequests: ${IN_FLIGHT}
+        FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
+        PutHandleClass: ${PUT_HANDLE_CLASS}
+        GetHandleClass: ${GET_HANDLE_CLASS}
+        Soft: true
+    }
+}}
+```
+
+```proto
+NodeId: ${NODEID}
+Event: { LoadStart: {
+    DurationSeconds: ${DURATION}
+    ScheduleThresholdUs: 0
+    ScheduleRoundingUs: 0
+    Tablets: {
+        Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
+        Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
+        WriteIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
+        MaxInFlightRequests: ${IN_FLIGHT}
+        FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
+        PutHandleClass: ${PUT_HANDLE_CLASS}
+        Soft: true
+    }
+}}
+```
+
+```proto
+NodeId: ${NODEID}
+Event: { MemoryLoadStart: {
+    DurationSeconds: ${DURATION}
+    IntervalUs: ${INTERVAL}
+    BlockSize: ${SIZE}
+}}
+```
 
 ### Остановка нагрузки {load-examples-stop}
 
-LoadStop
+```proto
+NodeId: 1
+Event:
+    LoadStop: {
+        RemoveAllTags: true
+    }
+}
+```
+или
+```proto
+NodeId: 1
+Event:
+    LoadStop: {
+        Tag: 123
+    }
+}
+```

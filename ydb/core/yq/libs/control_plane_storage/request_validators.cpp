@@ -105,18 +105,25 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
     return issues;
 }
 
-NYql::TIssues ValidateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting) {
+NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting) {
      NYql::TIssues issues;
     for (const auto& [key, value]: formatSetting) {
         if (key == "data.interval.unit") {
             if (!IsValidIntervalUnit(value)) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown value for data.interval.unit " + value));
             }
+        } else if (key == "csv_delimiter") {
+            if (format != "csv_with_names") {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "csv_delimiter should be used only with format csv_with_names"));
+            }
+            if (value.size() != 1) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "csv_delimiter should contain only one character"));
+            }
         } else {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown format setting " + key));
         }
     }
-     return issues;
+    return issues;
 }
 
 } // namespace NYq

@@ -76,7 +76,7 @@ NYql::TIssues ValidateQuery(T& ev, size_t maxSize)
     return issues;
 }
 
-NYql::TIssues ValidateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting);
+NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting);
 
 template<typename T>
 NYql::TIssues ValidateBinding(T& ev, size_t maxSize, const TSet<YandexQuery::BindingSetting::BindingCase>& availableBindings)
@@ -109,7 +109,7 @@ NYql::TIssues ValidateBinding(T& ev, size_t maxSize, const TSet<YandexQuery::Bin
             if (!dataStreams.has_schema()) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
             }
-            issues.AddIssues(ValidateFormatSetting(dataStreams.format_setting()));
+            issues.AddIssues(ValidateFormatSetting(dataStreams.format(), dataStreams.format_setting()));
             break;
         }
         case YandexQuery::BindingSetting::BINDING_NOT_SET: {
@@ -120,7 +120,7 @@ NYql::TIssues ValidateBinding(T& ev, size_t maxSize, const TSet<YandexQuery::Bin
         case YandexQuery::BindingSetting::kObjectStorage:
             const YandexQuery::ObjectStorageBinding objectStorage = setting.object_storage();
             for (const auto& subset: objectStorage.subset()) {
-                issues.AddIssues(ValidateFormatSetting(subset.format_setting()));
+                issues.AddIssues(ValidateFormatSetting(subset.format(), subset.format_setting()));
                 if (subset.projection_size() || subset.partitioned_by_size()) {
                     try {
                         TVector<TString> partitionedBy{subset.partitioned_by().begin(), subset.partitioned_by().end()};

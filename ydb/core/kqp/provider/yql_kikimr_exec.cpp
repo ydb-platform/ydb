@@ -1191,7 +1191,7 @@ private:
         TExprContext& ctx)>;
 
     std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> PerformExecution(TExprBase node,
-        TExprContext& ctx, const TString& cluster, TMaybe<TString> mode, TMaybe<bool> useNewEngine,
+        TExprContext& ctx, const TString& cluster, TMaybe<TString> mode,
         const TExecuteRunFunc& runFunc, const TExecuteFinalizeFunc& finalizeFunc)
     {
         if (node.Ref().GetState() == TExprNode::EState::ExecutionComplete) {
@@ -1222,7 +1222,6 @@ private:
             }
 
             settings.IsolationLevel = isolationLevel;
-            settings.UseNewEngine = useNewEngine;
             settings.StrictDml = config->StrictDml.Get(cluster).GetRef();
 
             const auto& scanQuery = config->ScanQuery.Get(cluster);
@@ -1301,7 +1300,7 @@ private:
             FillExecDataQueryAst(node.Cast<TKiExecDataQuery>(), result.QueryAst, ctx);
         };
 
-        return PerformExecution(execQuery, ctx, cluster, settings.Mode, settings.UseNewEngine, runFunc, finalizeFunc);
+        return PerformExecution(execQuery, ctx, cluster, settings.Mode, runFunc, finalizeFunc);
     }
 
     bool ApplyTableOperations(const TString& cluster, const TVector<NKqpProto::TKqpTableOp>& tableOps,

@@ -75,18 +75,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     Cerr << "Trying to start YDB, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
 
     TVector<NKikimrKqp::TKqpSetting> effectiveKqpSettings;
-    {
-        // Allow NewEngine in tests
-        NKikimrKqp::TKqpSetting setting;
-        setting.SetName("_KqpAllowNewEngine");
-        setting.SetValue("true");
-        effectiveKqpSettings.push_back(setting);
-
-        // Force NewEngine in tests
-        // setting.SetName("_KqpForceNewEngine");
-        // setting.SetValue("true");
-        // effectiveKqpSettings.push_back(setting);
-    }
 
     bool enableSpilling = false;
     if (settings.AppConfig.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable()) {

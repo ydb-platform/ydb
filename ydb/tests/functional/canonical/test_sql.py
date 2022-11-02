@@ -128,8 +128,6 @@ class BaseCanonicalTest(object):
             query_parts.pop(0)
             is_v1 = True
 
-        query_parts = ["PRAGMA Kikimr.UseNewEngine=\"True\";"] + query_parts
-
         query_parts = ["PRAGMA TablePathPrefix=\"{}\";".format(cls.prefix)] + query_parts
         if is_v1:
             query_parts = ['--!syntax_v1'] + query_parts

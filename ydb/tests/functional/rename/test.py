@@ -141,7 +141,6 @@ class Simple:
 
     upsert_table_template = (
         """
-        PRAGMA Kikimr.UseNewEngine="True";
         DECLARE $key AS Uint64;
         DECLARE $value AS Utf8;
 
@@ -153,7 +152,6 @@ class Simple:
 
     select_table_template = (
         """
-        PRAGMA Kikimr.UseNewEngine="True";
         DECLARE $key AS Uint64;
         SELECT value FROM `{table}` WHERE id = $key;
         """
@@ -161,7 +159,6 @@ class Simple:
 
     select_index_table_template = (
         """
-        PRAGMA Kikimr.UseNewEngine="True";
         DECLARE $value AS Utf8;
         SELECT id FROM `{table}` VIEW `value_index` WHERE value = $value;
         """

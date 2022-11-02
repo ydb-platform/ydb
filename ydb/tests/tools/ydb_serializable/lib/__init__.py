@@ -13,7 +13,6 @@ KEY_PREFIX_TYPE = ydb.TupleType().add_element(ydb.OptionalType(ydb.PrimitiveType
 
 QUERY_POINT_READS = '''\
 --!syntax_v1
-{FORCE_NEW_ENGINE}
 
 DECLARE $data AS List<Struct<
     key: Uint64>>;
@@ -26,7 +25,6 @@ INNER JOIN `{TABLE}` AS t ON t.key = d.key;
 
 QUERY_POINT_WRITES = '''\
 --!syntax_v1
-{FORCE_NEW_ENGINE}
 
 DECLARE $data AS List<Struct<
     key: Uint64,
@@ -40,7 +38,6 @@ FROM AS_TABLE($data);
 
 QUERY_POINT_READS_WRITES = '''\
 --!syntax_v1
-{FORCE_NEW_ENGINE}
 
 DECLARE $reads AS List<Struct<
     key: Uint64>>;
@@ -60,7 +57,6 @@ FROM AS_TABLE($writes);
 
 QUERY_RANGE_READS = '''\
 --!syntax_v1
-{FORCE_NEW_ENGINE}
 
 DECLARE $minKey AS Uint64;
 DECLARE $maxKey AS Uint64;
@@ -69,10 +65,6 @@ SELECT key, value
 FROM `{TABLE}`
 WHERE key >= $minKey AND key <= $maxKey;
 '''
-
-
-def new_engine_pragma(force_new_engine):
-    return 'PRAGMA Kikimr.UseNewEngine = "true";' if force_new_engine else ''
 
 
 def generate_random_name(cnt=20):
@@ -246,7 +238,6 @@ class DatabaseCheckerOptions(object):
         self.read_table_ranges = False
         self.ignore_read_table = False
         self.read_table_snapshot = None
-        self.force_new_engine = False
 
 
 class DatabaseChecker(object):
@@ -313,7 +304,7 @@ class DatabaseChecker(object):
     def async_perform_point_reads(self, history, table, options, checker, deadline):
         with (yield self.async_session()) as session:
             read_query = yield session.async_prepare(QUERY_POINT_READS.format(
-                TABLE=table, FORCE_NEW_ENGINE=new_engine_pragma(options.force_new_engine)))
+                TABLE=table))
 
             while time.time() < deadline:
                 keys = checker.select_read_from_write_keys(cnt=random.randint(1, options.shards))
@@ -359,7 +350,7 @@ class DatabaseChecker(object):
     def async_perform_point_writes(self, history, table, options, checker, deadline):
         with (yield self.async_session()) as session:
             write_query = yield session.async_prepare(QUERY_POINT_WRITES.format(
-                TABLE=table, FORCE_NEW_ENGINE=new_engine_pragma(options.force_new_engine)))
+                TABLE=table))
 
             while time.time() < deadline:
                 keys = checker.select_write_keys(cnt=random.randint(1, options.shards))
@@ -399,11 +390,11 @@ class DatabaseChecker(object):
     def async_perform_point_reads_writes(self, history, table, options, checker, deadline, keysets):
         with (yield self.async_session()) as session:
             read_query = yield session.async_prepare(QUERY_POINT_READS.format(
-                TABLE=table, FORCE_NEW_ENGINE=new_engine_pragma(options.force_new_engine)))
+                TABLE=table))
             write_query = yield session.async_prepare(QUERY_POINT_WRITES.format(
-                TABLE=table, FORCE_NEW_ENGINE=new_engine_pragma(options.force_new_engine)))
+                TABLE=table))
             read_write_query = yield session.async_prepare(QUERY_POINT_READS_WRITES.format(
-                TABLE=table, FORCE_NEW_ENGINE=new_engine_pragma(options.force_new_engine)))
+                TABLE=table))
 
             while time.time() < deadline:
                 read_keys = checker.select_read_keys(cnt=random.randint(1, options.shards))
@@ -474,7 +465,7 @@ class DatabaseChecker(object):
     def async_perform_verifying_reads(self, history, table, options, checker, deadline, keysets):
         with (yield self.async_session()) as session:
             read_query = yield session.async_prepare(QUERY_POINT_READS.format(
-                TABLE=table, FORCE_NEW_ENGINE=new_engine_pragma(options.force_new_engine)))
+                TABLE=table))
 
             while time.time() < deadline:
                 if not keysets:
@@ -521,7 +512,7 @@ class DatabaseChecker(object):
     def async_perform_range_reads(self, history, table, options, checker, deadline):
         with (yield self.async_session()) as session:
             range_query = yield session.async_prepare(QUERY_RANGE_READS.format(
-                TABLE=table, FORCE_NEW_ENGINE=new_engine_pragma(options.force_new_engine)))
+                TABLE=table))
 
             while time.time() < deadline:
                 min_key = random.randint(0, options.keys)

@@ -1644,22 +1644,9 @@ private:
         YQL_ENSURE(settings.RollbackTx);
 
         auto query = std::make_unique<NKikimrKqp::TPreparedQuery>();
-        auto engine = maybeTx->Get()->DeferredEffects.GetEngine();
 
-        if (engine.has_value()) {
-            bool newEngine = *engine == TKqpTransactionInfo::EEngine::NewEngine;
-            YQL_ENSURE(!settings.UseNewEngine.Defined() || *settings.UseNewEngine == newEngine);
-        } else if (SessionCtx->Config().HasKqpForceNewEngine()) {
-            engine = TKqpTransactionInfo::EEngine::NewEngine;
-        }
-
-        if (engine.has_value() && *engine == TKqpTransactionInfo::EEngine::NewEngine) {
-            query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
-            query->MutablePhysicalQuery()->SetType(NKqpProto::TKqpPhyQuery::TYPE_DATA);
-        } else {
-            query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_V1);
-            query->AddKqls();
-        }
+        query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+        query->MutablePhysicalQuery()->SetType(NKqpProto::TKqpPhyQuery::TYPE_DATA);
 
         YQL_CLOG(INFO, ProviderKqp) << "Rollback tx: " << txId << ", query: " << query->ShortUtf8DebugString();
 
@@ -1674,24 +1661,10 @@ private:
 
         auto query = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto settings1 = settings;
-        auto engine = tx->DeferredEffects.GetEngine();
 
-        if (engine.has_value()) {
-            bool newEngine = *engine == TKqpTransactionInfo::EEngine::NewEngine;
-            YQL_ENSURE(!settings.UseNewEngine.Defined() || *settings.UseNewEngine == newEngine);
-        } else if (SessionCtx->Config().HasKqpForceNewEngine()) {
-            engine = TKqpTransactionInfo::EEngine::NewEngine;
-        }
-
-        if (engine.has_value() && *engine == TKqpTransactionInfo::EEngine::NewEngine) {
-            settings1.UseNewEngine = true;
-            query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
-            query->MutablePhysicalQuery()->SetType(NKqpProto::TKqpPhyQuery::TYPE_DATA);
-        } else {
-            settings1.UseNewEngine = false;
-            query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_V1);
-            query->AddKqls();
-        }
+        settings1.UseNewEngine = true;
+        query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+        query->MutablePhysicalQuery()->SetType(NKqpProto::TKqpPhyQuery::TYPE_DATA);
 
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> q(query.release());
         return ExecuteDataQueryInternal(tx, q, {}, settings1, {}, {}, /* replyPrepared */ false, ctx);
@@ -1710,22 +1683,9 @@ private:
         YQL_ENSURE(settings.CommitTx);
 
         auto query = std::make_unique<NKikimrKqp::TPreparedQuery>();
-        auto engine = maybeTx->Get()->DeferredEffects.GetEngine();
 
-        if (engine.has_value()) {
-            bool newEngine = *engine == TKqpTransactionInfo::EEngine::NewEngine;
-            YQL_ENSURE(!settings.UseNewEngine.Defined() || *settings.UseNewEngine == newEngine);
-        } else if (SessionCtx->Config().HasKqpForceNewEngine()) {
-            engine = TKqpTransactionInfo::EEngine::NewEngine;
-        }
-
-        if (engine.has_value() && *engine == TKqpTransactionInfo::EEngine::NewEngine) {
-            query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
-            query->MutablePhysicalQuery()->SetType(NKqpProto::TKqpPhyQuery::TYPE_DATA);
-        } else {
-            query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_V1);
-            query->AddKqls();
-        }
+        query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+        query->MutablePhysicalQuery()->SetType(NKqpProto::TKqpPhyQuery::TYPE_DATA);
 
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> q(query.release());
         return ExecuteDataQueryInternal(txId, q, NKikimrMiniKQL::TParams(), settings, /* issues */ {},
@@ -1751,9 +1711,7 @@ private:
                 IKikimrQueryExecutor::TExecuteSettings settings;
                 settings.RollbackTx = true;
                 settings.Deadlines.TimeoutAt = TInstant::Now() + TDuration::Minutes(1);
-
-                auto engine = tx->DeferredEffects.GetEngine();
-                settings.UseNewEngine = engine.has_value() && *engine == TKqpTransactionInfo::EEngine::NewEngine;
+                settings.UseNewEngine = true;
 
                 return RollbackTransactionInternal(tx, settings, ctx);
             });
@@ -1802,9 +1760,6 @@ private:
         SessionCtx->Query().Type = EKikimrQueryType::Dml;
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
-        if (settings.UseNewEngine) {
-            SessionCtx->Config().UseNewEngine = *settings.UseNewEngine;
-        }
         if (settings.DocumentApiRestricted) {
             SessionCtx->Query().DocumentApiRestricted = *settings.DocumentApiRestricted;
         }

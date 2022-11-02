@@ -755,12 +755,8 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
 
             if (auto maybeDatasink = node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
                 auto cluster = TString(maybeDatasink.Cast().Cluster());
-                auto useNewEngine = sessionCtx->Config().UseNewEngine.Get();
-                if (!useNewEngine.Defined() && sessionCtx->Config().HasKqpForceNewEngine()) {
-                    useNewEngine = true;
-                }
 
-                ret = KiBuildQuery(node, useNewEngine, ctx);
+                ret = KiBuildQuery(node, ctx);
 
                 if (ret != inputNode) {
                     return ret;

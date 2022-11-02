@@ -28,10 +28,7 @@ NThreading::TFuture<TStatus> FinishTxAsync(const TDataQueryResult& in) {
     }
 }
 
-TString SetPragmas(const TString& in, bool useNewEngine) {
-    if (useNewEngine) {
-        return "--!syntax_v1\nPRAGMA Kikimr.UseNewEngine = \"true\";\n" + in;
-    }
+TString SetPragmas(const TString& in) {
     return "--!syntax_v1\n" + in;
 }
 
@@ -228,13 +225,11 @@ public:
     TSelectAndUpsertIfUniqTask(
             TTableDescription tableDescription,
             const TString& tableName,
-            TTableClient& client,
-            bool useNewEngine)
+            TTableClient& client)
         : TRandomValueProvider(TableDescriptionToShardsPower(tableDescription), KEYRANGELIMIT)
         , TableDescription_(tableDescription)
         , TableName_(tableName)
         , Client_(client)
-        , UseNewEngine_(useNewEngine)
     {
         CreateProgram();
     }
@@ -403,7 +398,7 @@ private:
                 TableName_.c_str(),
                 ParamName_.c_str());
 
-            Programs_.push_back({SetPragmas(program, UseNewEngine_), upsertInput});
+            Programs_.push_back({SetPragmas(program), upsertInput});
         }
 
         TString pkColumns;
@@ -438,7 +433,7 @@ private:
             sql += Sprintf("SELECT %s FROM `%s` VIEW %s WHERE %s", pkColumns.c_str(),
                 TableName_.c_str(), indexDesc.GetIndexName().c_str(), indexPredicate.c_str());
 
-            Programs_.push_back({SetPragmas(sql, UseNewEngine_), predicates});
+            Programs_.push_back({SetPragmas(sql), predicates});
         }
     }
 
@@ -446,7 +441,6 @@ private:
     TTableDescription TableDescription_;
     TString TableName_;
     TTableClient Client_;
-    bool UseNewEngine_;
 
     TVector<std::pair<TString, TVector<std::pair<TColumn, TString>>>> Programs_;
 
@@ -461,13 +455,11 @@ public:
     TSelectAndCompareTask(
             TTableDescription tableDescription,
             const TString& tableName,
-            TTableClient& client,
-            bool useNewEngine)
+            TTableClient& client)
         : TRandomValueProvider(TableDescriptionToShardsPower(tableDescription), KEYRANGELIMIT)
         , TableDescription_(tableDescription)
         , TableName_(tableName)
         , Client_(client)
-        , UseNewEngine_(useNewEngine)
     {
         CreateProgram();
     }
@@ -650,7 +642,7 @@ private:
         }
 
         select1 += Sprintf("SELECT %s FROM `%s` WHERE %s", allColumns.c_str(), TableName_.c_str(), pkPredicate.c_str());
-        Programs_.push_back({SetPragmas(select1, UseNewEngine_), pkPredicates});
+        Programs_.push_back({SetPragmas(select1), pkPredicates});
 
         THashMap<TString, std::pair<TString,
                                     TVector<std::pair<TColumn,
@@ -686,14 +678,13 @@ private:
             sql.first += Sprintf("SELECT %s FROM `%s` VIEW %s WHERE %s", allColumns.c_str(),
                 TableName_.c_str(), indexDesc.GetIndexName().c_str(), indexPredicate.c_str());
 
-            Programs_.push_back({SetPragmas(sql.first, UseNewEngine_), predicates});
+            Programs_.push_back({SetPragmas(sql.first), predicates});
         }
     }
 
     TTableDescription TableDescription_;
     TString TableName_;
     TTableClient Client_;
-    const bool UseNewEngine_;
 
     TVector<std::pair<TString, TVector<std::pair<TColumn, TString>>>> Programs_;
 
@@ -709,14 +700,12 @@ public:
             TTableDescription tableDescription,
             const TString& tableName,
             TTableClient& client,
-            IWorkLoader::ELoadCommand stmt,
-            bool useNewEngine)
+            IWorkLoader::ELoadCommand stmt)
         : TRandomValueProvider(TableDescriptionToShardsPower(tableDescription), KEYRANGELIMIT)
         , TableDescription_(tableDescription)
         , TableName_(tableName)
         , Client_(client)
         , Stmt_(stmt)
-        , UseNewEngine_(useNewEngine)
     {
         CreatePrograms();
     }
@@ -833,7 +822,7 @@ public:
         }
 
 
-        return {SetPragmas(sql, UseNewEngine_), resultColumns};
+        return {SetPragmas(sql), resultColumns};
     }
 
     IWorkLoader::ELoadCommand GetTaskId() const override {
@@ -860,7 +849,6 @@ private:
     TString TableName_;
     TTableClient Client_;
     const IWorkLoader::ELoadCommand Stmt_;
-    const bool UseNewEngine_;
     // program, columns
     TVector<std::pair<TString, TVector<std::pair<TColumn, TString>>>> Programs_;
 };
@@ -873,14 +861,12 @@ public:
             TTableDescription tableDescription,
             const TString& tableName,
             TTableClient& client,
-            IWorkLoader::ELoadCommand stmt,
-            bool useNewEngine)
+            IWorkLoader::ELoadCommand stmt)
         : TRandomValueProvider(TableDescriptionToShardsPower(tableDescription), KEYRANGELIMIT)
         , TableDescription_(tableDescription)
         , TableName_(tableName)
         , Client_(client)
         , Stmt_(stmt)
-        , UseNewEngine_(useNewEngine)
     {
         CreatePrograms();
     }
@@ -970,7 +956,7 @@ private:
             TableName_.c_str(),
             ParamName_.c_str());
 
-        return {SetPragmas(program, UseNewEngine_), resCol};
+        return {SetPragmas(program), resCol};
     }
 
     void CreatePrograms() {
@@ -989,7 +975,6 @@ private:
     TString TableName_;
     TTableClient Client_;
     const IWorkLoader::ELoadCommand Stmt_;
-    const bool UseNewEngine_;
     // program, columns
     TVector<std::pair<TString, TVector<TColumn>>> Programs_;
     const TString ParamName_ = "$items";
@@ -1090,39 +1075,39 @@ public:
             switch (i & loadCommands) {
                 case IWorkLoader::LC_UPSERT:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPSERT, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPSERT), 1000));
                 break;
                 case IWorkLoader::LC_INSERT:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_INSERT, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_INSERT), 1000));
                 break;
                 case IWorkLoader::LC_UPDATE:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamItemsTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPDATE, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPDATE), 1000));
                 break;
                 case IWorkLoader::LC_UPDATE_ON:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPDATE_ON, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPDATE_ON), 1000));
                 break;
                 case IWorkLoader::LC_REPLACE:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_REPLACE, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_REPLACE), 1000));
                 break;
                 case IWorkLoader::LC_DELETE:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamItemsTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_DELETE, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_DELETE), 1000));
                 break;
                 case IWorkLoader::LC_DELETE_ON:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_DELETE_ON, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_DELETE_ON), 1000));
                 break;
                 case IWorkLoader::LC_SELECT:
                     tasks.emplace_back(std::make_pair(std::make_unique<TSelectAndCompareTask>(
-                        tableDescription.GetRef(), tableName, Client_, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_), 1000));
                 break;
                 case IWorkLoader::LC_UPSERT_IF_UNIQ:
                     tasks.emplace_back(std::make_pair(std::make_unique<TSelectAndUpsertIfUniqTask>(
-                        tableDescription.GetRef(), tableName, Client_, settings.NewEngine), 1000));
+                        tableDescription.GetRef(), tableName, Client_), 1000));
                 break;
                 case IWorkLoader::LC_ALTER_ADD_INDEX:
                     tasks.emplace_back(std::make_pair(std::make_unique<TAlterTableAddIndexTask>(

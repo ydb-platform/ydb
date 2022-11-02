@@ -1,5 +1,4 @@
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine = "true";
 CREATE TABLE ScriptingTest (
     Key Uint64,
     Value String,
@@ -7,35 +6,29 @@ CREATE TABLE ScriptingTest (
 );
 COMMIT;
 
-PRAGMA Kikimr.UseNewEngine = "false";
 REPLACE INTO ScriptingTest (Key, Value) VALUES
     (1, "One"),
     (2, "Two");
 COMMIT;
 
-PRAGMA Kikimr.UseNewEngine = "true";
 REPLACE INTO ScriptingTest (Key, Value) VALUES
     (3, "Three"),
     (4, "Four");
 COMMIT;
 
 PRAGMA kikimr.ScanQuery = "true";
-PRAGMA Kikimr.UseNewEngine = "true";
 SELECT count(*) FROM ScriptingTest;
 COMMIT;
 
 PRAGMA kikimr.ScanQuery = "false";
-PRAGMA Kikimr.UseNewEngine = "true";
 SELECT count(*) FROM ScriptingTest;
 COMMIT;
 
 PRAGMA kikimr.ScanQuery = "true";
-PRAGMA Kikimr.UseNewEngine = "false";
 SELECT count(*) FROM ScriptingTest;
 COMMIT;
 
 PRAGMA kikimr.ScanQuery = "false";
-PRAGMA Kikimr.UseNewEngine = "false";
 SELECT count(*) FROM ScriptingTest;
 COMMIT;
 

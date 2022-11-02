@@ -26,12 +26,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-static std::atomic<bool> FailForcedNewEngineCompilationStatus = false;
-
-void FailForcedNewEngineCompilationForTests(bool fail) {
-    FailForcedNewEngineCompilationStatus = fail;
-}
-
 static const TString YqlName = "CompileActor";
 
 using namespace NKikimrConfig;
@@ -50,7 +44,7 @@ public:
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
         TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
-        TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine, NWilson::TTraceId traceId)
+        TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -60,7 +54,6 @@ public:
         , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , CompilationTimeout(TDuration::MilliSeconds(serviceConfig.GetCompileTimeoutMs()))
-        , RecompileWithNewEngine(recompileWithNewEngine)
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
     {
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), Query.Cluster, kqpSettings->Settings, false);
@@ -90,7 +83,8 @@ public:
             << ", text: \"" << EscapeC(Query.Text) << "\""
             << ", startTime: " << StartTime);
 
-        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup()));
+        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
+            new TEvents::TEvWakeup()));
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
 
@@ -98,9 +92,10 @@ public:
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
-        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), true);
-        Gateway = CreateKikimrIcGateway(Query.Cluster, Query.Database, std::move(loader), ctx.ExecutorThread.ActorSystem,
-            ctx.SelfID.NodeId(), counters, MakeMiniKQLCompileServiceID());
+        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
+            std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), true);
+        Gateway = CreateKikimrIcGateway(Query.Cluster, Query.Database, std::move(loader),
+            ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), counters, MakeMiniKQLCompileServiceID());
         Gateway->SetToken(Query.Cluster, UserToken);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
@@ -109,7 +104,6 @@ public:
             AppData(ctx)->FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
-        // prepareSettings.UseNewEngine = use default settings
         prepareSettings.DocumentApiRestricted = Query.Settings.DocumentApiRestricted;
 
         NCpuTime::TCpuTimer timer(CompileCpuTime);
@@ -145,28 +139,6 @@ private:
         }
     }
 
-    STFUNC(RecompileNewEngineState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvContinueProcess, HandleRecompile);
-                CFunc(TEvents::TSystem::Wakeup, HandleRecompileTimeout);
-                default: {
-                    LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Internal error in RecompileNewEngineState"
-                        << ", self: " << ctx.SelfID
-                        << ", unexpected event: " << ev->GetTypeRewrite());
-
-                    Reply(KqpCompileResult, ctx);
-                }
-            }
-        } catch (const yexception& e) {
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Internal error in RecompileNewEngineState"
-                << ", self: " << ctx.SelfID
-                << ", message: " << e.what());
-
-            Reply(KqpCompileResult, ctx);
-        }
-    }
-
 private:
     void Continue(const TActorContext &ctx) {
         TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
@@ -198,8 +170,8 @@ private:
         replayMessage.InsertValue("query_cluster", Query.Cluster);
         replayMessage.InsertValue("query_plan", queryPlan);
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: " << "Built the replay message "
-            << message);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
+            << "Built the replay message " << message);
 
         ReplayMessage = std::move(message);
     }
@@ -288,31 +260,11 @@ private:
             auto duration = now - StartTime;
             Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime);
 
+            const auto& queryTraits = KqpCompileResult->QueryTraits;
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation successful"
                 << ", self: " << ctx.SelfID
                 << ", duration: " << duration
-                << ", traits: " << (KqpCompileResult->QueryTraits ? KqpCompileResult->QueryTraits->ToString() : "<none>"));
-
-            if (RecompileWithNewEngine &&
-                KqpCompileResult->PreparedQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_V1)
-            {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "About to recompile with NewEngine"
-                    << ", self: " << ctx.SelfID);
-
-                RecompileStartTime = now;
-
-                IKqpHost::TPrepareSettings prepareSettings;
-                prepareSettings.UseNewEngine = true;
-                prepareSettings.DocumentApiRestricted = KqpCompileResult->Query->Settings.DocumentApiRestricted;
-
-                NCpuTime::TCpuTimer timer(CompileCpuTime);
-                AsyncCompileResult = KqpHost->PrepareDataQuery(KqpCompileResult->Query->Text, prepareSettings);
-
-                Continue(ctx);
-                Become(&TKqpCompileActor::RecompileNewEngineState);
-
-                return;
-            }
+                << ", traits: " << (queryTraits ? queryTraits->ToString() : "<none>"));
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
                 << ", self: " << ctx.SelfID
@@ -336,55 +288,6 @@ private:
         return ReplyError(Ydb::StatusIds::TIMEOUT, {issue}, ctx);
     }
 
-    void HandleRecompile(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
-        Y_ENSURE(!ev->Get()->QueryId);
-
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
-
-        if (!ev->Get()->Finished) {
-            NCpuTime::TCpuTimer timer(CompileCpuTime);
-            Continue(ctx);
-            return;
-        }
-
-        auto kqpResult = std::move(AsyncCompileResult->GetResult());
-        auto status = GetYdbStatus(kqpResult);
-
-        if (status == Ydb::StatusIds::SUCCESS && !FailForcedNewEngineCompilationStatus.load(std::memory_order_relaxed)) {
-            YQL_ENSURE(kqpResult.PreparingQuery);
-            KqpCompileResult->PreparedQueryNewEngine.reset(kqpResult.PreparingQuery.release());
-
-            auto duration = TInstant::Now() - RecompileStartTime;
-            Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime);
-
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "ReCompilation successful"
-                << ", self: " << ctx.SelfID
-                << ", duration: " << duration);
-        } else {
-            Counters->ReportCompileError(DbCounters);
-            Counters->ForceNewEngineCompileErrors->Inc();
-
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "ReCompilation failed"
-                << ", self: " << ctx.SelfID
-                << ", query: " << KqpCompileResult->Query->Text
-                << ", status: " << Ydb::StatusIds_StatusCode_Name(status)
-                << ", issues: " << kqpResult.Issues().ToString());
-        }
-
-        Reply(KqpCompileResult, ctx);
-    }
-
-    void HandleRecompileTimeout(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "ReCompilation timeout"
-            << ", self: " << ctx.SelfID
-            << ", cluster: " << Query.Cluster
-            << ", database: " << Query.Database
-            << ", text: \"" << EscapeC(Query.Text) << "\""
-            << ", startTime: " << StartTime);
-
-        return Reply(KqpCompileResult, ctx);
-    }
-
 private:
     TActorId Owner;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
@@ -395,7 +298,6 @@ private:
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
     TDuration CompilationTimeout;
-    bool RecompileWithNewEngine;
     TInstant StartTime;
     TDuration CompileCpuTime;
     TInstant RecompileStartTime;
@@ -422,10 +324,10 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
-    TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine, NWilson::TTraceId traceId)
+    TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
 {
     return new TKqpCompileActor(owner, kqpSettings, serviceConfig, moduleResolverState, counters, uid,
-        std::move(query), userToken, dbCounters, recompileWithNewEngine, std::move(traceId));
+        std::move(query), userToken, dbCounters, std::move(traceId));
 }
 
 } // namespace NKqp

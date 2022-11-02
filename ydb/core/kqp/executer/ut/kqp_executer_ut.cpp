@@ -88,7 +88,6 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         TExprContext ctx;
         auto tx = BuildTxPlan(R"(
-            PRAGMA kikimr.UseNewEngine = "true";
             DECLARE $items AS 'List<Struct<Key:Uint64?, Text:String?>>';
 
             $itemsSource = (

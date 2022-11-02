@@ -30,10 +30,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool 
     auto grpcPort = PortManager.GetPort();
 
     TVector<NKikimrKqp::TKqpSetting> kqpSettings;
-    NKikimrKqp::TKqpSetting setting;
-    setting.SetName("_KqpAllowNewEngine");
-    setting.SetValue("true");
-    kqpSettings.push_back(setting);
 
     Settings = new Tests::TServerSettings(mbusPort);
     Settings->SetDomainName("Root");

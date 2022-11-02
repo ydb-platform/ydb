@@ -466,7 +466,7 @@ TKiDataQuery MakeKiDataQuery(TExprBase node, const TKiExploreTxResults& txExplor
 
 } // namespace
 
-TExprNode::TPtr KiBuildQuery(TExprBase node, const TMaybe<bool>& useNewEngine, TExprContext& ctx) {
+TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx) {
     if (!node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
     }
@@ -511,7 +511,6 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, const TMaybe<bool>& useNewEngine, T
             execSettings.Mode = value;
         }
     }
-    execSettings.UseNewEngine = useNewEngine;
 
     auto execQuery = Build<TKiExecDataQuery>(ctx, node.Pos())
         .World<TCoSync>()

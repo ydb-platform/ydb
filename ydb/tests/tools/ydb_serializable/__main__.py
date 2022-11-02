@@ -32,7 +32,6 @@ def main():
     parser.add_argument('--rt-snapshot', dest='read_table_snapshot', action='store_true', default=None, help='Use server-side snapshots for read-table transactions')
     parser.add_argument('--ignore-rt', dest='ignore_read_table', action='store_true', help='Ignore read-table results (e.g. for interference only, legacy option)')
     parser.add_argument('--processes', type=int, default=1, help='Number of processes to fork into, default is 1')
-    parser.add_argument('--new-engine', dest='force_new_engine', action='store_true', default=False, help='Force NewEngine')
     args = parser.parse_args()
 
     logger = DummyLogger()
@@ -49,7 +48,6 @@ def main():
     options.read_table_ranges = args.read_table_ranges
     options.ignore_read_table = args.ignore_read_table
     options.read_table_snapshot = args.read_table_snapshot
-    options.force_new_engine = args.force_new_engine
 
     def run_single():
         def handler(signum, frame, sys=sys, logger=logger):

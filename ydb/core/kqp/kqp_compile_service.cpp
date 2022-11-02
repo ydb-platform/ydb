@@ -48,16 +48,9 @@ public:
         auto removedItem = List.Insert(item);
 
         IncBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
-        if (item->Value.CompileResult->PreparedQueryNewEngine) {
-            IncBytes(item->Value.CompileResult->PreparedQueryNewEngine->ByteSize());
-        }
 
         if (removedItem) {
             DecBytes(removedItem->Value.CompileResult->PreparedQuery->ByteSize());
-
-            if (removedItem->Value.CompileResult->PreparedQueryNewEngine) {
-                DecBytes(removedItem->Value.CompileResult->PreparedQueryNewEngine->ByteSize());
-            }
 
             QueryIndex.erase(*removedItem->Value.CompileResult->Query);
             auto indexIt = Index.find(*removedItem);
@@ -114,9 +107,6 @@ public:
         List.Erase(item);
 
         DecBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
-        if (item->Value.CompileResult->PreparedQueryNewEngine) {
-            DecBytes(item->Value.CompileResult->PreparedQueryNewEngine->ByteSize());
-        }
 
         Y_VERIFY(item->Value.CompileResult);
         Y_VERIFY(item->Value.CompileResult->Query);
@@ -368,28 +358,11 @@ private:
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
-        ui32 prevForceNewEnginePercent = Config.GetForceNewEnginePercent();
-        ui32 prevForceNewEngineLevel = Config.GetForceNewEngineLevel();
-
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
-
-        if (Config.GetForceNewEnginePercent() != prevForceNewEnginePercent ||
-            Config.GetForceNewEngineLevel() != prevForceNewEngineLevel)
-        {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                "ForceNewEnginePercent/Level was changed from "
-                << prevForceNewEnginePercent << '/' << prevForceNewEngineLevel << " to "
-                << Config.GetForceNewEnginePercent() << '/' << Config.GetForceNewEngineLevel());
-
-            if (prevForceNewEnginePercent == 0 && Config.GetForceNewEnginePercent() != 0) {
-                // clear cache only on `enable feature` action
-                QueryCache.Clear();
-            }
-        }
     }
 
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
@@ -708,17 +681,14 @@ private:
     }
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
-        bool recompileWithNewEngine = Config.GetForceNewEnginePercent() > 0;
-
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, Config, ModuleResolverState, Counters,
-            request.Uid, request.Query, request.UserToken, request.DbCounters, recompileWithNewEngine, request.CompileServiceSpan.GetTraceId());
+            request.Uid, request.Query, request.UserToken, request.DbCounters, request.CompileServiceSpan.GetTraceId());
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Created compile actor"
             << ", sender: " << request.Sender
-            << ", compileActor: " << compileActorId
-            << ", recompileWithNewEngine: " << recompileWithNewEngine);
+            << ", compileActor: " << compileActorId);
 
         request.CompileActor = compileActorId;
         RequestsQueue.AddActiveRequest(std::move(request));
@@ -745,11 +715,6 @@ private:
 
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats.CopyFrom(compileStats);
-
-        if (responseEv->CompileResult && responseEv->CompileResult->PreparedQueryNewEngine) {
-            responseEv->ForceNewEnginePercent = Config.GetForceNewEnginePercent();
-            responseEv->ForceNewEngineLevel = Config.GetForceNewEngineLevel();
-        }
 
         if (span) {
             span.End();

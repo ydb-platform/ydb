@@ -1173,15 +1173,10 @@ message TTableServiceConfig {
     optional TSpillingServiceConfig SpillingServiceConfig = 16;
     optional TShutdownSettings ShutdownSettings = 17;
     optional TSessionBalancerSettings SessionBalancerSettings = 18;
-    optional uint32 ForceNewEnginePercent = 19 [default = 0];
-    // level:
-    //   0 - Non interactive, read-only queries without joins, sql in and secondary indexes. With fallback to old engine.
-    //   1 - Non interactive, read-only queries. With fallback to old engine.
-    //   2 - All read-only queries. Without fallback to new engine (in case of rw tx, read queries will be executed with new engine, write queries - with old one).
-    //   3 - New engine for all queries.
-    optional uint32 ForceNewEngineLevel = 22 [default = 0];
+    reserved 19; // ForceNewEnginePercent
     optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
     optional TQueryReplayConfig QueryReplayConfig = 21;
+    reserved 22; // ForceNewEngineLevel
     reserved 23; // optional bool EnableKqpSessionActor = 23 [default = true];
     optional bool EnableKqpPatternCacheLiteral = 24 [default = false];
     optional bool EnableKqpPatternCacheCompute = 25 [default = false];

@@ -40,10 +40,6 @@ class TestTransactionIsolation(object):
             'upsert into %s (id, value) values (1, 10), (2, 20); ' % table, commit_tx=True)
         return table, session
 
-    @staticmethod
-    def _prepare_engine():
-        return 'pragma kikimr.UseNewEngine = "true";'
-
     def test_prevents_write_cycles_g0(self):
         """Write Cycles (G0), locking updated rows"""
         table_name, session = self._prepare("test_prevents_write_cycles_g0")
@@ -51,7 +47,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         t1.execute('{} upsert into {} (id, value) values (1, 11)'.format(prefix, table_name))
         t2.execute('{} select * from {} where id=1 or id=2;'.format(prefix, table_name))
@@ -100,7 +96,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         t1.execute('{} update {} set value = 101 where id = 1;'.format(prefix, table_name))
         result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name))
@@ -134,7 +130,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         t1.execute('{} select * from {} where id=1'.format(prefix, table_name))
         t1.execute('{} upsert into {} (id, value) values (1, 101);'.format(prefix, table_name))
@@ -170,7 +166,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         t1.execute(session.prepare('{} upsert into {} (id, value) values (1, 3);'.format(prefix, table_name)), commit_tx=True)
 
@@ -207,7 +203,7 @@ class TestTransactionIsolation(object):
         t2 = session.transaction()
         t3 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         t1.execute('{} select * from {} where id=1 or id=2;'.format(prefix, table_name))
         t1.execute('{} upsert into {} (id, value) values (1, 11);'.format(prefix, table_name))
@@ -266,7 +262,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         result_rows = t1.execute('{} select id from {} where value = 30;'.format(prefix, table_name))
         assert_that(result_rows[0].rows, equal_to([]))
@@ -288,7 +284,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         result_rows = t1.execute('{} select id from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -326,7 +322,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         result_rows = t1.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -369,7 +365,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         result_rows = t1.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -410,7 +406,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         result_rows = t1.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -461,7 +457,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         t1.execute('{} select value from {} where value % 5 = 0;'.format(prefix, table_name))
         t2.execute('{} update {} set value = 12 where value = 10;'.format(prefix, table_name))
@@ -482,7 +478,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         result_rows = t1.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -516,7 +512,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         t1.execute('{} select value from {} where id in (1,2);'.format(prefix, table_name))
         t2.execute('{} select value from {} where id in (1,2);'.format(prefix, table_name))
@@ -541,7 +537,7 @@ class TestTransactionIsolation(object):
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         t1.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name))
         t2.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name))
@@ -569,7 +565,7 @@ class TestTransactionIsolation(object):
         t2 = session.transaction()
         t3 = session.transaction()
 
-        prefix = self._prepare_engine()
+        prefix = ''
 
         result_rows = t1.execute('{} select id, value from {};'.format(prefix, table_name))
         assert_that(

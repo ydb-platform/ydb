@@ -271,7 +271,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
             auto result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 SELECT PathId, PartIdx, Path FROM `Root/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
@@ -282,7 +281,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
         {
             auto result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 SELECT PathId, PartIdx, Path FROM `Root/Tenant1/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
@@ -293,7 +291,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
         {
             auto result = session.ExecuteDataQuery(R"(
-                PRAGMA kikimr.UseNewEngine = "true";
                 SELECT PathId, PartIdx, Path FROM `Root/Tenant2/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 

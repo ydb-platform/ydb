@@ -3631,13 +3631,6 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool 
         .SetEnableMvcc(enableMvcc)
         .SetUseRealThreads(false);
 
-    if (dataQuery) {
-        NKikimrKqp::TKqpSetting setting;
-        setting.SetName("_KqpAllowNewEngine");
-        setting.SetValue("true");
-        serverSettings.KqpSettings.push_back(setting);
-    }
-
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();

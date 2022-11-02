@@ -225,7 +225,6 @@ struct TKqpCompileResult {
     ETableReadType MaxReadType;
 
     TPreparedQueryConstPtr PreparedQuery;
-    TPreparedQueryConstPtr PreparedQueryNewEngine;
     std::optional<TQueryTraits> QueryTraits;
 };
 
@@ -441,9 +440,6 @@ struct TEvKqp {
         TKqpCompileResult::TConstPtr CompileResult;
         NKqpProto::TKqpStatsCompile Stats;
         std::optional<TString> ReplayMessage;
-
-        ui32 ForceNewEnginePercent = 0;
-        ui32 ForceNewEngineLevel = 0;
 
         NLWTrace::TOrbit Orbit;
     };

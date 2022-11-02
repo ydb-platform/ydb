@@ -39,8 +39,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpSlowLogNoticeThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogTraceThresholdMs);
     REGISTER_SETTING(*this, _KqpYqlSyntaxVersion);
-    REGISTER_SETTING(*this, _KqpAllowNewEngine);
-    REGISTER_SETTING(*this, _KqpForceNewEngine);
     REGISTER_SETTING(*this, _KqpAllowUnsafeCommit);
     REGISTER_SETTING(*this, _KqpMaxComputeActors);
     REGISTER_SETTING(*this, _KqpEnableSpilling);
@@ -55,7 +53,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _ResultRowsLimit);
     REGISTER_SETTING(*this, _AllowReverseRange);
     REGISTER_SETTING(*this, CommitSafety).Enum({"Full", "Safe", "Moderate"});
-    REGISTER_SETTING(*this, UseNewEngine);
     REGISTER_SETTING(*this, UnwrapReadTableValues);
     REGISTER_SETTING(*this, AllowNullCompareInIndex);
     REGISTER_SETTING(*this, EnableSystemColumns);
@@ -85,18 +82,6 @@ bool TKikimrSettings::HasAllowNullCompareInIndex() const {
 
 bool TKikimrSettings::HasUnwrapReadTableValues() const {
     return GetFlagValue(UnwrapReadTableValues.Get());
-}
-
-bool TKikimrSettings::HasAllowKqpNewEngine() const {
-    return GetFlagValue(_KqpAllowNewEngine.Get());
-}
-
-bool TKikimrSettings::HasKqpForceNewEngine() const {
-    return GetFlagValue(_KqpForceNewEngine.Get());
-}
-
-bool TKikimrSettings::HasUseNewEngine() const {
-    return GetFlagValue(UseNewEngine.Get());
 }
 
 bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {

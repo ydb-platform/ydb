@@ -63,7 +63,6 @@ TQueryInfo GenerateUpsert(size_t n) {
 
     str << R"__(
         --!syntax_v1
-        PRAGMA Kikimr.UseNewEngine = 'true';
 
         DECLARE $key AS Utf8;
         DECLARE $field0 AS Utf8;

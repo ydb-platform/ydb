@@ -665,9 +665,6 @@ TKiExecDataQuerySettings TKiExecDataQuerySettings::Parse(TKiExecDataQuery exec) 
         if (setting.Name() == "mode") {
             YQL_ENSURE(setting.Value().Maybe<TCoAtom>());
             settings.Mode = setting.Value().Cast<TCoAtom>();
-        } else if (setting.Name()  == "use_new_engine") {
-            YQL_ENSURE(setting.Value().Maybe<TCoAtom>());
-            settings.UseNewEngine = FromString<bool>(setting.Value().Cast<TCoAtom>().Value());
         } else {
             settings.Other.push_back(setting);
         }
@@ -683,13 +680,6 @@ TCoNameValueTupleList TKiExecDataQuerySettings::BuildNode(TExprContext& ctx, TPo
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build("mode")
             .Value<TCoAtom>().Build(*Mode)
-            .Done());
-    }
-
-    if (UseNewEngine) {
-        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build("use_new_engine")
-            .Value<TCoAtom>().Build(ToString(*UseNewEngine))
             .Done());
     }
 

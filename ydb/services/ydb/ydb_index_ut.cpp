@@ -10,7 +10,6 @@ struct TRunSettings {
     const bool PkOverlap;
     const bool IndexOverlap;
     const bool WithDataColumn;
-    const bool UseNewEngine;
 };
 
 static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRunSettings& settings) {
@@ -68,7 +67,7 @@ static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRu
         IWorkLoader::LC_UPDATE_ON |
         IWorkLoader::LC_DELETE_ON |
         IWorkLoader::LC_DELETE;
-    workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{rowsCount, 5, settings.UseNewEngine});
+    workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{rowsCount, 5});
     auto checker = CreateChecker(driver);
     checker->Run("Root/Test");
     driver.Stop(true);
@@ -79,111 +78,51 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings {
             .PkOverlap = true,
             .IndexOverlap = false,
-            .WithDataColumn = false,
-            .UseNewEngine = false
+            .WithDataColumn = false
         }));
     }
-
-/*    Y_UNIT_TEST(MultiShardTableOneIndexNewEngine) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
-            .PkOverlap = true,
-            .IndexOverlap = false,
-            .WithDataColumn = false,
-            .UseNewEngine = true
-        }));
-    }*/
 
     Y_UNIT_TEST(MultiShardTableOneIndexDataColumn) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
             .PkOverlap = true,
             .IndexOverlap = false,
-            .WithDataColumn = true,
-            .UseNewEngine = false
+            .WithDataColumn = true
         }));
     }
-
-/*    Y_UNIT_TEST(MultiShardTableOneIndexDataColumnNewEngine) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
-            .PkOverlap = true,
-            .IndexOverlap = false,
-            .WithDataColumn = true,
-            .UseNewEngine = true
-        }));
-    }*/
 
     Y_UNIT_TEST(MultiShardTableOneIndexIndexOverlap) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
             .PkOverlap = false,
             .IndexOverlap = true,
-            .WithDataColumn = false,
-            .UseNewEngine = false
+            .WithDataColumn = false
         }));
     }
-
-/*    Y_UNIT_TEST(MultiShardTableOneIndexIndexOverlapNewEngine) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
-            .PkOverlap = false,
-            .IndexOverlap = true,
-            .WithDataColumn = false,
-            .UseNewEngine = true
-        }));
-    }*/
 
     Y_UNIT_TEST(MultiShardTableOneIndexIndexOverlapDataColumn) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
             .PkOverlap = false,
             .IndexOverlap = true,
-            .WithDataColumn = true,
-            .UseNewEngine = false
+            .WithDataColumn = true
         }));
     }
-
-/*    Y_UNIT_TEST(MultiShardTableOneIndexIndexOverlapDataColumnNewEngine) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
-           .PkOverlap = false,
-           .IndexOverlap = true,
-           .WithDataColumn = true,
-           .UseNewEngine = true
-        }));
-    }*/
 
     Y_UNIT_TEST(MultiShardTableOneIndexPkOverlap) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
            .PkOverlap = true,
            .IndexOverlap = false,
-           .WithDataColumn = false,
-           .UseNewEngine = false
+           .WithDataColumn = false
         }));
     }
-
-/*    Y_UNIT_TEST(MultiShardTableOneIndexPkOverlapNewEngine) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
-            .PkOverlap = true,
-            .IndexOverlap = false,
-            .WithDataColumn = false,
-            .UseNewEngine = true
-        }));
-    }*/
 
     Y_UNIT_TEST(MultiShardTableTwoIndexes) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 2, TRunSettings{
             .PkOverlap = false,
             .IndexOverlap = false,
-            .WithDataColumn = false,
-            .UseNewEngine = false
+            .WithDataColumn = false
         }));
     }
 
-/*    Y_UNIT_TEST(MultiShardTableTwoIndexesNewEngine) {
-        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 2, TRunSettings{
-            .PkOverlap = false,
-            .IndexOverlap = false,
-            .WithDataColumn = false,
-            .UseNewEngine = true
-        }));
-    }*/
-
-    void RunOnlineBuildTest(bool withDataColumn, bool useNewEngine) {
+    void RunOnlineBuildTest(bool withDataColumn) {
 
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -214,7 +153,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             ui32 stms =
                 IWorkLoader::LC_UPSERT |
                 (withDataColumn ? IWorkLoader::LC_ALTER_ADD_INDEX_WITH_DATA_COLUMN : IWorkLoader::LC_ALTER_ADD_INDEX);
-            workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{2000, 1, useNewEngine});
+            workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{2000, 1});
             auto checker = CreateChecker(driver);
             checker->Run("Root/Test");
             driver.Stop(true);
@@ -225,19 +164,10 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
     }
 
     Y_UNIT_TEST(OnlineBuild) {
-        RunOnlineBuildTest(false, false);
+        RunOnlineBuildTest(false);
     }
 
     Y_UNIT_TEST(OnlineBuildWithDataColumn) {
-        RunOnlineBuildTest(true, false);
+        RunOnlineBuildTest(true);
     }
-
-    Y_UNIT_TEST(OnlineBuildNewEngine) {
-        RunOnlineBuildTest(false, true);
-    }
-
-    Y_UNIT_TEST(OnlineBuildWithDataColumnNewEngine) {
-        RunOnlineBuildTest(true, true);
-    }
-
 }

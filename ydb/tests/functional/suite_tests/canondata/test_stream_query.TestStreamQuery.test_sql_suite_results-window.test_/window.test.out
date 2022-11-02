@@ -1,5 +1,4 @@
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname) ORDER BY depname, salary;
@@ -20,7 +19,6 @@ SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PA
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary);
@@ -41,7 +39,6 @@ SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITI
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT four, ten, SUM(SUM(four)) OVER w, AVG(ten) FROM tenk1
@@ -73,7 +70,6 @@ GROUP BY four, ten WINDOW w AS (PARTITION BY four) ORDER BY four, ten;
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
@@ -94,7 +90,6 @@ SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PA
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY r;
@@ -115,7 +110,6 @@ SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PA
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
@@ -136,7 +130,6 @@ SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
@@ -145,7 +138,6 @@ SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY ten ORDER BY unique2);
@@ -166,7 +158,6 @@ SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT row_number() OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY unique2);
@@ -187,7 +178,6 @@ SELECT row_number() OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY u
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
@@ -208,7 +198,6 @@ SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
@@ -229,7 +218,6 @@ SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS 
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
@@ -250,7 +238,6 @@ SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PAR
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
@@ -271,7 +258,6 @@ SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PA
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
@@ -292,7 +278,6 @@ SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
@@ -313,7 +298,6 @@ SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten);
@@ -334,7 +318,6 @@ SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WH
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT last_value(ten) OVER w, ten, four FROM
@@ -358,7 +341,6 @@ ORDER BY four, ten;
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER w AS wsum
@@ -380,7 +362,6 @@ FROM tenk1 GROUP BY ten, two WINDOW w AS (PARTITION BY two ORDER BY ten);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE unique2 < 10 WINDOW w AS (PARTITION BY four);
@@ -397,7 +378,6 @@ SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE uniq
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT (count(*) OVER w + sum(hundred) OVER w) AS cntsum
@@ -420,7 +400,6 @@ WINDOW w AS (PARTITION BY four ORDER BY ten);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT * FROM(
@@ -437,7 +416,6 @@ WHERE total <> fourcount + twosum;
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT avg(four) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY thousand / 100);
@@ -458,7 +436,6 @@ SELECT avg(four) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY 
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
@@ -480,7 +457,6 @@ FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT sum(salary),
@@ -498,7 +474,6 @@ WINDOW w1 AS (ORDER BY depname), w2 AS (ORDER BY depname DESC);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT sum(salary) OVER w1, count(*) OVER w2
@@ -520,7 +495,6 @@ FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT count(*) OVER w FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS (PARTITION BY four);
@@ -529,7 +503,6 @@ SELECT count(*) OVER w FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS (PARTI
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
@@ -550,7 +523,6 @@ SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION B
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER w, MAX(depadj) OVER w FROM(
@@ -582,7 +554,6 @@ WINDOW w AS (ORDER BY empno);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT SUM(COUNT(f1)) OVER w FROM int4_tbl WHERE f1=42 WINDOW w AS ();
@@ -594,7 +565,6 @@ SELECT SUM(COUNT(f1)) OVER w FROM int4_tbl WHERE f1=42 WINDOW w AS ();
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 select ten,
@@ -621,7 +591,6 @@ order by ten;
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 select first_value(max(x)) over w, y
@@ -642,7 +611,6 @@ select first_value(max(x)) over w, y
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT four, ten,
@@ -677,7 +645,6 @@ WINDOW w AS (partition by four order by ten);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT four, ten/4 as two,
@@ -712,7 +679,6 @@ WINDOW w AS (partition by four order by ten/4 rows between unbounded preceding a
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT sum(unique1) over w,
@@ -736,7 +702,6 @@ WINDOW w AS (rows between current row and unbounded following);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT sum(unique1) over w,
@@ -760,7 +725,6 @@ WINDOW w AS (rows between 2 preceding and 2 following);
 
 
 --!syntax_v1
-PRAGMA Kikimr.UseNewEngine="True";
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT sum(unique1) over w,

@@ -99,7 +99,6 @@ private:
 
 struct TKiExecDataQuerySettings {
     TMaybe<TString> Mode;
-    TMaybe<bool> UseNewEngine;
     TVector<NNodes::TCoNameValueTuple> Other;
 
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
@@ -243,7 +242,7 @@ NNodes::TExprBase DeduplicateByMembers(const NNodes::TExprBase& expr, const TSet
     TPositionHandle pos);
 
 // Optimizer rules
-TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, const TMaybe<bool>& useNewEngine, TExprContext& ctx);
+TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 TExprNode::TPtr KiApplyLimitToSelectRange(NNodes::TExprBase node, TExprContext& ctx);
 TExprNode::TPtr KiPushPredicateToSelectRange(NNodes::TExprBase node, TExprContext& ctx,

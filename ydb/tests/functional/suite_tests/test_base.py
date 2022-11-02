@@ -173,7 +173,7 @@ def format_yql_statement(lines_or_statement, table_path_prefix):
     if not isinstance(lines_or_statement, list):
         lines_or_statement = [lines_or_statement]
     statement = "\n".join(
-        ["PRAGMA Kikimr.UseNewEngine=\"True\";", 'pragma TablePathPrefix = "%s";' % table_path_prefix, "pragma SimpleColumns;"] + lines_or_statement)
+        ['pragma TablePathPrefix = "%s";' % table_path_prefix, "pragma SimpleColumns;"] + lines_or_statement)
     return statement
 
 

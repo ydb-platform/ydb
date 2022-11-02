@@ -28,8 +28,6 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpSlowLogNoticeThresholdMs;
     NCommon::TConfSetting<ui32, false> _KqpSlowLogTraceThresholdMs;
     NCommon::TConfSetting<ui32, false> _KqpYqlSyntaxVersion;
-    NCommon::TConfSetting<bool, false> _KqpAllowNewEngine;
-    NCommon::TConfSetting<bool, false> _KqpForceNewEngine;
     NCommon::TConfSetting<bool, false> _KqpAllowUnsafeCommit;
     NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
     NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
@@ -47,7 +45,6 @@ struct TKikimrSettings {
     NCommon::TConfSetting<TString, false> _DefaultCluster;
     NCommon::TConfSetting<ui32, false> _ResultRowsLimit;
     NCommon::TConfSetting<TString, false> CommitSafety;
-    NCommon::TConfSetting<bool, false> UseNewEngine;
     NCommon::TConfSetting<bool, false> UnwrapReadTableValues;
     NCommon::TConfSetting<bool, false> AllowNullCompareInIndex;
     NCommon::TConfSetting<bool, false> EnableSystemColumns;
@@ -74,9 +71,6 @@ struct TKikimrSettings {
     /* Accessors */
     bool HasAllowNullCompareInIndex() const;
     bool HasUnwrapReadTableValues() const;
-    bool HasAllowKqpNewEngine() const;
-    bool HasKqpForceNewEngine() const;
-    bool HasUseNewEngine() const;
     bool AllowReverseRange() const;
     bool HasDefaultCluster() const;
     bool HasAllowKqpUnsafeCommit() const;

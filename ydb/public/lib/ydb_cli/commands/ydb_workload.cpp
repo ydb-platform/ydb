@@ -37,7 +37,7 @@ TCommandWorkload::TCommandWorkload()
 {
     AddCommand(std::make_unique<TCommandStock>());
     AddCommand(std::make_unique<TCommandKv>());
-//    AddCommand(std::make_unique<TCommandClickBench>());
+    AddCommand(std::make_unique<TCommandClickBench>());
 }
 
 TWorkloadCommand::TWorkloadCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)

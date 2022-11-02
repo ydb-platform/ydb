@@ -3,11 +3,11 @@
 namespace NKikimr::NBlobDepot {
 
     TStorageStatusFlags TBlobDepotAgent::GetStorageStatusFlags() const {
-        return NKikimrBlobStorage::StatusIsValid; // FIXME: implement
+        return SpaceColorToStatusFlag(SpaceColor);
     }
 
     float TBlobDepotAgent::GetApproximateFreeSpaceShare() const {
-        return 1.0; // FIXME: implement
+        return ApproximateFreeSpaceShare;
     }
 
 } // NKikimr::NBlobDepot

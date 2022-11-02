@@ -64,6 +64,7 @@ namespace NKikimr::NBlobDepot {
         ui32 BlocksPending = 0;
         ui32 RetryCount = 0;
         THashSet<ui32> NodesWaitingForPushResult;
+        std::weak_ptr<TToken> Token;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -78,9 +79,13 @@ namespace NKikimr::NBlobDepot {
             , NodeId(nodeId)
             , IssuerGuid(issuerGuid)
             , Response(std::move(response))
+            , Token(Self->Token)
         {}
 
         bool CheckIfObsolete() {
+            if (Token.expired()) {
+                return true; // tablet is dead
+            }
             auto& block = Self->BlocksManager->Blocks[TabletId];
             if (block.BlockedGeneration == BlockedGeneration && block.IssuerGuid == IssuerGuid) {
                 return false;

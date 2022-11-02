@@ -60,6 +60,8 @@ namespace NKikimr::NBlobDepot {
         agent.AgentId = ev->Sender;
         agent.ConnectedNodeId = nodeId;
         agent.ExpirationTimestamp = TInstant::Max();
+        agent.LastPushedSpaceColor = SpaceMonitor->GetSpaceColor();
+        agent.LastPushedApproximateFreeSpaceShare = SpaceMonitor->GetApproximateFreeSpaceShare();
 
         if (agent.AgentInstanceId && *agent.AgentInstanceId != req.GetAgentInstanceId()) {
             ResetAgent(agent);
@@ -69,6 +71,8 @@ namespace NKikimr::NBlobDepot {
         OnAgentConnect(agent);
 
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId(), Executor()->Generation());
+        record->SetSpaceColor(agent.LastPushedSpaceColor);
+        record->SetApproximateFreeSpaceShare(agent.LastPushedApproximateFreeSpaceShare);
 
         for (const auto& [k, v] : ChannelKinds) {
             auto *proto = record->AddChannelKinds();
@@ -268,6 +272,23 @@ namespace NKikimr::NBlobDepot {
             for (auto& ev : events) {
                 TAutoPtr<IEventHandle> tmp(ev.release());
                 Receive(tmp, TActivationContext::AsActorContext());
+            }
+        }
+    }
+
+    void TBlobDepot::OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare) {
+        for (auto& [nodeId, agent] : Agents) {
+            if (agent.AgentId && (agent.LastPushedSpaceColor != spaceColor ||
+                    agent.LastPushedApproximateFreeSpaceShare != approximateFreeSpaceShare)) {
+                Y_VERIFY(agent.ConnectedNodeId == nodeId);
+                const ui64 id = ++agent.LastRequestId;
+                agent.PushCallbacks.emplace(id, [](TEvBlobDepot::TEvPushNotifyResult::TPtr) {});
+                auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();
+                ev->Record.SetSpaceColor(spaceColor);
+                ev->Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare);
+                Send(*agent.AgentId, ev.release(), 0, id);
+                agent.LastPushedSpaceColor = spaceColor;
+                agent.LastPushedApproximateFreeSpaceShare = approximateFreeSpaceShare;
             }
         }
     }

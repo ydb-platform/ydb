@@ -64,6 +64,10 @@ namespace NKikimr::NBlobDepot {
             return 0; // do not write data to this group
         }
 
+        if (!group.ApproximateFreeSpaceShare) { // not collected yet?
+            return 1;
+        }
+
         const float weight = group.ApproximateFreeSpaceShare < 0.25
             ? group.ApproximateFreeSpaceShare * 3
             : (group.ApproximateFreeSpaceShare + 2) / 3;
@@ -71,6 +75,22 @@ namespace NKikimr::NBlobDepot {
         const bool isCyan = group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan);
 
         return weight * 16'777'216.0f * (isCyan ? 0.5f : 1.0f /* cyan penalty */);
+    }
+
+    void TSpaceMonitor::SetSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare) {
+        if (SpaceColor != spaceColor || ApproximateFreeSpaceShare != approximateFreeSpaceShare) {
+            SpaceColor = spaceColor;
+            ApproximateFreeSpaceShare = approximateFreeSpaceShare;
+            Self->OnSpaceColorChange(SpaceColor, ApproximateFreeSpaceShare);
+        }
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E TSpaceMonitor::GetSpaceColor() const {
+        return SpaceColor;
+    }
+
+    float TSpaceMonitor::GetApproximateFreeSpaceShare() const {
+        return ApproximateFreeSpaceShare;
     }
 
     void TBlobDepot::KickSpaceMonitor() {

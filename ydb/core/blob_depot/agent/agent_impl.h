@@ -193,6 +193,8 @@ namespace NKikimr::NBlobDepot {
 
         ui32 BlobDepotGeneration = 0;
         std::optional<ui32> DecommitGroupId;
+        NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
+        float ApproximateFreeSpaceShare = 0.0f;
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);

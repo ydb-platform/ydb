@@ -65,6 +65,9 @@ namespace NKikimr::NBlobDepot {
             THashMap<ui64, THashMap<ui8, ui32>> InvalidateStepRequests;
             THashMap<ui64, std::function<void(TEvBlobDepot::TEvPushNotifyResult::TPtr)>> PushCallbacks;
             ui64 LastRequestId = 0;
+
+            NKikimrBlobStorage::TPDiskSpaceColor::E LastPushedSpaceColor = {};
+            float LastPushedApproximateFreeSpaceShare = 0.0f;
         };
 
         THashMap<TActorId, std::optional<ui32>> PipeServerToNode;
@@ -96,6 +99,7 @@ namespace NKikimr::NBlobDepot {
         TAgent& GetAgent(ui32 nodeId);
         void ResetAgent(TAgent& agent);
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
+        void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
         void ProcessRegisterAgentQ();
 

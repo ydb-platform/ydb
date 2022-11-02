@@ -75,6 +75,9 @@ namespace NKikimr::NBlobDepot {
         for (auto& [_, kind] : ChannelKinds) {
             IssueAllocateIdsIfNeeded(kind);
         }
+
+        SpaceColor = msg.GetSpaceColor();
+        ApproximateFreeSpaceShare = msg.GetApproximateFreeSpaceShare();
     }
 
     void TBlobDepotAgent::IssueAllocateIdsIfNeeded(TChannelKind& kind) {
@@ -185,6 +188,13 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA12, "TrimChannel", (VirtualGroupId, VirtualGroupId),
                 (Channel, int(channel)), (NumAvailableItemsBefore, numAvailableItemsBefore),
                 (NumAvailableItemsAfter, kind.GetNumAvailableItems()));
+        }
+
+        if (msg.HasSpaceColor()) {
+            SpaceColor = msg.GetSpaceColor();
+        }
+        if (msg.HasApproximateFreeSpaceShare()) {
+            ApproximateFreeSpaceShare = msg.GetApproximateFreeSpaceShare();
         }
 
         // it is essential to send response through the pipe -- otherwise we can break order with, for example, commits:

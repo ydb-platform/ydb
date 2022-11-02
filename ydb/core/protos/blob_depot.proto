@@ -1,5 +1,6 @@
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
 
 package NKikimrBlobDepot;
 
@@ -83,6 +84,8 @@ message TEvRegisterAgentResult {
     optional uint32 Generation = 1;
     repeated TChannelKind ChannelKinds = 2;
     optional uint32 DecommitGroupId = 3;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 4;
+    optional float ApproximateFreeSpaceShare = 5;
 }
 
 message TEvAllocateIds {
@@ -120,6 +123,8 @@ message TEvPushNotify {
     }
     repeated TBlockedTablet BlockedTablets = 1;
     repeated TInvalidatedStep InvalidatedSteps = 2;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 3;
+    optional float ApproximateFreeSpaceShare = 4;
 }
 
 message TEvPushNotifyResult {

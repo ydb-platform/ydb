@@ -289,19 +289,19 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
         env.SetLimits(1, 10, 1, 10);
 
         // Mark node as down and try to lock it.
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
 
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
 
         // Now node is locked and we cannot lock this or another node.
         env.CheckPermissionRequest("user", false, false, false,
                                    true, TStatus::DISALLOW_TEMP,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
         env.CheckPermissionRequest("user", false, false, false,
                                    true, TStatus::DISALLOW_TEMP,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
     }
 
     void TestScheduledPermission(bool defaultPolicy)

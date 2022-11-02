@@ -855,10 +855,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TCmsTestEnv env(8);
 
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
 
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
-                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
     void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes)
@@ -867,6 +867,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                  || mode == MODE_FORCE_RESTART);
 
         TCmsTestEnv env(8);
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", false, false, false,
@@ -932,6 +933,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                  || mode == MODE_FORCE_RESTART);
 
         TCmsTestEnv env(8);
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", true, false, true,
@@ -1072,7 +1074,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     }
 
     Y_UNIT_TEST(StateStorageTwoRings)
-    {   
+    {
         TTestEnvOpts options(5);
         options.VDisks = 0;
         options.NRings = 2;
@@ -1080,11 +1082,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         options.NToSelect = 2;
 
         TCmsTestEnv env(options);
-        
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
         
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
     }
 
@@ -1097,6 +1100,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         options.NToSelect = 2;
 
         TCmsTestEnv env(options);
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
@@ -1106,16 +1110,38 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     }
 
     Y_UNIT_TEST(StateStorageAvailabilityMode)
-    {   
-        TTestEnvOpts options(5);
+    {
+        TTestEnvOpts options(10);
         options.VDisks = 0;
-        options.NRings = 2;
+        options.NRings = 5;
         options.RingSize = 2;
-        options.NToSelect = 2;
+        options.NToSelect = 5;
 
         TCmsTestEnv env(options);
-        
+
         TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageTwoBrokenRings)
+    {   
+        TTestEnvOpts options(10);
+        options.VDisks = 0;
+        options.NRings = 5;
+        options.RingSize = 2;
+        options.NToSelect = 5;
+ 
+        TCmsTestEnv env(options);
+
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
+
         env.RestartCms();
 
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
@@ -1125,35 +1151,13 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(StateStorageTwoBrokenRings)
-    {   
-        TTestEnvOpts options(7);
-        options.VDisks = 0;
-        options.NRings = 3;
-        options.RingSize = 2;
-        options.NToSelect = 2;
- 
-        TCmsTestEnv env(options);
-
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
-
-        env.RestartCms();
-
-        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
-                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-        
-        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
-                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    }
-
     Y_UNIT_TEST(StateStorageRollingRestart) 
     {
         TTestEnvOpts options(20);
         options.VDisks = 0;
         options.NRings = 6;
         options.RingSize = 3;
-        options.NToSelect = 5;
+        options.NToSelect = 6;
  
         TCmsTestEnv env(options);
 
@@ -1223,6 +1227,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(WalleCleanupTest)
     {
         TCmsTestEnv env(8);
+        env.RestartCms();
 
         TAutoPtr<NCms::TEvCms::TEvPermissionRequest> event = new NCms::TEvCms::TEvPermissionRequest;
         event->Record.SetUser(WALLE_CMS_USER);
@@ -1230,7 +1235,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         event->Record.SetDryRun(false);
         event->Record.SetSchedule(false);
 
-        AddActions(event, MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 600000000, "storage"));
+        AddActions(event, MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 6000000000, "storage"));
 
         NKikimrCms::TPermissionResponse res;
         res = env.CheckPermissionRequest(event, TStatus::ALLOW);
@@ -1291,16 +1296,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
     }
 
-
     Y_UNIT_TEST(Mirror3dcPermissions) 
     {
         TTestEnvOpts options(18);
         options.UseMirror3dcErasure = true;
         options.VDisks = 9;
-        options.NRings = 3;
         options.DataCenterCount = 3;
-        options.RingSize = 2;
-        options.NToSelect = 2;
 
         TCmsTestEnv env(options);
 
@@ -1337,6 +1338,34 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageLockedNodes)
+    {
+        TTestEnvOpts options(10);
+        options.VDisks = 0;
+        options.NRings = 9;
+        options.RingSize = 1;
+        options.NToSelect = 9;
+
+        TCmsTestEnv env(options);
+
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
+
+        // Node downtime simulation
+        env.UpdateNodeStartTime(3, env.GetTimeProvider()->Now() + TDuration::Minutes(1));
+        env.UpdateNodeStartTime(4, env.GetTimeProvider()->Now() + TDuration::Minutes(1));
+
+        env.AdvanceCurrentTime(TDuration::Seconds(90));
+        env.RestartCms();
+
+        // Cant allow to restart ring when 2 restart 2 locked
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+        // Can get node from locked ring
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
     }
 }
 } // NCmsTest

@@ -244,7 +244,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
     else
         numGroups = numNodes * numNodeGroups;
 
-    auto now = Now();
+    auto now = runtime.GetTimeProvider()->Now();
     for (ui32 groupId = 0; groupId < numGroups; ++groupId) {
         auto &group = *config->AddGroup();
         group.SetGroupId(groupId);
@@ -562,6 +562,9 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0);
     cmsConfig.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
     SetCmsConfig(cmsConfig);
+    
+    // Need to allow restart state storage nodes
+    AdvanceCurrentTime(TDuration::Minutes(2));
 }
 
 

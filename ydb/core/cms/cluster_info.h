@@ -6,7 +6,9 @@
 #include "services.h"
 
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/actors/core/actor.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -16,6 +18,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/set.h>
+#include "util/generic/ptr.h"
 
 namespace NKikimr {
 namespace NCms {
@@ -328,6 +331,7 @@ public:
     TString Tenant;
     TString PreviousTenant;
     TServices Services;
+    TInstant StartTime;
 };
 using TNodeInfoPtr = TIntrusivePtr<TNodeInfo>;
 
@@ -452,6 +456,83 @@ struct TBSGroupInfo {
 };
 
 /**
+ * Structure to hold info and state for a state storage. It helps to 
+ * avoid the situation when we quickly unlock one state stotage node and 
+ * immediately lock another node from different ring
+ */
+class TStateStorageRingInfo : public TThrRefBase {
+public:
+
+    /**
+     * Ok:          we can allow to restart nodes;
+     * 
+     * Locked:      all nodes are up. We restarted some nodes before and waiting 
+     *              some timeout to allow restart nodes from other ring.
+     *              But, we still can restart nodes from this ring;
+     * 
+     * Disabled:    Disabled ring (see state storage config). The ring 
+     *              affects permissions of other rings, but this ring 
+     *              can be disabled without considering the others;
+     *
+     * Restart:     has some restarting or down nodes. We can still restart
+     *              nodes from this ring;
+    */
+    enum RingState : ui8 {
+        Unknown = 0,
+        Ok,
+        Locked,
+        Disabled,
+        Restart,
+    };
+
+    TStateStorageRingInfo() = default;
+    TStateStorageRingInfo(const TStateStorageRingInfo &other) = default;
+    TStateStorageRingInfo(TStateStorageRingInfo &&other) = default;
+
+    TStateStorageRingInfo &operator=(const TStateStorageRingInfo &other) = default;
+    TStateStorageRingInfo &operator=(TStateStorageRingInfo &&other) = default;
+    
+    static TString RingStateToString(RingState state) {
+        switch (state) {
+            case Unknown:
+                return "Unknown";
+                break;
+            case Ok:
+                return "Ok";
+                break;
+            case Locked:
+                return "Locked";
+                break;
+            case Restart:
+                return "Restart";
+                break;
+            default:
+                return "Unknown ring state";
+                break;
+        }
+    }
+
+    void AddNode(TNodeInfoPtr &node) {
+        Replicas.push_back(node);
+    }
+
+    void SetDisabled() {
+        IsDisabled = true;
+    }
+
+    RingState CountState(TInstant now, 
+                         TDuration retryTime,
+                         TDuration duration) const;
+
+    ui32 RingId = 0;
+    bool IsDisabled = false;
+    const TDuration Timeout = TDuration::Minutes(2);
+
+    TVector<TNodeInfoPtr> Replicas;
+};
+using TStateStorageRingInfoPtr = TIntrusivePtr<TStateStorageRingInfo>;
+
+/**
  * Main class to hold current cluster state.
  *
  * State is built by merging pieces of information from NodeWhiteboard through
@@ -474,6 +555,21 @@ public:
 
     TClusterInfo &operator=(const TClusterInfo &other) = default;
     TClusterInfo &operator=(TClusterInfo &&other) = default;
+
+    void ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info);
+
+    bool IsStateStorageReplicaNode(ui32 nodeId) {
+        return StateStorageReplicas.contains(nodeId);
+    }
+    
+    bool IsStateStorageinfoReceived() {
+        return StateStorageInfoReceived;
+    }
+    
+    ui32 GetRingId(ui32 nodeId) {
+        Y_VERIFY(IsStateStorageReplicaNode(nodeId));
+        return StateStorageNodeToRingId[nodeId];
+    }
 
     bool HasNode(ui32 nodeId) const
     {
@@ -823,16 +919,22 @@ private:
     ui64 RollbackPoint = 0;
     bool HasTenantsInfo = false;
     bool Outdated = false;
+    bool StateStorageInfoReceived;
 
     // Fast access structures.
     TMultiMap<TString, ui32> HostNameToNodeId;
     TMultiMap<TString, ui32> TenantToNodeId;
     THashMap<TString, TLockableItemPtr> LockableItems;
+    THashSet<ui32> StateStorageReplicas;
+    THashMap<ui32, ui32> StateStorageNodeToRingId;
 public:
 
     bool IsLocalBootConfDiffersFromConsole = false;
     THashMap<NKikimrConfig::TBootstrap::ETabletType, TVector<ui32>> TabletTypeToNodes;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
+
+    TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
+    TVector<TStateStorageRingInfoPtr> StateStorageRings;
 };
 
 inline bool ActionRequiresHost(NKikimrCms::TAction::EType type)

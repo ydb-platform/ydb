@@ -38,6 +38,7 @@ public:
         , Info(new TClusterInfo)
         , BootstrapConfigReceived(false)
         , BaseConfigReceived(false)
+        , StateStorageInfoReceived(false)
     {
     }
 
@@ -48,6 +49,9 @@ private:
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvWakeup, ReplyAndDie);
             hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+
+            // State Storage Config
+            hFunc(TEvStateStorage::TEvListStateStorageResult, Handle);
 
             // Nodes
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
@@ -84,6 +88,10 @@ private:
     //Configs
     void RequestBootstrapConfig();
     void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev);
+    
+    // State Storage
+    void RequestStateStorageConfig();
+    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr &ev);
 
     // BSC
     void RequestBaseConfig();
@@ -113,6 +121,7 @@ private:
     TActorId BscPipe;
     bool BootstrapConfigReceived;
     bool BaseConfigReceived;
+    bool StateStorageInfoReceived;
     THashMap<ui32, TSet<ui32>> NodeEvents; // nodeId -> expected events
     THashMap<TPDiskID, TPDiskStateInfo, TPDiskIDHash> PDiskInfo;
     THashMap<TVDiskID, TVDiskStateInfo> VDiskInfo;
@@ -121,7 +130,9 @@ private:
 
 void TInfoCollector::ReplyAndDie() {
     auto ev = MakeHolder<TCms::TEvPrivate::TEvClusterInfo>();
-    ev->Success = BaseConfigReceived && BootstrapConfigReceived;
+    ev->Success = BaseConfigReceived 
+                  && BootstrapConfigReceived
+                  && StateStorageInfoReceived;
 
     if (BaseConfigReceived) {
         for (const auto& [id, info] : PDiskInfo) {
@@ -136,12 +147,18 @@ void TInfoCollector::ReplyAndDie() {
         ev->Info->SetTimestamp(TlsActivationContext->Now());
     }
 
+    if (StateStorageInfoReceived) {
+        Info->ApplyStateStorageInfo(Info->StateStorageInfo);
+    }
+
     Send(Client, std::move(ev));
     PassAway();
 }
 
 void TInfoCollector::MaybeReplyAndDie() {
-    if (!BaseConfigReceived || !BootstrapConfigReceived) {
+    if (!BaseConfigReceived 
+        || !BootstrapConfigReceived
+        || !StateStorageInfoReceived) {
         return;
     }
 
@@ -170,6 +187,7 @@ void TInfoCollector::Bootstrap() {
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
     Schedule(Timeout, new TEvents::TEvWakeup());
     RequestBootstrapConfig();
+    RequestStateStorageConfig();
     Become(&TThis::StateWork);
 }
 
@@ -196,7 +214,6 @@ void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev
     if (!config->HasBootstrapConfig()){
         LOG_I("Couldn't collect bootstrap config from Console. Taking the local config");
         bootstrap.CopyFrom(AppData()->BootstrapConfig); 
-        return;
     } else {
         LOG_D("Got Bootstrap config"
               << ": record# " <<  config->ShortDebugString());
@@ -207,8 +224,32 @@ void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev
         }
         bootstrap = config->GetBootstrapConfig();
     }
- 
+
     Info->ApplySysTabletsInfo(bootstrap);
+    MaybeReplyAndDie();
+}
+
+void TInfoCollector::RequestStateStorageConfig() {
+    const auto& domains = *AppData()->DomainsInfo;
+    ui32 domainUid = domains.Domains.begin()->second->DomainUid;
+    const ui32 stateStorageGroup = domains.GetDefaultStateStorageGroup(domainUid);
+
+    const TActorId proxy = MakeStateStorageProxyID(stateStorageGroup);
+
+    Send(proxy, new TEvStateStorage::TEvListStateStorage());
+}
+
+void TInfoCollector::Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev) {
+    auto& info = ev->Get()->Info;
+    if (!info) {
+        LOG_E("Couldn't collect state storage config");
+        ReplyAndDie();
+        return;
+    }
+
+    StateStorageInfoReceived = true;
+    Info->StateStorageInfo = info;
+
     MaybeReplyAndDie();
 }
 

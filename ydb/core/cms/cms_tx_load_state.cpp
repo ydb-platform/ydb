@@ -197,7 +197,6 @@ public:
         Self->ScheduleLogCleanup(ctx);
         Self->ScheduleUpdateClusterInfo(ctx, true);
         Self->ProcessInitQueue(ctx);
-        Self->RequestStateStorageConfig(ctx);
     }
 };
 

@@ -3,6 +3,7 @@
 
 #include <util/string/builder.h>
 #include <util/system/hostname.h>
+#include <util/datetime/base.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
 #error log macro definition clash
@@ -298,6 +299,40 @@ void TVDiskInfo::MigrateOldInfo(const TLockableItem &old)
     }
 }
 
+TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now, 
+                                                                   TDuration retryTime,
+                                                                   TDuration duration) const 
+{
+    if (IsDisabled) {
+        return Disabled;
+    }
+
+    ui32 unavailableReplicas = 0;
+    bool hasTimeout = false;
+    TErrorInfo error;
+    for (auto &node : Replicas) {
+        if (node->IsDown(error, now + retryTime)
+            || node->IsLocked(error, retryTime, now, duration)) {
+            ++unavailableReplicas;
+            continue;
+        }
+
+        if (now <= node->StartTime + Timeout) {
+            hasTimeout = true;
+        }
+    }
+
+    if (unavailableReplicas > 0) {
+        return Restart;
+    }
+
+    if (hasTimeout) {
+        return Locked;
+    }
+
+    return Ok;
+}
+
 void TClusterInfo::SetTimestamp(TInstant timestamp)
 {
     Timestamp = timestamp;
@@ -347,6 +382,7 @@ void TClusterInfo::SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKi
 
     auto &node = NodeRef(nodeId);
     node.State = state;
+    node.StartTime = TInstant::MilliSeconds(info.GetStartTime());
     node.Version = info.GetVersion();
 
     node.Services = TServices();
@@ -795,6 +831,26 @@ void TClusterInfo::ApplySysTabletsInfo(const NKikimrConfig::TBootstrap& config) 
             TabletTypeToNodes[tablet.GetType()].push_back(nodeId);
             NodeToTabletTypes[nodeId].push_back(tablet.GetType());
         }
+    }
+}
+
+void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
+    StateStorageInfoReceived = true;
+    for (ui32 ringId = 0; ringId < info->Rings.size(); ++ringId) {
+        auto &ring = info->Rings[ringId];
+        TStateStorageRingInfoPtr ringInfo = MakeIntrusive<TStateStorageRingInfo>();
+        ringInfo->RingId = ringId;
+        if (ring.IsDisabled)
+            ringInfo->SetDisabled();
+
+        for(auto replica : ring.Replicas) {
+            Y_VERIFY(HasNode(replica.NodeId()));
+            ringInfo->AddNode(Nodes[replica.NodeId()]);
+            StateStorageReplicas.insert(replica.NodeId());
+            StateStorageNodeToRingId[replica.NodeId()] = ringId;
+        }
+
+        StateStorageRings.push_back(ringInfo);
     }
 }
 

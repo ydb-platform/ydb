@@ -36,8 +36,7 @@ The *BRO* has the following properties:
 
 ## Guarantees {#guarantees}
 
-* At every point in time, a *BRO* is run in no more than 1 instance per table.
-* *BROs* are run no more than once per hour for the same shard.
+* For the same partition *BRO* is run at the intervals set in the TTL settings. The default run interval is 1 hour, the minimum allowable value is 15 minutes.
 * Data consistency is guaranteed. The TTL column value is re-checked during the delete stage. This means that if the TTL column value is updated between stages 1 and 2 (for example, with `UPDATE`) and ceases to meet the delete criteria, the row will not be deleted.
 
 ## Limitations {#restrictions}

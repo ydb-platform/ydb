@@ -136,28 +136,28 @@ if err != nil {
 Query results:
 
 ```go
-	var (
-		id    *uint64
-		title *string
-		date  *[]byte
-	)
+  var (
+    id    *uint64
+    title *string
+    date  *[]byte
+  )
   log.Println("> select_simple_transaction:")
-	for res.NextResultSet(ctx, "series_id", "title", "release_date") {
-		for res.NextRow() {
-			err = res.Scan(&id, &title, &date)
-			if err != nil {
-				return err
-			}
+  for res.NextResultSet(ctx, "series_id", "title", "release_date") {
+    for res.NextRow() {
+      err = res.Scan(&id, &title, &date)
+      if err != nil {
+        return err
+      }
       log.Printf(
         "#  SeriesID: %d , Title: %s, Date: %s\n",
         *id, *title, *date,
       )
-		}
-	}
-	if err = res.Err(); err != nil {
-		return err
-	}
-	return nil
+    }
+  }
+  if err = res.Err(); err != nil {
+    return err
+  }
+  return nil
 }
 ```
 
@@ -209,4 +209,3 @@ Query results:
 ```
 
 {% include [error_handling.md](../_includes/steps/50_error_handling.md) %}
-

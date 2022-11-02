@@ -1,9 +1,0 @@
-items:
-- name: Overview
-  href: index.md
-- name: Random choice
-  href: random_choice.md
-- name: Prefer the nearest data center
-  href: prefer_local.md
-- name: Prefer the availability zone
-  href: prefer_location.md

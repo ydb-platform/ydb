@@ -27,8 +27,8 @@ Next, from the same working directory, run the command to start the test app. Th
 
 Main driver initialization parameters
 * A connection string containing details about an [endpoint](../../../../concepts/connect.md#endpoint) and [database](../../../../concepts/connect.md#database). This is the only parameter that is required.
-* [Authentication](../../auth.md##auth-provider) provider. Unless explicitly specified, an [anonymous connection](../../../../concepts/auth.md) is used.
-* [Session pool](../../recipes/session_pool_limit/index.md) settings
+* [Authentication](../../recipes/auth.md##auth-provider) provider. Unless explicitly specified, an [anonymous connection](../../../../concepts/auth.md) is used.
+* [Session pool](../../recipes/session-pool-limit.md) settings
 
 App code snippet for driver initialization:
 

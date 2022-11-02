@@ -24,17 +24,19 @@ To work with `YDB` in `Go`, import the `ydb-go-sdk` driver package:
 
 ```go
 import (
-  // general imports
+  // general imports from standard library
   "context"
+  "log"
   "path"
 
   // importing the packages ydb-go-sdk
   "github.com/ydb-platform/ydb-go-sdk/v3"
-  "github.com/ydb-platform/ydb-go-sdk/v3/table" // needed to work with the table service
- "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // needed to work with the table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // needed to work with the table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // needed to work with the table service
-  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // needed to authenticate using the environment variables
+  "github.com/ydb-platform/ydb-go-sdk/v3/table" // needed to work with table service
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // needed to work with table service
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // needed to work with table service
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // needed to work with table service
+  "github.com/ydb-platform/ydb-go-sdk/v3/table/types" // needed to work with YDB types and values
+  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // needed to authenticate using environment variables
   "github.com/ydb-platform/ydb-go-yc" // to work with YDB in Yandex Cloud
 )
 ```
@@ -48,8 +50,7 @@ dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8s
 // IAM token
 token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
 // create a connection object called db, it is an entry point for YDB services
-db, err := ydb.Open(ctx,
-  dsn,
+db, err := ydb.Open(ctx,  dsn,
 //  yc.WithInternalCA(), // use Yandex Cloud certificates
   ydb.WithAccessTokenCredentials(token), // authenticate using the token
 //  ydb.WithAnonimousCredentials(), // authenticate anonymously (for example, using docker ydb)
@@ -61,9 +62,7 @@ if err != nil {
   // handle a connection error
 }
 // driver must be closed when done
-defer func() {
-  _ = db.Close(ctx)
-}
+defer db.Close(ctx)
 ```
 
 The `db` object is an input point for working with `YDB` services.
@@ -77,8 +76,7 @@ The session has an exhaustive `API` that lets you perform `DDL`, `DML`, `DQL`, a
 To create tables, use the `table.Session.CreateTable()` method:
 
 ```go
-err = db.Table().Do(
-  ctx,
+err = db.Table().Do(ctx,
   func(ctx context.Context, s table.Session) (err error) {
     return s.CreateTable(ctx, path.Join(db.Name(), "series"),
       options.WithColumn("series_id", types.TypeUint64),  // not null column
@@ -95,11 +93,10 @@ if err != nil {
 }
 ```
 
-You can use the `table.Session.DescribeTable()` method to output information about the table structure and make sure that it was properly created:
+You can use the `table.Session.DescribeTable()` method to print information about the table structure and make sure that it was properly created:
 
 ```go
-err = db.Table().Do(
-  ctx,
+err = db.Table().Do(ctx,
   func(ctx context.Context, s table.Session) (err error) {
     desc, err := s.DescribeTable(ctx, path.Join(db.Name(), "series"))
     if err != nil {
@@ -113,7 +110,7 @@ err = db.Table().Do(
   }
 )
 if err != nil {
-  // handling a situation when a query has failed
+  // handling query execution failure
 }
 ```
 
@@ -131,8 +128,7 @@ var (
     table.CommitTx(),
   )
 )
-err := db.Table().Do(
-  ctx,
+err := db.Table().Do(ctx,
   func(ctx context.Context, s table.Session) (err error) {
     var (
       res   result.Result
@@ -153,17 +149,15 @@ err := db.Table().Do(
           series
         WHERE
           series_id = $seriesID;
-      `,
-      table.NewQueryParameters(
+      `
+,      table.NewQueryParameters(
         table.ValueParam("$seriesID", types.Uint64Value(1)), // insert into the query criteria
       ),
     )
     if err != nil {
       return err
     }
-    defer func() {
-      _ = res.Close() // result must be closed
-    }()
+    defer res.Close() // result must be closed
     log.Printf("> select_simple_transaction:\n")
     for res.NextResultSet(ctx) {
       for res.NextRow() {
@@ -205,8 +199,7 @@ var (
   `
   res result.StreamResult
 )
-err = c.Do(
-  ctx,
+err = c.Do(ctx,
   func(ctx context.Context, s table.Session) (err error) {
     res, err = s.StreamExecuteScanQuery(ctx, query,
       table.NewQueryParameters(
@@ -221,9 +214,7 @@ err = c.Do(
     if err != nil {
       return err
     }
-    defer func() {
-      _ = res.Close() // result must be closed
-    }()
+    defer res.Close() // be sure to close the result
     var (
       seriesID uint64
       seasonID uint64

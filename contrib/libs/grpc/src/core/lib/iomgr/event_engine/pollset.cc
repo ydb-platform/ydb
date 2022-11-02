@@ -16,7 +16,7 @@
 #ifdef GRPC_USE_EVENT_ENGINE
 #include <grpc/event_engine/event_engine.h>
 
-#include "src/core/lib/iomgr/event_engine/pollset.h"
+#error #include "src/core/lib/iomgr/event_engine/pollset.h"
 #include "src/core/lib/iomgr/iomgr_internal.h"
 #include "src/core/lib/iomgr/pollset.h"
 #include "src/core/lib/iomgr/pollset_set.h"

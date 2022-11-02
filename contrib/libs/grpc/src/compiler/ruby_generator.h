@@ -15,16 +15,16 @@
  * limitations under the License.
  *
  */
-#include <memory>
 
-#include <grpc/grpc.h>
-#include <grpcpp/security/auth_context.h>
+#ifndef GRPC_INTERNAL_COMPILER_RUBY_GENERATOR_H
+#define GRPC_INTERNAL_COMPILER_RUBY_GENERATOR_H
 
-namespace grpc {
+#include "src/compiler/config.h"
 
-std::shared_ptr<const AuthContext> CreateAuthContext(grpc_call* call) {
-  (void)call;
-  return std::shared_ptr<const AuthContext>();
-}
+namespace grpc_ruby_generator {
 
-}  // namespace grpc
+TString GetServices(const grpc::protobuf::FileDescriptor* file);
+
+}  // namespace grpc_ruby_generator
+
+#endif  // GRPC_INTERNAL_COMPILER_RUBY_GENERATOR_H

@@ -17,8 +17,8 @@
 #include <grpc/event_engine/event_engine.h>
 
 #include "src/core/lib/iomgr/closure.h"
-#include "src/core/lib/iomgr/event_engine/closure.h"
-#include "src/core/lib/iomgr/event_engine/pollset.h"
+#error #include "src/core/lib/iomgr/event_engine/closure.h"
+#error #include "src/core/lib/iomgr/event_engine/pollset.h"
 #include "src/core/lib/transport/error_utils.h"
 
 namespace grpc_event_engine {

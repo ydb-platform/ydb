@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2017 gRPC authors.
+ * Copyright 2015 gRPC authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,4 +16,17 @@
  *
  */
 
-#include <grpcpp/support/error_details.h>
+#ifndef GRPC_INTERNAL_COMPILER_CSHARP_GENERATOR_H
+#define GRPC_INTERNAL_COMPILER_CSHARP_GENERATOR_H
+
+#include "src/compiler/config.h"
+
+namespace grpc_csharp_generator {
+
+TString GetServices(const grpc::protobuf::FileDescriptor* file,
+                        bool generate_client, bool generate_server,
+                        bool internal_access);
+
+}  // namespace grpc_csharp_generator
+
+#endif  // GRPC_INTERNAL_COMPILER_CSHARP_GENERATOR_H

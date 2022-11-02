@@ -29,9 +29,9 @@
 #include <grpc/support/sync.h>
 
 #include "src/core/lib/debug/trace.h"
-#import "src/core/lib/iomgr/cfstream_handle.h"
+#error #import "src/core/lib/iomgr/cfstream_handle.h"
 #include "src/core/lib/iomgr/closure.h"
-#include "src/core/lib/iomgr/error_cfstream.h"
+#error #include "src/core/lib/iomgr/error_cfstream.h"
 #include "src/core/lib/iomgr/ev_apple.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 

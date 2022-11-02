@@ -23,89 +23,24 @@ Below are examples of the code for authentication based on a username and token 
 - Go (native)
 
    You can pass the username and password in the connection string. For example:
+
    ```shell
    "grpcs://login:password@localohost:2135/local"
    ```
 
    You can also explicitly pass them using the `ydb.WithStaticCredentials` parameter:
-   ```go
-   package main
 
-   import (
-     "context"
-     "os"
-
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-   )
-
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-         os.Getenv("YDB_CONNECTION_STRING"),
-         ydb.WithStaticCredentials("user", "password"),
-     )
-     if err != nil {
-         panic(err)
-     }
-     defer db.Close(ctx)
-     ...
-   }
-   ```
+  {% include [auth-static-with-native](../../../../_includes/go/auth-static-with-native.md) %}
 
 - Go (database/sql)
 
    You can pass the username and password in the connection string. For example:
-   ```go
-   package main
 
-   import (
-     "context"
-
-     _ "github.com/ydb-platform/ydb-go-sdk/v3"
-   )
-
-   func main() {
-     db, err := sql.Open("ydb", "grpcs://login:password@localohost:2135/local")
-     if err != nil {
-         panic(err)
-     }
-     defer db.Close()
-     ...
-   }
-   ```
+  {% include [auth-static-database-sql](../../../../_includes/go/auth-static-database-sql.md) %}
 
    You can also explicitly pass the username and password at driver initialization via a connector using the `ydb.WithStaticCredentials` parameter:
-   ```go
-   package main
 
-   import (
-     "context"
-     "os"
-
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-   )
-
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     nativeDriver, err := ydb.Open(ctx,
-         os.Getenv("YDB_CONNECTION_STRING"),
-         ydb.WithStaticCredentials("user", "password"),
-     )
-     if err != nil {
-         panic(err)
-     }
-     defer nativeDriver.Close(ctx)
-     connector, err := ydb.Connector(nativeDriver)
-     if err != nil {
-       panic(err)
-     }
-     db := sql.OpenDB(connector)
-     defer db.Close()
-     ...
-   }
-   ```
+  {% include [auth-static-with-database-sql](../../../../_includes/go/auth-static-with-database-sql.md) %}
 
 - Java
 
@@ -125,6 +60,5 @@ Below are examples of the code for authentication based on a username and token 
       transport.close();
   }
   ```
-
 
 {% endlist %}

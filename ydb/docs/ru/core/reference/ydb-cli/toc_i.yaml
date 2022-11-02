@@ -99,6 +99,8 @@ items:
       href: commands/workload/index.md
     - name: Stock нагрузка
       href: commands/workload/stock.md
+    - name: ClickBench нагрузка
+      href: commands/workload/click-bench.md
     - name: Key-Value нагрузка
       href: workload-kv.md
 

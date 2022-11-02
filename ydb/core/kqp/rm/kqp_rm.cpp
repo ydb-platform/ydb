@@ -638,9 +638,23 @@ private:
         LOG_D("Subscribed for config changes");
     }
 
+    static void UpdatePatternCache(bool enable, std::shared_ptr<NMiniKQL::TComputationPatternLRUCache>& cache) {
+        if (enable) {
+            if (!cache) {
+                cache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>();
+            }
+        } else {
+            cache.reset();
+        }
+    }
+
     void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto& event = ev->Get()->Record;
         Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(event), IEventHandle::FlagTrackDelivery, ev->Cookie);
+
+        const auto& tsConfig = event.MutableConfig()->GetTableServiceConfig();
+        UpdatePatternCache(tsConfig.GetEnableKqpPatternCacheLiteral(), LiteralPatternCache);
+        UpdatePatternCache(tsConfig.GetEnableKqpPatternCacheCompute(), ComputeActorPatternCache);
 
         auto& config = *event.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
 

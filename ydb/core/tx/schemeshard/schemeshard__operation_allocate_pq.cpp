@@ -196,7 +196,7 @@ public:
             return result;
         }
 
-        pqGroupInfo->AlterVersion = allocateDesc.GetAlterVersion() + 1;
+        pqGroupInfo->AlterVersion = allocateDesc.GetAlterVersion();
 
         if (!allocateDesc.HasPQTabletConfig()) {
             auto errStr = TStringBuilder() << "No PQTabletConfig specified";

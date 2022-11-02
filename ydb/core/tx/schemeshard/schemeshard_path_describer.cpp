@@ -486,6 +486,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 }
             }
         }
+        allocate->SetAlterVersion(pqGroupInfo->AlterVersion);
     }
 
     Y_VERIFY_DEBUG(!Result->PreSerializedData.empty());

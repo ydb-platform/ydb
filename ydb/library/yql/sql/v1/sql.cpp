@@ -4973,7 +4973,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             switch (token.GetId()) {
                 case SQLv1LexerTokens::TOKEN_NOT: opName = "Not"; break;
                 case SQLv1LexerTokens::TOKEN_PLUS: opName = "Plus"; break;
-                case SQLv1LexerTokens::TOKEN_MINUS: opName = "Minus"; break;
+                case SQLv1LexerTokens::TOKEN_MINUS: opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus"; break;
                 case SQLv1LexerTokens::TOKEN_TILDA: opName = "BitNot"; break;
                 default:
                     Ctx.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
@@ -5326,15 +5326,15 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                 Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
                 break;
             case SQLv1LexerTokens::TOKEN_PLUS:
-                opName = "+";
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
                 break;
             case SQLv1LexerTokens::TOKEN_MINUS:
-                opName = "-";
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
                 break;
             case SQLv1LexerTokens::TOKEN_ASTERISK:
-                opName = "*";
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
                 break;
             case SQLv1LexerTokens::TOKEN_SLASH:
@@ -5342,10 +5342,12 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                 Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
                 if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
                     partialResult = new TCallNodeImpl(pos, "SafeCast", {std::move(partialResult), BuildDataType(pos, "Double")});
+                } else if (Ctx.Scoped->PragmaCheckedOps) {
+                    opName = "CheckedDiv";
                 }
                 break;
             case SQLv1LexerTokens::TOKEN_PERCENT:
-                opName = "%";
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
                 break;
             default:
@@ -9434,7 +9436,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     }
 
     const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf";
-    static const THashSet<TStringBuf> lexicalScopePragmas = {"classicdivision", "strictjoinkeytypes", "disablestrictjoinkeytypes"};
+    static const THashSet<TStringBuf> lexicalScopePragmas = {"classicdivision", "strictjoinkeytypes", "disablestrictjoinkeytypes", "checkedops"};
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     for (auto pragmaValue : pragmaValues) {
         if (pragmaValue->HasAlt_pragma_value3()) {
@@ -9741,6 +9743,13 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return {};
             }
             Ctx.IncrementMonCounter("sql_pragma", "ClassicDivision");
+        } else if (normalizedPragma == "checkedops") {
+            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx.Scoped->PragmaCheckedOps)) {
+                Error() << "Expected boolean literal as a single argument for: " << pragma;
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+            Ctx.IncrementMonCounter("sql_pragma", "CheckedOps");
         } else if (normalizedPragma == "disableunordered") {
             Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
                 << "Use of deprecated DisableUnordered pragma. It will be dropped soon";

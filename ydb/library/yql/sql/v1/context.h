@@ -48,6 +48,7 @@ namespace NSQLTranslationV1 {
         TString CurrService;
         TDeferredAtom CurrCluster;
         bool PragmaClassicDivision = true;
+        bool PragmaCheckedOps = false;
         bool StrictJoinKeyTypes = false;
         TNamedNodesMap NamedNodes;
 

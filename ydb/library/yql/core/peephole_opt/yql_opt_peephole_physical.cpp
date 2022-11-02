@@ -6111,6 +6111,95 @@ TExprNode::TPtr DropToFlowDeps(const TExprNode::TPtr& node, TExprContext& ctx) {
     return ctx.ChangeChildren(*node, std::move(children));
 }
 
+TExprNode::TPtr BuildCheckedBinaryOpOverDecimal(TPositionHandle pos, TStringBuf op, const TExprNode::TPtr& lhs, const TExprNode::TPtr& rhs, const TTypeAnnotationNode& resultType, TExprContext& ctx) {
+    auto typeNode = ExpandType(pos, resultType, ctx);
+    return ctx.Builder(pos)
+        .Callable("SafeCast")
+            .Callable(0, op)
+                .Callable(0, "SafeCast")
+                    .Callable(0, "SafeCast")
+                        .Add(0, lhs)
+                        .Add(1, typeNode)
+                    .Seal()
+                    .Callable(1, "DataType")
+                        .Atom(0, "Decimal")
+                        .Atom(1, "20")
+                        .Atom(2, "0")
+                    .Seal()
+                .Seal()
+                .Callable(1, "SafeCast")
+                    .Callable(0, "SafeCast")
+                        .Add(0, rhs)
+                        .Add(1, typeNode)
+                    .Seal()
+                    .Callable(1, "DataType")
+                        .Atom(0, "Decimal")
+                        .Atom(1, "20")
+                        .Atom(2, "0")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Add(1, typeNode)
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr BuildCheckedBinaryOpOverSafeCast(TPositionHandle pos, TStringBuf op, const TExprNode::TPtr& lhs, const TExprNode::TPtr& rhs, const TTypeAnnotationNode& resultType, TExprContext& ctx) {
+    auto typeNode = ExpandType(pos, resultType, ctx);
+    return ctx.Builder(pos)
+        .Callable(op)
+            .Callable(0, "SafeCast")
+                .Add(0, lhs)
+                .Add(1, typeNode)
+            .Seal()
+            .Callable(1, "SafeCast")
+                .Add(0, rhs)
+                .Add(1, typeNode)
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandCheckedAdd(const TExprNode::TPtr& node, TExprContext& ctx) {
+    return BuildCheckedBinaryOpOverDecimal(node->Pos(), "+", node->ChildPtr(0), node->ChildPtr(1), *node->GetTypeAnn(), ctx);
+}
+
+TExprNode::TPtr ExpandCheckedSub(const TExprNode::TPtr& node, TExprContext& ctx) {
+    return BuildCheckedBinaryOpOverDecimal(node->Pos(), "-", node->ChildPtr(0), node->ChildPtr(1), *node->GetTypeAnn(), ctx);
+}
+
+TExprNode::TPtr ExpandCheckedMul(const TExprNode::TPtr& node, TExprContext& ctx) {
+    return BuildCheckedBinaryOpOverDecimal(node->Pos(), "*", node->ChildPtr(0), node->ChildPtr(1), *node->GetTypeAnn(), ctx);
+}
+
+TExprNode::TPtr ExpandCheckedDiv(const TExprNode::TPtr& node, TExprContext& ctx) {
+    return BuildCheckedBinaryOpOverSafeCast(node->Pos(), "/", node->ChildPtr(0), node->ChildPtr(1), *node->GetTypeAnn(), ctx);
+}
+
+TExprNode::TPtr ExpandCheckedMod(const TExprNode::TPtr& node, TExprContext& ctx) {
+    return BuildCheckedBinaryOpOverSafeCast(node->Pos(), "%", node->ChildPtr(0), node->ChildPtr(1), *node->GetTypeAnn(), ctx);
+}
+
+TExprNode::TPtr ExpandCheckedMinus(const TExprNode::TPtr& node, TExprContext& ctx) {
+    return ctx.Builder(node->Pos())
+        .Callable("SafeCast")
+            .Callable(0, "Minus")
+                .Callable(0, "SafeCast")
+                    .Add(0, node->HeadPtr())
+                    .Callable(1, "DataType")
+                        .Atom(0, "Decimal")
+                        .Atom(1, "20")
+                        .Atom(2, "0")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Callable(1, "TypeOf")
+                .Add(0, node->HeadPtr())
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 ui64 ToDate(ui64 now)      { return std::min<ui64>(NUdf::MAX_DATE - 1U, now / 86400000000ull); }
 ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now / 1000000ull); }
 ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, now); }
@@ -6181,6 +6270,12 @@ struct TPeepHoleRules {
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
         {"ToFlow", &DropToFlowDeps},
+        {"CheckedAdd", &ExpandCheckedAdd},
+        {"CheckedSub", &ExpandCheckedSub},
+        {"CheckedMul", &ExpandCheckedMul},
+        {"CheckedDiv", &ExpandCheckedDiv},
+        {"CheckedMod", &ExpandCheckedMod},
+        {"CheckedMinus", &ExpandCheckedMinus},
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> CommonStageExtRulesInit = {

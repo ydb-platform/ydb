@@ -806,7 +806,7 @@ private:
 
             FlushStatisticsToState();
 
-            return WrapFutureCallback(future, [localRun, startTime, type, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return WrapFutureCallback<false>(future, [localRun, startTime, type, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 YQL_CLOG(DEBUG, ProviderDq) << state->SessionId <<  " WrapFutureCallback";
 
                 auto duration = TInstant::Now() - startTime;
@@ -839,7 +839,8 @@ private:
                         state->Metrics->IncCounter("dq", "ForceFallback");
                     }
                     return FallbackCallback(state, input, output, ctx);
-                }
+                } else
+                    res.ReportIssues(ctx.IssueManager);
 
                 output = input;
                 input->SetState(TExprNode::EState::ExecutionComplete);
@@ -1161,7 +1162,7 @@ private:
 
         int level = 0;
         // TODO: remove copy-paste
-        return WrapFutureCallback(future, [settings, startTime, localRun, type, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        return WrapFutureCallback<false>(future, [settings, startTime, localRun, type, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             auto duration = TInstant::Now() - startTime;
             if (state->Metrics) {
                 state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());
@@ -1182,9 +1183,11 @@ private:
                 state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
                 // never fallback will be captured in yql_facade
                 auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
+                issues.AddIssues(res.Issues());
                 ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
-            }
+            } else
+                res.ReportIssues(ctx.IssueManager);
 
             output = input;
             input->SetState(TExprNode::EState::ExecutionComplete);

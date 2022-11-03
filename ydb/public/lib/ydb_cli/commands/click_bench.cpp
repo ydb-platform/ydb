@@ -64,9 +64,8 @@ struct TTestInfo {
     }
 };
 
-TString FullTablePath(const TString& database, const TString& path, const TString& table) {
+TString FullTablePath(const TString& database, const TString& table) {
     TPathSplitUnix prefixPathSplit(database);
-    prefixPathSplit.AppendComponent(path);
     prefixPathSplit.AppendComponent(table);
     return prefixPathSplit.Reconstruct();
 }
@@ -172,14 +171,14 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
     auto client = NYdb::NTable::TTableClient(driver);
 
     TStringStream report;
-    report << "Results for " << (IterationsCount + 1) << " iterations" << Endl;
+    report << "Results for " << IterationsCount << " iterations" << Endl;
     report << "+---------+----------+---------+---------+----------+---------+" << Endl;
     report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |   Std   |" << Endl;
     report << "+---------+----------+---------+---------+----------+---------+" << Endl;
 
     NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
     const bool collectJsonSensors = !JsonReportFileName.empty();
-    const TString queries = GetQueries(FullTablePath(config.Database, Path, Table));
+    const TString queries = GetQueries(FullTablePath(config.Database, Table));
     i32 queryN = 0;
     bool allOkay = true;
 
@@ -192,13 +191,13 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         const TString query = PatchQuery(qtoken.Token());
 
         std::vector<TDuration> timings;
-        timings.reserve(1 + IterationsCount);
+        timings.reserve(IterationsCount);
 
         Cout << Sprintf("Query%02u", queryN) << ":" << Endl;
         Cerr << "Query text:\n" << Endl;
         Cerr << query << Endl << Endl;
 
-        for (ui32 i = 0; i <= IterationsCount; ++i) {
+        for (ui32 i = 0; i < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
             auto res = Execute(query, client);
             auto duration = TInstant::Now() - t1;
@@ -246,7 +245,7 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
     if (MiniStatFileName) {
         TOFStream jStream{MiniStatFileName};
 
-        for(ui32 rowId = 0; rowId <= IterationsCount; ++rowId) {
+        for(ui32 rowId = 0; rowId < IterationsCount; ++rowId) {
             ui32 colId = 0;
             for(auto [_, testInfo] : QueryRuns) {
                 if (colId) {
@@ -274,11 +273,9 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 
 TString TClickBenchCommandRun::PatchQuery(const TStringBuf& original) const {
     TString result(original.data(), original.size());
-    if (EnablePushdown) {
-        result = "PRAGMA ydb.KqpPushOlapProcess = \"true\";\n" + result;
-    }
-    if (DisableLlvm) {
-        result = "PRAGMA ydb.EnableLlvm=\"false\";\n" + result;
+
+    if (!QuerySettings.empty()) {
+        result = JoinSeq("\n", QuerySettings) + "\n" + result;
     }
 
     std::vector<TStringBuf> lines;
@@ -312,20 +309,15 @@ TClickBenchCommandInit::TClickBenchCommandInit()
 void TClickBenchCommandInit::Config(TConfig& config) {
     NYdb::NConsoleClient::TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
-
-    config.Opts->AddLongOption("table", "Table name to work with")
+    config.Opts->AddLongOption('p', "path", "Table name to work with")
         .Optional()
         .RequiredArgument("NAME")
-        .DefaultValue("hits")
-        .StoreResult(&Table);
-    config.Opts->AddLongOption('p', "path", "Relative path to table")
-        .Optional()
-        .RequiredArgument("PATH")
+        .DefaultValue("clickbench/hits")
         .Handler1T<TStringBuf>([this](TStringBuf arg) {
             if (arg.StartsWith('/')) {
                 ythrow NLastGetopt::TUsageException() << "Path must be relative";
             }
-            Path = arg;
+            Table = arg;
         });
 };
 
@@ -335,7 +327,7 @@ int TClickBenchCommandInit::Run(TConfig& config) {
     TString createSql = NResource::Find("click_bench_schema.sql");
     TTableClient client(driver);
 
-    SubstGlobal(createSql, "{table}", FullTablePath(config.Database, Path, Table));
+    SubstGlobal(createSql, "{table}", FullTablePath(config.Database, Table));
     ThrowOnError(client.RetryOperationSync([createSql](TSession session) {
         return session.ExecuteSchemeQuery(createSql).GetValueSync();
     }));
@@ -353,13 +345,13 @@ TClickBenchCommandRun::TClickBenchCommandRun()
 void TClickBenchCommandRun::Config(TConfig& config) {
     TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
-    config.Opts->AddLongOption('o', "output", "Save queries output to file")
+    config.Opts->AddLongOption("output", "Save queries output to file")
         .Optional()
         .RequiredArgument("FILE")
         .DefaultValue("results.out")
         .StoreResult(&OutFilePath);
-    config.Opts->AddLongOption('n', "iterations", "Iterations count (without cold-start run)")
-        .DefaultValue(0)
+    config.Opts->AddLongOption("iterations", "Iterations count")
+        .DefaultValue(1)
         .StoreResult(&IterationsCount);
     config.Opts->AddLongOption("json", "Json report file name")
         .DefaultValue("")
@@ -367,28 +359,21 @@ void TClickBenchCommandRun::Config(TConfig& config) {
     config.Opts->AddLongOption("ministat", "Ministat report file name")
         .DefaultValue("")
         .StoreResult(&MiniStatFileName);
-    config.Opts->AddLongOption("disable-llvm", "disable llvm")
-        .NoArgument()
-        .SetFlag(&DisableLlvm);
-    config.Opts->AddLongOption("enable-pushdown", "enabled pushdown")
-        .NoArgument()
-        .SetFlag(&EnablePushdown);
-    config.Opts->AddLongOption('f', "ext-queries-file", "File with external queries. Separated by ';'")
+    config.Opts->AddLongOption("query-settings", "Query settings.")
+        .DefaultValue("")
+        .AppendTo(&QuerySettings);
+    config.Opts->AddLongOption("ext-queries-file", "File with external queries. Separated by ';'")
         .DefaultValue("")
         .StoreResult(&ExternalQueriesFile);
-    config.Opts->AddLongOption("table", "Table name to work with")
+    config.Opts->AddLongOption("table", "Table to work with")
         .Optional()
         .RequiredArgument("NAME")
-        .DefaultValue("hits")
-        .StoreResult(&Table);
-    config.Opts->AddLongOption("path", "Relative path to table")
-        .Optional()
-        .RequiredArgument("PATH")
+        .DefaultValue("clickbench/hits")
         .Handler1T<TStringBuf>([this](TStringBuf arg) {
             if (arg.StartsWith('/')) {
                 ythrow NLastGetopt::TUsageException() << "Path must be relative";
             }
-            Path = arg;
+            Table = arg;
         });
     config.Opts->AddLongOption('q', "ext-query", "String with external queries. Separated by ';'")
         .DefaultValue("")
@@ -439,7 +424,7 @@ int TClickBenchCommandRun::Run(TConfig& config) {
 };
 
 TCommandClickBench::TCommandClickBench()
-    : TClientCommandTree("click_bench")
+    : TClientCommandTree("clickbench")
 {
     AddCommand(std::make_unique<TClickBenchCommandRun>());
     AddCommand(std::make_unique<TClickBenchCommandInit>());

@@ -13,7 +13,6 @@ public:
     int Run(TConfig& config);
 
 private:
-    TString Path;
     TString Table;
 };
 
@@ -21,8 +20,7 @@ class TClickBenchCommandRun : public NYdb::NConsoleClient::TYdbCommand {
 protected:
     TSet<ui32> QueriesToRun;
     TSet<ui32> QueriesToSkip;
-    bool DisableLlvm = false;
-    bool EnablePushdown = false;
+    TVector<TString> QuerySettings;
     TString ExternalQueries;
     TString ExternalQueriesFile;
 
@@ -40,7 +38,6 @@ public:
     ui32 IterationsCount;
     TString JsonReportFileName;
     TString MiniStatFileName;
-    TString Path;
     TString Table;
 };
 

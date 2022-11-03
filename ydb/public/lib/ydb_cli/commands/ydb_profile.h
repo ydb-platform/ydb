@@ -24,6 +24,7 @@ public:
     TCommandProfileCommon(const TString& name, const std::initializer_list<TString>& aliases =
             std::initializer_list<TString>(), const TString& description = TString());
     virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
 
 protected:
     void ValidateAuth();
@@ -42,6 +43,8 @@ private:
     void SetupProfileAuthentication(bool existingProfile, const TString& profileName, std::shared_ptr<IProfile> profile,
                                     TConfig& config, bool interactive, bool cmdLine);
     bool SetAuthFromCommandLine(std::shared_ptr<IProfile> profile);
+    void GetOptionsFromStdin();
+    void ParseUrl(const TString& url);
 };
 
 class TCommandInit : public TCommandProfileCommon {

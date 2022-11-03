@@ -75,6 +75,7 @@ public:
     }
 
     std::shared_ptr<IProfile> CreateProfile(const TString& profileName) override {
+        ProfilesChanged = true;
         Config["profiles"][profileName] = YAML::Node();
         return GetProfile(profileName);
     }

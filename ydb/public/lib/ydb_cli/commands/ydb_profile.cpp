@@ -4,9 +4,24 @@
 
 #include <util/folder/dirut.h>
 
+#include <util/stream/input.h>
+
+#include <util/string/strip.h>
+
+#include <library/cpp/string_utils/url/url.h>
+
+#include <cstdio>
+
 #if defined(_win32_)
 #include <util/system/env.h>
 #endif
+
+#if defined(_win32_)
+#include <io.h>
+#elif defined(_unix_)
+#include <unistd.h>
+#endif
+
 
 namespace NYdb::NConsoleClient {
 
@@ -18,6 +33,15 @@ namespace {
 #else
     const TString HomeDir = GetHomeDir();
 #endif
+
+    bool IsStdinInteractive() {
+#if defined(_win32_)
+        return _isatty(_fileno(stdin));
+#elif defined(_unix_)
+        return isatty(fileno(stdin));
+#endif
+        return true;
+    }
 }
 
 const TString AuthNode = "authentication";
@@ -267,6 +291,66 @@ int TCommandInit::Run(TConfig& config) {
 TCommandProfileCommon::TCommandProfileCommon(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
     : TClientCommand(name, aliases, description)
 {}
+
+void TCommandProfileCommon::ParseUrl(const TString &url) {
+    if (Endpoint) {
+        throw TMisuseException() << "You entered too many \"endpoint\" options.";
+    }
+    TString trimmedUrl;
+    Strip(url, trimmedUrl);
+    TStringBuf endpoint, query, fragment;
+    SeparateUrlFromQueryAndFragment(trimmedUrl, endpoint, query, fragment);
+    Y_UNUSED(fragment);
+    if (query.contains("database=")) {
+        if (Database) {
+            throw TMisuseException() << "You entered too many \"database\" options.";
+        }
+        Endpoint = GetSchemeHostAndPort(endpoint);
+        query.remove_prefix(query.find("database=") + 9);
+        Database = query.substr(0, query.find_first_of(";&"));
+    } else {
+        Endpoint = trimmedUrl;
+    }
+}
+
+void TCommandProfileCommon::GetOptionsFromStdin() {
+    TString line, trimmedLine;
+    THashMap<TString, TString&> options {
+        {"database", Database},
+        {"token-file", TokenFile},
+        {"yc-token-file", YcTokenFile},
+        {"iam-token-file", IamTokenFile},
+        {"sa-key-file", SaKeyFile},
+        {"user", User},
+        {"password-file", PasswordFile},
+        {"iam-endpoint", IamEndpoint}
+    };
+    while (Cin.ReadLine(line)) {
+        Strip(line, trimmedLine);
+        if (trimmedLine.StartsWith("endpoint:")) {
+            ParseUrl(ToString(trimmedLine.substr(9)));
+            continue;
+        }
+
+        if (line.StartsWith("use-metadata-credentials")) {
+            if (UseMetadataCredentials) {
+                throw TMisuseException() << "You entered too many \"use-metadata-credentials\" options.";
+            }
+            UseMetadataCredentials = true;
+            continue;
+        }
+
+        for (const auto& [str, ref] : options) {
+            if (trimmedLine.StartsWith(str + ":")) {
+                if (ref) {
+                    throw TMisuseException() << "You entered too many \"" << str << "\" options.";
+                }
+                Strip(trimmedLine.substr(str.size() + 1), ref);
+                break;
+            }
+        }
+    }
+}
 
 void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::shared_ptr<IProfileManager> profileManager,
                       TConfig& config, bool interactive, bool cmdLine) {
@@ -529,6 +613,14 @@ void TCommandProfileCommon::Config(TConfig& config) {
         opts.AddLongOption("iam-endpoint", "Endpoint of IAM service to refresh token in YC OAuth or YC Service account authentication modes")
         .RequiredArgument("STR").StoreResult(&IamEndpoint);
     }
+    if (!IsStdinInteractive()) {
+        GetOptionsFromStdin();
+    }
+}
+
+void TCommandProfileCommon::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ValidateAuth();
 }
 
 void TCommandCreateProfile::Config(TConfig& config) {
@@ -536,17 +628,20 @@ void TCommandCreateProfile::Config(TConfig& config) {
 }
 
 void TCommandCreateProfile::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+    TCommandProfileCommon::Parse(config);
     if (config.ParseResult->GetFreeArgCount()) {
         ProfileName = config.ParseResult->GetFreeArgs()[0];
+    } else {
+        if (!IsStdinInteractive()) {
+            throw TMisuseException() << "You should enter profile name when stdin is not interactive";
+        }
     }
-    ValidateAuth();
 }
 
 int TCommandCreateProfile::Run(TConfig& config) {
 //    Y_UNUSED(config);
     TString profileName = ProfileName;
-    Interactive = !AnyProfileOptionInCommandLine() || !profileName;
+    Interactive = (!AnyProfileOptionInCommandLine() || !profileName) && IsStdinInteractive();
     auto profileManager = CreateYdbProfileManager(config.YdbDir);
     if (Interactive) {
         Cout << "Welcome! This command will take you through configuration profile creation process." << Endl;
@@ -556,6 +651,7 @@ int TCommandCreateProfile::Run(TConfig& config) {
             Cerr << "Profile \"" << ProfileName << "\" already exists. Consider using update, replace or delete command." << Endl;
             return EXIT_FAILURE;
         }
+        profileManager->CreateProfile(ProfileName);
     }
     if (!profileName) {
         Cout << "Please enter configuration profile name to create or re-configure: ";
@@ -913,9 +1009,8 @@ void TCommandUpdateProfile::DropNoOptions(std::shared_ptr<IProfile> profile) {
 }
 
 void TCommandUpdateProfile::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+    TCommandProfileCommon::Parse(config);
     ProfileName = config.ParseResult->GetFreeArgs()[0];
-    ValidateAuth();
     ValidateNoOptions();
 }
 
@@ -945,9 +1040,8 @@ void TCommandReplaceProfile::Config(TConfig& config) {
 }
 
 void TCommandReplaceProfile::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+    TCommandProfileCommon::Parse(config);
     ProfileName = config.ParseResult->GetFreeArgs()[0];
-    ValidateAuth();
 }
 
 int TCommandReplaceProfile::Run(TConfig& config) {

@@ -174,9 +174,13 @@ private:
         THolder<NDqProto::TMiniKqlProgramState> mkqlProgramState;
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
             if (shouldHandleWatermark) {
+                const auto watermarkRequested = ev->Get()->WatermarkRequest->Watermark;
+                LOG_T("Task runner. Watermarks. Injecting requested watermark " << watermarkRequested
+                    << " to " << ev->Get()->WatermarkRequest->ChannelIds.size() << " outputs ");
+
                 for (const auto& channelId : ev->Get()->WatermarkRequest->ChannelIds) {
                     NDqProto::TWatermark watermark;
-                    watermark.SetTimestampUs(ev->Get()->WatermarkRequest->Watermark.MicroSeconds());
+                    watermark.SetTimestampUs(watermarkRequested.MicroSeconds());
                     TaskRunner->GetOutputChannel(channelId)->Push(std::move(watermark));
                 }
 
@@ -345,6 +349,10 @@ private:
 
             if (hasCheckpoint) {
                 ResumeInputs();
+                break;
+            }
+
+            if (hasWatermark) {
                 break;
             }
         }

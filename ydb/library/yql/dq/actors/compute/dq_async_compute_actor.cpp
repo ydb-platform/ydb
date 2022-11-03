@@ -475,7 +475,8 @@ private:
         auto sourcesState = GetSourcesState();
         auto status = ev->Get()->RunStatus;
 
-        CA_LOG_T("Resume execution, run status: " << status << " checkpoint: " << (bool) ev->Get()->ProgramState);
+        CA_LOG_T("Resume execution, run status: " << status << " checkpoint: " << (bool) ev->Get()->ProgramState
+            << " watermark injected: " << ev->Get()->WatermarkInjectedToOutputs);
 
         for (const auto& [channelId, freeSpace] : ev->Get()->InputChannelFreeSpace) {
             auto it = InputChannelsMap.find(channelId);

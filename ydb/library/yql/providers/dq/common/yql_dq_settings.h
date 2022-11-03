@@ -28,8 +28,8 @@ struct TDqSettings {
         static constexpr ui64 OutputChunkMaxSize = 4_MB;
         static constexpr ui64 ChunkSizeLimit = 128_MB;
         static constexpr bool EnableDqReplicate = false;
-        static constexpr bool WatermarksGranularityMs = 1000;
-        static constexpr bool WatermarksLateArrivalDelayMs = 5000;
+        static constexpr ui64 WatermarksGranularityMs = 1000;
+        static constexpr ui64 WatermarksLateArrivalDelayMs = 5000;
         static constexpr ui64 ParallelOperationsLimit = 16;
     };
 

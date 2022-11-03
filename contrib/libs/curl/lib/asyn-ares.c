@@ -99,9 +99,7 @@
 
 #if ARES_VERSION >= 0x011000
 /* 1.16.0 or later has ares_getaddrinfo */
-#if !__has_feature(memory_sanitizer)
 #define HAVE_CARES_GETADDRINFO 1
-#endif
 #endif
 
 /* The last 3 #include files should be in this order */

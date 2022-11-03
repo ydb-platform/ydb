@@ -23,6 +23,10 @@ namespace NKikimr::NWrappers {
 namespace NExternalStorage {
 
 class TS3Wrapper: public TActor<TS3Wrapper> {
+    void Handle(TEvListObjectsRequest::TPtr& ev) {
+        CSOperator->Execute(ev);
+    }
+
     void Handle(TEvGetObjectRequest::TPtr& ev) {
         CSOperator->Execute(ev);
     }
@@ -40,6 +44,10 @@ class TS3Wrapper: public TActor<TS3Wrapper> {
     }
 
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {
+        CSOperator->Execute(ev);
+    }
+
+    void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         CSOperator->Execute(ev);
     }
 
@@ -73,16 +81,17 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvListObjectsRequest, Handle);
             hFunc(TEvGetObjectRequest, Handle);
             hFunc(TEvHeadObjectRequest, Handle);
             hFunc(TEvPutObjectRequest, Handle);
             hFunc(TEvDeleteObjectRequest, Handle);
+            hFunc(TEvDeleteObjectsRequest, Handle);
             hFunc(TEvCreateMultipartUploadRequest, Handle);
             hFunc(TEvUploadPartRequest, Handle);
             hFunc(TEvCompleteMultipartUploadRequest, Handle);
             hFunc(TEvAbortMultipartUploadRequest, Handle);
             hFunc(TEvCheckObjectExistsRequest, Handle);
-
 
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }

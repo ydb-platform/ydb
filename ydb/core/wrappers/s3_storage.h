@@ -78,6 +78,7 @@ public:
     virtual void Execute(TEvHeadObjectRequest::TPtr& ev) const override;
     virtual void Execute(TEvPutObjectRequest::TPtr& ev) const override;
     virtual void Execute(TEvDeleteObjectRequest::TPtr& ev) const override;
+    virtual void Execute(TEvDeleteObjectsRequest::TPtr& ev) const override;
     virtual void Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const override;
     virtual void Execute(TEvUploadPartRequest::TPtr& ev) const override;
     virtual void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const override;

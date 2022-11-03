@@ -6,20 +6,20 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Errors.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/ListObjectsRequest.h>
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/ListObjectsResult.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectsRequest.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectsResult.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <util/generic/ptr.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-    class TEvListObjectsRequest: public TEventLocal<TEvListObjectsRequest, EvListObjectsRequest> {
+    class TEvDeleteObjectsRequest: public TEventLocal<TEvDeleteObjectsRequest, EvDeleteObjectsRequest> {
     public:
-        using TRequest = Aws::S3::Model::ListObjectsRequest;
+        using TRequest = Aws::S3::Model::DeleteObjectsRequest;
     private:
         TRequest Request;
     public:
-        TEvListObjectsRequest(const TRequest& request)
+        TEvDeleteObjectsRequest(const TRequest& request)
             : Request(request) {
 
         }
@@ -33,21 +33,24 @@ namespace NKikimr::NWrappers::NExternalStorage {
             return &Request;
         }
     };
-    class TEvListObjectsResponse: public TEventLocal<TEvListObjectsResponse, EvListObjectsResponse> {
+    class TEvDeleteObjectsResponse: public TEventLocal<TEvDeleteObjectsResponse, EvDeleteObjectsResponse> {
     public:
-        using TResult = Aws::S3::Model::ListObjectsResult;
+        using TResult = Aws::S3::Model::DeleteObjectsResult;
         using TOutcome = Aws::Utils::Outcome<TResult, Aws::S3::S3Error>;
         using TKey = std::optional<TString>;
     private:
         TOutcome Outcome;
     public:
-        TEvListObjectsResponse(const TOutcome& result)
+        TEvDeleteObjectsResponse(const TOutcome& result)
             : Outcome(result)
         {
 
         }
         bool IsSuccess() const {
             return Outcome.IsSuccess();
+        }
+        const Aws::S3::S3Error& GetError() const {
+            return Outcome.GetError();
         }
         const TResult& GetResult() const {
             return Outcome.GetResult();

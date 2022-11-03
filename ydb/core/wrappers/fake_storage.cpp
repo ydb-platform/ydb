@@ -48,27 +48,22 @@ void TFakeExternalStorage::Execute(TEvListObjectsRequest::TPtr& ev) const {
     auto& awsPrefix = ev->Get()->GetRequest().GetPrefix();
     const TString prefix(awsPrefix.data(), awsPrefix.size());
     THolder<TEvListObjectsResponse> result;
-    if (!prefix) {
-        TEvListObjectsResponse::TOutcome awsOutcome;
-        result = MakeHolder<TEvListObjectsResponse>(awsOutcome);
-        TlsActivationContext->ActorSystem()->Send(ev->Sender, result.Release());
-    } else {
-        TGuard<TMutex> g(Mutex);
-        TEvListObjectsResponse::TResult awsResult;
-        for (auto&& i : Data) {
-            if (!i.first.StartsWith(prefix)) {
-                continue;
-            } else {
-                Aws::S3::Model::Object objectMeta;
-                objectMeta.SetKey(i.first);
-                objectMeta.SetSize(i.second.size());
-                awsResult.AddContents(std::move(objectMeta));
-            }
+    TGuard<TMutex> g(Mutex);
+    TEvListObjectsResponse::TResult awsResult;
+    for (auto&& i : Data) {
+        if (!!prefix && !i.first.StartsWith(prefix)) {
+            continue;
         }
-        TEvListObjectsResponse::TOutcome awsOutcome(awsResult);
-        result = MakeHolder<TEvListObjectsResponse>(awsOutcome);
-        TlsActivationContext->ActorSystem()->Send(ev->Sender, result.Release());
+        Aws::S3::Model::Object objectMeta;
+        objectMeta.SetKey(i.first);
+        objectMeta.SetSize(i.second.size());
+        awsResult.AddContents(std::move(objectMeta));
+        break;
     }
+    awsResult.SetIsTruncated(Data.size() > 1);
+    TEvListObjectsResponse::TOutcome awsOutcome(awsResult);
+    result = MakeHolder<TEvListObjectsResponse>(awsOutcome);
+    TlsActivationContext->ActorSystem()->Send(ev->Sender, result.Release());
 }
 
 void TFakeExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev) const {
@@ -146,6 +141,21 @@ void TFakeExternalStorage::Execute(TEvDeleteObjectRequest::TPtr& ev) const {
     Data.erase(key);
 
     THolder<TEvDeleteObjectResponse> result(new TEvDeleteObjectResponse(key, awsResult));
+    TlsActivationContext->ActorSystem()->Send(ev->Sender, result.Release());
+}
+
+void TFakeExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
+    TGuard<TMutex> g(Mutex);
+    Aws::S3::Model::DeleteObjectsResult awsResult;
+    for (auto&& awsKey : ev->Get()->GetRequest().GetDelete().GetObjects()) {
+        const TString key(awsKey.GetKey().data(), awsKey.GetKey().size());
+        Data.erase(key);
+        Aws::S3::Model::DeletedObject dObject;
+        dObject.WithKey(key);
+        awsResult.AddDeleted(std::move(dObject));
+    }
+
+    THolder<TEvDeleteObjectsResponse> result(new TEvDeleteObjectsResponse(awsResult));
     TlsActivationContext->ActorSystem()->Send(ev->Sender, result.Release());
 }
 

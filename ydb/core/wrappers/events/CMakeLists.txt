@@ -22,6 +22,7 @@ target_sources(core-wrappers-events PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/list_objects.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/object_exists.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/delete_objects.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/s3_out.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/events/abstract.cpp
 )

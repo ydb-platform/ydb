@@ -21,6 +21,7 @@ public:
         EV_REQUEST_RESPONSE(HeadObject),
         EV_REQUEST_RESPONSE(PutObject),
         EV_REQUEST_RESPONSE(DeleteObject),
+        EV_REQUEST_RESPONSE(DeleteObjects),
         EV_REQUEST_RESPONSE(CreateMultipartUpload),
         EV_REQUEST_RESPONSE(UploadPart),
         EV_REQUEST_RESPONSE(CompleteMultipartUpload),

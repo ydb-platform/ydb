@@ -2,6 +2,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/events/common.h>
+#include <ydb/core/wrappers/events/delete_objects.h>
 #include <ydb/core/wrappers/events/list_objects.h>
 #include <ydb/core/wrappers/events/object_exists.h>
 #include <util/generic/ptr.h>
@@ -19,6 +20,8 @@ struct TEvExternalStorage {
     using TEvPutObjectResponse = NExternalStorage::TEvPutObjectResponse;
     using TEvDeleteObjectRequest = NExternalStorage::TEvDeleteObjectRequest;
     using TEvDeleteObjectResponse = NExternalStorage::TEvDeleteObjectResponse;
+    using TEvDeleteObjectsRequest = NExternalStorage::TEvDeleteObjectsRequest;
+    using TEvDeleteObjectsResponse = NExternalStorage::TEvDeleteObjectsResponse;
     using TEvCreateMultipartUploadRequest = NExternalStorage::TEvCreateMultipartUploadRequest;
     using TEvCreateMultipartUploadResponse = NExternalStorage::TEvCreateMultipartUploadResponse;
     using TEvUploadPartRequest = NExternalStorage::TEvUploadPartRequest;
@@ -43,6 +46,7 @@ public:
     virtual void Execute(TEvHeadObjectRequest::TPtr& ev) const = 0;
     virtual void Execute(TEvPutObjectRequest::TPtr& ev) const = 0;
     virtual void Execute(TEvDeleteObjectRequest::TPtr& ev) const = 0;
+    virtual void Execute(TEvDeleteObjectsRequest::TPtr& ev) const = 0;
     virtual void Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const = 0;
     virtual void Execute(TEvUploadPartRequest::TPtr& ev) const = 0;
     virtual void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const = 0;

@@ -19,11 +19,16 @@ private:
     mutable TMap<TString, TString> Data;
 public:
     TFakeExternalStorage() = default;
+    TMap<TString, TString> GetData() const {
+        TGuard<TMutex> g(Mutex);
+        return Data;
+    }
     void Execute(TEvListObjectsRequest::TPtr& ev) const;
     void Execute(TEvGetObjectRequest::TPtr& ev) const;
     void Execute(TEvHeadObjectRequest::TPtr& ev) const;
     void Execute(TEvPutObjectRequest::TPtr& ev) const;
     void Execute(TEvDeleteObjectRequest::TPtr& ev) const;
+    void Execute(TEvDeleteObjectsRequest::TPtr& ev) const;
     void Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const;
     void Execute(TEvUploadPartRequest::TPtr& ev) const;
     void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const;
@@ -50,6 +55,9 @@ public:
         Singleton<TFakeExternalStorage>()->Execute(ev);
     }
     virtual void Execute(TEvDeleteObjectRequest::TPtr& ev) const override {
+        Singleton<TFakeExternalStorage>()->Execute(ev);
+    }
+    virtual void Execute(TEvDeleteObjectsRequest::TPtr& ev) const override {
         Singleton<TFakeExternalStorage>()->Execute(ev);
     }
     virtual void Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const override {

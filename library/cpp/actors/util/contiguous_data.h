@@ -1098,8 +1098,8 @@ public:
     }
 
     size_t UnsafeTailroom() const {
-        auto [data, size] = Backend.GetData();
-        return (data + size) - End;
+        auto span = Backend.GetData();
+        return (span.GetData() + span.GetSize()) - End;
     }
 
     size_t Headroom() const {

@@ -81,9 +81,20 @@ public:
 
             NYql::TIssues issues;
             auto operation = resp.operation();
-            for (auto& message : *operation.Mutableissues()) {
-                message.Setmessage(NBacktrace::Symbolize(message.Getmessage(), modulesMapping));
+            
+            for (auto& message_ : *operation.Mutableissues()) {
+                TDeque<std::remove_reference_t<decltype(message_)>*> queue;
+                queue.push_front(&message_);
+                while (!queue.empty()) {
+                    auto& message = *queue.front(); 
+                    queue.pop_front();
+                    message.Setmessage(NBacktrace::Symbolize(message.Getmessage(), modulesMapping));
+                    for (auto &subMsg : *message.Mutableissues()) {
+                        queue.push_back(&subMsg);
+                    }
+                }
             }
+
             NYql::IssuesFromMessage(operation.issues(), issues);
             error = false;
             for (const auto& issue : issues) {

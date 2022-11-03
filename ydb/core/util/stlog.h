@@ -2,12 +2,17 @@
 
 #include <ydb/core/protos/services.pb.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/json/json_writer.h>
 #include <google/protobuf/text_format.h>
 
 // special hack for gcc
 static struct STLOG_PARAM_T {} STLOG_PARAM;
 
 namespace NKikimr::NStLog {
+
+    static constexpr bool OutputLogJson = false;
+
+    void ProtobufToJson(const NProtoBuf::Message& m, NJson::TJsonWriter& json);
 
 #define STLOG_EXPAND(X) X
 
@@ -45,46 +50,37 @@ namespace NKikimr::NStLog {
 #define STLOG_PARAMS_15(KV, ...) STLOG_PARAMS_1(KV) STLOG_EXPAND(STLOG_PARAMS_14(__VA_ARGS__))
 #define STLOG_PARAMS_16(KV, ...) STLOG_PARAMS_1(KV) STLOG_EXPAND(STLOG_PARAMS_15(__VA_ARGS__))
 
-#define STLOGX(CTX, PRIO, COMP, MARKER, TEXT, ...) \
+#define STLOG_STREAM(NAME, JSON_OVERRIDE, MARKER, TEXT, ...) \
+    struct MARKER {}; \
+    TStringStream NAME; \
+    if constexpr (JSON_OVERRIDE ? JSON_OVERRIDE > 0 : ::NKikimr::NStLog::OutputLogJson) { \
+        NJson::TJsonWriter __json(&NAME, false); \
+        ::NKikimr::NStLog::TMessage<MARKER>(__FILE__, __LINE__, #MARKER)STLOG_PARAMS(__VA_ARGS__).WriteToJson(__json) << TEXT; \
+    } else { \
+        ::NKikimr::NStLog::TMessage<MARKER>(__FILE__, __LINE__, #MARKER)STLOG_PARAMS(__VA_ARGS__).WriteToStream(NAME) << TEXT; \
+    }
+
+#define STLOGX(CTX, PRIO, COMP, ...) \
     do { \
-        auto getPrio = [&] { using namespace NActors::NLog; return (PRIO); }; \
-        auto getComp = [&] { using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }; \
-        auto makeMessage = [&] { \
-            struct MARKER {}; \
-            using Tag = MARKER; \
-            return ::NKikimr::NStLog::TMessage<Tag>(__FILE__, __LINE__, #MARKER, TStringBuilder() << TEXT) \
-                STLOG_PARAMS(__VA_ARGS__); \
+        auto& ctx = (CTX); \
+        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
+        if (IS_LOG_PRIORITY_ENABLED(ctx, priority, component)) { \
+            STLOG_STREAM(__stream, 0, __VA_ARGS__); \
+            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
         }; \
-        LOG_LOG_S((CTX), getPrio(), getComp(), makeMessage()); \
     } while (false)
 
-#define STLOG(PRIO, COMP, MARKER, TEXT, ...) \
-    do { \
-        if (TActivationContext *ctxp = TlsActivationContext) { \
-            auto getPrio = [&] { using namespace NActors::NLog; return (PRIO); }; \
-            auto getComp = [&] { using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }; \
-            auto makeMessage = [&] { \
-                struct MARKER {}; \
-                using Tag = MARKER; \
-                return ::NKikimr::NStLog::TMessage<Tag>(__FILE__, __LINE__, #MARKER, TStringBuilder() << TEXT) \
-                    STLOG_PARAMS(__VA_ARGS__); \
-            }; \
-            LOG_LOG_S(*ctxp, getPrio(), getComp(), makeMessage()); \
-        } \
-    } while (false)
+#define STLOG(...) if (TActivationContext *ctxp = TlsActivationContext; !ctxp); else STLOGX(*ctxp, __VA_ARGS__)
 
-#define STLOG_DEBUG_FAIL(COMP, MARKER, TEXT, ...) \
+#define STLOG_DEBUG_FAIL(COMP, ...) \
     do { \
         if (TActivationContext *ctxp = TlsActivationContext) { \
-            auto getComp = [&] { using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }; \
-            auto makeMessage = [&] { \
-                struct MARKER {}; \
-                using Tag = MARKER; \
-                return ::NKikimr::NStLog::TMessage<Tag>(__FILE__, __LINE__, #MARKER, TStringBuilder() << TEXT) \
-                    STLOG_PARAMS(__VA_ARGS__); \
-            }; \
-            Y_VERIFY_DEBUG_S(false, makeMessage()); \
-            LOG_LOG_S(*ctxp, NLog::PRI_CRIT, getComp(), makeMessage()); \
+            const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
+            STLOG_STREAM(__stream, 0, __VA_ARGS__); \
+            const TString message = __stream.Str(); \
+            Y_VERIFY_DEBUG_S(false, message); \
+            LOG_LOG_S(*ctxp, NLog::PRI_CRIT, component, message); \
         } \
     } while (false)
 
@@ -118,32 +114,36 @@ namespace NKikimr::NStLog {
 
         void WriteToStream(IOutputStream& s) const {
             Base::WriteToStream(s);
-            s << "# ";
-            OutputParam(s, Value);
+            OutputParam(s << "# ", Value);
+        }
+
+        void WriteToJson(NJson::TJsonWriter& json) const {
+            Base::WriteToJson(json);
+            OutputParam(json, Value);
         }
 
     private:
-        template<typename TValue>
-        static void OutputParam(IOutputStream& s, const std::optional<TValue>& value) {
-            if (value) {
-                OutputParam(s, *value);
-            } else {
-                s << "<null>";
-            }
-        }
+        template<typename Tx> struct TOptionalTraits { static constexpr bool HasOptionalValue = false; };
+        template<> struct TOptionalTraits<const char*> { static constexpr bool HasOptionalValue = false; };
+        template<> struct TOptionalTraits<char*> { static constexpr bool HasOptionalValue = false; };
+        template<typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
+        template<typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
+        template<typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };
 
         template<typename TValue>
         static void OutputParam(IOutputStream& s, const TValue& value) {
-            if constexpr (google::protobuf::is_proto_enum<TValue>::value) {
-                const google::protobuf::EnumDescriptor *e = google::protobuf::GetEnumDescriptor<TValue>();
+            using Tx = std::decay_t<TValue>;
+
+            if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
+                const google::protobuf::EnumDescriptor *e = google::protobuf::GetEnumDescriptor<Tx>();
                 if (const auto *val = e->FindValueByNumber(value)) {
                     s << val->name();
                 } else {
                     s << static_cast<int>(value);
                 }
-            } else if constexpr (std::is_same_v<TValue, bool>) {
+            } else if constexpr (std::is_same_v<Tx, bool>) {
                 s << (value ? "true" : "false");
-            } else if constexpr (std::is_base_of_v<google::protobuf::Message, TValue>) {
+            } else if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
                 google::protobuf::TextFormat::Printer p;
                 p.SetSingleLineMode(true);
                 TString str;
@@ -152,15 +152,15 @@ namespace NKikimr::NStLog {
                 } else {
                     s << "<error>";
                 }
-            } else if constexpr (THasToStringMethod<TValue>::value) {
+            } else if constexpr (THasToStringMethod<Tx>::value) {
                 s << value.ToString();
-            } else if constexpr (std::is_pointer_v<TValue> && !std::is_same_v<std::remove_cv_t<std::remove_pointer_t<TValue>>, char>) {
+            } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
                 if (value) {
                     OutputParam(s, *value);
                 } else {
                     s << "<null>";
                 }
-            } else if constexpr (TIsIterable<TValue>::value) {
+            } else if constexpr (TIsIterable<Tx>::value) {
                 auto begin = std::begin(value);
                 auto end = std::end(value);
                 bool first = true;
@@ -176,6 +176,35 @@ namespace NKikimr::NStLog {
                 s << "]";
             } else {
                 s << value;
+            }
+        }
+
+        template<typename TValue>
+        static void OutputParam(NJson::TJsonWriter& json, const TValue& value) {
+            using Tx = std::decay_t<TValue>;
+
+            if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
+                ProtobufToJson(value, json);
+            } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
+                if (value) {
+                    OutputParam(json, *value);
+                } else {
+                    json.WriteNull();
+                }
+            } else if constexpr (TIsIterable<Tx>::value) {
+                json.OpenArray();
+                auto begin = std::begin(value);
+                auto end = std::end(value);
+                for (; begin != end; ++begin) {
+                    OutputParam(json, *begin);
+                }
+                json.CloseArray();
+            } else if constexpr (std::is_constructible_v<NJson::TJsonValue, Tx>) {
+                json.Write(value);
+            } else {
+                TStringStream stream;
+                OutputParam(stream, value);
+                json.Write(stream.Str());
             }
         }
     };
@@ -196,6 +225,10 @@ namespace NKikimr::NStLog {
         void WriteToStream(IOutputStream& s) const {
             s << Name;
         }
+
+        void WriteToJson(NJson::TJsonWriter& json) const {
+            json.WriteKey(Name);
+        }
     };
 
     template<typename Tag, typename... TParams>
@@ -203,53 +236,120 @@ namespace NKikimr::NStLog {
         const char *File;
         int Line;
         const char *Marker;
-        TString Text;
         std::tuple<TParams...> Params;
         static constexpr size_t NumParams = sizeof...(TParams);
 
     public:
         template<typename... TArgs>
-        TMessage(const char *file, int line, const char *marker, TString text, std::tuple<TParams...>&& params = {})
+        TMessage(const char *file, int line, const char *marker, std::tuple<TParams...>&& params = {})
             : File(file)
             , Line(line)
             , Marker(marker)
-            , Text(std::move(text))
             , Params(std::move(params))
         {}
 
         template<typename Base, typename T>
         TMessage<Tag, TParams..., TBoundParam<Base, T>> AppendBoundParam(TBoundParam<Base, T>&& p) {
-            return {File, Line, Marker, std::move(Text), std::tuple_cat(Params, std::make_tuple(std::move(p)))};
+            return {File, Line, Marker, std::tuple_cat(Params, std::make_tuple(std::move(p)))};
         }
 
         TMessage<Tag, TParams...> AppendBoundParam(const STLOG_PARAM_T&) {
             return std::move(*this);
         }
 
-        void WriteToStream(IOutputStream& s) const {
-            const char *p = strrchr(File, '/');
-            p = p ? p + 1 : File;
-            s << "{" << Marker << "@" << p << ":" << Line << "} " << Text;
-            WriteParams<0>(s, nullptr);
+        struct TStreamWriter {
+            const TMessage *Self;
+            IOutputStream& Stream;
+
+            template<typename T>
+            TStreamWriter& operator <<(const T& value) {
+                Stream << value;
+                return *this;
+            }
+
+            TStreamWriter(const TMessage *self, IOutputStream& stream)
+                : Self(self)
+                , Stream(stream)
+            {
+                Self->WriteHeaderToStream(Stream);
+            }
+
+            ~TStreamWriter() {
+                Self->WriteParamsToStream(Stream);
+            }
+        };
+
+        TStreamWriter WriteToStream(IOutputStream& s) const {
+            return {this, s};
+        }
+
+        struct TJsonWriter {
+            const TMessage *Self;
+            NJson::TJsonWriter& Json;
+            TStringStream Stream;
+
+            template<typename T>
+            TJsonWriter& operator <<(const T& value) {
+                Stream << value;
+                return *this;
+            }
+
+            TJsonWriter(const TMessage *self, NJson::TJsonWriter& json)
+                : Self(self)
+                , Json(json)
+            {}
+
+            ~TJsonWriter() {
+                Json.OpenMap();
+                Json.WriteKey("Marker");
+                Json.Write(Self->Marker);
+                Json.WriteKey("File");
+                Json.Write(Self->GetFileName());
+                Json.WriteKey("Line");
+                Json.Write(Self->Line);
+                Json.WriteKey("Text");
+                Json.Write(Stream.Str());
+                Self->WriteParamsToJson(Json);
+                Json.CloseMap();
+            }
+        };
+
+        TJsonWriter WriteToJson(NJson::TJsonWriter& json) const {
+            return {this, json};
         }
 
     private:
-        template<size_t Index>
-        void WriteParams(IOutputStream& s, std::enable_if_t<Index != NumParams>*) const {
-            s << " ";
-            std::get<Index>(Params).WriteToStream(s);
-            WriteParams<Index + 1>(s, nullptr);
+        const char *GetFileName() const {
+            const char *p = strrchr(File, '/');
+            return p ? p + 1 : File;
         }
 
-        // out-of-range handler
+        void WriteHeaderToStream(IOutputStream& s) const {
+            s << "{" << Marker << "@" << GetFileName() << ":" << Line << "} ";
+        }
+
+        void WriteParamsToStream(IOutputStream& s) const {
+            WriteParams<0>(&s);
+        }
+
+        void WriteParamsToJson(NJson::TJsonWriter& json) const {
+            WriteParams<0>(&json);
+        }
+        
+        template<size_t Index, typename = std::enable_if_t<Index != NumParams>>
+        void WriteParams(IOutputStream *s) const {
+            std::get<Index>(Params).WriteToStream(*s << " ");
+            WriteParams<Index + 1>(s);
+        }
+
+        template<size_t Index, typename = std::enable_if_t<Index != NumParams>>
+        void WriteParams(NJson::TJsonWriter *json) const {
+            std::get<Index>(Params).WriteToJson(*json);
+            WriteParams<Index + 1>(json);
+        }
+
         template<size_t Index>
-        void WriteParams(IOutputStream&, ...) const {}
+        void WriteParams(...) const {}
     };
 
-}
-
-template<typename Tag, typename... TParams>
-IOutputStream& operator <<(IOutputStream& s, const NKikimr::NStLog::TMessage<Tag, TParams...>& message) {
-    message.WriteToStream(s);
-    return s;
 }

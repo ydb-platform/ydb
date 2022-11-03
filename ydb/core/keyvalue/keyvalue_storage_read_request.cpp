@@ -8,13 +8,15 @@
 namespace NKikimr {
 namespace NKeyValue {
 
-#define STLOG_WITH_ERROR_DESCRIPTION(VARIABLE, PRIO, COMP, MARKER, TEXT, ...) \
+#define STLOG_WITH_ERROR_DESCRIPTION(VARIABLE, PRIO, COMP, ...) \
     do { \
-        struct MARKER {}; \
-        VARIABLE = (TStringBuilder() << VARIABLE << Endl \
-                << ::NKikimr::NStLog::TMessage<MARKER>(__FILE__, __LINE__, #MARKER, TStringBuilder() << TEXT) \
-                        STLOG_PARAMS(__VA_ARGS__)); \
-        STLOG(PRIO, COMP, MARKER, TEXT, __VA_ARGS__); \
+        VARIABLE += "\n"; \
+        STLOG_STREAM(__stream, 0, __VA_ARGS__); \
+        const TString message = __stream.Str(); \
+        VARIABLE += message; \
+        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
+        LOG_LOG_S(*TlsActivationContext, priority, component, message); \
     } while(false) \
 // STLOG_WITH_ERROR_DESCRIPTION
 

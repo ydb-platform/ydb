@@ -19,6 +19,7 @@ target_link_libraries(ydb-core-util PUBLIC
   cpp-containers-stack_vector
   cpp-html-escape
   library-cpp-ipmath
+  library-cpp-json
   library-cpp-lwtrace
   cpp-monlib-dynamic_counters
   library-cpp-random_provider
@@ -41,6 +42,7 @@ target_sources(ydb-core-util PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/memory_tracker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/page_map.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/single_thread_ic_mock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/util/stlog.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/testactorsys.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/text.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/ulid.cpp

@@ -1,7 +1,7 @@
 <img width="64" src="ydb/docs/_assets/logo.svg"/><br/>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb/blob/main/LICENSE)
-[![PyPI version](https://badge.fury.io/py/ydb.svg)](https://badge.fury.io/py/ydb)
+[![Release](https://img.shields.io/github/v/release/ydb-platform/ydb.svg?style=flat-square)](https://github.com/ydb-platform/ydb/releases)
 [![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/YDBPlatform)
 
 ## YDB

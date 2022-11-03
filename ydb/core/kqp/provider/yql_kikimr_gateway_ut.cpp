@@ -74,7 +74,7 @@ TIntrusivePtr<IKqpGateway> GetIcGateway(Tests::TServer& server) {
 
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(server.GetRuntime()->GetAnyNodeActorSystem(), false);
     return CreateKikimrIcGateway(TestCluster, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
-        server.GetRuntime()->GetNodeId(0), counters, MakeMiniKQLCompileServiceID());
+        server.GetRuntime()->GetNodeId(0), counters);
 }
 
 void TestListPathCommon(TIntrusivePtr<IKikimrGateway> gateway) {

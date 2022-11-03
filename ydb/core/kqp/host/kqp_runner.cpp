@@ -145,40 +145,8 @@ public:
             sessionCtx->TablesPtr()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
     {
-        KqlTypeAnnTransformer = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(*typesCtx),
-            *typesCtx);
-
         auto logLevel = NYql::NLog::ELevel::TRACE;
         auto logComp = NYql::NLog::EComponent::ProviderKqp;
-
-        KqlOptimizeTransformer = TTransformationPipeline(typesCtx)
-            .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("KqlOptimizeTransformer", logComp, logLevel), "LogKqlOptimize")
-            .AddTypeAnnotationTransformer()
-            .AddPostTypeAnnotation()
-            .AddOptimization(false)
-            .Build(false);
-
-        KqlPrepareTransformer = TTransformationPipeline(typesCtx)
-            .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("KqlPrepareTransformer", logComp, logLevel), "LogKqlRun")
-            .Add(new TKqpIterationGuardTransformer(), "IterationGuard")
-            .AddTypeAnnotationTransformer()
-            .Add(CreateKqpCheckKiProgramTransformer(), "CheckQuery")
-            .Add(CreateKqpSimplifyTransformer(), "Simplify")
-            .Add(CreateKqpAnalyzeTransformer(TransformCtx), "Analyze")
-            .Add(CreateKqpRewriteTransformer(TransformCtx), "Rewrite")
-            .Add(CreateKqpExecTransformer(Gateway, Cluster, TxState, TransformCtx), "Prepare")
-            .Add(CreateKqpSubstituteTransformer(TxState, TransformCtx), "Substitute")
-            .Add(CreateKqpFinalizeTransformer(Gateway, Cluster, TxState, TransformCtx), "Finalize")
-            .Build(false);
-
-        PreparedRunTransformer = TTransformationPipeline(typesCtx)
-            .Add(TLogExprTransformer::Sync("PreparedRun iteration", logComp, logLevel), "KqlPreparedRun")
-            .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx), "AcquireMvccSnapshot")
-            .Add(CreateKqpExecutePreparedTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecutePrepared")
-            .Add(CreateKqpFinalizeTransformer(Gateway, Cluster, TxState, TransformCtx), "Finalize")
-            .Build(false);
 
         PreparedExplainTransformer = TTransformationPipeline(typesCtx)
             .Add(CreateKqpExplainPreparedTransformer(Gateway, Cluster, TransformCtx), "ExplainQuery")
@@ -230,7 +198,7 @@ public:
             .Build(false);
 
         PhysicalRunQueryTransformer = TTransformationPipeline(typesCtx)
-            .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx, true), "AcquireMvccSnapshot")
+            .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx), "AcquireMvccSnapshot")
             .Add(CreateKqpExecutePhysicalDataTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecutePhysical")
             .Build(false);
 
@@ -275,34 +243,6 @@ public:
 
         IKikimrQueryExecutor::TExecuteSettings scanSettings(settings);
         return PrepareQueryInternal(cluster, dataQuery, ctx, scanSettings);
-    }
-
-    TIntrusivePtr<TAsyncQueryResult> ExecutePreparedDataQuery(const TString& cluster, TExprNode* queryExpr,
-        const NKikimrKqp::TPreparedKql& kql, TExprContext& ctx,
-        const IKikimrQueryExecutor::TExecuteSettings& settings) override
-    {
-        YQL_ENSURE(false, "Unexpected query execute in OldEngine mode.");
-
-        YQL_ENSURE(queryExpr->Type() == TExprNode::World);
-        YQL_ENSURE(cluster == Cluster);
-
-        PreparedRunTransformer->Rewind();
-
-        TransformCtx->Reset();
-        TransformCtx->Settings.CopyFrom(kql.GetSettings());
-        TransformCtx->Settings.SetCommitTx(settings.CommitTx);
-        TransformCtx->Settings.SetRollbackTx(settings.RollbackTx);
-        TransformCtx->PreparedKql = &kql;
-
-        YQL_ENSURE(TxState->Tx().EffectiveIsolationLevel);
-        YQL_ENSURE(TransformCtx->Settings.GetIsolationLevel() == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
-
-        bool strictDml = MergeFlagValue(Config->StrictDml.Get(Cluster), settings.StrictDml);
-        if (!ApplyTableOperations(kql, strictDml, ctx)) {
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
-        }
-
-        return MakeIntrusive<TAsyncRunResult>(queryExpr, ctx, *PreparedRunTransformer, *TransformCtx);
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePreparedQueryNewEngine(const TString& cluster,
@@ -516,10 +456,6 @@ private:
     TIntrusivePtr<TKqpOptimizeContext> OptimizeCtx;
     TIntrusivePtr<TKqpBuildQueryContext> BuildQueryCtx;
 
-    TAutoPtr<IGraphTransformer> KqlTypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> KqlOptimizeTransformer;
-    TAutoPtr<IGraphTransformer> KqlPrepareTransformer;
-    TAutoPtr<IGraphTransformer> PreparedRunTransformer;
     TAutoPtr<IGraphTransformer> PreparedExplainTransformer;
 
     TAutoPtr<IGraphTransformer> PhysicalOptimizeTransformer;
@@ -532,19 +468,17 @@ private:
 class TKqpAcquireMvccSnapshotTransformer : public TGraphTransformerBase {
 public:
     TKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqlTransformContext> transformCtx,
-        TIntrusivePtr<TKqpTransactionState> txState, bool newEngine)
+        TIntrusivePtr<TKqpTransactionState> txState)
         : Gateway(std::move(gateway))
         , TransformCtx(std::move(transformCtx))
-        , NewEngine(newEngine)
-        , TxState(std::move(txState))
-    {}
+        , TxState(std::move(txState)) {}
 
     TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) override {
         output = input;
 
         if (!NeedSnapshot(TxState->Tx(), *TransformCtx->Config, TransformCtx->Settings.GetRollbackTx(),
-                TransformCtx->Settings.GetCommitTx(), NewEngine ? TransformCtx->PhysicalQuery.get() : nullptr,
-                NewEngine ? nullptr : TransformCtx->PreparedKql)) {
+            TransformCtx->Settings.GetCommitTx(),TransformCtx->PhysicalQuery.get(), nullptr))
+        {
             return TStatus::Ok;
         }
 
@@ -605,12 +539,8 @@ public:
     }
 
 private:
-
-private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
-
-    bool NewEngine;
 
     NThreading::TFuture<IKqpGateway::TKqpSnapshotHandle> SnapshotFuture;
     NThreading::TPromise<void> Promise;
@@ -620,8 +550,8 @@ private:
 } // namespace
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx, bool newEngine) {
-    return new TKqpAcquireMvccSnapshotTransformer(gateway, transformCtx, txState, newEngine);
+    TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx) {
+    return new TKqpAcquireMvccSnapshotTransformer(gateway, transformCtx, txState);
 }
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,

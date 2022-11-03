@@ -1,4 +1,6 @@
-#include "kqp_prepare_impl.h"
+#include "kqp_prepare.h"
+
+#include "kqp_query_plan.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -30,7 +32,7 @@ using namespace NClient;
 namespace {
 
 struct TTableRead {
-    ETableReadType Type = ETableReadType::Unspecified;
+    EPlanTableReadType Type = EPlanTableReadType::Unspecified;
     TVector<TString> LookupBy;
     TVector<TString> ScanBy;
     TVector<TString> Columns;
@@ -39,7 +41,7 @@ struct TTableRead {
 };
 
 struct TTableWrite {
-    ETableWriteType Type = ETableWriteType::Unspecified;
+    EPlanTableWriteType Type = EPlanTableWriteType::Unspecified;
     TVector<TString> Keys;
     TVector<TString> Columns;
 };
@@ -47,6 +49,17 @@ struct TTableWrite {
 struct TTableInfo {
     TVector<TTableRead> Reads;
     TVector<TTableWrite> Writes;
+};
+
+struct TExprScope {
+    NYql::NNodes::TCallable Callable;
+    NYql::NNodes::TCoLambda Lambda;
+    ui32 Depth;
+
+    TExprScope(NYql::NNodes::TCallable callable, NYql::NNodes::TCoLambda Lambda, ui32 depth)
+        : Callable(callable)
+        , Lambda(Lambda)
+        , Depth(depth) {}
 };
 
 struct TSerializerCtx {
@@ -211,12 +224,12 @@ void FillTablesInfo(const TExprNode::TPtr& query, TMap<TString, TTableInfo>& tab
 
                 if (read.LookupBy.empty()) {
                     read.Type = TKikimrKeyRange::IsFull(selectRange.Range())
-                        ? ETableReadType::FullScan
-                        : ETableReadType::Scan;
+                        ? EPlanTableReadType::FullScan
+                        : EPlanTableReadType::Scan;
                 } else {
                     read.Type = mapDepth > 0
-                        ? ETableReadType::MultiLookup
-                        : ETableReadType::Lookup;
+                        ? EPlanTableReadType::MultiLookup
+                        : EPlanTableReadType::Lookup;
                 }
 
                 tables[TString(selectRange.Table().Path())].Reads.push_back(read);
@@ -227,8 +240,8 @@ void FillTablesInfo(const TExprNode::TPtr& query, TMap<TString, TTableInfo>& tab
 
                 TTableRead read;
                 read.Type = mapDepth > 0
-                    ? ETableReadType::MultiLookup
-                    : ETableReadType::Lookup;
+                    ? EPlanTableReadType::MultiLookup
+                    : EPlanTableReadType::Lookup;
 
                 for (const auto& key : selectRow.Key()) {
                     auto lookup = TStringBuilder() << key.Name().Value()
@@ -248,8 +261,8 @@ void FillTablesInfo(const TExprNode::TPtr& query, TMap<TString, TTableInfo>& tab
 
                 TTableWrite write;
                 write.Type = mapDepth > 0
-                    ? ETableWriteType::MultiUpsert
-                    : ETableWriteType::Upsert;
+                    ? EPlanTableWriteType::MultiUpsert
+                    : EPlanTableWriteType::Upsert;
 
 
                 for (const auto& tuple : updateRow.Key()) {
@@ -270,8 +283,8 @@ void FillTablesInfo(const TExprNode::TPtr& query, TMap<TString, TTableInfo>& tab
 
                 TTableWrite write;
                 write.Type = mapDepth > 0
-                    ? ETableWriteType::MultiErase
-                    : ETableWriteType::Erase;
+                    ? EPlanTableWriteType::MultiErase
+                    : EPlanTableWriteType::Erase;
 
                 for (const auto& tuple : eraseRow.Key()) {
                     auto key = TStringBuilder() << tuple.Name().Value()
@@ -683,7 +696,7 @@ private:
             auto tableLookup = maybeTableLookup.Cast();
 
             TTableRead readInfo;
-            readInfo.Type = ETableReadType::Lookup;
+            readInfo.Type = EPlanTableReadType::Lookup;
             planNode.TypeName = "TableLookup";
             TString table(tableLookup.Table().Path().Value());
             auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
@@ -935,7 +948,7 @@ private:
         op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
 
         TTableWrite writeInfo;
-        writeInfo.Type = ETableWriteType::MultiUpsert;
+        writeInfo.Type = EPlanTableWriteType::MultiUpsert;
         for (const auto& column : upsert.Columns()) {
             writeInfo.Columns.push_back(TString(column.Value()));
         }
@@ -954,7 +967,7 @@ private:
         op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
 
         TTableWrite writeInfo;
-        writeInfo.Type = ETableWriteType::MultiErase;
+        writeInfo.Type = EPlanTableWriteType::MultiErase;
 
         SerializerCtx.Tables[table].Writes.push_back(writeInfo);
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
@@ -1029,7 +1042,7 @@ private:
     ui32 Visit(const TKqlLookupTableBase& lookup, TQueryPlanNode& planNode) {
         auto table = TString(lookup.Table().Path().Value());
         TTableRead readInfo;
-        readInfo.Type = ETableReadType::Lookup;
+        readInfo.Type = EPlanTableReadType::Lookup;
 
         TOperator op;
         op.Properties["Name"] = "TablePointLookup";
@@ -1059,7 +1072,7 @@ private:
 
         auto rangesDesc = PrettyExprStr(read.Ranges());
         if (rangesDesc == "Void" || explainPrompt.UsedKeyColumns.empty()) {
-            readInfo.Type = ETableReadType::FullScan;
+            readInfo.Type = EPlanTableReadType::FullScan;
 
             auto& ranges = op.Properties["ReadRanges"];
             for (const auto& col : tableData.Metadata->KeyColumnNames) {
@@ -1069,7 +1082,7 @@ private:
                 ranges.AppendValue(rangeDesc);
             }
         } else if (auto maybeResultBinding = ContainResultBinding(rangesDesc)) {
-            readInfo.Type = ETableReadType::Scan;
+            readInfo.Type = EPlanTableReadType::Scan;
 
             auto [txId, resId] = *maybeResultBinding;
             if (auto result = GetResult(txId, resId)) {
@@ -1143,7 +1156,7 @@ private:
         }
 
         ui32 operatorId;
-        if (readInfo.Type == ETableReadType::FullScan) {
+        if (readInfo.Type == EPlanTableReadType::FullScan) {
             op.Properties["Name"] = "TableFullScan";
             operatorId = AddOperator(planNode, "TableFullScan", std::move(op));
         } else {
@@ -1244,9 +1257,9 @@ private:
             // Scan which fixes only few first members of compound primary key were called "Lookup"
             // by older explain version. We continue to do so.
             if (readInfo.LookupBy.size() > 0) {
-                readInfo.Type = ETableReadType::Lookup;
+                readInfo.Type = EPlanTableReadType::Lookup;
             } else {
-                readInfo.Type = hasRangeScans ? ETableReadType::Scan : ETableReadType::FullScan;
+                readInfo.Type = hasRangeScans ? EPlanTableReadType::Scan : EPlanTableReadType::FullScan;
             }
         }
 
@@ -1277,13 +1290,13 @@ private:
         SerializerCtx.Tables[table].Reads.push_back(readInfo);
 
         ui32 operatorId;
-        if (readInfo.Type == ETableReadType::Scan) {
+        if (readInfo.Type == EPlanTableReadType::Scan) {
             op.Properties["Name"] = "TableRangeScan";
             operatorId = AddOperator(planNode, "TableRangeScan", std::move(op));
-        } else if (readInfo.Type == ETableReadType::FullScan) {
+        } else if (readInfo.Type == EPlanTableReadType::FullScan) {
             op.Properties["Name"] = "TableFullScan";
             operatorId = AddOperator(planNode, "TableFullScan", std::move(op));
-        } else if (readInfo.Type == ETableReadType::Lookup) {
+        } else if (readInfo.Type == EPlanTableReadType::Lookup) {
             op.Properties["Name"] = "TablePointLookup";
             operatorId = AddOperator(planNode, "TablePointLookup", std::move(op));
         } else {

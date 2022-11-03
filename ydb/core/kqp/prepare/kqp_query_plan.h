@@ -12,6 +12,22 @@
 namespace NKikimr {
 namespace NKqp {
 
+enum class EPlanTableReadType {
+    Unspecified,
+    FullScan,
+    Scan,
+    Lookup,
+    MultiLookup,
+};
+
+enum class EPlanTableWriteType {
+    Unspecified,
+    Upsert,
+    MultiUpsert,
+    Erase,
+    MultiErase,
+};
+
 void WriteKqlPlan(NJsonWriter::TBuf& writer, const NYql::TExprNode::TPtr& query);
 
 /*

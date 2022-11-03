@@ -1,4 +1,4 @@
-#include "kqp_prepare_impl.h"
+#include "kqp_prepare.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -1340,30 +1340,6 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckQueryTransformer() {
                 if (!EnsureListType(result.Value().Ref(), ctx)) {
                     return TStatus::Error;
                 }
-            }
-
-            return TStatus::Ok;
-        });
-}
-
-TAutoPtr<IGraphTransformer> CreateKqpCheckKiProgramTransformer() {
-    return CreateFunctorTransformer(
-        [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
-            output = input;
-
-            YQL_ENSURE(TMaybeNode<TKiProgram>(input));
-
-            auto program = TKiProgram(input);
-            auto effectsType = program.Effects().Ptr()->GetTypeAnn();
-            bool typeOk = EnsureListType(input->Pos(), *effectsType, ctx);
-            if (typeOk) {
-                auto listType = effectsType->Cast<TListExprType>();
-                typeOk = listType->GetItemType()->GetKind() == ETypeAnnotationKind::Void;
-            }
-            if (!typeOk) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                    << "Invalid program effects type: " << FormatType(effectsType)));
-                return TStatus::Error;
             }
 
             return TStatus::Ok;

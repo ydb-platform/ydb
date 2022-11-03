@@ -22,17 +22,12 @@ target_link_libraries(core-kqp-prepare PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-prepare PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_query_analyze.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_query_exec.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_query_finalize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_query_plan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_query_rewrite.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_query_simplify.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_query_substitute.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_type_ann.cpp
 )
 generate_enum_serilization(core-kqp-prepare
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_prepare_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/prepare/kqp_query_plan.h
   INCLUDE_HEADERS
-  ydb/core/kqp/prepare/kqp_prepare_impl.h
+  ydb/core/kqp/prepare/kqp_query_plan.h
 )

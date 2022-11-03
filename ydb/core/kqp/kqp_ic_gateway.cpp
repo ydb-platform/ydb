@@ -6,9 +6,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/kikimr_issue.h>
-#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/kqp_gateway.h>
 #include <ydb/core/kqp/executer/kqp_executer.h>
@@ -25,7 +23,6 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -44,8 +41,6 @@ using namespace NThreading;
 using namespace NYql::NCommon;
 using namespace NSchemeShard;
 using namespace NKikimrSchemeOp;
-
-using NKikimrTxUserProxy::TMiniKQLTransaction;
 
 constexpr const IKqpGateway::TKqpSnapshot IKqpGateway::TKqpSnapshot::InvalidSnapshot = TKqpSnapshot();
 
@@ -480,184 +475,6 @@ private:
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
-class TMkqlRequestHandler : public TRequestHandlerBase<
-    TMkqlRequestHandler,
-    TEvTxUserProxy::TEvProposeTransaction,
-    TEvTxUserProxy::TEvProposeTransactionStatus,
-    IKqpGateway::TMkqlResult>
-{
-public:
-    using TBase = typename TMkqlRequestHandler::TBase;
-    using TCallbackFunc = typename TBase::TCallbackFunc;
-    using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-    using TResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
-    using TResult = IKqpGateway::TMkqlResult;
-
-    TMkqlRequestHandler(const TAlignedPagePoolCounters& allocCounters, TRequest* request,
-        TKqpParamsMap&& paramsMap, TPromise<TResult> promise, TCallbackFunc callback,
-        const TActorId& miniKqlComplileServiceActorId)
-        : TBase(request, promise, callback)
-        , ParamsMap(std::move(paramsMap))
-        , CompilationPending(false)
-        , CompilationRetried(false)
-        , AllocCounters(allocCounters)
-        , MiniKqlComplileServiceActorId(miniKqlComplileServiceActorId)
-    {}
-
-    void Bootstrap(const TActorContext& ctx) {
-        auto& mkqlTx = *Request->Record.MutableTransaction()->MutableMiniKQLTransaction();
-
-        if (mkqlTx.HasProgram() && mkqlTx.GetProgram().HasText()) {
-            MkqlProgramText = mkqlTx.GetProgram().GetText();
-            CompileProgram(ctx, mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE);
-        }
-
-        mkqlTx.SetCollectStats(true);
-        YQL_ENSURE(!mkqlTx.HasParams());
-
-        if (!ParamsMap.Values.empty()) {
-            try {
-                mkqlTx.MutableParams()->SetBin(BuildParams(ParamsMap, AllocCounters, ctx));
-            }
-            catch(const yexception& e) {
-                Promise.SetValue(ResultFromError<TResult>(e.what()));
-                this->Die(ctx);
-                return;
-            }
-        }
-
-        ProceedWithExecution(ctx);
-
-        this->Become(&TMkqlRequestHandler::AwaitState);
-    }
-
-    void Handle(TMiniKQLCompileServiceEvents::TEvCompileStatus::TPtr &ev, const TActorContext &ctx) {
-        const auto& result = ev->Get()->Result;
-        auto& mkqlTx = *Request->Record.MutableTransaction()->MutableMiniKQLTransaction();
-
-        if (!result.Errors.Empty()) {
-            Promise.SetValue(ResultFromIssues<TResult>(GetMkqlCompileStatus(result.Errors),
-                "Query compilation failed", result.Errors));
-
-            this->Die(ctx);
-            return;
-        }
-
-        if (mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE) {
-            TResult reply;
-            reply.SetSuccess();
-            reply.CompiledProgram = result.CompiledProgram;
-            Promise.SetValue(std::move(reply));
-            this->Die(ctx);
-            return;
-        }
-
-        auto& pgm = *mkqlTx.MutableProgram();
-        pgm.ClearText();
-        pgm.SetBin(result.CompiledProgram);
-
-        CompileResolveCookies = std::move(ev->Get()->CompileResolveCookies);
-
-        CompilationPending = false;
-        ProceedWithExecution(ctx);
-    }
-
-    void HandleResponse(TResponse::TPtr &ev, const TActorContext &ctx) {
-        auto& response = *ev->Get();
-        ui32 status = response.Record.GetStatus();
-
-        bool resolveError = status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError ||
-            status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable;
-
-        if (resolveError && !CompilationRetried && !MkqlProgramText.empty()) {
-            CompilationRetried = true;
-            CompileProgram(ctx, false);
-            ProceedWithExecution(ctx);
-            return;
-        }
-
-        Callback(Promise, std::move(*ev->Get()));
-        this->Die(ctx);
-    }
-
-    using TBase::Handle;
-
-    STFUNC(AwaitState) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TResponse, HandleResponse);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TMiniKQLCompileServiceEvents::TEvCompileStatus, Handle);
-        default:
-            TBase::HandleUnexpectedEvent("TMkqlRequestHandler", ev->GetTypeRewrite(), ctx);
-        }
-    }
-
-private:
-    static TString BuildParams(const TKqpParamsMap& paramsMap, const TAlignedPagePoolCounters& counters,
-        const TActorContext &ctx)
-    {
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__, counters, AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
-        NMiniKQL::TTypeEnvironment env(alloc);
-
-        NMiniKQL::TStructLiteralBuilder structBuilder(env);
-        structBuilder.Reserve(paramsMap.Values.size());
-        for (auto& pair : paramsMap.Values) {
-            const TString& name = pair.first;
-            const NYql::NDq::TMkqlValueRef& param = pair.second;
-
-            auto valueNode = NMiniKQL::ImportValueFromProto(param.GetType(), param.GetValue(), env);
-            structBuilder.Add(name, valueNode);
-        }
-
-        auto node = NMiniKQL::TRuntimeNode(structBuilder.Build(), true);
-        return NMiniKQL::SerializeRuntimeNode(node, env);
-    }
-
-    NYql::EYqlIssueCode GetMkqlCompileStatus(const NYql::TIssues& issues) {
-        for (auto& issue : issues) {
-            switch (issue.GetCode()) {
-                case NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR:
-                    return TIssuesIds::KIKIMR_SCHEME_MISMATCH;
-
-                case NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR:
-                    return TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
-            }
-        }
-
-        return TIssuesIds::DEFAULT_ERROR;
-    }
-
-    void CompileProgram(const TActorContext &ctx, bool forceRefresh) {
-        auto compileEv = MakeHolder<TMiniKQLCompileServiceEvents::TEvCompile>(MkqlProgramText);
-        compileEv->ForceRefresh = forceRefresh;
-        if (!CompileResolveCookies.empty()) {
-            compileEv->CompileResolveCookies = std::move(CompileResolveCookies);
-        }
-        ctx.Send(MiniKqlComplileServiceActorId, compileEv.Release());
-        CompilationPending = true;
-    }
-
-    void ProceedWithExecution(const TActorContext& ctx) {
-        if (!CompilationPending) {
-            TAutoPtr<TRequest> ev = new TRequest();
-            ev->Record.CopyFrom(this->Request->Record);
-
-            TActorId txproxy = MakeTxProxyID();
-            ctx.Send(txproxy, ev.Release());
-        }
-    }
-
-private:
-    TKqpParamsMap ParamsMap;
-    bool CompilationPending;
-    bool CompilationRetried;
-    TString MkqlProgramText;
-    THashMap<TString, ui64> CompileResolveCookies;
-    TAlignedPagePoolCounters AllocCounters;
-    TActorId MiniKqlComplileServiceActorId;
-};
-
 class TSchemeOpRequestHandler: public TRequestHandlerBase<
     TSchemeOpRequestHandler,
     TEvTxUserProxy::TEvProposeTransaction,
@@ -994,15 +811,13 @@ private:
 
 public:
     TKikimrIcGateway(const TString& cluster, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
-        TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const TActorId& mkqlComplileService)
+        TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters)
         : Cluster(cluster)
         , Database(database)
         , ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Counters(counters)
-        , MetadataLoader(std::move(metadataLoader))
-        , MkqlComplileService(mkqlComplileService)
-    {}
+        , MetadataLoader(std::move(metadataLoader)) {}
 
     bool HasCluster(const TString& cluster) override {
         return cluster == Cluster;
@@ -1799,26 +1614,6 @@ public:
         }
     }
 
-    TFuture<TMkqlResult> ExecuteMkql(const TString& cluster, const TString& program,
-        TKqpParamsMap&& params, const TMkqlSettings& settings, const TKqpSnapshot& snapshot) override
-    {
-        YQL_ENSURE(false, "Unexpected exec mkql in OldEngine mode.");
-
-        return RunInternal(cluster, program, std::move(params), false, false, settings, snapshot);
-    }
-
-    TFuture<TMkqlResult> ExecuteMkqlPrepared(const TString& cluster, const TString& program,
-        TKqpParamsMap&& params, const TMkqlSettings& settings, const TKqpSnapshot& snapshot) override
-    {
-        YQL_ENSURE(false, "Unexpected exeс prepared mkql in OldEngine mode.");
-        return RunInternal(cluster, program, std::move(params), false, true, settings, snapshot);
-    }
-
-    TFuture<TMkqlResult> PrepareMkql(const TString& cluster, const TString& program) override {
-        YQL_ENSURE(false, "Unexpected prepare mkql in OldEngine mode.");
-        return RunInternal(cluster, program, TKqpParamsMap(), true, false, TMkqlSettings());
-    }
-
     TFuture<TExecPhysicalResult> ExecutePhysical(TExecPhysicalRequest&& request, const NActors::TActorId& target) override {
         return ExecutePhysicalQueryInternal(std::move(request), target, false);
     }
@@ -2202,17 +1997,6 @@ private:
         return promise.GetFuture();
     }
 
-    TFuture<TMkqlResult> SendMkqlRequest(TEvTxUserProxy::TEvProposeTransaction* request,
-        TKqpParamsMap&& paramsMap, TMkqlRequestHandler::TCallbackFunc callback)
-    {
-        auto promise = NewPromise<TMkqlResult>();
-        IActor* requestHandler = new TMkqlRequestHandler(Counters->Counters->AllocCounters, request,
-            std::move(paramsMap), promise, callback, MkqlComplileService);
-        RegisterActor(requestHandler);
-
-        return promise.GetFuture();
-    }
-
     TFuture<TGenericResult> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request)
     {
         auto promise = NewPromise<TGenericResult>();
@@ -2248,91 +2032,6 @@ private:
 
     bool CheckCluster(const TString& cluster) {
         return cluster == Cluster;
-    }
-
-    TFuture<TMkqlResult> RunInternal(const TString& cluster, const TString& program, TKqpParamsMap&& params,
-        bool compileOnly, bool prepared, const TMkqlSettings& settings, const TKqpSnapshot& snapshot = TKqpSnapshot::InvalidSnapshot)
-    {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TMkqlResult>(cluster);
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->Serialized);
-            }
-            auto& mkqlTx = *ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
-            mkqlTx.SetFlatMKQL(true);
-            mkqlTx.SetMode(compileOnly ? TMiniKQLTransaction::COMPILE : TMiniKQLTransaction::COMPILE_AND_EXEC);
-
-            if (prepared) {
-                mkqlTx.MutableProgram()->SetBin(program);
-            } else {
-                mkqlTx.MutableProgram()->SetText(program);
-            }
-
-            if (!compileOnly) {
-                if (settings.LlvmRuntime) {
-                    mkqlTx.SetLlvmRuntime(true);
-                }
-
-                if (settings.PerShardKeysSizeLimitBytes) {
-                    mkqlTx.SetPerShardKeysSizeLimitBytes(*settings.PerShardKeysSizeLimitBytes);
-                }
-
-                if (settings.CancelAfterMs) {
-                    ev->Record.SetCancelAfterMs(settings.CancelAfterMs);
-                }
-
-                if (settings.TimeoutMs) {
-                    ev->Record.SetExecTimeoutPeriod(settings.TimeoutMs);
-                }
-
-                const auto& limits = settings.Limits;
-
-                if (limits.AffectedShardsLimit) {
-                    mkqlTx.MutableLimits()->SetAffectedShardsLimit(limits.AffectedShardsLimit);
-                }
-
-                if (limits.ReadsetCountLimit) {
-                    mkqlTx.MutableLimits()->SetReadsetCountLimit(limits.ReadsetCountLimit);
-                }
-
-                if (limits.ComputeNodeMemoryLimitBytes) {
-                    mkqlTx.MutableLimits()->SetComputeNodeMemoryLimitBytes(limits.ComputeNodeMemoryLimitBytes);
-                }
-
-                if (limits.TotalReadSizeLimitBytes) {
-                    mkqlTx.MutableLimits()->SetTotalReadSizeLimitBytes(limits.TotalReadSizeLimitBytes);
-                }
-
-                if (snapshot.IsValid()) {
-                    mkqlTx.SetSnapshotStep(snapshot.Step);
-                    mkqlTx.SetSnapshotTxId(snapshot.TxId);
-                }
-            }
-
-            if (settings.CollectStats) {
-                mkqlTx.SetCollectStats(true);
-            }
-
-            return SendMkqlRequest(ev.Release(), std::move(params),
-                [compileOnly] (TPromise<TMkqlResult> promise, TTransactionResponse&& response) {
-                    try {
-                        promise.SetValue(GetMkqlResult(GetRunResponse(std::move(response.Record)), compileOnly));
-                    }
-                    catch (yexception& e) {
-                        promise.SetValue(ResultFromException<TMkqlResult>(e));
-                    }
-                });
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TMkqlResult>(e));
-        }
     }
 
     TFuture<TExecPhysicalResult> ExecutePhysicalQueryInternal(TExecPhysicalRequest&& request, const TActorId& target,
@@ -2378,40 +2077,6 @@ private:
     }
 
 private:
-    static TRunResponse GetRunResponse(NKikimrTxUserProxy::TEvProposeTransactionStatus&& ev) {
-        IKqpGateway::TRunResponse response;
-
-        response.HasProxyError = ev.GetStatus() != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
-            && ev.GetStatus() != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready;
-        response.ProxyStatus = ev.GetStatus();
-        if (response.HasProxyError) {
-            NMsgBusProxy::ExplainProposeTransactionStatus(ev.GetStatus(), response.ProxyStatusName,
-                response.ProxyStatusDesc);
-        }
-
-        auto executionResponseStatus = static_cast<NMiniKQL::IEngineFlat::EStatus>(
-            ev.GetExecutionEngineResponseStatus());
-        auto executionEngineStatus = static_cast<NMiniKQL::IEngineFlat::EResult>(
-            ev.GetExecutionEngineStatus());
-        response.HasExecutionEngineError = executionResponseStatus == NMiniKQL::IEngineFlat::EStatus::Error &&
-            executionEngineStatus != NMiniKQL::IEngineFlat::EResult::Ok;
-        if (response.HasExecutionEngineError) {
-            NMsgBusProxy::ExplainExecutionEngineStatus(ev.GetExecutionEngineStatus(),
-                response.ExecutionEngineStatusName, response.ExecutionEngineStatusDesc);
-        }
-
-        NYql::IssuesFromMessage(ev.GetIssues(), response.Issues);
-
-        response.MiniKQLErrors = ev.GetMiniKQLErrors();
-        response.DataShardErrors = ev.GetDataShardErrors();
-        response.MiniKQLCompileResults = ev.GetMiniKQLCompileResults();
-
-        response.ExecutionEngineEvaluatedResponse.Swap(ev.MutableExecutionEngineEvaluatedResponse());
-        response.TxStats = ev.GetTxStats();
-
-        return response;
-    }
-
     static TListPathResult GetListPathResult(const TPathDescription& pathDesc, const TString& path) {
         if (pathDesc.GetSelf().GetPathType() != EPathTypeDir) {
             return ResultFromError<TListPathResult>(TString("Directory not found: ") + path);
@@ -2494,66 +2159,6 @@ private:
                 error = ResultFromError<TResult>(TStringBuilder() << status << ": " <<  reason);
                 return false;
         }
-    }
-
-    static TMkqlResult GetMkqlResult(TRunResponse&& response, bool compileOnly) {
-        auto& txRes = response.MiniKQLCompileResults;
-
-        if (txRes.ProgramCompileErrorsSize() > 0) {
-            NYql::TIssues errors;
-            for (size_t i = 0, end = txRes.ProgramCompileErrorsSize(); i < end; ++i) {
-                const auto& err = txRes.GetProgramCompileErrors(i);
-                errors.AddIssue(NYql::IssueFromMessage(err));
-            }
-            return ResultFromIssues<TMkqlResult>(TIssuesIds::KIKIMR_COMPILE_ERROR, "MiniKQL compilation error",
-                errors);
-        }
-
-        YQL_ENSURE(txRes.ParamsCompileErrorsSize() == 0);
-
-        if (!compileOnly) {
-            NYql::TIssues internalIssues;
-            if (response.HasExecutionEngineError) {
-                internalIssues.AddIssue(TIssue(NYql::TPosition(), TString("Execution engine failure (")
-                    + response.ExecutionEngineStatusName + "): " + response.ExecutionEngineStatusDesc));
-            }
-
-            if (!response.DataShardErrors.empty()) {
-                internalIssues.AddIssue(TIssue(NYql::TPosition(), TString("Data shard errors: ")
-                    + response.DataShardErrors));
-            }
-
-            if (!response.MiniKQLErrors.empty()) {
-                internalIssues.AddIssue(TIssue(NYql::TPosition(), TString("Execution engine errors: ")
-                    + response.MiniKQLErrors));
-            }
-
-            if (response.HasProxyError) {
-                auto message = TString("Error executing transaction (") + response.ProxyStatusName + "): "
-                    + response.ProxyStatusDesc;
-
-                NYql::TIssue proxyIssue(NYql::TPosition(), message);
-                for (auto& issue : internalIssues) {
-                    proxyIssue.AddSubIssue(MakeIntrusive<TIssue>(issue));
-                }
-                for (auto& issue : response.Issues) {
-                    proxyIssue.AddSubIssue(MakeIntrusive<TIssue>(issue));
-                }
-
-                return ResultFromIssues<TMkqlResult>(KikimrProxyErrorStatus(response.ProxyStatus), {proxyIssue});
-            }
-
-            if (!internalIssues.Empty()) {
-                return ResultFromErrors<TMkqlResult>(internalIssues);
-            }
-        }
-
-        TMkqlResult result;
-        result.SetSuccess();
-        result.CompiledProgram = txRes.GetCompiledProgram();
-        result.Result.Swap(&response.ExecutionEngineEvaluatedResponse);
-        result.TxStats.Swap(&response.TxStats);
-        return result;
     }
 
     static NYql::EYqlIssueCode KikimrProxyErrorStatus(ui32 proxyStatus) {
@@ -2919,16 +2524,16 @@ private:
     TAlignedPagePoolCounters AllocCounters;
     TMaybe<TUserTokenData> UserToken;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
-    TActorId MkqlComplileService;
 };
 
 } // namespace
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const TString& database,
-    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader>&& metadataLoader, TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters,
-    const TActorId& mkqlComplileService)
+    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader>&& metadataLoader, TActorSystem* actorSystem,
+    ui32 nodeId, TKqpRequestCounters::TPtr counters)
 {
-    return MakeIntrusive<TKikimrIcGateway>(cluster, database, std::move(metadataLoader), actorSystem, nodeId, counters, mkqlComplileService);
+    return MakeIntrusive<TKikimrIcGateway>(cluster, database, std::move(metadataLoader), actorSystem, nodeId,
+        counters);
 }
 
 } // namespace NKqp

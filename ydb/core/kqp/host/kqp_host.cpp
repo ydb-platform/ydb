@@ -654,32 +654,21 @@ public:
         if (!AsyncResult) {
             auto& query = QueryCtx->PreparedQuery;
             YQL_ENSURE(QueryCtx->Type != EKikimrQueryType::Unspecified);
+            YQL_ENSURE(query->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
 
-            if (query->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1) {
-                if (CurrentKqlIndex) {
-                    return TStatus::Ok;
-                }
+            if (CurrentKqlIndex) {
+                return TStatus::Ok;
+            }
 
-                std::shared_ptr<const NKqpProto::TKqpPhyQuery> phyQuery(query, &query->GetPhysicalQuery());
+            std::shared_ptr<const NKqpProto::TKqpPhyQuery> phyQuery(query, &query->GetPhysicalQuery());
 
-                if (QueryCtx->Type == EKikimrQueryType::Scan) {
-                    AsyncResult = KqpRunner->ExecutePreparedScanQuery(Cluster, input.Get(), std::move(phyQuery),
-                        ctx, ExecuteCtx->ReplyTarget);
-                } else {
-                    YQL_ENSURE(QueryCtx->Type == EKikimrQueryType::Dml);
-                    AsyncResult = KqpRunner->ExecutePreparedQueryNewEngine(Cluster, input.Get(), std::move(phyQuery),
-                        ctx, ExecuteCtx->Settings);
-                }
+            if (QueryCtx->Type == EKikimrQueryType::Scan) {
+                AsyncResult = KqpRunner->ExecutePreparedScanQuery(Cluster, input.Get(), std::move(phyQuery),
+                    ctx, ExecuteCtx->ReplyTarget);
             } else {
-                if (CurrentKqlIndex >= query->KqlsSize()) {
-                    return TStatus::Ok;
-                }
-
-                const auto& kql = query->GetKqls(CurrentKqlIndex);
-
                 YQL_ENSURE(QueryCtx->Type == EKikimrQueryType::Dml);
-                YQL_ENSURE(!kql.GetSettings().GetNewEngine());
-                AsyncResult = KqpRunner->ExecutePreparedDataQuery(Cluster, input.Get(), kql, ctx, ExecuteCtx->Settings);
+                AsyncResult = KqpRunner->ExecutePreparedQueryNewEngine(Cluster, input.Get(), std::move(phyQuery),
+                    ctx, ExecuteCtx->Settings);
             }
         }
 

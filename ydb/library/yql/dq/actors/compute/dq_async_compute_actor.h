@@ -23,7 +23,8 @@ NActors::IActor* CreateDqAsyncComputeActor(const NActors::TActorId& executerId, 
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr,
-    const NActors::TActorId& quoterServiceActorId = {});
+    const NActors::TActorId& quoterServiceActorId = {},
+    bool ownCounters = false);
 
 } // namespace NDq
 } // namespace NYql

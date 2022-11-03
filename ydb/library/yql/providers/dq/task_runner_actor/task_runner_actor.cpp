@@ -293,7 +293,7 @@ private:
         auto cookie = ev->Cookie;
         auto wasFinished = ev->Get()->WasFinished;
         auto toPop = ev->Get()->Size;
-        Invoker->Invoke([cookie,selfId,channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId, processInit=this->ProcessInit]() {
+        Invoker->Invoke([cookie,selfId,channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto channel = taskRunner->GetOutputChannel(channelId);
@@ -311,11 +311,10 @@ private:
                 }
 
                 TVector<NDqProto::TData> chunks;
-                NDqProto::TPopResponse lastPop;
                 NDqProto::TPopResponse response;
                 for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
                     NDqProto::TData data;
-                    lastPop = std::move(channel->Pop(data, remain));
+                    const auto lastPop = std::move(channel->Pop(data, remain));
 
                     for (auto& metric : lastPop.GetMetric()) {
                         *response.AddMetric() = metric;
@@ -332,12 +331,6 @@ private:
                     }
                 }
 
-                TDqTaskRunnerStatsInplace stats;
-                NDqProto::TGetStatsResponse pbStats;
-                lastPop.GetStats().UnpackTo(&pbStats);
-                stats.FromProto(pbStats.GetStats());
-                stats.ProcessInit = processInit;
-
                 actorSystem->Send(
                     new IEventHandle(
                         replyTo,
@@ -349,8 +342,7 @@ private:
                             Nothing(),
                             isFinished,
                             changed,
-                            GetSensors(response),
-                            TDqTaskRunnerStatsView(std::move(stats))),
+                            GetSensors(response)),
                         /*flags=*/0,
                         cookie));
             } catch (...) {
@@ -470,7 +462,7 @@ private:
             Settings->FreezeDefaults();
             StageId = taskMeta.GetStageId();
         }
-        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName,this_=this](){
+        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto result = taskRunner->Prepare();
@@ -481,7 +473,6 @@ private:
                     "ProcessInit");
                 i64 val = (TInstant::Now()-startTime).MilliSeconds();
                 sensors.push_back({sensorName, val, val, val, val, 1});
-                this_->ProcessInit = TDuration::MilliSeconds(val);
 
                 auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
                     taskRunner->GetSecureParams(),
@@ -581,7 +572,6 @@ private:
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;
-    TDuration ProcessInit = TDuration::Zero();
 };
 
 class TTaskRunnerActorFactory: public ITaskRunnerActorFactory {

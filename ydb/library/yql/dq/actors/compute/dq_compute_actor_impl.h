@@ -13,6 +13,7 @@
 #include <ydb/core/base/wilson.h>
 #include <ydb/core/protos/services.pb.h>
 
+#include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -1853,7 +1854,21 @@ public:
             dst->SetMkqlExtraMemoryRequests(GetProfileStats()->MkqlExtraMemoryRequests);
         }
 
-        if (auto* taskStats = GetTaskRunnerStats()) {
+        if (Stat) { // for task_runner_actor
+            Y_VERIFY(!dst->HasExtra());
+            NDqProto::TExtraStats extraStats;
+            for (const auto& [name, entry]: Stat->Get()) {
+                NDqProto::TDqStatsAggr metric;
+                metric.SetSum(entry.Sum);
+                metric.SetMax(entry.Max);
+                metric.SetMin(entry.Min);
+                //metric.SetAvg(entry.Avg);
+                metric.SetCnt(entry.Count);
+                (*extraStats.MutableStats())[name] = metric;
+            }
+            dst->MutableExtra()->PackFrom(extraStats);
+            Stat->Clear();
+        } else if (auto* taskStats = GetTaskRunnerStats()) { // for task_runner_actor_local
             auto* protoTask = dst->AddTasks();
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats());
 
@@ -2011,6 +2026,7 @@ protected:
     bool MonCountersProvided = false;
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryUsage;
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryLimit;
+    THolder<NYql::TCounters> Stat;
 };
 
 } // namespace NYql

@@ -107,6 +107,8 @@ message TDqMkqlStat {
 }
 
 message TDqTaskStats {
+    reserved 154;
+
     // basic stats
     uint64 TaskId = 1;
     uint32 StageId = 2;
@@ -140,7 +142,6 @@ message TDqTaskStats {
     repeated TDqInputChannelStats InputChannels = 151;
     repeated TDqAsyncOutputBufferStats Sinks = 152;
     repeated TDqOutputChannelStats OutputChannels = 153;
-    uint64 ProcessInit = 154;
 
     google.protobuf.Any Extra = 200;
 }
@@ -164,6 +165,10 @@ message TDqStatsAggr {
     uint64 Max = 2;
     uint64 Sum = 3;
     uint64 Cnt = 4;
+}
+
+message TExtraStats {
+    map<string, TDqStatsAggr> Stats = 1;
 }
 
 message TDqStatsMinMax {

@@ -39,7 +39,8 @@ public:
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters,
-        const TActorId& quoterServiceActorId)
+        const TActorId& quoterServiceActorId,
+        bool ownCounters)
         : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ false, false, taskCounters)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , ReadyToCheckpointFlag(false)
@@ -47,6 +48,10 @@ public:
         , QuoterServiceActorId(quoterServiceActorId)
     {
         InitExtraMonCounters(taskCounters);
+        if (ownCounters) {
+            CA_LOG_D("TDqAsyncComputeActor, make stat");
+            Stat = MakeHolder<NYql::TCounters>();
+        }
     }
 
     void DoBootstrap() {
@@ -429,7 +434,9 @@ private:
         const auto& taskParams = ev->Get()->TaskParams;
         const auto& typeEnv = ev->Get()->TypeEnv;
         const auto& holderFactory = ev->Get()->HolderFactory;
-
+        if (Stat) {
+            Stat->AddCounters2(ev->Get()->Sensors);
+        }
         TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
         FillIoMaps(holderFactory, typeEnv, secureParams, taskParams);
 
@@ -457,6 +464,9 @@ private:
     }
 
     void OnRunFinished(NTaskRunnerActor::TEvTaskRunFinished::TPtr& ev, const NActors::TActorContext& ) {
+        if (Stat) {
+            Stat->AddCounters2(ev->Get()->Sensors);
+        }
         ContinueRunInflight = false;
         TrySendAsyncChannelsData(); // send from previous cycle
 
@@ -533,10 +543,9 @@ private:
     }
 
     void OnPopFinished(NTaskRunnerActor::TEvChannelPopFinished::TPtr& ev, const NActors::TActorContext&) {
-        if (ev->Get()->Stats) {
-            TaskRunnerStats = std::move(ev->Get()->Stats);
+        if (Stat) {
+            Stat->AddCounters2(ev->Get()->Sensors);
         }
-        CA_LOG_T("OnPopFinished, stats: " << *TaskRunnerStats.Get());
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_VERIFY(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
@@ -886,10 +895,11 @@ IActor* CreateDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
-    const TActorId& quoterServiceActorId)
+    const TActorId& quoterServiceActorId,
+    bool ownCounters)
 {
     return new TDqAsyncComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, taskRunnerActorFactory, taskCounters, quoterServiceActorId);
+        functionRegistry, settings, memoryLimits, taskRunnerActorFactory, taskCounters, quoterServiceActorId, ownCounters);
 }
 
 } // namespace NDq

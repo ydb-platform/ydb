@@ -129,6 +129,12 @@ public:
             *Runner->GetStats(),
             CurrentStats,
             Runner->GetTaskId());
+        for (const auto& [inputId, _]: CurrentInputChannelsStats) {
+            UpdateInputChannelStats(inputId);
+        }
+        for (const auto& [outputId, _]: CurrentOutputChannelsStats) {
+            UpdateOutputChannelStats(outputId);
+        }
     }
 
     void UpdateOutputChannelStats(ui64 channelId)

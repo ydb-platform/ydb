@@ -130,13 +130,18 @@ private:
             << " PingCookie: " << ev->Cookie
             << " StatusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(state.GetStatusCode());
 
-        if (state.HasStats() && state.GetStats().GetTasks().size()) {
+        if (state.HasStats() && TryAddStatsFromExtra(state.GetStats())) {
+            if (ServiceCounters.Counters && !AggrPeriod) {
+                ExportStats(TaskStat, taskId);
+            }
+        } else if (state.HasStats() && state.GetStats().GetTasks().size()) {
             YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " AddStats " << taskId;
             AddStats(state.GetStats());
             if (ServiceCounters.Counters && !AggrPeriod) {
                 ExportStats(TaskStat, taskId);
             }
         }
+
 
         TIssues localIssues;
         // TODO: don't convert issues to string
@@ -278,6 +283,24 @@ private:
         }
     }
 
+    bool TryAddStatsFromExtra(const NDqProto::TDqComputeActorStats& x) {
+        NDqProto::TExtraStats extraStats;
+        if (x.HasExtra() && x.GetExtra().UnpackTo(&extraStats)) {
+            YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " AddStats from extra";
+            for (const auto& [name, m] : extraStats.GetStats()) {
+                NYql::TCounters::TEntry value;
+                value.Sum = m.GetSum();
+                value.Max = m.GetMax();
+                value.Min = m.GetMin();
+                //value.Avg = m.GetAvg();
+                value.Count = m.GetCnt();
+                TaskStat.AddCounter(name, value);
+            }
+            return true;
+        }
+        return false;
+    }
+
     void AddStats(const NDqProto::TDqComputeActorStats& x) {
         YQL_ENSURE(x.GetTasks().size() == 1);
         auto& s = x.GetTasks(0);
@@ -303,10 +326,6 @@ private:
         ADD_COUNTER(InputBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
-        if (stats.GetProcessInit()) {
-            const auto val = static_cast<i64>(stats.GetProcessInit());
-            TaskStat.AddCounter(TaskStat.GetCounterName("TaskRunner", labels, "ProcessInit"), NYql::TCounters::TEntry{val, val, val, val, val});
-        }
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)

@@ -38,6 +38,7 @@ namespace NYql::NDqs {
 
         bool CanUseComputeActor = true;
         NActors::TActorId QuoterServiceActorId;
+        bool ComputeActorOwnsCounters = false;
     };
 
     NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& options);

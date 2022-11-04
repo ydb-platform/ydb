@@ -14,6 +14,9 @@ namespace NKqpHelpers {
     using TEvCreateSessionRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
         Ydb::Table::CreateSessionResponse>;
 
+    using TEvDeleteSessionRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest,
+        Ydb::Table::DeleteSessionResponse>;
+
     template<class TResp>
     inline TResp AwaitResponse(TTestActorRuntime& runtime, NThreading::TFuture<TResp> f) {
         size_t responses = 0;
@@ -181,12 +184,11 @@ namespace NKqpHelpers {
         return runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     }
 
-    inline void CloseSession(TTestActorRuntime& runtime, TActorId sender, const TString& sessionId) {
-        auto request = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
-        request->Record.MutableRequest()->SetSessionId(sessionId);
-        runtime.Send(
-            new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()),
-            0, /* via actor system */ true);
+    inline void CloseSession(TTestActorRuntime& runtime, const TString& sessionId) {
+        Ydb::Table::DeleteSessionRequest request;
+        request.set_session_id(sessionId);
+        auto future = NRpcService::DoLocalRpc<TEvDeleteSessionRequest>(
+            std::move(request), "", "", /* token */ runtime.GetActorSystem(0));
     }
 
     inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeStreamRequest(
@@ -204,6 +206,14 @@ namespace NKqpHelpers {
         return request;
     }
 
+    inline TString FormatResult(const Ydb::Table::ExecuteQueryResult& result) {
+        if (result.result_sets_size() == 0) {
+            return "<empty>";
+        }
+        Cerr << JoinSeq(", ", result.result_sets(0).rows());
+        return JoinSeq(", ", result.result_sets(0).rows());
+    }
+
     inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false) {
         TString sessionId = CreateSessionRPC(runtime);
         TString txId;
@@ -213,11 +223,7 @@ namespace NKqpHelpers {
         }
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
-        if (result.result_sets_size() == 0) {
-            return "<empty>";
-        }
-        UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1u);
-        return JoinSeq(", ", result.result_sets(0).rows());
+        return FormatResult(result);
     }
 
     inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query) {
@@ -234,11 +240,7 @@ namespace NKqpHelpers {
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
         txId = result.tx_meta().id();
-        if (result.result_sets_size() == 0) {
-            return "<empty>";
-        }
-        UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1u);
-        return JoinSeq(", ", result.result_sets(0).rows());
+        return FormatResult(result);
     }
 
     inline TString KqpSimpleContinue(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
@@ -250,12 +252,7 @@ namespace NKqpHelpers {
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
         Y_VERIFY(result.tx_meta().id() == txId);
-        if (result.result_sets_size() == 0) {
-            return "<empty>";
-        }
-        UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1u);
-        Cerr << JoinSeq(", ", result.result_sets(0).rows()) << Endl;
-        return JoinSeq(", ", result.result_sets(0).rows());
+        return FormatResult(result);
     }
 
     inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
@@ -267,12 +264,7 @@ namespace NKqpHelpers {
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
         Y_VERIFY(result.tx_meta().id().empty(), "must be empty transaction");
-        if (result.result_sets_size() == 0) {
-            return "<empty>";
-        }
-        UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1u);
-        Cerr << JoinSeq(", ", result.result_sets(0).rows()) << Endl;
-        return JoinSeq(", ", result.result_sets(0).rows());
+        return FormatResult(result);
     }
 
 } // namespace NKqpHelpers

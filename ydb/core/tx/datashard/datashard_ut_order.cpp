@@ -4662,10 +4662,9 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
     };
 
     auto execSnapshotRequest = [&](const TString& query) -> TString {
-        auto reqSender = runtime.AllocateEdgeActor();
         TString sessionId, txId;
         TString result = beginSnapshotRequest(sessionId, txId, query);
-        CloseSession(runtime, reqSender, sessionId);
+        CloseSession(runtime, sessionId);
         return result;
     };
 
@@ -5057,10 +5056,9 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
     };
 
     auto execSnapshotRequest = [&](const TString& query) -> TString {
-        auto reqSender = runtime.AllocateEdgeActor();
         TString sessionId, txId;
         TString result = beginSnapshotRequest(sessionId, txId, query);
-        CloseSession(runtime, reqSender, sessionId);
+        CloseSession(runtime, sessionId);
         return result;
     };
 

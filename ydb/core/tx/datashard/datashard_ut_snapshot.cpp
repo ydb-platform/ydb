@@ -1030,10 +1030,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         };
 
         auto execSnapshotRequest = [&](const TString& query) -> TString {
-            auto reqSender = runtime.AllocateEdgeActor();
             TString sessionId, txId;
             TString result = beginSnapshotRequest(sessionId, txId, query);
-            CloseSession(runtime, reqSender, sessionId);
+            CloseSession(runtime, sessionId);
             return result;
         };
 
@@ -1145,10 +1144,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         };
 
         auto execSnapshotRequest = [&](const TString& query) -> TString {
-            auto reqSender = runtime.AllocateEdgeActor();
             TString sessionId, txId;
             TString result = beginSnapshotRequest(sessionId, txId, query);
-            CloseSession(runtime, reqSender, sessionId);
+            CloseSession(runtime, sessionId);
             return result;
         };
 

@@ -50,11 +50,11 @@ namespace NKqpHelpers {
         return sessionId;
     }
 
-    inline Ydb::Table::ExecuteDataQueryResponse ExecuteDataQueryRPCResponse(
-        TTestActorRuntime& runtime, Ydb::Table::ExecuteDataQueryRequest&& request, const TString& database = {}) {
-        auto future = NRpcService::DoLocalRpc<TEvExecuteDataQueryRequest>(
+    inline NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> SendRequest(
+        TTestActorRuntime& runtime, Ydb::Table::ExecuteDataQueryRequest&& request, const TString& database = {})
+    {
+        return NRpcService::DoLocalRpc<TEvExecuteDataQueryRequest>(
             std::move(request), database, "" /* token */, runtime.GetActorSystem(0));
-        return AwaitResponse(runtime, future);
     }
 
     inline Ydb::Table::ExecuteDataQueryRequest MakeSimpleRequestRPC(
@@ -214,10 +214,11 @@ namespace NKqpHelpers {
         return JoinSeq(", ", result.result_sets(0).rows());
     }
 
+
     inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false) {
         TString sessionId = CreateSessionRPC(runtime);
         TString txId;
-        auto response = ExecuteDataQueryRPCResponse(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */, staleRo));
+        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */, staleRo)));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -232,8 +233,8 @@ namespace NKqpHelpers {
 
     inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {
         sessionId = CreateSessionRPC(runtime);
-        Y_VERIFY(txId.empty(), "txId reused between transactions"); // ensure
-        auto response = ExecuteDataQueryRPCResponse(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */));
+        txId.clear();
+        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */)));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -245,7 +246,7 @@ namespace NKqpHelpers {
 
     inline TString KqpSimpleContinue(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
         Y_VERIFY(!txId.empty(), "continue on empty transaction");
-        auto response = ExecuteDataQueryRPCResponse(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */));
+        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */)));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -257,7 +258,7 @@ namespace NKqpHelpers {
 
     inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
         Y_VERIFY(!txId.empty(), "commit on empty transaction");
-        auto response = ExecuteDataQueryRPCResponse(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */));
+        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */)));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }

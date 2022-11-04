@@ -197,8 +197,8 @@ namespace NKikimr::NBlobDepot {
                 (Channel, channel_), (GivenIdRanges, Channels[channel_].GivenIdRanges),
                 (Agent.GivenIdRanges, agentGivenIdRange_));
             agentGivenIdRange = {};
+            Data->OnLeastExpectedBlobIdChange(channel);
         }
-        Data->HandleTrash();
     }
 
     void TBlobDepot::InitChannelKinds() {

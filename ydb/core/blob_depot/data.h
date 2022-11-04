@@ -318,10 +318,7 @@ namespace NKikimr::NBlobDepot {
     private:
         struct TRecordWithTrash {};
 
-        struct TRecordsPerChannelGroup
-            : TIntrusiveListItem<TRecordsPerChannelGroup, TRecordWithTrash>
-        {
-            const ui64 TabletId;
+        struct TRecordsPerChannelGroup {
             const ui8 Channel;
             const ui32 GroupId;
 
@@ -334,24 +331,22 @@ namespace NKikimr::NBlobDepot {
             bool CollectGarbageRequestInFlight = false;
             TBlobSeqId LeastExpectedBlobId;
 
-            TRecordsPerChannelGroup(ui64 tabletId, ui8 channel, ui32 groupId)
-                : TabletId(tabletId)
-                , Channel(channel)
+            TRecordsPerChannelGroup(ui8 channel, ui32 groupId)
+                : Channel(channel)
                 , GroupId(groupId)
             {}
 
-            void MoveToTrash(TData *self, TLogoBlobID id);
+            void MoveToTrash(TLogoBlobID id);
             void OnSuccessfulCollect(TData *self);
             void OnLeastExpectedBlobIdChange(TData *self, TBlobSeqId leastExpectedBlobId);
             void ClearInFlight(TData *self);
-            void EnqueueForCollectionIfPossible(TData *self);
+            void CollectIfPossible(TData *self);
         };
 
         bool Loaded = false;
         std::map<TKey, TValue> Data;
         THashMap<TLogoBlobID, ui32> RefCount;
-        THashMap<std::tuple<ui64, ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
-        TIntrusiveList<TRecordsPerChannelGroup, TRecordWithTrash> RecordsWithTrash;
+        THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         std::optional<TKey> LastLoadedKey; // keys are being loaded in ascending order
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
         ui64 TotalStoredDataSize = 0;
@@ -422,10 +417,21 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
 
+        template<typename TCallback>
+        void ShowRange(const std::optional<TKey>& seek, ui32 rowsBefore, ui32 rowsAfter, TCallback&& callback) {
+            auto it = seek ? Data.lower_bound(*seek) : Data.begin();
+            for (; it != Data.begin() && rowsBefore; --it, --rowsBefore, ++rowsAfter)
+            {}
+            for (; it != Data.end() && rowsAfter; ++it, --rowsAfter) {
+                callback(it->first, it->second);
+            }
+        }
+
         const TValue *FindKey(const TKey& key) const;
 
         template<typename T, typename... TArgs>
-        bool UpdateKey(TKey key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie, T&& callback, TArgs&&... args);
+        bool UpdateKey(TKey key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie, const char *reason,
+            T&& callback, TArgs&&... args);
 
         void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item, bool uncertainWrite,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
@@ -441,11 +447,10 @@ namespace NKikimr::NBlobDepot {
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 
-        bool UpdateKeepState(TKey key, EKeepState keepState,
-            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        bool UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void CommitTrash(void *cookie);
-        void HandleTrash();
+        void HandleTrash(TRecordsPerChannelGroup& record);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void OnPushNotifyResult(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId);
@@ -485,6 +490,8 @@ namespace NKikimr::NBlobDepot {
         ui64 GetTotalStoredDataSize() const {
             return TotalStoredDataSize;
         }
+
+        void RenderMainPage(IOutputStream& s);
 
     private:
         void ExecuteIssueGC(ui8 channel, ui32 groupId, TGenStep issuedGenStep,

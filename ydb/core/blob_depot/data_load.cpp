@@ -162,7 +162,6 @@ namespace NKikimr::NBlobDepot {
     void TData::OnLoadComplete() {
         Loaded = true;
         Self->BarrierServer->OnDataLoaded();
-        HandleTrash();
     }
 
 } // NKikimr::NBlobDepot

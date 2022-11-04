@@ -84,7 +84,7 @@ namespace NKikimr::NBlobDepot {
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA21, "allocated BlobSeqId", (VirtualGroupId, Agent.VirtualGroupId),
-                    (QueryId, GetQueryId()), (BlobSeqId, blobSeqId));
+                    (QueryId, GetQueryId()), (BlobSeqId, blobSeqId), (BlobId, msg.Id));
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
                 }

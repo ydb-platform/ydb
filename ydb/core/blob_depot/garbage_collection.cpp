@@ -296,7 +296,6 @@ namespace NKikimr::NBlobDepot {
             error ? NKikimrProto::ERROR : NKikimrProto::OK, std::move(error));
         TActivationContext::Send(response.release());
         barrier.ProcessingQ.pop_front();
-        Self->Data->HandleTrash();
         if (!barrier.ProcessingQ.empty()) {
             Self->Execute(std::make_unique<TTxCollectGarbage>(Self, tabletId, channel));
         }

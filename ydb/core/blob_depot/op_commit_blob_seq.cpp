@@ -124,7 +124,6 @@ namespace NKikimr::NBlobDepot {
 
             void Complete(const TActorContext&) override {
                 Self->Data->CommitTrash(this);
-                Self->Data->HandleTrash();
                 TActivationContext::Send(Response.release());
             }
         };

@@ -1,5 +1,6 @@
 #include "data.h"
 #include "data_uncertain.h"
+#include "mon_main.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -32,6 +33,8 @@ namespace NKikimr::NBlobDepot {
         if (entry->NumUncertainKeys == 0) {
             // we had no more uncertain keys to resolve
             entry->Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt);
+        } else {
+            NumKeysQueried += entry->NumUncertainKeys;
         }
     }
 
@@ -47,6 +50,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TUncertaintyResolver::DropKey(const TKey& key) {
         FinishKey(key, false);
+        ++NumKeysDropped;
     }
 
     void TData::TUncertaintyResolver::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
@@ -97,6 +101,7 @@ namespace NKikimr::NBlobDepot {
                             const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
                             SendToBSProxy(Self->SelfId(), groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
                                 NKikimrBlobStorage::EGetHandleClass::FastRead, true, true));
+                            ++NumGetsIssued;
                         }
 
                         okay = false;
@@ -116,10 +121,12 @@ namespace NKikimr::NBlobDepot {
                     case EKeyBlobState::WASNT_WRITTEN:
                         // the blob hasn't been written completely; this may also be a race when it is being written
                         // right now, but we are asking for the data too early (like in scan request)
+                        okay = false;
                         break;
 
                     case EKeyBlobState::ERROR:
                         // we can't figure out this blob's state
+                        okay = false;
                         break;
                 }
             });
@@ -138,6 +145,8 @@ namespace NKikimr::NBlobDepot {
         if (keyIt == Keys.end()) {
             return;
         }
+
+        ++(success ? NumKeysResolved : NumKeysUnresolved);
 
         auto item = Keys.extract(keyIt);
         auto& keyContext = item.mapped();
@@ -163,6 +172,20 @@ namespace NKikimr::NBlobDepot {
                     Blobs.erase(blobIt);
                 }
             }
+        }
+    }
+
+    void TData::TUncertaintyResolver::RenderMainPage(IOutputStream& s) {
+        HTML(s) {
+            KEYVALUE_TABLE({
+                KEYVALUE_P("Keys queried", NumKeysQueried);
+                KEYVALUE_P("Gets issued", NumGetsIssued);
+                KEYVALUE_P("Keys resolved", NumKeysResolved);
+                KEYVALUE_P("Keys unresolved", NumKeysUnresolved);
+                KEYVALUE_P("Keys dropped", NumKeysDropped);
+                KEYVALUE_P("Keys being processed", Keys.size());
+                KEYVALUE_P("Blobs in flight", Blobs.size());
+            })
         }
     }
 

@@ -24,7 +24,9 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_gc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_load.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_mon.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_resolve.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_trash.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_uncertain.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/garbage_collection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/given_id_range.cpp

@@ -48,6 +48,12 @@ namespace NKikimr::NBlobDepot {
         TKeys Keys;
         std::unordered_map<TLogoBlobID, TBlobContext> Blobs;
 
+        ui64 NumKeysQueried = 0;
+        ui64 NumGetsIssued = 0;
+        ui64 NumKeysResolved = 0;
+        ui64 NumKeysUnresolved = 0;
+        ui64 NumKeysDropped = 0;
+
     public:
         TUncertaintyResolver(TBlobDepot *self);
         void PushResultWithUncertainties(TResolveResultAccumulator&& result, std::deque<TKey>&& uncertainties);
@@ -55,6 +61,8 @@ namespace NKikimr::NBlobDepot {
         void DropBlobs(const std::vector<TLogoBlobID>& blobIds);
         void DropKey(const TKey& key);
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
+
+        void RenderMainPage(IOutputStream& s);
 
     private:
         void FinishBlob(TLogoBlobID id, EKeyBlobState state);

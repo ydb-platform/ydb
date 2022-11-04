@@ -3,6 +3,7 @@
 #include "garbage_collection.h"
 #include "blocks.h"
 #include "space_monitor.h"
+#include "mon_main.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -113,6 +114,10 @@ namespace NKikimr::NBlobDepot {
         }
 
         void RenderDataTable(bool header) {
+            std::optional<TData::TKey> seek;
+            ui32 rowsAfter = 100;
+            ui32 rowsBefore = 0;
+
             HTML(Stream) {
                 if (header) {
                     TABLEH() { Stream << "key"; }
@@ -120,7 +125,73 @@ namespace NKikimr::NBlobDepot {
                     TABLEH() { Stream << "keep state"; }
                     TABLEH() { Stream << "barrier"; }
                 } else {
-                    Self->Data->ScanRange(nullptr, nullptr, 0, [&](const TData::TKey& key, const TData::TValue& value) {
+                    const TCgiParameters& cgi = Request->Get()->Cgi();
+                    if (cgi.Has("seek")) {
+                        if (const TString& value = cgi.Get("seek")) {
+                            if (Self->Config.HasVirtualGroupId()) {
+                                TString error;
+                                TLogoBlobID id;
+                                if (TLogoBlobID::Parse(id, value, error)) {
+                                    seek.emplace(id);
+                                } else {
+                                    DIV() {
+                                        Stream << "invalid seek value: " << error;
+                                    }
+                                }
+                            } else {
+                                seek.emplace(value);
+                            }
+                        }
+                    }
+                    if (cgi.Has("rowsBefore") && !TryFromString(cgi.Get("rowsBefore"), rowsBefore)) {
+                        DIV() {
+                            Stream << "invalid rowsBefore value";
+                        }
+                    }
+                    if (cgi.Has("rowsAfter") && !TryFromString(cgi.Get("rowsAfter"), rowsAfter)) {
+                        DIV() {
+                            Stream << "invalid rowsAfter value";
+                        }
+                    }
+
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("control-group") {
+                            LABEL_CLASS_FOR("control-label", "inputSeek") {
+                                Stream << "Seek";
+                            }
+                            DIV_CLASS("controls") {
+                                Stream << "<input id='inputSeek' name='seek' type='text' value='" << cgi.Get("seek") << "'/>";
+                            }
+                        }
+                        DIV_CLASS("control-group") {
+                            LABEL_CLASS_FOR("control-label", "inputRowsBefore") {
+                                Stream << "Rows before";
+                            }
+                            DIV_CLASS("controls") {
+                                Stream << "<input id='inputRowsBefore' name='rowsBefore' type='number' value='" <<
+                                    rowsBefore << "'/>";
+                            }
+                        }
+                        DIV_CLASS("control-group") {
+                            LABEL_CLASS_FOR("control-label", "inputRowsAfter") {
+                                Stream << "Rows after";
+                            }
+                            DIV_CLASS("controls") {
+                                Stream << "<input id='inputRowsAfter' name='rowsAfter' type='number' value='" <<
+                                   rowsAfter << "'/>";
+                            }
+                        }
+                        DIV_CLASS("control-group") {
+                            DIV_CLASS("controls") {
+                                Stream << "<input type='hidden' name='TabletID' value='" << Self->TabletID() << "'/>";
+                                Stream << "<input type='hidden' name='page' value='data'/>";
+                                Stream << "<input type='hidden' name='table' value='data'/>";
+                                Stream << "<button type='submit' class='btn btn-default'>Show</button>";
+                            }
+                        }
+                    }
+
+                    Self->Data->ShowRange(seek, rowsBefore, rowsAfter, [&](const TData::TKey& key, const TData::TValue& value) {
                         TABLER() {
                             TABLED() {
                                 key.Output(Stream);
@@ -158,7 +229,6 @@ namespace NKikimr::NBlobDepot {
                                 }
                             }
                         }
-                        return true;
                     });
                 }
             }
@@ -261,19 +331,12 @@ namespace NKikimr::NBlobDepot {
                         space.try_emplace(groupId);
                     }
 
-                    auto outSize = [&](ui64 size) {
-                        static const char *suffixes[] = {
-                            "B", "KiB", "MiB", "GiB", "TiB", "PiB", nullptr
-                        };
-                        FormatHumanReadable(Stream, size, 1024, 2, suffixes);
-                    };
-
                     for (const auto& [groupId, value] : space) {
                         const auto& [current, total] = value;
                         TABLER() {
                             TABLED() { Stream << groupId; }
-                            TABLED() { outSize(current); }
-                            TABLED() { outSize(total); }
+                            TABLED() { Stream << FormatByteSize(current); }
+                            TABLED() { Stream << FormatByteSize(total); }
 
                             const auto it = Self->SpaceMonitor->Groups.find(groupId);
                             if (it != Self->SpaceMonitor->Groups.end()) {
@@ -345,61 +408,47 @@ namespace NKikimr::NBlobDepot {
                     s << "Stats";
                 }
                 DIV_CLASS("panel-body") {
-                    TABLE_CLASS("table") {
-                        TABLEHEAD() {
-                            TABLER() {
-                                TABLEH() { s << "Parameter"; }
-                                TABLEH() { s << "Value"; }
+                    KEYVALUE_TABLE({
+
+                        TABLER() {
+                            TABLED() { s << "Data, bytes"; }
+                            TABLED() {
+                                ui64 total = 0;
+                                Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
+                                    total += id.BlobSize();
+                                });
+                                s << FormatByteSize(total);
                             }
                         }
-                        TABLEBODY() {
-                            auto outSize = [&](ui64 size) {
-                                static const char *suffixes[] = {
-                                    "B", "KiB", "MiB", "GiB", "TiB", "PiB", nullptr
-                                };
-                                FormatHumanReadable(s, size, 1024, 2, suffixes);
-                            };
-                            TABLER() {
-                                TABLED() { s << "Data, bytes"; }
-                                TABLED() {
-                                    ui64 total = 0;
-                                    Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-                                        total += id.BlobSize();
-                                    });
-                                    outSize(total);
-                                }
-                            }
 
-                            ui64 trashInFlight = 0;
-                            ui64 trashPending = 0;
-                            Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
-                                (inFlight ? trashInFlight : trashPending) += id.BlobSize();
-                            });
+                        ui64 trashInFlight = 0;
+                        ui64 trashPending = 0;
+                        Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
+                            (inFlight ? trashInFlight : trashPending) += id.BlobSize();
+                        });
 
-                            TABLER() {
-                                TABLED() { s << "Trash in flight, bytes"; }
-                                TABLED() { outSize(trashInFlight); }
-                            }
+                        KEYVALUE_P("Trash in flight, bytes", FormatByteSize(trashInFlight));
+                        KEYVALUE_P("Trash pending, bytes", FormatByteSize(trashPending));
 
-                            TABLER() {
-                                TABLED() { s << "Trash pending, bytes"; }
-                                TABLED() { outSize(trashPending); }
-                            }
-
-                            std::vector<ui32> groups;
-                            for (const auto& [groupId, _] : Groups) {
-                                groups.push_back(groupId);
-                            }
-                            std::sort(groups.begin(), groups.end());
-                            for (const ui32 groupId : groups) {
-                                TGroupInfo& group = Groups[groupId];
-                                TABLER() {
-                                    TABLED() { s << "Data in GroupId# " << groupId << ", bytes"; }
-                                    TABLED() { outSize(group.AllocatedBytes); }
-                                }
-                            }
+                        std::vector<ui32> groups;
+                        for (const auto& [groupId, _] : Groups) {
+                            groups.push_back(groupId);
                         }
-                    }
+                        std::sort(groups.begin(), groups.end());
+                        for (const ui32 groupId : groups) {
+                            TGroupInfo& group = Groups[groupId];
+                            KEYVALUE_P(TStringBuilder() << "Data in GroupId# " << groupId << ", bytes",
+                                FormatByteSize(group.AllocatedBytes));
+                        }
+                    })
+                }
+            }
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    s << "Data";
+                }
+                DIV_CLASS("panel-body") {
+                    Data->RenderMainPage(s);
                 }
             }
         }

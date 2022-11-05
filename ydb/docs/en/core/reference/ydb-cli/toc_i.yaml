@@ -21,6 +21,10 @@ items:
       href: commands/secondary_index.md
     - name: Renaming tables
       href: commands/tools/rename.md
+    - name: Setting TTL parameters
+      href: table-ttl-set.md
+    - name: Deleting TTL parameters
+      href: table-ttl-drop.md
   - name: Operations with data
     items:
     - name: Getting a query execution plan and AST

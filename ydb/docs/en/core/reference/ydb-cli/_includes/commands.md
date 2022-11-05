@@ -60,8 +60,8 @@ Any command can be run from the command line with the `--help` option to get hel
 | [table query execute](../table-query-execute.md) | Executing a YQL query |
 | [table query explain](../commands/explain-plan.md) | YQL query execution plan |
 | [table readtable](../commands/readtable.md) | Streaming table reads |
-| table ttl drop | Deleting TTL parameters |
-| table ttl set | Setting TTL parameters |
+| [table ttl set](../table-ttl-set.md) | Setting TTL parameters |
+| [table ttl drop](../table-ttl-drop.md) | Deleting TTL parameters |
 | tools copy | Copying tables |
 | [tools dump](../export_import/tools_dump.md) | Dumping a directory or table to the file system |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |

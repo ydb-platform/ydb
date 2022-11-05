@@ -4345,30 +4345,25 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
 
     // Perform an additional read, it would mark transaction as write-broken
     {
-        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"(
+        auto result = KqpSimpleContinue(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 3
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "");
     }
 
     // Perform one more read, it would be in an already write-broken transaction
     {
-        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"(
+        auto result = KqpSimpleContinue(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 5
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "");
     }
 
     {
-        auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId, Q_(R"(
+        auto result = KqpSimpleCommit(runtime, sessionId, txId, Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5)
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: ABORTED");
     }
 }
 
@@ -4471,32 +4466,27 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
     // Perform an additional read, it would mark transaction as write-broken for the first time
     {
         Cerr << "... performing the second select" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"(
+        auto result = KqpSimpleContinue(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 3
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "");
     }
 
     // Perform one more read, it would be in an already write-broken transaction
     {
         Cerr << "... performing the third select" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeContinueRequest(sessionId, txId, Q_(R"(
+        auto result = KqpSimpleContinue(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 5
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "");
     }
 
     {
         Cerr << "... performing the last upsert and commit" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId, Q_(R"(
+        auto result = KqpSimpleCommit(runtime, sessionId, txId, Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5)
-        )")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: ABORTED");
     }
 }
 

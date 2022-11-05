@@ -1177,6 +1177,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // Create a new snapshot and verify initial state
         // This snapshot must be lightweight and must not advance any edges
         TString sessionId, txId;
+        TString senderImmediateWriteSessionId = CreateSessionRPC(runtime);
+        TString senderImmediateWriteTxId;
         UNIT_ASSERT_VALUES_EQUAL(
             beginSnapshotRequest(sessionId, txId, Q_(R"(
                 SELECT key, value FROM `/Root/table-1`
@@ -1194,10 +1196,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Send an immediate write after the finished split
         // In a buggy case it starts executing despite a blocked timecast
-        auto senderImmediateWrite = runtime.AllocateEdgeActor();
-        SendRequest(runtime, senderImmediateWrite, MakeSimpleRequest(Q_(R"(
+        auto f = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2)
-            )")));
+            )"), senderImmediateWriteSessionId, senderImmediateWriteTxId, true));
 
         // We sleep a little so datashard commits changes in buggy case
         SimulateSleep(runtime, TDuration::MicroSeconds(1));
@@ -1207,9 +1208,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Wait for the commit result
         {
-            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderImmediateWrite);
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            auto response = AwaitResponse(runtime, f);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
         // Snapshot must not have been damaged by the write above
@@ -2879,20 +2879,23 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.InjectLocks.emplace();
         observer.InjectLocks->AddLocks(locks1);
         observer.InjectLocks->AddLocks(locks2);
-        auto commitSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, commitSender, MakeSimpleRequest(Q_(R"(
+        auto commitSender = CreateSessionRPC(runtime);
+        auto writeSender = CreateSessionRPC(runtime);
+        TString commitSenderTxId;
+        TString writeSenderTxId;
+        auto commitFuture = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (0, 0);
-            )")));
+            )"), commitSender, commitSenderTxId, true));
+ 
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!observer.BlockedReadSets.empty());
         observer.InjectClearTasks = false;
         observer.InjectLocks.reset();
 
-        auto writeSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, writeSender, MakeSimpleRequest(Q_(R"(
+        auto writeFuture = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 22)
-            )")));
+            )"), writeSender, writeSenderTxId, true));
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         // Verify changes are not visible yet
@@ -2907,15 +2910,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.UnblockReadSets();
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(commitSender);
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+
+            auto response = AwaitResponse(runtime, commitFuture);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(writeSender);
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            auto response = AwaitResponse(runtime, writeFuture);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
     }
 
@@ -3024,11 +3026,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.InjectLocks.emplace();
         observer.InjectLocks->AddLocks(locks1);
         observer.InjectLocks->AddLocks(locks2);
-        auto commitSender1 = runtime.AllocateEdgeActor();
-        SendRequest(runtime, commitSender1, MakeSimpleRequest(Q_(R"(
+        TString commitSender1 = CreateSessionRPC(runtime);
+        TString commitSender1TxId;
+        TString commitSender2 = CreateSessionRPC(runtime);
+        TString commitSender2TxId;
+        auto commitSender1Future = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 21);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (30, 21);
-            )")));
+            )"), commitSender1, commitSender1TxId, true));
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!observer.BlockedReadSets.empty());
         //observer.InjectClearTasks = false;
@@ -3040,11 +3045,10 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.InjectLocks.emplace();
         observer.InjectLocks->AddLocks(locks3);
         observer.InjectLocks->AddLocks(locks4);
-        auto commitSender2 = runtime.AllocateEdgeActor();
-        SendRequest(runtime, commitSender2, MakeSimpleRequest(Q_(R"(
+        auto commitSender2Future = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 22);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 22);
-            )")));
+            )"), commitSender2, commitSender2TxId, true));
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!observer.BlockedReadSets.empty());
         //observer.InjectClearTasks = false;
@@ -3062,15 +3066,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.UnblockReadSets();
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(commitSender1);
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            auto response = AwaitResponse(runtime, commitSender1Future);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(commitSender2);
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
+            auto response = AwaitResponse(runtime, commitSender2Future);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::ABORTED);
         }
 
         // Verify only changes from commit 123 are visible

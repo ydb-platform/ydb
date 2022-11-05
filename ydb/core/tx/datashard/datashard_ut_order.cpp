@@ -4642,12 +4642,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
     };
 
     auto continueSnapshotRequest = [&](const TString& sessionId, const TString& txId, const TString& query) -> TString {
-        auto reqSender = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, reqSender, MakeContinueRequest(sessionId, txId, query));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        return KqpSimpleContinue(runtime, sessionId, txId, query);
     };
 
     auto execSnapshotRequest = [&](const TString& query) -> TString {
@@ -4877,13 +4872,11 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
-        "List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 7 } } } "
-        "List { Struct { Optional { Uint32: 9 } } Struct { Optional { Uint32: 9 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+        "{ items { uint32_value: 5 } items { uint32_value: 5 } }, "
+        "{ items { uint32_value: 7 } items { uint32_value: 7 } }, "
+        "{ items { uint32_value: 9 } items { uint32_value: 9 } }");
 
     // Make sure new snapshot will actually observe new data
     UNIT_ASSERT_VALUES_EQUAL(
@@ -5036,12 +5029,7 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
     };
 
     auto continueSnapshotRequest = [&](const TString& sessionId, const TString& txId, const TString& query) -> TString {
-        auto reqSender = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, reqSender, MakeContinueRequest(sessionId, txId, query));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        return KqpSimpleContinue(runtime, sessionId, txId, query);
     };
 
     auto execSnapshotRequest = [&](const TString& query) -> TString {
@@ -5102,9 +5090,7 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
     // However new snapshots must see updated data
     UNIT_ASSERT_VALUES_EQUAL(

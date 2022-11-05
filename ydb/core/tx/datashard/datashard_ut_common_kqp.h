@@ -112,24 +112,6 @@ namespace NKqpHelpers {
         return request;
     }
 
-    inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeContinueRequest(
-            const TString& sessionId,
-            const TString& txId,
-            const TString& sql,
-            const TString& database = {})
-    {
-        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        request->Record.MutableRequest()->SetSessionId(sessionId);
-        request->Record.MutableRequest()->MutableTxControl()->set_tx_id(txId);
-        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->Record.MutableRequest()->SetQuery(sql);
-        if (!database.empty()) {
-            request->Record.MutableRequest()->SetDatabase(database);
-        }
-        return request;
-    }
-
     inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeCommitRequest(
             const TString& sessionId,
             const TString& txId,

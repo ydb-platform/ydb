@@ -4288,16 +4288,15 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
 
     // Send an additional read request, it must not be blocked
-    SendRequest(runtime, sender1, MakeContinueRequest(sessionId1, txId1, Q_(R"(
+    auto f = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )"), "/Root"));
+    )"), sessionId1, txId1, false), "/Root");
 
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender1);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto response = AwaitResponse(runtime, f);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 }
 

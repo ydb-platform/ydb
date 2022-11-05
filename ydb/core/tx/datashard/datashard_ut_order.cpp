@@ -2085,15 +2085,14 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
 
     TString txId;
     {
-        auto sender1 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
              SELECT * FROM `/Root/table-1` WHERE key = 1
              UNION ALL
-             SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+             SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
     }
 
     // Capture and block all readset messages
@@ -2226,15 +2225,14 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc) {
 
     TString txId;
     {
-        auto sender1 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
     }
 
     // Capture and block all readset messages
@@ -2372,15 +2370,14 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc) {
 
     TString txId;
     {
-        auto sender1 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
     }
 
     // Capture and block all readset messages
@@ -2556,14 +2553,14 @@ Y_UNIT_TEST_TWIN(TestCopyTableNoDeadlock, UseMvcc) {
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId,Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2`)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
     }
 
     // Capture and block all readset messages
@@ -3213,14 +3210,14 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(
             "SELECT * FROM `/Root/table-1` "
             "UNION ALL "
-            "SELECT * FROM `/Root/table-2`")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            "SELECT * FROM `/Root/table-2`"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+             "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
     }
 
     // Capture and block all readset messages
@@ -3974,14 +3971,14 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, UseMvcc) {
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2`)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
     }
 
     auto waitFor = [&](const auto& condition, const TString& description) {
@@ -4085,14 +4082,14 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, UseMvcc) {
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2`)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 1 } }");
     }
 
     auto waitFor = [&](const auto& condition, const TString& description) {

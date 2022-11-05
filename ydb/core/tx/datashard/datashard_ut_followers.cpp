@@ -36,16 +36,11 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
 
         {
-            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM `/Root/table-1`", "/Root"));
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-            TString expected = "Struct { "
-                               "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-                               "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-                               "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-                               "} Struct { Bool: false }";
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+            auto result = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+            TString expected = "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                               "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                               "{ items { uint32_value: 3 } items { uint32_value: 3 } }";
+            UNIT_ASSERT_VALUES_EQUAL(result, expected);
         }
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1"));
@@ -60,33 +55,23 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         // Make a request to make sure snapshot metadata is updated on the follower
         {
-            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM `/Root/table-1`", "/Root"));
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-            TString expected = "Struct { "
-                               "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-                               "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-                               "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-                               "} Struct { Bool: false }";
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+            auto result = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+            TString expected = "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                               "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                               "{ items { uint32_value: 3 } items { uint32_value: 3 } }";
+            UNIT_ASSERT_VALUES_EQUAL(result, expected);
         }
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);");
 
         // The new row should be visible on the follower
         {
-            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM `/Root/table-1`", "/Root"));
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-            TString expected = "Struct { "
-                               "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-                               "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-                               "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-                               "List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 4 } } } "
-                               "} Struct { Bool: false }";
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+            auto result = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+            TString expected = "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                               "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                               "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+                               "{ items { uint32_value: 4 } items { uint32_value: 4 } }";
+            UNIT_ASSERT_VALUES_EQUAL(result, expected);
         }
 
         // Wait a bit more and add one more row
@@ -95,18 +80,13 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         // The new row should be visible on the follower
         {
-            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM `/Root/table-1`", "/Root"));
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-            TString expected = "Struct { "
-                               "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-                               "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-                               "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-                               "List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 4 } } } "
-                               "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
-                               "} Struct { Bool: false }";
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+            auto result = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+            TString expected = "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                               "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                               "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+                               "{ items { uint32_value: 4 } items { uint32_value: 4 } }, "
+                               "{ items { uint32_value: 5 } items { uint32_value: 5 } }";
+            UNIT_ASSERT_VALUES_EQUAL(result, expected);
         }
     }
 

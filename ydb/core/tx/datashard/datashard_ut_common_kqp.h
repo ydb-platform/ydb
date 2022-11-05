@@ -95,22 +95,6 @@ namespace NKqpHelpers {
         return request;
     }
 
-    inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSimpleStaleRoRequest(
-            const TString& sql,
-            const TString& database = {})
-    {
-        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_stale_read_only();
-        request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->Record.MutableRequest()->SetQuery(sql);
-        if (!database.empty()) {
-            request->Record.MutableRequest()->SetDatabase(database);
-        }
-        return request;
-    }
-
     inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeBeginRequest(
             const TString& sessionId,
             const TString& sql,
@@ -215,10 +199,11 @@ namespace NKqpHelpers {
     }
 
 
-    inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false) {
-        TString sessionId = CreateSessionRPC(runtime);
+    inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false, const TString& database = {}) {
+        TString sessionId = CreateSessionRPC(runtime, database);
         TString txId;
-        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */, staleRo)));
+        auto response = AwaitResponse(
+            runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */, staleRo), database));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -227,8 +212,8 @@ namespace NKqpHelpers {
         return FormatResult(result);
     }
 
-    inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query) {
-        return KqpSimpleExec(runtime, query, true);
+    inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {
+        return KqpSimpleExec(runtime, query, true, database);
     }
 
     inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {

@@ -20,6 +20,14 @@
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatFactory.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/InputStreamFromInputFormat.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/ArrowBufferedStreams.h>
+
+#include <arrow/api.h>
+#include <arrow/io/api.h>
+#include <arrow/status.h>
+#include <parquet/arrow/reader.h>
+#include <parquet/file_reader.h>
+
 #endif
 
 #include "yql_s3_read_actor.h"
@@ -85,6 +93,13 @@
 #define LOG_CORO_T(name, stream) \
     LOG_TRACE_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, name << ": " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << ". " << stream)
 
+#define THROW_ARROW_NOT_OK(status)                                     \
+    do                                                                 \
+    {                                                                  \
+        if (::arrow::Status _s = (status); !_s.ok())                   \
+            throw yexception() << _s.ToString(); \
+    } while (false)
+
 namespace NYql::NDq {
 
 using namespace ::NActors;
@@ -108,6 +123,7 @@ struct TEvPrivate {
         EvReadError,
         EvRetry,
         EvNextBlock,
+        EvNextRecordBatch,
         EvBlockProcessed,
 
         EvEnd
@@ -157,6 +173,13 @@ struct TEvPrivate {
     struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
         TEvNextBlock(NDB::Block& block, size_t pathInd, std::function<void()> functor = [](){}) : PathIndex(pathInd), Functor(functor) { Block.swap(block); }
         NDB::Block Block;
+        const size_t PathIndex;
+        std::function<void()> Functor;
+    };
+
+    struct TEvNextRecordBatch : public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {
+        TEvNextRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, size_t pathInd, std::function<void()> functor = []() {}) : Batch(batch), PathIndex(pathInd), Functor(functor) { }
+        std::shared_ptr<arrow::RecordBatch> Batch;
         const size_t PathIndex;
         std::function<void()> Functor;
     };
@@ -332,7 +355,9 @@ private:
 struct TReadSpec {
     using TPtr = std::shared_ptr<TReadSpec>;
 
-    NDB::ColumnsWithTypeAndName Columns;
+    bool Arrow = false;
+    NDB::ColumnsWithTypeAndName CHColumns;
+    std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
     TString Format, Compression;
     ui64 SizeLimit = 0;
@@ -393,6 +418,68 @@ void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSyste
         std::bind(&OnNewData, actorSystem, self, parent, std::placeholders::_1),
         std::bind(&OnDownloadFinished, actorSystem, self, parent, std::placeholders::_1));
 }
+
+template <typename T>
+class IBatchReader {
+public:
+    virtual ~IBatchReader() = default;
+
+    virtual bool Next(T& value) = 0;
+};
+
+class TBlockReader : public IBatchReader<NDB::Block> {
+public:
+    TBlockReader(std::unique_ptr<NDB::IBlockInputStream>&& stream)
+        : Stream(std::move(stream))
+    {}
+
+    bool Next(NDB::Block& value) final {
+        value = Stream->read();
+        return !!value;
+    }
+
+private:
+    std::unique_ptr<NDB::IBlockInputStream> Stream;
+};
+
+class TArrowParquetBatchReader : public IBatchReader<std::shared_ptr<arrow::RecordBatch>> {
+public:
+    TArrowParquetBatchReader(std::unique_ptr<parquet::arrow::FileReader>&& fileReader, std::vector<int>&& columnIndices)
+        : FileReader(std::move(fileReader))
+        , ColumnIndices(std::move(columnIndices))
+        , TotalGroups(FileReader->num_row_groups())
+        , CurrentGroup(0)
+    {}
+
+    bool Next(std::shared_ptr<arrow::RecordBatch>& value) final {
+        for (;;) {
+            if (CurrentGroup == TotalGroups) {
+                return false;
+            }
+
+            if (!CurrentBatchReader) {
+                THROW_ARROW_NOT_OK(FileReader->ReadRowGroup(CurrentGroup++, ColumnIndices, &CurrentTable));
+                CurrentBatchReader = std::make_unique<arrow::TableBatchReader>(*CurrentTable);
+            }
+
+            THROW_ARROW_NOT_OK(CurrentBatchReader->ReadNext(&value));
+            if (value) {
+                return true;
+            }
+
+            CurrentBatchReader = nullptr;
+            CurrentTable = nullptr;
+        }
+    }
+
+private:
+    std::unique_ptr<parquet::arrow::FileReader> FileReader;
+    const std::vector<int> ColumnIndices;
+    const int TotalGroups;
+    int CurrentGroup;
+    std::shared_ptr<arrow::Table> CurrentTable;
+    std::unique_ptr<arrow::TableBatchReader> CurrentBatchReader;
+};
 
 class TS3ReadCoroImpl : public TActorCoroImpl {
 private:
@@ -517,31 +604,35 @@ private:
             } else {
                 buffer = std::make_unique<TReadBufferFromStream>(this);
             }
+
             const auto decompress(MakeDecompressor(*buffer, ReadSpec->Compression));
             YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
-            NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : *buffer, NDB::Block(ReadSpec->Columns), nullptr, ReadActorFactoryCfg.RowsInBatch, ReadSpec->Settings));
-            auto actorSystem = GetActorSystem();
-            auto selfActorId = SelfActorId;
-            size_t cntBlocksInFly = 0;
-            if (isLocal) {
-                while (auto block = stream.read()) {
-                    if (++cntBlocksInFly > MaxBlocksInFly) {
-                        WaitForSpecificEvent<TEvPrivate::TEvBlockProcessed>();
-                        --cntBlocksInFly;
-                    }
-                    Send(ParentActorId, new TEvPrivate::TEvNextBlock(block, PathIndex, [actorSystem, selfActorId]() {
-                        actorSystem->Send(new IEventHandle(selfActorId, selfActorId, new TEvPrivate::TEvBlockProcessed()));
-                    }));
-                }
-                while (cntBlocksInFly--) {
-                    WaitForSpecificEvent<TEvPrivate::TEvBlockProcessed>();
-                }
-            } else {
-                while (auto block = stream.read()) {
-                    Send(ParentActorId, new TEvPrivate::TEvNextBlock(block, PathIndex));
-                }
-            }
+            if (ReadSpec->Arrow) {
+                YQL_ENSURE(ReadSpec->Format == "parquet");
+                std::unique_ptr<parquet::arrow::FileReader> fileReader;
+                auto arrowFile = NDB::asArrowFile(decompress ? *decompress : *buffer);
 
+                THROW_ARROW_NOT_OK(parquet::arrow::OpenFile(arrowFile, arrow::default_memory_pool(), &fileReader));
+                std::shared_ptr<arrow::Schema> schema;
+                THROW_ARROW_NOT_OK(fileReader->GetSchema(&schema));
+
+                std::vector<int> columnIndices;
+                for (int i = 0; i < ReadSpec->ArrowSchema->num_fields(); ++i) {
+                    const auto& targetField = ReadSpec->ArrowSchema->field(i);
+                    auto srcFieldIndex = schema->GetFieldIndex(targetField->name());
+                    YQL_ENSURE(srcFieldIndex != -1, "Missing field: " << targetField->name());
+                    YQL_ENSURE(targetField->type()->Equals(schema->field(srcFieldIndex)->type()), "Mismatch type for field: " << targetField->name() << ", expected: "
+                        << targetField->type()->ToString() << ", got: " << schema->field(srcFieldIndex)->type()->ToString());
+                    columnIndices.push_back(srcFieldIndex);
+                }
+
+                TArrowParquetBatchReader reader(std::move(fileReader), std::move(columnIndices));
+                ProcessBatches<std::shared_ptr<arrow::RecordBatch>, TEvPrivate::TEvNextRecordBatch>(reader, isLocal);
+            } else {
+                auto stream = std::make_unique<NDB::InputStreamFromInputFormat>(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : *buffer, NDB::Block(ReadSpec->CHColumns), nullptr, ReadActorFactoryCfg.RowsInBatch, ReadSpec->Settings));
+                TBlockReader reader(std::move(stream));
+                ProcessBatches<NDB::Block, TEvPrivate::TEvNextBlock>(reader, isLocal);
+            }
         } catch (const TS3ReadError&) {
             // Finish reading. Add error from server to issues
         } catch (const TDtorException&) {
@@ -578,6 +669,41 @@ private:
     } catch (const std::exception& err) {
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what())}, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
         return;
+    }
+
+    template <typename T, typename TEv>
+    void ProcessBatches(IBatchReader<T>& reader, bool isLocal) {
+        auto actorSystem = GetActorSystem();
+        auto selfActorId = SelfActorId;
+        size_t cntBlocksInFly = 0;
+        if (isLocal) {
+            for (;;) {
+                T batch;
+                if (!reader.Next(batch)) {
+                    break;
+                }
+
+                if (++cntBlocksInFly > MaxBlocksInFly) {
+                    WaitForSpecificEvent<TEvPrivate::TEvBlockProcessed>();
+                    --cntBlocksInFly;
+                }
+                Send(ParentActorId, new TEv(batch, PathIndex, [actorSystem, selfActorId]() {
+                    actorSystem->Send(new IEventHandle(selfActorId, selfActorId, new TEvPrivate::TEvBlockProcessed()));
+                }));
+            }
+            while (cntBlocksInFly--) {
+                WaitForSpecificEvent<TEvPrivate::TEvBlockProcessed>();
+            }
+        } else {
+            for (;;) {
+                T batch;
+                if (!reader.Next(batch)) {
+                    break;
+                }
+
+                Send(ParentActorId, new TEv(batch, PathIndex));
+            }
+        }
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) final {
@@ -666,6 +792,35 @@ private:
     const TRetryStuff::TPtr RetryStuff;
 };
 
+ui64 GetSizeOfData(const arrow::ArrayData& data) {
+    ui64 size = sizeof(data);
+    size += data.buffers.size() * sizeof(void*);
+    size += data.child_data.size() * sizeof(void*);
+    for (const auto& b : data.buffers) {
+        if (b) {
+            size += b->size();
+        }
+    }
+
+    for (const auto& c : data.child_data) {
+        if (c) {
+            size += GetSizeOfData(*c);
+        }
+    }
+
+    return size;
+}
+
+ui64 GetSizeOfBatch(const arrow::RecordBatch& batch) {
+    ui64 size = sizeof(batch);
+    size += batch.num_columns() * sizeof(void*);
+    for (int i = 0; i < batch.num_columns(); ++i) {
+        size += GetSizeOfData(*batch.column_data(i));
+    }
+
+    return size;
+}
+
 class TS3StreamReadActor : public TActorBootstrapped<TS3StreamReadActor>, public IDqComputeActorAsyncInput {
 public:
     TS3StreamReadActor(
@@ -718,8 +873,8 @@ public:
 private:
     class TBoxedBlock : public TComputationValue<TBoxedBlock> {
     public:
-        TBoxedBlock(TMemoryUsageInfo* memInfo, NDB::Block& block, std::function<void()> functor)
-            : TComputationValue(memInfo), OnDestroyFunctor(functor)
+        TBoxedBlock(TMemoryUsageInfo* memInfo, NDB::Block& block)
+            : TComputationValue(memInfo)
         {
             Block.swap(block);
         }
@@ -732,20 +887,15 @@ private:
             return &Block;
         }
 
-        ~TBoxedBlock() {
-            if (OnDestroyFunctor) {
-                OnDestroyFunctor();
-            }
-        }
-
         NDB::Block Block;
-        std::function<void()> OnDestroyFunctor;
     };
 
     class TReadyBlock {
     public:
         TReadyBlock(TEvPrivate::TEvNextBlock::TPtr& event) : PathInd(event->Get()->PathIndex), Functor (std::move(event->Get()->Functor)) { Block.swap(event->Get()->Block); }
+        TReadyBlock(TEvPrivate::TEvNextRecordBatch::TPtr& event) : Batch(event->Get()->Batch), PathInd(event->Get()->PathIndex), Functor(std::move(event->Get()->Functor)) {}
         NDB::Block Block;
+        std::shared_ptr<arrow::RecordBatch> Batch;
         size_t PathInd;
         std::function<void()> Functor;
     };
@@ -758,9 +908,29 @@ private:
     i64 GetAsyncInputData(TUnboxedValueVector& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
         i64 total = 0LL;
         if (!Blocks.empty()) do {
-            const i64 s = Blocks.front().Block.bytes();
+            const i64 s = ReadSpec->Arrow ? GetSizeOfBatch(*Blocks.front().Batch) : Blocks.front().Block.bytes();
 
-            auto value = HolderFactory.Create<TBoxedBlock>(Blocks.front().Block, Blocks.front().Functor);
+            NUdf::TUnboxedValue value;
+            if (ReadSpec->Arrow) {
+                const auto& batch = *Blocks.front().Batch;
+
+                NUdf::TUnboxedValue* structItems = nullptr;
+                auto structObj = ArrowRowContainerCache.NewArray(HolderFactory, batch.num_columns(), structItems);
+                for (int i = 0; i < batch.num_columns(); ++i) {
+                    structItems[i] = HolderFactory.CreateArrowBlock(arrow::Datum(batch.column_data(i)));
+                }
+
+                NUdf::TUnboxedValue* tupleItems = nullptr;
+                auto tuple = ArrowTupleContainerCache.NewArray(HolderFactory, 2, tupleItems);
+                *tupleItems++ = structObj;
+                *tupleItems++ = HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.num_rows())));
+                value = tuple;
+            } else {
+                value = HolderFactory.Create<TBoxedBlock>(Blocks.front().Block);
+            }
+
+            Blocks.front().Functor();
+
             if (AddPathIndex) {
                 NUdf::TUnboxedValue* tupleItems = nullptr;
                 auto tuple = ContainerCache.NewArray(HolderFactory, 2, tupleItems);
@@ -773,11 +943,13 @@ private:
             total += s;
             output.emplace_back(std::move(value));
             Blocks.pop_front();
-        } while (!Blocks.empty() && free > 0LL && Blocks.front().Block.bytes() <= size_t(free));
+        } while (!Blocks.empty() && free > 0LL && (ReadSpec->Arrow ? GetSizeOfBatch(*Blocks.front().Batch) : Blocks.front().Block.bytes()) <= size_t(free));
 
         finished = Blocks.empty() && !Count;
         if (finished) {
             ContainerCache.Clear();
+            ArrowTupleContainerCache.Clear();
+            ArrowRowContainerCache.Clear();
         }
         return total;
     }
@@ -799,6 +971,7 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvRetryEventFunc, HandleRetry);
         hFunc(TEvPrivate::TEvNextBlock, HandleNextBlock);
+        hFunc(TEvPrivate::TEvNextRecordBatch, HandleNextRecordBatch);
         cFunc(TEvPrivate::EvReadFinished, HandleReadFinished);
     )
 
@@ -807,6 +980,13 @@ private:
     }
 
     void HandleNextBlock(TEvPrivate::TEvNextBlock::TPtr& next) {
+        YQL_ENSURE(!ReadSpec->Arrow);
+        Blocks.emplace_back(next);
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
+    }
+
+    void HandleNextRecordBatch(TEvPrivate::TEvNextRecordBatch::TPtr& next) {
+        YQL_ENSURE(ReadSpec->Arrow);
         Blocks.emplace_back(next);
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
@@ -829,6 +1009,8 @@ private:
     std::vector<TRetryStuff::TPtr> RetryStuffForFile;
     const THolderFactory& HolderFactory;
     TPlainContainerCache ContainerCache;
+    TPlainContainerCache ArrowTupleContainerCache;
+    TPlainContainerCache ArrowRowContainerCache;
 
     const ui64 InputIndex;
     const TTxId TxId;
@@ -995,12 +1177,30 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         const auto structType = static_cast<TStructType*>(outputItemType);
 
         const auto readSpec = std::make_shared<TReadSpec>();
-        readSpec->Columns.resize(structType->GetMembersCount());
-        for (ui32 i = 0U; i < structType->GetMembersCount(); ++i) {
-            auto& column = readSpec->Columns[i];
-            column.type = MetaToClickHouse(structType->GetMemberType(i), intervalUnit);
-            column.name = structType->GetMemberName(i);
+        readSpec->Arrow = params.GetArrow();
+        if (readSpec->Arrow) {
+            arrow::SchemaBuilder builder;
+            for (ui32 i = 0U; i < structType->GetMembersCount(); ++i) {
+                auto memberType = structType->GetMemberType(i);
+                bool isOptional;
+                std::shared_ptr<arrow::DataType> dataType;
+                
+                YQL_ENSURE(ConvertArrowType(memberType, isOptional, dataType), "Unsupported arrow type");
+                THROW_ARROW_NOT_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(structType->GetMemberName(i)), dataType, isOptional)));
+            }
+
+            auto res = builder.Finish();
+            THROW_ARROW_NOT_OK(res.status());
+            readSpec->ArrowSchema = std::move(res).ValueOrDie();
+        } else {
+            readSpec->CHColumns.resize(structType->GetMembersCount());
+            for (ui32 i = 0U; i < structType->GetMembersCount(); ++i) {
+                auto& column = readSpec->CHColumns[i];
+                column.type = MetaToClickHouse(structType->GetMemberType(i), intervalUnit);
+                column.name = structType->GetMemberName(i);
+            }
         }
+
         readSpec->Format = params.GetFormat();
 
         if (const auto it = settings.find("compression"); settings.cend() != it)

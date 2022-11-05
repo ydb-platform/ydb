@@ -163,22 +163,50 @@ public:
                 );
             }
 
-            if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && !s3ReadObject.Object().Format().Ref().IsAtom({"raw", "json_list"}))
-                return Build<TDqSourceWrap>(ctx, read->Pos())
-                    .Input<TS3ParseSettings>()
-                        .Paths(s3ReadObject.Object().Paths())
-                        .Token<TCoSecureParam>()
-                            .Name().Build(token)
+            auto format = s3ReadObject.Object().Format().Ref().Content();
+            if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
+                bool supportedArrowTypes = false;
+                if (State_->Types->UseBlocks && State_->Types->ArrowResolver) {
+                    TVector<const TTypeAnnotationNode*> allTypes;
+                    for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
+                        allTypes.push_back(x->GetItemType());
+                    }
+
+                    YQL_ENSURE(State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(read->Pos()), allTypes, supportedArrowTypes, ctx));
+                }
+
+                if (supportedArrowTypes && format == "parquet") {
+                    return Build<TDqSourceWrap>(ctx, read->Pos())
+                        .Input<TS3ArrowSettings>()
+                            .Paths(s3ReadObject.Object().Paths())
+                            .Token<TCoSecureParam>()
+                                .Name().Build(token)
+                                .Build()
+                            .Format(s3ReadObject.Object().Format())
+                            .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                            .Settings(s3ReadObject.Object().Settings())
                             .Build()
-                        .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                        .Settings(s3ReadObject.Object().Settings())
-                        .Build()
-                    .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                    .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
-                    .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
-                    .Done().Ptr();
-            else {
+                        .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
+                        .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
+                        .Done().Ptr();
+                } else {
+                    return Build<TDqSourceWrap>(ctx, read->Pos())
+                        .Input<TS3ParseSettings>()
+                            .Paths(s3ReadObject.Object().Paths())
+                            .Token<TCoSecureParam>()
+                                .Name().Build(token)
+                                .Build()
+                            .Format(s3ReadObject.Object().Format())
+                            .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                            .Settings(s3ReadObject.Object().Settings())
+                            .Build()
+                        .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                        .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
+                        .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
+                        .Done().Ptr();
+                }
+            } else {
                 if (const auto& objectSettings = s3ReadObject.Object().Settings()) {
                     settings.emplace_back(
                         ctx.Builder(objectSettings.Cast().Pos())
@@ -258,6 +286,27 @@ public:
                 }
 
                 if (const auto maySettings = parseSettings.Settings()) {
+                    const auto& settings = maySettings.Cast();
+                    for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
+                        srcDesc.MutableSettings()->insert({ TString(settings.Ref().Child(i)->Head().Content()), TString(settings.Ref().Child(i)->Tail().IsAtom() ? settings.Ref().Child(i)->Tail().Content() : settings.Ref().Child(i)->Tail().Head().Content()) });
+                    }
+                }
+            } else if (const auto mayArrowSettings = settings.Maybe<TS3ArrowSettings>()) {
+                const auto arrowSettings = mayArrowSettings.Cast();
+                srcDesc.SetFormat(arrowSettings.Format().StringValue().c_str());
+                srcDesc.SetArrow(true);
+
+                const TStructExprType* fullRowType = arrowSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                // exclude extra columns to get actual row type we need to read from input
+                auto rowTypeItems = fullRowType->GetItems();
+                EraseIf(rowTypeItems, [extraColumnsType](const auto& item) { return extraColumnsType->FindItem(item->GetName()); });
+                {
+                    // TODO: pass context
+                    TExprContext ctx;
+                    srcDesc.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(rowTypeItems), NYT::NYson::EYsonFormat::Text));
+                }
+
+                if (const auto maySettings = arrowSettings.Settings()) {
                     const auto& settings = maySettings.Cast();
                     for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
                         srcDesc.MutableSettings()->insert({TString(settings.Ref().Child(i)->Head().Content()), TString(settings.Ref().Child(i)->Tail().IsAtom() ? settings.Ref().Child(i)->Tail().Content() : settings.Ref().Child(i)->Tail().Head().Content())});

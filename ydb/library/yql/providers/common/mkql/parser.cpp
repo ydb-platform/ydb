@@ -146,11 +146,30 @@ TRuntimeNode BuildParseCall(
     TType* inputType,
     TType* parseItemType,
     TType* finalItemType,
-    NCommon::TMkqlBuildContext& ctx)
+    NCommon::TMkqlBuildContext& ctx,
+    bool useBlocks)
 {
     const auto* inputItemType = static_cast<TStreamType*>(inputType)->GetItemType();
     const auto* parseItemStructType = static_cast<TStructType*>(parseItemType);
     const auto* finalItemStructType = static_cast<TStructType*>(finalItemType);
+
+    if (useBlocks) {
+        return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input), [&](TRuntimeNode item) {
+            MKQL_ENSURE(!extraColumnsByPathIndex && metadataColumns.empty(), "TODO");
+
+            auto structObj = ctx.ProgramBuilder.Nth(item, 0);
+            auto length = ctx.ProgramBuilder.Nth(item, 1);
+            TRuntimeNode::TList fields;
+
+            for (ui32 i = 0; i < finalItemStructType->GetMembersCount(); ++i) {
+                TStringBuf name = finalItemStructType->GetMemberName(i);
+                fields.push_back(ctx.ProgramBuilder.Member(structObj, name));
+            }
+
+            fields.push_back(length);
+            return fields;
+        });
+    }
 
     if (!compression.empty()) {
         input = WrapWithDecompress(input, inputItemType, compression, ctx);
@@ -301,7 +320,7 @@ TRuntimeNode BuildParseCall(
     );
 }
 
-TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWideWrap& wrapper, NCommon::TMkqlBuildContext& ctx) {
+TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx, bool useBlocks) {
     const auto& format = GetFormat(wrapper.Settings().Cast().Ref());
     if (!format.Content()) {
         return TMaybe<TRuntimeNode>();
@@ -358,7 +377,8 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWideWrap& wrapper, NCommon
         inputType,
         parseItemType,
         finalItemType,
-        ctx);
+        ctx,
+        useBlocks);
 }
 
 }

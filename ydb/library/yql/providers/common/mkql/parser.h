@@ -23,8 +23,9 @@ NKikimr::NMiniKQL::TRuntimeNode BuildParseCall(
     NKikimr::NMiniKQL::TType* inputType,
     NKikimr::NMiniKQL::TType* parseItemType,
     NKikimr::NMiniKQL::TType* finalItemType,
-    NCommon::TMkqlBuildContext& ctx);
+    NCommon::TMkqlBuildContext& ctx,
+    bool useBlocks = false);
 
-TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParser(const NYql::NNodes::TDqSourceWideWrap& wrapper, NCommon::TMkqlBuildContext& ctx);
+TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParser(const NYql::NNodes::TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx, bool useBlocks = false);
 
 }

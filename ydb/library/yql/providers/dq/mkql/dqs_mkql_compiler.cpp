@@ -10,7 +10,7 @@ using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 
 void RegisterDqsMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, const TTypeAnnotationContext& ctx) {
-    compiler.AddCallable({TDqSourceWideWrap::CallableName(), TDqReadWideWrap::CallableName()},
+    compiler.AddCallable({TDqSourceWideWrap::CallableName(), TDqSourceWideBlockWrap::CallableName(), TDqReadWideWrap::CallableName()},
         [](const TExprNode& node, NCommon::TMkqlBuildContext&) {
             YQL_ENSURE(false, "Unsupported reader: " << node.Head().Content());
             return TRuntimeNode();

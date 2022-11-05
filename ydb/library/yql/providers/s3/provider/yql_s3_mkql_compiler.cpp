@@ -135,6 +135,18 @@ void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
             return TRuntimeNode();
         });
 
+    compiler.ChainCallable(TDqSourceWideBlockWrap::CallableName(),
+        [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+            if (const auto wrapper = TDqSourceWideBlockWrap(&node); wrapper.DataSource().Category().Value() == S3ProviderName) {
+                const auto wrapped = TryWrapWithParser(wrapper, ctx, true);
+                if (wrapped) {
+                    return *wrapped;
+                }
+            }
+
+            return TRuntimeNode();
+        });
+
     if (!compiler.HasCallable(TS3SinkOutput::CallableName()))
         compiler.AddCallable(TS3SinkOutput::CallableName(),
             [state](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {

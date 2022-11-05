@@ -17,9 +17,10 @@ using namespace NYql::NNodes;
 
 class TDqsPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
-    TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
+    TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config, bool useBlocks)
         : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
         , Config(config)
+        , UseBlocks(useBlocks)
     {
         const bool enablePrecompute = Config->_EnablePrecompute.Get().GetOrElse(false);
 
@@ -106,62 +107,65 @@ protected:
             .Build().Done();
         }
         const auto& items = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
-        auto narrow = wrap.Settings() ?
-            ctx.Builder(node.Pos())
-            .Lambda()
-                .Param("source")
-                .Callable("NarrowMap")
-                    .Callable(0, TDqSourceWideWrap::CallableName())
-                        .Arg(0, "source")
-                        .Add(1, wrap.DataSource().Ptr())
-                        .Add(2, wrap.RowType().Ptr())
-                        .Add(3, wrap.Settings().Cast().Ptr())
-                    .Seal()
-                    .Lambda(1)
-                        .Params("fields", items.size())
-                        .Callable(TCoAsStruct::CallableName())
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                ui32 i = 0U;
-                                for (const auto& item : items) {
-                                    parent.List(i)
-                                        .Atom(0, item->GetName())
-                                        .Arg(1, "fields", i)
-                                    .Seal();
-                                    ++i;
-                                }
-                                return parent;
-                            })
-                        .Seal()
+        auto sourceArg = ctx.NewArgument(node.Pos(), "source");
+        bool supportsBlocks = false;
+        auto inputType = GetSeqItemType(wrap.Input().Ref().GetTypeAnn());
+        while (inputType->GetKind() == ETypeAnnotationKind::Tuple) {
+            auto tupleType = inputType->Cast<TTupleExprType>();
+            if (tupleType->GetSize() == 2 && tupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Scalar) {
+                supportsBlocks = true;
+                break;
+            }
+
+            inputType = tupleType->GetItems()[0];
+        }
+
+        auto wideWrap = ctx.Builder(node.Pos())
+            .Callable(UseBlocks && supportsBlocks ? TDqSourceWideBlockWrap::CallableName() : TDqSourceWideWrap::CallableName())
+                .Add(0, sourceArg)
+                .Add(1, wrap.DataSource().Ptr())
+                .Add(2, wrap.RowType().Ptr())
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    if (wrap.Settings()) {
+                        parent.Add(3, wrap.Settings().Cast().Ptr());
+                    }
+
+                    return parent;
+                })
+            .Seal()
+            .Build();
+
+        if (UseBlocks && supportsBlocks) {
+            wideWrap = ctx.Builder(node.Pos())
+                .Callable("WideFromBlocks")
+                    .Add(0, wideWrap)
+                .Seal()
+                .Build();
+        }
+
+        auto narrow = ctx.Builder(node.Pos())
+            .Callable("NarrowMap")
+                .Add(0, wideWrap)
+                .Lambda(1)
+                    .Params("fields", items.size())
+                    .Callable(TCoAsStruct::CallableName())
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            ui32 i = 0U;
+                            for (const auto& item : items) {
+                                parent.List(i)
+                                    .Atom(0, item->GetName())
+                                    .Arg(1, "fields", i)
+                                .Seal();
+                                ++i;
+                            }
+                            return parent;
+                        })
                     .Seal()
                 .Seal()
-            .Seal().Build():
-            ctx.Builder(node.Pos())
-            .Lambda()
-                .Param("source")
-                .Callable("NarrowMap")
-                    .Callable(0, TDqSourceWideWrap::CallableName())
-                        .Arg(0, "source")
-                        .Add(1, wrap.DataSource().Ptr())
-                        .Add(2, wrap.RowType().Ptr())
-                    .Seal()
-                    .Lambda(1)
-                        .Params("fields", items.size())
-                        .Callable(TCoAsStruct::CallableName())
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                ui32 i = 0U;
-                                for (const auto& item : items) {
-                                    parent.List(i)
-                                        .Atom(0, item->GetName())
-                                        .Arg(1, "fields", i)
-                                    .Seal();
-                                    ++i;
-                                }
-                                return parent;
-                            })
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal().Build();
+            .Seal()
+            .Build();
+
+        auto program = ctx.NewLambda(node.Pos(), ctx.NewArguments(node.Pos(), { sourceArg }), std::move(narrow));
 
         return Build<TDqCnUnionAll>(ctx, node.Pos())
             .Output()
@@ -172,7 +176,7 @@ protected:
                         .Settings(wrap.Input())
                         .Build()
                     .Build()
-                .Program(narrow)
+                .Program(program)
                 .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
                 .Build()
                 .Index().Build("0")
@@ -353,10 +357,11 @@ protected:
 
 private:
     TDqConfiguration::TPtr Config;
+    const bool UseBlocks;
 };
 
-THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {
-    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx, config));
+THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config, bool useBlocks) {
+    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx, config, useBlocks));
 }
 
 } // NYql::NDqs

@@ -110,6 +110,7 @@ public:
         AddHandler({TS3Object::CallableName()}, Hndl(&TSelf::HandleObject));
         AddHandler({TS3SourceSettings::CallableName()}, Hndl(&TSelf::HandleS3SourceSettings));
         AddHandler({TS3ParseSettings::CallableName()}, Hndl(&TSelf::HandleS3ParseSettings));
+        AddHandler({TS3ArrowSettings::CallableName()}, Hndl(&TSelf::HandleS3ArrowSettings));
         AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
     }
 
@@ -173,6 +174,59 @@ public:
         }
 
         const TTypeAnnotationNode* itemType = ctx.MakeType<TResourceExprType>("ClickHouseClient.Block");
+        if (extraColumnsType->GetSize()) {
+            itemType = ctx.MakeType<TTupleExprType>(
+                TTypeAnnotationNode::TListType{ itemType, ctx.MakeType<TDataExprType>(EDataSlot::Uint64) });
+        }
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleS3ArrowSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureMinMaxArgsCount(*input, 4U, 5U, ctx)) {
+            return TStatus::Error;
+        }
+
+        const TStructExprType* extraColumnsType = nullptr;
+        if (!ValidateS3Paths(*input->Child(TS3SourceSettings::idx_Paths), extraColumnsType, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!TCoSecureParam::Match(input->Child(TS3ParseSettings::idx_Token))) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ParseSettings::idx_Token)->Pos()), TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
+            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), ctx))
+        {
+            return TStatus::Error;
+        }
+
+        const auto& rowTypeNode = *input->Child(TS3ParseSettings::idx_RowType);
+        if (!EnsureType(rowTypeNode, ctx)) {
+            return TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* rowType = rowTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureStructType(rowTypeNode.Pos(), *rowType, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (input->ChildrenSize() > TS3ParseSettings::idx_Settings && !EnsureTuple(*input->Child(TS3ParseSettings::idx_Settings), ctx)) {
+            return TStatus::Error;
+        }
+
+        TVector<const TItemExprType*> blockRowTypeItems;
+        for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
+            blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(x->GetName(), ctx.MakeType<TBlockExprType>(x->GetItemType())));
+        }
+
+        auto blockRowType = ctx.MakeType<TStructExprType>(blockRowTypeItems);
+
+        const TTypeAnnotationNode* itemType = ctx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{ blockRowType, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)) }); // struct + block length
+
         if (extraColumnsType->GetSize()) {
             itemType = ctx.MakeType<TTupleExprType>(
                 TTypeAnnotationNode::TListType{ itemType, ctx.MakeType<TDataExprType>(EDataSlot::Uint64) });

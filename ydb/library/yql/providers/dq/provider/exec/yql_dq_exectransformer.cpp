@@ -810,6 +810,7 @@ private:
                 YQL_CLOG(DEBUG, ProviderDq) << state->SessionId <<  " WrapFutureCallback";
 
                 auto duration = TInstant::Now() - startTime;
+                YQL_CLOG(INFO, ProviderDq) << "Execution Result complete, duration: " << duration;
                 if (state->Metrics) {
                     state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());
                     state->Metrics->SetCounter(
@@ -1164,6 +1165,7 @@ private:
         // TODO: remove copy-paste
         return WrapFutureCallback<false>(future, [settings, startTime, localRun, type, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             auto duration = TInstant::Now() - startTime;
+            YQL_CLOG(INFO, ProviderDq) << "Execution Pull complete, duration: " << duration;
             if (state->Metrics) {
                 state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());
                 state->Metrics->SetCounter(
@@ -1613,6 +1615,7 @@ private:
                 MarkProgressFinished(publicIds->AllPublicIds, res.Success(), state->ProgressWriter);
 
                 auto duration = TInstant::Now() - startTime;
+                YQL_CLOG(INFO, ProviderDq) << "Execution precomputes complete, duration: " << duration;
                 if (state->Metrics) {
                     state->Metrics->SetCounter("dq", "PrecomputeExecutionTime", duration.MilliSeconds());
                 }

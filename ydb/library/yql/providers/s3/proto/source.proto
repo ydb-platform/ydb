@@ -15,4 +15,5 @@ message TSource {
     optional string RowType = 4;
     optional string Format = 5;
     map<string, string> Settings = 6;
+    bool Arrow = 7;
 }

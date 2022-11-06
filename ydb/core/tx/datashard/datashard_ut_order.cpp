@@ -1462,10 +1462,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    auto f2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     {
@@ -1509,16 +1508,12 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
     // Read the commit reply next
     bool committed;
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        if (response.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
+        auto response = AwaitResponse(runtime, f2);
+        if (response.operation().status() == Ydb::StatusIds::ABORTED) {
             // Let's suppose somehow locks still managed to become invalidated
-            NYql::TIssues issues;
-            IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT(NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
             committed = false;
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
             committed = true;
         }
     }
@@ -1557,7 +1552,6 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     auto &runtime = *server->GetRuntime();
 
     auto sender = runtime.AllocateEdgeActor();
-    auto sender2 = runtime.AllocateEdgeActor();
     auto sender3 = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1598,9 +1592,9 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    auto f2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2);)")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2);)"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     {
@@ -1645,9 +1639,8 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
 
     // Read the commit reply next, it must succeed
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto response = AwaitResponse(runtime, f2);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 
     {
@@ -1733,10 +1726,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, UseMvcc) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    auto f2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     {
@@ -1771,9 +1763,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, UseMvcc) {
 
     // Read the commit reply next, it must succeed
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto response = AwaitResponse(runtime, f2);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 
     // Select keys 3 and 4 from both tables, both should have been be inserted
@@ -1843,10 +1834,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, UseMvcc) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    auto f2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -1887,9 +1877,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, UseMvcc) {
 
     // Read the commit reply next, it must succeed
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto response = AwaitResponse(runtime, f2);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 
     // Select keys 3 and 4 from both tables, both should have been inserted

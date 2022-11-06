@@ -232,12 +232,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         // Begin transaction reading key 3
         TString txId;
         {
-            auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId,
-                "SELECT value FROM `/Root/table-1` WHERE key = 3"));
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-            txId = response.GetResponse().GetTxMeta().id();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            auto result = KqpSimpleBegin(runtime, sessionId, txId,
+                "SELECT value FROM `/Root/table-1` WHERE key = 3");
+            UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 300 } }");
         }
 
         // Do some upserts using UploadRows (overwrites key 3)
@@ -249,14 +246,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Commit transaction and perform some writes (must result in transaction locks invalidated)
         {
-            auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId,
-                "UPSERT INTO `/Root/table-1` (key, value) VALUES (6, 600);"));
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
-
-            NYql::TIssues issues;
-            IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT(NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
+            auto result = KqpSimpleCommit(runtime, sessionId, txId,
+                "UPSERT INTO `/Root/table-1` (key, value) VALUES (6, 600);");
+            UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: ABORTED");
         }
     }
 

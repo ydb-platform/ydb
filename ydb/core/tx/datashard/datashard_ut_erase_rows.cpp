@@ -690,15 +690,11 @@ key = 4, value = (empty maybe)
 
         TString txId;
         {
-            auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, R"(
+            auto result = KqpSimpleBegin(runtime, sessionId, txId, R"(
                 SELECT value FROM `/Root/table-1` WHERE key = 1
-            )"));
+            )");
 
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1);
-
-            txId = response.GetResponse().GetTxMeta().id();
+            UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint64_value: 0 } }");
         }
 
         {
@@ -710,17 +706,11 @@ key = 4, value = (empty maybe)
         }
 
         {
-            auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId, R"(
+            auto result = KqpSimpleCommit(runtime, sessionId, txId, R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES
                 (4, CAST("2031-04-15T00:00:00.000000Z" AS Timestamp));
-            )"));
-
-            auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
-
-            NYql::TIssues issues;
-            IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT(NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: ABORTED");
         }
     }
 

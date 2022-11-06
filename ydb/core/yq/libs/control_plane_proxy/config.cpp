@@ -21,6 +21,10 @@ NConfig::TControlPlaneProxyConfig FillDefaultParameters(NConfig::TControlPlanePr
         config.SetMetricsTtl("1d");
     }
 
+    if (!config.GetConfigRetryPeriod()) {
+        config.SetConfigRetryPeriod("100ms");
+    }
+
     return config;
 }
 
@@ -30,6 +34,7 @@ TControlPlaneProxyConfig::TControlPlaneProxyConfig(const NConfig::TControlPlaneP
     : Proto(FillDefaultParameters(config))
     , RequestTimeout(GetDuration(Proto.GetRequestTimeout(), TDuration::Seconds(30)))
     , MetricsTtl(GetDuration(Proto.GetMetricsTtl(), TDuration::Days(1)))
+    , ConfigRetryPeriod(GetDuration(Proto.GetConfigRetryPeriod(), TDuration::MilliSeconds(100)))
 {
 }
 

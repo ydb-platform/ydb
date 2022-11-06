@@ -13,6 +13,7 @@
 
 #include <ydb/core/yq/libs/common/entity_id.h>
 
+#include <ydb/core/yq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/library/security/util.h>
@@ -83,13 +84,12 @@ public:
     void Bootstrap() {
         Become(&TGetTaskRequestActor::StateFunc);
         auto request = Ev->Record;
-        LOG_D("Request CP::GetTask with size: " << request.ByteSize() << " bytes");
-        RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
         OwnerId = request.owner_id();
         Host = request.host();
         Tenant = request.tenant();
-        Send(NYq::ControlPlaneStorageServiceActorId(),
-            new NYq::TEvControlPlaneStorage::TEvGetTaskRequest(std::move(request)));
+        LOG_D("Request CP::GetTask with size: " << request.ByteSize() << " bytes");
+        RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
+        Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
     }
 
 private:
@@ -128,12 +128,20 @@ private:
         }
     }
 
+    void Handle(TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
+        auto request = Ev->Record;
+        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvGetTaskRequest>(std::move(request));
+        event->TenantInfo = ev->Get()->TenantInfo;
+        Send(NYq::ControlPlaneStorageServiceActorId(), event.release());
+    }
+
 private:
     STRICT_STFUNC(
         StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
         hFunc(NYq::TEvControlPlaneStorage::TEvGetTaskResponse, HandleResponse)
+        hFunc(TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle)
     )
 
     const NConfig::TTokenAccessorConfig TokenAccessorConfig;

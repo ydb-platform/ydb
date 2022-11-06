@@ -45,35 +45,6 @@ YandexQuery::IamAuth::IdentityCase GetIamAuth(const YandexQuery::Connection& con
 
 namespace NYq {
 
-TString TYdbControlPlaneStorageActor::AssignTenantName(const TString& cloudId, const TString& scope) {
-    const auto& mapping = Config.Proto.GetMapping();
-
-    if (scope) {
-        for (const auto& scopeToTenant: mapping.GetScopeToTenantName()) {
-            if (scopeToTenant.GetKey() == scope) {
-                return scopeToTenant.GetValue();
-            }
-        }
-    }
-
-    if (cloudId) {
-        for (const auto& cloudToTenant: mapping.GetCloudIdToTenantName()) {
-            if (cloudToTenant.GetKey() == cloudId) {
-                return cloudToTenant.GetValue();
-            }
-        }
-    }
-
-    auto size = mapping.CommonTenantNameSize();
-
-    if (size) {
-        auto index = MultiHash(cloudId, scope) % size;
-        return mapping.GetCommonTenantName(index);
-    } else {
-        return TenantName;
-    }
-}
-
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -123,6 +94,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     if (request.disposition().has_from_last_checkpoint()) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request"));
     }
+
+    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, TenantName);
 
     {
         TQuotaMap::const_iterator it = event.Quotas.end();
@@ -290,7 +263,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         response->second.After.ConstructInPlace().CopyFrom(query);
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(write)");
-        writeQueryBuilder.AddString("tenant", AssignTenantName(cloudId, scope));
+        writeQueryBuilder.AddString("tenant", tenant);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddString("name", query.content().name());
@@ -325,9 +298,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             writeQueryBuilder.AddText(
                 "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
                 "(`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`,\n"
-                "`" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
+                "`" RETRY_RATE_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "    ($tenant, $scope, $query_id, $query_type, $zero_timestamp, $zero_timestamp, 0, $now, \"\", \"\");"
+                "    ($tenant, $scope, $query_id, $query_type, $zero_timestamp, $zero_timestamp, 0, 0, $now, \"\", \"\");"
             );
         }
 
@@ -778,6 +751,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     if (request.state_load_mode() == YandexQuery::FROM_LAST_CHECKPOINT) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::UNSUPPORTED, "State load mode \"FROM_LAST_CHECKPOINT\" is not supported"));
     }
+
+    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, TenantName);
+
     if (issues) {
         CPS_LOG_W("ModifyQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
@@ -991,7 +967,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         response->second.CloudId = internal.cloud_id();
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyQuery(write)");
-        writeQueryBuilder.AddString("tenant", AssignTenantName(internal.cloud_id(), scope));
+        writeQueryBuilder.AddString("tenant", tenant);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddUint64("max_count_jobs", Config.Proto.GetMaxCountJobs());

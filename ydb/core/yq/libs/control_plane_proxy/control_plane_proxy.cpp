@@ -5,6 +5,7 @@
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
 #include <ydb/core/yq/libs/common/cache.h>
+#include <ydb/core/yq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/util.h>
@@ -16,6 +17,7 @@
 
 #include <ydb/core/yq/libs/config/yq_issue.h>
 #include <ydb/core/yq/libs/control_plane_proxy/events/events.h>
+#include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
@@ -321,6 +323,7 @@ class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestP
     using TBase::Send;
     using TBase::PassAway;
     using TBase::Become;
+    using TBase::Schedule;
 
     ::NYq::TControlPlaneProxyConfig Config;
     TRequestProto RequestProto;
@@ -333,10 +336,11 @@ class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestP
     TActorId ServiceId;
     TRequestCounters Counters;
     TInstant StartTime;
-    std::function<void(const TDuration&, bool, bool)> Probe;
+    std::function<void(const TDuration&, bool /* isSuccess */, bool /* isTimeout */)> Probe;
     TPermissions Permissions;
     TString CloudId;
     TQuotaMap Quotas;
+    ui32 RetryCount = 0;
 
 public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
@@ -373,13 +377,29 @@ public:
     void Bootstrap() {
         CPP_LOG_T("Request actor. Actor id: " << SelfId());
         Become(&TRequestActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
-        Send(ServiceId, new TRequest(Scope, RequestProto, User, Token, CloudId, Permissions, Quotas), 0, Cookie);
+        Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
     }
 
     STRICT_STFUNC(StateFunc,
         cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         hFunc(TResponse, Handle);
+        cFunc(TEvControlPlaneConfig::EvGetTenantInfoRequest, HandleRetry);
+        hFunc(TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle);
     )
+
+    void HandleRetry() {
+        Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
+    }
+
+    void Handle(TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
+        auto tenantInfo = ev->Get()->TenantInfo;
+        if (tenantInfo) {
+            Send(ServiceId, new TRequest(Scope, RequestProto, User, Token, CloudId, Permissions, Quotas, tenantInfo), 0, Cookie);
+        } else {
+            RetryCount++;
+            Schedule(Now() + Config.ConfigRetryPeriod * (1 << RetryCount), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
+        }
+    }
 
     void HandleTimeout() {
         CPP_LOG_D("Request timeout. " << RequestProto.DebugString());

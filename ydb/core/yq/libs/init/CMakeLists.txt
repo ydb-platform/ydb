@@ -23,6 +23,7 @@ target_link_libraries(yq-libs-init PUBLIC
   yq-libs-checkpoint_storage
   yq-libs-checkpointing
   yq-libs-common
+  yq-libs-control_plane_config
   yq-libs-control_plane_proxy
   yq-libs-control_plane_storage
   yq-libs-events

@@ -10,6 +10,7 @@ struct TControlPlaneProxyConfig {
     NConfig::TControlPlaneProxyConfig Proto;
     TDuration RequestTimeout;
     TDuration MetricsTtl;
+    TDuration ConfigRetryPeriod;
 
     TControlPlaneProxyConfig(const NConfig::TControlPlaneProxyConfig& config);
 };

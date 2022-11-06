@@ -975,6 +975,7 @@ class TGetTaskBuilder {
     TString Owner;
     TString HostName;
     TString TenantName;
+    NYq::TTenantInfo::TPtr TenantInfo;
 
 public:
     TGetTaskBuilder()
@@ -982,6 +983,7 @@ public:
         SetOwner(DefaultOwner());
         SetHostName("localhost");
         SetTenantName("/root/tenant");
+        SetTenantInfo(std::make_shared<NYq::TTenantInfo>());
     }
 
     static TString DefaultOwner() {
@@ -1006,12 +1008,19 @@ public:
         return *this;
     }
 
+    TGetTaskBuilder& SetTenantInfo(NYq::TTenantInfo::TPtr tenantInfo)
+    {
+        TenantInfo = tenantInfo;
+        return *this;
+    }
+
     std::unique_ptr<NYq::TEvControlPlaneStorage::TEvGetTaskRequest> Build()
     {
         auto request = std::make_unique<NYq::TEvControlPlaneStorage::TEvGetTaskRequest>();
         request->Request.set_tenant(TenantName);
         request->Request.set_owner_id(Owner);
         request->Request.set_host(HostName);
+        request->TenantInfo = TenantInfo;
         return request;
     }
 };
@@ -1038,12 +1047,14 @@ class TPingTaskBuilder {
     TVector<NYq::TEvControlPlaneStorage::TTopicConsumer> CreatedTopicConsumers;
     TVector<TString> DqGraphs;
     i32 DqGraphIndex = 0;
+    NYq::TTenantInfo::TPtr TenantInfo;
 
 public:
     TPingTaskBuilder()
     {
         SetDeadline(TInstant::Now() + TDuration::Minutes(5));
         SetTenantName("/root/tenant");
+        SetTenantInfo(std::make_shared<NYq::TTenantInfo>());
     }
 
     TPingTaskBuilder& SetTenantName(const TString& tenantName)
@@ -1172,7 +1183,13 @@ public:
         return *this;
     }
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> Build()
+    TPingTaskBuilder& SetTenantInfo(NYq::TTenantInfo::TPtr tenantInfo)
+    {
+        TenantInfo = tenantInfo;
+        return *this;
+    }
+
+std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
         Fq::Private::PingTaskRequest request;
         request.set_owner_id(Owner);
@@ -1230,7 +1247,9 @@ public:
             *request.mutable_finished_at() = NProtoInterop::CastToProto(*FinishedAt);
         }
 
-        return std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
+        auto pingRequest = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
+        pingRequest->TenantInfo = TenantInfo;
+        return pingRequest;
     }
 };
 

@@ -16,13 +16,15 @@ namespace {
 struct TTaskInternal {
     TTask Task;
     TRetryLimiter RetryLimiter;
-    bool ShouldAbortTask = false;
+    bool ShouldAbortTask = false; // force ABORTED_BY_SYSTEM
+    bool ShouldSkipTask = false;  // tenant fetch denied or tenant must be changed
     TString TablePathPrefix;
     TString Owner;
     TString HostName;
     TMaybe<YandexQuery::Job> Job;
     TInstant Deadline;
     TString TenantName;
+    TString NewTenantName;
 };
 
     TString GetServiceAccountId(const YandexQuery::IamAuth& auth) {
@@ -56,38 +58,88 @@ struct TTaskInternal {
     }
 
 std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, const TInstant& nowTimestamp, const TInstant& taskLeaseUntil) {
-    const auto& task = taskInternal.Task;
-    TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(write)");
-    queryBuilder.AddString("tenant", taskInternal.TenantName);
-    queryBuilder.AddString("scope", task.Scope);
-    queryBuilder.AddString("query_id", task.QueryId);
-    queryBuilder.AddString("query", task.Query.SerializeAsString());
-    queryBuilder.AddString("internal", task.Internal.SerializeAsString());
-    queryBuilder.AddString("host", taskInternal.HostName);
-    queryBuilder.AddString("owner", taskInternal.Owner);
-    queryBuilder.AddTimestamp("now", nowTimestamp);
-    queryBuilder.AddTimestamp("ttl", taskLeaseUntil);
-    queryBuilder.AddUint64("retry_counter", taskInternal.RetryLimiter.RetryCount);
-    queryBuilder.AddUint64("generation", task.Generation);
-    queryBuilder.AddTimestamp("retry_counter_update_time", taskInternal.RetryLimiter.RetryCounterUpdatedAt);
-    queryBuilder.AddDouble("retry_rate", taskInternal.RetryLimiter.RetryRate);
 
-    // update queries
-    queryBuilder.AddText(
-        "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation, `" QUERY_COLUMN_NAME "` = $query, `" INTERNAL_COLUMN_NAME "` = $internal\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
-    );
+    if (taskInternal.ShouldSkipTask) {
 
-    // update pending small
-    queryBuilder.AddText(
-        "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl,\n"
-        "`" RETRY_COUNTER_COLUMN_NAME "` = $retry_counter, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "` = $retry_counter_update_time, `" RETRY_RATE_COLUMN_NAME "` = $retry_rate,\n"
-        "`" HOST_NAME_COLUMN_NAME "` = $host, `" OWNER_COLUMN_NAME "` = $owner\n"
-        "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
-    );
+        if (taskInternal.NewTenantName) {
+            const auto& task = taskInternal.Task;
+            TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(move)");
+            queryBuilder.AddString("tenant", taskInternal.TenantName);
+            queryBuilder.AddString("new_tenant", taskInternal.NewTenantName);
+            queryBuilder.AddString("scope", task.Scope);
+            queryBuilder.AddString("query_id", task.QueryId);
+            queryBuilder.AddInt64("query_type", task.Query.content().type());
+            queryBuilder.AddString("query", task.Query.SerializeAsString());
+            queryBuilder.AddString("internal", task.Internal.SerializeAsString());
+            queryBuilder.AddTimestamp("now", nowTimestamp);
+            queryBuilder.AddTimestamp("zero_timestamp", TInstant::Zero());
+            queryBuilder.AddUint64("retry_counter", taskInternal.RetryLimiter.RetryCount);
+            queryBuilder.AddUint64("generation", task.Generation);
+            queryBuilder.AddTimestamp("retry_counter_update_time", taskInternal.RetryLimiter.RetryCounterUpdatedAt);
+            queryBuilder.AddDouble("retry_rate", taskInternal.RetryLimiter.RetryRate);
 
-    const auto query = queryBuilder.Build();
-    return std::make_pair(query.Sql, query.Params);
+            // update queries
+            queryBuilder.AddText(
+                "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation, `" QUERY_COLUMN_NAME "` = $query, `" INTERNAL_COLUMN_NAME "` = $internal, `" TENANT_COLUMN_NAME "` = $new_tenant\n"
+                "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+            );
+
+            // delete old record
+            queryBuilder.AddText(
+                "DELETE FROM `" PENDING_SMALL_TABLE_NAME "`\n"
+                "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+            );
+
+            // insert for new tenant
+            queryBuilder.AddText(
+                "UPSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
+                "(`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`,\n"
+                "`" RETRY_RATE_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
+                "VALUES\n"
+                "    ($new_tenant, $scope, $query_id, $query_type, $now, $zero_timestamp, $retry_rate, $retry_counter, $retry_counter_update_time, \"\", \"\");"
+            );
+
+            const auto query = queryBuilder.Build();
+            return std::make_pair(query.Sql, query.Params);
+
+        } else {
+            return std::make_pair("", NYdb::TParamsBuilder().Build());
+        }
+
+    } else {
+        const auto& task = taskInternal.Task;
+        TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(write)");
+        queryBuilder.AddString("tenant", taskInternal.TenantName);
+        queryBuilder.AddString("scope", task.Scope);
+        queryBuilder.AddString("query_id", task.QueryId);
+        queryBuilder.AddString("query", task.Query.SerializeAsString());
+        queryBuilder.AddString("internal", task.Internal.SerializeAsString());
+        queryBuilder.AddString("host", taskInternal.HostName);
+        queryBuilder.AddString("owner", taskInternal.Owner);
+        queryBuilder.AddTimestamp("now", nowTimestamp);
+        queryBuilder.AddTimestamp("ttl", taskLeaseUntil);
+        queryBuilder.AddUint64("retry_counter", taskInternal.RetryLimiter.RetryCount);
+        queryBuilder.AddUint64("generation", task.Generation);
+        queryBuilder.AddTimestamp("retry_counter_update_time", taskInternal.RetryLimiter.RetryCounterUpdatedAt);
+        queryBuilder.AddDouble("retry_rate", taskInternal.RetryLimiter.RetryRate);
+
+        // update queries
+        queryBuilder.AddText(
+            "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation, `" QUERY_COLUMN_NAME "` = $query, `" INTERNAL_COLUMN_NAME "` = $internal\n"
+            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        );
+
+        // update pending small
+        queryBuilder.AddText(
+            "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl,\n"
+            "`" RETRY_COUNTER_COLUMN_NAME "` = $retry_counter, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "` = $retry_counter_update_time, `" RETRY_RATE_COLUMN_NAME "` = $retry_rate,\n"
+            "`" HOST_NAME_COLUMN_NAME "` = $host, `" OWNER_COLUMN_NAME "` = $owner\n"
+            "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        );
+
+        const auto query = queryBuilder.Build();
+        return std::make_pair(query.Sql, query.Params);
+    }
 }
 
 } // namespace
@@ -99,7 +151,8 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
     const TInstant& taskLeaseUntil,
     bool disableCurrentIam,
     const TDuration& automaticQueriesTtl,
-    const TDuration& resultSetsTtl)
+    const TDuration& resultSetsTtl,
+    std::shared_ptr<TTenantInfo> tenantInfo)
 {
     const auto& task = taskInternal.Task;
 
@@ -118,7 +171,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" ASSIGNED_UNTIL_COLUMN_NAME "` < $now;\n"
     );
 
-    auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks](const TVector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo](const TVector<TResultSet>& resultSets) mutable {
         auto& task = taskInternal.Task;
         const auto shouldAbortTask = taskInternal.ShouldAbortTask;
         constexpr size_t expectedResultSetsSize = 2;
@@ -155,8 +208,23 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
             task.Query.mutable_meta()->set_status(YandexQuery::QueryMeta::ABORTING_BY_SYSTEM);
         }
 
-        responseTasks->AddTaskBlocking(task.QueryId, task);
+        if (tenantInfo->TenantState.Value(taskInternal.TenantName, TenantState::Active) != TenantState::Active) {
+            // tenant graceful shutdown, task fetch prohibited
+            taskInternal.ShouldSkipTask = true;
+        }
 
+        if (tenantInfo) {
+            auto tenant = tenantInfo->Assign(taskInternal.Task.Internal.cloud_id(), task.Scope, taskInternal.TenantName);
+            if (tenant != taskInternal.TenantName) {
+                // mapping changed, reassign tenant
+                taskInternal.ShouldSkipTask = true;
+                taskInternal.NewTenantName = tenant;
+            }
+        }
+
+        if (!taskInternal.ShouldSkipTask) {
+            responseTasks->AddTaskBlocking(task.QueryId, task);
+        }
         return MakeSql(taskInternal, nowTimestamp, taskLeaseUntil);
     };
 
@@ -217,8 +285,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     CPS_LOG_T("GetTaskRequest: {" << request.DebugString() << "}");
 
     NYql::TIssues issues = ValidateGetTask(owner, hostName);
+
+    if (!ev->Get()->TenantInfo) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::NOT_READY, "Control Plane is not ready yet. Please retry later."));
+    }
+
     if (issues) {
-        CPS_LOG_W("GetTaskRequest: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("GetTaskRequest: {" << request.DebugString() << "} FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetTaskResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(GetTaskRequest, owner, hostName, delta, false);
@@ -243,7 +316,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
     auto responseTasks = std::make_shared<TResponseTasks>();
 
-    auto prepareParams = [=, rootCounters=Counters.Counters, actorSystem=NActors::TActivationContext::ActorSystem(), responseTasks=responseTasks](const TVector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, rootCounters=Counters.Counters,
+                             actorSystem=NActors::TActivationContext::ActorSystem(),
+                             responseTasks=responseTasks,
+                             tenantInfo=ev->Get()->TenantInfo
+                        ](const TVector<TResultSet>& resultSets) mutable {
         TVector<TTaskInternal> tasks;
         TVector<TPickTaskParams> pickTaskParams;
         const auto now = TInstant::Now();
@@ -290,7 +367,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         for (size_t i = 0; i < numTasks; ++i) {
             auto tupleParams = MakeGetTaskUpdateQuery(tasks[i],
                 responseTasks, now, now + Config.TaskLeaseTtl, Config.Proto.GetDisableCurrentIam(),
-                Config.AutomaticQueriesTtl, Config.ResultSetsTtl); // using for win32 build
+                Config.AutomaticQueriesTtl, Config.ResultSetsTtl, tenantInfo); // using for win32 build
             auto readQuery = std::get<0>(tupleParams);
             auto readParams = std::get<1>(tupleParams);
             auto prepareParams = std::get<2>(tupleParams);

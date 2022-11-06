@@ -523,6 +523,7 @@ public:
         hFunc(TEvQuotaService::TQuotaUsageRequest, Handle);
         hFunc(TEvQuotaService::TQuotaLimitChangeRequest, Handle);
         hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
+        hFunc(TEvents::TEvSchemaCreated, Handle);
     )
 
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev);
@@ -555,6 +556,8 @@ public:
     void Handle(TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr& ev);
 
     void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev);
+
+    void Handle(TEvents::TEvSchemaCreated::TPtr& ev);
 
     void Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev);
     void Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev);
@@ -613,8 +616,12 @@ public:
     void CreateIdempotencyKeysTable();
     void CreateResultSetsTable();
     void CreateQuotasTable();
+    void CreateTenantsTable();
+    void CreateTenantAcksTable();
+    void CreateMappingsTable();
 
     void RunCreateTableActor(const TString& path, NYdb::NTable::TTableDescription desc);
+    void AfterTablesCreated();
 
 private:
     /*
@@ -892,8 +899,6 @@ private:
         std::shared_ptr<TResponseTasks> responseTasks,
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW());
-
-    TString AssignTenantName(const TString& cloudId, const TString& scope);
 };
 
 }

@@ -44,7 +44,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
     QueryQuotas.clear();
 
     TDbExecutable::TPtr executable;
-    auto& executer = TQuotaCountExecuter::Create(executable, [](TQuotaCountExecuter& executer) { executer.State.clear(); } );
+    auto& executer = TQuotaCountExecuter::Create(executable, false, [](TQuotaCountExecuter& executer) { executer.State.clear(); } );
 
     executer.Read(
         [=](TQuotaCountExecuter&, TSqlQueryBuilder& builder) {
@@ -76,11 +76,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
                             executer.State[internal.cloud_id()] += count;
                         }
                     },
-                    "GetScopeCloud_" + scope
+                    "GetScopeCloud_" + scope, true
                 );
             }
         },
-        "GroupByPendingSmall"
+        "GroupByPendingSmall", true
     ).Process(SelfId(),
         [=, this](TQuotaCountExecuter& executer) {
             this->QuotasUpdatedAt = Now();

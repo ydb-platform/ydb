@@ -5,6 +5,7 @@
 
 #include <ydb/core/yq/libs/audit/yq_audit_service.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/yq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/yq/libs/health/health.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
@@ -83,6 +84,11 @@ void Init(
                 credentialsProviderFactory,
                 tenant);
         actorRegistrator(NYq::ControlPlaneStorageServiceActorId(), controlPlaneStorage);
+
+        actorRegistrator(NYq::ControlPlaneConfigActorId(),
+            CreateControlPlaneConfigActor(yqSharedResources, credentialsProviderFactory, protoConfig.GetControlPlaneStorage(),
+                appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneConfig"))
+        );
     }
 
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {

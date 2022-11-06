@@ -11,8 +11,10 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
+#include <ydb/core/yq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
+
 #include <google/protobuf/util/time_util.h>
 
 #define LOG_E(stream) \
@@ -82,13 +84,7 @@ public:
         Deadline = NProtoInterop::CastFromProto(req.deadline());
         LOG_D("Request CP::PingTask with size: " << req.ByteSize() << " bytes");
         RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
-        try {
-            auto event = CreateControlPlaneEvent();
-            Send(NYq::ControlPlaneStorageServiceActorId(), event.release());
-        } catch (const std::exception& err) {
-            const auto msg = TStringBuilder() << "PingTask Boostrap Error: " << CurrentExceptionMessage();
-            Fail(msg);
-        }
+        Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
     }
 
 private:
@@ -97,6 +93,7 @@ private:
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         hFunc(NYq::TEvControlPlaneStorage::TEvPingTaskResponse, HandleResponse)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        hFunc(TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle);
     )
 
     std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> CreateControlPlaneEvent() {
@@ -118,6 +115,17 @@ private:
         response->Record.ConstructInPlace(ev->Get()->Record);
         Send(Sender, response.Release());
         PassAway();
+    }
+
+    void Handle(TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
+        try {
+            auto event = CreateControlPlaneEvent();
+            event->TenantInfo = ev->Get()->TenantInfo;
+            Send(NYq::ControlPlaneStorageServiceActorId(), event.release());
+        } catch (const std::exception& err) {
+            const auto msg = TStringBuilder() << "PingTask Boostrap Error: " << CurrentExceptionMessage();
+            Fail(msg);
+        }
     }
 
 private:

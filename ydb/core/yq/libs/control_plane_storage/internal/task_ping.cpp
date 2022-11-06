@@ -455,10 +455,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     const TString queryId = request.query_id().value();
     const TString owner = request.owner_id();
     const TInstant deadline = NProtoInterop::CastFromProto(request.deadline());
+    const TString tenant = request.tenant();
 
     CPS_LOG_T("PingTaskRequest: {" << request.DebugString() << "}");
 
     NYql::TIssues issues = ValidatePingTask(scope, queryId, owner, deadline, Config.ResultSetsTtl);
+
+    auto tenantInfo = ev->Get()->TenantInfo;
+    if (tenantInfo && tenantInfo->TenantState.Value(tenant, TenantState::Active) == TenantState::Idle) {
+        issues.AddIssue("Tenant is idle, no processing is allowed");
+    }
+
     if (issues) {
         CPS_LOG_W("PingTaskRequest: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;

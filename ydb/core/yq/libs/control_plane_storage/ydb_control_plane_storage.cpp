@@ -38,6 +38,7 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     YdbConnection = NewYdbConnection(Config.Proto.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
     DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
     CreateDirectory();
+
     CreateQueriesTable();
     CreatePendingSmallTable();
     CreateConnectionsTable();
@@ -47,6 +48,10 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     CreateJobsTable();
     CreateNodesTable();
     CreateQuotasTable();
+    CreateTenantsTable();
+    CreateTenantAcksTable();
+    CreateMappingsTable();
+
     Become(&TThis::StateFunc);
 }
 
@@ -54,7 +59,11 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
 * Creating tables
 */
 void TYdbControlPlaneStorageActor::RunCreateTableActor(const TString& path, NYdb::NTable::TTableDescription desc) {
-    Register(MakeCreateTableActor({}, NKikimrServices::YQ_CONTROL_PLANE_STORAGE, YdbConnection, path, std::move(desc), MakeCreateSchemaRetryPolicy()));
+    Register(MakeCreateTableActor(SelfId(), NKikimrServices::YQ_CONTROL_PLANE_STORAGE, YdbConnection, path, std::move(desc), MakeCreateSchemaRetryPolicy()));
+}
+
+void TYdbControlPlaneStorageActor::Handle(TEvents::TEvSchemaCreated::TPtr&) {
+    // skip for now
 }
 
 void TYdbControlPlaneStorageActor::CreateQueriesTable()
@@ -248,6 +257,53 @@ void TYdbControlPlaneStorageActor::CreateQuotasTable()
         .Build();
 
     RunCreateTableActor(tablePath, TTableDescription(description));
+}
+
+void TYdbControlPlaneStorageActor::CreateTenantsTable()
+{
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, TENANTS_TABLE_NAME);
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(VTENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(COMMON_COLUMN_NAME, EPrimitiveType::Bool)
+        .AddNullableColumn(STATE_COLUMN_NAME, EPrimitiveType::Uint32)
+        .AddNullableColumn(STATE_TIME_COLUMN_NAME, EPrimitiveType::Timestamp)
+        .SetPrimaryKeyColumns({TENANT_COLUMN_NAME})
+        .Build();
+
+    RunCreateTableActor(tablePath, TTableDescription(description));
+}
+
+void TYdbControlPlaneStorageActor::CreateTenantAcksTable()
+{
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, TENANT_ACKS_TABLE_NAME);
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(NODE_ID_COLUMN_NAME, EPrimitiveType::Uint32)
+        .AddNullableColumn(STATE_TIME_COLUMN_NAME, EPrimitiveType::Timestamp)
+        .SetPrimaryKeyColumns({NODE_ID_COLUMN_NAME})
+        .Build();
+
+    RunCreateTableActor(tablePath, TTableDescription(description));
+}
+
+void TYdbControlPlaneStorageActor::CreateMappingsTable()
+{
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, MAPPINGS_TABLE_NAME);
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SUBJECT_TYPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(SUBJECT_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(VTENANT_COLUMN_NAME, EPrimitiveType::String)
+        .SetPrimaryKeyColumns({SUBJECT_TYPE_COLUMN_NAME, SUBJECT_ID_COLUMN_NAME})
+        .Build();
+
+    RunCreateTableActor(tablePath, TTableDescription(description));
+}
+
+void TYdbControlPlaneStorageActor::AfterTablesCreated() {
+    // Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
 }
 
 bool TYdbControlPlaneStorageActor::IsSuperUser(const TString& user)

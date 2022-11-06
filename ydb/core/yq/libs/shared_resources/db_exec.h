@@ -135,7 +135,6 @@ public:
 
                     TCommitTransactionResult result = future.GetValue();
                     auto status = static_cast<TStatus>(result);
-
                     if (!status.IsSuccess()) {
                         return MakeFuture(status);
                     } else {

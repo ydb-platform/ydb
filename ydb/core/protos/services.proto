@@ -309,6 +309,7 @@ enum EServiceKikimr {
     YQ_RATE_LIMITER = 1155;
     FQ_QUOTA_PROXY = 1156;
     PUBLIC_HTTP = 1157;
+    FQ_CONTROL_PLANE_CONFIG = 1158;
 
     // 1024 - 1099 is reserved for nbs
 

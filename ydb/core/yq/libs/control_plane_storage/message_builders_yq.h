@@ -975,6 +975,7 @@ class TGetTaskBuilder {
     TString Owner;
     TString HostName;
     TString TenantName;
+    NYq::TTenantInfo::TPtr TenantInfo;
 
 public:
     TGetTaskBuilder()
@@ -982,6 +983,7 @@ public:
         SetOwner(DefaultOwner());
         SetHostName("localhost");
         SetTenantName("/root/tenant");
+        SetTenantInfo(std::make_shared<NYq::TTenantInfo>());
     }
 
     static TString DefaultOwner() {
@@ -1006,12 +1008,19 @@ public:
         return *this;
     }
 
+    TGetTaskBuilder& SetTenantInfo(NYq::TTenantInfo::TPtr tenantInfo)
+    {
+        TenantInfo = tenantInfo;
+        return *this;
+    }
+
     std::unique_ptr<TEvControlPlaneStorage::TEvGetTaskRequest> Build()
     {
         auto request = std::make_unique<TEvControlPlaneStorage::TEvGetTaskRequest>();
         request->Request.set_tenant(TenantName);
         request->Request.set_owner_id(Owner);
         request->Request.set_host(HostName);
+        request->TenantInfo = TenantInfo;
         return request;
     }
 };

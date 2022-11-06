@@ -21,6 +21,7 @@ target_link_libraries(yq-libs-control_plane_proxy PUBLIC
   ydb-core-mon
   libs-actors-logging
   yq-libs-actors
+  yq-libs-control_plane_config
   libs-control_plane_proxy-events
   yq-libs-control_plane_storage
   ydb-library-folder_service

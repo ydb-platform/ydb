@@ -14,6 +14,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
+#include <ydb/core/yq/libs/control_plane_config/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/yq/libs/events/event_subspace.h>
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
@@ -214,7 +215,8 @@ struct TEvControlPlaneStorage {
                                              const TString& token,
                                              const TString& cloudId,
                                              TPermissions permissions,
-                                             const TQuotaMap& quotas)
+                                             const TQuotaMap& quotas,
+                                             TTenantInfo::TPtr tenantInfo)
             : Scope(scope)
             , Request(request)
             , User(user)
@@ -222,6 +224,7 @@ struct TEvControlPlaneStorage {
             , CloudId(cloudId)
             , Permissions(permissions)
             , Quotas(quotas)
+            , TenantInfo(tenantInfo)
         {
         }
 
@@ -241,6 +244,7 @@ struct TEvControlPlaneStorage {
         TString CloudId;
         TPermissions Permissions;
         TQuotaMap Quotas;
+        TTenantInfo::TPtr TenantInfo;
     };
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>
@@ -417,6 +421,7 @@ struct TEvControlPlaneStorage {
         }
 
         Fq::Private::GetTaskRequest Request;
+        TTenantInfo::TPtr TenantInfo;
     };
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
@@ -480,6 +485,7 @@ struct TEvControlPlaneStorage {
         }
 
         Fq::Private::PingTaskRequest Request;
+        TTenantInfo::TPtr TenantInfo;
     };
 
     struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, EvPingTaskResponse> {

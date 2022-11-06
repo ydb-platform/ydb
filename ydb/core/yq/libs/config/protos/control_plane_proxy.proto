@@ -11,4 +11,5 @@ message TControlPlaneProxyConfig {
     string RequestTimeout = 2;
     bool EnablePermissions = 3;
     string MetricsTtl = 4;
+    string ConfigRetryPeriod = 31;
 }

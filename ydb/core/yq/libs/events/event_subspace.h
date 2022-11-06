@@ -29,6 +29,7 @@ struct TYqEventSubspace {
         InternalService,
         QuotaService,
         RateLimiter,
+        ControlPlaneConfig,
 
         SubspacesEnd,
     };

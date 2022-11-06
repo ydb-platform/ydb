@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/yq.pb.h>
 #include <ydb/core/yq/libs/events/event_subspace.h>
 
+#include <ydb/core/yq/libs/control_plane_config/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
 #include <library/cpp/actors/core/event_pb.h>
@@ -16,12 +17,12 @@ namespace NYq {
 struct TEvTestConnection {
     // Event ids.
     enum EEv : ui32 {
-        EvTestConnectionRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::TestConnection),
+        EvTestConnectionRequest = YqEventSubspaceBegin(::NYq::TYqEventSubspace::TestConnection),
         EvTestConnectionResponse,
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::TestConnection), "All events must be in their subspace");
+    static_assert(EvEnd <= YqEventSubspaceEnd(::NYq::TYqEventSubspace::TestConnection), "All events must be in their subspace");
 
     struct TEvTestConnectionRequest : NActors::TEventLocal<TEvTestConnectionRequest, EvTestConnectionRequest> {
         explicit TEvTestConnectionRequest(const TString& scope,
@@ -30,7 +31,8 @@ struct TEvTestConnection {
                                           const TString& token,
                                           const TString& cloudId,
                                           const TPermissions& permissions,
-                                          const TQuotaMap& quotas)
+                                          const TQuotaMap& quotas,
+                                          TTenantInfo::TPtr tenantInfo)
             : CloudId(cloudId)
             , Scope(scope)
             , Request(request)
@@ -38,6 +40,7 @@ struct TEvTestConnection {
             , Token(token)
             , Permissions(permissions)
             , Quotas(quotas)
+            , TenantInfo(tenantInfo)
         {
         }
 
@@ -48,6 +51,7 @@ struct TEvTestConnection {
         TString Token;
         TPermissions Permissions;
         const TQuotaMap Quotas;
+        TTenantInfo::TPtr TenantInfo;
     };
 
     struct TEvTestConnectionResponse : NActors::TEventLocal<TEvTestConnectionResponse, EvTestConnectionResponse> {

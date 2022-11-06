@@ -6,6 +6,8 @@
 
 #include <ydb/core/protos/services.pb.h>
 
+#include <ydb/core/yq/libs/control_plane_config/control_plane_config.h>
+#include <ydb/core/yq/libs/control_plane_config/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
@@ -39,6 +41,7 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvInternalService::TEvHealthCheckRequest, Handle)
         hFunc(TEvInternalService::TEvGetTaskRequest, Handle)
+        hFunc(NYq::TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle)
         hFunc(TEvInternalService::TEvPingTaskRequest, Handle)
         hFunc(TEvInternalService::TEvWriteResultRequest, Handle)
         hFunc(TEvInternalService::TEvCreateRateLimiterResourceRequest, Handle)
@@ -77,7 +80,20 @@ private:
         Cookie++;
         Senders[Cookie] = ev->Sender;
         auto request = ev->Get()->Request;
-        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvGetTaskRequest(std::move(request)), 0, Cookie);
+        GetRequests.emplace(Cookie, std::move(request));
+        Send(NYq::ControlPlaneConfigActorId(), new NYq::TEvControlPlaneConfig::TEvGetTenantInfoRequest(), 0, Cookie);
+    }
+
+    void Handle(NYq::TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
+        TenantInfo = ev->Get()->TenantInfo;
+        auto it = GetRequests.find(ev->Cookie);
+        if (it != GetRequests.end()) {
+            auto request = it->second;
+            GetRequests.erase(it);
+            auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvGetTaskRequest>(std::move(request));
+            event->TenantInfo = TenantInfo;
+            Send(NYq::ControlPlaneStorageServiceActorId(), event.release(), 0, ev->Cookie);
+        }
     }
 
     void Handle(NYq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) {
@@ -99,7 +115,9 @@ private:
         Senders[Cookie] = ev->Sender;
         OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
-        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvPingTaskRequest(std::move(request)), 0, Cookie);
+        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
+        event->TenantInfo = TenantInfo;
+        Send(NYq::ControlPlaneStorageServiceActorId(), event.release(), 0, Cookie);
     }
 
     void Handle(NYq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev) {
@@ -185,6 +203,8 @@ private:
     ui64 Cookie = 0;
     THashMap<ui64, NActors::TActorId> Senders;
     THashMap<ui64, ui64> OriginalCookies;
+    THashMap<ui64, Fq::Private::GetTaskRequest> GetRequests;
+    NYq::TTenantInfo::TPtr TenantInfo;
 };
 
 NActors::IActor* CreateLoopbackServiceActor(

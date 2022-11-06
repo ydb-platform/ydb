@@ -12,6 +12,9 @@ namespace NYq {
 #define JOBS_TABLE_NAME "jobs"
 #define NODES_TABLE_NAME "nodes"
 #define QUOTAS_TABLE_NAME "quotas"
+#define TENANTS_TABLE_NAME "tenants"
+#define TENANT_ACKS_TABLE_NAME "tenant_acks"
+#define MAPPINGS_TABLE_NAME "mappings"
 
 // columns
 #define SCOPE_COLUMN_NAME "scope"
@@ -78,5 +81,10 @@ namespace NYq {
 #define LIMIT_UPDATED_AT_COLUMN_NAME "limit_updated_at"
 #define METRIC_USAGE_COLUMN_NAME "metric_usage"
 #define USAGE_UPDATED_AT_COLUMN_NAME "usage_updated_at"
+
+#define VTENANT_COLUMN_NAME "vtenant"
+#define COMMON_COLUMN_NAME "common"
+#define STATE_COLUMN_NAME "state"
+#define STATE_TIME_COLUMN_NAME "state_time"
 
 } // namespace NYq

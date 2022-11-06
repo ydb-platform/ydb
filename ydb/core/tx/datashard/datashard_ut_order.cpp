@@ -1953,10 +1953,9 @@ Y_UNIT_TEST(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -2097,10 +2096,9 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -2237,10 +2235,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {

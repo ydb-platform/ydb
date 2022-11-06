@@ -4226,21 +4226,19 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     };
     auto prevObserver = runtime.SetObserverFunc(blockCommits);
 
-    auto sender1 = runtime.AllocateEdgeActor();
     TString sessionId1 = CreateSessionRPC(runtime, "/Root");
-    auto sender2 = runtime.AllocateEdgeActor();
     TString sessionId2 = CreateSessionRPC(runtime, "/Root");
 
-    SendRequest(runtime, sender1, MakeBeginRequest(sessionId1, Q_(R"(
+    auto f1 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )"), "/Root"));
-    SendRequest(runtime, sender2, MakeBeginRequest(sessionId2, Q_(R"(
+    )"), sessionId1, "", false), "/Root");
+    auto f2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )"), "/Root"));
+    )"), sessionId2, "", false), "/Root");
 
     waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
 
@@ -4257,18 +4255,20 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
 
     TString txId1;
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender1);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId1 = response.GetResponse().GetTxMeta().id();
+        auto response = AwaitResponse(runtime, f1);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Table::ExecuteQueryResult result;
+        response.operation().result().UnpackTo(&result);
+        txId1 = result.tx_meta().id();
     }
 
     TString txId2;
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId2 = response.GetResponse().GetTxMeta().id();
+        auto response = AwaitResponse(runtime, f2);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Table::ExecuteQueryResult result;
+        response.operation().result().UnpackTo(&result);
+        txId2 = result.tx_meta().id();
     }
 
     // Perform a couple of immediate reads to make sure shards are ready to respond to read-only requests
@@ -4324,14 +4324,14 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
     // to currently existing variables
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
     }
 
     SimulateSleep(server, TDuration::Seconds(1));
@@ -5144,14 +5144,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-3` (key, value) VALUES (3, 3)"));
 
     auto beginTx = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
-        auto reqSender = runtime.AllocateEdgeActor();
-        sessionId = CreateSessionRPC(runtime);
-        auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        return KqpSimpleBegin(runtime, sessionId, txId, query);
     };
 
     TString sessionId1, txId1;
@@ -5160,9 +5153,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
     TString sessionId2, txId2;
     UNIT_ASSERT_VALUES_EQUAL(
@@ -5170,9 +5161,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
             SELECT key, value FROM `/Root/table-2`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
 
     bool capturePlanSteps = true;
     TVector<THolder<IEventHandle>> capturedPlanSteps;

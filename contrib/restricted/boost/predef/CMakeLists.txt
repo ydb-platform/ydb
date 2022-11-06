@@ -13,5 +13,4 @@ target_include_directories(restricted-boost-predef INTERFACE
 )
 target_link_libraries(restricted-boost-predef INTERFACE
   contrib-libs-cxxsupp
-  yutil
 )

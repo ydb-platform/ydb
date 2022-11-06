@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-move INTERFACE
 )
 target_link_libraries(restricted-boost-move INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core

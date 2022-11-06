@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-icl INTERFACE
 )
 target_link_libraries(restricted-boost-icl INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-concept_check
   restricted-boost-config
@@ -24,6 +23,7 @@ target_link_libraries(restricted-boost-icl INTERFACE
   restricted-boost-iterator
   restricted-boost-move
   restricted-boost-mpl
+  restricted-boost-range
   restricted-boost-rational
   restricted-boost-static_assert
   restricted-boost-type_traits

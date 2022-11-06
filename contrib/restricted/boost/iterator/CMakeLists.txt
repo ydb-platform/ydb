@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-iterator INTERFACE
 )
 target_link_libraries(restricted-boost-iterator INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-concept_check
   restricted-boost-config

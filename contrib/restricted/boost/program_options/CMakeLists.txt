@@ -17,6 +17,7 @@ target_include_directories(restricted-boost-program_options PUBLIC
 target_link_libraries(restricted-boost-program_options PUBLIC
   contrib-libs-cxxsupp
   restricted-boost-any
+  restricted-boost-bind
   restricted-boost-config
   restricted-boost-core
   restricted-boost-detail

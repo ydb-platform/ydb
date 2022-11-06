@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-ratio INTERFACE
 )
 target_link_libraries(restricted-boost-ratio INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-core
   restricted-boost-integer

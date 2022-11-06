@@ -13,8 +13,9 @@ target_include_directories(restricted-boost-dynamic_bitset INTERFACE
 )
 target_link_libraries(restricted-boost-dynamic_bitset INTERFACE
   contrib-libs-cxxsupp
-  yutil
+  restricted-boost-assert
   restricted-boost-config
+  restricted-boost-container_hash
   restricted-boost-core
   restricted-boost-integer
   restricted-boost-move

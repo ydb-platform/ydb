@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-tti INTERFACE
 )
 target_link_libraries(restricted-boost-tti INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-function_types
   restricted-boost-mpl

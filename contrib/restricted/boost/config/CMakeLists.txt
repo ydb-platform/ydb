@@ -16,5 +16,4 @@ target_include_directories(restricted-boost-config INTERFACE
 )
 target_link_libraries(restricted-boost-config INTERFACE
   contrib-libs-cxxsupp
-  yutil
 )

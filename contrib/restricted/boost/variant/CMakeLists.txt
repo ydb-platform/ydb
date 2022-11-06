@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-variant INTERFACE
 )
 target_link_libraries(restricted-boost-variant INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-bind
   restricted-boost-config

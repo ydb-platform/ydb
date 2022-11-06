@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-numeric_conversion INTERFACE
 )
 target_link_libraries(restricted-boost-numeric_conversion INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-conversion
   restricted-boost-core

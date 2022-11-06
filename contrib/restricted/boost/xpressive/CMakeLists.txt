@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-xpressive INTERFACE
 )
 target_link_libraries(restricted-boost-xpressive INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-conversion

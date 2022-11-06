@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-rational INTERFACE
 )
 target_link_libraries(restricted-boost-rational INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core

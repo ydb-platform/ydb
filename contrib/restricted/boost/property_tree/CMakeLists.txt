@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-property_tree INTERFACE
 )
 target_link_libraries(restricted-boost-property_tree INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-any
   restricted-boost-assert
   restricted-boost-bind

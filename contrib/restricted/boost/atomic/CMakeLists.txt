@@ -10,6 +10,7 @@
 add_library(restricted-boost-atomic)
 target_compile_options(restricted-boost-atomic PRIVATE
   -DBOOST_ATOMIC_SOURCE
+  -Wno-everything
 )
 target_include_directories(restricted-boost-atomic PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/include
@@ -20,12 +21,12 @@ target_include_directories(restricted-boost-atomic PRIVATE
 )
 target_link_libraries(restricted-boost-atomic PUBLIC
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-align
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-predef
   restricted-boost-preprocessor
+  restricted-boost-static_assert
   restricted-boost-type_traits
 )
 target_sources(restricted-boost-atomic PRIVATE

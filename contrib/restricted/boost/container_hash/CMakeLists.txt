@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-container_hash INTERFACE
 )
 target_link_libraries(restricted-boost-container_hash INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core

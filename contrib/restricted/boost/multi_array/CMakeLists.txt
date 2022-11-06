@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-multi_array INTERFACE
 )
 target_link_libraries(restricted-boost-multi_array INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-array
   restricted-boost-assert
   restricted-boost-concept_check

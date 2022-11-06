@@ -8,12 +8,14 @@
 
 
 add_library(restricted-boost-exception)
+target_compile_options(restricted-boost-exception PRIVATE
+  -Wno-everything
+)
 target_include_directories(restricted-boost-exception PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/exception/include
 )
 target_link_libraries(restricted-boost-exception PUBLIC
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core

@@ -13,9 +13,9 @@ target_include_directories(restricted-boost-conversion INTERFACE
 )
 target_link_libraries(restricted-boost-conversion INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
+  restricted-boost-core
   restricted-boost-smart_ptr
   restricted-boost-throw_exception
   restricted-boost-type_traits

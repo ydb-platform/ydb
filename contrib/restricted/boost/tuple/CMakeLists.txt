@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-tuple INTERFACE
 )
 target_link_libraries(restricted-boost-tuple INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-core
   restricted-boost-static_assert

@@ -13,10 +13,10 @@ target_include_directories(restricted-boost-tokenizer INTERFACE
 )
 target_link_libraries(restricted-boost-tokenizer INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-iterator
   restricted-boost-mpl
   restricted-boost-throw_exception
+  restricted-boost-type_traits
 )

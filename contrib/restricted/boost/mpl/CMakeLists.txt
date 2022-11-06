@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-mpl INTERFACE
 )
 target_link_libraries(restricted-boost-mpl INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-core
   restricted-boost-predef

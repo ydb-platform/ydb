@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-winapi INTERFACE
 )
 target_link_libraries(restricted-boost-winapi INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-predef
 )

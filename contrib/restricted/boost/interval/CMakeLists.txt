@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-interval INTERFACE
 )
 target_link_libraries(restricted-boost-interval INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-detail
   restricted-boost-logic

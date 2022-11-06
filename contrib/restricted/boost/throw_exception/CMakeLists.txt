@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-throw_exception INTERFACE
 )
 target_link_libraries(restricted-boost-throw_exception INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
 )

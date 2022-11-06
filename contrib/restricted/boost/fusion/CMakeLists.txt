@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-fusion INTERFACE
 )
 target_link_libraries(restricted-boost-fusion INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-container_hash
   restricted-boost-core

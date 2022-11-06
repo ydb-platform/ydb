@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-foreach INTERFACE
 )
 target_link_libraries(restricted-boost-foreach INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-core
   restricted-boost-iterator

@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-proto INTERFACE
 )
 target_link_libraries(restricted-boost-proto INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-core
   restricted-boost-fusion

@@ -13,9 +13,9 @@ target_include_directories(restricted-boost-utility INTERFACE
 )
 target_link_libraries(restricted-boost-utility INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-core
+  restricted-boost-io
   restricted-boost-preprocessor
   restricted-boost-static_assert
   restricted-boost-throw_exception

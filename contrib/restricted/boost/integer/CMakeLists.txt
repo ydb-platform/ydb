@@ -13,9 +13,9 @@ target_include_directories(restricted-boost-integer INTERFACE
 )
 target_link_libraries(restricted-boost-integer INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core
   restricted-boost-static_assert
+  restricted-boost-throw_exception
 )

@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-function_types INTERFACE
 )
 target_link_libraries(restricted-boost-function_types INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-core
   restricted-boost-detail

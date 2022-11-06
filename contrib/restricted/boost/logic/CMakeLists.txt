@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-logic INTERFACE
 )
 target_link_libraries(restricted-boost-logic INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
   restricted-boost-core
 )

@@ -26,10 +26,12 @@ target_link_libraries(restricted-boost-locale PUBLIC
   restricted-boost-config
   restricted-boost-function
   restricted-boost-iterator
+  restricted-boost-predef
   restricted-boost-smart_ptr
   restricted-boost-static_assert
   restricted-boost-thread
   restricted-boost-type_traits
+  restricted-boost-unordered
 )
 target_sources(restricted-boost-locale PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/posix/codecvt.cpp

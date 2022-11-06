@@ -13,6 +13,5 @@ target_include_directories(restricted-boost-static_assert INTERFACE
 )
 target_link_libraries(restricted-boost-static_assert INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
 )

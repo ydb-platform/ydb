@@ -19,12 +19,16 @@ items:
       href: commands/dir.md
     - name: Вторичные индексы
       href: commands/secondary_index.md
+    - name: Копирование таблиц
+      href: tools-copy.md
     - name: Переименование таблиц
       href: commands/tools/rename.md
     - name: Установка параметров TTL
       href: table-ttl-set.md
     - name: Удаление параметров TTL
       href: table-ttl-drop.md
+    - name: Удаление таблицы
+      href: table-drop.md
   - name: Работа с данными
     items:
     - name: Получение плана исполнения запроса и AST
@@ -67,8 +71,6 @@ items:
       href: table-query-execute.md
 #  - name: Утилиты
 #    items:
-    # - name: Копирование таблиц
-    #   href: commands/tools/copy.md
     # - name: Снятие бэкапа
     #   href: commands/tools/dump.md
     # - name: Восстановление бэкапа

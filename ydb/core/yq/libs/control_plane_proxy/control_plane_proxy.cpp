@@ -33,9 +33,10 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/security/util.h>
 
+#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/retry/retry_policy.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
-#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/events.h>
@@ -61,6 +62,7 @@ struct TRequestScopeCounters: public virtual TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
     ::NMonitoring::TDynamicCounters::TCounterPtr Error;
     ::NMonitoring::TDynamicCounters::TCounterPtr Timeout;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Retry;
 
     explicit TRequestScopeCounters(const TString& name)
         : Name(name)
@@ -73,6 +75,7 @@ struct TRequestScopeCounters: public virtual TThrRefBase {
         Ok = subgroup->GetCounter("Ok", true);
         Error = subgroup->GetCounter("Error", true);
         Timeout = subgroup->GetCounter("Timeout", true);
+        Timeout = subgroup->GetCounter("Retry", true);
     }
 
     virtual ~TRequestScopeCounters() override {
@@ -93,6 +96,7 @@ struct TRequestCommonCounters: public virtual TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
     ::NMonitoring::TDynamicCounters::TCounterPtr Error;
     ::NMonitoring::TDynamicCounters::TCounterPtr Timeout;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Retry;
     ::NMonitoring::THistogramPtr LatencyMs;
 
     explicit TRequestCommonCounters(const TString& name)
@@ -106,6 +110,7 @@ struct TRequestCommonCounters: public virtual TThrRefBase {
         Ok = subgroup->GetCounter("Ok", true);
         Error = subgroup->GetCounter("Error", true);
         Timeout = subgroup->GetCounter("Timeout", true);
+        Retry = subgroup->GetCounter("Retry", true);
         LatencyMs = subgroup->GetHistogram("LatencyMs", GetLatencyHistogramBuckets());
     }
 
@@ -165,6 +170,16 @@ struct TRequestCounters {
         Scope->Timeout->Dec();
         Common->Timeout->Dec();
     }
+
+    void IncRetry() {
+        Scope->Retry->Inc();
+        Common->Retry->Inc();
+    }
+
+    void DecRetry() {
+        Scope->Retry->Dec();
+        Common->Retry->Dec();
+    }
 };
 
 template<class TEventRequest, class TResponseProxy>
@@ -220,6 +235,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
     using TBase::PassAway;
     using TBase::Become;
     using TBase::Register;
+    using IRetryPolicy = IRetryPolicy<NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr&>;
 
     ::NYq::TControlPlaneProxyConfig Config;
     TActorId Sender;
@@ -231,6 +247,8 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
     ui32 Cookie;
     TInstant StartTime;
     bool GetQuotas;
+    IRetryPolicy::IRetryState::TPtr RetryState;
+
 
 public:
     TResolveFolderActor(const TRequestCommonCountersPtr& counters,
@@ -249,6 +267,7 @@ public:
         , Cookie(cookie)
         , StartTime(TInstant::Now())
         , GetQuotas(getQuotas)
+        , RetryState(GetRetryPolicy()->CreateRetryState())
     {}
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_RESOLVE_FOLDER";
@@ -256,11 +275,15 @@ public:
     void Bootstrap() {
         CPP_LOG_T("Resolve folder bootstrap. Folder id: " << FolderId << " Actor id: " << SelfId());
         Become(&TResolveFolderActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
+        Counters->InFly->Inc();
+        Send(NKikimr::NFolderService::FolderServiceActorId(), CreateRequest().release(), 0, 0);
+    }
+
+    std::unique_ptr<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest> CreateRequest() {
         auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest>();
         request->Request.set_folder_id(FolderId);
         request->Token = Token;
-        Counters->InFly->Inc();
-        Send(NKikimr::NFolderService::FolderServiceActorId(), request.release(), 0, 0);
+        return request;
     }
 
     STRICT_STFUNC(StateFunc,
@@ -286,15 +309,21 @@ public:
         Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         const auto& response = ev->Get()->Response;
         const auto& status = ev->Get()->Status;
-        if (!status.Ok() || !ev->Get()->Response.has_folder()) {
-            Counters->Error->Inc();
+        if (!status.Ok() || !response.has_folder()) {
             TString errorMessage = "Msg: " + status.Msg + " Details: " + status.Details + " Code: " + ToString(status.GRpcStatusCode) + " InternalError: " + ToString(status.InternalError);
+            auto delay = RetryState->GetNextRetryDelay(ev);
+            if (delay) {
+                Counters->Retry->Inc();
+                CPP_LOG_E("Folder resolve error. Retry with delay " << *delay << ", " << errorMessage);
+                TActivationContext::Schedule(*delay, new IEventHandle(NKikimr::NFolderService::FolderServiceActorId(), static_cast<const TActorId&>(SelfId()), CreateRequest().release()));
+                return;
+            }
+            Counters->Error->Inc();
             CPP_LOG_E(errorMessage);
             NYql::TIssues issues;
             NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Resolve folder error");
             issues.AddIssue(issue);
             Counters->Error->Inc();
-            Counters->Timeout->Inc();
             const TDuration delta = TInstant::Now() - StartTime;
             Probe(delta, false, false);
             Send(Sender, new TResponseProxy(issues), 0, Cookie);
@@ -313,6 +342,16 @@ public:
             TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
         }
         PassAway();
+    }
+
+private:
+    static const IRetryPolicy::TPtr& GetRetryPolicy() {
+        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr& ev) {
+            const auto& response = ev->Get()->Response;
+            const auto& status = ev->Get()->Status;
+            return !status.Ok() || !response.has_folder() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
+        }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 5);
+        return policy;
     }
 };
 

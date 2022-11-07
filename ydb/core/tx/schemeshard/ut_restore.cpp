@@ -516,6 +516,31 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
+    Y_UNIT_TEST(ShouldNotDecompressEntirePortionAtOnce) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().ZstdBlockSizeForTest = 113; // one row
+
+        ui32 uploadRowsCount = 0;
+        runtime.SetObserverFunc([&uploadRowsCount](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            uploadRowsCount += ui32(ev->GetTypeRewrite() == TEvDataShard::EvUnsafeUploadRowsResponse);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto data = GenerateZstdTestData(TString(100, 'a'), 2); // 2 rows, 1 row = 113b
+        // ensure that one decompressed row is bigger than entire compressed file
+        UNIT_ASSERT(data.Data.size() < *runtime.GetAppData().ZstdBlockSizeForTest);
+
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data}, data.Data.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(uploadRowsCount, 2);
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldExpandBuffer) {
         TTestBasicRuntime runtime;
 

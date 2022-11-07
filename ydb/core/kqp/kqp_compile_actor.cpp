@@ -254,17 +254,14 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
             KqpCompileResult->PreparedQuery.reset(kqpResult.PreparingQuery.release());
-            KqpCompileResult->QueryTraits = kqpResult.QueryTraits;
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
             Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime);
 
-            const auto& queryTraits = KqpCompileResult->QueryTraits;
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation successful"
                 << ", self: " << ctx.SelfID
-                << ", duration: " << duration
-                << ", traits: " << (queryTraits ? queryTraits->ToString() : "<none>"));
+                << ", duration: " << duration);
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
                 << ", self: " << ctx.SelfID

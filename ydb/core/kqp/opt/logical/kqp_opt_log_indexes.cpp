@@ -12,6 +12,88 @@ using namespace NYql::NNodes;
 
 namespace {
 
+TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
+    TVector<TExprBase> columnsToSelect;
+    columnsToSelect.reserve(table.Metadata->KeyColumnNames.size());
+    for (auto key : table.Metadata->KeyColumnNames) {
+        auto value = table.Metadata->Columns.at(key);
+        auto atom = Build<TCoAtom>(ctx, pos)
+            .Value(value.Name)
+            .Done();
+
+        columnsToSelect.push_back(atom);
+    }
+
+    return Build<TCoAtomList>(ctx, pos)
+        .Add(columnsToSelect)
+        .Done();
+}
+
+TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) {
+    TVector<TCoAtom> columns;
+    THashSet<TString> uniqColumns;
+    columns.reserve(col1.Size() + col2.size());
+
+    for (const auto& c : col1) {
+        YQL_ENSURE(uniqColumns.emplace(c.StringValue()).second);
+        columns.push_back(c);
+    }
+
+    for (const auto& c : col2) {
+        if (uniqColumns.emplace(c).second) {
+            auto atom = Build<TCoAtom>(ctx, col1.Pos())
+                .Value(c)
+                .Done();
+            columns.push_back(atom);
+        }
+    }
+
+    return Build<TCoAtomList>(ctx, col1.Pos())
+        .Add(columns)
+        .Done();
+}
+
+bool IsKeySelectorPkPrefix(NNodes::TCoLambda keySelector, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
+    auto checkKey = [keySelector, &tableDesc, columns] (const TExprBase& key, ui32 index) {
+        if (!key.Maybe<TCoMember>()) {
+            return false;
+        }
+
+        auto member = key.Cast<TCoMember>();
+        if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
+            return false;
+        }
+
+        auto column = member.Name().StringValue();
+        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
+        if (!columnIndex || *columnIndex != index) {
+            return false;
+        }
+
+        if (columns) {
+            columns->emplace_back(std::move(column));
+        }
+
+        return true;
+    };
+
+    auto lambdaBody = keySelector.Body();
+    if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
+        auto tuple = maybeTuple.Cast();
+        for (size_t i = 0; i < tuple.Size(); ++i) {
+            if (!checkKey(tuple.Item(i), i)) {
+                return false;
+            }
+        }
+    } else {
+        if (!checkKey(lambdaBody, 0)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool CanPushTopSort(const TCoTopSort& node, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
     return IsKeySelectorPkPrefix(node.KeySelectorLambda(), tableDesc, columns);
 }

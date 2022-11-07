@@ -1,7 +1,6 @@
 #include "kqp_opt_impl.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/kqp/provider/kqp_opt_helpers.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
@@ -11,6 +10,107 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace {
+
+TExprBase UnwrapReadTableValues(TExprBase input, const TKikimrTableDescription& tableDesc,
+    const TCoAtomList columns, TExprContext& ctx)
+{
+    TCoArgument itemArg = Build<TCoArgument>(ctx, input.Pos())
+        .Name("item")
+        .Done();
+
+    TVector<TExprBase> structItems;
+    for (auto atom : columns) {
+        auto columnType = tableDesc.GetColumnType(TString(atom.Value()));
+        YQL_ENSURE(columnType);
+
+        auto item = Build<TCoNameValueTuple>(ctx, input.Pos())
+            .Name(atom)
+            .Value<TCoCoalesce>()
+                .Predicate<TCoMember>()
+                    .Struct(itemArg)
+                    .Name(atom)
+                    .Build()
+                .Value<TCoDefault>()
+                    .Type(ExpandType(atom.Pos(), *columnType->Cast<TOptionalExprType>()->GetItemType(), ctx))
+                    .Build()
+                .Build()
+            .Done();
+
+        structItems.push_back(item);
+    }
+
+    return Build<TCoMap>(ctx, input.Pos())
+        .Input(input)
+        .Lambda()
+            .Args({itemArg})
+            .Body<TCoAsStruct>()
+                .Add(structItems)
+                .Build()
+            .Build()
+        .Done();
+}
+
+// Replace absent input columns to NULL to perform REPLACE via UPSERT
+std::pair<TExprBase, TCoAtomList> CreateRowsToReplace(const TExprBase& input,
+    const TCoAtomList& inputColumns, const TKikimrTableDescription& tableDesc,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    THashSet<TStringBuf> inputColumnsSet;
+    for (const auto& name : inputColumns) {
+        inputColumnsSet.insert(name.Value());
+    }
+
+    auto rowArg = Build<TCoArgument>(ctx, pos)
+        .Name("row")
+        .Done();
+
+    TVector<TCoAtom> writeColumns;
+    TVector<TExprBase> writeMembers;
+
+    for (const auto& [name, _] : tableDesc.Metadata->Columns) {
+        TMaybeNode<TExprBase> memberValue;
+        if (tableDesc.GetKeyColumnIndex(name) || inputColumnsSet.contains(name)) {
+            memberValue = Build<TCoMember>(ctx, pos)
+                .Struct(rowArg)
+                .Name().Build(name)
+                .Done();
+        } else {
+            auto type = tableDesc.GetColumnType(name);
+            YQL_ENSURE(type);
+
+            memberValue = Build<TCoNothing>(ctx, pos)
+                .OptionalType(NCommon::BuildTypeExpr(pos, *type, ctx))
+                .Done();
+        }
+
+        auto nameAtom = TCoAtom(ctx.NewAtom(pos, name));
+
+        YQL_ENSURE(memberValue);
+        auto memberTuple = Build<TCoNameValueTuple>(ctx, pos)
+            .Name(nameAtom)
+            .Value(memberValue.Cast())
+            .Done();
+
+        writeColumns.emplace_back(std::move(nameAtom));
+        writeMembers.emplace_back(std::move(memberTuple));
+    }
+
+    auto writeData = Build<TCoMap>(ctx, pos)
+        .Input(input)
+        .Lambda()
+            .Args({rowArg})
+            .Body<TCoAsStruct>()
+                .Add(writeMembers)
+                .Build()
+            .Build()
+        .Done();
+
+    auto columnList = Build<TCoAtomList>(ctx, pos)
+        .Add(writeColumns)
+        .Done();
+
+    return {writeData, columnList};
+}
 
 bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
     /*
@@ -97,7 +197,7 @@ TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription
     auto readNode = BuildReadTable(columns, read.Pos(), tableData, ctx, kqpCtx);
 
     return unwrapValues
-        ? UnwrapKiReadTableValues(readNode, tableData, columns, ctx)
+        ? UnwrapReadTableValues(readNode, tableData, columns, ctx)
         : readNode;
 }
 
@@ -121,7 +221,7 @@ TExprBase BuildReadTableIndex(const TKiReadTable& read, const TKikimrTableDescri
         .Done();
 
     return unwrapValues
-        ? UnwrapKiReadTableValues(kqlReadTable, tableData, kqlReadTable.Columns(), ctx)
+        ? UnwrapReadTableValues(kqlReadTable, tableData, kqlReadTable.Columns(), ctx)
         : kqlReadTable;
 }
 

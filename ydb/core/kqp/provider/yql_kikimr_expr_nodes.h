@@ -70,20 +70,5 @@ public:
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h>
 
-template<typename TParent>
-class TNodeBuilder<TParent, TKiColumnRangeTuple> : public NGenerated::TKiColumnRangeTupleBuilder<TParent>
-{
-public:
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos,
-        typename NGenerated::TKiColumnRangeTupleBuilder<TParent>::BuildFuncType buildFunc,
-        typename NGenerated::TKiColumnRangeTupleBuilder<TParent>::GetArgFuncType getArgFunc)
-        : NGenerated::TKiColumnRangeTupleBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
-
-    TKiColumnRangeTuple DoBuild() {
-        auto node = this->Ctx.NewList(this->Pos, { this->ColumnHolder.Cast().Ptr(), this->FromHolder.Cast().Ptr(), this->ToHolder.Cast().Ptr() });
-        return TKiColumnRangeTuple(node);
-    }
-};
-
 } // namespace NNodes
 } // namespace NYql

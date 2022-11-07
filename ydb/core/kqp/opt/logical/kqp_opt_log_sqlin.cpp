@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/kqp/provider/yql_kikimr_opt_utils.h>
 
 #include <ydb/library/yql/core/common_opt/yql_co_sqlin.h>
 
@@ -13,6 +12,38 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
+
+namespace {
+
+bool CanRewriteSqlInToEquiJoin(const TTypeAnnotationNode* lookupType, const TTypeAnnotationNode* collectionType) {
+    // SqlIn in Dict
+    if (collectionType->GetKind() == ETypeAnnotationKind::Dict) {
+        return IsDataOrOptionalOfData(lookupType);
+    }
+
+    // SqlIn in List<DataType> or List<Tuple<DataType...>>
+    if (collectionType->GetKind() == ETypeAnnotationKind::List) {
+        auto collectionItemType = collectionType->Cast<TListExprType>()->GetItemType();
+
+        if (collectionItemType->GetKind() == ETypeAnnotationKind::Tuple) {
+            if (lookupType->GetKind() != ETypeAnnotationKind::Tuple) {
+                return false;
+            }
+            auto lookupItems = lookupType->Cast<TTupleExprType>()->GetItems();
+            auto collectionItems = collectionItemType->Cast<TTupleExprType>()->GetItems();
+            if (lookupItems.size() != collectionItems.size()) {
+                return false;
+            }
+            return AllOf(collectionItems, [](const auto& item) { return IsDataOrOptionalOfData(item); });
+        }
+
+        return IsDataOrOptionalOfData(collectionItemType);
+    }
+
+    return false;
+}
+
+} // namespace
 
 TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrConfiguration::TPtr& config)

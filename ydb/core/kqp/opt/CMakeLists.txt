@@ -32,4 +32,5 @@ target_sources(core-kqp-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phase.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_check.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_finalize.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_range_legacy.cpp
 )

@@ -38,7 +38,6 @@ struct TKikimrData {
         DataSourceNames.insert(TKiReadTableScheme::CallableName());
         DataSourceNames.insert(TKiReadTableList::CallableName());
 
-        DataSinkNames.insert(TKiClusterConfig::CallableName());
         DataSinkNames.insert(TKiWriteTable::CallableName());
         DataSinkNames.insert(TKiUpdateTable::CallableName());
         DataSinkNames.insert(TKiDeleteTable::CallableName());
@@ -54,19 +53,6 @@ struct TKikimrData {
         DataSinkNames.insert(TKiDataQuery::CallableName());
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
-
-        KqlNames.insert(TKiSelectRow::CallableName());
-        KqlNames.insert(TKiSelectRange::CallableName());
-        KqlNames.insert(TKiSelectIndexRange::CallableName());
-        KqlNames.insert(TKiUpdateRow::CallableName());
-        KqlNames.insert(TKiEraseRow::CallableName());
-        KqlNames.insert(TKiSetResult::CallableName());
-        KqlNames.insert(TKiMapParameter::CallableName());
-        KqlNames.insert(TKiFlatMapParameter::CallableName());
-        KqlNames.insert(TKiPartialSort::CallableName());
-        KqlNames.insert(TKiPartialTake::CallableName());
-        KqlNames.insert(TKiRevertIf::CallableName());
-        KqlNames.insert(TKiAbortIf::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -385,20 +371,9 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     return true;
 }
 
-NNodes::TKiVersionedTable BuildVersionedTable(const TKikimrTableMetadata& metadata, TPositionHandle pos, TExprContext& ctx) {
-    return Build<TKiVersionedTable>(ctx, pos)
-        .Path().Build(metadata.Name)
-        .SchemaVersion().Build(ToString(metadata.SchemaVersion))
-        .PathId().Build(metadata.PathId.ToString())
-        .Done();
-}
-
-NNodes::TCoAtomList BuildColumnsList(
-    const TKikimrTableDescription& table,
-    TPositionHandle pos,
-    TExprContext& ctx,
-    bool withSystemColumns
-) {
+TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHandle pos,
+    TExprContext& ctx, bool withSystemColumns)
+{
     TVector<TExprBase> columnsToSelect;
     for (const auto& pair : table.Metadata->Columns) {
         auto atom = Build<TCoAtom>(ctx, pos)
@@ -420,68 +395,6 @@ NNodes::TCoAtomList BuildColumnsList(
 
     return Build<TCoAtomList>(ctx, pos)
         .Add(columnsToSelect)
-        .Done();
-}
-
-NNodes::TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
-    TVector<TExprBase> columnsToSelect;
-    columnsToSelect.reserve(table.Metadata->KeyColumnNames.size());
-    for (auto key : table.Metadata->KeyColumnNames) {
-        auto value = table.Metadata->Columns.at(key);
-        auto atom = Build<TCoAtom>(ctx, pos)
-            .Value(value.Name)
-            .Done();
-
-        columnsToSelect.push_back(atom);
-    }
-
-    return Build<TCoAtomList>(ctx, pos)
-        .Add(columnsToSelect)
-        .Done();
-}
-
-NNodes::TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) {
-    TVector<TCoAtom> columns;
-    THashSet<TString> uniqColumns;
-    columns.reserve(col1.Size() + col2.size());
-
-    for (const auto& c : col1) {
-        YQL_ENSURE(uniqColumns.emplace(c.StringValue()).second);
-        columns.push_back(c);
-    }
-
-    for (const auto& c : col2) {
-        if (uniqColumns.emplace(c).second) {
-            auto atom = Build<TCoAtom>(ctx, col1.Pos())
-                .Value(c)
-                .Done();
-            columns.push_back(atom);
-        }
-    }
-
-    return Build<TCoAtomList>(ctx, col1.Pos())
-        .Add(columns)
-        .Done();
-}
-
-TCoNameValueTupleList ExtractNamedKeyTuples(TCoArgument itemArg, const TKikimrTableDescription& tableDesc,
-    TExprContext& ctx, const TString& tablePrefix)
-{
-    TVector<TExprBase> keyTuples;
-    for (TString& keyColumnName : tableDesc.Metadata->KeyColumnNames) {
-        auto tuple = Build<TCoNameValueTuple>(ctx, itemArg.Pos())
-            .Name().Build(keyColumnName)
-            .Value<TCoMember>()
-                .Struct(itemArg)
-                .Name().Build(tablePrefix.empty() ? keyColumnName : TString::Join(tablePrefix, ".", keyColumnName))
-                .Build()
-            .Done();
-
-        keyTuples.push_back(tuple);
-    }
-
-    return Build<TCoNameValueTupleList>(ctx, itemArg.Pos())
-        .Add(keyTuples)
         .Done();
 }
 

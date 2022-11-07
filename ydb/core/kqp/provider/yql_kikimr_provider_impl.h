@@ -27,7 +27,6 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
 private:
-    virtual TStatus HandleClusterConfig(NNodes::TKiClusterConfig, TExprContext& ctx) = 0;
     virtual TStatus HandleWriteTable(NNodes::TKiWriteTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleUpdateTable(NNodes::TKiUpdateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDeleteTable(NNodes::TKiDeleteTable node, TExprContext& ctx) = 0;
@@ -106,27 +105,6 @@ struct TKiExecDataQuerySettings {
     static TKiExecDataQuerySettings Parse(NNodes::TKiExecDataQuery exec);
 };
 
-class TKikimrKeyRange {
-public:
-    TKikimrKeyRange(TExprContext& ctx, const TKikimrTableDescription& table);
-    TKikimrKeyRange(const TKikimrTableDescription& table, const NCommon::TKeyRange& keyRange);
-
-    static bool IsFull(NNodes::TExprList list);
-    static TMaybe<NCommon::TKeyRange> GetPointKeyRange(TExprContext& ctx, const TKikimrTableDescription& table, NNodes::TExprList range);
-    static NNodes::TExprBase BuildReadRangeExpr(const TKikimrTableDescription& tableDesc,
-        const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select,  bool allowNulls,
-        TExprContext& ctx);
-    static NNodes::TExprBase BuildIndexReadRangeExpr(const TKikimrTableDescription& lookupTableDesc,
-        const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select, bool allowNulls,
-        const TKikimrTableDescription& dataTableDesc, TExprContext& ctx);
-
-    NNodes::TExprList ToRangeExpr(NNodes::TExprBase owner, TExprContext& ctx);
-
-private:
-    const TKikimrTableDescription& Table;
-    NCommon::TKeyRange KeyRange;
-};
-
 template<typename TResult>
 class TKikimrFutureResult : public IKikimrAsyncResult<TResult> {
 public:
@@ -180,7 +158,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePt
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx);
-TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types);
+TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
 TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx);
@@ -197,33 +176,8 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
 
 TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
 
-NNodes::TMaybeNode<NNodes::TExprBase> TranslateToMkql(NNodes::TExprBase node, TExprContext& ctx,
-    const TMaybe<TString>& rtParamName);
-
-NNodes::TExprBase UnwrapKiReadTableValues(NNodes::TExprBase input, const TKikimrTableDescription& tableDesc,
-    NNodes::TCoAtomList columns, TExprContext& ctx);
-
-NNodes::TKiVersionedTable BuildVersionedTable(const TKikimrTableMetadata& metadata, TPositionHandle pos, TExprContext& ctx);
-NNodes::TCoAtomList BuildColumnsList(
-    const TKikimrTableDescription& table,
-    TPositionHandle pos,
-    TExprContext& ctx,
-    bool withSystemColumns = false
-);
-NNodes::TCoAtomList BuildKeyColumnsList(
-    const TKikimrTableDescription& table,
-    TPositionHandle pos,
-    TExprContext& ctx
-);
-
-NNodes::TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx);
-
-bool IsKqlPureExpr(NNodes::TExprBase expr);
-bool IsKqlPureLambda(NNodes::TCoLambda lambda);
-bool IsKeySelectorPkPrefix(NNodes::TCoLambda lambda, const TKikimrTableDescription& desc, TVector<TString>* columns);
-
-NNodes::TCoNameValueTupleList ExtractNamedKeyTuples(NNodes::TCoArgument arg,
-    const TKikimrTableDescription& desc, TExprContext& ctx, const TString& tablePrefix = TString());
+NNodes::TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHandle pos,
+    TExprContext& ctx, bool withSystemColumns);
 
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
     const TString& cluster, const TString& table, NNodes::TCoAtomList select, bool withSystemColumns = false);
@@ -232,34 +186,18 @@ NKikimrKqp::EIsolationLevel GetIsolationLevel(const TMaybe<TString>& isolationLe
 TMaybe<TString> GetIsolationLevel(const NKikimrKqp::EIsolationLevel& isolationLevel);
 
 TYdbOperation GetTableOp(const NNodes::TKiWriteTable& write);
-TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TCoNameValueTupleList& operations, TExprContext& ctx);
+TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TCoNameValueTupleList& operations,
+    TExprContext& ctx);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TKiOperationList& operations, TExprContext& ctx);
 
-void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, NProtoBuf::RepeatedPtrField<NKqpProto::TKqpTableInfo>& infos);
-void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos);
-
-NNodes::TExprBase DeduplicateByMembers(const NNodes::TExprBase& expr, const TSet<TString>& members, TExprContext& ctx,
-    TPositionHandle pos);
+void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op,
+    NProtoBuf::RepeatedPtrField<NKqpProto::TKqpTableInfo>& infos);
+void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op,
+    TVector<NKqpProto::TKqpTableInfo>& infos);
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
-TExprNode::TPtr KiApplyLimitToSelectRange(NNodes::TExprBase node, TExprContext& ctx);
-TExprNode::TPtr KiPushPredicateToSelectRange(NNodes::TExprBase node, TExprContext& ctx,
-    const TKikimrTablesData& tablesData, const TKikimrConfiguration& config);
-TExprNode::TPtr KiApplyExtractMembersToSelectRow(NNodes::TExprBase node, TExprContext& ctx);
-TExprNode::TPtr KiRewriteEquiJoin(NNodes::TExprBase node, const TKikimrTablesData& tablesData,
-    const TKikimrConfiguration& config, TExprContext& ctx);
-TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesData& tablesData,
-    const TKikimrConfiguration& config, TExprContext& ctx);
-
-bool KiTableLookupCanCompare(NNodes::TExprBase node);
-NNodes::TMaybeNode<NNodes::TExprBase> KiTableLookupGetValue(NNodes::TExprBase node, const TTypeAnnotationNode* type,
-    TExprContext& ctx);
-NCommon::TTableLookup::TCompareResult KiTableLookupCompare(NNodes::TExprBase left, NNodes::TExprBase right);
-
-NNodes::TKiProgram BuildKiProgram(NNodes::TKiDataQuery query, const TKikimrTablesData& tablesData, TExprContext& ctx,
-    bool withSystemColumns);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();
 const THashSet<TStringBuf>& KikimrDataSinkFunctions();

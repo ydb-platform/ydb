@@ -8,6 +8,48 @@ using namespace NYql::NNodes;
 
 namespace {
 
+TVector<TExprBase> CreateColumnsToSelectToUpdateIndex(
+    const TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> indexes,
+    const TVector<TString>& pk,
+    const THashSet<TString>& dataColumns,
+    TPositionHandle pos,
+    TExprContext& ctx)
+{
+    TVector<TExprBase> columnsToSelect;
+    TSet<TString> columns;
+
+    for (const auto& pair : indexes) {
+        for (const auto& col : pair.second->KeyColumns) {
+            if (columns.insert(col).second) {
+                auto atom = Build<TCoAtom>(ctx, pos)
+                    .Value(col)
+                    .Done();
+                columnsToSelect.emplace_back(std::move(atom));
+            }
+        }
+
+        for (const auto& col : dataColumns) {
+            if (columns.insert(col).second) {
+                auto atom = Build<TCoAtom>(ctx, pos)
+                    .Value(col)
+                    .Done();
+                columnsToSelect.emplace_back(std::move(atom));
+            }
+        }
+    }
+
+    for (const auto& p : pk) {
+        const auto& atom = Build<TCoAtom>(ctx, pos)
+            .Value(p)
+            .Done();
+        if (columns.insert(p).second) {
+            columnsToSelect.push_back(atom);
+        }
+    }
+
+    return columnsToSelect;
+}
+
 TDqPhyPrecompute PrecomputeDict(const TCondenseInputResult& condenseResult, TPositionHandle pos, TExprContext& ctx) {
     auto computeDictStage = Build<TDqStage>(ctx, pos)
         .Inputs()
@@ -32,6 +74,50 @@ TDqPhyPrecompute PrecomputeDict(const TCondenseInputResult& condenseResult, TPos
 
 } // namespace
 
+TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryIndexVector(
+    const TKikimrTableDescription& table,
+    TPositionHandle pos,
+    TExprContext& ctx,
+    const THashSet<TStringBuf>* filter,
+    const std::function<TExprBase (const TKikimrTableMetadata&, TPositionHandle, TExprContext&)>& tableBuilder)
+{
+    TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> secondaryIndexes;
+    secondaryIndexes.reserve(table.Metadata->Indexes.size());
+    YQL_ENSURE(table.Metadata->Indexes.size() == table.Metadata->SecondaryGlobalIndexMetadata.size());
+    for (size_t i = 0; i < table.Metadata->Indexes.size(); i++) {
+        const auto& indexMeta = table.Metadata->Indexes[i];
+
+        if (!indexMeta.ItUsedForWrite()) {
+            continue;
+        }
+
+        // Add index if filter absent
+        bool addIndex = filter ? false : true;
+
+        for (const auto& col : indexMeta.KeyColumns) {
+
+            if (filter) {
+                // Add index if filter and at least one column present in the filter
+                addIndex |= filter->contains(TStringBuf(col));
+            }
+        }
+
+        for (const auto& col : indexMeta.DataColumns) {
+
+            if (filter) {
+                // Add index if filter and at least one column present in the filter
+                addIndex |= filter->contains(TStringBuf(col));
+            }
+        }
+
+        if (indexMeta.KeyColumns && addIndex) {
+            auto indexTable = tableBuilder(*table.Metadata->SecondaryGlobalIndexMetadata[i], pos, ctx).Ptr();
+            secondaryIndexes.emplace_back(std::make_pair(indexTable, &indexMeta));
+        }
+    }
+    return secondaryIndexes;
+}
+
 TSecondaryIndexes BuildSecondaryIndexVector(const TKikimrTableDescription& table, TPositionHandle pos,
     TExprContext& ctx, const THashSet<TStringBuf>* filter)
 {
@@ -39,7 +125,7 @@ TSecondaryIndexes BuildSecondaryIndexVector(const TKikimrTableDescription& table
         return BuildTableMeta(meta, pos, ctx);
     };
 
-    return ::NKikimr::NKqp::BuildSecondaryIndexVector(table, pos, ctx, filter, cb);
+    return BuildSecondaryIndexVector(table, pos, ctx, filter, cb);
 }
 
 TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& lookupKeys,

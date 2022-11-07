@@ -17,13 +17,6 @@ public:
         : SessionCtx(sessionCtx) {}
 
 private:
-    TStatus HandleClusterConfig(TKiClusterConfig node, TExprContext& ctx) override {
-        Y_UNUSED(node);
-        Y_UNUSED(ctx);
-
-        return TStatus::Ok;
-    }
-
     TStatus HandleWriteTable(TKiWriteTable node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
 
@@ -264,40 +257,8 @@ private:
     }
 
     TStatus HandleKql(TCallable node, TExprContext& ctx) override {
+        Y_UNUSED(node);
         Y_UNUSED(ctx);
-
-        if (auto call = node.Maybe<TKiSelectRow>()) {
-            auto cluster = call.Cast().Cluster().Value();
-            auto table = call.Cast().Table();
-
-            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path()));
-            return TStatus::Ok;
-        }
-
-        if (auto call = node.Maybe<TKiSelectRangeBase>()) {
-            auto cluster = call.Cast().Cluster().Value();
-            auto table = call.Cast().Table();
-
-            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path()));
-            return TStatus::Ok;
-        }
-
-        if (auto call = node.Maybe<TKiUpdateRow>()) {
-
-            auto cluster = call.Cast().Cluster().Value();
-            auto table = call.Cast().Table();
-
-            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path()));
-            return TStatus::Ok;
-        }
-
-        if (auto call = node.Maybe<TKiEraseRow>()) {
-            auto cluster = call.Cast().Cluster().Value();
-            auto table = call.Cast().Table();
-
-            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path()));
-            return TStatus::Ok;
-        }
 
         return TStatus::Ok;
     }
@@ -341,32 +302,9 @@ public:
     }
 
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override {
-        auto config = Gateway->GetClusterConfig(cluster);
-        if (!config) {
-            return {};
-        }
-
-        TPositionHandle pos;
-
-        TVector<TExprBase> locators;
-        auto& grpcData = config->GetGrpc();
-        for (size_t index = 0; index < grpcData.LocatorsSize(); ++index) {
-            locators.push_back(Build<TCoAtom>(ctx, pos)
-                .Value(grpcData.GetLocators(index))
-                .Done());
-        }
-
-        return Build<TKiClusterConfig>(ctx, pos)
-            .GrpcData<TKiGrpcData>()
-                .Locators<TCoAtomList>()
-                    .Add(locators)
-                    .Build()
-                .TimeoutMs<TCoAtom>().Build(ToString(grpcData.GetTimeoutMs()))
-                .MaxMessageSizeBytes<TCoAtom>().Build(ToString(grpcData.GetMaxMessageSizeBytes()))
-                .MaxInFlight<TCoAtom>().Build(ToString(grpcData.GetMaxInFlight()))
-                .Build()
-            .TvmId<TCoAtom>().Build(ToString(config->GetTvmId()))
-            .Done().Ptr();
+        Y_UNUSED(cluster);
+        Y_UNUSED(ctx);
+        return {};
     }
 
     IGraphTransformer& GetIntentDeterminationTransformer() override {
@@ -718,10 +656,6 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
     output = input;
 
     auto callable = TCallable(input);
-
-    if (auto node = callable.Maybe<TKiClusterConfig>()) {
-        return HandleClusterConfig(node.Cast(), ctx);
-    }
 
     if (auto node = callable.Maybe<TKiWriteTable>()) {
         return HandleWriteTable(node.Cast(), ctx);

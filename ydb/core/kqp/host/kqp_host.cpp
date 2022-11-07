@@ -352,8 +352,6 @@ public:
         } else {
             FillAstAndPlan(prepareResult, *prepareResult.PreparingQuery);
         }
-
-        prepareResult.QueryTraits = QueryCtx->QueryTraits;
     }
 
 private:

@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/kqp/provider/yql_kikimr_opt_utils.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
@@ -16,6 +15,100 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 namespace {
+
+bool GetEquiJoinKeyTypes(TExprBase leftInput, const TString& leftColumnName, const TKikimrTableDescription& rightTable,
+    const TString& rightColumnName, const TDataExprType*& leftData, const TDataExprType*& rightData)
+{
+    auto rightType = rightTable.GetColumnType(rightColumnName);
+    YQL_ENSURE(rightType);
+    if (rightType->GetKind() == ETypeAnnotationKind::Optional) {
+        rightType = rightType->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    YQL_ENSURE(rightType->GetKind() == ETypeAnnotationKind::Data);
+    rightData = rightType->Cast<TDataExprType>();
+
+    auto leftInputType = leftInput.Ref().GetTypeAnn();
+    YQL_ENSURE(leftInputType);
+    YQL_ENSURE(leftInputType->GetKind() == ETypeAnnotationKind::List);
+    auto itemType = leftInputType->Cast<TListExprType>()->GetItemType();
+    YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct);
+    auto structType = itemType->Cast<TStructExprType>();
+    auto memberIndex = structType->FindItem(leftColumnName);
+    YQL_ENSURE(memberIndex, "Column '" << leftColumnName << "' not found in " << *((TTypeAnnotationNode*) structType));
+
+    auto leftType = structType->GetItems()[*memberIndex]->GetItemType();
+    if (leftType->GetKind() == ETypeAnnotationKind::Optional) {
+        leftType = leftType->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    if (leftType->GetKind() != ETypeAnnotationKind::Data) {
+        return false;
+    }
+
+    leftData = leftType->Cast<TDataExprType>();
+    return true;
+}
+
+TExprBase ConvertToTuples(const TSet<TString>& columns, const TCoArgument& structArg, TExprContext& ctx,
+    TPositionHandle pos)
+{
+    TVector<TExprBase> tuples{Reserve(columns.size())};
+
+    for (const auto& key : columns) {
+        tuples.emplace_back(Build<TCoMember>(ctx, pos)
+            .Struct(structArg)
+            .Name().Build(key)
+            .Done());
+    }
+
+    if (tuples.size() == 1) {
+        return tuples[0];
+    }
+
+    return Build<TExprList>(ctx, pos)
+        .Add(tuples)
+        .Done();
+}
+
+TExprBase DeduplicateByMembers(const TExprBase& expr, const TSet<TString>& members, TExprContext& ctx,
+    TPositionHandle pos)
+{
+    auto structArg = Build<TCoArgument>(ctx, pos)
+            .Name("struct")
+            .Done();
+
+    return Build<TCoPartitionByKey>(ctx, pos)
+            .Input(expr)
+            .KeySelectorLambda()
+                .Args(structArg)
+                .Body(ConvertToTuples(members, structArg, ctx, pos))
+                .Build()
+            .SortDirections<TCoVoid>()
+                .Build()
+            .SortKeySelectorLambda<TCoVoid>()
+                .Build()
+            .ListHandlerLambda()
+                .Args({"stream"})
+                .Body<TCoFlatMap>()
+                    .Input("stream")
+                    .Lambda()
+                        .Args({"tuple"})
+                        .Body<TCoTake>()
+                            .Input<TCoNth>()
+                                .Tuple("tuple")
+                                .Index().Value("1").Build()
+                                .Build()
+                            .Count<TCoUint64>()
+                                .Literal().Value("1").Build()
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+}
+
 
 [[maybe_unused]]
 bool IsKqlPureExpr(const TExprBase& expr) {

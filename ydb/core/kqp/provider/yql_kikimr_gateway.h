@@ -1,7 +1,5 @@
 #pragma once
 
-#include "yql_kikimr_query_traits.h"
-
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -592,7 +590,6 @@ public:
         NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
-        std::optional<NKikimr::NKqp::TQueryTraits> QueryTraits;
         TString QueryAst;
         TString QueryPlan;
         std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;

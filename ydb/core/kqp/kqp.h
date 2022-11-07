@@ -4,7 +4,6 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/provider/yql_kikimr_query_traits.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -225,7 +224,6 @@ struct TKqpCompileResult {
     ETableReadType MaxReadType;
 
     TPreparedQueryConstPtr PreparedQuery;
-    std::optional<TQueryTraits> QueryTraits;
 };
 
 struct TEvKqp {

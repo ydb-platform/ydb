@@ -7,7 +7,6 @@
 
 
 find_package(Python3 REQUIRED)
-add_subdirectory(mkql)
 add_subdirectory(ut)
 
 add_library(core-kqp-provider)
@@ -18,7 +17,6 @@ target_link_libraries(core-kqp-provider PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
-  kqp-provider-mkql
   ydb-core-protos
   ydb-library-aclib
   library-aclib-protos
@@ -41,21 +39,14 @@ target_link_libraries(core-kqp-provider PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-provider PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/kqp_opt_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_datasink.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_datasource.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_exec.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_gateway.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_kql.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_mkql.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_opt_build.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_opt_join.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_opt_range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_opt_utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_opt.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_provider.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_query_traits.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_results.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_settings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_type_ann.cpp

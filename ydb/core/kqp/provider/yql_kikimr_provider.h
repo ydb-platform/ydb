@@ -2,7 +2,6 @@
 
 #include "yql_kikimr_gateway.h"
 #include "yql_kikimr_settings.h"
-#include "yql_kikimr_query_traits.h"
 
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
@@ -155,10 +154,6 @@ struct TKikimrQueryContext : TThrRefBase, TTimeAndRandomProvider {
     // full mode can be enabled explicitly.
     bool DocumentApiRestricted = true;
 
-    // Force NewEngine stuff
-    // remove it after enabling NewEngine
-    std::optional<NKikimr::NKqp::TQueryTraits> QueryTraits;
-
     std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     TKikimrParamsMap Parameters;
@@ -178,7 +173,6 @@ struct TKikimrQueryContext : TThrRefBase, TTimeAndRandomProvider {
         Deadlines = {};
         Limits = {};
 
-        QueryTraits.reset();
         PreparingQuery.reset();
         PreparedQuery.reset();
         Parameters.clear();

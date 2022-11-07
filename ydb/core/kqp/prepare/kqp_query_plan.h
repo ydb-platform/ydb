@@ -28,8 +28,6 @@ enum class EPlanTableWriteType {
     MultiErase,
 };
 
-void WriteKqlPlan(NJsonWriter::TBuf& writer, const NYql::TExprNode::TPtr& query);
-
 /*
  * Set dqPlan in each physical transaction (TKqpPhyQuery.Transactions[].Plan). Common query plan with all
  * table accesses is stored in top-level TKqpPhyQuery.QueryPlan.

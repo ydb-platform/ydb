@@ -35,7 +35,7 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
     auto row = flatmap.Lambda().Args().Arg(0);
     auto predicate = TExprBase(flatmap.Lambda().Body().Ref().ChildPtr(0));
     TTableLookup lookup = ExtractTableLookup(row, predicate, tableDesc.Metadata->KeyColumnNames,
-        &KiTableLookupGetValue, &KiTableLookupCanCompare, &KiTableLookupCompare, ctx,
+        &KqpTableLookupGetValue, &KqpTableLookupCanCompare, &KqpTableLookupCompare, ctx,
         kqpCtx.Config->HasAllowNullCompareInIndex());
 
     if (lookup.IsFullScan()) {

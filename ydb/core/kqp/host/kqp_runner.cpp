@@ -1,5 +1,4 @@
 #include "kqp_host_impl.h"
-#include "kqp_ne_helper.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compile/kqp_compile.h>
@@ -44,7 +43,6 @@ public:
                 queryResult.ProtobufArenaPtr.get());
         }
 
-        queryResult.QueryTraits = TransformCtx.QueryCtx->QueryTraits;
         queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
     }
 
@@ -71,7 +69,6 @@ public:
             results.push_back(result);
         }
 
-        queryResult.QueryTraits = TransformCtx.QueryCtx->QueryTraits;
         queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
         queryResult.Results = std::move(results);
     }

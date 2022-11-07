@@ -6,6 +6,72 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
+TExprBase ExtractKeys(TCoArgument itemArg, const TKikimrTableDescription& tableDesc,
+    TExprContext& ctx)
+{
+    TVector<TExprBase> keys;
+    for (TString& keyColumnName : tableDesc.Metadata->KeyColumnNames) {
+        auto key = Build<TCoMember>(ctx, itemArg.Pos())
+            .Struct(itemArg)
+            .Name().Build(keyColumnName)
+            .Done();
+
+        keys.emplace_back(std::move(key));
+    }
+
+    if (keys.size() == 1) {
+        return keys[0];
+    }
+
+    return Build<TExprList>(ctx, itemArg.Pos())
+        .Add(keys)
+        .Done();
+}
+
+TExprBase RemoveDuplicateKeyFromInput(const TExprBase& input, const TKikimrTableDescription& tableDesc,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    const auto& keySelectorArg = Build<TCoArgument>(ctx, pos)
+        .Name("item")
+        .Done();
+
+    const auto& streamArg = Build<TCoArgument>(ctx, pos)
+        .Name("streamArg")
+        .Done();
+
+    return Build<TCoPartitionByKey>(ctx, pos)
+        .Input(input)
+        .KeySelectorLambda()
+            .Args(keySelectorArg)
+            .Body(ExtractKeys(keySelectorArg, tableDesc, ctx))
+            .Build()
+        .SortDirections<TCoVoid>().Build()
+        .SortKeySelectorLambda<TCoVoid>().Build()
+        .ListHandlerLambda()
+            .Args({TStringBuf("stream")})
+            .Body<TCoFlatMap>()
+                .Input(TStringBuf("stream"))
+                .Lambda<TCoLambda>()
+                    .Args(streamArg)
+                    .Body<TCoLast>()
+                        .Input<TCoForwardList>()
+                            .Stream<TCoNth>()
+                                .Tuple(streamArg)
+                                .Index().Value(ToString(1))
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Build()
+        .Done();
+}
+
+} // namespace
+
 TExprNode::TPtr MakeMessage(TStringBuf message, TPositionHandle pos, TExprContext& ctx) {
     return ctx.NewCallable(pos, "Utf8", { ctx.NewAtom(pos, message) });
 }

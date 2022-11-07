@@ -89,6 +89,24 @@ TRowsAndKeysResult PrecomputeRowsAndKeys(const TCondenseInputResult& condenseRes
     };
 }
 
+// Return set of data columns need to be save during index update
+THashSet<TString> CreateDataColumnSetToRead(
+    const TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>>& indexes,
+    const THashSet<TStringBuf>& inputColumns)
+{
+    THashSet<TString> res;
+
+    for (const auto& index : indexes) {
+        for (const auto& col : index.second->DataColumns) {
+            if (!inputColumns.contains(col)) {
+                res.emplace(col);
+            }
+        }
+    }
+
+    return res;
+}
+
 TExprBase MakeNonexistingRowsFilter(const TDqPhyPrecompute& inputRows, const TDqPhyPrecompute& lookupDict,
     const TVector<TString>& dictKeys, TPositionHandle pos, TExprContext& ctx)
 {

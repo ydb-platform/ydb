@@ -1423,6 +1423,10 @@ namespace NActors {
         SendInternal(ev, senderNodeIndex, viaActorSystem);
     }
 
+    void TTestActorRuntimeBase::SendAsync(IEventHandle* ev, ui32 senderNodeIndex) {
+        Send(ev, senderNodeIndex, true);
+    }
+
     void TTestActorRuntimeBase::Schedule(IEventHandle* ev, const TDuration& duration, ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
         Y_VERIFY(nodeIndex < NodeCount);

@@ -261,6 +261,7 @@ namespace NActors {
         bool DispatchEvents(const TDispatchOptions& options, TDuration simTimeout);
         bool DispatchEvents(const TDispatchOptions& options, TInstant simDeadline);
         void Send(IEventHandle* ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false);
+        void SendAsync(IEventHandle* ev, ui32 senderNodeIndex = 0);
         void Schedule(IEventHandle* ev, const TDuration& duration, ui32 nodeIndex = 0);
         void ClearCounters();
         ui64 GetCounter(ui32 evType) const;

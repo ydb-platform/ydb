@@ -789,6 +789,11 @@ private:
                         future = NThreading::MakeFuture<IDqGateway::TResult>(std::move(result));
                     }
                 } else {
+                    if (State->Metrics) {
+                        State->Metrics->IncCounter("dq", "HandleResult");
+                    }
+                    State->Statistics[State->MetricId++].Entries.push_back(TOperationStatistics::TEntry("HandleResult", 0, 0, 0, 0, 1));
+
                     graphParams["Evaluation"] = ToString(!ctx.Step.IsDone(TExprStep::ExprEval));
                     future = State->ExecutePlan(
                         State->SessionId, executionPlanner->GetPlan(), columns, secureParams, graphParams,
@@ -1149,6 +1154,11 @@ private:
             settings->_AllResultsBytesLimit = 0;
             settings->_RowsLimitPerWrite = 0;
         }
+
+        if (State->Metrics) {
+            State->Metrics->IncCounter("dq", "HandlePull");
+        }
+        State->Statistics[State->MetricId++].Entries.push_back(TOperationStatistics::TEntry("HandlePull", 0, 0, 0, 0, 1));
 
         IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
 
@@ -1594,6 +1604,11 @@ private:
             if (fallbackFlag) {
                 return FallbackWithMessage(*input, "Too big attachment", ctx, false);
             }
+
+            if (State->Metrics) {
+                State->Metrics->IncCounter("dq", "Precompute");
+            }
+            State->Statistics[State->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Precompute", 0, 0, 0, 0, 1));
 
             auto graphParams = GatherGraphParams(optimizedInput);
             graphParams["Precompute"] = ToString(true);

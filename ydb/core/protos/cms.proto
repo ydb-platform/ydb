@@ -598,6 +598,9 @@ message TPDiskInfo {
     optional uint32 Status = 4; // EPDiskStatus
     optional bool ChangingAllowed = 5;
     optional bool Touched = 6;
+    optional uint32 DesiredStatus = 7;
+    optional uint32 StatusChangeAttempts = 8;
+    optional uint64 LastStatusChange = 9;
 }
 
 message TPDisk {
@@ -605,8 +608,26 @@ message TPDisk {
     optional TPDiskInfo Info = 2;
 }
 
+message TUpdaterInfo {
+    optional string ActorId = 1;
+    optional string StartedAt = 2;
+    optional bool Delayed = 3;
+}
+
+message TStateUpdaterState {
+    optional TUpdaterInfo UpdaterInfo = 1;
+    repeated uint32 WaitNodes = 2;
+}
+
+message TConfigUpdaterState {
+    optional TUpdaterInfo UpdaterInfo = 1;
+    optional uint32 Attempt = 2;
+}
+
 message TGetSentinelStateResponse {
     optional TStatus Status = 1;
     optional TCmsConfig.TSentinelConfig SentinelConfig = 2;
     repeated TPDisk PDisks = 3;
+    optional TStateUpdaterState StateUpdater = 4;
+    optional TConfigUpdaterState ConfigUpdater = 5;
 }

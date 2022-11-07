@@ -93,10 +93,10 @@ target_link_libraries(ydb-core-cms.global PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-cms.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/bda6b2eb0fe591794e0191b6befe2972.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/117417182f73c245478c9903130ed8f2.cpp
 )
 resources(ydb-core-cms.global
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/bda6b2eb0fe591794e0191b6befe2972.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/117417182f73c245478c9903130ed8f2.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/index.html
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms.css
@@ -124,6 +124,8 @@ resources(ydb-core-cms.global
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/res/remove.png
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/validators.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/sentinel_state.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/nanotable.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/sentinel.css
   KEYS
   cms/ui/index.html
   cms/ui/cms.css
@@ -151,4 +153,6 @@ resources(ydb-core-cms.global
   cms/ui/res/remove.png
   cms/ui/validators.js
   cms/ui/sentinel_state.js
+  cms/ui/nanotable.js
+  cms/ui/sentinel.css
 )

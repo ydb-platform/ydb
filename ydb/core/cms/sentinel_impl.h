@@ -71,8 +71,24 @@ private:
 
 }; // TPDiskStatus
 
-struct TPDiskInfo: public TPDiskStatus {
+struct TStatusChangerState: public TSimpleRefCount<TStatusChangerState> {
+    using TPtr = TIntrusivePtr<TStatusChangerState>;
+
+    explicit TStatusChangerState(NKikimrBlobStorage::EDriveStatus status)
+        : Status(status)
+    {}
+
+    const NKikimrBlobStorage::EDriveStatus Status;
+    ui32 Attempt = 0;
+}; // TStatusChangerState
+
+struct TPDiskInfo
+    : public TSimpleRefCount<TPDiskInfo>
+    , public TPDiskStatus
+{
+    using TPtr = TIntrusivePtr<TPDiskInfo>;
     TActorId StatusChanger;
+    TStatusChangerState::TPtr StatusChangerState;
 
     explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
 
@@ -84,7 +100,6 @@ struct TPDiskInfo: public TPDiskStatus {
 
 private:
     bool Touched;
-
 }; // TPDiskInfo
 
 class TClusterMap {

@@ -9,7 +9,9 @@
 
     <link rel="stylesheet" href="cms/common.css"></link>
     <link rel="stylesheet" href="cms/cms.css"></link>
+    <link rel="stylesheet" href="cms/sentinel.css"></link>
     <script language="javascript" type="text/javascript" src="cms/common.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/nanotable.js"></script>
     <script language="javascript" type="text/javascript" src="cms/enums.js"></script>
     <script language="javascript" type="text/javascript" src="cms/proto_types.js"></script>
     <script language="javascript" type="text/javascript" src="cms/cms_log.js"></script>
@@ -26,12 +28,6 @@
       .narrow-line70 {line-height: 70%}
       .narrow-line80 {line-height: 80%}
       .narrow-line90 {line-height: 90%}
-      pre {outline: 1px solid #ccc; padding: 5px; margin: 5px; }
-      .string { color: green; }
-      .number { color: darkorange; }
-      .boolean { color: blue; }
-      .null { color: magenta; }
-      .key { color: red; }
     </style>
   </head>
   <body>
@@ -53,7 +49,12 @@
           <a class="nav-link" href="#cms-log" data-toggle="tab">CMS Log</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="#sentinel-state" data-toggle="tab">Sentinel state</a>
+          <a class="nav-link" href="#sentinel-state" data-toggle="tab">
+            Sentinel state
+            <svg width="25px" height="25px" id="sentinel-loader">
+              <circle id="sentinel-anim" cy="50%" cx="50%" r="5"></circle>
+            </svg>
+          </a>
         </li>
       </ul>
       <div class="tab-content" style="padding-top: 10px">
@@ -92,9 +93,11 @@
           </table>
         </div>
         <div id="sentinel-state" class="tab-pane fade">
-          <pre id="sentinel-state-content">
-          Loading...
-          </pre>
+          <div id="sentinel-error" class="error"></div>
+          <table id="sentinel-config"></table>
+          <table id="sentinel-state-updater"></table>
+          <table id="sentinel-config-updater"></table>
+          <table id="sentinel-nodes"></table>
         </div>
       </div>
     </div>

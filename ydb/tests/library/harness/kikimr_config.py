@@ -210,6 +210,7 @@ class KikimrConfigGenerator(object):
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
         self.yaml_config['pqconfig']['enabled'] = enable_pq
         self.yaml_config['pqconfig']['enable_proto_source_id_info'] = True
+        self.yaml_config['pqconfig']['max_storage_node_port'] = 65535
         # NOTE(shmel1k@): KIKIMR-14221
         if use_legacy_pq:
             self.yaml_config['pqconfig']['topics_are_first_class_citizen'] = False

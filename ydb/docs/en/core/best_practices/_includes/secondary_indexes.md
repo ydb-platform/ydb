@@ -42,7 +42,7 @@ FROM   orders VIEW idx_customer AS o
 WHERE  o.id_customer = $customer_id
 ```
 
-where `idx_customer` is the name of the secondary index on the `orders` table with the `id_customer` field specified first.
+Where `idx_customer` is the name of the secondary index on the `orders` table with the `id_customer` field specified first.
 
 If no `VIEW` section is specified, making a query like this requires a full scan of the `orders` table .
 

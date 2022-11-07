@@ -1,7 +1,7 @@
 
 # Lexical structure
 
-The {% if feature_mapreduce %}program {% else %}query {% endif %} in the YQL language is a valid UTF-8 text consisting of _commands_ (statements) separated by semicolons (`;`).
+The {% if feature_mapreduce %}program{% else %}query{% endif %} in the YQL language is a valid UTF-8 text consisting of _commands_ (statements) separated by semicolons (`;`).
 The last semicolon can be omitted.
 Each command is a sequence of _tokens_ that are valid for this command.
 Tokens can be _keywords_, _IDs_, _literals_, and so on.

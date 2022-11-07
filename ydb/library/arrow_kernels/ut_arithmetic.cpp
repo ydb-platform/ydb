@@ -1,24 +1,11 @@
-#include <cmath>
-#include <cstdint>
-#include <iterator>
-#include <library/cpp/testing/unittest/registar.h>
-#include <ctime>
-#include <vector>
-#include <algorithm>
-
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-
-#include "func_common.h"
-#include "functions.h"
-#include "custom_registry.h"
-#include "arrow_helpers.h"
-
-namespace NKikimr::NArrow {
+#include "ut_common.h"
 
 namespace cp = ::arrow::compute;
 using cp::internal::applicator::ScalarBinary;
 using cp::internal::applicator::ScalarUnary;
+
+
+namespace NKikimr::NKernels {
 
 const std::vector<std::shared_ptr<arrow::DataType>> nonPrimitiveTypes = {
     arrow::list(arrow::utf8()),
@@ -343,7 +330,6 @@ Y_UNIT_TEST_SUITE(ModuloTest) {
             UNIT_ASSERT(!res.ok());
         }
     }
-
 }
 
 Y_UNIT_TEST_SUITE(ModuloOrZeroTest) {
@@ -366,7 +352,6 @@ Y_UNIT_TEST_SUITE(ModuloOrZeroTest) {
             UNIT_ASSERT(res->Equals(expected));
         }
     }
-
 }
 
 }

@@ -2,7 +2,7 @@
 
 namespace cp = arrow::compute;
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 template <typename T, typename TUnsigned = typename std::make_unsigned<T>::type>
 constexpr TUnsigned ToUnsigned(T sgnd) {

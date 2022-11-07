@@ -3,7 +3,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 constexpr size_t NextSize(size_t size) {
     if (size < 8) {

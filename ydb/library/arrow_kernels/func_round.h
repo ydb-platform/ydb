@@ -18,7 +18,7 @@
 #define CLZLL __builtin_clzll
 #endif
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 struct TRound {
 

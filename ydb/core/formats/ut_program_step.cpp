@@ -6,11 +6,14 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/arrow_kernels/ut_common.h>
 #include "custom_registry.h"
 #include "program.h"
 #include "arrow_helpers.h"
 
 namespace NKikimr::NArrow {
+
+using NKernels::NumVecToArray;
 
 size_t FilterTest(std::vector<std::shared_ptr<arrow::Array>> args, EOperation frst, EOperation scnd) {
     auto schema = std::make_shared<arrow::Schema>(std::vector{

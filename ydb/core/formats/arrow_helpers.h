@@ -212,8 +212,6 @@ inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
 }
 
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs);
-std::shared_ptr<arrow::Array> NumVecToArray(const std::shared_ptr<arrow::DataType>& type,
-                                            const std::vector<double>& vec);
 std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec);
 
 }

@@ -2,7 +2,7 @@
 #include "func_common.h"
 #include <cmath>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 struct TAcosh {
 

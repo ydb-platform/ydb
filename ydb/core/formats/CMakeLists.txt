@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-formats PUBLIC
   yutil
   libs-apache-arrow
   ydb-core-scheme
+  ydb-library-arrow_kernels
   ydb-library-binary_json
   ydb-library-dynumber
   ydb-library-arrow_clickhouse
@@ -29,7 +30,6 @@ target_sources(ydb-core-formats PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/clickhouse_block.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/custom_registry.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/func_cast.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/merging_sorted_input_stream.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/program.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/ssa_program_optimizer.cpp

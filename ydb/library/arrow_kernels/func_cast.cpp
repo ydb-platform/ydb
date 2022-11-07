@@ -13,7 +13,7 @@
 
 namespace cp = ::arrow::compute;
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 namespace {
 
@@ -118,7 +118,8 @@ YdbCastMetaFunction::YdbCastMetaFunction()
     return castFunc->Execute(args, options, ctx);
 }
 
-} // NKikimr::NArrow
+}
+
 
 namespace arrow::compute::internal {
 
@@ -129,17 +130,17 @@ struct CastFunctor<TimestampType, UInt32Type> {
             return ::arrow::Status::IndexError("Cast from uint32 to timestamp received empty batch.");
         }
         Y_VERIFY(batch[0].kind() == Datum::ARRAY, "Cast from uint32 to timestamp expected ARRAY as input.");
-    
+
         const auto& out_type = checked_cast<const ::arrow::TimestampType&>(*out->type());
         // get conversion MICROSECONDS -> unit
         auto conversion = ::arrow::util::GetTimestampConversion(::arrow::TimeUnit::MICRO, out_type.unit());
         Y_VERIFY(conversion.first == ::arrow::util::MULTIPLY, "Cast from uint32 to timestamp failed because timestamp unit is greater than seconds.");
-    
+
         auto input = batch[0].array();
         auto output = out->mutable_array();
         auto in_data = input->GetValues<uint32_t>(1);
         auto out_data = output->GetMutableValues<int64_t>(1);
-    
+
         for (int64_t i = 0; i < input->length; i++) {
             out_data[i] = static_cast<int64_t>(in_data[i] * conversion.second);
         }

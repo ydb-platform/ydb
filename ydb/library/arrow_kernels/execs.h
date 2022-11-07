@@ -13,17 +13,17 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
+
 #include <util/datetime/base.h>
 #include <util/system/yassert.h>
 #include <cstdint>
 #include <memory>
 #include <type_traits>
 #include <vector>
-#include "switch_type.h"
 
 namespace cp = arrow::compute;
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 template <template <typename... Args> class KernelGenerator, typename Op>
 cp::ArrayKernelExec ArithmeticBinaryExec(cp::internal::detail::GetTypeId getId) {

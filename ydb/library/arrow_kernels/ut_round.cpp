@@ -1,24 +1,9 @@
-#include <cmath>
-#include <cstdint>
-#include <iterator>
-#include <library/cpp/testing/unittest/registar.h>
-#include <ctime>
-#include <vector>
-#include <algorithm>
-
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-
-#include "func_common.h"
-#include "functions.h"
-#include "custom_registry.h"
-#include "arrow_helpers.h"
-
-
-namespace NKikimr::NArrow {
+#include "ut_common.h"
 
 namespace cp = ::arrow::compute;
 
+
+namespace NKikimr::NKernels {
 
 Y_UNIT_TEST_SUITE(RoundsTest) {
     Y_UNIT_TEST(RoundTest) {
@@ -47,7 +32,6 @@ Y_UNIT_TEST_SUITE(RoundsTest) {
             UNIT_ASSERT(res->Equals(expRes));
         }
     }
-
 }
 
 }

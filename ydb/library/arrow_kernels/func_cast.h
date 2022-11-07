@@ -4,7 +4,7 @@
 
 #include <type_traits>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 // Metafunction for dispatching to appropriate CastFunction. This corresponds
 // to the standard SQL CAST(expr AS target_type)
@@ -19,4 +19,4 @@ class YdbCastMetaFunction : public ::arrow::compute::MetaFunction {
                             ::arrow::compute::ExecContext* ctx) const override;
 };
 
-} // NKikimr::NArrow
+}

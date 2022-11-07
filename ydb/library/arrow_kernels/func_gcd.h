@@ -9,7 +9,7 @@
 #define INLINE __attribute__((always_inline))
 #endif
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 template<typename T>
 INLINE void FastIntSwap(T& lhs, T& rhs) {

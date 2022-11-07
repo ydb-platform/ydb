@@ -10,14 +10,13 @@
 
 #include <type_traits>
 
-#include "switch_type.h"
 #include "execs.h"
 
 namespace cp = arrow::compute;
 using cp::internal::applicator::ScalarBinary;
 using cp::internal::applicator::ScalarUnary;
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NKernels {
 
 template <typename T>
 using IsUnsignedInteger =

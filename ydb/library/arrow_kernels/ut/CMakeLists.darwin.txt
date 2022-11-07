@@ -7,48 +7,43 @@
 
 
 
-add_executable(ydb-core-formats-ut)
-target_compile_options(ydb-core-formats-ut PRIVATE
+add_executable(ydb-library-arrow_kernels-ut)
+target_compile_options(ydb-library-arrow_kernels-ut PRIVATE
   -Wno-unused-parameter
-  -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-core-formats-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats
+target_include_directories(ydb-library-arrow_kernels-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
-target_link_libraries(ydb-core-formats-ut PUBLIC
+target_link_libraries(ydb-library-arrow_kernels-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  ydb-core-formats
-  libs-apache-arrow
   ydb-library-arrow_kernels
-  ydb-core-base
-  udf-service-exception_policy
-  yql-sql-pg_dummy
+  libs-apache-arrow
 )
-target_link_options(ydb-core-formats-ut PRIVATE
+target_link_options(ydb-library-arrow_kernels-ut PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
-target_sources(ydb-core-formats-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/ut_arrow.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/ut_program_step.cpp
+target_sources(ydb-library-arrow_kernels-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_arithmetic.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_math.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_round.cpp
 )
 add_test(
   NAME
-  ydb-core-formats-ut
+  ydb-library-arrow_kernels-ut
   COMMAND
-  ydb-core-formats-ut
+  ydb-library-arrow_kernels-ut
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
 )
-vcs_info(ydb-core-formats-ut)
+vcs_info(ydb-library-arrow_kernels-ut)

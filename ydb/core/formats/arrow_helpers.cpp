@@ -1241,24 +1241,6 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
     return true;
 }
 
-std::shared_ptr<arrow::Array> NumVecToArray(const std::shared_ptr<arrow::DataType>& type,
-                                            const std::vector<double>& vec) {
-    std::shared_ptr<arrow::Array> out;
-    SwitchType(type->id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        if constexpr (arrow::is_number_type<typename TWrap::T>::value) {
-            typename arrow::TypeTraits<typename TWrap::T>::BuilderType builder;
-            for (const auto val : vec) {
-                Y_VERIFY(builder.Append(static_cast<typename TWrap::T::c_type>(val)).ok());
-            }
-            Y_VERIFY(builder.Finish(&out).ok());
-            return true;
-        }
-        return false;
-    });
-    return out;
-}
-
 std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec) {
     std::shared_ptr<arrow::Array> out;
     arrow::BooleanBuilder builder;

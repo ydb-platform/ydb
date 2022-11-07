@@ -70,6 +70,15 @@ public:
     using TBase::TBase;
 };
 
+class TServiceOperator {
+private:
+    friend class TExecutor;
+    bool EnabledFlag = false;
+    static void Register();
+public:
+    static bool IsEnabled();
+};
+
 NActors::TActorId MakeServiceId(const ui32 nodeId);
 
 }

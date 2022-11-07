@@ -7,8 +7,15 @@ namespace NSchemeShard {
 
 template<class T>
 struct TDebugEvent {
-    static TString ToString (const typename T::TPtr & ev) {
+    static TString ToString(const typename T::TPtr& ev) {
         return ev->Get()->Record.ShortDebugString();
+    }
+};
+
+template<>
+struct TDebugEvent<NBackgroundTasks::TEvAddTaskResult> {
+    static TString ToString(const NBackgroundTasks::TEvAddTaskResult::TPtr& ev) {
+        return ev->Get()->GetDebugString();
     }
 };
 

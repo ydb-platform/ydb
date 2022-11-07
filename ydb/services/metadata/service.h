@@ -27,6 +27,6 @@ public:
     }
 };
 
-NActors::TActorId MakeServiceId(ui32 node = 0);
+NActors::TActorId MakeServiceId(const ui32 node);
 
 }

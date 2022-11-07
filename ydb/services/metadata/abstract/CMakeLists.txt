@@ -13,6 +13,7 @@ target_link_libraries(services-metadata-abstract PUBLIC
   yutil
   ydb-library-accessor
   cpp-actors-core
+  services-metadata-request
   api-protos
   ydb-core-base
 )

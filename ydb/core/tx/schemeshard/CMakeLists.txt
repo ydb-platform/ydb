@@ -89,6 +89,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-library-login
   library-login-protos
   library-yql-minikql
+  ydb-services-bg_tasks
 )
 target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard.cpp

@@ -13,5 +13,9 @@ public:
         : Server(server) {
 
     }
+
+    void DropTable(const TString& tablePath);
+
+    void StartDataRequest(const TString& request) const;
 };
 }

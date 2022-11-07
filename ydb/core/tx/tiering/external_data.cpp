@@ -17,7 +17,7 @@ bool TConfigsSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQuery
         for (auto&& r : rawData.rows()) {
             TTierConfig config;
             if (!config.DeserializeFromRecord(decoder, r)) {
-                ALS_ERROR(NKikimrServices::TX_COLUMNSHARD) << "cannot parse tier config from snapshot";
+                ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot parse tier config from snapshot";
                 continue;
             }
             TierConfigs.emplace(config.GetConfigId(), config);
@@ -31,7 +31,7 @@ bool TConfigsSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQuery
         for (auto&& r : rawData.rows()) {
             TTieringRule tr;
             if (!tr.DeserializeFromRecord(decoder, r)) {
-                ALS_WARN(NKikimrServices::TX_COLUMNSHARD) << "cannot parse record for tiering info";
+                ALS_WARN(NKikimrServices::TX_TIERING) << "cannot parse record for tiering info";
                 continue;
             }
             rulesLocal.emplace_back(std::move(tr));
@@ -67,6 +67,25 @@ const TTableTiering* TConfigsSnapshot::GetTableTiering(const TString& tablePath)
     } else {
         return &it->second;
     }
+}
+
+std::vector<NKikimr::NColumnShard::NTiers::TTierConfig> TConfigsSnapshot::GetTiersForPathId(const ui64 pathId) const {
+    std::vector<TTierConfig> result;
+    std::set<TString> readyIds;
+    for (auto&& i : TableTierings) {
+        for (auto&& r : i.second.GetRules()) {
+            if (r.GetTablePathId() == pathId) {
+                auto it = TierConfigs.find(r.GetTierId());
+                if (it == TierConfigs.end()) {
+                    ALS_ERROR(NKikimrServices::TX_TIERING) << "inconsistency tiering for " << r.GetTierId();
+                    continue;
+                } else if (readyIds.emplace(r.GetTierId()).second) {
+                    result.emplace_back(it->second);
+                }
+            }
+        }
+    }
+    return result;
 }
 
 TVector<NMetadataProvider::ITableModifier::TPtr> TSnapshotConstructor::DoGetTableSchema() const {

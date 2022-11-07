@@ -94,6 +94,7 @@ public:
         : TBase(config.GetRequestConfig())
         , Config(config)
     {
+        TServiceOperator::Register();
     }
 };
 

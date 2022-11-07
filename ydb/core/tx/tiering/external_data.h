@@ -21,6 +21,7 @@ protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
     virtual TString DoSerializeToString() const override;
 public:
+    std::vector<TTierConfig> GetTiersForPathId(const ui64 pathId) const;
     const TTableTiering* GetTableTiering(const TString& tablePath) const;
     void RemapTablePathToId(const TString& path, const ui64 pathId);
     std::optional<TTierConfig> GetValue(const TString& key) const;

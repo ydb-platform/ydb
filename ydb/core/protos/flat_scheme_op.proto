@@ -889,6 +889,11 @@ message TS3Settings {
     optional uint32 ConnectionTimeoutMs = 103;
 };
 
+message TTaskCleaner {
+    optional uint64 PathId = 1;
+    optional TS3Settings StorageSettings = 2;
+}
+
 message TBackupTask {
     optional string TableName = 1;
     optional uint64 TableId = 2;

@@ -474,4 +474,6 @@ enum ETxTypes {
     TXTYPE_ALTER_BLOB_DEPOT_RESULT = 78                   [(TxTypeOpts) = {Name: "TxAlterBlobDepotResult"}];
     TXTYPE_DROP_BLOB_DEPOT_RESULT = 79                    [(TxTypeOpts) = {Name: "TxDropBlobDepotResult"}];
     TXTYPE_BLOB_DEPOT_CONFIG_RESULT = 80                  [(TxTypeOpts) = {Name: "TxBlobDepotConfigResult"}];
+
+    TXTYPE_ADD_BACKGROUND_TASK_RESULT = 81                [(TxTypeOpts) = {Name: "TxAddBackgroundTaskResult"}];
 }

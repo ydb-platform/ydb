@@ -18,13 +18,35 @@ target_link_libraries(core-tx-tiering PUBLIC
   core-tablet_flat-protos
   ydb-core-wrappers
   api-protos
+  services-bg_tasks-abstract
   ydb-services-metadata
 )
 target_sources(core-tx-tiering PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier_cleaner.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/path_cleaner.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/decoder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/external_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/s3_actor.cpp
+)
+
+add_global_library_for(core-tx-tiering.global core-tx-tiering)
+target_link_libraries(core-tx-tiering.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  cpp-json-writer
+  ydb-core-blobstorage
+  ydb-core-protos
+  core-tablet_flat-protos
+  ydb-core-wrappers
+  api-protos
+  services-bg_tasks-abstract
+  ydb-services-metadata
+)
+target_sources(core-tx-tiering.global PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/cleaner_task.cpp
 )

@@ -89,7 +89,7 @@ public:
         if (Rules.size()) {
             Y_VERIFY(Rules.back().GetDurationForEvict() <= tr.GetDurationForEvict());
             if (Column != tr.GetColumn()) {
-                ALS_ERROR(NKikimrServices::TX_COLUMNSHARD) << "inconsistency rule column: " <<
+                ALS_ERROR(NKikimrServices::TX_TIERING) << "inconsistency rule column: " <<
                     TablePath << "/" << Column << " != " << tr.GetColumn();
                 return;
             }

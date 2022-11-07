@@ -75,6 +75,34 @@ public:
     explicit operator bool() const {
         return GetTxId() != InvalidTxId && GetSubTxId() != InvalidSubTxId;
     }
+
+    TString SerializeToString() const {
+        return "SSO:" + ::ToString(GetTxId().GetValue()) + ":" + ::ToString(GetSubTxId());
+    }
+
+    bool DeserializeFromString(const TString& data) {
+        TStringBuf sb(data.data(), data.size());
+        if (!sb.StartsWith("SSO:")) {
+            return false;
+        }
+        sb.Skip(4);
+        TStringBuf l;
+        TStringBuf r;
+        if (!sb.TrySplit(':', l, r)) {
+            return false;
+        }
+        ui64 txId;
+        TSubTxId subTxId;
+        if (!TryFromString(l, txId)) {
+            return false;
+        }
+        if (!TryFromString(r, subTxId)) {
+            return false;
+        }
+        first = TTxId(txId);
+        second = subTxId;
+        return true;
+    }
 };
 constexpr TOperationId InvalidOperationId = TOperationId(InvalidTxId, InvalidSubTxId);
 

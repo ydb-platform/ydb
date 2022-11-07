@@ -1,4 +1,3 @@
-#include "columnshard_ut_common.h"
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/tiering/external_data.h>
@@ -6,11 +5,14 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/services/metadata/service.h>
 
 #include <library/cpp/actors/core/av_bootstrapped.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/hostname.h>
 
@@ -135,7 +137,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
             for (const TInstant start = Now(); !IsFound() && Now() - start < TDuration::Seconds(10); ) {
                 runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+                runtime.UpdateCurrentTime(Now());
             }
+            runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
             Y_VERIFY(IsFound());
         }
 
@@ -225,46 +229,19 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TTestCSEmulator* emulator = new TTestCSEmulator;
             emulator->MutableCheckers().emplace("/Root/olapStore.tier1", TJsonChecker("Name", "abc"));
             runtime.Register(emulator);
-            {
-                const TInstant start = Now();
-                while (Now() - start < TDuration::Seconds(10)) {
-                    runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
-                        Cerr << "Step " << event->Type << Endl;
-                        return false;
-                        }, {}, TDuration::Seconds(1));
-                    Sleep(TDuration::Seconds(1));
-                    Cerr << "Step finished" << Endl;
-                }
-            }
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            Cerr << "Initialization finished" << Endl;
 
-            {
-                NYdb::NTable::TTableClient tClient(server->GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-                tClient.CreateSession().Subscribe([](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-                    auto session = f.GetValueSync().GetSession();
-                    session.ExecuteDataQuery(
-                        "INSERT INTO `/Root/.external_data/tiers` (ownerPath, tierName, tierConfig) "
-                        "VALUES ('/Root/olapStore', 'tier1', '" + ConfigProtoStr + "')"
-                        , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
-                    });
-            }
-            {
-                NYdb::NTable::TTableClient tClient(server->GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-                tClient.CreateSession().Subscribe([](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-                    auto session = f.GetValueSync().GetSession();
-                    session.ExecuteDataQuery(
-                        "INSERT INTO `/Root/.external_data/tiering` (ownerPath, tierName, tablePath, column, durationForEvict) "
-                        "VALUES ('/Root/olapStore', 'tier1', '/Root/olapStore/olapTable', 'timestamp', '10d')"
-                        , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
-                    });
-            }
+            lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiers` (ownerPath, tierName, tierConfig) "
+                "VALUES ('/Root/olapStore', 'tier1', '" + ConfigProtoStr + "')");
+            lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiering` (ownerPath, tierName, tablePath, column, durationForEvict) "
+                "VALUES ('/Root/olapStore', 'tier1', '/Root/olapStore/olapTable', 'timestamp', '10d')");
             const TInstant start = Now();
             while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
-                runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(10));
+                runtime.SimulateSleep(TDuration::Seconds(1));
             }
             Y_VERIFY(emulator->IsFound());
         }
-        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        //runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
     }
 
     Y_UNIT_TEST(DSConfigs) {
@@ -295,36 +272,14 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_INFO);
-//        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
-        for (const TInstant start = Now(); Now() - start < TDuration::Seconds(10); ) {
-            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
-                Cerr << "Step " << event->Type << Endl;
-                return false;
-                }, {}, TDuration::Seconds(1));
-            Sleep(TDuration::Seconds(1));
-            Cerr << "Step finished" << Endl;
-        }
+        //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        Cerr << "Initialization finished" << Endl;
 
-        {
-            NYdb::NTable::TTableClient tClient(server->GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-            tClient.CreateSession().Subscribe([](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-                auto session = f.GetValueSync().GetSession();
-                session.ExecuteDataQuery(
-                    "INSERT INTO `/Root/.external_data/tiers` (ownerPath, tierName, tierConfig) "
-                    "VALUES ('/Root/olapStore', 'tier1', '" + ConfigProtoStr + "')"
-                    , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
-                });
-        }
-        {
-            NYdb::NTable::TTableClient tClient(server->GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-            tClient.CreateSession().Subscribe([](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-                auto session = f.GetValueSync().GetSession();
-                session.ExecuteDataQuery(
-                    "INSERT INTO `/Root/.external_data/tiering` (ownerPath, tierName, tablePath, column, durationForEvict) "
-                    "VALUES ('/Root/olapStore', 'tier1', '/Root/olapStore/olapTable', 'timestamp', '10d')"
-                    , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
-                });
-        }
+        lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiers` (ownerPath, tierName, tierConfig) "
+            "VALUES ('/Root/olapStore', 'tier1', '" + ConfigProtoStr + "')");
+        lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiering` (ownerPath, tierName, tablePath, column, durationForEvict) "
+            "VALUES ('/Root/olapStore', 'tier1', '/Root/olapStore/olapTable', 'timestamp', '10d')");
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace("/Root/olapStore.tier1", TJsonChecker("Name", "abc"));
@@ -332,27 +287,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator.CheckRuntime(runtime);
         }
 
-        {
-            NYdb::NTable::TTableClient tClient(server->GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-            tClient.CreateSession().Subscribe([](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-                auto session = f.GetValueSync().GetSession();
-                session.ExecuteDataQuery(
-                    "INSERT INTO `/Root/.external_data/tiers` (ownerPath, tierName, tierConfig) "
-                    "VALUES ('/Root/olapStore', 'tier2', '" + ConfigProtoStr + "')"
-                    , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
-                });
-        }
-        {
-            NYdb::NTable::TTableClient tClient(server->GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-            tClient.CreateSession().Subscribe([](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-                auto session = f.GetValueSync().GetSession();
-                session.ExecuteDataQuery(
-                    "INSERT INTO `/Root/.external_data/tiering` (ownerPath, tierName, tablePath, column, durationForEvict) "
-                    "VALUES ('/Root/olapStore', 'tier2', '/Root/olapStore/olapTable', 'timestamp', '20d')"
-                    , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
-                });
-        }
-
+        lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiers` (ownerPath, tierName, tierConfig) "
+            "VALUES ('/Root/olapStore', 'tier2', '" + ConfigProtoStr + "')");
+        lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiering` (ownerPath, tierName, tablePath, column, durationForEvict) "
+            "VALUES ('/Root/olapStore', 'tier2', '/Root/olapStore/olapTable', 'timestamp', '20d')");
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace("/Root/olapStore.tier1", TJsonChecker("Name", "abc"));
@@ -361,24 +299,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator.CheckRuntime(runtime);
         }
 
-        {
-            NYdb::NTable::TTableClient tClient(server->GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-            tClient.CreateSession().Subscribe([](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-                auto session = f.GetValueSync().GetSession();
-                session.ExecuteDataQuery(
-                    "DELETE FROM `/Root/.external_data/tiers`"
-                    , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
-                });
-        }
-        {
-            NYdb::NTable::TTableClient tClient(server->GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-            tClient.CreateSession().Subscribe([](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-                auto session = f.GetValueSync().GetSession();
-                session.ExecuteDataQuery(
-                    "DELETE FROM `/Root/.external_data/tiering`"
-                    , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
-                });
-        }
+        lHelper.StartDataRequest("DELETE FROM `/Root/.external_data/tiers`");
+        lHelper.StartDataRequest("DELETE FROM `/Root/.external_data/tiering`");
         {
             TTestCSEmulator emulator;
             emulator.SetTieringsCount(0);
@@ -387,6 +309,137 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
         //runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+    }
+//#define S3_TEST_USAGE
+#ifdef S3_TEST_USAGE
+    const TString TierConfigProtoStr =
+        R"(
+        Name : "fakeTier"
+        ObjectStorage : {
+            Scheme: HTTP
+            VerifySSL: false
+            Endpoint: "storage.cloud-preprod.yandex.net"
+            Bucket: "tiering-test-01"
+            AccessKey: "..."
+            SecretKey: "..."
+            ProxyHost: "localhost"
+            ProxyPort: 8080
+            ProxyScheme: HTTP
+        }
+    )";
+    const TString TierEndpoint = "storage.cloud-preprod.yandex.net";
+#else
+    const TString TierConfigProtoStr =
+        R"(
+        Name : "fakeTier"
+        ObjectStorage : {
+            Endpoint: "fake"
+            Bucket: "fake"
+        }
+    )";
+    const TString TierEndpoint = "fake";
+#endif
+
+    Y_UNIT_TEST(TieringUsage) {
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        Tests::TServerSettings serverSettings(msgbPort);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMetadataProvider(true)
+            .SetEnableBackgroundTasks(true)
+            .SetEnableOlapSchemaOperations(true);
+        ;
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+        Tests::TClient client(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+        TLocalHelper lHelper(*server);
+        lHelper.CreateTestOlapTable("olapTable");
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
+        //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
+        Cerr << "Wait initialization" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        Cerr << "Initialization finished" << Endl;
+
+        lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiers` (ownerPath, tierName, tierConfig) "
+            "VALUES ('/Root/olapStore', 'fakeTier1', '" + TierConfigProtoStr + "')");
+        lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiers` (ownerPath, tierName, tierConfig) "
+            "VALUES ('/Root/olapStore', 'fakeTier2', '" + TierConfigProtoStr + "')");
+        lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiering` (ownerPath, tierName, tablePath, column, durationForEvict) "
+            "VALUES ('/Root/olapStore', 'fakeTier1', '/Root/olapStore/olapTable', 'timestamp', '10d')");
+        lHelper.StartDataRequest("INSERT INTO `/Root/.external_data/tiering` (ownerPath, tierName, tablePath, column, durationForEvict) "
+            "VALUES ('/Root/olapStore', 'fakeTier2', '/Root/olapStore/olapTable', 'timestamp', '20d')");
+        {
+            TTestCSEmulator emulator;
+            emulator.MutableCheckers().emplace("/Root/olapStore.fakeTier1", TJsonChecker("Name", "fakeTier"));
+            emulator.MutableCheckers().emplace("/Root/olapStore.fakeTier2", TJsonChecker("ObjectStorage.Endpoint", TierEndpoint));
+            emulator.SetTieringsCount(2);
+            emulator.CheckRuntime(runtime);
+        }
+        Cerr << "Insert..." << Endl;
+        const TInstant pkStart = Now() - TDuration::Days(15);
+        ui32 idx = 0;
+        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", 0, (pkStart + TDuration::Seconds(2 * idx++)).GetValue(), 2000);
+        {
+            const TInstant start = Now();
+            bool check = false;
+            while (Now() - start < TDuration::Seconds(60)) {
+                Cerr << "Waiting..." << Endl;
+#ifndef S3_TEST_USAGE
+                if (Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize()) {
+                    check = true;
+                    Cerr << "Fake storage filled" << Endl;
+                    break;
+                }
+#else
+                check = true;
+#endif
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            Y_VERIFY(check);
+        }
+#ifdef S3_TEST_USAGE
+        Cerr << "storage initialized..." << Endl;
+#endif
+
+        lHelper.DropTable("/Root/olapStore/olapTable");
+        {
+            const TInstant start = Now();
+            bool check = false;
+            while (Now() - start < TDuration::Seconds(60)) {
+                Cerr << "Cleaning waiting..." << Endl;
+#ifndef S3_TEST_USAGE
+                if (!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize()) {
+                    check = true;
+                    Cerr << "Fake storage clean" << Endl;
+                    break;
+                }
+#else
+                check = true;
+#endif
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            Y_VERIFY(check);
+        }
+#ifndef S3_TEST_USAGE
+        Y_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount() == 1);
+#endif
     }
 
 }

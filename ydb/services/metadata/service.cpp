@@ -2,8 +2,8 @@
 
 namespace NKikimr::NMetadataProvider {
 
-NActors::TActorId MakeServiceId(ui32 node) {
-    return NActors::TActorId(node, "SrvcMetaData");
+NActors::TActorId MakeServiceId(const ui32 nodeId) {
+    return NActors::TActorId(nodeId, "SrvcMetaData");
 }
 
 }

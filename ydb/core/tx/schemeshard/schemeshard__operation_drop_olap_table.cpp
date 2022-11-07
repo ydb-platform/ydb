@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/tx/tiering/cleaner_task.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -262,23 +263,7 @@ private:
                 << " operationId#" << OperationId;
     }
 
-public:
-    TProposedDeleteParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
-
+    bool Finish(TOperationContext& context) {
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
@@ -302,6 +287,40 @@ public:
 
         context.OnComplete.DoneOperation(OperationId);
         return true;
+    }
+public:
+    TProposedDeleteParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(),
+            {TEvColumnShard::TEvProposeTransactionResult::EventType,
+             TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType});
+    }
+
+    bool HandleReply(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, TOperationContext& context) override {
+        Y_VERIFY(ev->Get()->IsSuccess());
+        return Finish(context);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
+
+        if (NBackgroundTasks::TServiceOperator::IsEnabled()) {
+            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(txState->TargetPathId.LocalPathId), nullptr);
+            task.SetId(OperationId.SerializeToString());
+            context.SS->SelfId().Send(NBackgroundTasks::MakeServiceId(context.SS->SelfId().NodeId()), new NBackgroundTasks::TEvAddTask(std::move(task)));
+            return false;
+        } else {
+            return Finish(context);
+        }
     }
 };
 

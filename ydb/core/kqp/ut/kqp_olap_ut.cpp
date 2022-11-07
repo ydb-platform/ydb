@@ -123,65 +123,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             });
     }
 
-    std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
-        std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
-
-        arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
-        arrow::StringBuilder b2;
-        arrow::StringBuilder b3;
-        arrow::Int32Builder b4;
-        arrow::StringBuilder b5;
-
-        for (size_t i = 0; i < rowCount; ++i) {
-            std::string uid("uid_" + std::to_string(tsBegin + i));
-            std::string message("some prefix " + std::string(1024 + i % 200, 'x'));
-            Y_VERIFY(b1.Append(tsBegin + i).ok());
-            Y_VERIFY(b2.Append(std::to_string(pathIdBegin + i)).ok());
-            Y_VERIFY(b3.Append(uid).ok());
-            Y_VERIFY(b4.Append(i % 5).ok());
-            Y_VERIFY(b5.Append(message).ok());
-        }
-
-        std::shared_ptr<arrow::TimestampArray> a1;
-        std::shared_ptr<arrow::StringArray> a2;
-        std::shared_ptr<arrow::StringArray> a3;
-        std::shared_ptr<arrow::Int32Array> a4;
-        std::shared_ptr<arrow::StringArray> a5;
-
-        Y_VERIFY(b1.Finish(&a1).ok());
-        Y_VERIFY(b2.Finish(&a2).ok());
-        Y_VERIFY(b3.Finish(&a3).ok());
-        Y_VERIFY(b4.Finish(&a4).ok());
-        Y_VERIFY(b5.Finish(&a5).ok());
-
-        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 });
-    }
-
-    TString TestBlob(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
-        auto batch = TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        int64_t size;
-        auto status = arrow::ipc::GetRecordBatchSize(*batch, &size);
-        Y_VERIFY(status.ok());
-
-        TString buf;
-        buf.resize(size);
-        auto writer = arrow::Buffer::GetWriter(arrow::MutableBuffer::Wrap(&buf[0], size));
-        Y_VERIFY(writer.ok());
-
-        // UNCOMPRESSED
-        status = SerializeRecordBatch(*batch, arrow::ipc::IpcWriteOptions::Defaults(), (*writer).get());
-        Y_VERIFY(status.ok());
-        return buf;
-    }
-
     void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+        TLocalHelper lHelper(kikimr.GetTestServer());
         NYdb::NLongTx::TClient client(kikimr.GetDriver());
 
         NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
 
         auto txId = resBeginTx.GetResult().tx_id();
-        TString data = TestBlob(pathIdBegin, tsBegin, rowCount);
+        TString data = lHelper.TestBlob(pathIdBegin, tsBegin, rowCount);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
@@ -189,34 +139,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
-    }
-
-    void SendDataViaActorSystem(NActors::TTestActorRuntime* runtime, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
-        std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
-        TString serializedSchema = NArrow::SerializeSchema(*schema);
-        Y_VERIFY(serializedSchema);
-
-        auto batch = TestBlob(pathIdBegin, tsBegin, rowCount);
-        Y_VERIFY(batch);
-
-        Ydb::Table::BulkUpsertRequest request;
-        request.mutable_arrow_batch_settings()->set_schema(serializedSchema);
-        request.set_data(batch);
-        request.set_table(testTable);
-
-        size_t responses = 0;
-        auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(std::move(request), "", "", runtime->GetActorSystem(0));
-        future.Subscribe([&](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) mutable {
-            ++responses;
-            UNIT_ASSERT_VALUES_EQUAL(f.GetValueSync().operation().status(), Ydb::StatusIds::SUCCESS);
-        });
-
-        TDispatchOptions options;
-        options.CustomFinalCondition = [&]() {
-            return responses >= 1;
-        };
-
-        runtime->DispatchEvents(options);
     }
 
     TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it) {
@@ -1600,7 +1522,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui32 insertRows = 0;
         const ui32 iterationPackSize = 2000;
         for (ui64 i = 0; i < numIterations; ++i) {
-            SendDataViaActorSystem(runtime, "/Root/olapStore/olapTable", 0, 1000000 + i * 1000000, iterationPackSize);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/olapStore/olapTable", 0, 1000000 + i * 1000000, iterationPackSize);
             insertRows += iterationPackSize;
         }
 
@@ -1966,7 +1888,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TLocalHelper(*server).CreateTestOlapTable("selectTable", "selectStore", numShards, numShards);
         ui32 insertRows = 0;
         for(ui64 i = 0; i < numIterations; ++i) {
-            SendDataViaActorSystem(runtime, "/Root/selectStore/selectTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/selectStore/selectTable", 0, 1000000 + i*1000000, 2000);
             insertRows += 2000;
         }
 
@@ -2055,7 +1977,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TLocalHelper(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
         for(ui64 i = 0; i < numIterations; ++i) {
-            SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
             insertRows += 2000;
         }
 
@@ -2121,7 +2043,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TLocalHelper(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
         for(ui64 i = 0; i < numIterations; ++i) {
-            SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
             insertRows += 2000;
         }
 
@@ -2187,7 +2109,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui32 insertRows = 0;
         const ui32 iterationPackSize = 2000;
         for (ui64 i = 0; i < numIterations; ++i) {
-            SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i * 1000000, iterationPackSize);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i * 1000000, iterationPackSize);
             insertRows += iterationPackSize;
         }
 
@@ -2274,7 +2196,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui32 insertRows = 0;
 
         for(ui64 i = 0; i < numIterations; ++i) {
-            SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
             insertRows += 2000;
         }
 

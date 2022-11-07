@@ -595,7 +595,7 @@ void TestTwoHotTiers(bool reboot) {
 }
 
 void TestHotAndColdTiers(bool reboot) {
-    TString bucket = "ydb";
+    const TString bucket = "tiering-test-01";
     TPortManager portManager;
     const ui16 port = portManager.GetPort();
 
@@ -612,9 +612,10 @@ void TestHotAndColdTiers(bool reboot) {
 
         s3Config.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
         s3Config.SetVerifySSL(false);
-#if 0
+        s3Config.SetBucket(bucket);
+//#define S3_TEST_USAGE
+#ifdef S3_TEST_USAGE
         s3Config.SetEndpoint("storage.cloud-preprod.yandex.net");
-        s3Config.SetBucket("tiering-test-01");
         s3Config.SetAccessKey("...");
         s3Config.SetSecretKey("...");
         s3Config.SetProxyHost("localhost");
@@ -622,7 +623,6 @@ void TestHotAndColdTiers(bool reboot) {
         s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
 #else
         s3Config.SetEndpoint("fake");
-        s3Config.SetBucket(bucket);
 #endif
         s3Config.SetRequestTimeoutMs(10000);
         s3Config.SetHttpRequestTimeoutMs(10000);

@@ -13,51 +13,18 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-    class TEvDeleteObjectsRequest: public TEventLocal<TEvDeleteObjectsRequest, EvDeleteObjectsRequest> {
-    public:
-        using TRequest = Aws::S3::Model::DeleteObjectsRequest;
+    class TEvDeleteObjectsRequest: public TGenericRequest<TEvDeleteObjectsRequest, EvDeleteObjectsRequest, Aws::S3::Model::DeleteObjectsRequest> {
     private:
-        TRequest Request;
+        using TBase = TGenericRequest<TEvDeleteObjectsRequest, EvDeleteObjectsRequest, Aws::S3::Model::DeleteObjectsRequest>;
     public:
-        TEvDeleteObjectsRequest(const TRequest& request)
-            : Request(request) {
-
-        }
-        IRequestContext::TPtr GetRequestContext() const {
-            return nullptr;
-        }
-        const TRequest& GetRequest() const {
-            return Request;
-        }
-        TRequest* operator->() {
-            return &Request;
-        }
+        using TBase::TBase;
     };
-    class TEvDeleteObjectsResponse: public TEventLocal<TEvDeleteObjectsResponse, EvDeleteObjectsResponse> {
-    public:
-        using TResult = Aws::S3::Model::DeleteObjectsResult;
-        using TOutcome = Aws::Utils::Outcome<TResult, Aws::S3::S3Error>;
-        using TKey = std::optional<TString>;
-    private:
-        TOutcome Outcome;
-    public:
-        TEvDeleteObjectsResponse(const TOutcome& result)
-            : Outcome(result)
-        {
 
-        }
-        bool IsSuccess() const {
-            return Outcome.IsSuccess();
-        }
-        const Aws::S3::S3Error& GetError() const {
-            return Outcome.GetError();
-        }
-        const TResult& GetResult() const {
-            return Outcome.GetResult();
-        }
-        const TResult* operator->() const {
-            return &Outcome.GetResult();
-        }
+    class TEvDeleteObjectsResponse: public TBaseGenericResponse<TEvDeleteObjectsResponse, EvDeleteObjectsResponse, Aws::S3::Model::DeleteObjectsResult> {
+    private:
+        using TBase = TBaseGenericResponse<TEvDeleteObjectsResponse, EvDeleteObjectsResponse, Aws::S3::Model::DeleteObjectsResult>;
+    public:
+        using TBase::TBase;
     };
 
 }

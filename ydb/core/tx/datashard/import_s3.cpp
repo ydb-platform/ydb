@@ -357,7 +357,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ": key# " << key);
 
         auto request = Model::HeadObjectRequest()
-            .WithBucket(Settings.GetBucket())
             .WithKey(key);
 
         Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
@@ -369,7 +368,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", range# " << range.first << "-" << range.second);
 
         auto request = Model::GetObjectRequest()
-            .WithBucket(Settings.GetBucket())
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 

@@ -13,48 +13,18 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-    class TEvListObjectsRequest: public TEventLocal<TEvListObjectsRequest, EvListObjectsRequest> {
-    public:
-        using TRequest = Aws::S3::Model::ListObjectsRequest;
+    class TEvListObjectsRequest: public TGenericRequest<TEvListObjectsRequest, EvListObjectsRequest, Aws::S3::Model::ListObjectsRequest> {
     private:
-        TRequest Request;
+        using TBase = TGenericRequest<TEvListObjectsRequest, EvListObjectsRequest, Aws::S3::Model::ListObjectsRequest>;
     public:
-        TEvListObjectsRequest(const TRequest& request)
-            : Request(request) {
-
-        }
-        IRequestContext::TPtr GetRequestContext() const {
-            return nullptr;
-        }
-        const TRequest& GetRequest() const {
-            return Request;
-        }
-        TRequest* operator->() {
-            return &Request;
-        }
+        using TBase::TBase;
     };
-    class TEvListObjectsResponse: public TEventLocal<TEvListObjectsResponse, EvListObjectsResponse> {
-    public:
-        using TResult = Aws::S3::Model::ListObjectsResult;
-        using TOutcome = Aws::Utils::Outcome<TResult, Aws::S3::S3Error>;
-        using TKey = std::optional<TString>;
-    private:
-        TOutcome Outcome;
-    public:
-        TEvListObjectsResponse(const TOutcome& result)
-            : Outcome(result)
-        {
 
-        }
-        bool IsSuccess() const {
-            return Outcome.IsSuccess();
-        }
-        const TResult& GetResult() const {
-            return Outcome.GetResult();
-        }
-        const TResult* operator->() const {
-            return &Outcome.GetResult();
-        }
+    class TEvListObjectsResponse: public TBaseGenericResponse<TEvListObjectsResponse, EvListObjectsResponse, Aws::S3::Model::ListObjectsResult> {
+    private:
+        using TBase = TBaseGenericResponse<TEvListObjectsResponse, EvListObjectsResponse, Aws::S3::Model::ListObjectsResult>;
+    public:
+        using TBase::TBase;
     };
 
 }

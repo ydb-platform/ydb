@@ -132,23 +132,15 @@ TUnifiedBlobId ParseSmallBlobId(const TString& s, TString& error) {
     return TUnifiedBlobId(tabletId, gen, step, cookie, size);
 }
 
-// Format: "S3_key|bucket"
+// Format: "s = S3_key"
 TUnifiedBlobId ParseS3BlobId(const TString& s, TString& error) {
-    TVector<TString> keyBucket;
-    Split(s, "|", keyBucket);
-
-    if (keyBucket.size() != 2) {
-        error = TStringBuilder() << "Wrong S3 id '" << s << "'";
-        return TUnifiedBlobId();
-    }
-
     ui64 pathId;
-    TUnifiedBlobId dsBlobId = S3KeyToDsId(keyBucket[0], error, pathId);
+    TUnifiedBlobId dsBlobId = S3KeyToDsId(s, error, pathId);
     if (!dsBlobId.IsValid()) {
         return TUnifiedBlobId();
     }
 
-    return TUnifiedBlobId(dsBlobId, TUnifiedBlobId::S3_BLOB, keyBucket[1], pathId);
+    return TUnifiedBlobId(dsBlobId, TUnifiedBlobId::S3_BLOB, pathId);
 }
 
 }

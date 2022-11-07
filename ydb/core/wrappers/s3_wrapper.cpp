@@ -23,47 +23,9 @@ namespace NKikimr::NWrappers {
 namespace NExternalStorage {
 
 class TS3Wrapper: public TActor<TS3Wrapper> {
-    void Handle(TEvListObjectsRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
 
-    void Handle(TEvGetObjectRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvCheckObjectExistsRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvHeadObjectRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvPutObjectRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvDeleteObjectRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvUploadPartRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvCompleteMultipartUploadRequest::TPtr& ev) {
-        CSOperator->Execute(ev);
-    }
-
-    void Handle(TEvAbortMultipartUploadRequest::TPtr& ev) {
+    template <class T>
+    void Handle(T& ev) {
         CSOperator->Execute(ev);
     }
 
@@ -74,7 +36,9 @@ public:
 
     explicit TS3Wrapper(IExternalStorageOperator::TPtr csOperator)
         : TActor(&TThis::StateWork)
-        , CSOperator(csOperator) {
+        , CSOperator(csOperator)
+    {
+        Y_VERIFY(!!CSOperator, "not initialized operator. incorrect config.");
     }
 
     virtual ~TS3Wrapper() = default;

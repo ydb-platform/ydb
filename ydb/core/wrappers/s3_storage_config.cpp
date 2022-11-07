@@ -183,8 +183,30 @@ TString TS3ExternalStorageConfig::DoGetStorageId() const {
 }
 
 IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator() const {
-    return std::make_shared<TS3ExternalStorage>(Config, Credentials);
+    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket);
 }
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings): Config(ConfigFromSettings(settings))
+, Credentials(CredentialsFromSettings(settings))
+{
+    Bucket = settings.bucket();
+}
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Aws::Auth::AWSCredentials& credentials,
+    const Aws::Client::ClientConfiguration& config, const TString& bucket)
+    : Config(config)
+    , Credentials(credentials)
+{
+    Bucket = bucket;
+}
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrSchemeOp::TS3Settings& settings)
+    : Config(ConfigFromSettings(settings))
+    , Credentials(CredentialsFromSettings(settings))
+{
+    Bucket = settings.GetBucket();
+}
+
 }
 
 #endif // KIKIMR_DISABLE_S3_OPS

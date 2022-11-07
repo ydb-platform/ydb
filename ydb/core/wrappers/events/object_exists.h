@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/HeadObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/HeadObjectResult.h>
@@ -12,50 +13,22 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-class TEvCheckObjectExistsRequest: public TEventLocal<TEvCheckObjectExistsRequest, EvCheckObjectExistsRequest> {
-public:
-    using TRequest = Aws::S3::Model::HeadObjectRequest;
+class TEvCheckObjectExistsRequest: public TGenericRequest<TEvCheckObjectExistsRequest,
+    EvCheckObjectExistsRequest, Aws::S3::Model::ListObjectsRequest> {
 private:
-    TRequest Request;
-    IRequestContext::TPtr RequestContext;
+    using TBase = TGenericRequest<TEvCheckObjectExistsRequest, EvCheckObjectExistsRequest, Aws::S3::Model::ListObjectsRequest>;
 public:
-    TEvCheckObjectExistsRequest(const TRequest& request, IRequestContext::TPtr requestContext)
-        : Request(request)
-        , RequestContext(requestContext) {
-
-    }
-    IRequestContext::TPtr GetRequestContext() const {
-        return RequestContext;
-    }
-    const TRequest& GetRequest() const {
-        return Request;
-    }
-    TRequest* operator->() {
-        return &Request;
-    }
+    using TBase::TBase;
 };
 
-class TEvCheckObjectExistsResponse: public TEventLocal<TEvCheckObjectExistsResponse, EvCheckObjectExistsResponse> {
-public:
-    using TRequest = Aws::S3::Model::HeadObjectRequest;
-    using TResult = Aws::S3::Model::HeadObjectResult;
-    using TOutcome = Aws::Utils::Outcome<TResult, Aws::S3::S3Error>;
-    using TKey = std::optional<TString>;
+class TEvCheckObjectExistsResponse: public TBaseGenericResponse<TEvCheckObjectExistsResponse,
+    EvCheckObjectExistsResponse, Aws::S3::Model::ListObjectsResult> {
 private:
-    IRequestContext::TPtr RequestContext;
-    const bool IsExistsFlag;
+    using TBase = TBaseGenericResponse<TEvCheckObjectExistsResponse, EvCheckObjectExistsResponse, Aws::S3::Model::ListObjectsResult>;
 public:
-    TEvCheckObjectExistsResponse(const TRequest& /*request*/, const TOutcome& outcome, IRequestContext::TPtr requestContext)
-        : RequestContext(requestContext)
-        , IsExistsFlag(outcome.IsSuccess() && !outcome.GetResult().GetDeleteMarker()) {
-
-    }
+    using TBase::TBase;
     bool IsExists() const {
-        return IsExistsFlag;
-    }
-    template <class T>
-    std::shared_ptr<T> GetRequestContextAs() const {
-        return dynamic_pointer_cast<T>(RequestContext);
+        return Result.IsSuccess() && Result.GetResult().GetContents().size();
     }
 };
 }

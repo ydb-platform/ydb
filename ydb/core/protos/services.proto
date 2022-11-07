@@ -331,6 +331,12 @@ enum EServiceKikimr {
     // MetadataProvider
     METADATA_PROVIDER = 1500;
 
+    // Tiering
+    TX_TIERING = 1600;
+
+    // Background tasks
+    BG_TASKS = 1700;
+
 };
 
 message TActivity {

@@ -20,7 +20,11 @@ void TService::Handle(TEvSubscribeExternal::TPtr& ev) {
         THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, ev->Get()->GetSnapshotParser());
         it = Accessors.emplace(ev->Get()->GetSnapshotParser()->GetSnapshotId(), Register(actor.Release())).first;
     }
-    Send<TEvSubscribe>(it->second, ev->Sender);
+    if (!!ev->Get()->GetSubscriberId()) {
+        Send<TEvSubscribe>(it->second, ev->Get()->GetSubscriberId());
+    } else {
+        Send<TEvSubscribe>(it->second, ev->Sender);
+    }
 }
 
 void TService::Handle(TEvUnsubscribeExternal::TPtr& ev) {

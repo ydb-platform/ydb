@@ -30,7 +30,7 @@ public:
     }
     void Bootstrap() {
         Become(&TThis::StateMain);
-        Send(GetExternalDataActorId(), new NMetadataProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation()));
+        Send(GetExternalDataActorId(), new NMetadataProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation(), SelfId()));
     }
     void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshot();
@@ -79,7 +79,7 @@ bool TManager::Start() {
 #ifndef KIKIMR_DISABLE_S3_OPS
     auto& ctx = TActivationContext::AsActorContext();
     const NActors::TActorId newActor = ctx.Register(
-        CreateS3Actor(TabletId, ctx.SelfID, Config.GetTierName())
+        CreateS3Actor(TabletId, TabletActorId, Config.GetTierName())
     );
     ctx.Send(newActor, new TEvPrivate::TEvS3Settings(Config.GetProtoConfig().GetObjectStorage()));
     Stop();
@@ -88,9 +88,11 @@ bool TManager::Start() {
     return true;
 }
 
-TManager::TManager(const ui64 tabletId, const TTierConfig& config)
+TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TTierConfig& config)
     : TabletId(tabletId)
-    , Config(config) {
+    , TabletActorId(tabletActorId)
+    , Config(config)
+{
 }
 
 NOlap::TStorageTier TManager::BuildTierStorage() const {
@@ -147,7 +149,7 @@ void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt) 
         if (Managers.contains(i.second.GetTierName())) {
             continue;
         }
-        NTiers::TManager localManager(TabletId, i.second);
+        NTiers::TManager localManager(TabletId, TabletActorId, i.second);
         auto& manager = Managers.emplace(i.second.GetTierName(), std::move(localManager)).first->second;
         if (IsActive()) {
             manager.Start();
@@ -158,12 +160,12 @@ void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt) 
 TActorId TTiersManager::GetStorageActorId(const TString& tierName) {
     auto it = Managers.find(tierName);
     if (it == Managers.end()) {
-        ALS_ERROR(NKikimrServices::TX_COLUMNSHARD) << "No S3 actor for tier '" << tierName << "' at tablet " << TabletId;
+        ALS_ERROR(NKikimrServices::TX_TIERING) << "No S3 actor for tier '" << tierName << "' at tablet " << TabletId;
         return {};
     }
     auto actorId = it->second.GetStorageActorId();
     if (!actorId) {
-        ALS_ERROR(NKikimrServices::TX_COLUMNSHARD) << "Not started storage actor for tier '" << tierName << "' at tablet " << TabletId;
+        ALS_ERROR(NKikimrServices::TX_TIERING) << "Not started storage actor for tier '" << tierName << "' at tablet " << TabletId;
         return {};
     }
     return actorId;
@@ -231,6 +233,14 @@ TTiersManager::~TTiersManager() {
     auto cs = std::dynamic_pointer_cast<NTiers::TSnapshotConstructor>(ExternalDataManipulation);
     if (!!cs) {
         cs->Stop();
+    }
+}
+
+TActorId TTiersManager::GetActorId() const {
+    if (Actor) {
+        return Actor->SelfId();
+    } else {
+        return {};
     }
 }
 

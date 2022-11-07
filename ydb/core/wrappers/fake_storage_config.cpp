@@ -10,7 +10,7 @@ TString TFakeExternalStorageConfig::DoGetStorageId() const {
 }
 
 IExternalStorageOperator::TPtr TFakeExternalStorageConfig::DoConstructStorageOperator() const {
-    return std::make_shared<TFakeExternalStorageOperator>();
+    return std::make_shared<TFakeExternalStorageOperator>(Bucket);
 }
 }
 

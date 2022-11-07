@@ -150,6 +150,8 @@ struct TKikimrEvents : TEvents {
         ES_DATASHARD_LOAD,
         ES_METADATA_PROVIDER,
         ES_INTERNAL_REQUEST,
+        ES_BACKGROUND_TASKS,
+        ES_TIERING
     };
 };
 

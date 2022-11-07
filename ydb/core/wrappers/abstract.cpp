@@ -12,7 +12,7 @@ IExternalStorageOperator::TPtr IExternalStorageConfig::ConstructStorageOperator(
 
 IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrSchemeOp::TS3Settings& settings) {
     if (settings.GetEndpoint() == "fake") {
-        return std::make_shared<TFakeExternalStorageConfig>();
+        return std::make_shared<TFakeExternalStorageConfig>(settings.GetBucket());
     } else {
         return std::make_shared <TS3ExternalStorageConfig>(settings);
     }

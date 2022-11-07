@@ -7,9 +7,12 @@ namespace NKikimr::NMetadataProvider {
 class TEvSubscribeExternal: public NActors::TEventLocal<TEvSubscribeExternal, EEvSubscribe::EvSubscribeExternal> {
 private:
     YDB_READONLY_DEF(ISnapshotParser::TPtr, SnapshotParser);
+    YDB_READONLY_DEF(NActors::TActorId, SubscriberId);
 public:
-    TEvSubscribeExternal(ISnapshotParser::TPtr parser)
-        : SnapshotParser(parser) {
+    TEvSubscribeExternal(ISnapshotParser::TPtr parser, const NActors::TActorId& subscriberId = {})
+        : SnapshotParser(parser)
+        , SubscriberId(subscriberId)
+    {
         Y_VERIFY(!!SnapshotParser);
     }
 };

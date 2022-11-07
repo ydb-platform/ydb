@@ -79,7 +79,6 @@ protected:
         google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithBucket(Settings.GetBucket())
             .WithKey(Settings.GetSchemeKey())
             .WithStorageClass(Settings.GetStorageClass());
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
@@ -145,7 +144,6 @@ protected:
     void UploadData() {
         if (!MultiPart) {
             auto request = Aws::S3::Model::PutObjectRequest()
-                .WithBucket(Settings.GetBucket())
                 .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                 .WithStorageClass(Settings.GetStorageClass());
             this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
@@ -156,7 +154,6 @@ protected:
             }
 
             auto request = Aws::S3::Model::UploadPartRequest()
-                .WithBucket(Settings.GetBucket())
                 .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                 .WithUploadId(*UploadId)
                 .WithPartNumber(Parts.size() + 1);
@@ -187,7 +184,6 @@ protected:
 
         if (!upload) {
             auto request = Aws::S3::Model::CreateMultipartUploadRequest()
-                .WithBucket(Settings.GetBucket())
                 .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                 .WithStorageClass(Settings.GetStorageClass());
             this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
@@ -209,7 +205,6 @@ protected:
                     }
 
                     auto request = Aws::S3::Model::CompleteMultipartUploadRequest()
-                        .WithBucket(Settings.GetBucket())
                         .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                         .WithUploadId(*UploadId)
                         .WithMultipartUpload(Aws::S3::Model::CompletedMultipartUpload().WithParts(std::move(parts)));
@@ -224,7 +219,6 @@ protected:
                     }
 
                     auto request = Aws::S3::Model::AbortMultipartUploadRequest()
-                        .WithBucket(Settings.GetBucket())
                         .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                         .WithUploadId(*UploadId);
                     this->Send(Client, new TEvExternalStorage::TEvAbortMultipartUploadRequest(request));

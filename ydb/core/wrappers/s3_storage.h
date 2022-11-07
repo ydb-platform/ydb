@@ -32,6 +32,7 @@ private:
     THolder<Aws::S3::S3Client> Client;
     const Aws::Client::ClientConfiguration Config;
     const Aws::Auth::AWSCredentials Credentials;
+    const TString Bucket;
 
     template <typename TRequest, typename TOutcome>
     using THandler = std::function<void(const Aws::S3::S3Client*, const TRequest&, const TOutcome&, const std::shared_ptr<const Aws::Client::AsyncCallerContext>&)>;
@@ -42,6 +43,7 @@ private:
     template <typename TEvRequest, typename TEvResponse, template <typename...> typename TContext>
     void Call(typename TEvRequest::TPtr& ev, TFunc<typename TEvRequest::TRequest, typename TEvResponse::TOutcome> func) const {
         using TCtx = TContext<TEvRequest, TEvResponse>;
+        ev->Get()->MutableRequest().WithBucket(Bucket);
 
         auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext());
         auto callback = [](
@@ -64,10 +66,12 @@ private:
     }
 
 public:
-    TS3ExternalStorage(const Aws::Client::ClientConfiguration& config, const Aws::Auth::AWSCredentials& credentials)
+    TS3ExternalStorage(const Aws::Client::ClientConfiguration& config, const Aws::Auth::AWSCredentials& credentials, const TString& bucket)
         : Client(new Aws::S3::S3Client(credentials, config))
         , Config(config)
-        , Credentials(credentials) {
+        , Credentials(credentials)
+        , Bucket(bucket)
+    {
     }
 
     ~TS3ExternalStorage();

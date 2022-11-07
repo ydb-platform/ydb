@@ -32,8 +32,8 @@ public:
         return Event->Blobs;
     }
 
-    TUnifiedBlobId AddExported(const TString& bucket, const TUnifiedBlobId& srcBlob, const ui64 pathId) {
-        Event->SrcToDstBlobs[srcBlob] = TUnifiedBlobId(srcBlob, TUnifiedBlobId::S3_BLOB, bucket, pathId);
+    TUnifiedBlobId AddExported(const TUnifiedBlobId& srcBlob, const ui64 pathId) {
+        Event->SrcToDstBlobs[srcBlob] = TUnifiedBlobId(srcBlob, TUnifiedBlobId::S3_BLOB, pathId);
         return Event->SrcToDstBlobs[srcBlob];
     }
 
@@ -74,9 +74,9 @@ public:
         return NKikimrServices::TActivity::TX_COLUMNSHARD_S3_ACTOR;
     }
 
-    TS3Actor(ui64 tabletId, const TActorId& parent, const TString& tierName)
+    TS3Actor(ui64 tabletId, const TActorId& shardActor, const TString& tierName)
         : TabletId(tabletId)
-        , ShardActor(parent)
+        , ShardActor(shardActor)
         , TierName(tierName)
     {}
 
@@ -88,16 +88,16 @@ public:
     void Handle(TEvPrivate::TEvS3Settings::TPtr& ev) {
         auto& msg = *ev->Get();
         auto& endpoint = msg.Settings.GetEndpoint();
-        Bucket = msg.Settings.GetBucket();
+        const auto& bucket = msg.Settings.GetBucket();
 
         LOG_S_DEBUG("[S3] Update settings for tier '" << TierName << "' endpoint '" << endpoint
-            << "' bucket '" << Bucket << "' at tablet " << TabletId);
+            << "' bucket '" << bucket << "' at tablet " << TabletId);
 
         if (endpoint.empty()) {
             LOG_S_ERROR("[S3] No endpoint in settings for tier '" << TierName << "' at tablet " << TabletId);
             return;
         }
-        if (Bucket.empty()) {
+        if (bucket.empty()) {
             LOG_S_ERROR("[S3] No bucket in settings for tier '" << TierName << "' at tablet " << TabletId);
             return;
         }
@@ -113,13 +113,14 @@ public:
     void Handle(TEvPrivate::TEvExport::TPtr& ev) {
         auto& msg = *ev->Get();
         ui64 exportNo = msg.ExportNo;
+        Y_VERIFY(ev->Get()->DstActor == ShardActor);
 
         Y_VERIFY(!Exports.count(exportNo));
         Exports[exportNo] = TS3Export(ev->Release());
         auto& ex = Exports[exportNo];
 
         for (auto& [blobId, blob] : ex.Blobs()) {
-            TString key = ex.AddExported(Bucket, blobId, blob.PathId).GetS3Key();
+            TString key = ex.AddExported(blobId, blob.PathId).GetS3Key();
             Y_VERIFY(!ExportingKeys.count(key)); // TODO
 
             ex.RegisterKey(key);
@@ -221,7 +222,11 @@ public:
         if (!context) {
             return;
         }
-        if (!msg.IsExists()) {
+        const auto& resultOutcome = msg.Result;
+
+        if (!resultOutcome.IsSuccess()) {
+            KeyFinished(context->GetKey(), true, LogError("CheckObjectExistsResponse", resultOutcome.GetError(), !!context->GetKey()));
+        } else if (!msg.IsExists()) {
             SendPutObject(context->GetKey(), std::move(context->DetachData()));
         } else {
             KeyFinished(context->GetKey(), false, "");
@@ -348,7 +353,6 @@ public:
 
         auto& ex = it->second;
         ex.FinishKey(key);
-        Y_VERIFY(ex.Event->DstActor == ShardActor);
 
         if (hasError) {
             ex.Event->Status = NKikimrProto::ERROR;
@@ -370,7 +374,6 @@ private:
     ui64 TabletId;
     TActorId ShardActor;
     TString TierName;
-    TString Bucket;
     ui64 ForgetNo{};
     THashMap<ui64, TS3Export> Exports;
     THashMap<ui64, TS3Forget> Forgets;
@@ -412,7 +415,6 @@ private:
 
     void SendPutObject(const TString& key, TString&& data) const {
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithBucket(Bucket)
             .WithKey(key)
             .WithStorageClass(Aws::S3::Model::StorageClass::STANDARD_IA);
 #if 0
@@ -425,18 +427,16 @@ private:
     }
 
     void SendPutObjectIfNotExists(const TString& key, TString&& data) {
-        auto request = Aws::S3::Model::HeadObjectRequest()
-            .WithBucket(Bucket)
-            .WithKey(key);
+        auto request = Aws::S3::Model::ListObjectsRequest()
+            .WithPrefix(key);
 
-        LOG_S_DEBUG("[S3] HeadObjectRequest key '" << key << "' at tablet " << TabletId);
+        LOG_S_DEBUG("[S3] PutObjectIfNotExists->ListObjectsRequest key '" << key << "' at tablet " << TabletId);
         std::shared_ptr<TEvCheckObjectExistsRequestContext> context = std::make_shared<TEvCheckObjectExistsRequestContext>(key, std::move(data));
         Send(ExternalStorageActorId, new TEvExternalStorage::TEvCheckObjectExistsRequest(request, context));
     }
 
     void SendHeadObject(const TString& key) const {
         auto request = Aws::S3::Model::HeadObjectRequest()
-            .WithBucket(Bucket)
             .WithKey(key);
 
         LOG_S_DEBUG("[S3] HeadObjectRequest key '" << key << "' at tablet " << TabletId);
@@ -446,7 +446,6 @@ private:
     void SendGetObject(const TString& key, const ui32 startPos, const ui32 size) {
         Y_VERIFY(size);
         auto request = Aws::S3::Model::GetObjectRequest()
-            .WithBucket(Bucket)
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << startPos << "-" << startPos + size - 1);
 
@@ -456,7 +455,6 @@ private:
 
     void SendDeleteObject(const TString& key) const {
         auto request = Aws::S3::Model::DeleteObjectRequest()
-            .WithBucket(Bucket)
             .WithKey(key);
 
         Send(ExternalStorageActorId, new TEvExternalStorage::TEvDeleteObjectRequest(request));

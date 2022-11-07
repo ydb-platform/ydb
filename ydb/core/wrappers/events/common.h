@@ -13,18 +13,31 @@ namespace NKikimr::NWrappers::NExternalStorage {
 
 template <typename TDerived, ui32 EventType, typename T>
 struct TGenericRequest: public NActors::TEventLocal<TDerived, EventType> {
+private:
+    IRequestContext::TPtr RequestContext;
+public:
     using TRequest = T;
     TRequest Request;
     IRequestContext::TPtr GetRequestContext() const {
-        return nullptr;
+        return RequestContext;
     }
 
     const TRequest& GetRequest() const {
         return Request;
     }
 
+    TRequest& MutableRequest() {
+        return Request;
+    }
+
     explicit TGenericRequest(const TRequest& request)
         : Request(request) {
+    }
+
+    TGenericRequest(const TRequest& request, IRequestContext::TPtr requestContext)
+        : RequestContext(requestContext)
+        , Request(request)
+    {
     }
 
     TString ToString() const override {
@@ -57,18 +70,42 @@ struct TRequestWithBody: public TGenericRequest<TDerived, EventType, T> {
     using TBase = TRequestWithBody<TDerived, EventType, T>;
 };
 
-template <typename TDerived, ui32 EventType, typename T, typename U = T>
-struct TGenericResponse: public NActors::TEventLocal<TDerived, EventType> {
-    using TOutcome = Aws::Utils::Outcome<T, Aws::S3::S3Error>;
+template <typename TDerived, ui32 EventType, typename TAWSResultExt, typename U = TAWSResultExt>
+struct TBaseGenericResponse: public NActors::TEventLocal<TDerived, EventType> {
+private:
+    using TBase = NActors::TEventLocal<TDerived, EventType>;
+    IRequestContext::TPtr RequestContext;
+public:
+    using TOutcome = Aws::Utils::Outcome<TAWSResultExt, Aws::S3::S3Error>;
     using TResult = Aws::Utils::Outcome<U, Aws::S3::S3Error>;
+    using TAWSResult = U;
+    using TAWSOutcome = TResult;
     using TKey = std::optional<TString>;
 
-    TKey Key;
     TResult Result;
 
-    explicit TGenericResponse(const TKey& key, const TOutcome& outcome)
-        : Key(key)
+    explicit TBaseGenericResponse(const TOutcome& outcome)
+        : Result(TDerived::ResultFromOutcome(outcome)) {
+    }
+
+    TBaseGenericResponse(const TOutcome& outcome, IRequestContext::TPtr requestContext)
+        : RequestContext(requestContext)
         , Result(TDerived::ResultFromOutcome(outcome)) {
+    }
+
+    bool IsSuccess() const {
+        return Result.IsSuccess();
+    }
+    const Aws::S3::S3Error& GetError() const {
+        return Result.GetError();
+    }
+    const U& GetResult() const {
+        return Result.GetResult();
+    }
+
+    template <class T>
+    std::shared_ptr<T> GetRequestContextAs() const {
+        return dynamic_pointer_cast<T>(RequestContext);
     }
 
     static TResult ResultFromOutcome(const TOutcome& outcome) {
@@ -77,27 +114,56 @@ struct TGenericResponse: public NActors::TEventLocal<TDerived, EventType> {
 
     TString ToString() const override {
         return TStringBuilder() << this->ToStringHeader() << " {"
-            << " Key: " << (Key ? "null" : *Key)
             << " Result: " << Result
             << " }";
     }
+};
 
-    using TBase = TGenericResponse<TDerived, EventType, T, U>;
+template <typename TDerived, ui32 EventType, typename TAWSResult, typename U = TAWSResult>
+struct TGenericResponse: public TBaseGenericResponse<TDerived, EventType, TAWSResult, U> {
+private:
+    using TBase = TBaseGenericResponse<TDerived, EventType, TAWSResult, U>;
+public:
+    using TOutcome = typename TBase::TOutcome;
+    using TResult = typename TBase::TResult;
+    using TKey = std::optional<TString>;
+
+    TKey Key;
+
+    TGenericResponse(const TKey& key, const TOutcome& outcome)
+        : TBase(outcome)
+        , Key(key) {
+    }
+
+    TGenericResponse(const TKey& key, const TOutcome& outcome, IRequestContext::TPtr requestContext)
+        : TBase(outcome, requestContext)
+        , Key(key)
+    {
+    }
+
+    TString ToString() const override {
+        return TStringBuilder() << this->ToStringHeader() << " {"
+            << " Key: " << (Key ? "null" : *Key)
+            << " Result: " << TBase::Result
+            << " }";
+    }
 };
 
 template <typename TDerived, ui32 EventType, typename T, typename U>
 struct TResponseWithBody: public TGenericResponse<TDerived, EventType, T, U> {
-    using TGeneric = TGenericResponse<TDerived, EventType, T, U>;
-    using TKey = typename TGeneric::TKey;
+private:
+    using TBase = TGenericResponse<TDerived, EventType, T, U>;
+public:
+    using TKey = typename TBase::TKey;
 
     TString Body;
 
-    explicit TResponseWithBody(const TKey& key, const typename TGeneric::TOutcome& outcome)
-        : TGeneric(key, outcome) {
+    explicit TResponseWithBody(const TKey& key, const typename TBase::TOutcome& outcome)
+        : TBase(key, outcome) {
     }
 
-    explicit TResponseWithBody(const TKey& key, const typename TGeneric::TOutcome& outcome, TString&& body)
-        : TGeneric(key, outcome)
+    explicit TResponseWithBody(const TKey& key, const typename TBase::TOutcome& outcome, TString&& body)
+        : TBase(key, outcome)
         , Body(std::move(body)) {
     }
 
@@ -108,8 +174,6 @@ struct TResponseWithBody: public TGenericResponse<TDerived, EventType, T, U> {
             << " Body: " << Body.size() << "b"
             << " }";
     }
-
-    using TBase = TResponseWithBody<TDerived, EventType, T, U>;
 };
 
 #define DEFINE_REQUEST(name, base) \
@@ -121,14 +185,21 @@ struct TResponseWithBody: public TGenericResponse<TDerived, EventType, T, U> {
         DEFINE_REQUEST(name, TGenericRequest)
 
 #define DECLARE_GENERIC_RESPONSE(name) \
-        struct TEv##name##Response: public TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result>
+        struct TEv##name##Response: public TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result> {\
+        private:\
+            using TBase = TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result>;\
+        public:\
+            using TBase::TBase;
 
 #define DECLARE_RESPONSE_WITH_BODY(name, result_t) \
-        struct TEv##name##Response: public TResponseWithBody<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, result_t>
+        struct TEv##name##Response: public TResponseWithBody<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, result_t> {\
+        private:\
+            using TBase = TResponseWithBody<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, result_t>;\
+        public:\
+            using TBase::TBase;
 
 #define DEFINE_GENERIC_RESPONSE(name) \
-        DECLARE_GENERIC_RESPONSE(name) { \
-            using TBase::TBase; \
+        DECLARE_GENERIC_RESPONSE(name) \
         }
 
 #define DEFINE_GENERIC_REQUEST_RESPONSE(name) \
@@ -136,7 +207,7 @@ struct TResponseWithBody: public TGenericResponse<TDerived, EventType, T, U> {
         DEFINE_GENERIC_RESPONSE(name)
 
 DEFINE_GENERIC_REQUEST(GetObject);
-DECLARE_RESPONSE_WITH_BODY(GetObject, Aws::String) {
+DECLARE_RESPONSE_WITH_BODY(GetObject, Aws::String)
     static TResult ResultFromOutcome(const TOutcome & outcome) {
         if (outcome.IsSuccess()) {
             return outcome.GetResult().GetETag();
@@ -144,8 +215,6 @@ DECLARE_RESPONSE_WITH_BODY(GetObject, Aws::String) {
             return outcome.GetError();
         }
     }
-
-    using TBase::TBase;
 };
 
 DEFINE_REQUEST(PutObject, TRequestWithBody);

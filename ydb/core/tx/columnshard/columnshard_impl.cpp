@@ -5,6 +5,7 @@
 #include <ydb/core/tx/tiering/external_data.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -951,7 +952,7 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
 
     EnableTiering = schema.GetEnableTiering();
     if (OwnerPath && !Tiers && EnableTiering) {
-        Tiers = std::make_shared<TTiersManager>(TabletID(), OwnerPath);
+        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(), OwnerPath);
     }
     if (!!Tiers) {
         if (EnableTiering) {
@@ -1044,7 +1045,7 @@ TActorId TColumnShard::GetS3ActorForTier(const TString& tierName) const {
 
 void TColumnShard::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
     if (!Tiers) {
-        Tiers = std::make_shared<TTiersManager>(TabletID(), OwnerPath);
+        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(), OwnerPath);
     }
     Tiers->TakeConfigs(ev->Get()->GetSnapshot());
     if (EnableTiering) {

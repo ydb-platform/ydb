@@ -23,7 +23,7 @@ void TDSAccessorNotifier::Handle(TEvSubscribe::TPtr& ev) {
             ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot";
             return;
         }
-        Send(ev->Get()->GetSubscriberId(), new TEvRefreshSubscriberData(snapshot));
+        Sender<TEvRefreshSubscriberData>(snapshot).SendTo(ev->Get()->GetSubscriberId());
     }
 }
 

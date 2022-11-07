@@ -29,7 +29,6 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
     void HeadObject(const TString& key) {
         auto request = Model::HeadObjectRequest()
-            .WithBucket(ImportInfo->Settings.bucket())
             .WithKey(key);
 
         Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
@@ -52,7 +51,6 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
         auto request = Model::GetObjectRequest()
-            .WithBucket(ImportInfo->Settings.bucket())
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
@@ -137,7 +135,6 @@ public:
         if (Client) {
             Send(Client, new TEvents::TEvPoisonPill());
         }
-
         Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         HeadObject(SchemeKey);

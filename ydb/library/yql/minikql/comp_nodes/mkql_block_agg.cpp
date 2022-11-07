@@ -15,10 +15,12 @@ class TBlockCombineAllWrapper : public TStatefulWideFlowComputationNode<TBlockCo
 public:
     TBlockCombineAllWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
+        ui32 countColumn,
         size_t width,
         TVector<std::unique_ptr<IBlockAggregator>>&& aggs)
         : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
         , Flow_(flow)
+        , CountColumn_(countColumn)
         , Width_(width)
         , Aggs_(std::move(aggs))
     {
@@ -38,13 +40,23 @@ public:
             if (result == EFetchResult::Yield) {
                 return result;
             } else if (result == EFetchResult::One) {
+                ui64 batchLength = GetBatchLength(s.Values_.data());
+                if (!batchLength) {
+                    continue;
+                }
+
+                s.HasValues_ = true;
                 for (size_t i = 0; i < Aggs_.size(); ++i) {
                     if (output[i]) {
-                        Aggs_[i]->AddMany(s.Values_.data());
+                        Aggs_[i]->AddMany(s.Values_.data(), batchLength);
                     }
                 }
             } else {
                 s.IsFinished_ = true;
+                if (!s.HasValues_) {
+                    return EFetchResult::Finish;
+                }
+
                 for (size_t i = 0; i < Aggs_.size(); ++i) {
                     if (auto* out = output[i]; out != nullptr) {
                         *out = Aggs_[i]->Finish();
@@ -63,6 +75,7 @@ private:
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
         bool IsFinished_ = false;
+        bool HasValues_ = false;
 
         TState(TMemoryUsageInfo* memInfo, size_t width)
             : TComputationValue(memInfo)
@@ -87,9 +100,13 @@ private:
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
+    ui64 GetBatchLength(const NUdf::TUnboxedValue* columns) const {
+        return TArrowBlock::From(columns[CountColumn_]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+    }
+
 private:
     IComputationWideFlowNode* Flow_;
-    TTupleType* TupleType_;
+    const ui32 CountColumn_;
     const size_t Width_;
     TVector<std::unique_ptr<IBlockAggregator>> Aggs_;
 };
@@ -123,10 +140,10 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
             argColumns.push_back(AS_VALUE(TDataLiteral, aggVal->GetValue(j))->AsValue().Get<ui32>());
         }
 
-        aggs.emplace_back(MakeBlockAggregator(name, tupleType, countColumn, filterColumn, argColumns));
+        aggs.emplace_back(MakeBlockAggregator(name, tupleType, filterColumn, argColumns));
     }
 
-    return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, tupleType->GetElementsCount(), std::move(aggs));
+    return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, countColumn, tupleType->GetElementsCount(), std::move(aggs));
 }
 
 }

@@ -5,13 +5,14 @@ namespace NMiniKQL {
 
 class TCountAllBlockAggregator : public TBlockAggregatorBase {
 public:
-    TCountAllBlockAggregator(ui32 countColumn, std::optional<ui32> filterColumn)
-        : TBlockAggregatorBase(countColumn, filterColumn)
+    TCountAllBlockAggregator(std::optional<ui32> filterColumn)
+        : TBlockAggregatorBase(filterColumn)
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns) final {
-        State_ += GetBatchLength(columns);
+    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength) final {
+        Y_UNUSED(columns);
+        State_ += batchLength;
     }
 
     NUdf::TUnboxedValue Finish() final {
@@ -24,17 +25,17 @@ private:
 
 class TCountBlockAggregator : public TBlockAggregatorBase {
 public:
-    TCountBlockAggregator(ui32 countColumn, std::optional<ui32> filterColumn, ui32 argColumn)
-        : TBlockAggregatorBase(countColumn, filterColumn)
+    TCountBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
+        : TBlockAggregatorBase(filterColumn)
         , ArgColumn_(argColumn)
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns) final {
+    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength) final {
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                State_ += GetBatchLength(columns);
+                State_ += batchLength;
             }
         } else {
             const auto& array = datum.array();
@@ -55,12 +56,11 @@ class TBlockCountAllFactory : public IBlockAggregatorFactory {
 public:
    std::unique_ptr<IBlockAggregator> Make(
        TTupleType* tupleType,
-       ui32 countColumn,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns) const final {
        Y_UNUSED(tupleType);
        Y_UNUSED(argsColumns);
-       return std::make_unique<TCountAllBlockAggregator>(countColumn, filterColumn);
+       return std::make_unique<TCountAllBlockAggregator>(filterColumn);
    }
 };
 
@@ -68,11 +68,10 @@ class TBlockCountFactory : public IBlockAggregatorFactory {
 public:
    std::unique_ptr<IBlockAggregator> Make(
        TTupleType* tupleType,
-       ui32 countColumn,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns) const final {
        Y_UNUSED(tupleType);
-       return std::make_unique<TCountBlockAggregator>(countColumn, filterColumn, argsColumns[0]);
+       return std::make_unique<TCountBlockAggregator>(filterColumn, argsColumns[0]);
    }
 };
 

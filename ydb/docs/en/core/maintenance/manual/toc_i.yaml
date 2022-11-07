@@ -11,7 +11,7 @@ items:
   href: adding_storage_groups.md
 - name: Safe restart and shutdown of nodes
   href: node_restarting.md
-- name: Enabling/disabling SelfHeal
+- name: Working with SelfHeal
   href: selfheal.md
 - name: Enabling/disabling Scrubbing
   href: scrubbing.md

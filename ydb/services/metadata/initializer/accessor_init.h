@@ -13,13 +13,14 @@ namespace NKikimr::NMetadataProvider {
 class TDSAccessorInitialized: public NActors::TActorBootstrapped<TDSAccessorInitialized> {
 private:
     TDeque<ITableModifier::TPtr> Modifiers;
+    const NInternal::NRequest::TConfig Config;
 protected:
-    const TConfig& Config;
     virtual void RegisterState() = 0;
     virtual void OnInitialized() = 0;
+    virtual TVector<NMetadataProvider::ITableModifier::TPtr> BuildModifiers() const = 0;
 public:
     void Bootstrap();
-    TDSAccessorInitialized(const TConfig& config, const TVector<ITableModifier::TPtr>& modifiers);
+    TDSAccessorInitialized(const NInternal::NRequest::TConfig& config);
     void Handle(NInternal::NRequest::TEvRequestFinished::TPtr& ev);
 
     STATEFN(StateMain) {

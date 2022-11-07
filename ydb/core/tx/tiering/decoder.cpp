@@ -31,6 +31,34 @@ bool TDecoderBase::Read(const ui32 columnIdx, TDuration& result, const Ydb::Valu
     return true;
 }
 
+bool TDecoderBase::Read(const ui32 columnIdx, bool& result, const Ydb::Value& r) const {
+    auto& pValue = r.items()[columnIdx];
+    if (pValue.has_bool_value()) {
+        result = pValue.bool_value();
+    } else {
+        ALS_WARN(0) << "incorrect type for instant seconds parsing";
+        return false;
+    }
+    return true;
+}
+
+bool TDecoderBase::Read(const ui32 columnIdx, TInstant& result, const Ydb::Value& r) const {
+    auto& pValue = r.items()[columnIdx];
+    if (pValue.has_uint32_value()) {
+        result = TInstant::Seconds(pValue.uint32_value());
+    } else if (pValue.has_int64_value()) {
+        result = TInstant::Seconds(pValue.int64_value());
+    } else if (pValue.has_uint64_value()) {
+        result = TInstant::Seconds(pValue.uint64_value());
+    } else if (pValue.has_int32_value()) {
+        result = TInstant::Seconds(pValue.int32_value());
+    } else {
+        ALS_WARN(0) << "incorrect type for instant seconds parsing";
+        return false;
+    }
+    return true;
+}
+
 bool TDecoderBase::ReadDebugProto(const ui32 columnIdx, ::google::protobuf::Message& result, const Ydb::Value& r) const {
     const TString& s = r.items()[columnIdx].bytes_value();
     if (!::google::protobuf::TextFormat::ParseFromString(s, &result)) {

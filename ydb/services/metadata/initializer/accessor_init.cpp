@@ -5,28 +5,36 @@ namespace NKikimr::NMetadataProvider {
 
 void TDSAccessorInitialized::Bootstrap() {
     RegisterState();
-    Modifiers.front()->Execute(SelfId(), Config.GetRequestConfig());
+    auto modifiers = BuildModifiers();
+    for (auto&& i : modifiers) {
+        Modifiers.emplace_back(i);
+    }
+    if (Modifiers.size()) {
+        ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "modifiers count: " << Modifiers.size();
+        Modifiers.front()->Execute(SelfId(), Config);
+    } else {
+        ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "initialization finished";
+        OnInitialized();
+    }
 }
 
 void TDSAccessorInitialized::Handle(NInternal::NRequest::TEvRequestFinished::TPtr& /*ev*/) {
+    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "modifiers count: " << Modifiers.size();
     if (Modifiers.empty()) {
         return;
     }
     Modifiers.pop_front();
     if (Modifiers.size()) {
-        Modifiers.front()->Execute(SelfId(), Config.GetRequestConfig());
+        Modifiers.front()->Execute(SelfId(), Config);
     } else {
+        ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "initialization finished";
         OnInitialized();
     }
 }
 
-TDSAccessorInitialized::TDSAccessorInitialized(const TConfig& config, const TVector<ITableModifier::TPtr>& modifiers)
+TDSAccessorInitialized::TDSAccessorInitialized(const NInternal::NRequest::TConfig& config)
     : Config(config)
 {
-    Y_VERIFY(modifiers.size());
-    for (auto&& i : modifiers) {
-        Modifiers.emplace_back(i);
-    }
 }
 
 }

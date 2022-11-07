@@ -39,12 +39,14 @@ private:
     YDB_READONLY_DEF(ISnapshot::TPtr, CurrentSnapshot);
     YDB_READONLY_DEF(Ydb::Table::ExecuteQueryResult, CurrentSelection);
     TInstant RequestedActuality = TInstant::Zero();
+    const TConfig Config;
 protected:
     bool IsReady() const {
         return !!CurrentSnapshot;
     }
     virtual void OnInitialized() override;
     virtual void OnSnapshotModified() = 0;
+    virtual TVector<NMetadataProvider::ITableModifier::TPtr> BuildModifiers() const override;
 public:
     using TBase::Handle;
 

@@ -14,7 +14,6 @@ private:
 public:
     TConfig() = default;
 
-    TDuration GetRetryPeriod(const ui32 retry) const;
     bool DeserializeFromProto(const NKikimrConfig::TMetadataProviderConfig& config);
 };
 }

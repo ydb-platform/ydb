@@ -90,6 +90,8 @@
 #include <ydb/core/yq/libs/mock/yql_mock.h>
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/services/bg_tasks/ds_table/executor.h>
+#include <ydb/services/bg_tasks/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
@@ -627,6 +629,11 @@ namespace Tests {
             auto* actor = NMetadataProvider::CreateService(NMetadataProvider::TConfig());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NMetadataProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
+        }
+        if (Settings->IsEnableBackgroundTasks()) {
+            auto* actor = NBackgroundTasks::CreateService(NBackgroundTasks::TConfig());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NBackgroundTasks::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 

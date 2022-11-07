@@ -124,6 +124,8 @@ target_link_libraries(run PUBLIC
   ydb-services-local_discovery
   services-metadata-ds_table
   ydb-services-metadata
+  services-bg_tasks-ds_table
+  ydb-services-bg_tasks
   ydb-services-monitoring
   ydb-services-persqueue_cluster_discovery
   ydb-services-persqueue_v1

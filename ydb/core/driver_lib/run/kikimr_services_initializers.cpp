@@ -151,6 +151,9 @@
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
 
+#include <ydb/services/bg_tasks/ds_table/executor.h>
+#include <ydb/services/bg_tasks/service.h>
+
 #include <library/cpp/actors/protos/services_common.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -2012,7 +2015,25 @@ void TMetadataProviderInitializer::InitializeServices(NActors::TActorSystemSetup
     if (serviceConfig.IsEnabled()) {
         auto service = NMetadataProvider::CreateService(serviceConfig);
         setup->LocalServices.push_back(std::make_pair(
-            NMetadataProvider::MakeServiceId(),
+            NMetadataProvider::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TBackgroundTasksInitializer::TBackgroundTasksInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TBackgroundTasksInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NBackgroundTasks::TConfig serviceConfig;
+    if (Config.HasBackgroundTasksConfig()) {
+        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetBackgroundTasksConfig()));
+    }
+
+    if (serviceConfig.IsEnabled()) {
+        auto service = NBackgroundTasks::CreateService(serviceConfig);
+        setup->LocalServices.push_back(std::make_pair(
+            NBackgroundTasks::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

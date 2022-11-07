@@ -2,8 +2,6 @@
 #include "common.h"
 #include "config.h"
 
-#include <library/cpp/actors/core/actor_virtual.h>
-#include <library/cpp/actors/core/av_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -29,6 +27,16 @@ using TDialogSelect = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb
 using TDialogCreateSession = TDialogPolicyImpl<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse,
     EEvents::EvCreateSessionRequest, EEvents::EvCreateSessionInternalResponse, EEvents::EvCreateSessionResponse>;
 
+template <ui32 evResult = EEvents::EvGeneralYQLResponse>
+using TCustomDialogYQLRequest = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse,
+    EEvents::EvYQLRequest, EEvents::EvYQLInternalResponse, evResult>;
+template <ui32 evResult = EEvents::EvCreateSessionResponse>
+using TCustomDialogCreateSpecialSession = TDialogPolicyImpl<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse,
+    EEvents::EvCreateSessionRequest, EEvents::EvCreateSessionInternalResponse, evResult>;
+
+using TDialogYQLRequest = TCustomDialogYQLRequest<EEvents::EvGeneralYQLResponse>;
+using TDialogCreateSpecialSession = TCustomDialogCreateSpecialSession<EEvents::EvCreateSessionResponse>;
+
 template <class TDialogPolicy>
 class TEvRequestResult: public NActors::TEventLocal<TEvRequestResult<TDialogPolicy>, TDialogPolicy::EvResult> {
 private:
@@ -42,7 +50,14 @@ public:
 
 class TEvRequestFinished: public NActors::TEventLocal<TEvRequestFinished, EEvents::EvRequestFinished> {
 public:
-    TEvRequestFinished() = default;
+};
+
+class TEvRequestStart: public NActors::TEventLocal<TEvRequestStart, EEvents::EvRequestStart> {
+public:
+};
+
+class TEvRequestFailed: public NActors::TEventLocal<TEvRequestFailed, EEvents::EvRequestFailed> {
+public:
 };
 
 template <class TResponse>
@@ -71,6 +86,7 @@ private:
     using TSelf = TYDBRequest<TDialogPolicy>;
     TRequest ProtoRequest;
     const NActors::TActorId ActorFinishId;
+    const NActors::TActorId ActorRestartId;
     const TConfig& Config;
     ui32 Retry = 0;
 protected:
@@ -83,10 +99,6 @@ protected:
 
         }
     };
-    class TEvRequestStart: public NActors::TEventLocal<TEvRequestStart, TDialogPolicy::EvStart> {
-    public:
-    };
-
 public:
     void Bootstrap(const TActorContext& /*ctx*/) {
         TBase::Become(&TBase::TThis::StateMain);
@@ -104,14 +116,22 @@ public:
     void Handle(typename TEvRequestInternalResult::TPtr& ev) {
         if (!ev->Get()->GetFuture().HasValue() || ev->Get()->GetFuture().HasException()) {
             ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot receive result on initialization";
-            TBase::Schedule(Config.GetRetryPeriod(++Retry), new TEvRequestStart);
+            if (ActorRestartId) {
+                TBase::template Sender<TEvRequestFailed>().SendTo(ActorRestartId);
+            } else {
+                TBase::Schedule(Config.GetRetryPeriod(++Retry), new TEvRequestStart);
+            }
             return;
         }
         auto f = ev->Get()->GetFuture();
         TResponse response = f.ExtractValue();
         if (!TOperatorChecker<TResponse>::IsSuccess(response)) {
             ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "incorrect reply: " << response.DebugString();
-            TBase::Schedule(Config.GetRetryPeriod(++Retry), new TEvRequestStart);
+            if (ActorRestartId) {
+                TBase::template Sender<TEvRequestFailed>().SendTo(ActorRestartId);
+            } else {
+                TBase::Schedule(Config.GetRetryPeriod(++Retry), new TEvRequestStart);
+            }
             return;
         }
         TBase::template Sender<TEvRequestResult<TDialogPolicy>>(std::move(response)).SendTo(ActorFinishId);
@@ -131,13 +151,79 @@ public:
         result.Subscribe(replyCallback);
     }
 
-    TYDBRequest(const TRequest& request, const NActors::TActorId actorFinishId, const TConfig& config)
+    TYDBRequest(const TRequest& request, const NActors::TActorId actorFinishId, const TConfig& config, const NActors::TActorId& actorRestartId = {})
         : ProtoRequest(request)
         , ActorFinishId(actorFinishId)
+        , ActorRestartId(actorRestartId)
         , Config(config)
     {
 
     }
 };
+
+template <class TDialogPolicy>
+class TSessionedActorImpl: public NActors::TActorBootstrapped<TSessionedActorImpl<TDialogPolicy>> {
+private:
+    ui32 Retry = 0;
+    const TActorId FinishedActorId;
+
+    static_assert(!std::is_same<TDialogPolicy, TDialogCreateSession>());
+    using TBase = NActors::TActorBootstrapped<TSessionedActorImpl<TDialogPolicy>>;
+    void Handle(TEvRequestResult<TDialogCreateSession>::TPtr& ev) {
+        Ydb::Table::CreateSessionResponse currentFullReply = ev->Get()->GetResult();
+        Ydb::Table::CreateSessionResult session;
+        currentFullReply.operation().result().UnpackTo(&session);
+        const TString sessionId = session.session_id();
+        Y_VERIFY(sessionId);
+        std::optional<typename TDialogPolicy::TRequest> nextRequest = OnSessionId(sessionId);
+        Y_VERIFY(nextRequest);
+        TBase::Register(new TYDBRequest<TDialogPolicy>(*nextRequest, TBase::SelfId(), Config, TBase::SelfId()));
+    }
+protected:
+    const NInternal::NRequest::TConfig Config;
+    virtual std::optional<typename TDialogPolicy::TRequest> OnSessionId(const TString& sessionId) = 0;
+    virtual void OnResult(const typename TDialogPolicy::TResponse& response) = 0;
+public:
+    STATEFN(StateMain) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvRequestResult<TDialogCreateSession>, Handle);
+            hFunc(TEvRequestFailed, Handle);
+            hFunc(TEvRequestStart, Handle);
+            hFunc(TEvRequestResult<TDialogPolicy>, Handle);
+            default:
+                break;
+        }
+    }
+
+    TSessionedActorImpl(const NInternal::NRequest::TConfig& config)
+        : Config(config)
+    {
+
+    }
+
+    void Handle(typename TEvRequestResult<TDialogPolicy>::TPtr& ev) {
+        OnResult(ev->Get()->GetResult());
+        TBase::PassAway();
+    }
+
+    void Handle(typename TEvRequestFailed::TPtr& /*ev*/) {
+        TBase::Schedule(Config.GetRetryPeriod(++Retry), new TEvRequestStart);
+    }
+
+    void Handle(typename TEvRequestFinished::TPtr& /*ev*/) {
+        Retry = 0;
+    }
+
+    void Handle(typename TEvRequestStart::TPtr& /*ev*/) {
+        TBase::Register(new TYDBRequest<TDialogCreateSession>(TDialogCreateSession::TRequest(), TBase::SelfId(), Config, TBase::SelfId()));
+    }
+
+    void Bootstrap() {
+        TBase::Become(&TSessionedActorImpl::StateMain);
+        TBase::template Sender<TEvRequestStart>().SendTo(TBase::SelfId());
+    }
+};
+
+using TSessionedActor = TSessionedActorImpl<TDialogYQLRequest>;
 
 }

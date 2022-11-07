@@ -18,10 +18,15 @@ enum EEvents {
     EvSelectRequest,
     EvSelectInternalResponse,
     EvSelectResponse,
+    EvYQLRequest,
+    EvYQLInternalResponse,
+    EvGeneralYQLResponse,
     EvCreateSessionRequest,
     EvCreateSessionInternalResponse,
     EvCreateSessionResponse,
     EvRequestFinished,
+    EvRequestFailed,
+    EvRequestStart,
     EvEnd
 };
 

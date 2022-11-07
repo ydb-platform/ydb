@@ -92,6 +92,8 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-services-rate_limiter
   ydb-services-monitoring
   services-metadata-ds_table
+  services-bg_tasks-ds_table
+  ydb-services-bg_tasks
   ydb-services-ydb
   ydb-services-yq
   ydb-core-http_proxy

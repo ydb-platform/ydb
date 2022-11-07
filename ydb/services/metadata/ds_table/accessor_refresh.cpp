@@ -18,9 +18,7 @@ void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
     Y_VERIFY((size_t)qResult.result_sets().size() == SnapshotConstructor->GetTables().size());
     *CurrentSelection.mutable_result_sets() = std::move(*qResult.mutable_result_sets());
     auto parsedSnapshot = SnapshotConstructor->ParseSnapshot(CurrentSelection, RequestedActuality);
-    if (!!parsedSnapshot) {
-        CurrentSnapshot = parsedSnapshot;
-    } else {
+    if (!parsedSnapshot) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot parse current snapshot";
     }
 
@@ -36,6 +34,8 @@ void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
                 }
             }
         );
+    } else {
+        Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
     }
 }
 
@@ -80,9 +80,14 @@ void TDSAccessorRefresher::OnInitialized() {
 }
 
 TDSAccessorRefresher::TDSAccessorRefresher(const TConfig& config, ISnapshotParser::TPtr snapshotConstructor)
-    : TBase(config, snapshotConstructor->GetTableSchema())
+    : TBase(config.GetRequestConfig())
     , SnapshotConstructor(snapshotConstructor)
+    , Config(config)
 {
+}
+
+TVector<NKikimr::NMetadataProvider::ITableModifier::TPtr> TDSAccessorRefresher::BuildModifiers() const {
+    return SnapshotConstructor->GetTableSchema();
 }
 
 }

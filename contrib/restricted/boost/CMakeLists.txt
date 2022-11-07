@@ -92,6 +92,7 @@ add_subdirectory(unordered)
 add_subdirectory(utility)
 add_subdirectory(uuid)
 add_subdirectory(variant)
+add_subdirectory(variant2)
 add_subdirectory(winapi)
 add_subdirectory(xpressive)
 

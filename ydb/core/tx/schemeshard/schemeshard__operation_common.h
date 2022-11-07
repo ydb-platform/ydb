@@ -887,9 +887,12 @@ public:
         // OlapStore tracks all tables that are under operation, make sure to unlink
         if (context.SS->ColumnTables.contains(pathId)) {
             auto tableInfo = context.SS->ColumnTables.at(pathId);
-            if (context.SS->OlapStores.contains(tableInfo->OlapStorePathId)) {
-                auto storeInfo = context.SS->OlapStores.at(tableInfo->OlapStorePathId);
-                storeInfo->ColumnTablesUnderOperation.erase(pathId);
+            if (tableInfo->OlapStorePathId) {
+                auto& storePathId = *tableInfo->OlapStorePathId;
+                if (context.SS->OlapStores.contains(storePathId)) {
+                    auto storeInfo = context.SS->OlapStores.at(storePathId);
+                    storeInfo->ColumnTablesUnderOperation.erase(pathId);
+                }
             }
         }
 

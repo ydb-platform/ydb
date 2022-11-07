@@ -282,20 +282,39 @@ bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& me
     return CheckColumns(batch, colNames, rowsCount);
 }
 
+struct TestTableDescription {
+    TVector<std::pair<TString, TTypeInfo>> Schema = TTestSchema::YdbSchema();
+    TVector<std::pair<TString, TTypeInfo>> Pk = TTestSchema::YdbPkSchema();
+    bool InStore = true;
+};
+
+void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
+                 const TestTableDescription& table, TString codec = "none") {
+    NOlap::TSnapshot snap = {10, 10};
+    TString txBody;
+    if (table.InStore) {
+        txBody = TTestSchema::CreateTableTxBody(
+            pathId, table.Schema, table.Pk, TTestSchema::TTableSpecials().WithCodec(codec));
+
+    } else {
+        txBody = TTestSchema::CreateStandaloneTableTxBody(
+            pathId, table.Schema, table.Pk, TTestSchema::TTableSpecials().WithCodec(codec));
+    }
+    bool ok = ProposeSchemaTx(runtime, sender, txBody, snap);
+    UNIT_ASSERT(ok);
+
+    PlanSchemaTx(runtime, sender, snap);
+}
+
 void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TVector<std::pair<TString, TTypeInfo>>& schema = TTestSchema::YdbSchema(),
                  const TVector<std::pair<TString, TTypeInfo>>& pk = TTestSchema::YdbPkSchema(),
                  TString codec = "none") {
-    NOlap::TSnapshot snap = {10, 10};
-    bool ok = ProposeSchemaTx(runtime, sender,
-                              TTestSchema::CreateTableTxBody(pathId, schema, pk,
-                                                             TTestSchema::TTableSpecials().WithCodec(codec)),
-                              snap);
-    UNIT_ASSERT(ok);
-    PlanSchemaTx(runtime, sender, snap);
+    TestTableDescription table{schema, pk, true};
+    SetupSchema(runtime, sender, pathId, table, codec);
 }
 
-void TestWrite(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema) {
+void TestWrite(const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -312,7 +331,10 @@ void TestWrite(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema) {
     ui64 writeId = 0;
     ui64 tableId = 1;
 
-    SetupSchema(runtime, sender, tableId, ydbSchema);
+    SetupSchema(runtime, sender, tableId, table);
+
+    const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
+
     bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema));
     UNIT_ASSERT(ok);
 
@@ -453,9 +475,7 @@ void TestWriteReadDup() {
     }
 }
 
-void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = TTestSchema::YdbSchema(),
-                   const TVector<std::pair<TString, TTypeInfo>>& testYdbPk = TTestSchema::YdbPkSchema(),
-                   TString codec = "") {
+void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -498,7 +518,10 @@ void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeInfo>>& y
     ui64 writeId = 0;
     ui64 tableId = 1;
 
-    SetupSchema(runtime, sender, tableId, ydbSchema, testYdbPk, codec);
+    SetupSchema(runtime, sender, tableId, table, codec);
+
+    const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
+    const TVector<std::pair<TString, TTypeInfo>>& testYdbPk = table.Pk;
 
     // ----xx
     // -----xx..
@@ -1474,11 +1497,27 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, 
 
 Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(Write) {
-        TestWrite(TTestSchema::YdbSchema());
+        TestTableDescription table;
+        TestWrite(table);
+    }
+
+    Y_UNIT_TEST(WriteStandalone) {
+        TestTableDescription table;
+        table.InStore = false;
+        TestWrite(table);
     }
 
     Y_UNIT_TEST(WriteExoticTypes) {
-        TestWrite(TTestSchema::YdbExoticSchema());
+        TestTableDescription table;
+        table.Schema = TTestSchema::YdbExoticSchema();
+        TestWrite(table);
+    }
+
+    Y_UNIT_TEST(WriteStandaloneExoticTypes) {
+        TestTableDescription table;
+        table.Schema = TTestSchema::YdbExoticSchema();
+        table.InStore = false;
+        TestWrite(table);
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {
@@ -1486,23 +1525,45 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(WriteRead) {
-        TestWriteRead(false);
+        TestTableDescription table;
+        TestWriteRead(false, table);
+    }
+
+    Y_UNIT_TEST(WriteReadStandalone) {
+        TestTableDescription table;
+        table.InStore = false;
+        TestWriteRead(false, table);
     }
 
     Y_UNIT_TEST(WriteReadExoticTypes) {
-        TestWriteRead(false, TTestSchema::YdbExoticSchema());
+        TestTableDescription table;
+        table.Schema = TTestSchema::YdbExoticSchema();
+        TestWriteRead(false, table);
+    }
+
+    Y_UNIT_TEST(WriteReadStandaloneExoticTypes) {
+        TestTableDescription table;
+        table.Schema = TTestSchema::YdbExoticSchema();
+        table.InStore = false;
+        TestWriteRead(false, table);
     }
 
     Y_UNIT_TEST(RebootWriteRead) {
         TestWriteRead(true);
     }
 
+    Y_UNIT_TEST(RebootWriteReadStandalone) {
+        TestTableDescription table;
+        table.InStore = false;
+        TestWriteRead(true, table);
+    }
+
     Y_UNIT_TEST(WriteReadNoCompression) {
-        TestWriteRead(true, TTestSchema::YdbSchema(), TTestSchema::YdbPkSchema(), "none");
+        TestWriteRead(true, {}, "none");
     }
 
     Y_UNIT_TEST(WriteReadZSTD) {
-        TestWriteRead(true, TTestSchema::YdbSchema(), TTestSchema::YdbPkSchema(), "zstd");
+        TestWriteRead(true, {}, "zstd");
     }
 
     Y_UNIT_TEST(CompactionInGranule) {

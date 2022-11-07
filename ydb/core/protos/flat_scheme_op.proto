@@ -646,6 +646,9 @@ message TColumnTableDescription {
     // Internal fields that make sure versions always increase when presets are switched
     optional uint64 SchemaPresetVersionAdj = 11;
     optional uint64 TtlSettingsPresetVersionAdj = 12;
+
+    // Channels for standalone column table
+    optional TColumnStorageConfig StorageConfig = 13;
 }
 
 message TAlterColumnTable {

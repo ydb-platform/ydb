@@ -47,7 +47,7 @@ struct Schema : NIceDb::Schema {
         LastGcBarrierGen = 8,
         LastGcBarrierStep = 9,
         LastExportNumber = 10,
-        StorePathId = 11,
+        OwnerPathId = 11,
         OwnerPath = 12,
     };
 
@@ -95,7 +95,7 @@ struct Schema : NIceDb::Schema {
         struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
         struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TSchemaPresetVersionInfo
+        struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TCommonSchemaVersionInfo
 
         using TKey = TableKey<Id, SinceStep, SinceTxId>;
         using TColumns = TableColumns<Id, SinceStep, SinceTxId, InfoProto>;

@@ -13,23 +13,206 @@ namespace NSchemeShard {
 
 namespace {
 
-TColumnTableInfo::TPtr CreateColumnTable(
-        const NKikimrSchemeOp::TColumnTableDescription& opSrc,
-        TOlapStoreInfo::TPtr storeInfo, const TSubDomainInfo& subDomain,
-        TEvSchemeShard::EStatus& status, TString& errStr,
-        TSchemeShard* ss)
+bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& schema, TString& errStr) {
+    proto.SetNextColumnId(1);
+    proto.SetVersion(1);
+
+    if (!TOlapSchema::UpdateProto(proto, errStr)) {
+        return false;
+    }
+    return schema.Parse(proto, errStr);
+}
+
+bool ValidateSchema(const TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSchema& opSchema,
+                    TEvSchemeShard::EStatus& status, TString& errStr)
 {
-    Y_UNUSED(subDomain);
+    const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
-    TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo;
-    tableInfo->AlterVersion = 1;
-    tableInfo->Description.CopyFrom(opSrc);
+    ui32 lastColumnId = 0;
+    THashSet<ui32> usedColumns;
+    for (const auto& colProto : opSchema.GetColumns()) {
+        if (colProto.GetName().empty()) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = "Columns cannot have an empty name";
+            return false;
+        }
+        const TString& colName = colProto.GetName();
+        auto* col = schema.FindColumnByName(colName);
+        if (!col) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder()
+                << "Column '" << colName << "' does not match schema preset";
+            return false;
+        }
+        if (colProto.HasId() && colProto.GetId() != col->Id) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder()
+                << "Column '" << colName << "' has id " << colProto.GetId() << " that does not match schema preset";
+            return false;
+        }
 
-    auto& op = tableInfo->Description;
+        if (!usedColumns.insert(col->Id).second) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder() << "Column '" << colName << "' is specified multiple times";
+            return false;
+        }
+        if (col->Id < lastColumnId) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = "Column order does not match schema preset";
+            return false;
+        }
+        lastColumnId = col->Id;
 
+        if (colProto.HasTypeId()) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder() << "Cannot set TypeId for column '" << colName << "', use Type";
+            return false;
+        }
+        if (!colProto.HasType()) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder() << "Missing Type for column '" << colName << "'";
+            return false;
+        }
+
+        auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
+        const NScheme::IType* type = typeRegistry->GetType(typeName);
+        NScheme::TTypeInfo typeInfo;
+        if (!type || !NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+            auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            if (!typeDesc) {
+                status = NKikimrScheme::StatusSchemeError;
+                errStr = TStringBuilder()
+                    << "Type '" << colProto.GetType() << "' specified for column '" << colName << "' is not supported";
+                return false;
+            }
+            typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+        } else {
+            typeInfo = NScheme::TTypeInfo(type->GetTypeId());
+        }
+
+        if (typeInfo != col->Type) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder()
+                << "Type '" << TypeName(typeInfo) << "' specified for column '" << colName
+                << "' does not match schema preset type '" << TypeName(col->Type) << "'";
+            return false;
+        }
+    }
+
+    for (auto& pr : schema.Columns) {
+        if (!usedColumns.contains(pr.second.Id)) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = "Specified schema is missing some schema preset columns";
+            return false;
+        }
+    }
+
+    TVector<ui32> keyColumnIds;
+    for (const TString& keyName : opSchema.GetKeyColumnNames()) {
+        auto* col = schema.FindColumnByName(keyName);
+        if (!col) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder() << "Unknown key column '" << keyName << "'";
+            return false;
+        }
+        keyColumnIds.push_back(col->Id);
+    }
+    if (keyColumnIds != schema.KeyColumnIds) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = "Specified schema key columns not matching schema preset";
+        return false;
+    }
+
+    if (opSchema.GetEngine() != schema.Engine) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = "Specified schema engine does not match schema preset";
+        return false;
+    }
+    return true;
+}
+
+bool SetSharding(const TOlapSchema& schema, NKikimrSchemeOp::TColumnTableDescription& op,
+                 TColumnTableInfo::TPtr tableInfo,
+                 TEvSchemeShard::EStatus& status, TString& errStr)
+{
+    ui32 shardsCount = Max(ui32(1), op.GetColumnShardCount());
+    if (op.HasSharding()) {
+        tableInfo->Sharding = std::move(*op.MutableSharding());
+    } else if (shardsCount < 2) {
+        tableInfo->Sharding.MutableRandomSharding();
+    } else {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = Sprintf("Sharding is not set");
+        return false;
+    }
+
+    op.ClearSharding();
+
+    switch (tableInfo->Sharding.Method_case()) {
+        case NKikimrSchemeOp::TColumnTableSharding::kRandomSharding: {
+            // Random sharding implies non-unique primary key
+            if (shardsCount > 1) {
+                tableInfo->Sharding.SetUniquePrimaryKey(false);
+            }
+            break;
+        }
+        case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
+            auto& sharding = *tableInfo->Sharding.MutableHashSharding();
+            if (sharding.ColumnsSize() == 0) {
+                status = NKikimrScheme::StatusSchemeError;
+                errStr = Sprintf("Hash sharding requires a non-empty list of columns");
+                return false;
+            }
+            bool keysOnly = true;
+            for (const TString& columnName : sharding.GetColumns()) {
+                auto* pColumn = schema.FindColumnByName(columnName);
+                if (!pColumn) {
+                    status = NKikimrScheme::StatusSchemeError;
+                    errStr = Sprintf("Hash sharding is using an unknown column '%s'", columnName.c_str());
+                    return false;
+                }
+                if (!pColumn->IsKeyColumn()) {
+                    keysOnly = false;
+                }
+            }
+            sharding.SetUniqueShardKey(true);
+            tableInfo->Sharding.SetUniquePrimaryKey(keysOnly);
+            break;
+        }
+        default: {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = "Unsupported sharding method";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool CheckSupported(const NKikimrSchemeOp::TColumnTableDescription& op,
+                    TEvSchemeShard::EStatus& status, TString& errStr)
+{
     if (op.HasRESERVED_TtlSettingsPresetName() || op.HasRESERVED_TtlSettingsPresetId()) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = "TTL presets are not supported";
+        return false;
+    }
+    if (op.HasRESERVED_TtlSettingsPresetName() || op.HasRESERVED_TtlSettingsPresetId()) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = "TTL presets are not supported";
+        return false;
+    }
+    return true;
+}
+
+TColumnTableInfo::TPtr CreateColumnTableInStore(
+        TColumnTableInfo::TPtr& tableInfo,
+        TOlapStoreInfo::TPtr storeInfo,
+        ui32 columnShardCount,
+        TEvSchemeShard::EStatus& status, TString& errStr)
+{
+    auto& op = tableInfo->Description;
+
+    if (!CheckSupported(op, status, errStr)) {
         return nullptr;
     }
 
@@ -43,7 +226,7 @@ TColumnTableInfo::TPtr CreateColumnTable(
         const TString presetName = op.GetSchemaPresetName();
         if (!storeInfo->SchemaPresetByName.contains(presetName)) {
             status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified schema preset '%s' does not exist in olap store", presetName.c_str());
+            errStr = Sprintf("Specified schema preset '%s' does not exist in tablestore", presetName.c_str());
             return nullptr;
         }
         const ui32 presetId = storeInfo->SchemaPresetByName.at(presetName);
@@ -52,7 +235,7 @@ TColumnTableInfo::TPtr CreateColumnTable(
         }
         if (op.GetSchemaPresetId() != presetId) {
             status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified schema preset '%s' and id %" PRIu32 " do not match in olap store", presetName.c_str(), presetId);
+            errStr = Sprintf("Specified schema preset '%s' and id %" PRIu32 " do not match in tablestore", presetName.c_str(), presetId);
             return nullptr;
         }
         pSchema = &storeInfo->SchemaPresets.at(presetId);
@@ -60,7 +243,7 @@ TColumnTableInfo::TPtr CreateColumnTable(
         const ui32 presetId = op.GetSchemaPresetId();
         if (!storeInfo->SchemaPresets.contains(presetId)) {
             status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified schema preset %" PRIu32 " does not exist in olap store", presetId);
+            errStr = Sprintf("Specified schema preset %" PRIu32 " does not exist in tablestore", presetId);
             return nullptr;
         }
         const TString& presetName = storeInfo->SchemaPresets.at(presetId).Name;
@@ -68,120 +251,16 @@ TColumnTableInfo::TPtr CreateColumnTable(
         pSchema = &storeInfo->SchemaPresets.at(presetId);
     }
 
-    Y_VERIFY(pSchema, "Expected to find a preset schema");
+    Y_VERIFY(pSchema, "No schema preset id/name for in-store column table");
 
     if (op.HasSchema()) {
         auto& opSchema = op.GetSchema();
-        const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
-        ui32 lastColumnId = 0;
-        THashSet<ui32> usedColumns;
-        for (const auto& colProto : opSchema.GetColumns()) {
-            if (colProto.GetName().empty()) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = "Columns cannot have an empty name";
-                return nullptr;
-            }
-            const TString& colName = colProto.GetName();
-            auto* col = pSchema->FindColumnByName(colName);
-            if (!col) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder()
-                    << "Column '" << colName << "' does not match schema preset";
-                return nullptr;
-            }
-            if (colProto.HasId() && colProto.GetId() != col->Id) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder()
-                    << "Column '" << colName << "' has id " << colProto.GetId() << " that does not match schema preset";
-                return nullptr;
-            }
-
-            if (!usedColumns.insert(col->Id).second) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder() << "Column '" << colName << "' is specified multiple times";
-                return nullptr;
-            }
-            if (col->Id < lastColumnId) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = "Column order does not match schema preset";
-                return nullptr;
-            }
-            lastColumnId = col->Id;
-
-            if (colProto.HasTypeId()) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder() << "Cannot set TypeId for column '" << colName << "', use Type";
-                return nullptr;
-            }
-            if (!colProto.HasType()) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder() << "Missing Type for column '" << colName << "'";
-                return nullptr;
-            }
-
-            auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
-            const NScheme::IType* type = typeRegistry->GetType(typeName);
-            NScheme::TTypeInfo typeInfo;
-            if (!type || !NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-                if (!typeDesc) {
-                    status = NKikimrScheme::StatusSchemeError;
-                    errStr = TStringBuilder()
-                        << "Type '" << colProto.GetType() << "' specified for column '" << colName << "' is not supported";
-                    return nullptr;
-                }
-                typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-            } else {
-                typeInfo = NScheme::TTypeInfo(type->GetTypeId());
-            }
-
-            if (typeInfo != col->Type) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder()
-                    << "Type '" << colProto.GetType() << "' specified for column '" << colName
-                    << "' does not match schema preset";
-                return nullptr;
-            }
-        }
-
-        for (auto& pr : pSchema->Columns) {
-            if (!usedColumns.contains(pr.second.Id)) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = "Specified schema is missing some schema preset columns";
-                return nullptr;
-            }
-        }
-
-        TVector<ui32> keyColumnIds;
-        for (const TString& keyName : opSchema.GetKeyColumnNames()) {
-            auto* col = pSchema->FindColumnByName(keyName);
-            if (!col) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder() << "Unknown key column '" << keyName << "'";
-                return nullptr;
-            }
-            keyColumnIds.push_back(col->Id);
-        }
-        if (keyColumnIds != pSchema->KeyColumnIds) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = "Specified schema key columns not matching schema preset";
-            return nullptr;
-        }
-
-        if (opSchema.GetEngine() != pSchema->Engine) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = "Specified schema engine does not match schema preset";
+        if (!ValidateSchema(*pSchema, opSchema, status, errStr)) {
             return nullptr;
         }
 
         op.ClearSchema();
-    }
-
-    if (op.HasRESERVED_TtlSettingsPresetName() || op.HasRESERVED_TtlSettingsPresetId()) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = "TTL presets are not supported";
-        return nullptr;
     }
 
     if (op.HasTtlSettings()) {
@@ -196,52 +275,10 @@ TColumnTableInfo::TPtr CreateColumnTable(
         }
     }
 
-    if (op.HasSharding()) {
-        tableInfo->Sharding = std::move(*op.MutableSharding());
-        op.ClearSharding();
-    } else {
-        // Use default random sharding
-        tableInfo->Sharding.MutableRandomSharding();
+    if (!SetSharding(*pSchema, op, tableInfo, status, errStr)) {
+        return nullptr;
     }
 
-    switch (tableInfo->Sharding.Method_case()) {
-        case NKikimrSchemeOp::TColumnTableSharding::kRandomSharding: {
-            // Random sharding implies non-unique primary key
-            tableInfo->Sharding.SetUniquePrimaryKey(false);
-            break;
-        }
-        case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
-            auto& sharding = *tableInfo->Sharding.MutableHashSharding();
-            if (sharding.ColumnsSize() == 0) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = Sprintf("Hash sharding requires a non-empty list of columns");
-                return nullptr;
-            }
-            Y_VERIFY(pSchema);
-            bool keysOnly = true;
-            for (const TString& columnName : sharding.GetColumns()) {
-                auto* pColumn = pSchema->FindColumnByName(columnName);
-                if (!pColumn) {
-                    status = NKikimrScheme::StatusSchemeError;
-                    errStr = Sprintf("Hash sharding is using an unknown column '%s'", columnName.c_str());
-                    return nullptr;
-                }
-                if (!pColumn->IsKeyColumn()) {
-                    keysOnly = false;
-                }
-            }
-            sharding.SetUniqueShardKey(true);
-            tableInfo->Sharding.SetUniquePrimaryKey(keysOnly);
-            break;
-        }
-        default: {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = "Unsupported sharding method";
-            return nullptr;
-        }
-    }
-
-    const ui32 columnShardCount = Max(ui32(1), op.GetColumnShardCount());
     if (columnShardCount > storeInfo->ColumnShards.size()) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("Cannot create table with %" PRIu32 " column shards, only %" PRIu32 " are available",
@@ -249,13 +286,23 @@ TColumnTableInfo::TPtr CreateColumnTable(
         return nullptr;
     }
 
-    tableInfo->ColumnShards.reserve(storeInfo->ColumnShards.size());
-    for (const auto& shardIdx : storeInfo->ColumnShards) {
+    return tableInfo;
+}
+
+void SetShardingTablets(
+        TColumnTableInfo::TPtr& tableInfo,
+        const TVector<TShardIdx>& columnShards, ui32 columnShardCount, bool shuffle,
+        TSchemeShard* ss)
+{
+    tableInfo->ColumnShards.reserve(columnShards.size());
+    for (const auto& shardIdx : columnShards) {
         auto* shardInfo = ss->ShardInfos.FindPtr(shardIdx);
         Y_VERIFY(shardInfo, "ColumnShard not found");
         tableInfo->ColumnShards.push_back(shardInfo->TabletID.GetValue());
     }
-    ShuffleRange(tableInfo->ColumnShards);
+    if (shuffle) {
+        ShuffleRange(tableInfo->ColumnShards);
+    }
     tableInfo->ColumnShards.resize(columnShardCount);
 
     tableInfo->Sharding.SetVersion(1);
@@ -267,13 +314,59 @@ TColumnTableInfo::TPtr CreateColumnTable(
     }
 
     tableInfo->Sharding.ClearAdditionalColumnShards();
+}
 
-    // Don't allow users to set these fields
-    op.ClearSchemaPresetVersionAdj();
-    op.ClearTtlSettingsPresetVersionAdj();
+TColumnTableInfo::TPtr CreateColumnTable(
+        TColumnTableInfo::TPtr& tableInfo,
+        TEvSchemeShard::EStatus& status, TString& errStr)
+{
+    auto& op = tableInfo->Description;
+
+    if (!CheckSupported(op, status, errStr)) {
+        return nullptr;
+    }
+
+    if (op.HasSchemaPresetName() || op.HasSchemaPresetId()) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = "Schema presets are not supported for standalone column tables";
+        return nullptr;
+    }
+
+    if (!op.HasSchema()) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = "No schema for column table specified";
+        return nullptr;
+    }
+
+    NKikimrSchemeOp::TColumnTableSchema* opSchema = op.MutableSchema();
+    tableInfo->Schema = TOlapSchema();
+    auto& schema = *tableInfo->Schema;
+
+    if (!PrepareSchema(*opSchema, schema, errStr)) {
+        status = NKikimrScheme::StatusSchemeError;
+        return nullptr;
+    }
+
+    if (op.HasTtlSettings()) {
+        op.MutableTtlSettings()->SetVersion(1);
+
+        if (!ValidateTtlSettings(op.GetTtlSettings(), schema.Columns, schema.ColumnsByName, errStr)) {
+            status = NKikimrScheme::StatusInvalidParameter;
+            return nullptr;
+        }
+    }
+
+    if (!SetSharding(schema, op, tableInfo, status, errStr)) {
+        return nullptr;
+    }
+
+    if (!op.GetStorageConfig().HasDataChannelCount()) {
+        op.MutableStorageConfig()->SetDataChannelCount(1);
+    }
 
     return tableInfo;
 }
+
 
 class TConfigureParts: public TSubOperationState {
 private:
@@ -308,49 +401,66 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
-        TString pathString = path.PathString();
 
         TColumnTableInfo::TPtr pendingInfo = context.SS->ColumnTables[pathId];
         Y_VERIFY(pendingInfo);
         Y_VERIFY(pendingInfo->AlterData);
         TColumnTableInfo::TPtr tableInfo = pendingInfo->AlterData;
 
-        auto olapStorePath = path.FindOlapStore();
-        Y_VERIFY(olapStorePath, "Unexpected failure to find an olap store");
-        auto storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
-
         txState->ClearShardsInProgress();
 
         auto seqNo = context.SS->StartRound(*txState);
 
+        Y_VERIFY(tableInfo->ColumnShards.empty() || tableInfo->OwnedColumnShards.empty());
+
         TString columnShardTxBody;
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        context.SS->FillSeqNo(tx, seqNo);
         {
-            NKikimrTxColumnShard::TSchemaTxBody tx;
-            context.SS->FillSeqNo(tx, seqNo);
+            NKikimrTxColumnShard::TCreateTable* create{};
+            if (tableInfo->IsStandalone()) {
+                Y_VERIFY(tableInfo->ColumnShards.empty());
+                Y_VERIFY(tableInfo->Description.HasSchema());
 
-            auto* create = tx.MutableEnsureTables()->AddTables();
+                auto* init = tx.MutableInitShard();
+                init->SetDataChannelCount(tableInfo->Description.GetStorageConfig().GetDataChannelCount());
+                init->SetOwnerPathId(pathId.LocalPathId);
+                init->SetOwnerPath(path.PathString());
 
-            create->SetPathId(pathId.LocalPathId);
-            if (tableInfo->Description.HasSchema()) {
+                create = init->AddTables();
                 create->MutableSchema()->CopyFrom(tableInfo->Description.GetSchema());
-            }
-            if (tableInfo->Description.HasSchemaPresetId()) {
+            } else {
+                Y_VERIFY(tableInfo->OwnedColumnShards.empty());
+                Y_VERIFY(!tableInfo->Description.HasSchema());
+                Y_VERIFY(tableInfo->Description.HasSchemaPresetId());
+
+                create = tx.MutableEnsureTables()->AddTables();
+
+                if (tableInfo->Description.HasSchemaPresetVersionAdj()) {
+                    create->SetSchemaPresetVersionAdj(tableInfo->Description.GetSchemaPresetVersionAdj());
+                }
+
+                auto olapStorePath = path.FindOlapStore();
+                Y_VERIFY(olapStorePath, "Unexpected failure to find a tablestore");
+                auto storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
+
                 const ui32 presetId = tableInfo->Description.GetSchemaPresetId();
                 Y_VERIFY(storeInfo->SchemaPresets.contains(presetId),
-                    "Failed to find schema preset %" PRIu32 " in an olap store", presetId);
+                    "Failed to find schema preset %" PRIu32 " in a tablestore", presetId);
                 auto& preset = storeInfo->SchemaPresets.at(presetId);
                 size_t presetIndex = preset.ProtoIndex;
                 create->MutableSchemaPreset()->CopyFrom(storeInfo->Description.GetSchemaPresets(presetIndex));
             }
+
+            Y_VERIFY(create);
+            create->SetPathId(pathId.LocalPathId);
+
             if (tableInfo->Description.HasTtlSettings()) {
                 create->MutableTtlSettings()->CopyFrom(tableInfo->Description.GetTtlSettings());
             }
-            if (tableInfo->Description.HasSchemaPresetVersionAdj()) {
-                create->SetSchemaPresetVersionAdj(tableInfo->Description.GetSchemaPresetVersionAdj());
-            }
-
-            Y_VERIFY(tx.SerializeToString(&columnShardTxBody));
         }
+
+        Y_VERIFY(tx.SerializeToString(&columnShardTxBody));
 
         for (auto& shard : txState->Shards) {
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
@@ -423,6 +533,11 @@ public:
         Y_VERIFY(pending);
         TColumnTableInfo::TPtr table = pending->AlterData;
         Y_VERIFY(table);
+        if (table->IsStandalone()) {
+            Y_VERIFY(table->ColumnShards.empty());
+            SetShardingTablets(table, table->OwnedColumnShards, table->OwnedColumnShards.size(), false, context.SS);
+        }
+
         context.SS->ColumnTables[pathId] = table;
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -544,13 +659,18 @@ class TCreateColumnTable: public TSubOperation {
     const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
-    TTxState::ETxState NextState() {
-        return TTxState::ConfigureParts;
+    TTxState::ETxState NextState(bool inStore) {
+        if (inStore) {
+            return TTxState::ConfigureParts;
+        }
+        return TTxState::CreateParts;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) {
         switch(state) {
         case TTxState::Waiting:
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose;
         case TTxState::Propose:
@@ -568,6 +688,8 @@ class TCreateColumnTable: public TSubOperation {
 
         switch(state) {
         case TTxState::Waiting:
+        case TTxState::CreateParts:
+            return TPtr(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
             return TPtr(new TConfigureParts(OperationId));
         case TTxState::Propose:
@@ -610,6 +732,8 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         auto& createDescription = Transaction.GetCreateColumnTable();
         const TString& name = createDescription.GetName();
+        const ui32 shardsCount = Max(ui32(1), createDescription.GetColumnShardCount());
+        auto opTxId = OperationId.GetTxId();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateColumnTable Propose"
@@ -618,8 +742,9 @@ public:
                         << ", at schemeshard: " << ssId);
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
-        auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
+        TOlapStoreInfo::TPtr storeInfo;
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
@@ -629,7 +754,6 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .HasOlapStore()
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
@@ -639,6 +763,29 @@ public:
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
                 return result;
+            }
+
+            if (auto olapStorePath = parentPath.FindOlapStore()) {
+                storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
+                Y_VERIFY(storeInfo, "Unexpected failure to find an tablestore info");
+
+                NSchemeShard::TPath::TChecker ckecksStore = olapStorePath.Check();
+                ckecksStore
+                    .NotUnderDomainUpgrade()
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .NotUnderDeleting()
+                    .IsOlapStore()
+                    .NotUnderOperation();
+
+                if (!ckecksStore) {
+                    TString explain = TStringBuilder() << "tablestore fail checks"
+                                                    << ", path: " << olapStorePath.PathString();
+                    auto status = ckecksStore.GetStatus(&explain);
+                    result->SetError(status, explain);
+                    return result;
+                }
             }
         }
 
@@ -664,6 +811,8 @@ public:
                     .IsValidLeafName()
                     .DepthLimit()
                     .PathsLimit()
+                    .ShardsLimit(storeInfo ? 0 : shardsCount)
+                    .PathShardsLimit(storeInfo ? 0 : shardsCount)
                     .DirChildrenLimit()
                     .IsValidACL(acl);
             }
@@ -688,40 +837,35 @@ public:
             return result;
         }
 
-        auto olapStorePath = dstPath.FindOlapStore();
-        Y_VERIFY(olapStorePath, "Unexpected failure to find an olap store");
-        auto storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
-        {
-            NSchemeShard::TPath::TChecker checks = olapStorePath.Check();
-            checks
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .IsOlapStore()
-                .NotUnderOperation();
-
-            if (!checks) {
-                TString explain = TStringBuilder() << "olap store fail checks"
-                                                   << ", path: " << olapStorePath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
-                return result;
-            }
-        }
-
         if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Olap schema operations are not supported");
             return result;
         }
 
-        TColumnTableInfo::TPtr tableInfo = CreateColumnTable(createDescription, storeInfo, *parentPath.DomainInfo(), status, errStr, context.SS);
+        TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo;
+        {
+            tableInfo->AlterVersion = 1;
+            tableInfo->Description.CopyFrom(createDescription);
+            // Don't allow users to set these fields
+            tableInfo->Description.ClearSchemaPresetVersionAdj();
+            tableInfo->Description.ClearTtlSettingsPresetVersionAdj();
+        }
+
+        if (storeInfo) {
+            tableInfo = CreateColumnTableInStore(tableInfo, storeInfo, shardsCount, status, errStr);
+            if (tableInfo) {
+                SetShardingTablets(tableInfo, storeInfo->ColumnShards, shardsCount, true, context.SS);
+            }
+        } else {
+            tableInfo = CreateColumnTable(tableInfo, status, errStr);
+        }
+
         if (!tableInfo) {
             result->SetError(status, errStr);
             return result;
         }
+
         if (!context.SS->CheckInFlightLimit(TTxState::TxCreateColumnTable, errStr)) {
             result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
@@ -733,49 +877,111 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_COLUMN_TABLE_COUNT].Add(1);
 
         TPathId pathId = dstPath.Base()->PathId;
-        dstPath.Base()->CreateTxId = OperationId.GetTxId();
-        dstPath.Base()->LastTxId = OperationId.GetTxId();
+        dstPath.Base()->CreateTxId = opTxId;
+        dstPath.Base()->LastTxId = opTxId;
         dstPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
         dstPath.Base()->PathType = TPathElement::EPathType::EPathTypeColumnTable;
 
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateColumnTable, pathId);
-        txState.State = TTxState::ConfigureParts;
 
-        txState.Shards.reserve(tableInfo->ColumnShards.size());
-        for (ui64 columnShardId : tableInfo->ColumnShards) {
-            auto tabletId = TTabletId(columnShardId);
-            auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
-            TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
-            txState.Shards.emplace_back(shardIdx, ETabletType::ColumnShard, TTxState::ConfigureParts);
-            // N.B. we seem to only need CurrentTxId when creating/modifying tablets
-            shardInfo.CurrentTxId = OperationId.GetTxId();
-            context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
+        Y_VERIFY(tableInfo);
+        if (storeInfo) {
+            auto olapStorePath = parentPath.FindOlapStore();
+
+            txState.State = TTxState::ConfigureParts;
+            txState.Shards.reserve(tableInfo->ColumnShards.size());
+
+            for (ui64 columnShardId : tableInfo->ColumnShards) {
+                auto tabletId = TTabletId(columnShardId);
+                auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
+                TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
+                txState.Shards.emplace_back(shardIdx, ETabletType::ColumnShard, TTxState::ConfigureParts);
+                // N.B. we seem to only need CurrentTxId when creating/modifying tablets
+                shardInfo.CurrentTxId = opTxId;
+                context.SS->PersistShardTx(db, shardIdx, opTxId);
+            }
+
+            TColumnTableInfo::TPtr pending = new TColumnTableInfo;
+            pending->AlterData = tableInfo;
+            pending->SetOlapStorePathId(olapStorePath->PathId);
+            tableInfo->SetOlapStorePathId(olapStorePath->PathId);
+            context.SS->ColumnTables[pathId] = pending;
+            storeInfo->ColumnTables.insert(pathId);
+            storeInfo->ColumnTablesUnderOperation.insert(pathId);
+            context.SS->PersistColumnTable(db, pathId, *pending);
+            context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
+            context.SS->IncrementPathDbRefCount(pathId);
+
+            if (parentPath.Base()->HasActiveChanges()) {
+                TTxId parentTxId = parentPath.Base()->PlannedToCreate()
+                    ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+                context.OnComplete.Dependence(parentTxId, opTxId);
+            }
+
+            // Sequentially chain operations in the same store
+            if (context.SS->Operations.contains(olapStorePath.Base()->LastTxId)) {
+                context.OnComplete.Dependence(olapStorePath.Base()->LastTxId, opTxId);
+            }
+            olapStorePath.Base()->LastTxId = opTxId;
+            context.SS->PersistLastTxId(db, olapStorePath.Base());
+        } else {
+            NKikimrSchemeOp::TColumnStorageConfig storageConfig; // default
+            storageConfig.SetDataChannelCount(1);
+
+            TChannelsBindings channelsBindings;
+            if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(),
+                                                     storageConfig, channelsBindings, errStr))
+            {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
+
+            txState.State = TTxState::CreateParts;
+            txState.Shards.reserve(shardsCount);
+
+            TShardInfo columnShardInfo = TShardInfo::ColumnShardInfo(opTxId, pathId);
+            columnShardInfo.BindedChannels = channelsBindings;
+
+            tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
+            Y_VERIFY(tableInfo->OwnedColumnShards.empty());
+            tableInfo->OwnedColumnShards.reserve(shardsCount);
+
+            for (ui64 i = 0; i < shardsCount; ++i) {
+                TShardIdx idx = context.SS->RegisterShardInfo(columnShardInfo);
+                context.SS->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS].Add(1);
+                txState.Shards.emplace_back(idx, ETabletType::ColumnShard, TTxState::CreateParts);
+
+                auto* shardInfoProto = tableInfo->StandaloneSharding->AddColumnShards();
+                shardInfoProto->SetOwnerId(idx.GetOwnerId());
+                shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
+
+                tableInfo->OwnedColumnShards.emplace_back(std::move(idx));
+            }
+
+            context.SS->SetPartitioning(pathId, tableInfo);
+
+            for (auto shard : txState.Shards) {
+                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, opTxId, shard.TabletType);
+                context.SS->PersistChannelsBinding(db, shard.Idx, channelsBindings);
+            }
+            Y_VERIFY(txState.Shards.size() == shardsCount);
+
+            TColumnTableInfo::TPtr pending = new TColumnTableInfo;
+            pending->AlterData = tableInfo;
+
+            context.SS->ColumnTables[pathId] = pending;
+            context.SS->PersistColumnTable(db, pathId, *pending);
+            context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
+            context.SS->IncrementPathDbRefCount(pathId);
+
+            if (parentPath.Base()->HasActiveChanges()) {
+                TTxId parentTxId = parentPath.Base()->PlannedToCreate()
+                    ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+                context.OnComplete.Dependence(parentTxId, opTxId);
+            }
         }
-
-        TColumnTableInfo::TPtr pending = new TColumnTableInfo;
-        pending->AlterData = tableInfo;
-        pending->SetOlapStorePathId(olapStorePath->PathId);
-        tableInfo->SetOlapStorePathId(olapStorePath->PathId);
-        context.SS->ColumnTables[pathId] = pending;
-        storeInfo->ColumnTables.insert(pathId);
-        storeInfo->ColumnTablesUnderOperation.insert(pathId);
-        context.SS->PersistColumnTable(db, pathId, *pending);
-        context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-        context.SS->IncrementPathDbRefCount(pathId);
-
-        if (parentPath.Base()->HasActiveChanges()) {
-            TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
-            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
-        }
-
-        // Sequentially chain operations in the same olap store
-        if (context.SS->Operations.contains(olapStorePath.Base()->LastTxId)) {
-            context.OnComplete.Dependence(olapStorePath.Base()->LastTxId, OperationId.GetTxId());
-        }
-        olapStorePath.Base()->LastTxId = OperationId.GetTxId();
-        context.SS->PersistLastTxId(db, olapStorePath.Base());
 
         context.SS->PersistTxState(db, OperationId);
         context.SS->PersistPath(db, dstPath.Base()->PathId);
@@ -799,9 +1005,13 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
         dstPath.DomainInfo()->IncPathsInside();
+        if (!storeInfo) {
+            dstPath.DomainInfo()->AddInternalShards(txState);
+            dstPath.Base()->IncShardsInside(tableInfo->OwnedColumnShards.size());
+        }
         parentPath.Base()->IncAliveChildren();
 
-        State = NextState();
+        State = NextState(!!storeInfo);
         SetState(SelectStateFunc(State));
         return result;
     }

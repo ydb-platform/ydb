@@ -28,6 +28,17 @@ static const TString defaultStoreSchema = R"(
     }
 )";
 
+TString defaultTableSchema = R"(
+    Name: "ColumnTable"
+    ColumnShardCount: 1
+    Schema {
+        Columns { Name: "timestamp" Type: "Timestamp" }
+        Columns { Name: "data" Type: "Utf8" }
+        KeyColumnNames: "timestamp"
+        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+    }
+)";
+
 static const TVector<std::pair<TString, TTypeInfo>> defaultYdbSchema = {
     {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
     {"data", TTypeInfo(NTypeIds::Utf8) }
@@ -359,7 +370,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
         env.TestWaitNotification(runtime, txId);
+
         TestLsPathId(runtime, 4, NLs::PathStringEqual("/MyRoot/OlapStore/MyDir/ColumnTable"));
+
         TestDropColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
 
@@ -375,6 +388,28 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathNotExist);
         TestLsPathId(runtime, 2, NLs::PathStringEqual(""));
+    }
+
+    Y_UNIT_TEST(CreateDropStandaloneTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir", false, NLs::PathExist);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestLsPathId(runtime, 3, NLs::PathStringEqual("/MyRoot/MyDir/ColumnTable"));
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        TestLsPathId(runtime, 3, NLs::PathStringEqual(""));
     }
 
     Y_UNIT_TEST(CreateTableTtl) {

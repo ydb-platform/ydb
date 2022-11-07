@@ -446,11 +446,28 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
         checks
             .NotEmpty()
             .IsResolved()
-            .NotDeleted()
-            .IsTable()
-            .NotUnderDeleting()
-            .NotUnderOperation()
-            .IsCommonSensePath();
+            .NotDeleted();
+
+        if (checks) {
+            if (table.Base()->IsColumnTable()) {
+                checks
+                    .IsColumnTable()
+                    .NotUnderDeleting()
+                    .NotUnderOperation()
+                    .IsCommonSensePath();
+
+                if (checks) {
+                    // DROP TABLE statement has no info is it a drop of row or column table
+                    return {CreateDropColumnTable(nextId, tx)};
+                }
+            } else {
+                checks
+                    .IsTable()
+                    .NotUnderDeleting()
+                    .NotUnderOperation()
+                    .IsCommonSensePath();
+            }
+        }
 
         if (!checks) {
             TString explain = TStringBuilder() << "path table fail checks"

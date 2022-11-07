@@ -2135,6 +2135,8 @@ private:
         for (const auto& keyColumn : metadata.KeyColumnNames) {
             schema.AddKeyColumnNames(keyColumn);
         }
+
+        schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
     }
 
     static bool CheckLoadTableMetadataStatus(ui32 status, const TString& reason,
@@ -2487,7 +2489,9 @@ private:
     static bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         NKikimrSchemeOp::TColumnTableDescription& tableDesc, Ydb::StatusIds::StatusCode& code, TString& error)
     {
-        tableDesc.SetSchemaPresetName("default"); // TODO: CREATE TABLE without TABLESTORE needs schema
+        if (metadata->Columns.empty()) {
+            tableDesc.SetSchemaPresetName("default");
+        }
 
         // TODO: not first PK column
         if (metadata->KeyColumnNames.empty()) {

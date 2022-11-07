@@ -3042,7 +3042,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-#if 0 // TODO
         TString tableName = "/Root/TableStoreTest/ColumnTableTest";
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
@@ -3058,19 +3057,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
+#if 0 // TODO
         auto query3 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(`;)";
         result = session.ExecuteSchemeQuery(query3).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
+#endif
         auto query4 = TStringBuilder() << R"(
             --!syntax_v1
             DROP TABLE `)" << tableName << R"(`;)";
         result = session.ExecuteSchemeQuery(query4).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-#endif
 
         auto query5 = TStringBuilder() << R"(
             --!syntax_v1
@@ -3079,7 +3077,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-#if 0 // TODO
     Y_UNIT_TEST(CreateDropColumnTable) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -3106,7 +3103,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
-#endif
 
     Y_UNIT_TEST(CreateDropColumnTableNegative) {
         TKikimrRunner kikimr;

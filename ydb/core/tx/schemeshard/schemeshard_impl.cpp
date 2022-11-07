@@ -3005,11 +3005,23 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
             db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::ColumnTablesAlters::AlterBody>(serializedAlterBody));
         }
+        if (tableInfo.StandaloneSharding) {
+            TString serializedOwnedShards;
+            Y_VERIFY(tableInfo.StandaloneSharding->SerializeToString(&serializedOwnedShards));
+            db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ColumnTablesAlters::StandaloneSharding>(serializedOwnedShards));
+        }
     } else {
         db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::ColumnTables::AlterVersion>(tableInfo.AlterVersion),
             NIceDb::TUpdate<Schema::ColumnTables::Description>(serialized),
             NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding));
+        if (tableInfo.StandaloneSharding) {
+            TString serializedOwnedShards;
+            Y_VERIFY(tableInfo.StandaloneSharding->SerializeToString(&serializedOwnedShards));
+            db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ColumnTables::StandaloneSharding>(serializedOwnedShards));
+        }
     }
 }
 
@@ -3032,8 +3044,9 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
     }
 
     // Unlink table from olap store
-    if (OlapStores.contains(tableInfo->OlapStorePathId)) {
-        auto storeInfo = OlapStores.at(tableInfo->OlapStorePathId);
+    if (tableInfo->OlapStorePathId && *tableInfo->OlapStorePathId) {
+        Y_VERIFY(OlapStores.contains(*tableInfo->OlapStorePathId));
+        auto storeInfo = OlapStores.at(*tableInfo->OlapStorePathId);
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
@@ -3657,7 +3670,8 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 if (tableInfo->Description.HasSchema()) {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchema().GetVersion());
                 } else if (tableInfo->Description.HasSchemaPresetId() && tableInfo->OlapStorePathId) {
-                    auto storeInfo = OlapStores.at(tableInfo->OlapStorePathId);
+                    Y_VERIFY(OlapStores.contains(*tableInfo->OlapStorePathId));
+                    auto& storeInfo = OlapStores.at(*tableInfo->OlapStorePathId);
                     auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj() + preset.Version);
                 } else {
@@ -5954,9 +5968,7 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
     return true;
 }
 
-void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo) {
-    const TVector<TShardIdx>& partitioning = storeInfo->ColumnShards;
-
+void TSchemeShard::SetPartitioning(TPathId pathId, const TVector<TShardIdx>& partitioning) {
     if (AppData()->FeatureFlags.GetEnableSystemViews()) {
         TVector<std::pair<ui64, ui64>> shardIndices;
         shardIndices.reserve(partitioning.size());
@@ -5969,6 +5981,14 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInf
         ev->ShardIndices.swap(shardIndices);
         Send(SysPartitionStatsCollector, ev.Release());
     }
+}
+
+void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo) {
+    SetPartitioning(pathId, storeInfo->ColumnShards);
+}
+
+void TSchemeShard::SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo) {
+    SetPartitioning(pathId, tableInfo->OwnedColumnShards);
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
@@ -6232,7 +6252,7 @@ void TSchemeShard::ConfigureStatsOperations(const NKikimrConfig::TSchemeShardCon
         auto txState = TTxState::ConvertToTxType(operationConfig.GetType());
         InFlightLimits[txState] = limit;
     }
-    
+
     if (InFlightLimits.empty()) {
         NKikimrConfig::TSchemeShardConfig_TInFlightCounterConfig inFlightCounterConfig;
         auto defaultInFlightLimit = inFlightCounterConfig.GetInFlightLimit();
@@ -6252,7 +6272,7 @@ void TSchemeShard::ConfigureStatsOperations(const NKikimrConfig::TSchemeShardCon
 bool TSchemeShard::CheckInFlightLimit(const TTxState::ETxType txType, TString& errStr) const {
     auto it = InFlightLimits.find(txType);
     if (it == InFlightLimits.end()) {
-        return true; 
+        return true;
     }
     if (it->second != 0 && TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(txType)].Get() >= it->second)
     {
@@ -6261,7 +6281,7 @@ bool TSchemeShard::CheckInFlightLimit(const TTxState::ETxType txType, TString& e
                                             << ", limit: " << it->second;
         return false;
     }
-    
+
     return true;
 }
 

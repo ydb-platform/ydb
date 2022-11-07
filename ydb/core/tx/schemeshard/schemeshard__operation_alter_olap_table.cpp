@@ -453,7 +453,15 @@ public:
         Y_VERIFY(context.SS->ColumnTables.contains(path.Base()->PathId));
         TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
 
-        TPath storePath = TPath::Init(tableInfo->OlapStorePathId, context.SS);
+        if (!tableInfo->OlapStorePathId) {
+            result->SetError(NKikimrScheme::StatusSchemeError,
+                             "Alter for standalone column table is not supported yet");
+            return result;
+        }
+
+        auto& storePathId = *tableInfo->OlapStorePathId;
+
+        TPath storePath = TPath::Init(storePathId, context.SS);
         {
             TPath::TChecker checks = storePath.Check();
             checks
@@ -471,8 +479,8 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->OlapStores.contains(tableInfo->OlapStorePathId));
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(tableInfo->OlapStorePathId);
+        Y_VERIFY(context.SS->OlapStores.contains(storePathId));
+        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(storePathId);
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {

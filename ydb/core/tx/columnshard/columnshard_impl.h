@@ -125,7 +125,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvForget::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
-    
+
     ITransaction* CreateTxInitSchema();
     ITransaction* CreateTxRunGc();
 
@@ -293,11 +293,11 @@ private:
     };
 
     struct TSchemaPreset {
-        using TVerProto = NKikimrTxColumnShard::TSchemaPresetVersionInfo;
+        using TSchemaPresetVersionInfo = NKikimrTxColumnShard::TSchemaPresetVersionInfo;
 
         ui32 Id;
         TString Name;
-        TMap<TRowVersion, TVerProto> Versions;
+        TMap<TRowVersion, TSchemaPresetVersionInfo> Versions;
         TRowVersion DropVersion = TRowVersion::Max();
 
         bool IsDropped() const {
@@ -306,10 +306,10 @@ private:
     };
 
     struct TTableInfo {
-        using TVerProto = NKikimrTxColumnShard::TTableVersionInfo;
+        using TTableVersionInfo = NKikimrTxColumnShard::TTableVersionInfo;
 
         ui64 PathId;
-        std::map<TRowVersion, TVerProto> Versions;
+        std::map<TRowVersion, TTableVersionInfo> Versions;
         TRowVersion DropVersion = TRowVersion::Max();
 
         bool IsDropped() const {
@@ -332,7 +332,7 @@ private:
     ui64 LastCompactedGranule = 0;
     ui64 LastExportNo = 0;
     ui64 WritesInFly = 0;
-    ui64 StorePathId = 0;
+    ui64 OwnerPathId = 0;
     ui64 StatsReportRound = 0;
     ui64 BackgroundActivation = 0;
     ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
@@ -432,6 +432,8 @@ private:
 
     bool IsTableWritable(ui64 tableId) const;
 
+    ui32 EnsureSchemaPreset(NIceDb::TNiceDb& db, ui32 presetId, const TString& name,
+                            const NKikimrSchemeOp::TColumnTableSchema& schemaProto, const TRowVersion& version);
     ui32 EnsureSchemaPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, const TRowVersion& version);
     //ui32 EnsureTtlSettingsPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableTtlSettingsPreset& presetProto, const TRowVersion& version);
 

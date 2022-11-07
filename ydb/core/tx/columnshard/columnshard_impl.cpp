@@ -380,26 +380,36 @@ bool TColumnShard::IsTableWritable(ui64 tableId) const {
     return !it->second.IsDropped();
 }
 
-ui32 TColumnShard::EnsureSchemaPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto,
+ui32 TColumnShard::EnsureSchemaPreset(NIceDb::TNiceDb& db, ui32 presetId, const TString& name,
+                                      const NKikimrSchemeOp::TColumnTableSchema& schemaProto,
                                       const TRowVersion& version) {
-    if (!SchemaPresets.contains(presetProto.GetId())) {
-        auto& preset = SchemaPresets[presetProto.GetId()];
-        preset.Id = presetProto.GetId();
-        preset.Name = presetProto.GetName();
+    if (!SchemaPresets.contains(presetId)) {
+        LOG_S_DEBUG("EnsureSchemaPreset " << presetId << " at tablet " << TabletID());
+
+        auto& preset = SchemaPresets[presetId];
+        preset.Id = presetId;
+        preset.Name = name;
         auto& info = preset.Versions[version];
         info.SetId(preset.Id);
         info.SetSinceStep(version.Step);
         info.SetSinceTxId(version.TxId);
-        *info.MutableSchema() = presetProto.GetSchema();
-
-        Y_VERIFY(preset.Name == "default", "Only schema preset named 'default' is supported");
+        *info.MutableSchema() = schemaProto;
 
         Schema::SaveSchemaPresetInfo(db, preset.Id, preset.Name);
         Schema::SaveSchemaPresetVersionInfo(db, preset.Id, version, info);
         SetCounter(COUNTER_TABLE_PRESETS, SchemaPresets.size());
+    } else {
+        LOG_S_DEBUG("EnsureSchemaPreset for existed preset " << presetId << " at tablet " << TabletID());
     }
 
-    return presetProto.GetId();
+    return presetId;
+}
+
+ui32 TColumnShard::EnsureSchemaPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto,
+                                      const TRowVersion& version) {
+    Y_VERIFY(presetProto.GetName() == "default", "Only schema preset named 'default' is supported");
+
+    return EnsureSchemaPreset(db, presetProto.GetId(), presetProto.GetName(), presetProto.GetSchema(), version);
 }
 
 void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const TRowVersion& version,
@@ -441,13 +451,18 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
 
     NIceDb::TNiceDb db(txc.DB);
 
-    if (proto.HasStorePathId()) {
-        StorePathId = proto.GetStorePathId();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::StorePathId, StorePathId);
+    if (proto.HasOwnerPathId()) {
+        OwnerPathId = proto.GetOwnerPathId();
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
     }
+
     if (proto.HasOwnerPath()) {
         OwnerPath = proto.GetOwnerPath();
         Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
+    }
+
+    for (auto& createTable : proto.GetTables()) {
+        RunEnsureTable(createTable, version, txc);
     }
 }
 
@@ -457,18 +472,34 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     const ui64 pathId = tableProto.GetPathId();
     if (!Tables.contains(pathId)) {
+        LOG_S_DEBUG("EnsureTable for pathId: " << pathId << " at tablet " << TabletID());
+
+        ui32 schemaPresetId = 0;
+        if (tableProto.HasSchemaPreset()) {
+            Y_VERIFY(!tableProto.HasSchema(), "Tables has either schema or preset");
+
+            schemaPresetId = EnsureSchemaPreset(db, tableProto.GetSchemaPreset(), version);
+            Y_VERIFY(schemaPresetId);
+        } else {
+            Y_VERIFY(tableProto.HasSchema(), "Tables has either schema or preset");
+
+            // Save first table schema as common one with schemaPresetId == 0
+
+            if (SchemaPresets.count(0)) {
+                LOG_S_WARN("Colocated standalone tables are not supported. "
+                    << "EnsureTable failed at tablet " << TabletID());
+                return;
+            }
+
+            schemaPresetId = EnsureSchemaPreset(db, 0, "", tableProto.GetSchema(), version);
+            Y_VERIFY(!schemaPresetId);
+        }
+
         auto& table = Tables[pathId];
         table.PathId = pathId;
         auto& tableVerProto = table.Versions[version];
         tableVerProto.SetPathId(pathId);
-
-        Y_VERIFY(!tableProto.HasSchema(), "Tables with explicit schema are not supported");
-
-        ui32 schemaPresetId = 0;
-        if (tableProto.HasSchemaPreset()) {
-            schemaPresetId = EnsureSchemaPreset(db, tableProto.GetSchemaPreset(), version);
-            tableVerProto.SetSchemaPresetId(schemaPresetId);
-        }
+        tableVerProto.SetSchemaPresetId(schemaPresetId);
 
         if (tableProto.HasTtlSettings()) {
             *tableVerProto.MutableTtlSettings() = tableProto.GetTtlSettings();
@@ -476,13 +507,14 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
             SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
         }
 
-        if (!PrimaryIndex && schemaPresetId) {
-            auto& schemaPresetVerProto = SchemaPresets[schemaPresetId].Versions[version];
-            TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaPreset;
-            schemaPreset.emplace(NOlap::TSnapshot{version.Step, version.TxId},
-                                 ConvertSchema(schemaPresetVerProto.GetSchema()));
+        if (!PrimaryIndex) {
+            TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaHistory;
 
-            SetPrimaryIndex(std::move(schemaPreset));
+            auto& schemaPresetVerProto = SchemaPresets[schemaPresetId].Versions[version];
+            schemaHistory.emplace(NOlap::TSnapshot{version.Step, version.TxId},
+                                    ConvertSchema(schemaPresetVerProto.GetSchema()));
+
+            SetPrimaryIndex(std::move(schemaHistory));
         }
 
         tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
@@ -491,6 +523,8 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         Schema::SaveTableInfo(db, table.PathId);
         Schema::SaveTableVersionInfo(db, table.PathId, version, tableVerProto);
         SetCounter(COUNTER_TABLES, Tables.size());
+    } else {
+        LOG_S_DEBUG("EnsureTable for existed pathId: " << pathId << " at tablet " << TabletID());
     }
 }
 
@@ -502,6 +536,8 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     auto* tablePtr = Tables.FindPtr(pathId);
     Y_VERIFY(tablePtr && !tablePtr->IsDropped(), "AlterTable on a dropped or non-existent table");
     auto& table = *tablePtr;
+
+    LOG_S_DEBUG("AlterTable for pathId: " << pathId << " at tablet " << TabletID());
 
     Y_VERIFY(!alterProto.HasSchema(), "Tables with explicit schema are not supported");
 
@@ -531,6 +567,8 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     auto* table = Tables.FindPtr(pathId);
     Y_VERIFY_DEBUG(table && !table->IsDropped());
     if (table && !table->IsDropped()) {
+        LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
+
         PathsToDrop.insert(pathId);
         Ttl.DropPathTtl(pathId);
 
@@ -542,6 +580,8 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
 
         table->DropVersion = version;
         Schema::SaveTableDropVersion(db, pathId, version.Step, version.TxId);
+    } else {
+        LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
     }
 }
 
@@ -550,11 +590,11 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
     NIceDb::TNiceDb db(txc.DB);
 
     if (proto.HasStorePathId()) {
-        StorePathId = proto.GetStorePathId();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::StorePathId, StorePathId);
+        OwnerPathId = proto.GetStorePathId();
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
     }
 
-    TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaPreset;
+    TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaHistory;
 
     for (ui32 id : proto.GetDroppedSchemaPresets()) {
         if (!SchemaPresets.contains(id)) {
@@ -579,14 +619,14 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         *info.MutableSchema() = presetProto.GetSchema();
 
         if (preset.Name == "default") {
-            schemaPreset.emplace(NOlap::TSnapshot{version.Step, version.TxId}, ConvertSchema(info.GetSchema()));
+            schemaHistory.emplace(NOlap::TSnapshot{version.Step, version.TxId}, ConvertSchema(info.GetSchema()));
         }
 
         Schema::SaveSchemaPresetVersionInfo(db, preset.Id, version, info);
     }
 
-    if (!schemaPreset.empty()) {
-        SetPrimaryIndex(std::move(schemaPreset));
+    if (!schemaHistory.empty()) {
+        SetPrimaryIndex(std::move(schemaHistory));
     }
 }
 

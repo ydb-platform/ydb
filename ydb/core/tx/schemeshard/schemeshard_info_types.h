@@ -823,6 +823,9 @@ struct TOlapSchema {
         }
         return nullptr;
     }
+
+    static bool UpdateProto(NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr);
+    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr);
 };
 
 struct TOlapStoreSchemaPreset : public TOlapSchema {
@@ -880,17 +883,20 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
 
     NKikimrSchemeOp::TColumnTableDescription Description;
     NKikimrSchemeOp::TColumnTableSharding Sharding;
+    TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
 
-    // Path id of the olap store
-    TPathId OlapStorePathId;
+    TMaybe<TPathId> OlapStorePathId; // PathId of the table store
+    TMaybe<TOlapSchema> Schema; // schema for standalone table
 
     // Current list of column shards
     TVector<ui64> ColumnShards;
+    TVector<TShardIdx> OwnedColumnShards;
 
     TColumnTableInfo() = default;
     TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
             NKikimrSchemeOp::TColumnTableSharding&& sharding,
+            TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
             TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
 
     void SetOlapStorePathId(const TPathId& pathId) {
@@ -898,6 +904,12 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
         Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId);
         Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
     }
+
+    bool IsStandalone() const {
+        return !OwnedColumnShards.empty();
+    }
+
+    // TODO: UpdateShardStats(), GetStats() for standalone table
 };
 
 struct TPQShardInfo : TSimpleRefCount<TPQShardInfo> {

@@ -276,7 +276,7 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
 }
 
 void TColumnShard::SendPeriodicStats() {
-    if (!CurrentSchemeShardId || !StorePathId) {
+    if (!CurrentSchemeShardId || !OwnerPathId) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
@@ -294,7 +294,7 @@ void TColumnShard::SendPeriodicStats() {
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
-    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), StorePathId);
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
     {
         ev->Record.SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
         ev->Record.SetGeneration(Executor()->Generation());

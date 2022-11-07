@@ -4460,16 +4460,24 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY(description.ParseFromString(rowset.GetValue<Schema::ColumnTables::Description>()));
                 NKikimrSchemeOp::TColumnTableSharding sharding;
                 Y_VERIFY(sharding.ParseFromString(rowset.GetValue<Schema::ColumnTables::Sharding>()));
+                TMaybe<NKikimrSchemeOp::TColumnStoreSharding> storeSharding;
+                if (rowset.HaveValue<Schema::ColumnTables::StandaloneSharding>()) {
+                    Y_VERIFY(storeSharding.ConstructInPlace().ParseFromString(
+                        rowset.GetValue<Schema::ColumnTables::StandaloneSharding>()));
+                }
 
-                TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo(alterVersion, std::move(description), std::move(sharding));
+                TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo(alterVersion,
+                    std::move(description), std::move(sharding), std::move(storeSharding));
                 Self->ColumnTables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
 
-                auto itStore = Self->OlapStores.find(tableInfo->OlapStorePathId);
-                if (itStore != Self->OlapStores.end()) {
-                    itStore->second->ColumnTables.insert(pathId);
-                    if (pathsUnderOperation.contains(pathId)) {
-                        itStore->second->ColumnTablesUnderOperation.insert(pathId);
+                if (tableInfo->OlapStorePathId) {
+                    auto itStore = Self->OlapStores.find(*tableInfo->OlapStorePathId);
+                    if (itStore != Self->OlapStores.end()) {
+                        itStore->second->ColumnTables.insert(pathId);
+                        if (pathsUnderOperation.contains(pathId)) {
+                            itStore->second->ColumnTablesUnderOperation.insert(pathId);
+                        }
                     }
                 }
 
@@ -4497,11 +4505,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (rowset.HaveValue<Schema::ColumnTablesAlters::AlterBody>()) {
                     Y_VERIFY(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::AlterBody>()));
                 }
-
-                TColumnTableInfo::TPtr alterData = new TColumnTableInfo(alterVersion, std::move(description), std::move(sharding), std::move(alterBody));
+                TMaybe<NKikimrSchemeOp::TColumnStoreSharding> storeSharding;
+                if (rowset.HaveValue<Schema::ColumnTablesAlters::StandaloneSharding>()) {
+                    Y_VERIFY(storeSharding.ConstructInPlace().ParseFromString(
+                        rowset.GetValue<Schema::ColumnTablesAlters::StandaloneSharding>()));
+                }
 
                 Y_VERIFY_S(Self->ColumnTables.contains(pathId),
                     "Cannot load alter for olap table " << pathId);
+
+                TColumnTableInfo::TPtr alterData = new TColumnTableInfo(alterVersion,
+                    std::move(description), std::move(sharding), std::move(storeSharding), std::move(alterBody));
+
                 Self->ColumnTables[pathId]->AlterData = alterData;
 
                 if (!rowset.Next()) {

@@ -5861,6 +5861,11 @@
                 "ColumnId": 4,
                 "ColumnName": "Sharding",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "StandaloneSharding",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -5870,7 +5875,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5919,6 +5925,11 @@
                 "ColumnId": 5,
                 "ColumnName": "AlterBody",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "StandaloneSharding",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -5929,7 +5940,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

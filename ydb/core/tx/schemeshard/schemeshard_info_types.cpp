@@ -1983,6 +1983,134 @@ NKikimr::NSchemeShard::TBillingStats::operator bool() const {
     return Rows || Bytes;
 }
 
+bool TOlapSchema::UpdateProto(NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr) {
+    ui32 nextColumnId = proto.GetNextColumnId();
+
+    const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
+
+    for (auto& colProto : *proto.MutableColumns()) {
+        auto& colName = colProto.GetName();
+
+        if (!colProto.HasId()) {
+            colProto.SetId(nextColumnId++);
+        } else if (colProto.GetId() <= 0 || colProto.GetId() >= nextColumnId) {
+            errStr = Sprintf("Column id is incorrect");
+            return false;
+        }
+
+        if (colProto.HasTypeId()) {
+            errStr = Sprintf("Cannot set TypeId for column '%s', use Type", colName.c_str());
+            return false;
+        }
+        if (!colProto.HasType()) {
+            errStr = Sprintf("Missing Type for column '%s'", colName.c_str());
+            return false;
+        }
+
+        auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
+        const NScheme::IType* type = typeRegistry->GetType(typeName);
+        NScheme::TTypeInfo typeInfo;
+        if (type) {
+            if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+                errStr = Sprintf("Type '%s' specified for column '%s' is not supported",
+                                 colProto.GetType().c_str(), colName.c_str());
+                return false;
+            }
+            typeInfo = NScheme::TTypeInfo(type->GetTypeId());
+        } else {
+#if 0 // TODO: support PG types in ColumnShard
+            auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            if (!typeDesc) {
+                errStr = Sprintf("Type '%s' specified for column '%s' is not supported",
+                                 colProto.GetType().c_str(), colName.c_str());
+                return false;
+            }
+            typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+#else
+            errStr = Sprintf("Type '%s' specified for column '%s' is not supported",
+                             colProto.GetType().c_str(), colName.c_str());
+            return false;
+#endif
+        }
+
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(typeInfo);
+        colProto.SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *colProto.MutableTypeInfo() = *columnType.TypeInfo;
+        }
+    }
+
+    proto.SetNextColumnId(nextColumnId);
+    return true;
+}
+
+bool TOlapSchema::Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr) {
+    NextColumnId = proto.GetNextColumnId();
+
+    Columns.clear();
+    for (auto& colProto : proto.GetColumns()) {
+        if (colProto.GetName().empty()) {
+            errStr = Sprintf("Columns cannot have an empty name");
+            return false;
+        }
+
+        ui32 colId = colProto.GetId();
+        if (Columns.contains(colId)) {
+            errStr = Sprintf("Duplicate column id %" PRIu32 " for column '%s'", colId, colProto.GetName().c_str());
+            return false;
+        }
+        auto& col = Columns[colId];
+        col.Id = colId;
+        col.Name = colProto.GetName();
+
+        if (ColumnsByName.contains(col.Name)) {
+            errStr = Sprintf("Duplicate column '%s'", col.Name.c_str());
+            return false;
+        }
+
+        if (!colProto.HasTypeId()) {
+            errStr = Sprintf("No generated TypeId for column '%s'", col.Name.c_str());
+            return false;
+        }
+
+        if (colProto.HasTypeInfo()) {
+            col.Type = NScheme::TypeInfoFromProtoColumnType(colProto.GetTypeId(), &colProto.GetTypeInfo());
+        } else {
+            col.Type = NScheme::TTypeInfo(colProto.GetTypeId());
+        }
+
+        ColumnsByName[col.Name] = col.Id;
+    }
+
+    if (Columns.empty()) {
+        errStr = Sprintf("At least one column is required");
+        return false;
+    }
+
+    KeyColumnIds.clear();
+    for (const TString& keyName : proto.GetKeyColumnNames()) {
+        auto* col = FindColumnByName(keyName);
+        if (!col) {
+            errStr = Sprintf("Unknown key column '%s'", keyName.c_str());
+            return false;
+        }
+        if (col->IsKeyColumn()) {
+            errStr = Sprintf("Duplicate key column '%s'", keyName.c_str());
+            return false;
+        }
+        col->KeyOrder = KeyColumnIds.size();
+        KeyColumnIds.push_back(col->Id);
+    }
+
+    if (KeyColumnIds.empty()) {
+        errStr = "At least one key column is required";
+        return false;
+    }
+
+    Engine = proto.GetEngine();
+    return true;
+}
+
 TOlapStoreInfo::TOlapStoreInfo(
         ui64 alterVersion,
         NKikimrSchemeOp::TColumnStoreDescription&& description,
@@ -2039,19 +2167,38 @@ TColumnTableInfo::TColumnTableInfo(
         ui64 alterVersion,
         NKikimrSchemeOp::TColumnTableDescription&& description,
         NKikimrSchemeOp::TColumnTableSharding&& sharding,
+        TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody)
     : AlterVersion(alterVersion)
     , Description(std::move(description))
     , Sharding(std::move(sharding))
+    , StandaloneSharding(std::move(standaloneSharding))
     , AlterBody(std::move(alterBody))
 {
-    OlapStorePathId = TPathId(
-        TOwnerId(Description.GetColumnStorePathId().GetOwnerId()),
-        TLocalPathId(Description.GetColumnStorePathId().GetLocalId()));
+    if (Description.HasColumnStorePathId()) {
+        OlapStorePathId = TPathId(
+            TOwnerId(Description.GetColumnStorePathId().GetOwnerId()),
+            TLocalPathId(Description.GetColumnStorePathId().GetLocalId()));
+    }
+
+    if (Description.HasSchema()) {
+        Schema = TOlapSchema();
+        TString strError;
+        Y_VERIFY((*Schema).Parse(Description.GetSchema(), strError), "Cannot parse column table schema");
+    }
 
     ColumnShards.reserve(Sharding.GetColumnShards().size());
     for (ui64 columnShard : Sharding.GetColumnShards()) {
         ColumnShards.push_back(columnShard);
+    }
+
+    if (StandaloneSharding) {
+        OwnedColumnShards.reserve(StandaloneSharding->GetColumnShards().size());
+        for (const auto& shardIdx : StandaloneSharding->GetColumnShards()) {
+            OwnedColumnShards.push_back(TShardIdx(
+                TOwnerId(shardIdx.GetOwnerId()),
+                TLocalShardIdx(shardIdx.GetLocalId())));
+        }
     }
 }
 

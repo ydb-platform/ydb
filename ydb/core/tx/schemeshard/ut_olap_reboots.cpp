@@ -79,6 +79,35 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
         });
     }
 
+    Y_UNIT_TEST(CreateStandaloneTable) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+
+            {
+                TInactiveZone inactive(activeZone);
+                // no inactive initialization
+            }
+
+            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestLs(runtime, "/MyRoot/ColumnTable", false, NLs::PathExist);
+            }
+        });
+    }
+
     Y_UNIT_TEST(CreateDropTable) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -115,6 +144,38 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 // no inactive finalization
+            }
+        });
+    }
+
+    Y_UNIT_TEST(CreateDropStandaloneTable) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+
+            {
+                TInactiveZone inactive(activeZone);
+                // no inactive initialization
+            }
+
+            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "ColumnTable");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestLs(runtime, "/MyRoot/ColumnTable", false, NLs::PathNotExist);
             }
         });
     }
@@ -159,6 +220,50 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
                 TestLs(runtime, "/MyRoot/OlapStore/ColumnTable1", false, NLs::PathExist);
                 TestLs(runtime, "/MyRoot/OlapStore/ColumnTable2", false, NLs::PathExist);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(CreateMultipleStandaloneTables) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+
+            {
+                TInactiveZone inactive(activeZone);
+                // no inactive initialization
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                CreateColumnTableRequest(t.TxId += 2, "/MyRoot", R"(
+                    Name: "ColumnTable1"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                )"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->ReliablePropose(runtime,
+                CreateColumnTableRequest(t.TxId - 1, "/MyRoot", R"(
+                    Name: "ColumnTable2"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                )"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestLs(runtime, "/MyRoot/ColumnTable1", false, NLs::PathExist);
+                TestLs(runtime, "/MyRoot/ColumnTable2", false, NLs::PathExist);
             }
         });
     }
@@ -209,6 +314,55 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
                 TestLs(runtime, "/MyRoot/OlapStore/ColumnTable1", false, NLs::PathNotExist);
                 TestLs(runtime, "/MyRoot/OlapStore/ColumnTable2", false, NLs::PathNotExist);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(DropMultipleStandaloneTables) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "ColumnTable1"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "ColumnTable2"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(t.TxId += 2, "/MyRoot", "ColumnTable1"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(t.TxId - 1, "/MyRoot", "ColumnTable2"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestLs(runtime, "/MyRoot/ColumnTable1", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/ColumnTable2", false, NLs::PathNotExist);
             }
         });
     }

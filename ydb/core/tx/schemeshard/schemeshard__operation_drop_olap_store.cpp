@@ -189,19 +189,13 @@ public:
         txState->ClearShardsInProgress();
 
         for (auto& shard : txState->Shards) {
-            TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
-            switch (shard.TabletType) {
-                case ETabletType::ColumnShard: {
-                    auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+            Y_VERIFY(shard.TabletType == ETabletType::ColumnShard);
 
-                    context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
-                    txState->ShardsInProgress.insert(shard.Idx);
-                    break;
-                }
-                default: {
-                    Y_FAIL("unexpected tablet type");
-                }
-            }
+            TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
+            auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+
+            context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
+            txState->ShardsInProgress.insert(shard.Idx);
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " ProgressState"

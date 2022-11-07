@@ -12,113 +12,11 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-// TODO: make it a part of TOlapSchema
 bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& schema, TString& errStr) {
-    schema.NextColumnId = proto.GetNextColumnId();
-
-    const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
-
-    schema.Columns.clear();
-    for (auto& colProto : *proto.MutableColumns()) {
-        if (colProto.GetName().empty()) {
-            errStr = Sprintf("Columns cannot have an empty name");
-            return false;
-        }
-        if (!colProto.HasId()) {
-            colProto.SetId(schema.NextColumnId++);
-        } else if (colProto.GetId() <= 0 || colProto.GetId() >= schema.NextColumnId) {
-            errStr = Sprintf("Column id is incorrect");
-            return false;
-        }
-        ui32 colId = colProto.GetId();
-        if (schema.Columns.contains(colId)) {
-            errStr = Sprintf("Duplicate column id %" PRIu32 " for column '%s'", colId, colProto.GetName().c_str());
-            return false;
-        }
-        auto& col = schema.Columns[colId];
-        col.Id = colId;
-        col.Name = colProto.GetName();
-
-        if (colProto.HasTypeId()) {
-            errStr = Sprintf("Cannot set TypeId for column '%s', use Type", col.Name.c_str());
-            return false;
-        }
-        if (!colProto.HasType()) {
-            errStr = Sprintf("Missing Type for column '%s'", col.Name.c_str());
-            return false;
-        }
-
-        auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
-        const NScheme::IType* type = typeRegistry->GetType(typeName);
-        if (type) {
-            if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                errStr = Sprintf("Type '%s' specified for column '%s' is not supported", colProto.GetType().c_str(), col.Name.c_str());
-                return false;
-            }
-            col.Type = NScheme::TTypeInfo(type->GetTypeId());
-        } else {
-            auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-            if (!typeDesc) {
-                errStr = Sprintf("Type '%s' specified for column '%s' is not supported", colProto.GetType().c_str(), col.Name.c_str());
-            }
-            col.Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-        }
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(col.Type);
-        colProto.SetTypeId(columnType.TypeId);
-        if (columnType.TypeInfo) {
-            *colProto.MutableTypeInfo() = *columnType.TypeInfo;
-        }
-
-        if (schema.ColumnsByName.contains(col.Name)) {
-            errStr = Sprintf("Duplicate column '%s'", col.Name.c_str());
-            return false;
-        }
-        schema.ColumnsByName[col.Name] = col.Id;
-    }
-
-    if (schema.Columns.empty()) {
-        errStr = Sprintf("At least one column is required");
+    if (!TOlapSchema::UpdateProto(proto, errStr)) {
         return false;
     }
-
-    schema.KeyColumnIds.clear();
-    for (const TString& keyName : proto.GetKeyColumnNames()) {
-        auto* col = schema.FindColumnByName(keyName);
-        if (!col) {
-            errStr = Sprintf("Unknown key column '%s'", keyName.c_str());
-            return false;
-        }
-        if (col->IsKeyColumn()) {
-            errStr = Sprintf("Duplicate key column '%s'", keyName.c_str());
-            return false;
-        }
-        col->KeyOrder = schema.KeyColumnIds.size();
-        schema.KeyColumnIds.push_back(col->Id);
-    }
-
-    if (schema.KeyColumnIds.empty()) {
-        errStr = "At least one key column is required";
-        return false;
-    }
-#if 0
-    for (auto& tierConfig : proto.GetStorageTiers()) {
-        TString tierName = tierConfig.GetName();
-        if (schema.Tiers.count(tierName)) {
-            errStr = Sprintf("Same tier name in schema: '%s'", tierName.c_str());
-            return false;
-        }
-        schema.Tiers.insert(tierName);
-
-        if (!PrepareTier(tierConfig, errStr)) {
-            return false;
-        }
-    }
-#endif
-
-    schema.Engine = proto.GetEngine();
-
-    proto.SetNextColumnId(schema.NextColumnId);
-    return true;
+    return schema.Parse(proto, errStr);
 }
 
 // TODO: make it a part of TOlapStoreInfo
@@ -294,7 +192,7 @@ public:
             // TODO: we may need to specify a more complex data channel mapping
             auto* init = tx.MutableInitShard();
             init->SetDataChannelCount(storeInfo->Description.GetStorageConfig().GetDataChannelCount());
-            init->SetStorePathId(txState->TargetPathId.LocalPathId);
+            init->SetOwnerPathId(txState->TargetPathId.LocalPathId);
             init->SetOwnerPath(path.PathString());
 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&columnShardTxBody);

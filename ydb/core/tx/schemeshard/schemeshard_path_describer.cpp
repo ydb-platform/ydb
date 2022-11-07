@@ -369,8 +369,6 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
 void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {
     const TColumnTableInfo::TPtr tableInfo = *Self->ColumnTables.FindPtr(pathId);
     Y_VERIFY(tableInfo, "ColumnTable not found");
-    const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(tableInfo->OlapStorePathId);
-    Y_VERIFY(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
 
     auto description = Result->Record.MutablePathDescription()->MutableColumnTableDescription();
@@ -378,6 +376,9 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     description->MutableSharding()->CopyFrom(tableInfo->Sharding);
 
     if (!description->HasSchema() && description->HasSchemaPresetId()) {
+        const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(*tableInfo->OlapStorePathId);
+        Y_VERIFY(storeInfo, "OlapStore not found");
+
         auto& preset = storeInfo->SchemaPresets.at(description->GetSchemaPresetId());
         auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex);
         *description->MutableSchema() = presetProto.GetSchema();

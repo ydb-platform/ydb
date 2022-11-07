@@ -38,7 +38,7 @@ struct TTestSchema {
 
         TStorageTier(const TString& name = {})
             : Name(name)
-            
+
         {}
 
         NKikimrSchemeOp::EColumnCodec GetCodecId() const {
@@ -173,6 +173,39 @@ struct TTestSchema {
         return col;
     }
 
+    static void InitSchema(const TVector<std::pair<TString, TTypeInfo>>& columns,
+                           const TVector<std::pair<TString, TTypeInfo>>& pk,
+                           const TTableSpecials& specials,
+                           NKikimrSchemeOp::TColumnTableSchema* schema)
+    {
+        schema->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+
+        for (ui32 i = 0; i < columns.size(); ++i) {
+            *schema->MutableColumns()->Add() = CreateColumn(i + 1, columns[i].first, columns[i].second);
+        }
+
+        Y_VERIFY(pk.size() == 4);
+        for (auto& column : ExtractNames(pk)) {
+            schema->AddKeyColumnNames(column);
+        }
+
+        if (specials.HasCodec()) {
+            schema->MutableDefaultCompression()->SetCompressionCodec(specials.GetCodecId());
+        }
+        if (specials.CompressionLevel) {
+            schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
+        }
+
+        schema->SetEnableTiering(specials.HasTiers());
+    }
+
+    static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
+        ttlSettings->SetVersion(1);
+        auto* enable = ttlSettings->MutableEnabled();
+        enable->SetColumnName(specials.GetTtlColumn());
+        enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
+    }
+
     static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeInfo>>& columns,
                                      const TVector<std::pair<TString, TTypeInfo>>& pk,
                                      const TTableSpecials& specials = {}) {
@@ -186,35 +219,29 @@ struct TTestSchema {
             preset->SetName("default");
 
             // schema
-
-            auto* schema = preset->MutableSchema();
-            schema->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
-
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                *schema->MutableColumns()->Add() = CreateColumn(i + 1, columns[i].first, columns[i].second);
-            }
-
-            Y_VERIFY(pk.size() == 4);
-            for (auto& column : ExtractNames(pk)) {
-                schema->AddKeyColumnNames(column);
-            }
-
-            if (specials.HasCodec()) {
-                schema->MutableDefaultCompression()->SetCompressionCodec(specials.GetCodecId());
-            }
-            if (specials.CompressionLevel) {
-                schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
-            }
-
-            schema->SetEnableTiering(specials.HasTiers());
+            InitSchema(columns, pk, specials, preset->MutableSchema());
         }
 
         if (specials.HasTtl()) {
-            auto* ttlSettings = table->MutableTtlSettings();
-            ttlSettings->SetVersion(1);
-            auto* enable = ttlSettings->MutableEnabled();
-            enable->SetColumnName(specials.GetTtlColumn());
-            enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
+            InitTtl(specials, table->MutableTtlSettings());
+        }
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
+    static TString CreateStandaloneTableTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeInfo>>& columns,
+                                               const TVector<std::pair<TString, TTypeInfo>>& pk,
+                                               const TTableSpecials& specials = {}) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        auto* table = tx.MutableEnsureTables()->AddTables();
+        table->SetPathId(pathId);
+
+        InitSchema(columns, pk, specials, table->MutableSchema());
+
+        if (specials.HasTtl()) {
+            InitTtl(specials, table->MutableTtlSettings());
         }
 
         TString out;

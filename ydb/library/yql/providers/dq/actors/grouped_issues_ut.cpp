@@ -79,5 +79,19 @@ Y_UNIT_TEST_SUITE(TestIssuesGrouping) {
         }
         UNIT_ASSERT_C(!holder.Issues.contains(eldery), "the oldest issue is not removed");
     }
+
+    Y_UNIT_TEST(ShouldSaveSubIssues) {
+        TIntrusivePtr<AgileTimeProvider> timeProvider = CreateAgileTimeProvider(1);
+        NDq::GroupedIssues holder(timeProvider);
+        holder.IssueExpiration = TDuration::Seconds(5);
+        TIssue issue("a");
+        issue.AddSubIssue(MakeIntrusive<TIssue>("sub_issue"));
+        holder.AddIssue(issue);
+        auto groupedIssues = holder.ToIssues();
+        UNIT_ASSERT_EQUAL(groupedIssues.Size(), 1);
+        UNIT_ASSERT_EQUAL(groupedIssues.back().GetSubIssues().size(), 1);
+        const auto& subIssue = *groupedIssues.back().GetSubIssues().back();
+        UNIT_ASSERT_STRING_CONTAINS(subIssue.ToString(true), "sub_issue");
+    }
 }
 } // namespace NYq

@@ -190,6 +190,17 @@ struct TEvPrivate {
 
 };
 
+TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
+    if (!issues) {
+        return TIssues{};
+    }
+    TIssue result(prefix);
+    for (auto& issue: issues) {
+        result.AddSubIssue(MakeIntrusive<TIssue>(issue));
+    }
+    return TIssues{result};
+}
+
 using namespace NKikimr::NMiniKQL;
 
 class TS3ReadActor : public TActorBootstrapped<TS3ReadActor>, public IDqComputeActorAsyncInput {
@@ -294,8 +305,9 @@ private:
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         ++IsDoneCounter;
         const auto id = result->Get()->PathIndex;
+        const auto path = std::get<TString>(Paths[id - StartPathIndex]);
         const auto httpCode = result->Get()->Result.HttpResponseCode;
-        LOG_D("TS3ReadActor", "ID: " << id << ", TEvReadResult size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode);
+        LOG_D("TS3ReadActor", "ID: " << id << ", Path: " << path << ", read size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode);
         if (200 == httpCode || 206 == httpCode) {
             Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), id));
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
@@ -306,6 +318,7 @@ private:
             if (!ParseS3ErrorResponse(errorText, errorCode, message)) {
                 message = errorText;
             }
+            message = TStringBuilder{} << "Error while reading file " << path << ", details: " << message;
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, BuildIssues(httpCode, errorCode, message), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         }
     }
@@ -313,8 +326,10 @@ private:
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
         ++IsDoneCounter;
         auto id = result->Get()->PathIndex;
-        LOG_W("TS3ReadActor", "ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString());
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        const auto path = std::get<TString>(Paths[id - StartPathIndex]);
+        LOG_W("TS3ReadActor", "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString());
+        auto issues = AddParentIssue(TStringBuilder{} << "Error while reading file " << path, TIssues{result->Get()->Error});
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
     // IActor & IDqComputeActorAsyncInput
@@ -579,7 +594,7 @@ private:
             switch (etype) {
                 case TEvPrivate::TEvReadFinished::EventType:
                     Issues = std::move(ev->Get<TEvPrivate::TEvReadFinished>()->Issues);
-                    LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished: " << Issues.ToOneLineString());
+                    LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished: " << Path << " " << Issues.ToOneLineString());
                     break;
                 default:
                     continue;
@@ -638,7 +653,7 @@ private:
         } catch (const TDtorException&) {
             throw;
         } catch (const std::exception& err) {
-            exceptIssue.SetMessage(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what());
+            exceptIssue.SetMessage(err.what());
             fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
@@ -660,8 +675,9 @@ private:
             Issues.AddIssue(exceptIssue);
         }
 
-        if (Issues)
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(Issues), fatalCode));
+        auto issues = AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
+        if (issues)
+            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), fatalCode));
         else
             Send(ParentActorId, new TEvPrivate::TEvReadFinished);
     } catch (const TDtorException&) {
@@ -708,7 +724,8 @@ private:
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) final {
         TStringBuilder message;
-        message << "S3 read. Unexpected message type " << Hex(ev->GetTypeRewrite());
+        message << "Error while reading file " << Path << ", details: "
+                << "S3 read. Unexpected message type " << Hex(ev->GetTypeRewrite());
         if (auto* eventBase = ev->GetBase()) {
             message << " (" << eventBase->ToStringHeader() << ")";
         }
@@ -859,7 +876,6 @@ public:
         LOG_D("TS3StreamReadActor", "Bootstrap");
         Become(&TS3StreamReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
-
             const TPath& path = Paths[pathInd];
             auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + std::get<TString>(path), Headers, std::get<std::size_t>(path), TxId, RetryPolicy);
             RetryStuffForFile.push_back(stuff);

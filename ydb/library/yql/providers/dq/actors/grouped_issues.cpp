@@ -16,6 +16,9 @@ NYql::TIssues NYql::NDq::GroupedIssues::ToIssues() {
     for (auto& [issue, meta]: issueVector) {
         auto modified_issue_message = issue.GetMessage() + " " + meta.InfoString();
         auto modified_issue = NYql::TIssue(issue.Position, issue.EndPosition, modified_issue_message);
+        for (const auto& subIssue: issue.GetSubIssues()) {
+            modified_issue.AddSubIssue(subIssue);
+        }
         issues.AddIssue(modified_issue);
     }
     return issues;

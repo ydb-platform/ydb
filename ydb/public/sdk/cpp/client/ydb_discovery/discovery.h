@@ -27,6 +27,7 @@ struct TEndpointInfo {
     bool Ssl = false;
     TVector<TString> Services;
     TString Location;
+    ui32 NodeId = 0;
     TVector<TString> IPv4Addrs;
     TVector<TString> IPv6Addrs;
     TString SslTargetNameOverride;

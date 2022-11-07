@@ -15,6 +15,7 @@ TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discover
         info.Address = endpointInfo.address();
         info.Port = endpointInfo.port();
         info.Location = endpointInfo.location();
+        info.NodeId = endpointInfo.node_id();
         info.LoadFactor = endpointInfo.load_factor();
         info.Ssl = endpointInfo.ssl();
         info.Services.reserve(endpointInfo.service().size());

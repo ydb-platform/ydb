@@ -110,6 +110,13 @@ message QueryContent {
         ANALYTICS = 1; // Analytical query (used for analytical data processing for example to work with YDB, ClickHouse, ...)
         STREAMING = 2; // Streaming query (used for streaming data processing, such as working with YDS)
     }
+
+    enum QuerySyntax {
+        QUERY_SYNTAX_UNSPECIFIED = 0;
+        YQL_V1 = 1; // YQL version 1
+        PG = 2; // PostgresQL
+    }
+
     QueryType type = 1;
     string name = 2 [(Ydb.length).le = 1024];
     Acl acl = 3;
@@ -121,6 +128,9 @@ message QueryContent {
     // Well known settings are:
     // "executor" - type of executor for this query
     map<string, string> execution_settings = 10 [(Ydb.map_key).length.range = {min: 1, max: 100}, (Ydb.length).le = 4096];
+    // Syntax of the text
+    // By default it is "yql", but additional syntax "pg" (PostreSQL SQL frontend) is supported as well
+    QuerySyntax syntax = 11;
 }
 
 message CommonMeta {
@@ -364,6 +374,7 @@ message Job {
     Acl acl = 10;
     bool automatic = 11;
     google.protobuf.Timestamp expire_at = 12;
+    QueryContent.QuerySyntax syntax = 13;
 }
 
 // Information about recent query runs

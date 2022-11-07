@@ -1937,12 +1937,6 @@ private:
     }
 
     TStatus CondenseWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const TStructExprType* inItemType = GetNonEmptyStructItemType(*input->Head().GetTypeAnn());
-        const TStructExprType* outItemType = GetNonEmptyStructItemType(*input->GetTypeAnn());
-        if (!inItemType) {
-            return InheriteEmptyFromInput(input, output, ctx);
-        }
-
         const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>();
         if (input->Child(1)->IsLambda()) {
             TConstraintNode::TListType argConstraints;
@@ -1993,7 +1987,7 @@ private:
         }
 
         if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) {
-            if (outItemType) {
+            if (const auto outItemType = GetNonEmptyStructItemType(*input->GetTypeAnn())) {
                 input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(*outItemType));
             }
         }

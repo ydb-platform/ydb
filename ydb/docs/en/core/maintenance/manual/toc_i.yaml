@@ -21,3 +21,5 @@ items:
   href: cms.md
 - name: Updating configuration of the actor system
   href: change_actorsystem_configs.md
+- name: Decomission of a part of the cluster
+  href: ../../administration/decommissioning.md

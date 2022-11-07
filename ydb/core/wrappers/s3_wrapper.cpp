@@ -26,7 +26,7 @@ class TS3Wrapper: public TActor<TS3Wrapper> {
 
     template <class T>
     void Handle(T& ev) {
-        CSOperator->Execute(ev);
+        StorageOperator->Execute(ev);
     }
 
 public:
@@ -34,11 +34,11 @@ public:
         return NKikimrServices::TActivity::S3_WRAPPER_ACTOR;
     }
 
-    explicit TS3Wrapper(IExternalStorageOperator::TPtr csOperator)
+    explicit TS3Wrapper(IExternalStorageOperator::TPtr storageOperator)
         : TActor(&TThis::StateWork)
-        , CSOperator(csOperator)
+        , StorageOperator(storageOperator)
     {
-        Y_VERIFY(!!CSOperator, "not initialized operator. incorrect config.");
+        Y_VERIFY(!!StorageOperator, "not initialized operator. incorrect config.");
     }
 
     virtual ~TS3Wrapper() = default;
@@ -62,7 +62,7 @@ public:
     }
 
 private:
-    IExternalStorageOperator::TPtr CSOperator;
+    IExternalStorageOperator::TPtr StorageOperator;
 
 }; // TS3Wrapper
 

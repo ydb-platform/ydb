@@ -50,7 +50,7 @@ TEvListObjectsResponse::TResult TFakeExternalStorage::BuildListObjectsResult(con
     const TString prefix(awsPrefix.data(), awsPrefix.size());
     THolder<TEvListObjectsResponse> result;
     TGuard<TMutex> g(Mutex);
-    TEvListObjectsResponse::TAWSResult awsResult;
+    TEvListObjectsResponse::TAwsResult awsResult;
     for (auto&& i : bucket) {
         if (!!prefix && !i.first.StartsWith(prefix)) {
             continue;

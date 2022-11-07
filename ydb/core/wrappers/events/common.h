@@ -34,7 +34,7 @@ public:
         : Request(request) {
     }
 
-    TGenericRequest(const TRequest& request, IRequestContext::TPtr requestContext)
+    explicit TGenericRequest(const TRequest& request, IRequestContext::TPtr requestContext)
         : RequestContext(requestContext)
         , Request(request)
     {
@@ -70,16 +70,16 @@ struct TRequestWithBody: public TGenericRequest<TDerived, EventType, T> {
     using TBase = TRequestWithBody<TDerived, EventType, T>;
 };
 
-template <typename TDerived, ui32 EventType, typename TAWSResultExt, typename U = TAWSResultExt>
+template <typename TDerived, ui32 EventType, typename TAwsResultExt, typename U = TAwsResultExt>
 struct TBaseGenericResponse: public NActors::TEventLocal<TDerived, EventType> {
 private:
     using TBase = NActors::TEventLocal<TDerived, EventType>;
     IRequestContext::TPtr RequestContext;
 public:
-    using TOutcome = Aws::Utils::Outcome<TAWSResultExt, Aws::S3::S3Error>;
+    using TOutcome = Aws::Utils::Outcome<TAwsResultExt, Aws::S3::S3Error>;
     using TResult = Aws::Utils::Outcome<U, Aws::S3::S3Error>;
-    using TAWSResult = U;
-    using TAWSOutcome = TResult;
+    using TAwsResult = U;
+    using TAwsOutcome = TResult;
     using TKey = std::optional<TString>;
 
     TResult Result;
@@ -88,7 +88,7 @@ public:
         : Result(TDerived::ResultFromOutcome(outcome)) {
     }
 
-    TBaseGenericResponse(const TOutcome& outcome, IRequestContext::TPtr requestContext)
+    explicit TBaseGenericResponse(const TOutcome& outcome, IRequestContext::TPtr requestContext)
         : RequestContext(requestContext)
         , Result(TDerived::ResultFromOutcome(outcome)) {
     }
@@ -119,10 +119,10 @@ public:
     }
 };
 
-template <typename TDerived, ui32 EventType, typename TAWSResult, typename U = TAWSResult>
-struct TGenericResponse: public TBaseGenericResponse<TDerived, EventType, TAWSResult, U> {
+template <typename TDerived, ui32 EventType, typename TAwsResult, typename U = TAwsResult>
+struct TGenericResponse: public TBaseGenericResponse<TDerived, EventType, TAwsResult, U> {
 private:
-    using TBase = TBaseGenericResponse<TDerived, EventType, TAWSResult, U>;
+    using TBase = TBaseGenericResponse<TDerived, EventType, TAwsResult, U>;
 public:
     using TOutcome = typename TBase::TOutcome;
     using TResult = typename TBase::TResult;
@@ -130,12 +130,12 @@ public:
 
     TKey Key;
 
-    TGenericResponse(const TKey& key, const TOutcome& outcome)
+    explicit TGenericResponse(const TKey& key, const TOutcome& outcome)
         : TBase(outcome)
         , Key(key) {
     }
 
-    TGenericResponse(const TKey& key, const TOutcome& outcome, IRequestContext::TPtr requestContext)
+    explicit TGenericResponse(const TKey& key, const TOutcome& outcome, IRequestContext::TPtr requestContext)
         : TBase(outcome, requestContext)
         , Key(key)
     {

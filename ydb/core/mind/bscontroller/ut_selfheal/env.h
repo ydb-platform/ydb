@@ -17,8 +17,11 @@ struct TEnvironmentSetup {
     ui64 NextHostConfigId = 1;
     TActorId TimerActor;
 
-    TEnvironmentSetup(ui32 nodeCount)
+    const std::function<TNodeLocation(ui32)> LocationGenerator;
+
+    TEnvironmentSetup(ui32 nodeCount, std::function<TNodeLocation(ui32)> locationGenerator = {})
         : NodeCount(nodeCount)
+        , LocationGenerator(locationGenerator)
     {
         Initialize();
     }
@@ -34,7 +37,11 @@ struct TEnvironmentSetup {
         Runtime->Start();
         auto *appData = Runtime->GetAppData();
         appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", Domain).Release());
-        Runtime->SetupTabletRuntime();
+        if (LocationGenerator) {
+            Runtime->SetupTabletRuntime(LocationGenerator);
+        } else {
+            Runtime->SetupTabletRuntime();
+        }
         SetupStorage();
         SetupTablet();
     }
@@ -206,4 +213,5 @@ struct TEnvironmentSetup {
         Runtime->Send(new IEventHandle(TimerActor, edge, new TEvArmTimer(timeout)), NodeId);
         WaitForEdgeActorEvent<TEvents::TEvWakeup>(edge);
     }
+
 };

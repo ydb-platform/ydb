@@ -333,6 +333,23 @@ public:
         YQL_ENSURE(event.GetRequest().GetSessionId() == SessionId,
                 "Invalid session, expected: " << SessionId << ", got: " << event.GetRequest().GetSessionId());
 
+        if (event.HasYdbStatus()) {
+            if (event.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(event.GetQueryIssues(), issues);
+                TString errMsg = issues.ToString();
+
+                LOG_N(TKqpRequestInfo("", SessionId)
+                    << "Got invalid query request, reply with status: "
+                    << event.GetYdbStatus()
+                    << " msg: "
+                    << errMsg <<".");
+                ReplyProcessError(ev->Sender, proxyRequestId, event.GetYdbStatus(), errMsg);
+                FinalCleanup();
+                return;
+            }
+        }
+
         if (ShutdownState && ShutdownState->SoftTimeoutReached()) {
             // we reached the soft timeout, so at this point we don't allow to accept new queries for session.
             LOG_N("system shutdown requested: soft timeout reached, no queries can be accepted");

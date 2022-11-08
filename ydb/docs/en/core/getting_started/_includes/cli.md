@@ -55,10 +55,14 @@ To avoid specifying connection parameters every time you call the YDB CLI, use t
 [Create the profile](../../reference/ydb-cli/profile/create.md) `db1` using the following command:
 
 ```bash
-{{ ydb-cli }} config profile create db1
+{{ ydb-cli }} config profile create db1 -e <endpoint> -d <database>
 ```
 
-You will be interactively prompted for connection parameters to be linked with the profile. Use for them the values verified in the [previous step](#ping).
+Use the values checked at the [previous step](#ping) as parameters. For example, to create a connection profile to a local YDB database created using the self-hosted deployment scenario [in Docker](../self_hosted/ydb_docker.md), run the following command:
+
+```bash
+{{ ydb-cli }} config profile create db1 -e grpc://localhost:2136 -d /local
+```
 
 Check that the profile is OK with the `scheme ls` command:
 

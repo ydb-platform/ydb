@@ -15,7 +15,7 @@ A profile is a saved and locally named configuration of DB connection parameters
 - Calling the same `scheme ls` command using a profile:
 
   ```bash
-  {{ ydb-cli }} --profile db1 scheme ls
+  {{ ydb-cli }} -p db1 scheme ls
   ```
 
 ## Profile management commands {#commands}

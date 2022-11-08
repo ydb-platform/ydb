@@ -5,7 +5,7 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvBlock>(std::unique_ptr<IEventHandle> ev) {
-        class TBlockQuery : public TQuery {
+        class TBlockQuery : public TBlobStorageQuery<TEvBlobStorage::TEvBlock> {
             struct TBlockContext : TRequestContext {
                 TMonotonic Timestamp;
 
@@ -15,24 +15,22 @@ namespace NKikimr::NBlobDepot {
             };
 
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                auto& msg = *Event->Get<TEvBlobStorage::TEvBlock>();
-
                 // lookup existing blocks to try fail-fast
-                const auto& [blockedGeneration, issuerGuid] = Agent.BlocksManager.GetBlockForTablet(msg.TabletId);
-                if (msg.Generation < blockedGeneration || (msg.Generation == blockedGeneration && (
-                        msg.IssuerGuid != issuerGuid || !msg.IssuerGuid || !issuerGuid))) {
+                const auto& [blockedGeneration, issuerGuid] = Agent.BlocksManager.GetBlockForTablet(Request.TabletId);
+                if (Request.Generation < blockedGeneration || (Request.Generation == blockedGeneration && (
+                        Request.IssuerGuid != issuerGuid || !Request.IssuerGuid || !issuerGuid))) {
                     // we don't consider ExpirationTimestamp here because blocked generation may only increase
                     return EndWithError(NKikimrProto::ALREADY, "block race detected");
                 }
 
                 // issue request to the tablet
                 NKikimrBlobDepot::TEvBlock block;
-                block.SetTabletId(msg.TabletId);
-                block.SetBlockedGeneration(msg.Generation);
-                block.SetIssuerGuid(msg.IssuerGuid);
+                block.SetTabletId(Request.TabletId);
+                block.SetBlockedGeneration(Request.Generation);
+                block.SetIssuerGuid(Request.IssuerGuid);
                 Agent.Issue(std::move(block), this, std::make_shared<TBlockContext>(TActivationContext::Monotonic()));
             }
 
@@ -54,11 +52,14 @@ namespace NKikimr::NBlobDepot {
                 } else {
                     // update blocks cache
                     auto& blockContext = context->Obtain<TBlockContext>();
-                    auto& query = *Event->Get<TEvBlobStorage::TEvBlock>();
-                    Agent.BlocksManager.SetBlockForTablet(query.TabletId, query.Generation, blockContext.Timestamp,
+                    Agent.BlocksManager.SetBlockForTablet(Request.TabletId, Request.Generation, blockContext.Timestamp,
                         TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs()));
                     EndWithSuccess(std::make_unique<TEvBlobStorage::TEvBlockResult>(NKikimrProto::OK));
                 }
+            }
+
+            ui64 GetTabletId() const override {
+                return Request.TabletId;
             }
         };
 

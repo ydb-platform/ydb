@@ -5,7 +5,7 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvCollectGarbage>(std::unique_ptr<IEventHandle> ev) {
-        class TCollectGarbageQuery : public TQuery {
+        class TCollectGarbageQuery : public TBlobStorageQuery<TEvBlobStorage::TEvCollectGarbage> {
             ui32 BlockChecksRemain = 3;
             ui32 KeepIndex = 0;
             ui32 NumKeep;
@@ -16,15 +16,13 @@ namespace NKikimr::NBlobDepot {
             bool QueryInFlight = false;
 
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                auto& msg = *Event->Get<TEvBlobStorage::TEvCollectGarbage>();
+                NumKeep = Request.Keep ? Request.Keep->size() : 0;
+                NumDoNotKeep = Request.DoNotKeep ? Request.DoNotKeep->size() : 0;
 
-                NumKeep = msg.Keep ? msg.Keep->size() : 0;
-                NumDoNotKeep = msg.DoNotKeep ? msg.DoNotKeep->size() : 0;
-
-                const auto status = Agent.BlocksManager.CheckBlockForTablet(msg.TabletId, msg.RecordGeneration, this, nullptr);
+                const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Request.RecordGeneration, this, nullptr);
                 if (status == NKikimrProto::OK) {
                     IssueCollectGarbage();
                 } else if (status != NKikimrProto::UNKNOWN) {
@@ -35,31 +33,30 @@ namespace NKikimr::NBlobDepot {
             }
 
             void IssueCollectGarbage() {
-                auto& msg = *Event->Get<TEvBlobStorage::TEvCollectGarbage>();
                 NKikimrBlobDepot::TEvCollectGarbage record;
 
                 ui32 numItemsIssued = 0;
 
                 for (; KeepIndex < NumKeep && numItemsIssued < MaxCollectGarbageFlagsPerMessage; ++KeepIndex) {
-                    LogoBlobIDFromLogoBlobID((*msg.Keep)[KeepIndex], record.AddKeep());
+                    LogoBlobIDFromLogoBlobID((*Request.Keep)[KeepIndex], record.AddKeep());
                     ++numItemsIssued;
                 }
                 for (; DoNotKeepIndex < NumDoNotKeep && numItemsIssued < MaxCollectGarbageFlagsPerMessage; ++DoNotKeepIndex) {
-                    LogoBlobIDFromLogoBlobID((*msg.DoNotKeep)[DoNotKeepIndex], record.AddDoNotKeep());
+                    LogoBlobIDFromLogoBlobID((*Request.DoNotKeep)[DoNotKeepIndex], record.AddDoNotKeep());
                     ++numItemsIssued;
                 }
 
                 IsLast = KeepIndex == NumKeep && DoNotKeepIndex == NumDoNotKeep;
 
-                record.SetTabletId(msg.TabletId);
-                record.SetGeneration(msg.RecordGeneration);
-                record.SetPerGenerationCounter(msg.PerGenerationCounter + CounterShift);
-                record.SetChannel(msg.Channel);
+                record.SetTabletId(Request.TabletId);
+                record.SetGeneration(Request.RecordGeneration);
+                record.SetPerGenerationCounter(Request.PerGenerationCounter + CounterShift);
+                record.SetChannel(Request.Channel);
 
-                if (msg.Collect && IsLast) {
-                    record.SetHard(msg.Hard);
-                    record.SetCollectGeneration(msg.CollectGeneration);
-                    record.SetCollectStep(msg.CollectStep);
+                if (Request.Collect && IsLast) {
+                    record.SetHard(Request.Hard);
+                    record.SetCollectGeneration(Request.CollectGeneration);
+                    record.SetCollectStep(Request.CollectStep);
                 }
 
                 Agent.Issue(std::move(record), this, nullptr);
@@ -97,12 +94,15 @@ namespace NKikimr::NBlobDepot {
                 } else if (const auto status = msg.GetStatus(); status != NKikimrProto::OK) {
                     EndWithError(status, msg.GetErrorReason());
                 } else if (IsLast) {
-                    auto& msg = *Event->Get<TEvBlobStorage::TEvCollectGarbage>();
                     EndWithSuccess(std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(NKikimrProto::OK,
-                        msg.TabletId, msg.RecordGeneration, msg.PerGenerationCounter, msg.Channel));
+                        Request.TabletId, Request.RecordGeneration, Request.PerGenerationCounter, Request.Channel));
                 } else {
                     IssueCollectGarbage();
                 }
+            }
+
+            ui64 GetTabletId() const override {
+                return Request.TabletId;
             }
         };
 

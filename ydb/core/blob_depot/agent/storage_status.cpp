@@ -4,9 +4,9 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvStatus>(std::unique_ptr<IEventHandle> ev) {
-        class TStatusQuery : public TQuery {
+        class TStatusQuery : public TBlobStorageQuery<TEvBlobStorage::TEvStatus> {
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
                 EndWithSuccess(std::make_unique<TEvBlobStorage::TEvStatusResult>(NKikimrProto::OK,

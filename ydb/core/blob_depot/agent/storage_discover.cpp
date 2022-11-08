@@ -6,7 +6,7 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvDiscover>(std::unique_ptr<IEventHandle> ev) {
-        class TDiscoverQuery : public TQuery {
+        class TDiscoverQuery : public TBlobStorageQuery<TEvBlobStorage::TEvDiscover> {
             ui64 TabletId = 0;
             bool ReadBody;
             ui32 MinGeneration = 0;
@@ -21,18 +21,16 @@ namespace NKikimr::NBlobDepot {
             ui32 BlockedGeneration = 0;
 
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                auto& msg = *Event->Get<TEvBlobStorage::TEvDiscover>();
-
-                TabletId = msg.TabletId;
-                ReadBody = msg.ReadBody;
-                MinGeneration = msg.MinGeneration;
+                TabletId = Request.TabletId;
+                ReadBody = Request.ReadBody;
+                MinGeneration = Request.MinGeneration;
 
                 IssueResolve();
 
-                if (msg.DiscoverBlockedGeneration) {
+                if (Request.DiscoverBlockedGeneration) {
                     const auto status = Agent.BlocksManager.CheckBlockForTablet(TabletId, Max<ui32>(), this, &BlockedGeneration);
                     if (status == NKikimrProto::OK) {
                         DoneWithBlockedGeneration = true;
@@ -164,6 +162,10 @@ namespace NKikimr::NBlobDepot {
                         ? std::make_unique<TEvBlobStorage::TEvDiscoverResult>(Id, MinGeneration, Buffer, BlockedGeneration)
                         : std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA, MinGeneration, BlockedGeneration));
                 }
+            }
+
+            ui64 GetTabletId() const override {
+                return Request.TabletId;
             }
         };
 

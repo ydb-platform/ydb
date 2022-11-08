@@ -4,9 +4,9 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvAssimilate>(std::unique_ptr<IEventHandle> ev) {
-        class TAssimilateQuery : public TQuery {
+        class TAssimilateQuery : public TBlobStorageQuery<TEvBlobStorage::TEvAssimilate> {
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
                 Y_VERIFY(Agent.ProxyId);

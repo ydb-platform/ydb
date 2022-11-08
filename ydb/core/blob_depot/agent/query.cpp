@@ -9,7 +9,7 @@ namespace NKikimr::NBlobDepot {
         } else {
             auto *query = CreateQuery(ev);
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA13, "new query", (VirtualGroupId, VirtualGroupId),
-                (QueryId, query->GetQueryId()), (Name, query->GetName()));
+                (QueryId, query->GetQueryId()), (TabletId, query->GetTabletId()), (Name, query->GetName()));
             if (!TabletId) {
                 query->EndWithError(NKikimrProto::ERROR, "group is in error state");
             } else {

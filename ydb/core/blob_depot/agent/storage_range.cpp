@@ -4,7 +4,7 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvRange>(std::unique_ptr<IEventHandle> ev) {
-        class TRangeQuery : public TQuery {
+        class TRangeQuery : public TBlobStorageQuery<TEvBlobStorage::TEvRange> {
             std::unique_ptr<TEvBlobStorage::TEvRangeResult> Response;
             ui32 ReadsInFlight = 0;
             ui32 ResolvesInFlight = 0;
@@ -18,33 +18,29 @@ namespace NKikimr::NBlobDepot {
             };
 
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                auto& msg = GetQuery();
-
-                if (msg.Decommission) {
+                if (Request.Decommission) {
                     Y_VERIFY(Agent.ProxyId);
                     STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA26, "forwarding TEvRange", (VirtualGroupId, Agent.VirtualGroupId),
-                        (TabletId, Agent.TabletId), (Msg, msg), (ProxyId, Agent.ProxyId));
+                        (TabletId, Agent.TabletId), (Msg, Request), (ProxyId, Agent.ProxyId));
                     const bool sent = TActivationContext::Send(Event->Forward(Agent.ProxyId));
                     Y_VERIFY(sent);
                     delete this;
                     return;
                 }
 
-                Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, msg.From, msg.To,
+                Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, Request.From, Request.To,
                     Agent.VirtualGroupId);
 
                 IssueResolve();
             }
 
             void IssueResolve() {
-                auto& msg = GetQuery();
-
-                TString from = msg.From.AsBinaryString();
-                TString to = msg.To.AsBinaryString();
-                const bool reverse = msg.To < msg.From;
+                TString from = Request.From.AsBinaryString();
+                TString to = Request.To.AsBinaryString();
+                const bool reverse = Request.To < Request.From;
                 if (reverse) {
                     std::swap(from, to);
                 }
@@ -57,20 +53,19 @@ namespace NKikimr::NBlobDepot {
                 range->SetEndingKey(to);
                 range->SetIncludeEnding(true);
                 range->SetReverse(reverse);
-                item->SetTabletId(msg.TabletId);
-                item->SetMustRestoreFirst(msg.MustRestoreFirst);
+                item->SetTabletId(Request.TabletId);
+                item->SetMustRestoreFirst(Request.MustRestoreFirst);
 
                 Agent.Issue(std::move(resolve), this, nullptr);
                 ++ResolvesInFlight;
             }
 
             void IssueResolve(TLogoBlobID id, size_t index) {
-                auto& msg = GetQuery();
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
                 item->SetExactKey(id.AsBinaryString());
-                item->SetTabletId(msg.TabletId);
-                item->SetMustRestoreFirst(msg.MustRestoreFirst);
+                item->SetTabletId(Request.TabletId);
+                item->SetMustRestoreFirst(Request.MustRestoreFirst);
 
                 Agent.Issue(std::move(resolve), this, std::make_shared<TExtraResolveContext>(index));
                 ++ResolvesInFlight;
@@ -89,8 +84,6 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, NKikimrBlobDepot::TEvResolveResult& msg) {
-                auto& query = GetQuery();
-
                 --ResolvesInFlight;
 
                 if (msg.GetStatus() != NKikimrProto::OK && msg.GetStatus() != NKikimrProto::OVERRUN) {
@@ -108,11 +101,11 @@ namespace NKikimr::NBlobDepot {
                         Response->Responses.emplace_back(id, TString());
                     }
 
-                    if (!query.IsIndexOnly) {
+                    if (!Request.IsIndexOnly) {
                         TReadArg arg{
                             key.GetValueChain(),
                             NKikimrBlobStorage::EGetHandleClass::FastRead,
-                            query.MustRestoreFirst,
+                            Request.MustRestoreFirst,
                             this,
                             0,
                             0,
@@ -124,7 +117,7 @@ namespace NKikimr::NBlobDepot {
                                 << error);
                         }
                         ++ReadsInFlight;
-                    } else if (query.MustRestoreFirst) {
+                    } else if (Request.MustRestoreFirst) {
                         Y_FAIL("not implemented yet");
                     }
                 }
@@ -163,8 +156,8 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            TEvBlobStorage::TEvRange& GetQuery() const {
-                return *Event->Get<TEvBlobStorage::TEvRange>();
+            ui64 GetTabletId() const override {
+                return Request.TabletId;
             }
         };
 

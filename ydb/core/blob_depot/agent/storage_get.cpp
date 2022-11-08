@@ -6,7 +6,7 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGet>(std::unique_ptr<IEventHandle> ev) {
-        class TGetQuery : public TQuery {
+        class TGetQuery : public TBlobStorageQuery<TEvBlobStorage::TEvGet> {
             std::unique_ptr<TEvBlobStorage::TEvGetResult> Response;
             ui32 AnswersRemain;
 
@@ -19,12 +19,10 @@ namespace NKikimr::NBlobDepot {
             };
 
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                auto& msg = GetQuery();
-
-                if (msg.Decommission) {
+                if (Request.Decommission) {
                     // just forward this message to underlying proxy
                     Y_VERIFY(Agent.ProxyId);
                     const bool sent = TActivationContext::Send(Event->Forward(Agent.ProxyId));
@@ -33,20 +31,20 @@ namespace NKikimr::NBlobDepot {
                     return;
                 }
 
-                Response = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg.QuerySize,
+                Response = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, Request.QuerySize,
                     Agent.VirtualGroupId);
-                AnswersRemain = msg.QuerySize;
+                AnswersRemain = Request.QuerySize;
 
-                if (msg.ReaderTabletData) {
-                    auto status = Agent.BlocksManager.CheckBlockForTablet(msg.ReaderTabletData->Id, msg.ReaderTabletData->Generation, this, nullptr);
+                if (Request.ReaderTabletData) {
+                    auto status = Agent.BlocksManager.CheckBlockForTablet(Request.ReaderTabletData->Id, Request.ReaderTabletData->Generation, this, nullptr);
                     if (status == NKikimrProto::BLOCKED) {
                         EndWithError(status, "Fail TEvGet due to BLOCKED tablet generation");
                         return;
                     }
                 }
 
-                for (ui32 i = 0; i < msg.QuerySize; ++i) {
-                    auto& query = msg.Queries[i];
+                for (ui32 i = 0; i < Request.QuerySize; ++i) {
+                    auto& query = Request.Queries[i];
 
                     auto& response = Response->Responses[i];
                     response.Id = query.Id;
@@ -64,26 +62,25 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool ProcessSingleResult(ui32 queryIdx, const TResolvedValueChain *value) {
-                auto& msg = GetQuery();
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA27, "ProcessSingleResult", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Value, value));
 
                 if (!value) {
                     Response->Responses[queryIdx].Status = NKikimrProto::NODATA;
                     --AnswersRemain;
-                } else if (msg.IsIndexOnly) {
+                } else if (Request.IsIndexOnly) {
                     Response->Responses[queryIdx].Status = NKikimrProto::OK;
                     --AnswersRemain;
                 } else if (value) {
                     TReadArg arg{
                         *value,
-                        msg.GetHandleClass,
-                        msg.MustRestoreFirst,
+                        Request.GetHandleClass,
+                        Request.MustRestoreFirst,
                         this,
-                        msg.Queries[queryIdx].Shift,
-                        msg.Queries[queryIdx].Size,
+                        Request.Queries[queryIdx].Shift,
+                        Request.Queries[queryIdx].Size,
                         queryIdx,
-                        msg.ReaderTabletData};
+                        Request.ReaderTabletData};
                     TString error;
                     const bool success = Agent.IssueRead(arg, error);
                     if (!success) {
@@ -126,8 +123,16 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            TEvBlobStorage::TEvGet& GetQuery() const {
-                return *Event->Get<TEvBlobStorage::TEvGet>();
+            ui64 GetTabletId() const override {
+                ui64 value = 0;
+                for (ui32 i = 0; i < Request.QuerySize; ++i) {
+                    auto& req = Request.Queries[i];
+                    if (value && value != req.Id.TabletID()) {
+                        return 0;
+                    }
+                    value = req.Id.TabletID();
+                }
+                return value;
             }
         };
 

@@ -241,6 +241,7 @@ namespace NKikimr::NBlobDepot {
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
             TString GetName() const;
             ui64 GetQueryId() const { return QueryId; }
+            virtual ui64 GetTabletId() const { return 0; }
             virtual void Initiate() = 0;
 
             virtual void OnUpdateBlock(bool /*success*/) {}
@@ -252,6 +253,18 @@ namespace NKikimr::NBlobDepot {
             struct TDeleter {
                 static void Destroy(TQuery *query) { delete query; }
             };
+        };
+
+        template<typename TEvent>
+        class TBlobStorageQuery : public TQuery {
+        public:
+            TBlobStorageQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
+                : TQuery(agent, std::move(event))
+                , Request(*Event->Get<TEvent>())
+            {}
+
+        protected:
+            TEvent& Request;
         };
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEventQ;

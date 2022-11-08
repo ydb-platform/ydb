@@ -5,7 +5,7 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev) {
-        class TPutQuery : public TQuery {
+        class TPutQuery : public TBlobStorageQuery<TEvBlobStorage::TEvPut> {
             const bool SuppressFooter = true;
             const bool IssueUncertainWrites = true;
 
@@ -18,7 +18,7 @@ namespace NKikimr::NBlobDepot {
             TBlobSeqId BlobSeqId;
 
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void OnDestroy(bool success) override {
                 if (IsInFlight) {
@@ -31,29 +31,27 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Initiate() override {
-                auto& msg = GetQuery();
-                if (msg.Buffer.size() > MaxBlobSize) {
+                if (Request.Buffer.size() > MaxBlobSize) {
                     return EndWithError(NKikimrProto::ERROR, "blob is way too big");
-                } else if (msg.Buffer.size() != msg.Id.BlobSize()) {
+                } else if (Request.Buffer.size() != Request.Id.BlobSize()) {
                     return EndWithError(NKikimrProto::ERROR, "blob size mismatch");
-                } else if (!msg.Buffer) {
+                } else if (!Request.Buffer) {
                     return EndWithError(NKikimrProto::ERROR, "no blob data");
-                } else if (!msg.Id) {
+                } else if (!Request.Id) {
                     return EndWithError(NKikimrProto::ERROR, "blob id is zero");
                 }
 
-                BlockChecksRemain.resize(1 + msg.ExtraBlockChecks.size(), 3); // set number of tries for every block
+                BlockChecksRemain.resize(1 + Request.ExtraBlockChecks.size(), 3); // set number of tries for every block
                 CheckBlocks();
             }
 
             void CheckBlocks() {
-                auto& msg = GetQuery();
                 bool someBlocksMissing = false;
-                for (size_t i = 0; i <= msg.ExtraBlockChecks.size(); ++i) {
-                    const auto *blkp = i ? &msg.ExtraBlockChecks[i - 1] : nullptr;
-                    const ui64 tabletId = blkp ? blkp->first : msg.Id.TabletID();
-                    const ui32 generation = blkp ? blkp->second : msg.Id.Generation();
-                    const auto status = msg.Decommission
+                for (size_t i = 0; i <= Request.ExtraBlockChecks.size(); ++i) {
+                    const auto *blkp = i ? &Request.ExtraBlockChecks[i - 1] : nullptr;
+                    const ui64 tabletId = blkp ? blkp->first : Request.Id.TabletID();
+                    const ui32 generation = blkp ? blkp->second : Request.Id.Generation();
+                    const auto status = Request.Decommission
                         ? NKikimrProto::OK // suppress blocks check when copying blob from decommitted group
                         : Agent.BlocksManager.CheckBlockForTablet(tabletId, generation, this, nullptr);
                     if (status == NKikimrProto::OK) {
@@ -74,8 +72,6 @@ namespace NKikimr::NBlobDepot {
             void IssuePuts() {
                 Y_VERIFY(!PutsIssued);
 
-                auto& msg = GetQuery();
-
                 const auto it = Agent.ChannelKinds.find(NKikimrBlobDepot::TChannelKind::Data);
                 if (it == Agent.ChannelKinds.end()) {
                     return EndWithError(NKikimrProto::ERROR, "no Data channels");
@@ -84,7 +80,7 @@ namespace NKikimr::NBlobDepot {
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA21, "allocated BlobSeqId", (VirtualGroupId, Agent.VirtualGroupId),
-                    (QueryId, GetQueryId()), (BlobSeqId, blobSeqId), (BlobId, msg.Id));
+                    (QueryId, GetQueryId()), (BlobSeqId, blobSeqId), (BlobId, Request.Id));
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
                 }
@@ -98,11 +94,11 @@ namespace NKikimr::NBlobDepot {
 
                 Y_VERIFY(CommitBlobSeq.ItemsSize() == 0);
                 auto *commitItem = CommitBlobSeq.AddItems();
-                commitItem->SetKey(msg.Id.AsBinaryString());
+                commitItem->SetKey(Request.Id.AsBinaryString());
                 auto *locator = commitItem->MutableBlobLocator();
                 BlobSeqId.ToProto(locator->MutableBlobSeqId());
-                //locator->SetChecksum(Crc32c(msg.Buffer.data(), msg.Buffer.size()));
-                locator->SetTotalDataLen(msg.Buffer.size());
+                //locator->SetChecksum(Crc32c(Request.Buffer.data(), Request.Buffer.size()));
+                locator->SetTotalDataLen(Request.Buffer.size());
                 if (!SuppressFooter) {
                     locator->SetFooterLen(sizeof(TVirtualGroupBlobFooter));
                 }
@@ -112,17 +108,17 @@ namespace NKikimr::NBlobDepot {
                     footerData = TContiguousData::Uninitialized(sizeof(TVirtualGroupBlobFooter));
                     auto& footer = *reinterpret_cast<TVirtualGroupBlobFooter*>(footerData.UnsafeGetDataMut());
                     memset(&footer, 0, sizeof(footer));
-                    footer.StoredBlobId = msg.Id;
+                    footer.StoredBlobId = Request.Id;
                 }
 
                 auto put = [&](EBlobType type, TContiguousData&& buffer) {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_VERIFY(!locator->HasGroupId() || locator->GetGroupId() == groupId);
                     locator->SetGroupId(groupId);
-                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), msg.Deadline, msg.HandleClass, msg.Tactic);
-                    ev->ExtraBlockChecks = msg.ExtraBlockChecks;
-                    if (!msg.Decommission) { // do not check original blob against blocks when writing decommission copy
-                        ev->ExtraBlockChecks.emplace_back(msg.Id.TabletID(), msg.Id.Generation());
+                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), Request.Deadline, Request.HandleClass, Request.Tactic);
+                    ev->ExtraBlockChecks = Request.ExtraBlockChecks;
+                    if (!Request.Decommission) { // do not check original blob against blocks when writing decommission copy
+                        ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
                     }
                     Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
                     ++PutsInFlight;
@@ -130,16 +126,16 @@ namespace NKikimr::NBlobDepot {
 
                 if (SuppressFooter) {
                     // write the blob as is, we don't need footer for this kind
-                    put(EBlobType::VG_DATA_BLOB, TContiguousData(std::move(msg.Buffer)));
-                } else if (msg.Buffer.size() + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize) {
+                    put(EBlobType::VG_DATA_BLOB, TContiguousData(std::move(Request.Buffer)));
+                } else if (Request.Buffer.size() + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize) {
                     // write single blob with footer
-                    TRope buffer = TRope(std::move(msg.Buffer));
+                    TRope buffer = TRope(std::move(Request.Buffer));
                     buffer.Insert(buffer.End(), std::move(footerData));
                     buffer.Compact();
                     put(EBlobType::VG_COMPOSITE_BLOB, TContiguousData(std::move(buffer)));
                 } else {
                     // write data blob and blob with footer
-                    put(EBlobType::VG_DATA_BLOB, TContiguousData(std::move(msg.Buffer)));
+                    put(EBlobType::VG_DATA_BLOB, TContiguousData(std::move(Request.Buffer)));
                     put(EBlobType::VG_FOOTER_BLOB, TContiguousData(std::move(footerData)));
                 }
 
@@ -252,13 +248,12 @@ namespace NKikimr::NBlobDepot {
                     IssueCommitBlobSeq(false);
                 }
 
-                auto& msg = GetQuery();
-                TQuery::EndWithSuccess(std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::OK, msg.Id,
+                TQuery::EndWithSuccess(std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::OK, Request.Id,
                     Agent.GetStorageStatusFlags(), Agent.VirtualGroupId, Agent.GetApproximateFreeSpaceShare()));
             }
 
-            TEvBlobStorage::TEvPut& GetQuery() const {
-                return *Event->Get<TEvBlobStorage::TEvPut>();
+            ui64 GetTabletId() const override {
+                return Request.Id.TabletID();
             }
         };
 

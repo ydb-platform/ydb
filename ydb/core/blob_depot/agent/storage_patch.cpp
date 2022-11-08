@@ -4,9 +4,9 @@ namespace NKikimr::NBlobDepot {
 
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPatch>(std::unique_ptr<IEventHandle> ev) {
-        class TPatchQuery : public TQuery {
+        class TPatchQuery : public TBlobStorageQuery<TEvBlobStorage::TEvPatch> {
         public:
-            using TQuery::TQuery;
+            using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
                 EndWithError(NKikimrProto::ERROR, "not implemented");

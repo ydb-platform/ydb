@@ -743,7 +743,6 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     CompileQueryCacheEvicted = YdbGroup->GetNamedCounter("name", "table.query.compilation.cache_evictions", true);
 
     CompileQueueSize = KqpGroup->GetCounter("Compilation/QueueSize", false);
-    ForceNewEngineCompileErrors = KqpGroup->GetCounter("Compilation/ForceNEErrors", true);
 
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
@@ -769,27 +768,12 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     ScanQueryRateLimitLatency = KqpGroup->GetHistogram(
         "ScanQuery/RateLimitLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 
-
-    // NewEngine
-    NewEngineForcedQueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE] = KqpGroup->GetHistogram(
-        "Query/ExecuteLatency_NEForced", NMonitoring::ExponentialHistogram(20, 2, 1));
-    NewEngineForcedQueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED] = KqpGroup->GetHistogram(
-        "Query/ExecPreparedLatency_NEForced", NMonitoring::ExponentialHistogram(20, 2, 1));
-    NewEngineCompatibleQueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE] = KqpGroup->GetHistogram(
-        "Query/ExecuteLatency_NECompatible", NMonitoring::ExponentialHistogram(20, 2, 1));
-    NewEngineCompatibleQueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED] = KqpGroup->GetHistogram(
-        "Query/ExecPreparedLatency_NECompatible", NMonitoring::ExponentialHistogram(20, 2, 1));
-    NewEngineForcedComputeCpuTime = KqpGroup->GetCounter("Query/ComputeCpuTime_NEForced", true);
-    NewEngineCompatibleComputeCpuTime = KqpGroup->GetCounter("Query/ComputeCpuTime_NECompatible", true);
-    NewEngineForcedQueryCount = KqpGroup->GetCounter("Query/Count_NEForced", true);
-    NewEngineCompatibleQueryCount = KqpGroup->GetCounter("Query/Count_NECompatible", true);
-
     LiteralTxTotalTimeHistogram = KqpGroup->GetHistogram(
-        "NE/LiteralTxTotalTimeMs", NMonitoring::ExponentialHistogram(10, 2, 1));
+        "PhyTx/LiteralTxTotalTimeMs", NMonitoring::ExponentialHistogram(10, 2, 1));
     DataTxTotalTimeHistogram = KqpGroup->GetHistogram(
-        "NE/DataTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+        "PhyTx/DataTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
     ScanTxTotalTimeHistogram = KqpGroup->GetHistogram(
-        "NE/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+        "PhyTx/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetQueryReplayCounters() const {
@@ -1147,28 +1131,6 @@ void TKqpCounters::ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters) {
     TKqpCountersBase::ReportRecompileRequestGet();
     if (dbCounters) {
         dbCounters->ReportRecompileRequestGet();
-    }
-}
-
-void TKqpCounters::ReportNewEngineForcedQueryStats(NKikimrKqp::EQueryAction action, TDuration duration,
-    ui64 computeCpuTime)
-{
-    NewEngineForcedComputeCpuTime->Add(computeCpuTime);
-    NewEngineForcedQueryCount->Inc();
-
-    if (auto counter = NewEngineForcedQueryLatencies.FindPtr(action)) {
-        (*counter)->Collect(duration.MilliSeconds());
-    }
-}
-
-void TKqpCounters::ReportNewEngineCompatibleQueryStats(NKikimrKqp::EQueryAction action, TDuration duration,
-    ui64 computeCpuTime)
-{
-    NewEngineCompatibleComputeCpuTime->Add(computeCpuTime);
-    NewEngineCompatibleQueryCount->Inc();
-
-    if (auto counter = NewEngineCompatibleQueryLatencies.FindPtr(action)) {
-        (*counter)->Collect(duration.MilliSeconds());
     }
 }
 

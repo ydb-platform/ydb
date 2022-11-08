@@ -289,12 +289,6 @@ public:
     void ReportSqlVersion(TKqpDbCountersPtr dbCounters, ui16 sqlVersion);
     void ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTransactionInfo& txInfo);
 
-    // NewEngine
-    void ReportNewEngineForcedQueryStats(NKikimrKqp::EQueryAction action,
-        TDuration duration, ui64 computeCpuTime);
-    void ReportNewEngineCompatibleQueryStats(NKikimrKqp::EQueryAction action,
-        TDuration duration, ui64 computeCpuTime);
-
     void ReportWorkerCreated(TKqpDbCountersPtr dbCounters);
     void ReportWorkerFinished(TKqpDbCountersPtr dbCounters, TDuration lifeSpan);
     void ReportWorkerCleanupLatency(TKqpDbCountersPtr dbCounters, TDuration cleanupTime);
@@ -346,7 +340,6 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ForceNewEngineCompileErrors;
 
     // Resource Manager
     ::NMonitoring::TDynamicCounters::TCounterPtr RmComputeActors;
@@ -371,15 +364,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardResolve;
     NMonitoring::THistogramPtr ScanQueryRateLimitLatency;
 
-    // NewEngine vs OldEngine
-    THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> NewEngineForcedQueryLatencies;
-    THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> NewEngineCompatibleQueryLatencies;
-    ::NMonitoring::TDynamicCounters::TCounterPtr NewEngineForcedComputeCpuTime;
-    ::NMonitoring::TDynamicCounters::TCounterPtr NewEngineForcedQueryCount;
-    ::NMonitoring::TDynamicCounters::TCounterPtr NewEngineCompatibleComputeCpuTime;
-    ::NMonitoring::TDynamicCounters::TCounterPtr NewEngineCompatibleQueryCount;
-
-    // NewEngine tx duration
+    // Physical tx duration
     NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;
     NMonitoring::THistogramPtr DataTxTotalTimeHistogram;
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;

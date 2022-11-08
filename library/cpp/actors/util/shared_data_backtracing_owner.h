@@ -24,7 +24,7 @@ public:
     static constexpr const char* INFO_ALLOC_UNINITIALIZED = "ALLOC_UNINITIALIZED";
     static constexpr const char* INFO_ALLOC_UNINIT_ROOMS = "ALLOC_UNINIT_ROOMS";
 
-    static NActors::TSharedData Allocate(size_t size, const char* info = nullptr) {
+    static char* Allocate(size_t size, const char* info = nullptr) {
         char* raw = reinterpret_cast<char*>(y_allocate(OverheadSize + size));
         THeader* header = reinterpret_cast<THeader*>(raw + PrivateHeaderSize);
         TSelf* btOwner = new TSelf;
@@ -33,7 +33,7 @@ public:
         header->RefCount = 1;
         header->Owner = btOwner;
         char* data = raw + OverheadSize;
-        return NActors::TSharedData::AttachUnsafe(data, size);
+        return data;
     }
 
     static void FakeOwner(const NActors::TSharedData& data, const char* info = nullptr) {
@@ -66,6 +66,10 @@ public:
         }
 
         delete this;
+    }
+
+    IOwner* GetRealOwner() const {
+        return RealOwner;
     }
 
     void PrintBackTrace() {

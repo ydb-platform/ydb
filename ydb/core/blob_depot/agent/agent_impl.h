@@ -123,7 +123,7 @@ namespace NKikimr::NBlobDepot {
             ENUMERATE_INCOMING_EVENTS(FORWARD_STORAGE_PROXY)
             hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle);
 
-            fFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
+            cFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
         );
 #undef FORWARD_STORAGE_PROXY
 
@@ -228,6 +228,8 @@ namespace NKikimr::NBlobDepot {
             std::unique_ptr<IEventHandle> Event; // original query event
             const ui64 QueryId;
             const TMonotonic StartTime;
+            std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
+            NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
 
             static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
 
@@ -235,7 +237,7 @@ namespace NKikimr::NBlobDepot {
             TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event);
             virtual ~TQuery();
 
-            void CheckQueryExecutionTime();
+            void CheckQueryExecutionTime(TMonotonic now);
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
@@ -269,9 +271,9 @@ namespace NKikimr::NBlobDepot {
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEventQ;
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> ExecutingQueries;
-        THashMultiMap<ui64, TQuery*> QueryIdToQuery;
+        std::multimap<TMonotonic, TQuery*> QueryWatchdogMap;
 
-        void HandleQueryWatchdog(TAutoPtr<IEventHandle> ev);
+        void HandleQueryWatchdog();
         void HandleStorageProxy(TAutoPtr<IEventHandle> ev);
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         TQuery *CreateQuery(TAutoPtr<IEventHandle> ev);

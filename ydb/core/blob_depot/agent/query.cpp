@@ -33,10 +33,18 @@ namespace NKikimr::NBlobDepot {
         Y_FAIL();
     }
 
-    void TBlobDepotAgent::HandleQueryWatchdog(TAutoPtr<IEventHandle> ev) {
-        for (auto [first, last] = QueryIdToQuery.equal_range(ev->Cookie); first != last; ++first) {
-            first->second->CheckQueryExecutionTime();
+    void TBlobDepotAgent::HandleQueryWatchdog() {
+        auto now = TActivationContext::Monotonic();
+        for (auto it = QueryWatchdogMap.begin(); it != QueryWatchdogMap.end(); ) {
+            const auto& [timestamp, query] = *it++;
+            if (timestamp <= now) {
+                query->CheckQueryExecutionTime(now);
+            } else {
+                break;
+            }
         }
+        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvQueryWatchdog, 0, SelfId(),
+            {}, nullptr, 0));
     }
 
     TBlobDepotAgent::TQuery::TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
@@ -44,34 +52,24 @@ namespace NKikimr::NBlobDepot {
         , Event(std::move(event))
         , QueryId(RandomNumber<ui64>())
         , StartTime(TActivationContext::Monotonic())
-    {
-        Agent.QueryIdToQuery.emplace(QueryId, this);
-        TActivationContext::Schedule(WatchdogDuration, new IEventHandle(TEvPrivate::EvQueryWatchdog, 0,
-            Agent.SelfId(), {}, nullptr, QueryId));
-    }
+        , QueryWatchdogMapIter(agent.QueryWatchdogMap.emplace(StartTime + WatchdogDuration, this))
+    {}
 
     TBlobDepotAgent::TQuery::~TQuery() {
         if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
-            STLOG(PRI_WARN, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
+            STLOG(WatchdogPriority, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
                 (VirtualGroupId, Agent.VirtualGroupId), (QueryId, QueryId), (Duration, duration));
         }
-
-        for (auto [first, last] = Agent.QueryIdToQuery.equal_range(QueryId); first != last; ++first) {
-            if (first->first == QueryId && first->second == this) {
-                Agent.QueryIdToQuery.erase(first);
-                return;
-            }
-        }
-        Y_FAIL();
+        Agent.QueryWatchdogMap.erase(QueryWatchdogMapIter);
     }
 
-    void TBlobDepotAgent::TQuery::CheckQueryExecutionTime() {
-        if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
-            STLOG(PRI_WARN, BLOB_DEPOT_AGENT, BDA23, "query is still executing", (VirtualGroupId, Agent.VirtualGroupId),
-                (QueryId, QueryId), (Duration, duration));
-            TActivationContext::Schedule(WatchdogDuration, new IEventHandle(TEvPrivate::EvQueryWatchdog, 0,
-                Agent.SelfId(), {}, nullptr, QueryId));
-        }
+    void TBlobDepotAgent::TQuery::CheckQueryExecutionTime(TMonotonic now) {
+        const auto prio = std::exchange(WatchdogPriority, NLog::PRI_NOTICE);
+        STLOG(prio, BLOB_DEPOT_AGENT, BDA23, "query is still executing", (VirtualGroupId, Agent.VirtualGroupId),
+            (QueryId, GetQueryId()), (Duration, now - StartTime));
+        auto nh = Agent.QueryWatchdogMap.extract(QueryWatchdogMapIter);
+        nh.key() = now + WatchdogDuration;
+        QueryWatchdogMapIter = Agent.QueryWatchdogMap.insert(std::move(nh));
     }
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {

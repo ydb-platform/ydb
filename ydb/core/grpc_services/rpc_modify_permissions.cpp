@@ -100,5 +100,10 @@ void DoModifyPermissionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilit
     TActivationContext::AsActorContext().Register(new TModifyPermissionsRPC(p.release()));
 }
 
+template<>
+IActor* TEvModifyPermissionsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TModifyPermissionsRPC(msg);
+}
+
 } // namespace NKikimr
 } // namespace NGRpcService

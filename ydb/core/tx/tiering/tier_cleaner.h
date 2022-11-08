@@ -1,4 +1,5 @@
 #pragma once
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include "common.h"
 
 #include <ydb/core/wrappers/abstract.h>
@@ -59,3 +60,4 @@ public:
     void Bootstrap();
 };
 }
+#endif

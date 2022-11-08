@@ -136,8 +136,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             runtime.SetObserverFunc(pred);
 
             for (const TInstant start = Now(); !IsFound() && Now() - start < TDuration::Seconds(10); ) {
-                runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-                runtime.UpdateCurrentTime(Now());
+                runtime.SimulateSleep(TDuration::Seconds(1));
             }
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
             Y_VERIFY(IsFound());

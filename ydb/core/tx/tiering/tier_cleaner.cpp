@@ -1,4 +1,5 @@
 #include "tier_cleaner.h"
+#ifndef KIKIMR_DISABLE_S3_OPS
 
 namespace NKikimr::NColumnShard::NTiers {
 
@@ -42,7 +43,6 @@ void TTierCleaner::Bootstrap() {
 
     auto request = Aws::S3::Model::ListObjectsRequest()
         .WithPrefix("S3-" + ::ToString(PathId));
-
     Send(SelfId(), new NWrappers::TEvExternalStorage::TEvListObjectsRequest(request));
 }
 
@@ -56,3 +56,4 @@ TTierCleaner::TTierCleaner(const TString& tierName, const TActorId& ownerId,
     Y_VERIFY(Storage);
 }
 }
+#endif

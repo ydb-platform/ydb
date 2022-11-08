@@ -1,4 +1,5 @@
 #pragma once
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include "common.h"
 #include "tier_cleaner.h"
 
@@ -42,3 +43,4 @@ public:
     void Bootstrap();
 };
 }
+#endif

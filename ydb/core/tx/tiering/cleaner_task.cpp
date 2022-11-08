@@ -19,7 +19,11 @@ bool TTaskCleanerActivity::DoDeserializeFromProto(const NKikimrSchemeOp::TTaskCl
 void TTaskCleanerActivity::DoExecute(NBackgroundTasks::ITaskExecutorController::TPtr controller,
     const NBackgroundTasks::TTaskStateContainer& /*state*/)
 {
+#ifndef KIKIMR_DISABLE_S3_OPS
     TActivationContext::AsActorContext().Register(new TPathCleaner(PathId, controller));
+#else
+    controller->TaskFinished();
+#endif
 }
 
 }

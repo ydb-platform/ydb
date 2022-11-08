@@ -147,6 +147,15 @@ TVector<NMetadataProvider::ITableModifier::TPtr> TSnapshotConstructor::DoGetTabl
         }
         result.emplace_back(new NMetadataProvider::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request));
     }
+    for (auto&& t: Tables) {
+        Ydb::Scheme::ModifyPermissionsRequest request;
+        request.set_path(t);
+        request.set_clear_permissions(true);
+        auto* permission = request.add_actions();
+        permission->mutable_grant()->add_permission_names("ydb.tables.modify");
+        permission->mutable_grant()->add_permission_names("ydb.tables.read");
+        result.emplace_back(new NMetadataProvider::TGenericTableModifier<NInternal::NRequest::TDialogModifyPermissions>(request));
+    }
     return result;
 }
 

@@ -1,4 +1,5 @@
 #include "path_cleaner.h"
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include "external_data.h"
 
 #include <ydb/services/metadata/service.h>
@@ -53,3 +54,4 @@ TPathCleaner::TPathCleaner(const ui64 pathId, NBackgroundTasks::ITaskExecutorCon
 }
 
 }
+#endif

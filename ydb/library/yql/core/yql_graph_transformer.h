@@ -320,7 +320,7 @@ private:
     TNodeMap<TAsyncTransformCallbackFuture> Callbacks;
 };
 
-template <bool RaiseIssues = true, typename TFuture, typename TCallback>
+template <typename TFuture, typename TCallback>
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture>
 WrapFutureCallback(const TFuture& future, const TCallback& callback, const TString& message = "") {
     return std::make_pair(IGraphTransformer::TStatus::Async, future.Apply(
@@ -338,9 +338,7 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
                                 ? TStringBuilder() << "Execution of node: " << input->Content()
                                 : message);
                     });
-
-                    if constexpr (RaiseIssues)
-                        res.ReportIssues(ctx.IssueManager);
+                    res.ReportIssues(ctx.IssueManager);
 
                     if (!res.Success()) {
                         input->SetState(TExprNode::EState::Error);

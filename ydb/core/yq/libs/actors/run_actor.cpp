@@ -810,11 +810,7 @@ private:
     }
 
     void Handle(TEvents::TEvRaiseTransientIssues::TPtr& ev) {
-        Fq::Private::PingTaskRequest request;
-
-        NYql::IssuesToMessage(ev->Get()->TransientIssues, request.mutable_transient_issues());
-
-        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, RaiseTransientIssuesCookie);
+        SendTransientIssues(ev->Get()->TransientIssues);
     }
 
     void Handle(TEvDqStats::TPtr& ev) {
@@ -823,6 +819,12 @@ private:
             *request.mutable_transient_issues() = ev->Get()->Record.issues();
             Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0);
         }
+    }
+
+    void SendTransientIssues(const NYql::TIssues& issues) {
+        Fq::Private::PingTaskRequest request;
+        NYql::IssuesToMessage(issues, request.mutable_transient_issues());
+        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, RaiseTransientIssuesCookie);
     }
 
     i32 UpdateResultIndices() {
@@ -1674,6 +1676,9 @@ private:
 
     void FinishProgram(NYql::TProgram::TStatus status, const TString& message = "", const NYql::TIssues& issues = {}) {
         if (status == TProgram::TStatus::Ok || (DqGraphParams.size() > 0 && !DqGraphParams[0].GetResultType())) {
+            if (issues) {
+                SendTransientIssues(issues);
+            }
             PrepareGraphs();
         } else {
             TString abortMessage = message;

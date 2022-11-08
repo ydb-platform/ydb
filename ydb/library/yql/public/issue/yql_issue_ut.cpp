@@ -6,7 +6,11 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
+#include <library/cpp/unicode/normalization/normalization.h>
+
 #include <util/charset/utf8.h>
+#include <util/charset/wide.h>
+#include <util/string/builder.h>
 
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
@@ -143,37 +147,10 @@ Y_UNIT_TEST_SUITE(ToOneLineStringTest) {
 
 Y_UNIT_TEST_SUITE(ToMessage) {
     Y_UNIT_TEST(NonUtf8) {
-        TString s;
-        int chars[] = {
-            0x7f,
-            0xf8,
-            0xf7,
-            0xff,
-            0xf8,
-            0x1f,
-            0xff,
-            0xf2,
-            0xaf,
-            0xbf,
-            0xfe,
-            0xfa,
-            0xf5,
-            0x7f,
-            0xfe,
-            0xfa,
-            0x27,
-            0x20,
-            0x7d,
-            0x20,
-            0x5d,
-            0x2e
-        };
-        for (int i : chars) {
-            s.append(static_cast<char>(i));
-        }
-        UNIT_ASSERT(!IsUtf(s));
+        const TString nonUtf8String = "\x7f\xf8\xf7\xff\xf8\x1f\xff\xf2\xaf\xbf\xfe\xfa\xf5\x7f\xfe\xfa\x27\x20\x7d\x20\x5d\x2e";
+        UNIT_ASSERT(!IsUtf(nonUtf8String));
         TIssue issue;
-        issue.SetMessage(s);
+        issue.SetMessage(nonUtf8String);
 
         Ydb::Issue::IssueMessage msg;
         IssueToMessage(issue, &msg);
@@ -181,5 +158,31 @@ Y_UNIT_TEST_SUITE(ToMessage) {
         UNIT_ASSERT(msg.SerializeToString(&serialized));
         Ydb::Issue::IssueMessage msg2;
         UNIT_ASSERT(msg2.ParseFromString(serialized));
+    }
+}
+
+Y_UNIT_TEST_SUITE(EscapeNonUtf8) {
+    Y_UNIT_TEST(Escape) {
+        const TString nonUtf8String = "\xfe\xfa\xf5\xc2";
+        UNIT_ASSERT(!IsUtf(nonUtf8String));
+
+        // Check that our escaping correctly processes unicode pairs
+        const TString toNormalize = "Ёлка";
+        const TString nfd = WideToUTF8(Normalize<NUnicode::ENormalization::NFD>(UTF8ToWide(toNormalize))); // dots over 'ё' will be separate unicode symbol
+        const TString nfc = WideToUTF8(Normalize<NUnicode::ENormalization::NFC>(UTF8ToWide(toNormalize))); // dots over 'ё' will be with with their letter
+        UNIT_ASSERT_STRINGS_UNEQUAL(nfc, nfd);
+        std::pair<TString, TString> nonUtf8Messages[] = {
+            { nonUtf8String, "????" },
+            { TStringBuilder() << nonUtf8String << "Failed to parse file " << nonUtf8String << "עברית" << nonUtf8String, "????Failed to parse file ????עברית????" },
+            { nfd, nfd },
+            { nfc, nfc },
+            { TStringBuilder() << nfc << nonUtf8String << nfd, TStringBuilder() << nfc << "????" << nfd },
+            { TStringBuilder() << nfd << nonUtf8String << nfc, TStringBuilder() << nfd << "????" << nfc },
+        };
+
+        for (const auto& [src, dst] : nonUtf8Messages) {
+            TIssue issue(src);
+            UNIT_ASSERT_STRINGS_EQUAL(issue.GetMessage(), dst);
+        }
     }
 }

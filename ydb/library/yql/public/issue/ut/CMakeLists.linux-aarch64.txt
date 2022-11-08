@@ -17,6 +17,7 @@ target_link_libraries(ydb-library-yql-public-issue-ut PUBLIC
   library-cpp-lfalloc
   cpp-testing-unittest_main
   yql-public-issue
+  cpp-unicode-normalization
 )
 target_link_options(ydb-library-yql-public-issue-ut PRIVATE
   -ldl

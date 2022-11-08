@@ -5,6 +5,7 @@
 
 #include <library/cpp/colorizer/output.h>
 
+#include <util/charset/utf8.h>
 #include <util/string/ascii.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -19,11 +20,23 @@ namespace NYql {
 
 void SanitizeNonAscii(TString& s) {
     if (!NYql::IsUtf8(s)) {
-        for (size_t i = 0; i < s.size(); ++i) {
-            if (!IsAscii(s[i])) {
-                s[i] = '?';
+        TString escaped;
+        escaped.reserve(s.size());
+        const unsigned char* i = reinterpret_cast<const unsigned char*>(s.data());
+        const unsigned char* end = i + s.size();
+        while (i < end) {
+            wchar32 rune;
+            size_t runeLen;
+            const RECODE_RESULT result = SafeReadUTF8Char(rune, runeLen, i, end);
+            if (result == RECODE_OK) {
+                escaped.insert(escaped.end(), reinterpret_cast<const char*>(i), reinterpret_cast<const char*>(i + runeLen));
+                i += runeLen;
+            } else {
+                escaped.push_back('?');
+                ++i;
             }
         }
+        s = escaped;
     }
 }
 

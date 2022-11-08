@@ -2,8 +2,11 @@
 
 #include "event.h"
 #include "monotonic.h"
-#include <util/system/tls.h>
+
 #include <library/cpp/actors/util/local_process_key.h>
+
+#include <util/system/tls.h>
+#include <util/generic/noncopyable.h>
 
 namespace NActors {
     class TActorSystem;
@@ -377,6 +380,32 @@ namespace NActors {
         }
 
     public:
+        class TPassAwayGuard: TMoveOnly {
+        private:
+            IActor* Owner = nullptr;
+        public:
+            TPassAwayGuard(TPassAwayGuard&& item) {
+                Owner = item.Owner;
+                item.Owner = nullptr;
+            }
+
+            TPassAwayGuard(IActor* owner)
+                : Owner(owner)
+            {
+
+            }
+
+            ~TPassAwayGuard() {
+                if (Owner) {
+                    Owner->PassAway();
+                }
+            }
+        };
+
+        TPassAwayGuard PassAwayGuard() {
+            return TPassAwayGuard(this);
+        }
+
         // must be called to wrap any call trasitions from one actor to another
         template<typename TActor, typename TMethod, typename... TArgs>
         static decltype((std::declval<TActor>().*std::declval<TMethod>())(std::declval<TArgs>()...))

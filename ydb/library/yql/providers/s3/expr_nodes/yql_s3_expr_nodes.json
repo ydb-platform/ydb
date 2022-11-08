@@ -57,9 +57,9 @@
             ]
         },
         {
-            "Name": "TS3ParseSettings",
+            "Name": "TS3ParseSettingsBase",
             "Base": "TS3SourceSettingsBase",
-            "Match": {"Type": "Callable", "Name": "S3ParseSettings"},
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 2, "Name": "Format", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "RowType", "Type": "TExprBase"},
@@ -67,14 +67,14 @@
             ]
         },
         {
+            "Name": "TS3ParseSettings",
+            "Base": "TS3ParseSettingsBase",
+            "Match": {"Type": "Callable", "Name": "S3ParseSettings"}
+        },
+        {
             "Name": "TS3ArrowSettings",
-            "Base": "TS3SourceSettingsBase",
-            "Match": {"Type": "Callable", "Name": "S3ArrowSettings"},
-            "Children": [
-                {"Index": 2, "Name": "Format", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 4, "Name": "Settings", "Type": "TExprBase", "Optional": true}
-            ]
+            "Base": "TS3ParseSettingsBase",
+            "Match": {"Type": "Callable", "Name": "S3ArrowSettings"}
         },
         {
             "Name": "TS3Read",

@@ -179,6 +179,33 @@ public:
             return status;
         }
 
+        // check if we need to do listings
+        bool needList = false;
+        status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& n, TExprContext& ctx) {
+            if (needList) {
+                return n;
+            }
+            TExprBase node(n);
+            if (auto maybeParse = node.Maybe<TS3ParseSettingsBase>()) {
+                auto maybeSettings = maybeParse.Cast().Settings();
+                if (maybeSettings && HasSetting(maybeSettings.Cast().Ref(), "directories")) {
+                    needList = true;
+                    // noop optimization just to update graph and allow restart
+                    return ctx.ShallowCopy(*n);
+                }
+            }
+            return n;
+        }, ctx, TOptimizeExprSettings(nullptr));
+
+        if (status != TStatus::Ok) {
+            if (status != TStatus::Error) {
+                YQL_ENSURE(needList);
+                YQL_CLOG(INFO, ProviderS3) << "Restarting io discovery - need to list S3 directories";
+                ctx.Step.Repeat(TExprStep::DiscoveryIO);
+            }
+            return status;
+        }
+
         // check read limits after pruning
         bool hasErr = false;
         size_t count = 0;
@@ -466,15 +493,14 @@ public:
                 .Done();
         }
 
-        const bool isArrowSettings = maybeS3SourceSettings.Cast().CallableName() == TS3ArrowSettings::CallableName();
-        const TStructExprType* readRowType =
-            (isArrowSettings ? dqSource.Input().Maybe<TS3ArrowSettings>().Cast().RowType().Ref() : dqSource.Input().Maybe<TS3ParseSettings>().Cast().RowType().Ref())
-            .GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        const auto parseSettingsBase = dqSource.Input().Maybe<TS3ParseSettingsBase>().Cast();
+
+        const TStructExprType* readRowType = parseSettingsBase.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
 
         TVector<const TItemExprType*> readRowDataItems = readRowType->GetItems();
         TVector<const TItemExprType*> outputRowDataItems = outputRowType->GetItems();
 
-        if (auto settings = isArrowSettings ? dqSource.Input().Maybe<TS3ArrowSettings>().Cast().Settings() : dqSource.Input().Maybe<TS3ParseSettings>().Cast().Settings()) {
+        if (auto settings = parseSettingsBase.Settings()) {
             if (auto ps = GetSetting(settings.Cast().Ref(), "partitionedby")) {
                 THashSet<TStringBuf> cols;
                 for (size_t i = 1; i < ps->ChildrenSize(); ++i) {
@@ -487,7 +513,7 @@ public:
             }
         }
 
-        if (outputRowDataItems.size() == 0 && readRowDataItems.size() != 0 && !isArrowSettings) {
+        if (outputRowDataItems.size() == 0 && readRowDataItems.size() != 0 && !parseSettingsBase.Maybe<TS3ArrowSettings>()) {
             const TStructExprType* readRowDataType = ctx.MakeType<TStructExprType>(readRowDataItems);
             auto item = GetLightColumn(*readRowDataType);
             YQL_ENSURE(item);
@@ -496,29 +522,17 @@ public:
             readRowType = outputRowType;
         }
 
-        if (isArrowSettings) {
-            return Build<TDqSourceWrap>(ctx, dqSource.Pos())
-                .InitFrom(dqSource)
-                .Input<TS3ArrowSettings>()
-                    .InitFrom(dqSource.Input().Maybe<TS3ArrowSettings>().Cast())
-                    .Paths(newPaths)
-                    .RowType(ExpandType(dqSource.Input().Pos(), *readRowType, ctx))
-                .Build()
-                .RowType(outputRowTypeNode)
-                .Settings(newSettings)
-                .Done();
-        } else {
-            return Build<TDqSourceWrap>(ctx, dqSource.Pos())
-                .InitFrom(dqSource)
-                .Input<TS3ParseSettings>()
-                    .InitFrom(dqSource.Input().Maybe<TS3ParseSettings>().Cast())
-                    .Paths(newPaths)
-                    .RowType(ExpandType(dqSource.Input().Pos(), *readRowType, ctx))
-                .Build()
-                .RowType(outputRowTypeNode)
-                .Settings(newSettings)
-                .Done();
-        }
+        return Build<TDqSourceWrap>(ctx, dqSource.Pos())
+            .InitFrom(dqSource)
+            .Input<TS3ParseSettingsBase>()
+                .CallableName(parseSettingsBase.CallableName())
+                .InitFrom(parseSettingsBase)
+                .Paths(newPaths)
+                .RowType(ExpandType(dqSource.Input().Pos(), *readRowType, ctx))
+            .Build()
+            .RowType(outputRowTypeNode)
+            .Settings(newSettings)
+            .Done();
     }
 
     TMaybeNode<TExprBase> MergeS3Paths(TExprBase node, TExprContext& ctx) const {

@@ -175,37 +175,22 @@ public:
                     YQL_ENSURE(State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(read->Pos()), allTypes, supportedArrowTypes, ctx));
                 }
 
-                if (supportedArrowTypes && format == "parquet") {
-                    return Build<TDqSourceWrap>(ctx, read->Pos())
-                        .Input<TS3ArrowSettings>()
-                            .Paths(s3ReadObject.Object().Paths())
-                            .Token<TCoSecureParam>()
-                                .Name().Build(token)
-                                .Build()
-                            .Format(s3ReadObject.Object().Format())
-                            .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                            .Settings(s3ReadObject.Object().Settings())
-                            .Build()
+                return Build<TDqSourceWrap>(ctx, read->Pos())
+                    .Input<TS3ParseSettingsBase>()
+                        .CallableName((supportedArrowTypes && format == "parquet") ? TS3ArrowSettings::CallableName() :
+                                                                                     TS3ParseSettings::CallableName())
+                        .Paths(s3ReadObject.Object().Paths())
+                        .Token<TCoSecureParam>()
+                            .Name().Build(token)
+                        .Build()
+                        .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                        .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
-                        .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
-                        .Done().Ptr();
-                } else {
-                    return Build<TDqSourceWrap>(ctx, read->Pos())
-                        .Input<TS3ParseSettings>()
-                            .Paths(s3ReadObject.Object().Paths())
-                            .Token<TCoSecureParam>()
-                                .Name().Build(token)
-                                .Build()
-                            .Format(s3ReadObject.Object().Format())
-                            .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                            .Settings(s3ReadObject.Object().Settings())
-                            .Build()
-                        .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                        .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
-                        .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
-                        .Done().Ptr();
-                }
+                        .Settings(s3ReadObject.Object().Settings())
+                        .Build()
+                    .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                    .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
+                    .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
+                    .Done().Ptr();
             } else {
                 if (const auto& objectSettings = s3ReadObject.Object().Settings()) {
                     settings.emplace_back(
@@ -271,9 +256,10 @@ public:
             YQL_ENSURE(paths.Size() > 0);
             const TStructExprType* extraColumnsType = paths.Item(0).ExtraColumns().Ref().GetTypeAnn()->Cast<TStructExprType>();
 
-            if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
+            if (const auto mayParseSettings = settings.Maybe<TS3ParseSettingsBase>()) {
                 const auto parseSettings = mayParseSettings.Cast();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
+                srcDesc.SetArrow(bool(parseSettings.Maybe<TS3ArrowSettings>()));
 
                 const TStructExprType* fullRowType = parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 // exclude extra columns to get actual row type we need to read from input
@@ -289,27 +275,6 @@ public:
                     const auto& settings = maySettings.Cast();
                     for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
                         srcDesc.MutableSettings()->insert({ TString(settings.Ref().Child(i)->Head().Content()), TString(settings.Ref().Child(i)->Tail().IsAtom() ? settings.Ref().Child(i)->Tail().Content() : settings.Ref().Child(i)->Tail().Head().Content()) });
-                    }
-                }
-            } else if (const auto mayArrowSettings = settings.Maybe<TS3ArrowSettings>()) {
-                const auto arrowSettings = mayArrowSettings.Cast();
-                srcDesc.SetFormat(arrowSettings.Format().StringValue().c_str());
-                srcDesc.SetArrow(true);
-
-                const TStructExprType* fullRowType = arrowSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                // exclude extra columns to get actual row type we need to read from input
-                auto rowTypeItems = fullRowType->GetItems();
-                EraseIf(rowTypeItems, [extraColumnsType](const auto& item) { return extraColumnsType->FindItem(item->GetName()); });
-                {
-                    // TODO: pass context
-                    TExprContext ctx;
-                    srcDesc.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(rowTypeItems), NYT::NYson::EYsonFormat::Text));
-                }
-
-                if (const auto maySettings = arrowSettings.Settings()) {
-                    const auto& settings = maySettings.Cast();
-                    for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
-                        srcDesc.MutableSettings()->insert({TString(settings.Ref().Child(i)->Head().Content()), TString(settings.Ref().Child(i)->Tail().IsAtom() ? settings.Ref().Child(i)->Tail().Content() : settings.Ref().Child(i)->Tail().Head().Content())});
                     }
                 }
             } else if (const auto maySourceSettings = source.Settings().Maybe<TS3SourceSettings>()){

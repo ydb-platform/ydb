@@ -129,23 +129,23 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         ui64 nextUniqueId,
         TVector<TDataProviderInitializer> dataProvidersInit,
-        NYql::IModuleResolver::TPtr& moduleResolver,
-        NYql::TGatewaysConfig gatewaysConfig,
+        NYql::IModuleResolver::TPtr moduleResolver,
+        const NYql::TGatewaysConfig& gatewaysConfig,
         const TString& sql,
         const TString& sessionId,
-        NSQLTranslation::TTranslationSettings sqlSettings,
+        const NSQLTranslation::TTranslationSettings& sqlSettings,
         YandexQuery::ExecuteMode executeMode
     )
-        : RunActorId(runActorId),
-        FunctionRegistry(functionRegistry),
-        NextUniqueId(nextUniqueId),
-        DataProvidersInit(dataProvidersInit),
-        ModuleResolver(moduleResolver),
-        GatewaysConfig(gatewaysConfig),
-        Sql(sql),
-        SessionId(sessionId),
-        SqlSettings(sqlSettings),
-        ExecuteMode(executeMode)
+        : RunActorId(runActorId)
+        , FunctionRegistry(functionRegistry)
+        , NextUniqueId(nextUniqueId)
+        , DataProvidersInit(std::move(dataProvidersInit))
+        , ModuleResolver(moduleResolver)
+        , GatewaysConfig(gatewaysConfig)
+        , Sql(sql)
+        , SessionId(sessionId)
+        , SqlSettings(sqlSettings)
+        , ExecuteMode(executeMode)
     {
     }
 
@@ -251,16 +251,16 @@ public:
 private:
     TProgramPtr Program;
     TIssues Issues;
-    TActorId RunActorId;
+    const TActorId RunActorId;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     ui64 NextUniqueId;
-    TVector<TDataProviderInitializer> DataProvidersInit;
-    NYql::IModuleResolver::TPtr ModuleResolver;
-    NYql::TGatewaysConfig GatewaysConfig;
+    const TVector<TDataProviderInitializer> DataProvidersInit;
+    const NYql::IModuleResolver::TPtr ModuleResolver;
+    const NYql::TGatewaysConfig GatewaysConfig;
     const TString Sql;
     const TString SessionId;
-    NSQLTranslation::TTranslationSettings SqlSettings;
-    YandexQuery::ExecuteMode ExecuteMode;
+    const NSQLTranslation::TTranslationSettings SqlSettings;
+    const YandexQuery::ExecuteMode ExecuteMode;
     bool Compiled = false;
 };
 
@@ -1617,6 +1617,7 @@ private:
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
+        sqlSettings.PgParser = (Params.QuerySyntax == YandexQuery::QueryContent::PG);
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs" });
         try {

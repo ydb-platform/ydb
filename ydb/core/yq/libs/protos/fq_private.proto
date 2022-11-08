@@ -108,6 +108,7 @@ message GetTaskResult {
         uint32 restart_count = 32;
 
         TaskResources resources = 33;
+        YandexQuery.QueryContent.QuerySyntax query_syntax = 34;
     }
     repeated Task tasks = 1;
 }

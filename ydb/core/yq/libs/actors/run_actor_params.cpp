@@ -33,6 +33,7 @@ TRunActorParams::TRunActorParams(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     THashMap<TString, TString> accountIdSignatures,
     YandexQuery::QueryContent::QueryType queryType,
+    YandexQuery::QueryContent::QuerySyntax querySyntax,
     YandexQuery::ExecuteMode executeMode,
     const TString& resultId,
     const YandexQuery::StateLoadMode stateLoadMode,
@@ -84,6 +85,7 @@ TRunActorParams::TRunActorParams(
     , CredentialsFactory(std::move(credentialsFactory))
     , AccountIdSignatures(std::move(accountIdSignatures))
     , QueryType(queryType)
+    , QuerySyntax(querySyntax)
     , ExecuteMode(executeMode)
     , ResultId(resultId)
     , StateLoadMode(stateLoadMode)

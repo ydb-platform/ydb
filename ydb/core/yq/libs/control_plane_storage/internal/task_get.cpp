@@ -447,6 +447,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
             auto* newTask = result.add_tasks();
             newTask->set_query_type(queryType);
+            newTask->set_query_syntax(task.Query.content().syntax());
             newTask->set_execute_mode(task.Query.meta().execute_mode());
             newTask->set_state_load_mode(task.Internal.state_load_mode());
             auto* queryId = newTask->mutable_query_id();

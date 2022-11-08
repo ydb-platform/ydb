@@ -375,6 +375,7 @@ private:
             CredentialsFactory,
             serviceAccounts,
             task.query_type(),
+            task.query_syntax(),
             task.execute_mode(),
             GetEntityIdAsString(CommonConfig.GetIdsPrefix(), EEntityType::RESULT),
             task.state_load_mode(),

@@ -280,7 +280,6 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 DataShard.AddLockChangeRecords(guardLocks.LockTxId, std::move(changes));
             }
         } else {
-            // FIXME: handle lock changes commit
             op->ChangeRecords() = std::move(changes);
         }
 
@@ -305,6 +304,35 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
         return OnTabletNotReady(*tx, *dataTx, txc, ctx);
+    } catch (const TLockedWriteLimitException&) {
+        dataTx->ResetCollectedChanges();
+
+        op->SetAbortedFlag();
+
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR);
+
+        op->Result()->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED,
+            TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
+
+        for (auto& table : guardLocks.AffectedTables) {
+            Y_VERIFY(guardLocks.LockTxId);
+            op->Result()->AddTxLock(
+                guardLocks.LockTxId,
+                DataShard.TabletID(),
+                DataShard.Generation(),
+                Max<ui64>(),
+                table.GetTableId().OwnerId,
+                table.GetTableId().LocalPathId);
+        }
+
+        tx->ReleaseTxData(txc, ctx);
+
+        // Transaction may have made some changes before it hit the limit,
+        // so we need to roll them back. We do this by marking transaction for
+        // reschedule and restarting. The next cycle will detect aborted
+        // operation and move along.
+        txc.Reschedule();
+        return EExecutionStatus::Restart;
     } catch (const yexception& e) {
         LOG_C("Exception while executing KQP transaction " << *op << " at " << tabletId << ": " << e.what());
         if (op->IsReadOnly() || op->IsImmediate()) {

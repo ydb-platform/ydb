@@ -22,6 +22,8 @@ class TDataShard;
 
 TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self);
 
+class TLockedWriteLimitException : public yexception {};
+
 ///
 class TEngineBay : TNonCopyable {
 public:

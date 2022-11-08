@@ -1415,6 +1415,11 @@ public:
         return value != 0;
     }
 
+    ui64 GetMaxLockedWritesPerKey() const {
+        ui64 value = MaxLockedWritesPerKey;
+        return value;
+    }
+
     template <typename T>
     void ReleaseCache(T& tx) {
         ReleaseTxCache(tx.GetTxCacheUsage());
@@ -2287,6 +2292,7 @@ private:
     TControlWrapper EnablePrioritizedMvccSnapshotReads;
     TControlWrapper EnableUnprotectedMvccSnapshotReads;
     TControlWrapper EnableLockedWrites;
+    TControlWrapper MaxLockedWritesPerKey;
 
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;

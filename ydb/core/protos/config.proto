@@ -1305,6 +1305,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        optional uint64 MaxLockedWritesPerKey = 15 [(ControlOptions) = {
+            Description: "Maximum number of uncommitted locked writes per key",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
     }
 
     message TTxLimitControls {

@@ -1411,6 +1411,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         ui64 Counter;
         ui64 SchemeShard;
         ui64 PathId;
+
+        friend bool operator==(const TLockInfo& a, const TLockInfo& b) = default;
     };
 
     struct TInjectLocks {
@@ -3455,6 +3457,154 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "ERROR: ABORTED");
         observer.InjectClearTasks = false;
         observer.InjectLocks.reset();
+    }
+
+    Y_UNIT_TEST(LockedWritesLimitedPerKey) {
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+        controls.MutableDataShardControls()->SetMaxLockedWritesPerKey(2);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        TInjectLockSnapshotObserver observer(runtime);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+
+        // We will reuse this snapshot
+        auto snapshot = observer.Last.MvccSnapshot;
+
+        using NLongTxService::TLockHandle;
+        std::optional<TLockHandle> lock1handle(std::in_place, 123, runtime.GetActorSystem(0));
+        std::optional<TLockHandle> lock2handle(std::in_place, 234, runtime.GetActorSystem(0));
+        std::optional<TLockHandle> lock3handle(std::in_place, 345, runtime.GetActorSystem(0));
+
+        // Write uncommitted changes to key 2 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 21)
+                )")),
+            "<empty>");
+        auto locks1 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 2 with tx 234
+        observer.Inject.LockId = 234;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 22)
+                )")),
+            "<empty>");
+        auto locks2 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 2 with tx 345
+        observer.Inject.LockId = 345;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 23)
+                )")),
+            "ERROR: GENERIC_ERROR");
+        observer.Inject = {};
+
+        // Abort tx 234, this would allow adding one more change to key 2
+        lock2handle.reset();
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        // Write uncommitted changes to key 2 with tx 345
+        observer.Inject.LockId = 345;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 23)
+                )")),
+            "<empty>");
+        auto locks3 = observer.LastLocks;
+        observer.Inject = {};
+
+        // Write uncommitted changes to key 3 with tx 123
+        observer.Inject.LockId = 123;
+        observer.Inject.LockNodeId = runtime.GetNodeId(0);
+        observer.Inject.MvccSnapshot = snapshot;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 31)
+                )")),
+            "<empty>");
+        UNIT_ASSERT(locks1 == observer.LastLocks);
+        observer.Inject = {};
+
+        // Commit changes in tx 123
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace().Locks = locks1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0)
+                )")),
+            "<empty>");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        // Commit changes in tx 345
+        observer.InjectClearTasks = true;
+        observer.InjectLocks.emplace().Locks = locks3;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0)
+                )")),
+            "<empty>");
+        observer.InjectClearTasks = false;
+        observer.InjectLocks.reset();
+
+        // Check table has those changes visible
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 23 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 31 } }");
     }
 
 }

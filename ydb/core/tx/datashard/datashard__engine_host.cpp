@@ -606,30 +606,54 @@ public:
         TSmallVec<TRawTypeValue> key;
         ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
 
+        ui64 skipCount = 0;
+
+        NTable::ITransactionObserverPtr txObserver;
+        if (LockTxId) {
+            txObserver = new TLockedWriteTxObserver(this, LockTxId, skipCount, localTid);
+        } else {
+            txObserver = new TWriteTxObserver(this);
+        }
+
         // We are not actually interested in the row version, we only need to
         // detect uncommitted transaction skips on the path to that version.
         auto res = Db.SelectRowVersion(
             localTid, key, /* readFlags */ 0,
-            GetReadTxMap(tableId),
-            new TWriteTxObserver(this, tableId));
+            nullptr, txObserver);
 
         if (res.Ready == NTable::EReady::Page) {
             throw TNotReadyTabletException();
         }
+
+        if (LockTxId) {
+            ui64 skipLimit = Self->GetMaxLockedWritesPerKey();
+            if (skipLimit > 0 && skipCount >= skipLimit) {
+                throw TLockedWriteLimitException();
+            }
+        }
     }
 
-    class TWriteTxObserver : public NTable::ITransactionObserver {
+    class TLockedWriteTxObserver : public NTable::ITransactionObserver {
     public:
-        TWriteTxObserver(const TDataShardEngineHost* host, const TTableId& tableId)
+        TLockedWriteTxObserver(const TDataShardEngineHost* host, ui64 txId, ui64& skipCount, ui32 localTid)
             : Host(host)
-            , TableId(tableId)
+            , SelfTxId(txId)
+            , SkipCount(skipCount)
+            , LocalTid(localTid)
         {
-            Y_UNUSED(Host);
-            Y_UNUSED(TableId);
         }
 
         void OnSkipUncommitted(ui64 txId) override {
-            Host->AddWriteConflict(TableId, txId);
+            if (!Host->Db.HasRemovedTx(LocalTid, txId)) {
+                ++SkipCount;
+                if (!SelfFound) {
+                    if (txId != SelfTxId) {
+                        Host->AddWriteConflict(txId);
+                    } else {
+                        SelfFound = true;
+                    }
+                }
+            }
         }
 
         void OnSkipCommitted(const TRowVersion&) override {
@@ -650,16 +674,49 @@ public:
 
     private:
         const TDataShardEngineHost* const Host;
-        const TTableId TableId;
+        const ui64 SelfTxId;
+        ui64& SkipCount;
+        const ui32 LocalTid;
+        bool SelfFound = false;
     };
 
-    void AddWriteConflict(const TTableId& tableId, ui64 txId) const {
-        Y_UNUSED(tableId);
-        if (LockTxId) {
-            Self->SysLocksTable().AddWriteConflict(txId);
-        } else {
-            Self->SysLocksTable().BreakLock(txId);
+    class TWriteTxObserver : public NTable::ITransactionObserver {
+    public:
+        TWriteTxObserver(const TDataShardEngineHost* host)
+            : Host(host)
+        {
         }
+
+        void OnSkipUncommitted(ui64 txId) override {
+            Host->BreakWriteConflict(txId);
+        }
+
+        void OnSkipCommitted(const TRowVersion&) override {
+            // nothing
+        }
+
+        void OnSkipCommitted(const TRowVersion&, ui64) override {
+            // nothing
+        }
+
+        void OnApplyCommitted(const TRowVersion&) override {
+            // nothing
+        }
+
+        void OnApplyCommitted(const TRowVersion&, ui64) override {
+            // nothing
+        }
+
+    private:
+        const TDataShardEngineHost* const Host;
+    };
+
+    void AddWriteConflict(ui64 txId) const {
+        Self->SysLocksTable().AddWriteConflict(txId);
+    }
+
+    void BreakWriteConflict(ui64 txId) const {
+        Self->SysLocksTable().BreakLock(txId);
     }
 
 private:

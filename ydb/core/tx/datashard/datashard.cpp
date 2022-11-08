@@ -146,6 +146,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , EnablePrioritizedMvccSnapshotReads(1, 0, 1)
     , EnableUnprotectedMvccSnapshotReads(1, 0, 1)
     , EnableLockedWrites(0, 0, 1)
+    , MaxLockedWritesPerKey(1000, 0, 1000000)
     , EnableLeaderLeases(1, 0, 1)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
     , DataShardSysTables(InitDataShardSysTables(this))
@@ -317,6 +318,7 @@ void TDataShard::IcbRegister() {
         appData->Icb->RegisterSharedControl(EnablePrioritizedMvccSnapshotReads, "DataShardControls.PrioritizedMvccSnapshotReads");
         appData->Icb->RegisterSharedControl(EnableUnprotectedMvccSnapshotReads, "DataShardControls.UnprotectedMvccSnapshotReads");
         appData->Icb->RegisterSharedControl(EnableLockedWrites, "DataShardControls.EnableLockedWrites");
+        appData->Icb->RegisterSharedControl(MaxLockedWritesPerKey, "DataShardControls.MaxLockedWritesPerKey");
 
         appData->Icb->RegisterSharedControl(EnableLeaderLeases, "DataShardControls.EnableLeaderLeases");
         appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "DataShardControls.MinLeaderLeaseDurationUs");

@@ -309,7 +309,7 @@ public:
                         issueLog.add_reason(r);
                     }
                 }
-                if (setTag) {
+                if (setTag != ETags::None) {
                     issueRecord.Tag = setTag;
                 }
             }
@@ -1237,53 +1237,6 @@ public:
         return static_cast<Ydb::Monitoring::StatusFlag::Status>(std::min<int>(a, b));
     }
 
-    static Ydb::Monitoring::StatusFlag::Status StatusFromWhiteboardFlag(NKikimrWhiteboard::EFlag flag) {
-        switch(flag) {
-        case NKikimrWhiteboard::EFlag::Green:
-            return Ydb::Monitoring::StatusFlag::GREEN;
-        case NKikimrWhiteboard::EFlag::Yellow:
-            return Ydb::Monitoring::StatusFlag::YELLOW;
-        case NKikimrWhiteboard::EFlag::Orange:
-            return Ydb::Monitoring::StatusFlag::ORANGE;
-        case NKikimrWhiteboard::EFlag::Red:
-            return Ydb::Monitoring::StatusFlag::RED;
-        default:
-            return Ydb::Monitoring::StatusFlag::GREY;
-        }
-    }
-
-    static Ydb::Monitoring::StatusFlag::Status StatusFrom(const NKikimrWhiteboard::TSystemStateInfo& systemStateInfo) {
-        return StatusFromWhiteboardFlag(systemStateInfo.GetSystemState());
-    }
-
-    static Ydb::Monitoring::StatusFlag::Status StatusFrom(const NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo) {
-        TInstant now(TInstant::Now());
-        if (tabletStateInfo.state() == NKikimrWhiteboard::TTabletStateInfo::Active) {
-            if (now - TInstant::MilliSeconds(tabletStateInfo.changetime()) > TDuration::Seconds(30)) {
-                return Ydb::Monitoring::StatusFlag::GREEN;
-            } else {
-                return Ydb::Monitoring::StatusFlag::YELLOW;
-            }
-        } else {
-            if (tabletStateInfo.leader()) {
-                return Ydb::Monitoring::StatusFlag::RED;
-            } else {
-                return Ydb::Monitoring::StatusFlag::BLUE;
-            }
-        }
-    }
-
-    static Ydb::Monitoring::StatusFlag::Status StatusFrom(const NKikimrHive::TTabletInfo& tabletInfo) {
-        switch (tabletInfo.volatilestate()) {
-            case NKikimrHive::TABLET_VOLATILE_STATE_RUNNING:
-                return Ydb::Monitoring::StatusFlag::GREEN;
-            case NKikimrHive::TABLET_VOLATILE_STATE_STARTING:
-                return Ydb::Monitoring::StatusFlag::YELLOW;
-            default:
-                return Ydb::Monitoring::StatusFlag::RED;
-        }
-    }
-
     static TString GetNodeLocation(const TEvInterconnect::TNodeInfo& nodeInfo) {
         return TStringBuilder() << nodeInfo.NodeId << '/' << nodeInfo.Host << ':' << nodeInfo.Port;
     }
@@ -1456,7 +1409,7 @@ public:
         } else {
             Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets({&context, "SYSTEM_TABLET"});
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
-                context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::DBState, {ETags::SystemTabletState});
+                context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
             }
             Ydb::Monitoring::StatusFlag::Status nodesStatus = Ydb::Monitoring::StatusFlag::GREEN;
             for (TNodeId nodeId : *computeNodeIds) {
@@ -1465,7 +1418,7 @@ public:
                 nodesStatus = MaxStatus(nodesStatus, computeNode.overall());
             }
             if (nodesStatus != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(nodesStatus, "Compute is overloaded", ETags::DBState, {ETags::OverloadState});
+                context.ReportStatus(nodesStatus, "Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
             }
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node
@@ -1473,7 +1426,7 @@ public:
                 tabletsStatus = MaxStatus(tabletsStatus, FillTablets(databaseState, nodeId, *computeStatus.mutable_tablets(), context));
             }
             if (tabletsStatus != Ydb::Monitoring::StatusFlag::GREEN) {
-                context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::DBState, {ETags::TabletState});
+                context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::ComputeState, {ETags::TabletState});
             }
         }
         computeStatus.set_overall(context.GetOverallStatus());

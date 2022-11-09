@@ -1,4 +1,5 @@
 #include <ydb/core/yq/libs/actors/logging/log.h>
+#include <ydb/core/yq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
@@ -360,6 +361,14 @@ private:
         runtime->AddLocalService(
             NKikimr::NFolderService::FolderServiceActorId(),
             TActorSetupCmd(folderService, TMailboxType::Simple, 0),
+            0
+        );
+
+        auto configService = CreateControlPlaneConfigActor(NYq::TYqSharedResources::TPtr{}, NKikimr::TYdbCredentialsProviderFactory(nullptr),
+            NConfig::TControlPlaneStorageConfig{}, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        runtime->AddLocalService(
+            NYq::ControlPlaneConfigActorId(),
+            TActorSetupCmd(configService, TMailboxType::Simple, 0),
             0
         );
 

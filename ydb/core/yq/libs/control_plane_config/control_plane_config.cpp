@@ -65,9 +65,9 @@ public:
     void Bootstrap() {
         CPC_LOG_D("STARTING: " << SelfId());
         Become(&TControlPlaneConfigActor::StateFunc);
-        YdbConnection = NewYdbConnection(Config.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
-        DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
         if (Config.GetUseDbMapping()) {
+            YdbConnection = NewYdbConnection(Config.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
+            DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
             Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
         } else {
             TenantInfo.reset(new TTenantInfo());

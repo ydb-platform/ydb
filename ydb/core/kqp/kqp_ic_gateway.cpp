@@ -1700,9 +1700,6 @@ public:
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
         }
 
-        //auto& querySettings = *ev->Record.MutableRequest()->MutableQuerySettings();
-        //querySettings.set_use_new_engine(NYql::GetFlagValue(settings.UseNewEngine));
-
         auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
         txControl.mutable_begin_tx()->CopyFrom(txSettings);
         txControl.set_commit_tx(true);
@@ -1799,9 +1796,6 @@ public:
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
         }
-
-        //auto& querySettings = *ev->Record.MutableRequest()->MutableQuerySettings();
-        //querySettings.set_use_new_engine(NYql::GetFlagValue(settings.UseNewEngine));
 
         auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
         txControl.mutable_begin_tx()->CopyFrom(txSettings);

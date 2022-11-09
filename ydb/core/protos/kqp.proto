@@ -71,7 +71,7 @@ message TKqlSettings {
     optional bool RollbackTx = 2;
     optional bool RawResults = 3;
     optional EIsolationLevel IsolationLevel = 5;
-    optional bool NewEngine = 6;
+    reserved 6; // (deprecated) NewEngine
 };
 
 message TTopicOperations {

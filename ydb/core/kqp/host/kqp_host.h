@@ -25,12 +25,10 @@ public:
     };
 
     struct TPrepareSettings {
-        TMaybe<bool> UseNewEngine;
         TMaybe<bool> DocumentApiRestricted;
 
         TString ToString() const {
-            return TStringBuilder() << "TPrepareSettings{ UseNewEngine: " << UseNewEngine
-                << ", DocumentApiRestricted: " << DocumentApiRestricted << " }";
+            return TStringBuilder() << "TPrepareSettings{ DocumentApiRestricted: " << DocumentApiRestricted << " }";
         }
     };
 
@@ -42,9 +40,6 @@ public:
     virtual ~IKqpHost() {}
 
     virtual TMaybe<TKqpTransactionInfo> GetTransactionInfo() = 0;
-
-    virtual void ForceTxOldEngine(const TString& txId) = 0;
-    virtual void ForceTxNewEngine(const TString& txId, ui32 percent, ui32 level) = 0;
 
     /* Transaction control */
     virtual TBeginTxResult BeginTransaction(NKikimrKqp::EIsolationLevel isolationLevel,

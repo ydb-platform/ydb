@@ -8,7 +8,7 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-Y_UNIT_TEST_SUITE(KqpNewEngineInplaceUpdate) {
+Y_UNIT_TEST_SUITE(KqpInplaceUpdate) {
 
 void PrepareTable(TSession& session) {
     auto ret = session.ExecuteSchemeQuery(R"(

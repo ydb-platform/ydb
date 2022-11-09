@@ -1344,7 +1344,7 @@ private:
 
         /*
          * TODO:
-         * For Scan/NewEngine plan will be set later on rpc_* level from stats and execution profiles, so
+         * For Scan/Data plan will be set later on rpc_* level from stats and execution profiles, so
          * QUERY_REPLY_FLAG_PLAN doesn't matter much. However it's may be a good idea to move FillQueryStats here,
          * but for that we need to set QueryStats for scan query earlier in pipeline (now ExecutionProfiles are
          * handled in rpc_stream_execute_scan_query). Other option is to remove REPLY_FLAGs at all.

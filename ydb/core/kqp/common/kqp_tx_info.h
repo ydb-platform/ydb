@@ -21,15 +21,9 @@ struct TKqpTransactionInfo {
         Aborted
     };
 
-    enum class EEngine {
-        OldEngine,
-        NewEngine
-    };
-
 public:
     EStatus Status;
     EKind Kind;
-    std::optional<EEngine> TxEngine;
     TDuration TotalDuration;
     TDuration ServerDuration;
     ui32 QueriesCount = 0;

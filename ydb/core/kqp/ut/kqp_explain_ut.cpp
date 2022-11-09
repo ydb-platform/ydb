@@ -441,24 +441,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_EQUAL(unionNode.GetMap().at("Plans").GetArraySafe().size(), 4);
     }
 
-    Y_UNIT_TEST(ExplainDataQueryOldEngine) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExplainDataQuery(R"(
-            SELECT Key, Value FROM `/Root/KeyValue` WHERE Key IN (1, 2, 3, 42) ORDER BY Key;
-        )").ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr);
-
-        NJson::TJsonValue plan;
-        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-        UNIT_ASSERT(ValidatePlanNodeIds(plan));
-
-        UNIT_ASSERT_EQUAL(plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe().at("name").GetStringSafe(), "/Root/KeyValue");
-    }
-
-    Y_UNIT_TEST(ExplainDataQueryNewEngine) {
+    Y_UNIT_TEST(ExplainDataQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

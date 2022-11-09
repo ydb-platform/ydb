@@ -106,10 +106,6 @@ public:
         return DeferredEffects.empty();
     }
 
-    std::optional<TKqpTransactionInfo::EEngine> GetEngine() const {
-        return Engine;
-    }
-
     ui64 Size() const {
         return DeferredEffects.size();
     }
@@ -125,20 +121,15 @@ public:
 private:
     [[nodiscard]]
     bool Add(const NYql::NNodes::TExprBase& node) {
-        if (Engine.has_value() && *Engine != TKqpTransactionInfo::EEngine::OldEngine) {
-            return false;
-        }
-        Engine.emplace(TKqpTransactionInfo::EEngine::OldEngine);
-        DeferredEffects.emplace_back(node);
-        return true;
+        Y_UNUSED(node);
+
+        // TODO: Remove legacy deferred effects
+        YQL_ENSURE(false, "Unexpected deferred effect kind (OldEngine)");
+        return false;
     }
 
     [[nodiscard]]
     bool Add(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx, TParamValueMap&& params) {
-        if (Engine.has_value() && *Engine != TKqpTransactionInfo::EEngine::NewEngine) {
-            return false;
-        }
-        Engine.emplace(TKqpTransactionInfo::EEngine::NewEngine);
         DeferredEffects.emplace_back(std::move(physicalTx));
         DeferredEffects.back().Params = std::move(params);
         return true;
@@ -146,12 +137,10 @@ private:
 
     void Clear() {
         DeferredEffects.clear();
-        Engine.reset();
     }
 
 private:
     TVector<TDeferredEffect> DeferredEffects;
-    std::optional<TKqpTransactionInfo::EEngine> Engine;
 
     friend class TKqpTransactionContext;
 };

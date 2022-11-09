@@ -119,7 +119,7 @@ TParams BuildInsertIndexParams(TTableClient& client) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(KqpPerf) {
+Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     Y_UNIT_TEST(Upsert) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        // TODO: Get rid of additional precompute stage for adding optionality to row members in NewEngine
+        // TODO: Get rid of additional precompute stage for adding optionality to row members
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         for (const auto& phase : stats.query_phases()) {
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        // Single-phase REPLACE in NewEngine require additional runtime write callable
+        // Single-phase REPLACE require additional runtime write callable
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         for (const auto& phase : stats.query_phases()) {
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        // Two-phase UPDATE ON in NewEngine require more complex runtime callables
+        // Two-phase UPDATE ON require more complex runtime callables
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
         for (const auto& phase : stats.query_phases()) {
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        // Three-phase INSERT in NewEngine require more complex runtime callables
+        // Three-phase INSERT require more complex runtime callables
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
 
         for (const auto& phase : stats.query_phases()) {
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        // TODO: Get rid of additional precompute stage for adding optionality to row members in NewEngine
+        // TODO: Get rid of additional precompute stage for adding optionality to row members
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         for (const auto& phase : stats.query_phases()) {

@@ -93,8 +93,5 @@ Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::TIssues& issues);
 void AddQueryIssues(NKikimrKqp::TQueryResponse& response, const NYql::TIssues& issues);
 bool HasSchemeOrFatalIssues(const NYql::TIssues& issues);
 
-// for tests only
-void FailForcedNewEngineCompilationForTests(bool fail = true);
-
 } // namespace NKqp
 } // namespace NKikimr

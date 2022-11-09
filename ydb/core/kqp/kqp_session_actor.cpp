@@ -583,7 +583,7 @@ public:
         YQL_ENSURE(compileResult->PreparedQuery);
         const ui32 compiledVersion = compileResult->PreparedQuery->GetVersion();
         YQL_ENSURE(compiledVersion == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1,
-            "SessionActor can not execute OldEngine requests (invalid compiled version: " << compiledVersion << ")");
+            "Unexpected prepared query version: " << compiledVersion);
 
         QueryState->CompileResult = compileResult;
         QueryState->CompileStats.Swap(&ev->Get()->Stats);

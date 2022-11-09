@@ -44,13 +44,10 @@ public:
         bool RawResults = false; // TODO: deprecate
         TMaybe<TString> IsolationLevel; // TODO: deprecate
         TMaybe<bool> StrictDml; // TODO: deprecate
-        TMaybe<bool> UseNewEngine;
         TMaybe<bool> UseScanQuery;
         EKikimrStatsMode StatsMode = EKikimrStatsMode::None;
         TMaybe<bool> DocumentApiRestricted;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
-
-        bool ForceNewEngine() const { return UseNewEngine && *UseNewEngine; }
     };
 
     virtual ~IKikimrQueryExecutor() {}

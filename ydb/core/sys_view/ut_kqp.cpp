@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(PartitionStatsOneSchemeShardDataQueryNewEngine) {
+    Y_UNIT_TEST(PartitionStatsOneSchemeShardDataQuery) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
 

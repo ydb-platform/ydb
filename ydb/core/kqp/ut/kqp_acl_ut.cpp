@@ -9,7 +9,7 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
+Y_UNIT_TEST_SUITE(KqpAcl) {
     Y_UNIT_TEST(FailNavigate) {
         TKikimrRunner kikimr("user0@builtin");
 

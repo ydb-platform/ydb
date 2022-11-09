@@ -208,23 +208,6 @@ Y_UNIT_TEST(DataQueryWithEffects) {
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
 
-Y_UNIT_TEST(DataQueryOldEngine) {
-    auto kikimr = DefaultKikimrRunner();
-    auto db = kikimr.GetTableClient();
-    auto session = db.CreateSession().GetValueSync().GetSession();
-
-    TExecDataQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
-
-    auto result = session.ExecuteDataQuery(R"(
-
-        UPSERT INTO `/Root/TwoShard`
-        SELECT Key + 1u AS Key, Value1 FROM `/Root/TwoShard`;
-    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
-    result.GetIssues().PrintTo(Cerr);
-    AssertSuccessResult(result);
-}
-
 Y_UNIT_TEST(DataQueryMulti) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();

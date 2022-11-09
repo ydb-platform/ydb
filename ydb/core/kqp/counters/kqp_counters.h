@@ -382,7 +382,7 @@ struct TKqpRequestCounters : public TThrRefBase {
 
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TKqpDbCounters> DbCounters; // may be null
-    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon; // OldEngine compatibility
+    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
 };
 
 } // namespace NKqp

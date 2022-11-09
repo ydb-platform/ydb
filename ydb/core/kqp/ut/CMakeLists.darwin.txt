@@ -47,25 +47,25 @@ target_sources(ydb-core-kqp-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_acl_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_arrow_in_channels_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_document_api_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_effects_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_explain_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_flip_join_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_flowcontrol_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_index_lookup_join_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_indexes_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_indexes_multishard_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_inplace_update_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_join_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_limits_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_locks_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_merge_connection_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_mvcc_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_effects_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_flowcontrol_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_inplace_update_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_perf_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_ne_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_not_null_columns_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_olap_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_params_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_pragma_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_query_perf_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_query_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_scan_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_scheme_ut.cpp

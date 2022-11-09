@@ -8,7 +8,7 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-Y_UNIT_TEST_SUITE(KqpNewEngineEffects) {
+Y_UNIT_TEST_SUITE(KqpEffects) {
     Y_UNIT_TEST(InsertAbort_Literal_Success) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

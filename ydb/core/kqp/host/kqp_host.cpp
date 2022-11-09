@@ -1169,18 +1169,6 @@ public:
         return ImplicitTransaction->GetInfo();
     }
 
-    void ForceTxOldEngine(const TString& txId) override {
-        Y_UNUSED(txId);
-        Y_ENSURE(false, "Unsupported ForceTxOldEngine");
-    }
-
-    void ForceTxNewEngine(const TString& txId, ui32 percent, ui32 level) override {
-        Y_UNUSED(txId);
-        Y_UNUSED(percent);
-        Y_UNUSED(level);
-        Y_ENSURE(false, "Unsupported ForceTxNewEngine");
-    }
-
     TMaybe<TKqpTransactionInfo> GetTransactionInfo(const TString& txId) override {
         auto tx = FindTransaction(txId);
         if (!tx) {
@@ -1649,7 +1637,6 @@ private:
         auto query = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto settings1 = settings;
 
-        settings1.UseNewEngine = true;
         query->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
         query->MutablePhysicalQuery()->SetType(NKqpProto::TKqpPhyQuery::TYPE_DATA);
 
@@ -1698,7 +1685,6 @@ private:
                 IKikimrQueryExecutor::TExecuteSettings settings;
                 settings.RollbackTx = true;
                 settings.Deadlines.TimeoutAt = TInstant::Now() + TDuration::Minutes(1);
-                settings.UseNewEngine = true;
 
                 return RollbackTransactionInternal(tx, settings, ctx);
             });
@@ -1767,7 +1753,6 @@ private:
         // TODO: Use empty tx context
         TIntrusivePtr<TKikimrTransactionContextBase> tempTxCtx = MakeIntrusive<TKqpTransactionContext>(true);
         IKikimrQueryExecutor::TExecuteSettings execSettings;
-        execSettings.UseNewEngine = settings.UseNewEngine;
         SetupDataQueryAstTransformer(execSettings, tempTxCtx);
 
         SessionCtx->Query().Type = EKikimrQueryType::Dml;
@@ -1924,7 +1909,6 @@ private:
         (*maybeTx)->OnBeginQuery();
 
         TPrepareSettings prepareSettings;
-        prepareSettings.UseNewEngine = settings.UseNewEngine;
         prepareSettings.DocumentApiRestricted = settings.DocumentApiRestricted;
 
         auto prepareResult = isSql
@@ -2232,8 +2216,6 @@ TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     txInfo.TotalDuration = FinishTime - CreationTime;
     txInfo.ServerDuration = QueriesDuration;
     txInfo.QueriesCount = QueriesCount;
-
-    txInfo.TxEngine = DeferredEffects.GetEngine();
 
     return txInfo;
 }

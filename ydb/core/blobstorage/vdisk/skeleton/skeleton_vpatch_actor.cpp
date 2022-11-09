@@ -169,6 +169,9 @@ namespace NKikimr::NPrivate {
             Become(&TThis::StartState);
 
             TDuration liveDuration = Deadline - TActivationContext::Now();
+            if (!Deadline || liveDuration > CommonLiveTime) {
+                liveDuration = CommonLiveTime;
+            }
             Schedule(liveDuration, new TKikimrEvents::TEvWakeup);
         }
 
@@ -263,14 +266,16 @@ namespace NKikimr::NPrivate {
                 ErrorReason = TStringBuilder() << "Recieve not OK status from VGetResult,"
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
                 SendVPatchResult(NKikimrProto::ERROR);
-                PassAway();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
             if (record.ResultSize() != 1) {
                 ErrorReason = TStringBuilder() << "Recieve not correct result count from VGetResult,"
                         << " expetced 1 but given " << record.ResultSize();
                 SendVPatchResult(NKikimrProto::ERROR);
-                PassAway();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -281,7 +286,8 @@ namespace NKikimr::NPrivate {
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
                         << " response status# " << NKikimrProto::EReplyStatus_Name(item.GetStatus());
                 SendVPatchResult(NKikimrProto::ERROR);
-                PassAway();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -428,7 +434,6 @@ namespace NKikimr::NPrivate {
             Sender = ev->Sender;
             Cookie = ev->Cookie;
             SendVPatchResult(NKikimrProto::ERROR);
-            PassAway();
         }
 
         void Handle(TEvBlobStorage::TEvVPatchDiff::TPtr &ev) {
@@ -471,7 +476,7 @@ namespace NKikimr::NPrivate {
 
             if (forceEnd) {
                 SendVPatchResult(NKikimrProto::OK);
-                PassAway();
+                NotifySkeletonAndDie();
                 return;
             }
 
@@ -487,7 +492,8 @@ namespace NKikimr::NPrivate {
 
             if (!CheckDiff(Diffs, "Diff from DSProxy")) {
                 SendVPatchResult(NKikimrProto::ERROR);
-                PassAway();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -516,7 +522,7 @@ namespace NKikimr::NPrivate {
             ResultEvent->SetStatusFlagsAndFreeSpace(record.GetStatusFlags(), record.GetApproximateFreeSpaceShare());
 
             SendVPatchResult(status);
-            PassAway();
+            NotifySkeletonAndDie();
         }
 
         void HandleError(TEvBlobStorage::TEvVPatchXorDiff::TPtr &ev) {
@@ -556,10 +562,9 @@ namespace NKikimr::NPrivate {
 
                 if (ResultEvent) {
                     SendVPatchResult(NKikimrProto::ERROR);
-                    PassAway();
-                } else {
-                    Become(&TThis::ErrorState);
+                    NotifySkeletonAboutDying();
                 }
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -581,13 +586,12 @@ namespace NKikimr::NPrivate {
         }
 
         void NotifySkeletonAndDie() {
-            Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId));
+            NotifySkeletonAboutDying();
             PassAway();
         }
 
         void NotifySkeletonAboutDying() {
             Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId));
-            Schedule(CommonLiveTime, new TEvVPatchDyingConfirm);
         }
 
         void HandleInStartState(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
@@ -653,7 +657,6 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 IgnoreFunc(TEvBlobStorage::TEvVPatchXorDiffResult)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInDataStates)
-                IgnoreFunc(TEvVPatchDyingConfirm)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
             }
         }
@@ -664,7 +667,6 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInParityStates)
-                IgnoreFunc(TEvVPatchDyingConfirm)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
             }
         }

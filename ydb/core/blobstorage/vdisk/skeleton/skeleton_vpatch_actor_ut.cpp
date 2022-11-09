@@ -341,7 +341,8 @@ namespace NKikimr {
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
-                    TEvBlobStorage::EvVPatchResult};
+                    TEvBlobStorage::EvVPatchResult,
+                    TEvBlobStorage::EvVPatchDyingRequest};
             MakeVPatchFindingPartsTest(NKikimrProto::OK, {1}, std::move(receivingEvents), std::move(sendingEvents));
         }
 
@@ -353,7 +354,8 @@ namespace NKikimr {
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
-                    TEvBlobStorage::EvVPatchResult};
+                    TEvBlobStorage::EvVPatchResult,
+                    TEvBlobStorage::EvVPatchDyingRequest};
             MakeVPatchFindingPartsTest(NKikimrProto::OK, {1, 2}, std::move(receivingEvents), std::move(sendingEvents));
         }
 
@@ -482,6 +484,8 @@ namespace NKikimr {
             if (isKilled) {
                 auto result = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchResult>(handle);
                 UNIT_ASSERT(result->Record.GetStatus() == NKikimrProto::ERROR);
+                handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, new TEvVPatchDyingConfirm);
+                runtime.Send(handle.Release());
                 testData.WaitEndTest();
                 return;
             }
@@ -511,7 +515,8 @@ namespace NKikimr {
                     TEvBlobStorage::EvVPatchFoundParts,
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPut,
-                    TEvBlobStorage::EvVPatchResult};
+                    TEvBlobStorage::EvVPatchResult,
+                    TEvBlobStorage::EvVPatchDyingRequest};
 
             TVector<ui8> foundPartIds = {1};
             MakeVPatchTest(NKikimrProto::OK, NKikimrProto::OK, 100, {1}, 1, 0,
@@ -523,12 +528,14 @@ namespace NKikimr {
                     TEvents::TSystem::Bootstrap,
                     TEvBlobStorage::EvVGetResult,
                     TEvBlobStorage::EvVPatchDiff,
-                    TEvBlobStorage::EvVGetResult};
+                    TEvBlobStorage::EvVGetResult,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
                     TEvBlobStorage::EvVGet,
-                    TEvBlobStorage::EvVPatchResult};
+                    TEvBlobStorage::EvVPatchResult,
+                    TEvBlobStorage::EvVPatchDyingRequest};
 
             TVector<ui8> foundPartIds = {1};
             MakeVPatchTest(NKikimrProto::ERROR, NKikimrProto::OK, 100, {1}, 1, 0,
@@ -547,7 +554,8 @@ namespace NKikimr {
                     TEvBlobStorage::EvVPatchFoundParts,
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPut,
-                    TEvBlobStorage::EvVPatchResult};
+                    TEvBlobStorage::EvVPatchResult,
+                    TEvBlobStorage::EvVPatchDyingRequest};
 
             TVector<ui8> foundPartIds = {1};
             MakeVPatchTest(NKikimrProto::OK, NKikimrProto::ERROR, 100, {1}, 1, 0,
@@ -610,6 +618,8 @@ namespace NKikimr {
                 TAutoPtr<IEventHandle> handle;
                 testData.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchXorDiffResult>(handle);
                 ReceiveVPatchResult(testData, status);
+                handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, new TEvVPatchDyingConfirm);
+                runtime.Send(handle.Release());
                 testData.WaitEndTest();
             } else {
                 testData.ForceEndTest();
@@ -631,7 +641,8 @@ namespace NKikimr {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPut,
                     TEvBlobStorage::EvVPatchResult,
-                    TEvBlobStorage::EvVPatchResult};
+                    TEvBlobStorage::EvVPatchResult,
+                    TEvBlobStorage::EvVPatchDyingRequest};
 
             TVector<TDiff> diffs;
             diffs.emplace_back("", 0, true, false);
@@ -644,12 +655,14 @@ namespace NKikimr {
                     TEvents::TSystem::Bootstrap,
                     TEvBlobStorage::EvVGetResult,
                     TEvBlobStorage::EvVPatchXorDiff,
-                    TEvBlobStorage::EvVPatchDiff,};
+                    TEvBlobStorage::EvVPatchDiff,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
                     TEvBlobStorage::EvVPatchXorDiffResult,
-                    TEvBlobStorage::EvVPatchResult};
+                    TEvBlobStorage::EvVPatchResult,
+                    TEvBlobStorage::EvVPatchDyingRequest};
 
             TVector<TDiff> diffs;
             diffs.emplace_back("", 100, true, false);
@@ -662,12 +675,14 @@ namespace NKikimr {
                     TEvents::TSystem::Bootstrap,
                     TEvBlobStorage::EvVGetResult,
                     TEvBlobStorage::EvVPatchXorDiff,
-                    TEvBlobStorage::EvVPatchDiff,};
+                    TEvBlobStorage::EvVPatchDiff,
+                    TEvBlobStorage::EvVPatchDyingConfirm};
             TVector<ui64> sendingEvents {
                     TEvBlobStorage::EvVGet,
                     TEvBlobStorage::EvVPatchFoundParts,
                     TEvBlobStorage::EvVPatchXorDiffResult,
-                    TEvBlobStorage::EvVPatchResult};
+                    TEvBlobStorage::EvVPatchResult,
+                    TEvBlobStorage::EvVPatchDyingRequest};
 
             TVector<TDiff> diffs;
             diffs.emplace_back("aa", 3, true, false);

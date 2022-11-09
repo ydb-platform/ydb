@@ -19,13 +19,7 @@ public:
         : NActors::TActor<TAcceptorActor>(&TAcceptorActor::StateInit)
         , Owner(owner)
         , Poller(poller)
-        , Socket(new TSocketDescriptor())
     {
-        // for unit tests :(
-        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
-#ifdef SO_REUSEPORT
-        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true);
-#endif
     }
 
     static constexpr char ActorName[] = "HTTP_ACCEPTOR_ACTOR";
@@ -47,7 +41,15 @@ protected:
     }
 
     void HandleInit(TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
-        SocketAddressType bindAddress(Socket->Socket.MakeAddress(event->Get()->Address,event->Get()->Port));
+        TString address = event->Get()->Address;
+        ui16 port = event->Get()->Port;
+        Socket = new TSocketDescriptor(SocketType::GuessAddressFamily(address));
+        // for unit tests :(
+        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
+#ifdef SO_REUSEPORT
+        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true);
+#endif
+        SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
         Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
         Endpoint->Owner = ctx.SelfID;
         Endpoint->Proxy = Owner;

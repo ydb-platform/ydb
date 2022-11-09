@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include "ydb/library/yql/core/type_ann/type_ann_impl.h"
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -895,7 +896,7 @@ TStatus AnnotateOlapAgg(const TExprNode::TPtr& node, TExprContext& ctx) {
         } else if (opType->Content() == "sum") {
             auto colType = structType->FindItemType(colName->Content());
             const TTypeAnnotationNode* resultType = nullptr;
-            if(!NTypeAnnImpl::GetSumResultType(node->Pos(), *colType, resultType, ctx)) {
+            if(!GetSumResultType(node->Pos(), *colType, resultType, ctx)) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
                     TStringBuilder() << "Unsupported type: " << FormatType(colType) << ". Expected Data or Optional of Data or Null."));
                 return TStatus::Error;

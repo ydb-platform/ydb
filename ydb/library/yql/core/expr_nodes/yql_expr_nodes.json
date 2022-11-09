@@ -2228,7 +2228,10 @@
         {
             "Name": "TCoAggApplyState",
             "Base": "TCoAggApplyBase",
-            "Match": {"Type": "Callable", "Name": "AggApplyState"}
+            "Match": {"Type": "Callable", "Name": "AggApplyState"},
+            "Children": [
+                {"Index": 3, "Name": "OriginalType", "Type": "TExprBase"}
+            ]
         },
         {
             "Name": "TCoAggOverState",

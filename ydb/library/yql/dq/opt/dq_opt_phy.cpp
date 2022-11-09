@@ -1687,6 +1687,17 @@ TExprBase DqRewriteLengthOfStageOutputLegacy(TExprBase node, TExprContext& ctx, 
     };
 
     auto stateRowType = ctx.MakeType<TStructExprType>(stateItems);
+    auto stateTypeNode = ExpandType(node.Pos(), *stateRowType, ctx);
+
+    auto originalTypeNode = ctx.Builder(node.Pos())
+        .Callable("StructType")
+            .List(0)
+                .Add(0, field.Ptr())
+                .Callable(1, "VoidType")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
 
     auto aggregateFinal = Build<TCoAggregateMergeFinalize>(ctx, node.Pos())
         .Input(aggregateCombine)
@@ -1699,7 +1710,7 @@ TExprBase DqRewriteLengthOfStageOutputLegacy(TExprBase node, TExprContext& ctx, 
                     .Name<TCoAtom>()
                         .Value("count_all")
                     .Build()
-                    .InputType(ExpandType(node.Pos(), *stateRowType, ctx))
+                    .InputType(stateTypeNode)
                     .Extractor<TCoLambda>()
                         .Args({ "row" })
                         .Body<TCoMember>()
@@ -1707,6 +1718,7 @@ TExprBase DqRewriteLengthOfStageOutputLegacy(TExprBase node, TExprContext& ctx, 
                             .Name(field)
                         .Build()
                     .Build()
+                    .OriginalType(originalTypeNode)
                 .Build()
             .Build()
         .Build()

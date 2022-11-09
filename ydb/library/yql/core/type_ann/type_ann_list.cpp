@@ -4951,6 +4951,8 @@ namespace {
                     .Add(0, root->ChildPtr(0))
                     .Add(1, root->ChildPtr(1))
                     .Add(2, input->ChildPtr(0))
+                    .Callable(3, "Void")
+                    .Seal()
                 .Seal()
                 .Build();
 
@@ -5104,47 +5106,17 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& itemType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
-        bool isOptional;
-        const TDataExprType* lambdaType;
-        if(IsDataOrOptionalOfData(&itemType, isOptional, lambdaType)) {
-            auto lambdaTypeSlot = lambdaType->GetSlot();
-            const TTypeAnnotationNode *sumResultType = nullptr;
-            if (IsDataTypeSigned(lambdaTypeSlot)) {
-                sumResultType = ctx.MakeType<TDataExprType>(EDataSlot::Int64);
-            } else if (IsDataTypeUnsigned(lambdaTypeSlot)) {
-                sumResultType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
-            } else if (IsDataTypeDecimal(lambdaTypeSlot)) {
-                const auto decimalType = lambdaType->Cast<TDataExprParamsType>();
-                sumResultType = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", decimalType->GetParamTwo());
-            } else if (IsDataTypeFloat(lambdaTypeSlot) || IsDataTypeInterval(lambdaTypeSlot)) {
-                sumResultType = ctx.MakeType<TDataExprType>(lambdaTypeSlot);
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(pos),
-                    TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (isOptional) {
-                sumResultType = ctx.MakeType<TOptionalExprType>(sumResultType);
-            }
-
-            retType = sumResultType;
-            return true;
-        } else if (IsNull(itemType)) {
-            retType = ctx.MakeType<TNullExprType>();
-            return true;
-        } else {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Unsupported type: " << FormatType(&itemType) << ". Expected Data or Optional of Data."));
-            return false;
-        }
-    }
-
     IGraphTransformer::TStatus AggApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
+        const bool overState = input->Content().EndsWith("State");
+        if (overState) {
+            if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
@@ -5154,6 +5126,15 @@ namespace {
         auto name = input->Child(0)->Content();
         if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        bool hasOriginalType = false;
+        if (overState && !input->Child(3)->IsCallable("Void")) {
+            if (auto status = EnsureTypeRewrite(input->ChildRef(3), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+
+           hasOriginalType = true;
         }
 
         auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -5179,7 +5160,78 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
+            if (overState) {
+                if (!IsSameAnnotation(*lambda->GetTypeAnn(), *retType)) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Mismatch sum type, expected: " << *lambda->GetTypeAnn() << ", but got: " << *retType));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
             input->SetTypeAnn(retType);
+        } else if (name == "avg") {
+            const TTypeAnnotationNode* retType;
+            if (!overState) {
+                if (!GetAvgResultType(input->Pos(), *lambda->GetTypeAnn(), retType, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                auto itemType = lambda->GetTypeAnn();
+                if (IsNull(*itemType)) {
+                    retType = itemType;
+                } else {
+                    bool isOptional = false;
+                    if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+                        isOptional = true;
+                        itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+                    }
+
+                    if (!EnsureTupleTypeSize(lambda->Pos(), itemType, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    auto tupleType = itemType->Cast<TTupleExprType>();
+                    auto sumType = tupleType->GetItems()[0];
+                    const TTypeAnnotationNode* sumTypeOut;
+                    if (!GetSumResultType(input->Pos(), *sumType, sumTypeOut, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (!IsSameAnnotation(*sumType, *sumTypeOut)) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                            TStringBuilder() << "Mismatch sum type, expected: " << *sumType << ", but got: " << *sumTypeOut));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    auto countType = tupleType->GetItems()[1];
+                    if (!EnsureSpecificDataType(lambda->Pos(), *countType, EDataSlot::Uint64, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    retType = sumType;
+                    if (isOptional) {
+                        retType = ctx.Expr.MakeType<TOptionalExprType>(retType);
+                    }
+                }
+            }
+
+            if (hasOriginalType) {
+                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                if (!EnsureStructType(input->Pos(), *originalExtractorType, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                auto structType = originalExtractorType->Cast<TStructExprType>();
+                if (structType->GetSize() != 1) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Expected struct with one member"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                input->SetTypeAnn(structType->GetItems()[0]->GetItemType());
+            } else {
+                input->SetTypeAnn(retType);
+            }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported agg name: " << name));
@@ -5203,7 +5255,7 @@ namespace {
         ui32 expectedArgs;
         if (name == "count_all") {
             expectedArgs = 1;
-        } else if (name == "count" || name == "sum") {
+        } else if (name == "count" || name == "sum" || name == "avg") {
             expectedArgs = 2;
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -5223,7 +5275,7 @@ namespace {
 
         if (name == "count_all" || name == "count") {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64));
-        } else {
+        } else if (name == "sum") {
             auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType;
             if (!GetSumResultType(input->Pos(), *itemType, retType, ctx.Expr)) {
@@ -5231,6 +5283,18 @@ namespace {
             }
 
             input->SetTypeAnn(retType);
+        } else if (name == "avg") {
+            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            const TTypeAnnotationNode* retType;
+            if (!GetAvgResultType(input->Pos(), *itemType, retType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            input->SetTypeAnn(retType);
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Unsupported agg name: " << name));
+            return IGraphTransformer::TStatus::Error;
         }
 
         return IGraphTransformer::TStatus::Ok;

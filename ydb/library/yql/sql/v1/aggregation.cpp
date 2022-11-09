@@ -31,7 +31,8 @@ namespace {
 
 static const THashSet<TString> AggApplyFuncs = {
     "count_traits_factory",
-    "sum_traits_factory"
+    "sum_traits_factory",
+    "avg_traits_factory",
 };
 
 class TAggregationFactory : public IAggregation {

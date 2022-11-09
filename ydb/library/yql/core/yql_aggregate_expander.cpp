@@ -97,7 +97,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
     TNodeOnNodeOwnedMap deepClones;
     auto lambda = Ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
 
-    auto listTypeNode = Ctx.NewCallable(node->Pos(), "ListType", { node->ChildPtr(1) });
+    auto listTypeNode = Ctx.NewCallable(node->Pos(), "ListType", { node->ChildPtr(node->ChildrenSize() == 4 && !node->Child(3)->IsCallable("Void") ? 3 : 1) });
     auto extractor = node->ChildPtr(2);
 
     auto traits = Ctx.ReplaceNodes(lambda->TailPtr(), {
@@ -1969,11 +1969,21 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
             .Build();
 
         if (isAggApply) {
+            auto originalExtractorTypeNode = Ctx.Builder(Node->Pos())
+                .Callable("StructType")
+                    .List(0)
+                        .Add(0, InitialColumnNames[index])
+                        .Add(1, ExpandType(Node->Pos(), *originalTrait->GetTypeAnn(), Ctx))
+                    .Seal()
+                .Seal()
+                .Build();
+
             mergeTraits.push_back(Ctx.Builder(Node->Pos())
                 .Callable("AggApplyState")
                     .Add(0, originalTrait->ChildPtr(0))
                     .Add(1, extractorTypeNode)
                     .Add(2, extractor)
+                    .Add(3, originalExtractorTypeNode)
                 .Seal()
                 .Build());
         } else {

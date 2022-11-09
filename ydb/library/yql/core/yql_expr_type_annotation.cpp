@@ -5227,12 +5227,119 @@ const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, boo
 }
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {
-    Y_UNUSED(ctx);
     auto name = input->Child(0)->Content();
     if (name == "count" || name == "count_all" || name == "sum") {
         return input->GetTypeAnn();
+    } else if (name == "avg") {
+        auto itemType = input->Content().StartsWith("AggBlock") ?
+            input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType() :
+            input->Child(2)->GetTypeAnn();
+        if (input->Content().EndsWith("State")) {
+            return itemType;
+        }
+
+        if (IsNull(*itemType)) {
+            return itemType;
+        }
+
+        bool isOptional;
+        const TDataExprType* lambdaType;
+        YQL_ENSURE(IsDataOrOptionalOfData(itemType, isOptional, lambdaType));
+        auto lambdaTypeSlot = lambdaType->GetSlot();
+        const TTypeAnnotationNode* stateValueType;
+        if (IsDataTypeDecimal(lambdaTypeSlot)) {
+            const auto decimalType = lambdaType->Cast<TDataExprParamsType>();
+            stateValueType = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", decimalType->GetParamTwo());
+        } else if (IsDataTypeInterval(lambdaTypeSlot)) {
+            stateValueType = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", "0");
+        } else {
+            stateValueType = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Double);
+        }
+
+        TVector<const TTypeAnnotationNode*> items = {
+            stateValueType,
+            ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64)
+        };
+
+        const TTypeAnnotationNode* stateType = ctx.MakeType<TTupleExprType>(std::move(items));
+        if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+            stateType = ctx.MakeType<TOptionalExprType>(stateType);
+        }
+
+        return stateType;
     } else {
         YQL_ENSURE(false, "Unknown AggApply: " << name);
+    }
+}
+
+bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& itemType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
+    bool isOptional;
+    const TDataExprType* lambdaType;
+    if(IsDataOrOptionalOfData(&itemType, isOptional, lambdaType)) {
+        auto lambdaTypeSlot = lambdaType->GetSlot();
+        const TTypeAnnotationNode *sumResultType = nullptr;
+        if (IsDataTypeSigned(lambdaTypeSlot)) {
+            sumResultType = ctx.MakeType<TDataExprType>(EDataSlot::Int64);
+        } else if (IsDataTypeUnsigned(lambdaTypeSlot)) {
+            sumResultType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        } else if (IsDataTypeDecimal(lambdaTypeSlot)) {
+            const auto decimalType = lambdaType->Cast<TDataExprParamsType>();
+            sumResultType = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", decimalType->GetParamTwo());
+        } else if (IsDataTypeFloat(lambdaTypeSlot) || IsDataTypeInterval(lambdaTypeSlot)) {
+            sumResultType = ctx.MakeType<TDataExprType>(lambdaTypeSlot);
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isOptional) {
+            sumResultType = ctx.MakeType<TOptionalExprType>(sumResultType);
+        }
+
+        retType = sumResultType;
+        return true;
+    } else if (IsNull(itemType)) {
+        retType = ctx.MakeType<TNullExprType>();
+        return true;
+    } else {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Unsupported type: " << FormatType(&itemType) << ". Expected Data or Optional of Data."));
+        return false;
+    }
+}
+
+bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& itemType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
+    bool isOptional;
+    const TDataExprType* lambdaType;
+    if(IsDataOrOptionalOfData(&itemType, isOptional, lambdaType)) {
+        auto lambdaTypeSlot = lambdaType->GetSlot();
+        const TTypeAnnotationNode *avgResultType = nullptr;
+        if (IsDataTypeNumeric(lambdaTypeSlot)) {
+            avgResultType = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+        } else if (IsDataTypeDecimal(lambdaTypeSlot)) {
+            avgResultType = &itemType;
+        } else if (IsDataTypeInterval(lambdaTypeSlot)) {
+            avgResultType = &itemType;
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isOptional) {
+            avgResultType = ctx.MakeType<TOptionalExprType>(avgResultType);
+        }
+
+        retType = avgResultType;
+        return true;
+    } else if (IsNull(itemType)) {
+        retType = ctx.MakeType<TNullExprType>();
+        return true;
+    } else {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Unsupported type: " << FormatType(&itemType) << ". Expected Data or Optional of Data."));
+        return false;
     }
 }
 

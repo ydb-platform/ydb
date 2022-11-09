@@ -101,7 +101,10 @@ namespace NKikimr::NBlobDepot {
                         Response->Responses.emplace_back(id, TString());
                     }
 
-                    if (!Request.IsIndexOnly) {
+                    if (key.HasErrorReason()) {
+                        return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to resolve blob# " << id
+                            << ": " << key.GetErrorReason());
+                    } else if (!Request.IsIndexOnly) {
                         TReadArg arg{
                             key.GetValueChain(),
                             NKikimrBlobStorage::EGetHandleClass::FastRead,

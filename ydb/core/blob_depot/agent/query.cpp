@@ -2,52 +2,76 @@
 
 namespace NKikimr::NBlobDepot {
 
+    template<>
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<0>(std::unique_ptr<IEventHandle> ev) {
+        switch (ev->GetTypeRewrite()) {
+#define XX(TYPE) case TEvBlobStorage::TYPE: return CreateQuery<TEvBlobStorage::TYPE>(std::move(ev));
+            ENUMERATE_INCOMING_EVENTS(XX)
+#undef XX
+        }
+        Y_FAIL();
+    }
+
     void TBlobDepotAgent::HandleStorageProxy(TAutoPtr<IEventHandle> ev) {
+        std::unique_ptr<IEventHandle> p(ev.Release());
+
         if (TabletId == Max<ui64>() || !PendingEventQ.empty()) {
-            // TODO: memory usage control
-            PendingEventQ.emplace_back(ev.Release());
+            size_t size = Max<size_t>();
+            switch (p->GetTypeRewrite()) {
+#define XX(TYPE) case TEvBlobStorage::TYPE: size = p->Get<TEvBlobStorage::T##TYPE>()->CalculateSize(); break;
+                ENUMERATE_INCOMING_EVENTS(XX)
+#undef XX
+            }
+            Y_VERIFY(size != Max<size_t>());
+
+            if (size + PendingEventBytes > MaxPendingEventBytes) {
+                CreateQuery<0>(std::move(p))->EndWithError(NKikimrProto::ERROR, "pending event queue overflow");
+            } else {
+                PendingEventBytes += size;
+                PendingEventQ.push_back(TPendingEvent{std::move(p), size, TMonotonic::Now() + EventExpirationTime});
+            }
         } else {
-            ProcessStorageEvent(std::unique_ptr<IEventHandle>(ev.Release()));
+            ProcessStorageEvent(std::move(p));
         }
     }
 
     void TBlobDepotAgent::HandlePendingEvent() {
-        THPTimer timer;
+        for (THPTimer timer; !PendingEventQ.empty(); ) {
+            TPendingEvent& item = PendingEventQ.front();
+            ProcessStorageEvent(std::move(item.Event));
+            Y_VERIFY(PendingEventBytes >= item.Size);
+            PendingEventBytes -= item.Size;
+            PendingEventQ.pop_front();
+            Y_VERIFY(!PendingEventQ.empty() || !PendingEventBytes);
 
-        do {
-            if (!PendingEventQ.empty()) {
-                ProcessStorageEvent(std::move(PendingEventQ.front()));
-                PendingEventQ.pop_front();
-            } else {
+            if (TDuration::Seconds(timer.Passed()) >= TDuration::MicroSeconds(100)) {
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessPendingEvent, 0, SelfId(), {}, nullptr, 0));
                 break;
             }
-        } while (TDuration::Seconds(timer.Passed()) <= TDuration::MicroSeconds(100));
-
-        if (!PendingEventQ.empty()) {
-            TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessPendingEvent, 0, SelfId(), {}, nullptr, 0));
         }
     }
 
     void TBlobDepotAgent::ProcessStorageEvent(std::unique_ptr<IEventHandle> ev) {
-        TQuery *query = nullptr;
-
-        switch (ev->GetTypeRewrite()) {
-#define XX(TYPE) \
-            case TEvBlobStorage::TYPE: query = CreateQuery<TEvBlobStorage::TYPE>(std::move(ev)); break;
-
-            ENUMERATE_INCOMING_EVENTS(XX)
-#undef XX
-        }
-
-        Y_VERIFY(query);
-
+        TQuery *query = CreateQuery<0>(std::move(ev));
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA13, "new query", (VirtualGroupId, VirtualGroupId),
-            (QueryId, query->GetQueryId()), (TabletId, query->GetTabletId()), (Name, query->GetName()));
+            (QueryId, query->GetQueryId()), (Name, query->GetName()));
         if (!TabletId) {
             query->EndWithError(NKikimrProto::ERROR, "group is in error state");
         } else {
             query->Initiate();
         }
+    }
+
+    void TBlobDepotAgent::HandlePendingEventQueueWatchdog() {
+        const TMonotonic now = TActivationContext::Monotonic();
+        std::deque<TPendingEvent>::iterator it;
+        for (it = PendingEventQ.begin(); it != PendingEventQ.end() && it->ExpirationTimestamp <= now; ++it) {
+            CreateQuery<0>(std::move(it->Event))->EndWithError(NKikimrProto::ERROR, "pending event queue timeout");
+        }
+        PendingEventQ.erase(PendingEventQ.begin(), it);
+
+        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvPendingEventQueueWatchdog, 0,
+            SelfId(), {}, nullptr, 0));
     }
 
     void TBlobDepotAgent::Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev) {
@@ -79,7 +103,7 @@ namespace NKikimr::NBlobDepot {
     TBlobDepotAgent::TQuery::~TQuery() {
         if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
             STLOG(WatchdogPriority, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
-                (VirtualGroupId, Agent.VirtualGroupId), (QueryId, QueryId), (Duration, duration));
+                (VirtualGroupId, Agent.VirtualGroupId), (QueryId, GetQueryId()), (Duration, duration));
         }
         Agent.QueryWatchdogMap.erase(QueryWatchdogMapIter);
     }
@@ -95,7 +119,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
         STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA14, "query ends with error", (VirtualGroupId, Agent.VirtualGroupId),
-            (QueryId, QueryId), (Status, status), (ErrorReason, errorReason),
+            (QueryId, GetQueryId()), (Status, status), (ErrorReason, errorReason),
             (Duration, TActivationContext::Monotonic() - StartTime));
 
         std::unique_ptr<IEventBase> response;
@@ -116,10 +140,22 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "query ends with success", (VirtualGroupId, Agent.VirtualGroupId),
-            (QueryId, QueryId), (Response, response->ToString()), (Duration, TActivationContext::Monotonic() - StartTime));
+            (QueryId, GetQueryId()), (Response, response->ToString()), (Duration, TActivationContext::Monotonic() - StartTime));
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         OnDestroy(true);
         delete this;
+    }
+
+    TString TBlobDepotAgent::TQuery::GetQueryId() const {
+        if (!QueryIdString) {
+            TStringStream s;
+            s << Hex(QueryId);
+            if (const ui64 tabletId = GetTabletId()) {
+                s << '@' << tabletId;
+            }
+            QueryIdString = std::move(s.Str());
+        }
+        return QueryIdString;
     }
 
     TString TBlobDepotAgent::TQuery::GetName() const {

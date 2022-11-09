@@ -120,7 +120,7 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "issuing TEvCollectGarbage", (Id, Self->GetLogId()),
                 (Channel, int(record.Channel)), (GroupId, record.GroupId), (Msg, ev->ToString()),
                 (LastConfirmedGenStep, record.LastConfirmedGenStep), (IssuedGenStep, record.IssuedGenStep),
-                (TrashInFlight.size, record.TrashInFlight.size()));
+                (LeastExpectedBlobId, record.LeastExpectedBlobId), (TrashInFlight.size, record.TrashInFlight.size()));
 
             const ui64 id = ++LastCollectCmdId;
             CollectCmdToGroup.emplace(id, record.GroupId);

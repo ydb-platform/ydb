@@ -12,7 +12,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlobMappingCache::HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg,
             TRequestContext::TPtr context) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDA28, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId), (Msg, msg));
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA28, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId), (Msg, msg));
 
         auto process = [&](TString key, const NKikimrBlobDepot::TEvResolveResult::TResolvedKey *item) {
             const auto [it, inserted] = Cache.try_emplace(std::move(key));
@@ -28,8 +28,9 @@ namespace NKikimr::NBlobDepot {
             }
             Queue.PushBack(&entry);
             entry.ResolveInFlight = false;
-            for (TQueryWaitingForKey& item : std::exchange(entry.QueriesWaitingForKey, {})) {
-                Agent.OnRequestComplete(item.Id, TKeyResolved{entry.Values.empty() ? nullptr : &entry.Values},
+            for (TQueryWaitingForKey& q : std::exchange(entry.QueriesWaitingForKey, {})) {
+                Agent.OnRequestComplete(q.Id, TKeyResolved{entry.Values.empty() ? nullptr : &entry.Values,
+                    item && item->HasErrorReason() ? std::make_optional(item->GetErrorReason()) : std::nullopt},
                     Agent.OtherRequestInFlight);
             }
         };

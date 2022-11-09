@@ -7,12 +7,14 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev) {
         class TTxCommitBlobSeq : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            const ui32 NodeId;
             std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> Request;
             std::unique_ptr<IEventHandle> Response;
 
         public:
-            TTxCommitBlobSeq(TBlobDepot *self, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> request)
+            TTxCommitBlobSeq(TBlobDepot *self, ui32 nodeId, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> request)
                 : TTransactionBase(self)
+                , NodeId(nodeId)
                 , Request(std::move(request))
             {}
 
@@ -22,7 +24,7 @@ namespace NKikimr::NBlobDepot {
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
                 std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId());
 
-                TAgent& agent = Self->GetAgent(Request->Recipient);
+                TAgent& agent = Self->GetAgent(NodeId);
                 const ui32 generation = Self->Executor()->Generation();
 
                 for (const auto& item : Request->Get()->Record.GetItems()) {
@@ -41,15 +43,12 @@ namespace NKikimr::NBlobDepot {
                     const auto blobSeqId = TBlobSeqId::FromProto(blobLocator.GetBlobSeqId());
                     const bool canBeCollected = Self->Data->CanBeCollected(blobLocator.GetGroupId(), blobSeqId);
 
+                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT68, "TTxCommitBlobSeq process key", (Id, Self->GetLogId()),
+                        (Key, key), (Item, item), (CanBeCollected, canBeCollected), (Generation, generation));
+
                     if (blobSeqId.Generation == generation) {
                         // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
                         Y_VERIFY_S(!canBeCollected || item.GetCommitNotify(), "BlobSeqId# " << blobSeqId.ToString());
-
-                        // mark given blob as committed only when it was issued in current generation -- only for this
-                        // generation we have correct GivenIdRanges
-                        if (!item.GetCommitNotify()) {
-                            MarkGivenIdCommitted(agent, blobSeqId);
-                        }
                     } else if (canBeCollected) {
                         // we can't accept this record, because it is potentially under already issued barrier
                         responseItem->SetStatus(NKikimrProto::ERROR);
@@ -77,6 +76,12 @@ namespace NKikimr::NBlobDepot {
                         }
                     } else {
                         Self->Data->UpdateKey(key, item, item.GetUncertainWrite(), txc, this);
+                        if (blobSeqId.Generation == generation) {
+                            // mark given blob as committed only when it was issued in current generation -- only for this
+                            // generation we have correct GivenIdRanges; and we can do this only after updating key as the
+                            // callee function may trigger garbage collection
+                            MarkGivenIdCommitted(agent, blobSeqId);
+                        }
                     }
                 }
 
@@ -128,8 +133,9 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        Execute(std::make_unique<TTxCommitBlobSeq>(this, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle>(
-            ev.Release())));
+        TAgent& agent = GetAgent(ev->Recipient);
+        Execute(std::make_unique<TTxCommitBlobSeq>(this, agent.ConnectedNodeId,
+            std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle>(ev.Release())));
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev) {

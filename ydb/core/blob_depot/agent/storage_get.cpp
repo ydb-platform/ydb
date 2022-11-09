@@ -54,7 +54,7 @@ namespace NKikimr::NBlobDepot {
                     TString blobId = query.Id.AsBinaryString();
                     if (const TResolvedValueChain *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
                             std::make_shared<TResolveKeyContext>(i))) {
-                        if (!ProcessSingleResult(i, value)) {
+                        if (!ProcessSingleResult(i, value, std::nullopt)) {
                             return;
                         }
                     } else {
@@ -64,15 +64,19 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            bool ProcessSingleResult(ui32 queryIdx, const TResolvedValueChain *value) {
+            bool ProcessSingleResult(ui32 queryIdx, const TResolvedValueChain *value, const std::optional<TString>& errorReason) {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA27, "ProcessSingleResult", (VirtualGroupId, Agent.VirtualGroupId),
-                    (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Value, value));
+                    (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Value, value), (ErrorReason, errorReason));
 
-                if (!value) {
-                    Response->Responses[queryIdx].Status = NKikimrProto::NODATA;
+                auto& r = Response->Responses[queryIdx];
+                if (errorReason) {
+                    r.Status = NKikimrProto::ERROR;
+                    --AnswersRemain;
+                } else if (!value) {
+                    r.Status = NKikimrProto::NODATA;
                     --AnswersRemain;
                 } else if (Request.IsIndexOnly) {
-                    Response->Responses[queryIdx].Status = NKikimrProto::OK;
+                    r.Status = NKikimrProto::OK;
                     --AnswersRemain;
                 } else if (value) {
                     TReadArg arg{
@@ -111,7 +115,7 @@ namespace NKikimr::NBlobDepot {
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
                 if (auto *p = std::get_if<TKeyResolved>(&response)) {
-                    ProcessSingleResult(context->Obtain<TResolveKeyContext>().QueryIdx, p->ValueChain);
+                    ProcessSingleResult(context->Obtain<TResolveKeyContext>().QueryIdx, p->ValueChain, p->ErrorReason);
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
                     Agent.HandleGetResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {

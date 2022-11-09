@@ -76,7 +76,7 @@ namespace NKikimr::NBlobDepot {
 
             void OnUpdateBlock(bool success) override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (VirtualGroupId, Agent.VirtualGroupId),
-                    (QueryId, QueryId), (Success, success));
+                    (QueryId, GetQueryId()), (Success, success));
 
                 if (!success) {
                     return EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
@@ -95,7 +95,7 @@ namespace NKikimr::NBlobDepot {
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, TEvBlobDepot::TEvResolveResult& msg) {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
-                    (QueryId, QueryId), (Msg, msg.Record));
+                    (QueryId, GetQueryId()), (Msg, msg.Record));
 
                 Agent.BlobMappingCache.HandleResolveResult(msg.Record, nullptr);
 
@@ -107,6 +107,10 @@ namespace NKikimr::NBlobDepot {
                 if (status == NKikimrProto::OK) {
                     for (const auto& item : msg.Record.GetResolvedKeys()) {
                         Id = TLogoBlobID::FromBinary(item.GetKey());
+                        if (item.HasErrorReason()) {
+                            return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to resolve blob# " << Id
+                                << ": " << item.GetErrorReason());
+                        }
                         Y_VERIFY(item.ValueChainSize() == 1);
                         if (ReadBody) {
                             TReadArg arg{
@@ -141,7 +145,7 @@ namespace NKikimr::NBlobDepot {
 
             void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus status, TString dataOrErrorReason) override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
-                    (QueryId, QueryId), (Status, status));
+                    (QueryId, GetQueryId()), (Status, status));
 
                 if (status == NKikimrProto::OK) {
                     Buffer = std::move(dataOrErrorReason);

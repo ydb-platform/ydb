@@ -18,20 +18,27 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(!uncertainties.empty());
 
         auto entry = MakeIntrusive<TResolveOnHold>(std::move(result));
+
         for (const TKey& key : uncertainties) {
             if (const TValue *value = Self->Data->FindKey(key); value && value->UncertainWrite && !value->ValueChain.empty()) {
                 const auto [it, _] = Keys.try_emplace(key);
                 it->second.DependentRequests.push_back(entry);
                 ++entry->NumUncertainKeys;
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT61, "uncertain key", (Id, Self->GetLogId()),
+                    (Sender, entry->Result.GetSender()), (Cookie, entry->Result.GetCookie()), (Key, key));
                 CheckAndFinishKeyIfPossible(&*it);
             } else {
                 // this value is not uncertainly written anymore, we can issue response
                 // FIXME: handle race when underlying value gets changed here and we reply with old value chain
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT62, "racing uncertain key", (Id, Self->GetLogId()),
+                    (Sender, entry->Result.GetSender()), (Cookie, entry->Result.GetCookie()), (Key, key));
             }
         }
 
         if (entry->NumUncertainKeys == 0) {
             // we had no more uncertain keys to resolve
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT63, "uncertainty resolver finished with noop", (Id, Self->GetLogId()),
+                (Sender, entry->Result.GetSender()), (Cookie, entry->Result.GetCookie()));
             entry->Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt);
         } else {
             NumKeysQueried += entry->NumUncertainKeys;
@@ -39,17 +46,17 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TUncertaintyResolver::MakeKeyCertain(const TKey& key) {
-        FinishKey(key, true);
+        FinishKey(key, NKikimrProto::OK, {});
     }
 
     void TData::TUncertaintyResolver::DropBlobs(const std::vector<TLogoBlobID>& blobIds) {
         for (const TLogoBlobID& id : blobIds) {
-            FinishBlob(id, EKeyBlobState::WASNT_WRITTEN);
+            FinishBlob(id, EKeyBlobState::WASNT_WRITTEN, {});
         }
     }
 
     void TData::TUncertaintyResolver::DropKey(const TKey& key) {
-        FinishKey(key, false);
+        FinishKey(key, NKikimrProto::NODATA, {});
         ++NumKeysDropped;
     }
 
@@ -58,11 +65,14 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(msg.ResponseSz == 1);
         auto& resp = msg.Responses[0];
         FinishBlob(resp.Id, resp.Status == NKikimrProto::OK ? EKeyBlobState::CONFIRMED :
-                resp.Status == NKikimrProto::NODATA ? EKeyBlobState::WASNT_WRITTEN :
-                EKeyBlobState::ERROR);
+            resp.Status == NKikimrProto::NODATA ? EKeyBlobState::WASNT_WRITTEN :
+            EKeyBlobState::ERROR, msg.ErrorReason ? msg.ErrorReason : "EvGet failed");
     }
 
-    void TData::TUncertaintyResolver::FinishBlob(TLogoBlobID id, EKeyBlobState state) {
+    void TData::TUncertaintyResolver::FinishBlob(TLogoBlobID id, EKeyBlobState state, const TString& errorReason) {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT64, "TUncertaintyResolver::FinishBlob", (Id, Self->GetLogId()), (BlobId, id),
+            (State, state), (Contained, Blobs.contains(id)));
+
         const auto blobIt = Blobs.find(id);
         if (blobIt == Blobs.end()) {
             return;
@@ -75,7 +85,7 @@ namespace NKikimr::NBlobDepot {
 
             const auto blobStateIt = keyContext.BlobState.find(id);
             Y_VERIFY(blobStateIt != keyContext.BlobState.end());
-            blobStateIt->second = state;
+            blobStateIt->second = {state, errorReason};
 
             CheckAndFinishKeyIfPossible(keyRecord);
         }
@@ -84,14 +94,18 @@ namespace NKikimr::NBlobDepot {
     void TData::TUncertaintyResolver::CheckAndFinishKeyIfPossible(TKeys::value_type *keyRecord) {
         auto& [key, keyContext] = *keyRecord;
 
-        bool okay = true;
-
         if (const TValue *value = Self->Data->FindKey(key); value && !value->ValueChain.empty()) {
             Y_VERIFY(value->UncertainWrite); // otherwise we must have already received push notification
 
+            bool wait = false;
+            bool nodata = false;
+            bool error = false;
+            TStringStream errorReason;
+
             EnumerateBlobsForValueChain(value->ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
                 auto& [key, keyContext] = *keyRecord;
-                switch (EKeyBlobState& state = keyContext.BlobState[id]) {
+                auto& [state, blobErrorReason] = keyContext.BlobState[id];
+                switch (state) {
                     case EKeyBlobState::INITIAL: {
                         // have to additionally query this blob and wait for it
                         TBlobContext& blobContext = Blobs[id];
@@ -99,19 +113,21 @@ namespace NKikimr::NBlobDepot {
                         Y_VERIFY(inserted);
                         if (blobContext.ReferringKeys.size() == 1) {
                             const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
+                            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT65, "TUncertaintyResolver sending Get", (Id, Self->GetLogId()),
+                                (BlobId, id), (Key, key), (GroupId, groupId));
                             SendToBSProxy(Self->SelfId(), groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
                                 NKikimrBlobStorage::EGetHandleClass::FastRead, true, true));
                             ++NumGetsIssued;
                         }
 
-                        okay = false;
                         state = EKeyBlobState::QUERY_IN_FLIGHT;
+                        wait = true;
                         break;
                     }
 
                     case EKeyBlobState::QUERY_IN_FLIGHT:
                         // still have to wait for this one
-                        okay = false;
+                        wait = true;
                         break;
 
                     case EKeyBlobState::CONFIRMED:
@@ -120,48 +136,77 @@ namespace NKikimr::NBlobDepot {
 
                     case EKeyBlobState::WASNT_WRITTEN:
                         // the blob hasn't been written completely; this may also be a race when it is being written
-                        // right now, but we are asking for the data too early (like in scan request)
-                        okay = false;
+                        // right now, but we are asking for the data too early (like in scan request); however this means
+                        // that blob couldn't have been reported as OK to the agent, and we may respond with NODATA to it
+                        nodata = true;
                         break;
 
                     case EKeyBlobState::ERROR:
-                        // we can't figure out this blob's state
-                        okay = false;
+                        // we can't figure out this blob's state; this means we have to respond with ERROR for this
+                        // particular blob
+                        if (error) {
+                            errorReason << ", ";
+                        }
+                        errorReason << id << ": " << blobErrorReason;
+                        error = true;
                         break;
                 }
             });
-        } else { // key has been deleted, we have to drop it from the response
-            okay = false;
-            FinishKey(key, false);
-        }
 
-        if (okay) {
-            Self->Data->MakeKeyCertain(key);
+            if (error) {
+                FinishKey(key, NKikimrProto::ERROR, errorReason.Str());
+            } else if (nodata) {
+                FinishKey(key, NKikimrProto::NODATA, {});
+            } else if (wait) {
+                // just do nothing, wait for the request to fulfill
+            } else {
+                Self->Data->MakeKeyCertain(key);
+            }
+        } else { // key has been deleted, we have to drop it from the response
+            FinishKey(key, NKikimrProto::NODATA, {});
         }
     }
 
-    void TData::TUncertaintyResolver::FinishKey(const TKey& key, bool success) {
+    void TData::TUncertaintyResolver::FinishKey(const TKey& key, NKikimrProto::EReplyStatus status,
+            const TString& errorReason) {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT66, "TUncertaintyResolver::FinishKey", (Id, Self->GetLogId()), (Key, key),
+            (Status, status));
+
         const auto keyIt = Keys.find(key);
         if (keyIt == Keys.end()) {
             return;
         }
 
-        ++(success ? NumKeysResolved : NumKeysUnresolved);
+        ++(status == NKikimrProto::OK ? NumKeysResolved : NumKeysUnresolved);
 
         auto item = Keys.extract(keyIt);
         auto& keyContext = item.mapped();
 
         for (auto& request : keyContext.DependentRequests) {
-            if (!success) {
-                request->KeysToBeFilteredOut.insert(key);
+            switch (status) {
+                case NKikimrProto::OK:
+                    break;
+
+                case NKikimrProto::NODATA:
+                    request->Result.AddKeyWithNoData(key);
+                    break;
+
+                case NKikimrProto::ERROR:
+                    request->Result.AddKeyWithError(key, errorReason);
+                    break;
+
+                default:
+                    Y_FAIL();
             }
             if (--request->NumUncertainKeys == 0) { // we can finish the request
-                request->Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt, &request->KeysToBeFilteredOut,
-                    &Self->Config);
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT67, "uncertainty resolver finished", (Id, Self->GetLogId()),
+                    (Sender, request->Result.GetSender()), (Cookie, request->Result.GetCookie()));
+                request->Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt);
             }
         }
 
-        for (const auto& [id, state] : keyContext.BlobState) {
+        for (const auto& [id, s] : keyContext.BlobState) {
+            const auto& [state, errorReason] = s;
             if (state == EKeyBlobState::QUERY_IN_FLIGHT) {
                 const auto blobIt = Blobs.find(id);
                 Y_VERIFY(blobIt != Blobs.end());
@@ -190,3 +235,16 @@ namespace NKikimr::NBlobDepot {
     }
 
 } // NKikimr::NBlobDepot
+
+template<>
+void Out<NKikimr::NBlobDepot::TData::TUncertaintyResolver::EKeyBlobState>(IOutputStream& s,
+        NKikimr::NBlobDepot::TData::TUncertaintyResolver::EKeyBlobState value) {
+    using E = decltype(value);
+    switch (value) {
+        case E::INITIAL:            s << "INITIAL";             break;
+        case E::QUERY_IN_FLIGHT:    s << "QUERY_IN_FLIGHT";     break;
+        case E::CONFIRMED:          s << "CONFIRMED";           break;
+        case E::WASNT_WRITTEN:      s << "WASNT_WRITTEN";       break;
+        case E::ERROR:              s << "ERROR";               break;
+    }
+}

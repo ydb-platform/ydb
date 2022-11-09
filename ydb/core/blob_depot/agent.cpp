@@ -239,16 +239,18 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
         class TTxInvokeCallback : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            const ui32 NodeId;
             TEvBlobDepot::TEvPushNotifyResult::TPtr Ev;
 
         public:
-            TTxInvokeCallback(TBlobDepot *self, TEvBlobDepot::TEvPushNotifyResult::TPtr ev)
+            TTxInvokeCallback(TBlobDepot *self, ui32 nodeId, TEvBlobDepot::TEvPushNotifyResult::TPtr ev)
                 : TTransactionBase(self)
+                , NodeId(nodeId)
                 , Ev(ev)
             {}
 
             bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
-                TAgent& agent = Self->GetAgent(Ev->Recipient);
+                TAgent& agent = Self->GetAgent(NodeId);
                 if (const auto it = agent.PushCallbacks.find(Ev->Cookie); it != agent.PushCallbacks.end()) {
                     auto callback = std::move(it->second);
                     agent.PushCallbacks.erase(it);
@@ -260,7 +262,8 @@ namespace NKikimr::NBlobDepot {
             void Complete(const TActorContext&) override {}
         };
 
-        Execute(std::make_unique<TTxInvokeCallback>(this, ev));
+        TAgent& agent = GetAgent(ev->Recipient);
+        Execute(std::make_unique<TTxInvokeCallback>(this, agent.ConnectedNodeId, ev));
     }
 
     void TBlobDepot::ProcessRegisterAgentQ() {

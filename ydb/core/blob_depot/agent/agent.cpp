@@ -32,6 +32,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         HandleQueryWatchdog();
+        HandlePendingEventQueueWatchdog();
     }
 
     IActor *CreateBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId) {

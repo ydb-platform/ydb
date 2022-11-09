@@ -13,13 +13,15 @@ namespace NKikimr::NBlobDepot {
         , InterconnectSession(ev.InterconnectSession)
     {}
 
-    void TData::TResolveResultAccumulator::AddItem(NKikimrBlobDepot::TEvResolveResult::TResolvedKey&& item) {
+    void TData::TResolveResultAccumulator::AddItem(NKikimrBlobDepot::TEvResolveResult::TResolvedKey&& item,
+            const NKikimrBlobDepot::TBlobDepotConfig& config) {
+        KeyToIndex.emplace(TKey::FromBinaryKey(item.GetKey(), config), Items.size());
         Items.push_back(std::move(item));
+        KeysToFilterOut.push_back(false);
     }
 
     void TData::TResolveResultAccumulator::Send(TActorIdentity selfId, NKikimrProto::EReplyStatus status,
-            std::optional<TString> errorReason, const std::unordered_set<TKey> *filter,
-            const NKikimrBlobDepot::TBlobDepotConfig *config) {
+            std::optional<TString> errorReason) {
         auto sendResult = [&](std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev) {
             auto handle = std::make_unique<IEventHandle>(Sender, selfId, ev.release(), 0, Cookie);
             if (InterconnectSession) {
@@ -35,15 +37,13 @@ namespace NKikimr::NBlobDepot {
         size_t lastResponseSize;
         std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev;
 
-        for (auto& item : Items) {
-            if (filter) {
-                Y_VERIFY_DEBUG(config);
-                const TKey key(TKey::FromBinaryKey(item.GetKey(), *config));
-                if (filter->contains(key)) {
-                    continue;
-                }
+        size_t index = 0;
+        for (auto it = Items.begin(); it != Items.end(); ++it, ++index) {
+            if (KeysToFilterOut[index]) {
+                continue;
             }
 
+            auto& item = *it;
             const size_t itemSize = item.ByteSizeLong();
             if (!ev || lastResponseSize + itemSize > EventMaxByteSize) {
                 if (ev) {
@@ -66,6 +66,19 @@ namespace NKikimr::NBlobDepot {
 
     std::deque<NKikimrBlobDepot::TEvResolveResult::TResolvedKey> TData::TResolveResultAccumulator::ReleaseItems() {
         return std::exchange(Items, {});
+    }
+
+    void TData::TResolveResultAccumulator::AddKeyWithNoData(const TKey& key) {
+        const auto it = KeyToIndex.find(key);
+        Y_VERIFY(it != KeyToIndex.end());
+        KeysToFilterOut[it->second] = true;
+    }
+
+    void TData::TResolveResultAccumulator::AddKeyWithError(const TKey& key, const TString& errorReason) {
+        const auto it = KeyToIndex.find(key);
+        Y_VERIFY(it != KeyToIndex.end());
+        auto& item = Items[it->second];
+        item.SetErrorReason(item.HasErrorReason() ? TStringBuilder() << item.GetErrorReason() << ", " << errorReason : errorReason);
     }
 
     class TData::TTxResolve : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
@@ -321,7 +334,7 @@ namespace NKikimr::NBlobDepot {
                     (Key, key), (Value, value), (Item, item), (Sender, Request->Sender), (Cookie, Request->Cookie));
             }
 
-            Result.AddItem(std::move(item));
+            Result.AddItem(std::move(item), Self->Config);
             if (value.UncertainWrite && !value.ValueChain.empty()) {
                 Uncertainties.push_back(key);
             }

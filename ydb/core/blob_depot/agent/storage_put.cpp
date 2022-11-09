@@ -153,6 +153,10 @@ namespace NKikimr::NBlobDepot {
                 } else {
                     item->ClearUncertainWrite();
                 }
+
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA30, "IssueCommitBlobSeq", (VirtualGroupId, Agent.VirtualGroupId),
+                    (QueryId, GetQueryId()), (UncertainWrite, uncertainWrite), (Msg, CommitBlobSeq));
+
                 Agent.Issue(CommitBlobSeq, this, nullptr);
 
                 Y_VERIFY(!WaitingForCommitBlobSeq);
@@ -160,6 +164,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void RemoveBlobSeqFromInFlight() {
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA32, "RemoveBlobSeqFromInFlight", (VirtualGroupId, Agent.VirtualGroupId),
+                    (QueryId, GetQueryId()));
+
                 Y_VERIFY(IsInFlight);
                 IsInFlight = false;
 
@@ -222,6 +229,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleCommitBlobSeqResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCommitBlobSeqResult& msg) {
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA31, "TEvCommitBlobSeqResult", (VirtualGroupId, Agent.VirtualGroupId),
+                    (QueryId, GetQueryId()), (Msg, msg));
+
                 Y_VERIFY(WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = false;
 

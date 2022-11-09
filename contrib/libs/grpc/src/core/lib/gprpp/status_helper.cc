@@ -85,6 +85,8 @@ const char* GetStatusIntPropertyUrl(StatusIntProperty key) {
       return TYPE_URL(TYPE_INT_TAG "channel_connectivity_state");
     case StatusIntProperty::kLbPolicyDrop:
       return TYPE_URL(TYPE_INT_TAG "lb_policy_drop");
+    case StatusIntProperty::kStreamNetworkState:
+      return TYPE_URL(TYPE_INT_TAG "stream_network_state");
   }
   GPR_UNREACHABLE_CODE(return "unknown");
 }
@@ -161,7 +163,7 @@ std::vector<y_absl::Status> ParseChildren(y_absl::Cord children) {
 
 y_absl::Status StatusCreate(y_absl::StatusCode code, y_absl::string_view msg,
                           const DebugLocation& location,
-                          std::initializer_list<y_absl::Status> children) {
+                          std::vector<y_absl::Status> children) {
   y_absl::Status s(code, msg);
   if (location.file() != nullptr) {
     StatusSetStr(&s, StatusStrProperty::kFile, location.file());
@@ -232,7 +234,10 @@ y_absl::optional<y_absl::Time> StatusGetTime(const y_absl::Status& status,
   if (p.has_value()) {
     y_absl::optional<y_absl::string_view> sv = p->TryFlat();
     if (sv.has_value()) {
-      return *reinterpret_cast<const y_absl::Time*>(sv->data());
+      // copy the content before casting to avoid misaligned address access
+      alignas(y_absl::Time) char buf[sizeof(const y_absl::Time)];
+      memcpy(buf, sv->data(), sizeof(const y_absl::Time));
+      return *reinterpret_cast<const y_absl::Time*>(buf);
     } else {
       TString s = TString(*p);
       return *reinterpret_cast<const y_absl::Time*>(s.c_str());
@@ -381,32 +386,8 @@ y_absl::Status StatusFromProto(google_rpc_Status* msg) {
   return status;
 }
 
-uintptr_t StatusAllocPtr(y_absl::Status s) {
-  // This relies the fact that y_absl::Status has only one member, StatusRep*
-  // so the sizeof(y_absl::Status) has the same size of intptr_t and StatusRep*
-  // can be stolen using placement allocation.
-  static_assert(sizeof(intptr_t) == sizeof(y_absl::Status),
-                "y_absl::Status should be as big as intptr_t");
-  // This does two things;
-  // 1. Copies StatusRep* of y_absl::Status to ptr
-  // 2. Increases the counter of StatusRep if it's not inlined
-  uintptr_t ptr;
-  new (&ptr) y_absl::Status(s);
-  return ptr;
-}
-
-void StatusFreePtr(uintptr_t ptr) {
-  // Decreases the counter of StatusRep if it's not inlined.
-  reinterpret_cast<y_absl::Status*>(&ptr)->~Status();
-}
-
-y_absl::Status StatusGetFromPtr(uintptr_t ptr) {
-  // Constructs Status from ptr having the address of StatusRep.
-  return *reinterpret_cast<y_absl::Status*>(&ptr);
-}
-
 uintptr_t StatusAllocHeapPtr(y_absl::Status s) {
-  if (s.ok()) return kOkStatusPtr;
+  if (s.ok()) return 0;
   y_absl::Status* ptr = new y_absl::Status(s);
   return reinterpret_cast<uintptr_t>(ptr);
 }
@@ -417,10 +398,21 @@ void StatusFreeHeapPtr(uintptr_t ptr) {
 }
 
 y_absl::Status StatusGetFromHeapPtr(uintptr_t ptr) {
-  if (ptr == kOkStatusPtr) {
+  if (ptr == 0) {
     return y_absl::OkStatus();
   } else {
     return *reinterpret_cast<y_absl::Status*>(ptr);
+  }
+}
+
+y_absl::Status StatusMoveFromHeapPtr(uintptr_t ptr) {
+  if (ptr == 0) {
+    return y_absl::OkStatus();
+  } else {
+    y_absl::Status* s = reinterpret_cast<y_absl::Status*>(ptr);
+    y_absl::Status ret = std::move(*s);
+    delete s;
+    return ret;
   }
 }
 

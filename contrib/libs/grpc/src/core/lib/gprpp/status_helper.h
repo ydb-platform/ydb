@@ -37,7 +37,6 @@ struct upb_arena;
 namespace grpc_core {
 
 /// This enum should have the same value of grpc_error_ints
-// TODO(veblush): Use camel-case names once migration to y_absl::Status is done.
 enum class StatusIntProperty {
   /// 'errno' from the operating system
   kErrorNo,
@@ -72,10 +71,11 @@ enum class StatusIntProperty {
   ChannelConnectivityState,
   /// LB policy drop
   kLbPolicyDrop,
+  /// stream network state
+  kStreamNetworkState,
 };
 
 /// This enum should have the same value of grpc_error_strs
-// TODO(veblush): Use camel-case names once migration to y_absl::Status is done.
 enum class StatusStrProperty {
   /// top-level textual description of this error
   kDescription,
@@ -110,7 +110,7 @@ enum class StatusTimeProperty {
 /// Creates a status with given additional information
 y_absl::Status StatusCreate(
     y_absl::StatusCode code, y_absl::string_view msg, const DebugLocation& location,
-    std::initializer_list<y_absl::Status> children) GRPC_MUST_USE_RESULT;
+    std::vector<y_absl::Status> children) GRPC_MUST_USE_RESULT;
 
 /// Sets the int property to the status
 void StatusSetInt(y_absl::Status* status, StatusIntProperty key, intptr_t value);
@@ -160,22 +160,6 @@ google_rpc_Status* StatusToProto(const y_absl::Status& status,
 /// This is for internal implementation & test only
 y_absl::Status StatusFromProto(google_rpc_Status* msg) GRPC_MUST_USE_RESULT;
 
-/// The same value of internal::StatusAllocPtr(y_absl::OkStatus())
-static constexpr uintptr_t kOkStatusPtr = 0;
-
-/// Returns ptr where the given status is copied into.
-/// This ptr can be used to get Status later and should be freed by
-/// StatusFreePtr. This shouldn't be used except migration purpose.
-uintptr_t StatusAllocPtr(y_absl::Status s);
-
-/// Frees the allocated status at ptr.
-/// This shouldn't be used except migration purpose.
-void StatusFreePtr(uintptr_t ptr);
-
-/// Get the status from ptr.
-/// This shouldn't be used except migration purpose.
-y_absl::Status StatusGetFromPtr(uintptr_t ptr);
-
 /// Returns ptr that is allocated in the heap memory and the given status is
 /// copied into. This ptr can be used to get Status later and should be
 /// freed by StatusFreeHeapPtr. This can be 0 in case of OkStatus.
@@ -186,6 +170,9 @@ void StatusFreeHeapPtr(uintptr_t ptr);
 
 /// Get the status from a heap ptr.
 y_absl::Status StatusGetFromHeapPtr(uintptr_t ptr);
+
+/// Move the status from a heap ptr. (GetFrom & FreeHeap)
+y_absl::Status StatusMoveFromHeapPtr(uintptr_t ptr);
 
 }  // namespace internal
 

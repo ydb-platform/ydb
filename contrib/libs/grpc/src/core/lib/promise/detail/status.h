@@ -41,4 +41,9 @@ inline y_absl::Status IntoStatus(y_absl::Status* status) {
 }  // namespace promise_detail
 }  // namespace grpc_core
 
+// Return true if the status represented by the argument is ok, false if not.
+// By implementing this function for other, non-y_absl::Status types, those types
+// can participate in TrySeq as result types that affect control flow.
+inline bool IsStatusOk(const y_absl::Status& status) { return status.ok(); }
+
 #endif  // GRPC_CORE_LIB_PROMISE_DETAIL_STATUS_H

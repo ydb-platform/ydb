@@ -48,6 +48,7 @@ target_link_libraries(contrib-libs-grpc PUBLIC
   abseil-cpp-tstring-y_absl-functional
   abseil-cpp-tstring-y_absl-hash
   abseil-cpp-tstring-y_absl-meta
+  abseil-cpp-tstring-y_absl-random
   abseil-cpp-tstring-y_absl-status
   abseil-cpp-tstring-y_absl-strings
   abseil-cpp-tstring-y_absl-synchronization
@@ -93,7 +94,6 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/lb_policy_registry.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/local_subchannel_pool.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/proxy_mapper_registry.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_event_engine.cc
@@ -109,12 +109,10 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/google_c2p/google_c2p_resolver.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/sockaddr/sockaddr_resolver.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/xds/xds_resolver.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver_registry.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/resolver_result_parsing.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/retry_filter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/retry_service_config.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/retry_throttle.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/server_address.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/service_config_channel_arg_filter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/subchannel.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/client_channel/subchannel_pool_interface.cc
@@ -131,10 +129,10 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/http/server/http_server_filter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/max_age/max_age_filter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/message_size/message_size_filter.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/rbac/rbac_filter.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/rbac/rbac_service_config_parser.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/server_config_selector/server_config_selector.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/filters/server_config_selector/server_config_selector_filter.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/service_config/service_config.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/service_config/service_config_parser.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/binder_connector.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/channel_create.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/channel_create_impl.cc
@@ -178,7 +176,6 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/chttp2/transport/hpack_encoder_table.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/chttp2/transport/hpack_parser.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/chttp2/transport/hpack_parser_table.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/chttp2/transport/hpack_utils.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/chttp2/transport/http2_settings.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/chttp2/transport/huffsyms.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/chttp2/transport/parsing.cc
@@ -230,6 +227,7 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/envoy/extensions/clusters/aggregate/v3/cluster.upb.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/envoy/extensions/filters/common/fault/v3/fault.upb.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/envoy/extensions/filters/http/fault/v3/fault.upb.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/envoy/extensions/filters/http/rbac/v3/rbac.upb.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/envoy/extensions/filters/http/router/v3/router.upb.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upb.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/envoy/extensions/transport_sockets/tls/v3/cert.upb.c
@@ -330,6 +328,7 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/config/listener/v3/udp_listener_config.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/config/metrics/v3/stats.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/config/overload/v3/overload.upbdefs.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/config/rbac/v3/rbac.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/config/route/v3/route.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/config/route/v3/route_components.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/config/route/v3/scoped_route.upbdefs.c
@@ -337,6 +336,7 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/extensions/clusters/aggregate/v3/cluster.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/extensions/filters/common/fault/v3/fault.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/extensions/filters/http/fault/v3/fault.upbdefs.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/extensions/filters/http/rbac/v3/rbac.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/extensions/filters/http/router/v3/router.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/extensions/transport_sockets/tls/v3/cert.upbdefs.c
@@ -368,6 +368,11 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/type/v3/range.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/envoy/type/v3/semantic_version.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/api/annotations.upbdefs.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/api/expr/v1alpha1/checked.upbdefs.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/api/expr/v1alpha1/eval.upbdefs.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/api/expr/v1alpha1/explain.upbdefs.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/api/expr/v1alpha1/syntax.upbdefs.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/api/expr/v1alpha1/value.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/api/http.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/protobuf/any.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/protobuf/descriptor.upbdefs.c
@@ -397,11 +402,19 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_api.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_bootstrap.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_certificate_provider.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_channel_creds.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_channel_stack_modifier.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_client.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_client_stats.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_cluster.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_common_types.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_endpoint.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_http_fault_filter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_http_filters.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_http_rbac_filter.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_listener.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_resource_type.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_route_config.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_routing.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/xds/xds_server_config_fetcher.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/address_utils/parse_address.cc
@@ -419,12 +432,8 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/channel/handshaker_registry.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/channel/status_util.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/compression/compression.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/compression/compression_args.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/compression/compression_internal.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/compression/message_compress.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/compression/stream_compression.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/compression/stream_compression_gzip.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/compression/stream_compression_identity.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/config/core_configuration.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/debug/stats.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/debug/stats_data.cc
@@ -465,7 +474,6 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/tmpfile_posix.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/tmpfile_windows.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/wrap_memcpy.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/arena.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/examine_stack.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/fork.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/global_config_env.cc
@@ -582,13 +590,20 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/profiling/basic_timers.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/profiling/stap_timers.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/promise/activity.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resolver/resolver.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resolver/resolver_registry.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resolver/server_address.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resource_quota/api.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resource_quota/arena.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resource_quota/memory_quota.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resource_quota/resource_quota.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resource_quota/thread_quota.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/resource_quota/trace.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/authorization/authorization_policy_provider_vtable.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/authorization/evaluate_args.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/authorization/grpc_authorization_engine.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/authorization/matchers.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/authorization/rbac_policy.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/authorization/sdk_server_authz_filter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/context/security_context.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/alts/alts_credentials.cc
@@ -601,7 +616,6 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/alts/grpc_alts_credentials_server_options.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/composite/composite_credentials.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/credentials.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/credentials_metadata.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/external/aws_external_account_credentials.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/external/aws_request_signer.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/external/external_account_credentials.cc
@@ -644,6 +658,8 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/transport/server_auth_filter.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/transport/tsi_error.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/util/json_util.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/service_config/service_config.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/service_config/service_config_parser.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/slice/b64.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/slice/percent_encoding.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/slice/slice.cc
@@ -653,7 +669,6 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/slice/slice_refcount.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/slice/slice_split.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/slice/slice_string_helpers.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/slice/static_slice.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/surface/api_trace.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/surface/builtins.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/surface/byte_buffer.cc
@@ -679,13 +694,9 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/byte_stream.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/connectivity_state.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/error_utils.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/metadata.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/metadata_batch.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/parsed_metadata.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/pid_controller.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/static_metadata.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/status_conversion.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/status_metadata.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/timeout_encoding.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/transport.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/transport/transport_op_string.cc

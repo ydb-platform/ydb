@@ -17,10 +17,13 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <cstdint>
+
 #include "y_absl/strings/string_view.h"
 
 #include <grpc/slice.h>
 
+#include "src/core/lib/gpr/string.h"
 #include "src/core/lib/slice/slice_internal.h"
 
 // Herein lies grpc_core::Slice and its team of thin wrappers around grpc_slice.
@@ -110,6 +113,8 @@ class BaseSlice {
 
   uint8_t* mutable_data() { return GRPC_SLICE_START_PTR(slice_); }
 
+  grpc_slice* c_slice_ptr() { return &slice_; }
+
  private:
   grpc_slice slice_;
 };
@@ -159,6 +164,9 @@ struct CopyConstructors {
   static Out FromCopiedString(const char* s) {
     return Out(grpc_slice_from_copied_string(s));
   }
+  static Out FromCopiedString(y_absl::string_view s) {
+    return FromCopiedBuffer(s.data(), s.size());
+  }
   static Out FromCopiedString(TString s) {
     return Out(grpc_slice_from_cpp_string(std::move(s)));
   }
@@ -171,29 +179,38 @@ struct CopyConstructors {
     return FromCopiedBuffer(reinterpret_cast<const char*>(buffer.data()),
                             buffer.size());
   }
+
+  static Out FromInt64(int64_t i) {
+    char buffer[GPR_LTOA_MIN_BUFSIZE];
+    gpr_ltoa(i, buffer);
+    return FromCopiedString(buffer);
+  }
+};
+
+template <typename Out>
+struct StaticConstructors {
+  static Out FromStaticString(const char* s) {
+    return Out(grpc_slice_from_static_string(s));
+  }
+
+  static Out FromStaticString(y_absl::string_view s) {
+    return Out(ExternallyManagedSlice(s.data(), s.size()));
+  }
 };
 
 }  // namespace slice_detail
 
-class StaticSlice : public slice_detail::BaseSlice {
+class StaticSlice : public slice_detail::BaseSlice,
+                    public slice_detail::StaticConstructors<StaticSlice> {
  public:
   StaticSlice() = default;
   explicit StaticSlice(const grpc_slice& slice)
       : slice_detail::BaseSlice(slice) {
-    GPR_DEBUG_ASSERT(
-        slice.refcount->GetType() == grpc_slice_refcount::Type::STATIC ||
-        slice.refcount->GetType() == grpc_slice_refcount::Type::NOP);
+    GPR_DEBUG_ASSERT(slice.refcount->GetType() ==
+                     grpc_slice_refcount::Type::NOP);
   }
   explicit StaticSlice(const StaticMetadataSlice& slice)
       : slice_detail::BaseSlice(slice) {}
-
-  static StaticSlice FromStaticString(const char* s) {
-    return StaticSlice(grpc_slice_from_static_string(s));
-  }
-
-  static StaticSlice FromStaticString(y_absl::string_view s) {
-    return StaticSlice(ExternallyManagedSlice(s.data(), s.size()));
-  }
 
   StaticSlice(const StaticSlice& other)
       : slice_detail::BaseSlice(other.c_slice()) {}
@@ -242,13 +259,15 @@ class MutableSlice : public slice_detail::BaseSlice,
   // Iterator access to the underlying bytes
   uint8_t* begin() { return mutable_data(); }
   uint8_t* end() { return mutable_data() + size(); }
+  uint8_t* data() { return mutable_data(); }
 
   // Array access
   uint8_t& operator[](size_t i) { return mutable_data()[i]; }
 };
 
 class Slice : public slice_detail::BaseSlice,
-              public slice_detail::CopyConstructors<Slice> {
+              public slice_detail::CopyConstructors<Slice>,
+              public slice_detail::StaticConstructors<Slice> {
  public:
   Slice() = default;
   ~Slice() { grpc_slice_unref_internal(c_slice()); }
@@ -319,6 +338,17 @@ class Slice : public slice_detail::BaseSlice,
   // valid state.
   Slice TakeSubSlice(size_t pos, size_t n) {
     return Slice(grpc_slice_sub_no_ref(TakeCSlice(), pos, pos + n));
+  }
+
+  // Return a sub slice of this one. Adds a reference to the underlying slice.
+  Slice RefSubSlice(size_t pos, size_t n) const {
+    return Slice(grpc_slice_sub(c_slice(), pos, pos + n));
+  }
+
+  // Split this slice, returning a new slice containing (split:end] and
+  // leaving this slice with [begin:split).
+  Slice Split(size_t split) {
+    return Slice(grpc_slice_split_tail(c_slice_ptr(), split));
   }
 
   Slice Ref() const { return Slice(grpc_slice_ref_internal(c_slice())); }

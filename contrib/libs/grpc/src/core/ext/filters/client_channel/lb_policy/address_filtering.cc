@@ -69,10 +69,11 @@ MakeHierarchicalPathAttribute(std::vector<TString> path) {
   return y_absl::make_unique<HierarchicalPathAttribute>(std::move(path));
 }
 
-HierarchicalAddressMap MakeHierarchicalAddressMap(
-    const ServerAddressList& addresses) {
+y_absl::StatusOr<HierarchicalAddressMap> MakeHierarchicalAddressMap(
+    const y_absl::StatusOr<ServerAddressList>& addresses) {
+  if (!addresses.ok()) return addresses.status();
   HierarchicalAddressMap result;
-  for (const ServerAddress& address : addresses) {
+  for (const ServerAddress& address : *addresses) {
     const HierarchicalPathAttribute* path_attribute =
         static_cast<const HierarchicalPathAttribute*>(
             address.GetAttribute(kHierarchicalPathAttributeKey));

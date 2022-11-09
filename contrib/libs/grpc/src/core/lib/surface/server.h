@@ -293,8 +293,8 @@ class Server : public InternallyRefCounted<Server>,
 
     std::atomic<CallState> state_{CallState::NOT_STARTED};
 
-    y_absl::optional<grpc_slice> path_;
-    y_absl::optional<grpc_slice> host_;
+    y_absl::optional<Slice> path_;
+    y_absl::optional<Slice> host_;
     grpc_millis deadline_ = GRPC_MILLIS_INF_FUTURE;
 
     grpc_completion_queue* cq_new_ = nullptr;

@@ -26,4 +26,3 @@
   - [Включить логирование](debug-logs.md)
   - [Подключить метрики в Prometheus](debug-prometheus.md)
   - [Подключить трассировку в Jaeger](debug-jaeger.md)
-

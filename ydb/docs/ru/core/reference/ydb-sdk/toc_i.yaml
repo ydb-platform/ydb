@@ -19,3 +19,5 @@ items:
       href: health-check-api.md  
   - name: Рецепты кода
     include: { mode: link, path: recipes/toc_p.yaml }
+  - name: Сравнение возможностей SDK
+    href: feature-parity.md

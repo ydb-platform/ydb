@@ -21,4 +21,5 @@
 - [Аутентификация](../auth.md)
 - [Тестовое приложение](../example/index.md)
 - [Рецепты кода](../recipes/index.md)
+- [Сравнение возможностей SDK](../feature-parity.md)
 

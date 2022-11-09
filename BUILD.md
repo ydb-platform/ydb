@@ -59,11 +59,24 @@
     ```
 
  1. Build ydb
-     ```
+
+    Run cmake to generate build configuration:
+
+    ```
     cd build
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
+    ```
+
+    To build both YDB server (ydbd) and YDB CLI (ydb) run:
+    ```
     ninja
     ```
+
+    To build only YDB CLI (ydb) run:
+    ```
+    ninja ydb/apps/ydb/all
+    ```
+
     A YDB server binary can be found at:
     ```
     ydb/apps/ydbd/ydbd

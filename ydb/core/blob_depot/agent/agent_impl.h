@@ -86,6 +86,7 @@ namespace NKikimr::NBlobDepot {
         struct TEvPrivate {
             enum {
                 EvQueryWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvProcessPendingEvent,
             };
         };
 
@@ -122,6 +123,7 @@ namespace NKikimr::NBlobDepot {
 
             ENUMERATE_INCOMING_EVENTS(FORWARD_STORAGE_PROXY)
             hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle);
+            cFunc(TEvPrivate::EvProcessPendingEvent, HandlePendingEvent);
 
             cFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
         );
@@ -140,10 +142,7 @@ namespace NKikimr::NBlobDepot {
                     if (TabletId && TabletId != Max<ui64>()) {
                         ConnectToBlobDepot();
                     }
-                
-                    for (auto& ev : std::exchange(PendingEventQ, {})) {
-                        TActivationContext::Send(ev.release());
-                    }
+                    HandlePendingEvent();
                 }
                 if (!info->GetTotalVDisksNum()) {
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
@@ -275,8 +274,9 @@ namespace NKikimr::NBlobDepot {
 
         void HandleQueryWatchdog();
         void HandleStorageProxy(TAutoPtr<IEventHandle> ev);
+        void HandlePendingEvent();
+        void ProcessStorageEvent(std::unique_ptr<IEventHandle> ev);
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
-        TQuery *CreateQuery(TAutoPtr<IEventHandle> ev);
         template<ui32 EventType> TQuery *CreateQuery(std::unique_ptr<IEventHandle> ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

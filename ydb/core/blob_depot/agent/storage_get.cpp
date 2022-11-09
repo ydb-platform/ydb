@@ -57,6 +57,9 @@ namespace NKikimr::NBlobDepot {
                         if (!ProcessSingleResult(i, value)) {
                             return;
                         }
+                    } else {
+                        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA29, "resolve pending", (VirtualGroupId, Agent.VirtualGroupId),
+                            (QueryId, GetQueryId()), (QueryIdx, i), (BlobId, query.Id));
                     }
                 }
             }

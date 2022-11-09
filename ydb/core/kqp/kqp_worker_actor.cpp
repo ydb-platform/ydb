@@ -1271,11 +1271,6 @@ private:
 
             auto& preparedQuery = compileResult->PreparedQuery;
             response.MutableQueryParameters()->CopyFrom(preparedQuery->GetParameters());
-
-            if (preparedQuery->KqlsSize() > 0) {
-                response.SetQueryAst(preparedQuery->GetKqls(0).GetAst());
-                response.SetQueryPlan(preparedQuery->GetKqls(0).GetPlan());
-            }
         }
     }
 

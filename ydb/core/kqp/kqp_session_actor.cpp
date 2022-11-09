@@ -608,7 +608,8 @@ public:
             AcquirePersistentSnapshot();
             return;
         } else if (NeedSnapshot(*QueryState->TxCtx, *Config, /*rollback*/ false, QueryState->Commit,
-                &QueryState->PreparedQuery->GetPhysicalQuery(), /*preparedKql*/ nullptr)) {
+            QueryState->PreparedQuery->GetPhysicalQuery()))
+        {
             AcquireMvccSnapshot();
             return;
         }
@@ -1122,7 +1123,6 @@ public:
             QueryState->Commited = true;
 
             for (const auto& effect : txCtx.DeferredEffects) {
-                YQL_ENSURE(!effect.Node);
                 YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
                 request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params));
 
@@ -1669,11 +1669,6 @@ public:
 
             auto& preparedQuery = compileResult->PreparedQuery;
             response.MutableQueryParameters()->CopyFrom(preparedQuery->GetParameters());
-
-            if (preparedQuery->KqlsSize() > 0) {
-                response.SetQueryAst(preparedQuery->GetKqls(0).GetAst());
-                response.SetQueryPlan(preparedQuery->GetKqls(0).GetPlan());
-            }
         }
     }
 

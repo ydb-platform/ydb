@@ -186,7 +186,6 @@ message TTransformProfile {
     repeated TTransformProfile Stages = 100;
 }
 
-
 message TKqlProfile {
     optional string Query = 1;
     repeated TMkqlProfile MkqlProfiles = 2;
@@ -205,28 +204,6 @@ message TParameterBinding {
     optional uint32 ResultIndex = 3;
 }
 
-message TPreparedMkql {
-    optional string Program = 1;
-    repeated TParameterBinding Bindings = 2;
-    optional string ProgramText = 3;
-    optional bool IsPure = 4;
-};
-
-message TPreparedEffect {
-    optional string NodeAst = 1;
-    repeated TParameterBinding Bindings = 2;
-}
-
-message TPreparedKql {
-    optional TKqlSettings Settings = 1;
-    repeated TPreparedMkql Mkqls = 2;
-    repeated TPreparedEffect Effects = 3;
-    repeated NKqpProto.TKqpTableOp Operations = 4;
-    repeated NKqpProto.TKqpTableInfo TableInfo = 5;
-    optional string Ast = 6;
-    optional string Plan = 7;
-};
-
 message TPreparedResult {
     optional uint32 KqlIndex = 1;
     optional uint32 ResultIndex = 2;
@@ -242,12 +219,12 @@ message TParameterDescription {
 message TPreparedQuery {
     enum EVersion {
         VERSION_UNSPECIFIED = 0;
-        VERSION_V1 = 1;
+        VERSION_V1_DEPRECATED = 1;
         VERSION_PHYSICAL_V1 = 11;
     };
 
     optional uint32 Version = 1;
-    repeated TPreparedKql Kqls = 2;
+    reserved 2; // (deprecated) Kqls
     repeated TPreparedResult Results = 3;
     repeated TParameterDescription Parameters = 4;
     optional string Text = 5;

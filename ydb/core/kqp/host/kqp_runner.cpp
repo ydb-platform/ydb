@@ -274,12 +274,6 @@ private:
         return true;
     }
 
-    bool ApplyTableOperations(const NKikimrKqp::TPreparedKql& kql, bool strictDml, TExprContext& ctx) {
-        TVector<NKqpProto::TKqpTableOp> operations(kql.GetOperations().begin(), kql.GetOperations().end());
-        TVector<NKqpProto::TKqpTableInfo> tableInfos(kql.GetTableInfo().begin(), kql.GetTableInfo().end());
-        return ApplyTableOperations(operations, tableInfos, strictDml, ctx);
-    }
-
     bool ApplyTableOperations(const NKqpProto::TKqpPhyQuery& query, bool strictDml, TExprContext& ctx) {
         TVector<NKqpProto::TKqpTableOp> operations(query.GetTableOps().begin(), query.GetTableOps().end());
         TVector<NKqpProto::TKqpTableInfo> tableInfos(query.GetTableInfos().begin(), query.GetTableInfos().end());
@@ -474,7 +468,7 @@ public:
         output = input;
 
         if (!NeedSnapshot(TxState->Tx(), *TransformCtx->Config, TransformCtx->Settings.GetRollbackTx(),
-            TransformCtx->Settings.GetCommitTx(),TransformCtx->PhysicalQuery.get(), nullptr))
+            TransformCtx->Settings.GetCommitTx(), *TransformCtx->PhysicalQuery))
         {
             return TStatus::Ok;
         }

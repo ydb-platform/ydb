@@ -104,20 +104,6 @@ void FillAstAndPlan(IKqpHost::TQueryResult& queryResult, TExprNode* queryRoot, T
     queryResult.QueryPlan = planStream.Str();
 }
 
-void FillAstAndPlan(IKqpHost::TQueryResult& queryResult, const NKikimrKqp::TPreparedQuery& query) {
-    YQL_ENSURE(query.KqlsSize() == 1);
-
-    queryResult.QueryAst = query.GetKqls(0).GetAst();
-    queryResult.QueryPlan = query.GetKqls(0).GetPlan();
-
-    if (queryResult.QueryPlan.empty()) {
-        TStringStream planStream;
-        NYson::TYsonWriter writer(&planStream, NYson::EYsonFormat::Binary);
-        writer.OnEntity();
-        queryResult.QueryPlan = planStream.Str();
-    }
-}
-
 /*
  * Validate YqlScript.
  */
@@ -274,9 +260,6 @@ public:
             queryResult.Results.push_back(protoResult);
         }
 
-        if (!SessionCtx->Query().PrepareOnly && SessionCtx->Query().PreparedQuery->KqlsSize() == 1) {
-            FillAstAndPlan(queryResult, *SessionCtx->Query().PreparedQuery);
-        }
         queryResult.QueryAst = SessionCtx->Query().PreparedQuery->GetPhysicalQuery().GetQueryAst();
 
         if (Query) {
@@ -346,12 +329,9 @@ public:
         prepareResult.PreparingQuery->SetText(std::move(QueryText));
         prepareResult.SqlVersion = SqlVersion;
 
-        if (prepareResult.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1) {
-            prepareResult.QueryPlan = SerializeExplainPlan(prepareResult.PreparingQuery->GetPhysicalQuery());
-            prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
-        } else {
-            FillAstAndPlan(prepareResult, *prepareResult.PreparingQuery);
-        }
+        YQL_ENSURE(prepareResult.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+        prepareResult.QueryPlan = SerializeExplainPlan(prepareResult.PreparingQuery->GetPhysicalQuery());
+        prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
     }
 
 private:
@@ -1708,12 +1688,9 @@ private:
 
                 TQueryResult explainResult;
                 explainResult.SetSuccess();
-                if (prepared.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1) {
-                    explainResult.QueryPlan = std::move(prepared.QueryPlan);
-                    explainResult.QueryAst = std::move(*prepared.PreparingQuery->MutablePhysicalQuery()->MutableQueryAst());
-                } else {
-                    FillAstAndPlan(explainResult, *prepared.PreparingQuery);
-                }
+                YQL_ENSURE(prepared.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+                explainResult.QueryPlan = std::move(prepared.QueryPlan);
+                explainResult.QueryAst = std::move(*prepared.PreparingQuery->MutablePhysicalQuery()->MutableQueryAst());
                 explainResult.SqlVersion = prepared.SqlVersion;
                 return MakeKikimrResultHolder(std::move(explainResult));
             });
@@ -1828,15 +1805,6 @@ private:
         YQL_ENSURE(!settings.CommitTx || !settings.RollbackTx);
 
         switch (preparedQuery->GetVersion()) {
-            case NKikimrKqp::TPreparedQuery::VERSION_V1: {
-                YQL_ENSURE(preparedQuery->KqlsSize() == 1);
-                auto& kql = preparedQuery->GetKqls(0);
-                YQL_ENSURE(!kql.GetSettings().GetCommitTx());
-                YQL_ENSURE(!kql.GetSettings().GetRollbackTx());
-                YQL_ENSURE(kql.GetSettings().GetIsolationLevel() == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
-                break;
-            }
-
             case NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1: {
                 break;
             }
@@ -1862,12 +1830,6 @@ private:
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().Limits = settings.Limits;
         SessionCtx->Query().PreparedQuery = preparedQuery;
-
-        // moved to kqp_runner.cpp, ExecutePreparedQuery(...)
-//        if (preparedQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_V1) {
-//            SessionCtx->Query().PreparedQuery.MutableKqls(0)->MutableSettings()->SetCommitTx(settings.CommitTx);
-//            SessionCtx->Query().PreparedQuery.MutableKqls(0)->MutableSettings()->SetRollbackTx(settings.RollbackTx);
-//        }
 
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> reply;
         if (replyPrepared) {

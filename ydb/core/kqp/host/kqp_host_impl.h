@@ -244,7 +244,7 @@ public:
 };
 
 inline bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
-    bool commitTx, const NKqpProto::TKqpPhyQuery* physicalQuery, const NKikimrKqp::TPreparedKql* preparedKql)
+    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
 {
     if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
         return false;
@@ -263,28 +263,20 @@ inline bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikim
     size_t readPhases = 0;
     bool hasEffects = false;
 
-    YQL_ENSURE(physicalQuery || preparedKql);
-    if (physicalQuery) {
-        for (const auto &tx : physicalQuery->GetTransactions()) {
-            switch (tx.GetType()) {
-                case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                    // ignore pure computations
-                    break;
+    for (const auto &tx : physicalQuery.GetTransactions()) {
+        switch (tx.GetType()) {
+            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+                // ignore pure computations
+                break;
 
-                default:
-                    ++readPhases;
-                    break;
-            }
-
-            if (tx.GetHasEffects()) {
-                hasEffects = true;
-            }
+            default:
+                ++readPhases;
+                break;
         }
-    } else {
-        YQL_ENSURE(preparedKql);
 
-        readPhases += preparedKql->GetMkqls().size();
-        hasEffects = !preparedKql->GetEffects().empty();
+        if (tx.GetHasEffects()) {
+            hasEffects = true;
+        }
     }
 
     // We don't want snapshot when there are effects at the moment,

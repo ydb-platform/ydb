@@ -52,7 +52,6 @@ protected:
             Y_VERIFY_DEBUG(txState.DeferredEffects.Empty() || !txState.Locks.Broken());
 
             for (const auto& effect : txState.DeferredEffects) {
-                YQL_ENSURE(!effect.Node);
                 YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
                 request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params));
             }

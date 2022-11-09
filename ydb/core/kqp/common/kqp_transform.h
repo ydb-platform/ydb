@@ -87,12 +87,8 @@ struct TKqpTxLocks {
 using TParamValueMap = THashMap<TString, NKikimrMiniKQL::TParams>;
 
 struct TDeferredEffect {
-    NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> Node;
     std::shared_ptr<const NKqpProto::TKqpPhyTx> PhysicalTx;
     TParamValueMap Params;
-
-    explicit TDeferredEffect(const NYql::NNodes::TExprBase& node)
-        : Node(node) {}
 
     explicit TDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx)
         : PhysicalTx(std::move(physicalTx)) {}
@@ -119,15 +115,6 @@ public:
     }
 
 private:
-    [[nodiscard]]
-    bool Add(const NYql::NNodes::TExprBase& node) {
-        Y_UNUSED(node);
-
-        // TODO: Remove legacy deferred effects
-        YQL_ENSURE(false, "Unexpected deferred effect kind (OldEngine)");
-        return false;
-    }
-
     [[nodiscard]]
     bool Add(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx, TParamValueMap&& params) {
         DeferredEffects.emplace_back(std::move(physicalTx));
@@ -161,11 +148,6 @@ public:
 
     void ClearDeferredEffects() {
         DeferredEffects.Clear();
-    }
-
-    [[nodiscard]]
-    bool AddDeferredEffect(const NYql::NNodes::TExprBase& node) {
-        return DeferredEffects.Add(node);
     }
 
     [[nodiscard]]

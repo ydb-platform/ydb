@@ -151,18 +151,6 @@ private:
     }
 
 private:
-    void FillTables(const NKikimrKqp::TPreparedKql& kql) {
-        for (const auto& tableInfo : kql.GetTableInfo()) {
-            TTableId tableId(tableInfo.GetTableId().GetOwnerId(), tableInfo.GetTableId().GetTableId());
-            auto it = TableVersions.find(tableId);
-            if (it != TableVersions.end()) {
-                Y_ENSURE(it->second == tableInfo.GetSchemaVersion());
-            } else {
-                TableVersions.emplace(tableId, tableInfo.GetSchemaVersion());
-            }
-        }
-    }
-
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {
         for (const auto& stage : phyTx.GetStages()) {
             for (const auto& tableOp : stage.GetTableOps()) {
@@ -181,12 +169,6 @@ private:
         TableVersions.clear();
 
         switch (query.GetVersion()) {
-            case NKikimrKqp::TPreparedQuery::VERSION_V1:
-                for (const auto& kql : query.GetKqls()) {
-                    FillTables(kql);
-                }
-                break;
-
             case NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1:
                 for (const auto& tx : query.GetPhysicalQuery().GetTransactions()) {
                     FillTables(tx);

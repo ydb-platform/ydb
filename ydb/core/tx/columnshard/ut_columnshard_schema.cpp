@@ -161,11 +161,13 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         spec.SetEvictAfterSeconds(ttlSec);
     }
     bool ok = ProposeSchemaTx(runtime, sender,
-                              TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk, spec),
+                              TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, spec, "/Root/olapStore"),
                               {++planStep, ++txId});
     UNIT_ASSERT(ok);
     PlanSchemaTx(runtime, sender, {planStep, txId});
-    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec, "test", tableId));
+    if (spec.HasTiers()) {
+        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec, "test", tableId));
+    }
     //
 
     ui32 portionSize = 80 * 1000;
@@ -228,7 +230,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                          {++planStep, ++txId});
     UNIT_ASSERT(ok);
     PlanSchemaTx(runtime, sender, {planStep, txId});
-    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec, "test", tableId));
+    if (spec.HasTiers()) {
+        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec, "test", tableId));
+    }
 
     if (internal) {
         TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.GetTtlColumn());
@@ -259,7 +263,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                          TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
                          {++planStep, ++txId});
     UNIT_ASSERT(ok);
-    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials(), "test", tableId));
+    if (spec.HasTiers()) {
+        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials(), "test", tableId));
+    }
     PlanSchemaTx(runtime, sender, {planStep, txId});
 
     UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, blobs[0]));
@@ -427,7 +433,7 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
     UNIT_ASSERT(specs.size() > 0);
     {
         const bool ok = ProposeSchemaTx(runtime, sender,
-            TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk, specs[0]),
+            TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, specs[0], "/Root/olapStore"),
             { ++planStep, ++txId });
         UNIT_ASSERT(ok);
     }

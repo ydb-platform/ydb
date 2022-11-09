@@ -1,5 +1,7 @@
 #pragma once
+#include "common.h"
 #include "decoder.h"
+
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -41,8 +43,8 @@ public:
     };
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r);
 
-    TString GetConfigId() const {
-        return OwnerPath + "." + TierName;
+    TGlobalTierId GetGlobalTierId() const {
+        return TGlobalTierId(OwnerPath, TierName);
     }
 
     bool NeedExport() const {

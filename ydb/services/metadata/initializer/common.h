@@ -2,7 +2,7 @@
 #include <ydb/services/metadata/request/config.h>
 #include <ydb/services/metadata/request/request_actor.h>
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadataInitializer {
 
 class ITableModifier {
 protected:
@@ -29,6 +29,14 @@ public:
         : Request(request) {
 
     }
+};
+
+class IController {
+public:
+    using TPtr = std::shared_ptr<IController>;
+    virtual void PreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) const = 0;
+    virtual void PreparationProblem(const TString& errorMessage) const = 0;
+    virtual ~IController() = default;
 };
 
 }

@@ -296,7 +296,7 @@ NMetadataProvider::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecia
     for (auto&& tier : specials.Tiers) {
         {
             NColumnShard::NTiers::TTierConfig tConfig;
-            tConfig.SetOwnerPath("/Root");
+            tConfig.SetOwnerPath("/Root/olapStore");
             tConfig.SetTierName(tier.Name);
             tConfig.MutableProtoConfig().SetName(tier.Name);
             auto& cProto = tConfig.MutableProtoConfig();
@@ -309,11 +309,11 @@ NMetadataProvider::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecia
             if (tier.CompressionLevel) {
                 cProto.MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
             }
-            cs->MutableTierConfigs().emplace(tConfig.GetConfigId(), tConfig);
+            cs->MutableTierConfigs().emplace(tConfig.GetGlobalTierId(), tConfig);
         }
         {
             NColumnShard::NTiers::TTieringRule tRule;
-            tRule.SetOwnerPath("/Root");
+            tRule.SetOwnerPath("/Root/olapStore");
             tRule.SetDurationForEvict(TDuration::Seconds(tier.GetEvictAfterSecondsUnsafe()));
             tRule.SetTablePath(tablePath).SetTablePathId(tablePathId);
             tRule.SetTierName(tier.Name);

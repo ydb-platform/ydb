@@ -51,9 +51,9 @@ public:
     }
 };
 
-class TExecutor: public NMetadataProvider::TDSAccessorInitialized {
+class TExecutor: public NMetadataInitializer::TDSAccessorInitialized {
 private:
-    using TBase = NMetadataProvider::TDSAccessorInitialized;
+    using TBase = NMetadataInitializer::TDSAccessorInitialized;
     TString TableName;
     const TString ExecutorId = TGUID::CreateTimebased().AsUuidString();
     const TConfig Config;
@@ -62,7 +62,10 @@ private:
 protected:
     virtual void RegisterState() override;
     virtual void OnInitialized() override;
-    virtual TVector<NMetadataProvider::ITableModifier::TPtr> BuildModifiers() const override;
+    virtual void Prepare(NMetadataInitializer::IController::TPtr controller) override {
+        controller->PreparationFinished(BuildModifiers());
+    }
+    TVector<NMetadataInitializer::ITableModifier::TPtr> BuildModifiers() const;
 
     void Handle(TEvStartAssign::TPtr& ev);
     void Handle(TEvAssignFinished::TPtr& ev);

@@ -892,6 +892,7 @@ message TS3Settings {
 message TTaskCleaner {
     optional uint64 PathId = 1;
     optional TS3Settings StorageSettings = 2;
+    optional string OwnerPath = 3;
 }
 
 message TBackupTask {

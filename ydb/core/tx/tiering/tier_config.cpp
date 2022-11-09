@@ -20,6 +20,7 @@ bool TTierConfig::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Valu
     if (!decoder.Read(decoder.GetOwnerPathIdx(), OwnerPath, r)) {
         return false;
     }
+    OwnerPath = TFsPath(OwnerPath).Fix().GetPath();
     if (!decoder.Read(decoder.GetTierNameIdx(), TierName, r)) {
         return false;
     }

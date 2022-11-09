@@ -31,6 +31,9 @@ target_sources(core-tx-tiering PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/external_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/owner_enrich.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/snapshot_enrich.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/snapshot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/s3_actor.cpp
 )
 

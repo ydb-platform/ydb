@@ -16,6 +16,7 @@ namespace NKikimr::NColumnShard::NTiers {
 class TPathCleaner: public TActorBootstrapped<TPathCleaner> {
 private:
     YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TString, OwnerPath);
     bool Truncated = false;
     std::set<TString> TiersWait;
     NBackgroundTasks::ITaskExecutorController::TPtr Controller;
@@ -25,7 +26,7 @@ protected:
     void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(TEvTierCleared::TPtr& ev);
 public:
-    TPathCleaner(const ui64 pathId, NBackgroundTasks::ITaskExecutorController::TPtr controller);
+    TPathCleaner(const ui64 pathId, const TString& ownerPath, NBackgroundTasks::ITaskExecutorController::TPtr controller);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_TIERING_PATH_CLEANER;

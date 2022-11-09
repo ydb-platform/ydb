@@ -24,16 +24,7 @@ void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
 
     if (!!parsedSnapshot && CurrentSelection.SerializeAsString() != startString) {
         ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "New refresher data: " << CurrentSelection.DebugString();
-        NActors::TActorIdentity actorId = SelfId();
-        SnapshotConstructor->EnrichSnapshotData(parsedSnapshot).Subscribe(
-            [actorId](NThreading::TFuture<ISnapshot::TPtr> f) {
-                if (f.HasValue() && !f.HasException()) {
-                    actorId.Send(actorId, new TEvEnrichSnapshotResult(f.GetValueSync()));
-                } else {
-                    actorId.Send(actorId, new TEvEnrichSnapshotResult("cannot enrich snapshot"));
-                }
-            }
-        );
+        SnapshotConstructor->EnrichSnapshotData(parsedSnapshot, GetController());
     } else {
         Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
     }
@@ -42,12 +33,14 @@ void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogSelect>::TPtr& ev) {
 void TDSAccessorRefresher::Handle(TEvEnrichSnapshotResult::TPtr& ev) {
     RequestedActuality = TInstant::Zero();
     Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
-    if (ev->Get()->IsSuccess()) {
-        CurrentSnapshot = ev->Get()->GetEnrichedSnapshot();
-        OnSnapshotModified();
-    } else {
-        ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "enrich problem: " << ev->Get()->GetErrorText();
-    }
+    CurrentSnapshot = ev->Get()->GetEnrichedSnapshot();
+    OnSnapshotModified();
+}
+
+void TDSAccessorRefresher::Handle(TEvEnrichSnapshotProblem::TPtr& ev) {
+    RequestedActuality = TInstant::Zero();
+    Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
+    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "enrich problem: " << ev->Get()->GetErrorText();
 }
 
 void TDSAccessorRefresher::Handle(TEvRequestResult<TDialogCreateSession>::TPtr& ev) {
@@ -84,10 +77,14 @@ TDSAccessorRefresher::TDSAccessorRefresher(const TConfig& config, ISnapshotParse
     , SnapshotConstructor(snapshotConstructor)
     , Config(config)
 {
+
 }
 
-TVector<NKikimr::NMetadataProvider::ITableModifier::TPtr> TDSAccessorRefresher::BuildModifiers() const {
-    return SnapshotConstructor->GetTableSchema();
+ISnapshotAcceptorController::TPtr TDSAccessorRefresher::GetController() const {
+    if (!ControllerImpl) {
+        ControllerImpl = std::make_shared<TSnapshotAcceptorController>(SelfId());
+    }
+    return ControllerImpl;
 }
 
 }

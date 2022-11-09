@@ -1,5 +1,5 @@
 #include "common.h"
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadataInitializer {
 
 }

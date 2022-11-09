@@ -30,7 +30,7 @@ public:
     }
     void Bootstrap() {
         Become(&TThis::StateMain);
-        Send(GetExternalDataActorId(), new NMetadataProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation(), SelfId()));
+        Send(GetExternalDataActorId(), new NMetadataProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation()));
     }
     void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshot();
@@ -133,7 +133,7 @@ void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt) 
     Snapshot = snapshotExt;
     auto& snapshot = *snapshotPtr;
     for (auto itSelf = Managers.begin(); itSelf != Managers.end(); ) {
-        auto it = snapshot.GetTierConfigs().find(OwnerPath + "." + itSelf->first);
+        auto it = snapshot.GetTierConfigs().find(itSelf->first);
         if (it == snapshot.GetTierConfigs().end()) {
             itSelf->second.Stop();
             itSelf = Managers.erase(itSelf);
@@ -143,29 +143,26 @@ void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt) 
         }
     }
     for (auto&& i : snapshot.GetTierConfigs()) {
-        if (i.second.GetOwnerPath() != OwnerPath && !!OwnerPath) {
-            continue;
-        }
-        if (Managers.contains(i.second.GetTierName())) {
+        if (Managers.contains(i.second.GetGlobalTierId())) {
             continue;
         }
         NTiers::TManager localManager(TabletId, TabletActorId, i.second);
-        auto& manager = Managers.emplace(i.second.GetTierName(), std::move(localManager)).first->second;
+        auto& manager = Managers.emplace(i.second.GetGlobalTierId(), std::move(localManager)).first->second;
         if (IsActive()) {
             manager.Start();
         }
     }
 }
 
-TActorId TTiersManager::GetStorageActorId(const TString& tierName) {
-    auto it = Managers.find(tierName);
+TActorId TTiersManager::GetStorageActorId(const NTiers::TGlobalTierId& tierId) {
+    auto it = Managers.find(tierId);
     if (it == Managers.end()) {
-        ALS_ERROR(NKikimrServices::TX_TIERING) << "No S3 actor for tier '" << tierName << "' at tablet " << TabletId;
+        ALS_ERROR(NKikimrServices::TX_TIERING) << "No S3 actor for tier '" << tierId.ToString() << "' at tablet " << TabletId;
         return {};
     }
     auto actorId = it->second.GetStorageActorId();
     if (!actorId) {
-        ALS_ERROR(NKikimrServices::TX_TIERING) << "Not started storage actor for tier '" << tierName << "' at tablet " << TabletId;
+        ALS_ERROR(NKikimrServices::TX_TIERING) << "Not started storage actor for tier '" << tierId.ToString() << "' at tablet " << TabletId;
         return {};
     }
     return actorId;
@@ -201,7 +198,7 @@ TTiersManager& TTiersManager::Stop() {
     return *this;
 }
 
-const NKikimr::NColumnShard::NTiers::TManager& TTiersManager::GetManagerVerified(const TString& tierId) const {
+const NTiers::TManager& TTiersManager::GetManagerVerified(const NTiers::TGlobalTierId& tierId) const {
     auto it = Managers.find(tierId);
     Y_VERIFY(it != Managers.end());
     return it->second;
@@ -209,9 +206,7 @@ const NKikimr::NColumnShard::NTiers::TManager& TTiersManager::GetManagerVerified
 
 NMetadataProvider::ISnapshotParser::TPtr TTiersManager::GetExternalDataManipulation() const {
     if (!ExternalDataManipulation) {
-        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
-        auto edmPtr = std::dynamic_pointer_cast<NTiers::TSnapshotConstructor>(ExternalDataManipulation);
-        edmPtr->Start(edmPtr);
+        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>(OwnerPath);
     }
     return ExternalDataManipulation;
 }
@@ -227,13 +222,6 @@ THashMap<ui64, NKikimr::NOlap::TTiersInfo> TTiersManager::GetTiering() const {
         result.emplace(i.second.GetTablePathId(), i.second.BuildTiersInfo());
     }
     return result;
-}
-
-TTiersManager::~TTiersManager() {
-    auto cs = std::dynamic_pointer_cast<NTiers::TSnapshotConstructor>(ExternalDataManipulation);
-    if (!!cs) {
-        cs->Stop();
-    }
 }
 
 TActorId TTiersManager::GetActorId() const {

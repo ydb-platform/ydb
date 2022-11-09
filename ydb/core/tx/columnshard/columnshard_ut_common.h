@@ -207,8 +207,8 @@ struct TTestSchema {
     }
 
     static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeInfo>>& columns,
-                                     const TVector<std::pair<TString, TTypeInfo>>& pk,
-                                     const TTableSpecials& specials = {}) {
+        const TVector<std::pair<TString, TTypeInfo>>& pk,
+        const TTableSpecials& specials = {}) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableEnsureTables()->AddTables();
         table->SetPathId(pathId);
@@ -222,6 +222,24 @@ struct TTestSchema {
             InitSchema(columns, pk, specials, preset->MutableSchema());
         }
 
+        if (specials.HasTtl()) {
+            InitTtl(specials, table->MutableTtlSettings());
+        }
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
+    static TString CreateInitShardTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeInfo>>& columns,
+        const TVector<std::pair<TString, TTypeInfo>>& pk,
+        const TTableSpecials& specials = {}, const TString& ownerPath = "/Root/olap") {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        auto* table = tx.MutableInitShard()->AddTables();
+        tx.MutableInitShard()->SetOwnerPath(ownerPath);
+        table->SetPathId(pathId);
+
+        InitSchema(columns, pk, specials, table->MutableSchema());
         if (specials.HasTtl()) {
             InitTtl(specials, table->MutableTtlSettings());
         }

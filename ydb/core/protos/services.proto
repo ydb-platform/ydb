@@ -337,6 +337,7 @@ enum EServiceKikimr {
     // Background tasks
     BG_TASKS = 1700;
 
+    METADATA_INITIALIZER = 1800;
 };
 
 message TActivity {
@@ -928,5 +929,8 @@ message TActivity {
         TEST_SHARD_VALIDATION_ACTOR = 583;
         TX_TIERING_TIER_CLEANER = 584;
         TX_TIERING_PATH_CLEANER = 585;
+        METADATA_INITIALIZER = 586;
+        TIERING_OWNER_ENRICH = 587;
+        TIERING_SNAPSHOT_ENRICH = 588;
     };
 };

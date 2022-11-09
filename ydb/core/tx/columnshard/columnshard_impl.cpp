@@ -998,14 +998,14 @@ void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMeta
 
 void TColumnShard::ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
     TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const {
-    if (auto s3 = GetS3ActorForTier(tierName)) {
+    if (auto s3 = GetS3ActorForTier(NTiers::TGlobalTierId(OwnerPath, tierName))) {
         auto event = std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, s3, std::move(blobsInfo));
         ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
     }
 }
 
 void TColumnShard::ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const {
-    if (auto s3 = GetS3ActorForTier(tierName)) {
+    if (auto s3 = GetS3ActorForTier(NTiers::TGlobalTierId(OwnerPath, tierName))) {
         auto forget = std::make_unique<TEvPrivate::TEvForget>();
         forget->Evicted = std::move(blobs);
         ctx.Send(s3, forget.release());
@@ -1014,7 +1014,7 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const TString& tierName
 
 bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
                                    NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges) {
-    if (auto s3 = GetS3ActorForTier(tierName)) {
+    if (auto s3 = GetS3ActorForTier(NTiers::TGlobalTierId(OwnerPath, tierName))) {
         auto get = std::make_unique<TEvPrivate::TEvGetExported>();
         get->DstActor = dst;
         get->DstCookie = cookie;
@@ -1036,17 +1036,15 @@ void TColumnShard::Die(const TActorContext& ctx) {
     return IActor::Die(ctx);
 }
 
-TActorId TColumnShard::GetS3ActorForTier(const TString& tierName) const {
+TActorId TColumnShard::GetS3ActorForTier(const NTiers::TGlobalTierId& tierId) const {
     if (!Tiers) {
         return {};
     }
-    return Tiers->GetStorageActorId(tierName);
+    return Tiers->GetStorageActorId(tierId);
 }
 
 void TColumnShard::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
-    if (!Tiers) {
-        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(), OwnerPath);
-    }
+    Y_VERIFY(Tiers);
     Tiers->TakeConfigs(ev->Get()->GetSnapshot());
     if (EnableTiering) {
         Tiers->Start(Tiers);

@@ -20,9 +20,7 @@ void TPathCleaner::Handle(TEvTierCleared::TPtr& ev) {
 
 NMetadataProvider::ISnapshotParser::TPtr TPathCleaner::GetTieringSnapshotParser() const {
     if (!ExternalDataManipulation) {
-        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
-        auto edmPtr = std::dynamic_pointer_cast<NTiers::TSnapshotConstructor>(ExternalDataManipulation);
-        edmPtr->Start(edmPtr);
+        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>(OwnerPath);
     }
     return ExternalDataManipulation;
 }
@@ -48,8 +46,9 @@ void TPathCleaner::Bootstrap() {
     Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()), new NMetadataProvider::TEvSubscribeExternal(GetTieringSnapshotParser()));
 }
 
-TPathCleaner::TPathCleaner(const ui64 pathId, NBackgroundTasks::ITaskExecutorController::TPtr controller)
+TPathCleaner::TPathCleaner(const ui64 pathId, const TString& ownerPath, NBackgroundTasks::ITaskExecutorController::TPtr controller)
     : PathId(pathId)
+    , OwnerPath(ownerPath)
     , Controller(controller) {
 }
 

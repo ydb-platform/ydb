@@ -8,9 +8,9 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-TVector<NKikimr::NMetadataProvider::ITableModifier::TPtr> TExecutor::BuildModifiers() const {
+TVector<NMetadataInitializer::ITableModifier::TPtr> TExecutor::BuildModifiers() const {
     const TString tableName = Config.GetTablePath();
-    TVector<NMetadataProvider::ITableModifier::TPtr> result;
+    TVector<NMetadataInitializer::ITableModifier::TPtr> result;
     {
         Ydb::Table::CreateTableRequest request;
         request.set_session_id("");
@@ -66,7 +66,7 @@ TVector<NKikimr::NMetadataProvider::ITableModifier::TPtr> TExecutor::BuildModifi
             column.set_name("state");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
-        result.emplace_back(new NMetadataProvider::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request));
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request));
     }
     return result;
 }

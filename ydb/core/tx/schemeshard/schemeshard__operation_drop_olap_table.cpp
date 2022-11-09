@@ -314,7 +314,11 @@ public:
                                << ", at schemeshard: " << ssId);
 
         if (NBackgroundTasks::TServiceOperator::IsEnabled()) {
-            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(txState->TargetPathId.LocalPathId), nullptr);
+            NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
+            TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
+            NSchemeShard::TPath ownerPath = tableInfo->IsStandalone() ? path : path.FindOlapStore();
+            Y_VERIFY(path.IsResolved());
+            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(txState->TargetPathId.LocalPathId, ownerPath.PathString()), nullptr);
             task.SetId(OperationId.SerializeToString());
             context.SS->SelfId().Send(NBackgroundTasks::MakeServiceId(context.SS->SelfId().NodeId()), new NBackgroundTasks::TEvAddTask(std::move(task)));
             return false;

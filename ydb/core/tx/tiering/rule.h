@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 #include "decoder.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -19,14 +20,15 @@ private:
     YDB_ACCESSOR_DEF(TDuration, DurationForEvict);
 public:
     bool operator<(const TTieringRule& item) const {
-        return std::tie(OwnerPath, TierName, TablePath, Column, DurationForEvict)
-            < std::tie(item.OwnerPath, item.TierName, item.TablePath, item.Column, item.DurationForEvict);
+        return std::tie(TablePath, TierName, Column, DurationForEvict)
+            < std::tie(item.TablePath, item.TierName, item.Column, item.DurationForEvict);
+    }
+
+    TGlobalTierId GetGlobalTierId() const {
+        return TGlobalTierId(OwnerPath, TierName);
     }
 
     NJson::TJsonValue GetDebugJson() const;
-    TString GetTierId() const {
-        return OwnerPath + "." + TierName;
-    }
     class TDecoder: public NInternal::TDecoderBase {
     private:
         YDB_READONLY(i32, OwnerPathIdx, -1);
@@ -53,6 +55,7 @@ public:
         if (!decoder.Read(decoder.GetOwnerPathIdx(), OwnerPath, r)) {
             return false;
         }
+        OwnerPath = TFsPath(OwnerPath).Fix().GetPath();
         if (!decoder.Read(decoder.GetTierNameIdx(), TierName, r)) {
             return false;
         }

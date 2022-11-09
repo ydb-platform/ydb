@@ -33,7 +33,7 @@ public:
 class TTiersManager {
 private:
     class TActor;
-    using TManagers = TMap<TString, NTiers::TManager>;
+    using TManagers = TMap<NTiers::TGlobalTierId, NTiers::TManager>;
     ui64 TabletId = 0;
     const TActorId TabletActorId;
     TString OwnerPath;
@@ -52,13 +52,12 @@ public:
     {
     }
     TActorId GetActorId() const;
-    ~TTiersManager();
     THashMap<ui64, NOlap::TTiersInfo> GetTiering() const;
     void TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshot);
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop();
-    TActorId GetStorageActorId(const TString& tierName);
-    const NTiers::TManager& GetManagerVerified(const TString& tierId) const;
+    TActorId GetStorageActorId(const NTiers::TGlobalTierId& tierId);
+    const NTiers::TManager& GetManagerVerified(const NTiers::TGlobalTierId& tierId) const;
     NMetadataProvider::ISnapshotParser::TPtr GetExternalDataManipulation() const;
 
     TManagers::const_iterator begin() const {

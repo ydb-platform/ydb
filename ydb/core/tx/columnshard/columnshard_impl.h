@@ -139,9 +139,9 @@ class TColumnShard
         Y_UNUSED(ctx);
     }
 
-    const NTiers::TManager& GetTierManagerVerified(const TString& tierName) const {
+    const NTiers::TManager& GetTierManagerVerified(const NTiers::TGlobalTierId& tierId) const {
         Y_VERIFY(!!Tiers);
-        return Tiers->GetManagerVerified(tierName);
+        return Tiers->GetManagerVerified(tierId);
     }
 
     void Die(const TActorContext& ctx) override;
@@ -447,7 +447,7 @@ private:
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
-    TActorId GetS3ActorForTier(const TString& tierName) const;
+    TActorId GetS3ActorForTier(const NTiers::TGlobalTierId& tierId) const;
     void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
         TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const;
     void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const;

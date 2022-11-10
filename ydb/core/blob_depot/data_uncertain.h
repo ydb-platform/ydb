@@ -53,7 +53,15 @@ namespace NKikimr::NBlobDepot {
         ui64 NumKeysUnresolved = 0;
         ui64 NumKeysDropped = 0;
 
-        friend void Out(IOutputStream& s, EKeyBlobState value);
+        friend void Out<EKeyBlobState>(IOutputStream& s, EKeyBlobState value) {
+            switch (value) {
+                case EKeyBlobState::INITIAL:            s << "INITIAL";             break;
+                case EKeyBlobState::QUERY_IN_FLIGHT:    s << "QUERY_IN_FLIGHT";     break;
+                case EKeyBlobState::CONFIRMED:          s << "CONFIRMED";           break;
+                case EKeyBlobState::WASNT_WRITTEN:      s << "WASNT_WRITTEN";       break;
+                case EKeyBlobState::ERROR:              s << "ERROR";               break;
+            }
+        }
 
     public:
         TUncertaintyResolver(TBlobDepot *self);

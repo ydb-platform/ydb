@@ -235,16 +235,3 @@ namespace NKikimr::NBlobDepot {
     }
 
 } // NKikimr::NBlobDepot
-
-template<>
-void Out<NKikimr::NBlobDepot::TData::TUncertaintyResolver::EKeyBlobState>(IOutputStream& s,
-        NKikimr::NBlobDepot::TData::TUncertaintyResolver::EKeyBlobState value) {
-    using E = decltype(value);
-    switch (value) {
-        case E::INITIAL:            s << "INITIAL";             break;
-        case E::QUERY_IN_FLIGHT:    s << "QUERY_IN_FLIGHT";     break;
-        case E::CONFIRMED:          s << "CONFIRMED";           break;
-        case E::WASNT_WRITTEN:      s << "WASNT_WRITTEN";       break;
-        case E::ERROR:              s << "ERROR";               break;
-    }
-}

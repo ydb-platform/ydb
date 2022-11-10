@@ -256,15 +256,15 @@ TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison
 
     ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
 
-    if (comparison.Maybe<TKqpOlapFilterEqual>()) {
+    if (comparison.Operator() == "eq") {
         function = TProgram::TAssignment::FUNC_CMP_EQUAL;
-    } else if (comparison.Maybe<TKqpOlapFilterLess>()) {
+    } else if (comparison.Operator() == "lt") {
         function = TProgram::TAssignment::FUNC_CMP_LESS;
-    } else if (comparison.Maybe<TKqpOlapFilterLessOrEqual>()) {
+    } else if (comparison.Operator() == "lte") {
         function = TProgram::TAssignment::FUNC_CMP_LESS_EQUAL;
-    } else if (comparison.Maybe<TKqpOlapFilterGreater>()) {
+    } else if (comparison.Operator() == "gt") {
         function = TProgram::TAssignment::FUNC_CMP_GREATER;
-    } else if (comparison.Maybe<TKqpOlapFilterGreaterOrEqual>()) {
+    } else if (comparison.Operator() == "gte") {
         function = TProgram::TAssignment::FUNC_CMP_GREATER_EQUAL;
     }
 
@@ -345,7 +345,7 @@ TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapComp
         return CompileExists(maybeExists.Cast(), ctx);
     }
 
-    if (auto maybeNot = condition.Maybe<TCoNot>()) {
+    if (auto maybeNot = condition.Maybe<TKqpOlapNot>()) {
         // Not is a special way in case it has only one child
         TProgram::TAssignment *value = CompileCondition(maybeNot.Cast().Value(), ctx);
 
@@ -360,11 +360,11 @@ TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapComp
 
     ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
 
-    if (condition.Maybe<TCoAnd>()) {
+    if (condition.Maybe<TKqpOlapAnd>()) {
         function = TProgram::TAssignment::FUNC_BINARY_AND;
-    } else if (condition.Maybe<TCoOr>()) {
+    } else if (condition.Maybe<TKqpOlapOr>()) {
         function = TProgram::TAssignment::FUNC_BINARY_OR;
-    } else if (condition.Maybe<TCoXor>()) {
+    } else if (condition.Maybe<TKqpOlapXor>()) {
         function = TProgram::TAssignment::FUNC_BINARY_XOR;
     } else {
         YQL_ENSURE(false, "Unsuppoted logical operation: " << condition.Ptr()->Content());

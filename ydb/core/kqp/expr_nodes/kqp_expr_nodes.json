@@ -400,45 +400,44 @@
             ]
         },
         {
-            "Name": "TKqpOlapFilterCompare",
-            "Base": "TKqpOlapOperationBase",
-            "Match": {"Type": "CallableBase"},
+            "Name": "TKqpOlapNot",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOlapNot"},
             "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapAnd",
+            "VarArgBase": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapAnd"}
+        },
+        {
+            "Name": "TKqpOlapOr",
+            "VarArgBase": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapOr"}
+        },
+        {
+            "Name": "TKqpOlapXor",
+            "VarArgBase": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapXor"}
+        },
+        {
+            "Name": "TKqpOlapFilterCompare",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterCompare"},
+            "Children": [
+                {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Left", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Right", "Type": "TExprBase"}
             ]
         },
         {
-            "Name": "TKqpOlapFilterEqual",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterEqual"}
-        },
-        {
-            "Name": "TKqpOlapFilterLess",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterLess"}
-        },
-        {
-            "Name": "TKqpOlapFilterLessOrEqual",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterLessOrEqual"}
-        },
-        {
-            "Name": "TKqpOlapFilterGreater",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterGreater"}
-        },
-        {
-            "Name": "TKqpOlapFilterGreaterOrEqual",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterGreaterOrEqual"}
-        },
-        {
             "Name": "TKqpOlapFilterExists",
-            "Base": "TKqpOlapOperationBase",
-            "Match": {"Type": "Callable", "Name": "TKqpOlapFilterExists"},
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterExists"},
             "Children": [
-                {"Index": 1, "Name": "Column", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Column", "Type": "TCoAtom"}
             ]
         },
         {

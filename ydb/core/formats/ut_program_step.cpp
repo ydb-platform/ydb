@@ -11,9 +11,11 @@
 #include "program.h"
 #include "arrow_helpers.h"
 
-namespace NKikimr::NArrow {
+using namespace NKikimr::NArrow;
+using namespace NKikimr::NSsa;
+using NKikimr::NKernels::NumVecToArray;
 
-using NKernels::NumVecToArray;
+namespace NKikimr::NSsa {
 
 size_t FilterTest(std::vector<std::shared_ptr<arrow::Array>> args, EOperation frst, EOperation scnd) {
     auto schema = std::make_shared<arrow::Schema>(std::vector{
@@ -48,6 +50,7 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
     return rBatch->num_rows();
 }
 
+}
 
 Y_UNIT_TEST_SUITE(ProgramStepTest) {
     Y_UNIT_TEST(ProgramStepRound0) {
@@ -197,6 +200,4 @@ Y_UNIT_TEST_SUITE(ProgramStepTest) {
         UNIT_ASSERT(rBatch->num_columns() == 2);
         UNIT_ASSERT(rBatch->num_rows() == 4);
     }
-}
-
 }

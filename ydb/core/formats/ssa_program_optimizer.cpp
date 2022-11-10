@@ -1,36 +1,32 @@
 #include "ssa_program_optimizer.h"
 
-namespace NKikimr::NSsaOptimizer {
+namespace NKikimr::NSsa {
 
 namespace {
 
-std::vector<std::shared_ptr<NArrow::TProgramStep>> ReplaceCountAll(const std::vector<std::shared_ptr<NArrow::TProgramStep>>& program, const NTable::TScheme::TTableSchema& tableSchema) {
-    std::vector<std::shared_ptr<NArrow::TProgramStep>> newProgram;
-    newProgram.reserve(program.size());
+void ReplaceCountAll(TProgram& program) {
+    Y_VERIFY(!program.SourceColumns.empty());
 
-    for (auto& step : program) {
-        newProgram.push_back(std::make_shared<NArrow::TProgramStep>(*step));
-        for (size_t i = 0; i < step->GroupBy.size(); ++i) {
-            auto groupBy = step->GroupBy[i];
-            auto& newGroupBy = newProgram.back()->GroupBy;
-            if (groupBy.GetOperation() == NArrow::EAggregate::Count 
-                && groupBy.GetArguments().size() == 1
-                && groupBy.GetArguments()[0] == "") {
-                // COUNT(*)
-                auto replaceIt = std::next(newGroupBy.begin(), i);
-                replaceIt = newGroupBy.erase(replaceIt);
-                auto pkColName = tableSchema.Columns.find(tableSchema.KeyColumns[0])->second.Name;
-                newGroupBy.emplace(replaceIt, groupBy.GetName(), groupBy.GetOperation(), std::string(pkColName));
+    for (auto& step : program.Steps) {
+        Y_VERIFY(step);
+
+        for (auto& groupBy : step->GroupBy) {
+            if (groupBy.GetOperation() == EAggregate::Count && groupBy.GetArguments().empty()) {
+                if (!step->GroupByKeys.empty()) {
+                    groupBy.MutableArguments().push_back(step->GroupByKeys[0]);
+                } else {
+                    auto& anySourceColumn = program.SourceColumns.begin()->second;
+                    groupBy.MutableArguments().push_back(anySourceColumn);
+                }
             }
         }
     }
-    return newProgram;
 }
 
 } // anonymous namespace
 
-std::vector<std::shared_ptr<NArrow::TProgramStep>> OptimizeProgram(const std::vector<std::shared_ptr<NArrow::TProgramStep>>& program, const NTable::TScheme::TTableSchema& tableSchema) {
-    return ReplaceCountAll(program, tableSchema);
+void OptimizeProgram(TProgram& program) {
+    ReplaceCountAll(program);
 }
 
-} // namespace NKikimr::NSsaOptimizer
+}

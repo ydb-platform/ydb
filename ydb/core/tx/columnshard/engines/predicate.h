@@ -48,7 +48,7 @@ struct TPredicate {
     }
 
     friend IOutputStream& operator << (IOutputStream& out, const TPredicate& pred) {
-        out << NArrow::GetFunctionName(pred.Operation);
+        out << NSsa::GetFunctionName(pred.Operation);
         if (pred.Inclusive) {
             out << "(incl) ";
         } else {

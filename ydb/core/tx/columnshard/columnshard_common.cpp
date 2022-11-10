@@ -6,6 +6,12 @@ namespace NKikimr::NColumnShard {
 
 namespace {
 
+using EOperation = NArrow::EOperation;
+using EAggregate = NArrow::EAggregate;
+using TAssign = NSsa::TAssign;
+using TAggregateAssign = NSsa::TAggregateAssign;
+
+
 TVector<NScheme::TTypeInfo> ExtractTypes(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     TVector<NScheme::TTypeInfo> types;
     types.reserve(columns.size());
@@ -67,16 +73,21 @@ struct TContext {
     }
 };
 
-NArrow::TAssign MakeFunction(const TContext& info, const std::string& name,
+TAssign MakeFunction(const TContext& info, const std::string& name,
                             const NKikimrSSA::TProgram::TAssignment::TFunction& func) {
     using TId = NKikimrSSA::TProgram::TAssignment;
-    using EOperation = NArrow::EOperation;
-    using TAssign = NArrow::TAssign;
 
     std::vector<std::string> arguments;
     for (auto& col : func.GetArguments()) {
         arguments.push_back(info.GetName(col));
     }
+
+    auto mkCastOptions = [](std::shared_ptr<arrow::DataType> dataType) {
+        // TODO: support CAST with OrDefault/OrNull logic (second argument is default value)
+        auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
+        castOpts->to_type = dataType;
+        return castOpts;
+    };
 
     switch (func.GetId()) {
         case TId::FUNC_CMP_EQUAL:
@@ -113,34 +124,39 @@ NArrow::TAssign MakeFunction(const TContext& info, const std::string& name,
             return TAssign(name, EOperation::Multiply, std::move(arguments));
         case TId::FUNC_MATH_DIVIDE:
             return TAssign(name, EOperation::Divide, std::move(arguments));
-        case TId::FUNC_CAST_TO_INT32:
-        {
-            // TODO: support CAST with OrDefault/OrNull logic (second argument is default value)
-            auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
-            castOpts->to_type = std::make_shared<arrow::Int32Type>();
-            return TAssign(name, EOperation::CastInt32, std::move(arguments), castOpts);
-        }
-        case TId::FUNC_CAST_TO_INT64:
-        {
-            // TODO: support CAST with OrDefault/OrNull logic (second argument is default value)
-            auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
-            castOpts->to_type = std::make_shared<arrow::Int64Type>();
-            return TAssign(name, EOperation::CastInt64, std::move(arguments), castOpts);
-        }
-        case TId::FUNC_CAST_TO_TIMESTAMP:
-        {
-            auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
-            castOpts->to_type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
-            return TAssign(name, EOperation::CastTimestamp, std::move(arguments), castOpts);
-        }
         case TId::FUNC_CAST_TO_INT8:
+            return TAssign(name, EOperation::CastInt8, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::Int8Type>()));
         case TId::FUNC_CAST_TO_INT16:
+            return TAssign(name, EOperation::CastInt16, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::Int16Type>()));
+        case TId::FUNC_CAST_TO_INT32:
+            return TAssign(name, EOperation::CastInt32, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::Int32Type>()));
+        case TId::FUNC_CAST_TO_INT64:
+            return TAssign(name, EOperation::CastInt64, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::Int64Type>()));
         case TId::FUNC_CAST_TO_UINT8:
+            return TAssign(name, EOperation::CastUInt8, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::UInt8Type>()));
         case TId::FUNC_CAST_TO_UINT16:
+            return TAssign(name, EOperation::CastUInt16, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::UInt16Type>()));
         case TId::FUNC_CAST_TO_UINT32:
+            return TAssign(name, EOperation::CastUInt32, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::UInt32Type>()));
         case TId::FUNC_CAST_TO_UINT64:
+            return TAssign(name, EOperation::CastUInt64, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::UInt64Type>()));
         case TId::FUNC_CAST_TO_FLOAT:
+            return TAssign(name, EOperation::CastFloat, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::FloatType>()));
         case TId::FUNC_CAST_TO_DOUBLE:
+            return TAssign(name, EOperation::CastDouble, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::DoubleType>()));
+        case TId::FUNC_CAST_TO_TIMESTAMP:
+            return TAssign(name, EOperation::CastTimestamp, std::move(arguments),
+                           mkCastOptions(std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO)));
         case TId::FUNC_CAST_TO_BINARY:
         case TId::FUNC_CAST_TO_FIXED_SIZE_BINARY:
         case TId::FUNC_UNSPECIFIED:
@@ -149,10 +165,8 @@ NArrow::TAssign MakeFunction(const TContext& info, const std::string& name,
     return TAssign(name, EOperation::Unspecified, std::move(arguments));
 }
 
-NArrow::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant) {
+NSsa::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant) {
     using TId = NKikimrSSA::TProgram::TConstant;
-    using EOperation = NArrow::EOperation;
-    using TAssign = NArrow::TAssign;
 
     switch (constant.GetValueCase()) {
         case TId::kBool:
@@ -185,12 +199,10 @@ NArrow::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram
     return TAssign(name, EOperation::Unspecified, {});
 }
 
-NArrow::TAggregateAssign MakeAggregate(const TContext& info, const std::string& name,
+NSsa::TAggregateAssign MakeAggregate(const TContext& info, const std::string& name,
                                        const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func)
 {
     using TId = NKikimrSSA::TProgram::TAggregateAssignment;
-    using EAggregate = NArrow::EAggregate;
-    using TAggregateAssign = NArrow::TAggregateAssign;
 
     if (func.ArgumentsSize() == 1) {
         std::string argument = info.GetName(func.GetArguments()[0]);
@@ -215,16 +227,14 @@ NArrow::TAggregateAssign MakeAggregate(const TContext& info, const std::string& 
         }
     } else if (func.ArgumentsSize() == 0 && func.GetId() == TId::AGG_COUNT) {
         // COUNT(*) case
-        return TAggregateAssign(name, EAggregate::Count, {});
+        return TAggregateAssign(name, EAggregate::Count);
     }
-    return TAggregateAssign(name, EAggregate::Unspecified, {});
+    return TAggregateAssign(name); // !ok()
 }
 
-NArrow::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter,
+NSsa::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter,
     const std::shared_ptr<arrow::RecordBatch>& parameterValues)
 {
-    using TAssign = NArrow::TAssign;
-
     auto parameterName = parameter.GetName();
     auto column = parameterValues->GetColumnByName(parameterName);
 #if 0
@@ -244,7 +254,7 @@ NArrow::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::
     return TAssign(name, *column->GetScalar(0));
 }
 
-bool ExtractAssign(const TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TAssignment& assign,
+bool ExtractAssign(const TContext& info, NSsa::TProgramStep& step, const NKikimrSSA::TProgram::TAssignment& assign,
     const std::shared_ptr<arrow::RecordBatch>& parameterValues)
 {
     using TId = NKikimrSSA::TProgram::TAssignment;
@@ -287,7 +297,7 @@ bool ExtractAssign(const TContext& info, NArrow::TProgramStep& step, const NKiki
     return true;
 }
 
-bool ExtractFilter(const TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TFilter& filter) {
+bool ExtractFilter(const TContext& info, NSsa::TProgramStep& step, const NKikimrSSA::TProgram::TFilter& filter) {
     auto& column = filter.GetPredicate();
     if (!column.HasId() && !column.HasName()) {
         return false;
@@ -297,7 +307,7 @@ bool ExtractFilter(const TContext& info, NArrow::TProgramStep& step, const NKiki
     return true;
 }
 
-bool ExtractProjection(const TContext& info, NArrow::TProgramStep& step,
+bool ExtractProjection(const TContext& info, NSsa::TProgramStep& step,
                        const NKikimrSSA::TProgram::TProjection& projection) {
     step.Projection.reserve(projection.ColumnsSize());
     for (auto& col : projection.GetColumns()) {
@@ -307,7 +317,7 @@ bool ExtractProjection(const TContext& info, NArrow::TProgramStep& step,
     return true;
 }
 
-bool ExtractGroupBy(const TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TGroupBy& groupBy) {
+bool ExtractGroupBy(const TContext& info, NSsa::TProgramStep& step, const NKikimrSSA::TProgram::TGroupBy& groupBy) {
     if (!groupBy.AggregatesSize()) {
         return false;
     }
@@ -395,13 +405,14 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
         TPredicate(EOperation::Less, rightBorder, NArrow::MakeArrowSchema(rightColumns), toInclusive));
 }
 
-std::shared_ptr<NArrow::TSsaProgramSteps> TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program)
+std::shared_ptr<NSsa::TProgram> TReadDescription::AddProgram(const IColumnResolver& columnResolver,
+                                                             const NKikimrSSA::TProgram& program)
 {
     using TId = NKikimrSSA::TProgram::TCommand;
 
-    auto programSteps = std::make_shared<NArrow::TSsaProgramSteps>();
+    auto ssaProgram = std::make_shared<NSsa::TProgram>();
     TContext info(columnResolver);
-    auto step = std::make_shared<NArrow::TProgramStep>();
+    auto step = std::make_shared<NSsa::TProgramStep>();
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign:
@@ -418,15 +429,15 @@ std::shared_ptr<NArrow::TSsaProgramSteps> TReadDescription::AddProgram(const ICo
                 if (!ExtractProjection(info, *step, cmd.GetProjection())) {
                     return nullptr;
                 }
-                programSteps->Program.push_back(step);
-                step = std::make_shared<NArrow::TProgramStep>();
+                ssaProgram->Steps.push_back(step);
+                step = std::make_shared<NSsa::TProgramStep>();
                 break;
             case TId::kGroupBy:
                 if (!ExtractGroupBy(info, *step, cmd.GetGroupBy())) {
                     return nullptr;
                 }
-                programSteps->Program.push_back(step);
-                step = std::make_shared<NArrow::TProgramStep>();
+                ssaProgram->Steps.push_back(step);
+                step = std::make_shared<NSsa::TProgramStep>();
                 break;
             case TId::LINE_NOT_SET:
                 return nullptr;
@@ -435,11 +446,25 @@ std::shared_ptr<NArrow::TSsaProgramSteps> TReadDescription::AddProgram(const ICo
 
     // final step without final projection
     if (!step->Empty()) {
-        programSteps->Program.push_back(step);
+        ssaProgram->Steps.push_back(step);
     }
 
-    programSteps->ProgramSourceColumns = std::move(info.Sources);
-    return programSteps;
+    ssaProgram->SourceColumns = std::move(info.Sources);
+
+    // Query 'SELECT count(*) FROM table' needs a column
+    if (ssaProgram->SourceColumns.empty()) {
+        auto& ydbSchema = columnResolver.GetSchema();
+
+        Y_VERIFY(!ydbSchema.KeyColumns.empty());
+        ui32 key = ydbSchema.KeyColumns[0];
+
+        auto it = ydbSchema.Columns.find(key);
+        Y_VERIFY(it != ydbSchema.Columns.end());
+
+        ssaProgram->SourceColumns[key] = it->second.Name;
+    }
+
+    return ssaProgram;
 }
 
 }

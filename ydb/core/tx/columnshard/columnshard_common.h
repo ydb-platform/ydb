@@ -21,6 +21,7 @@ class IColumnResolver {
 public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
+    virtual const NTable::TScheme::TTableSchema& GetSchema() const = 0;
 };
 
 // Describes read/scan request
@@ -36,9 +37,8 @@ struct TReadDescription {
     std::shared_ptr<NOlap::TPredicate> LessPredicate;
 
     // SSA Program
-    std::vector<std::shared_ptr<NArrow::TProgramStep>> Program;
-    THashMap<ui32, TString> ProgramSourceColumns;
-    std::shared_ptr<arrow::RecordBatch> ProgramParameters;
+    std::shared_ptr<NSsa::TProgram> Program;
+    std::shared_ptr<arrow::RecordBatch> ProgramParameters; // TODO
 
     // List of columns
     TVector<ui32> ColumnIds;
@@ -50,7 +50,7 @@ struct TReadDescription {
     ui64 PlanStep = 0;
     ui64 TxId = 0;
 
-    std::shared_ptr<NArrow::TSsaProgramSteps> AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
+    std::shared_ptr<NSsa::TProgram> AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
 };
 
 class TBatchCache {

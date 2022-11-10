@@ -47,7 +47,7 @@ struct TReadMetadataBase {
     std::shared_ptr<arrow::Schema> BlobSchema;
     std::shared_ptr<arrow::Schema> LoadSchema; // ResultSchema + required for intermediate operations
     std::shared_ptr<arrow::Schema> ResultSchema; // TODO: add Program modifications
-    std::vector<std::shared_ptr<NArrow::TProgramStep>> Program;
+    std::shared_ptr<NSsa::TProgram> Program;
     std::shared_ptr<const THashMap<TUnifiedBlobId, TUnifiedBlobId>> ExternBlobs; // DS -> S3 map TODO: move out of base
     ESorting Sorting{ESorting::ASC}; // Sorting inside returned batches
     ui64 Limit{0}; // TODO
@@ -61,10 +61,6 @@ struct TReadMetadataBase {
     virtual TVector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
     virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan() const = 0;
     virtual void Dump(IOutputStream& out) const { Y_UNUSED(out); };
-
-    bool HasProgram() const {
-        return !Program.empty();
-    }
 
     // TODO:  can this only be done for base class?
     friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
@@ -134,7 +130,7 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
             << " index records: " << NumIndexedRecords()
             << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
-            << " with program steps: " << Program.size()
+            << " with program steps: " << (Program ? Program->Steps.size() : 0)
             << (Sorting == ESorting::NONE ? " not" : (Sorting == ESorting::ASC ? " asc" : " desc"))
             << " sorted, at snapshot: " << PlanStep << ":" << TxId;
         if (GreaterPredicate) {

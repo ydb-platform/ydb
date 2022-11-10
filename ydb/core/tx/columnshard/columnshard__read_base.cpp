@@ -129,8 +129,10 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
     }
 
     out.Program = std::move(read.Program);
-    for (auto& [id, name] : read.ProgramSourceColumns) {
-        columnIds.insert(id);
+    if (out.Program) {
+        for (auto& [id, name] : out.Program->SourceColumns) {
+            columnIds.insert(id);
+        }
     }
 
     if (read.ReadNothing) {
@@ -185,18 +187,16 @@ bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapP
         read.ProgramParameters = NArrow::DeserializeBatch(olapProgram.GetParameters(), schema);
     }
 
-
-    auto ssaProgramSteps = read.AddProgram(columnResolver, program);
-    if (!ssaProgramSteps) {
+    auto ssaProgram = read.AddProgram(columnResolver, program);
+    if (!ssaProgram) {
         ErrorDescription = TStringBuilder() << "Wrong olap program";
         return false;
     }
-    if (!ssaProgramSteps->Program.empty() && Self->PrimaryIndex) {
-        ssaProgramSteps->Program = NKikimr::NSsaOptimizer::OptimizeProgram(ssaProgramSteps->Program, Self->PrimaryIndex->GetIndexInfo());
+    if (!ssaProgram->Steps.empty() && Self->PrimaryIndex) {
+        NSsa::OptimizeProgram(*ssaProgram);
     }
 
-    read.Program = ssaProgramSteps->Program;
-    read.ProgramSourceColumns = ssaProgramSteps->ProgramSourceColumns;
+    read.Program = ssaProgram;
     return true;
 }
 

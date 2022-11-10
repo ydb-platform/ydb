@@ -184,7 +184,7 @@ struct TTestSchema {
             *schema->MutableColumns()->Add() = CreateColumn(i + 1, columns[i].first, columns[i].second);
         }
 
-        Y_VERIFY(pk.size() == 4);
+        Y_VERIFY(pk.size() > 0);
         for (auto& column : ExtractNames(pk)) {
             schema->AddKeyColumnNames(column);
         }

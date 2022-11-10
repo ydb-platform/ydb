@@ -17,9 +17,10 @@
 
 namespace cp = ::arrow::compute;
 
-namespace NKikimr::NArrow {
+using namespace NKikimr::NKernels;
+using namespace NKikimr::NSsa;
 
-using namespace NKernels;
+namespace NKikimr::NArrow {
 
 static void RegisterMath(cp::FunctionRegistry* registry) {
     Y_VERIFY(registry->AddFunction(MakeMathUnary<TAcosh>(TAcosh::Name)).ok());

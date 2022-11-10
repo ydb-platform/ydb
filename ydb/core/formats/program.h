@@ -21,6 +21,13 @@ enum class EAggregate {
     //Avg = 6,
 };
 
+}
+
+namespace NKikimr::NSsa {
+
+using EOperation = NArrow::EOperation;
+using EAggregate = NArrow::EAggregate;
+
 const char * GetFunctionName(EOperation op);
 const char * GetFunctionName(EAggregate op);
 const char * GetHouseFunctionName(EAggregate op);
@@ -124,13 +131,21 @@ private:
 
 class TAggregateAssign {
 public:
+    TAggregateAssign(const std::string& name, EAggregate op = EAggregate::Unspecified)
+        : Name(name)
+        , Operation(op)
+    {
+        if (op != EAggregate::Count) {
+            op = EAggregate::Unspecified;
+        }
+    }
+
     TAggregateAssign(const std::string& name, EAggregate op, std::string&& arg)
         : Name(name)
         , Operation(op)
         , Arguments({std::move(arg)})
     {
-        if (Arguments[0].empty() && op != EAggregate::Count) {
-            // COUNT(*) doesn't have arguments
+        if (Arguments.empty()) {
             op = EAggregate::Unspecified;
         }
     }
@@ -138,6 +153,7 @@ public:
     bool IsOk() const { return Operation != EAggregate::Unspecified; }
     EAggregate GetOperation() const { return Operation; }
     const std::vector<std::string>& GetArguments() const { return Arguments; }
+    std::vector<std::string>& MutableArguments() { return Arguments; }
     const std::string& GetName() const { return Name; }
     const arrow::compute::ScalarAggregateOptions& GetAggregateOptions() const { return ScalarOpts; }
 
@@ -197,9 +213,9 @@ inline arrow::Status ApplyProgram(
     return arrow::Status::OK();
 }
 
-struct TSsaProgramSteps {
-    std::vector<std::shared_ptr<TProgramStep>> Program;
-    THashMap<ui32, TString> ProgramSourceColumns;
+struct TProgram {
+    std::vector<std::shared_ptr<TProgramStep>> Steps;
+    THashMap<ui32, TString> SourceColumns;
 };
 
 }

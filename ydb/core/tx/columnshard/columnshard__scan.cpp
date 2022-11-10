@@ -521,8 +521,10 @@ static void FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::T
 std::shared_ptr<NOlap::TReadStatsMetadata>
 PrepareStatsReadMetadata(ui64 tabletId, const TReadDescription& read, const std::unique_ptr<NOlap::IColumnEngine>& index, TString& error) {
     THashSet<ui32> readColumnIds(read.ColumnIds.begin(), read.ColumnIds.end());
-    for (auto& [id, name] : read.ProgramSourceColumns) {
-        readColumnIds.insert(id);
+    if (read.Program) {
+        for (auto& [id, name] : read.Program->SourceColumns) {
+            readColumnIds.insert(id);
+        }
     }
 
     for (ui32 colId : readColumnIds) {
@@ -536,7 +538,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const TReadDescription& read, const std:
 
     out->ReadColumnIds.assign(readColumnIds.begin(), readColumnIds.end());
     out->ResultColumnIds = read.ColumnIds;
-    out->Program = std::move(read.Program);
+    out->Program = read.Program;
 
     if (!index) {
         return out;

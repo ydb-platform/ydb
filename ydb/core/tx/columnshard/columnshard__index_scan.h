@@ -17,6 +17,10 @@ public:
     TString GetColumnName(ui32 id, bool required) const override {
         return IndexInfo.GetColumnName(id, required);
     }
+
+    const NTable::TScheme::TTableSchema& GetSchema() const override {
+        return IndexInfo;
+    }
 };
 
 

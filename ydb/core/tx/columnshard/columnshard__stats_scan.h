@@ -25,6 +25,10 @@ public:
         }
         return it->second.Name;
     }
+
+    const NTable::TScheme::TTableSchema& GetSchema() const override {
+        return PrimaryIndexStatsSchema;
+    }
 };
 
 
@@ -56,8 +60,8 @@ public:
         // Leave only requested columns
         auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
 
-        if (!ReadMetadata->Program.empty()) {
-            auto status = ApplyProgram(batch, ReadMetadata->Program, NArrow::GetCustomExecContext());
+        if (ReadMetadata->Program) {
+            auto status = ApplyProgram(batch, ReadMetadata->Program->Steps, NArrow::GetCustomExecContext());
             Y_VERIFY_S(status.ok(), status.message());
         }
 

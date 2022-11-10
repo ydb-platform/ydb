@@ -140,10 +140,12 @@ public:
 
         auto indexSize = txc.DB.GetTableIndexSize(tableInfo.LocalTid);
         auto memSize = txc.DB.GetTableMemSize(tableInfo.LocalTid);
+        auto memRowCount = txc.DB.GetTableMemRowCount(tableInfo.LocalTid);
 
         if (tableInfo.ShadowTid) {
             indexSize += txc.DB.GetTableIndexSize(tableInfo.ShadowTid);
             memSize += txc.DB.GetTableMemSize(tableInfo.ShadowTid);
+            memRowCount += txc.DB.GetTableMemRowCount(tableInfo.ShadowTid);
         }
 
         Result->Record.MutableTableStats()->SetIndexSize(indexSize);
@@ -161,8 +163,8 @@ public:
             return true;
 
         const NTable::TStats& stats = tableInfo.Stats.DataStats;
-        Result->Record.MutableTableStats()->SetDataSize(stats.DataSize);
-        Result->Record.MutableTableStats()->SetRowCount(stats.RowCount);
+        Result->Record.MutableTableStats()->SetDataSize(stats.DataSize + memSize);
+        Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
         FillHistogram(stats.DataSizeHistogram, *Result->Record.MutableTableStats()->MutableDataSizeHistogram());
         FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
         // Fill key access sample if it was collected not too long ago

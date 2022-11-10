@@ -11,18 +11,26 @@ namespace NMiniKQL {
 
 namespace {
 
+struct TAggParams {
+    TStringBuf Name;
+    TTupleType* TupleType;
+    std::vector<ui32> ArgColumns;
+};
+
 class TBlockCombineAllWrapper : public TStatefulWideFlowComputationNode<TBlockCombineAllWrapper> {
 public:
     TBlockCombineAllWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         ui32 countColumn,
+        std::optional<ui32> filterColumn,
         size_t width,
-        TVector<std::unique_ptr<IBlockAggregator>>&& aggs)
+        TVector<TAggParams>&& aggsParams)
         : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
         , Flow_(flow)
         , CountColumn_(countColumn)
+        , FilterColumn_(filterColumn)
         , Width_(width)
-        , Aggs_(std::move(aggs))
+        , AggsParams_(std::move(aggsParams))
     {
     }
 
@@ -46,9 +54,9 @@ public:
                 }
 
                 s.HasValues_ = true;
-                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                     if (output[i]) {
-                        Aggs_[i]->AddMany(s.Values_.data(), batchLength);
+                        s.Aggs_[i]->AddMany(s.Values_.data(), batchLength);
                     }
                 }
             } else {
@@ -57,9 +65,9 @@ public:
                     return EFetchResult::Finish;
                 }
 
-                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                     if (auto* out = output[i]; out != nullptr) {
-                        *out = Aggs_[i]->Finish();
+                        *out = s.Aggs_[i]->Finish();
                     }
                 }
 
@@ -74,16 +82,21 @@ private:
     struct TState : public TComputationValue<TState> {
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
+        TVector<std::unique_ptr<IBlockAggregator>> Aggs_;
         bool IsFinished_ = false;
         bool HasValues_ = false;
 
-        TState(TMemoryUsageInfo* memInfo, size_t width)
+        TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32> filterColumn, const TVector<TAggParams>& params, const THolderFactory& holderFactory)
             : TComputationValue(memInfo)
             , Values_(width)
             , ValuePointers_(width)
         {
             for (size_t i = 0; i < width; ++i) {
                 ValuePointers_[i] = &Values_[i];
+            }
+
+            for (const auto& p : params) {
+                Aggs_.emplace_back(MakeBlockAggregator(p.Name, p.TupleType, filterColumn, p.ArgColumns, holderFactory));
             }
         }
     };
@@ -95,7 +108,7 @@ private:
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Width_);
+            state = ctx.HolderFactory.Create<TState>(Width_, FilterColumn_, AggsParams_, ctx.HolderFactory);
         }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
@@ -107,8 +120,9 @@ private:
 private:
     IComputationWideFlowNode* Flow_;
     const ui32 CountColumn_;
+    std::optional<ui32> FilterColumn_;
     const size_t Width_;
-    TVector<std::unique_ptr<IBlockAggregator>> Aggs_;
+    const TVector<TAggParams> AggsParams_;
 };
 
 }
@@ -130,7 +144,7 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 
     MKQL_ENSURE(!filterColumn, "Filter column is not supported yet");
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(3));
-    TVector<std::unique_ptr<IBlockAggregator>> aggs;
+    TVector<TAggParams> aggsParams;
     for (ui32 i = 0; i < aggsVal->GetValuesCount(); ++i) {
         auto aggVal = AS_VALUE(TTupleLiteral, aggsVal->GetValue(i));
         auto name = AS_VALUE(TDataLiteral, aggVal->GetValue(0))->AsValue().AsStringRef();
@@ -140,10 +154,10 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
             argColumns.push_back(AS_VALUE(TDataLiteral, aggVal->GetValue(j))->AsValue().Get<ui32>());
         }
 
-        aggs.emplace_back(MakeBlockAggregator(name, tupleType, filterColumn, argColumns));
+        aggsParams.emplace_back(TAggParams{ TStringBuf(name), tupleType, argColumns });
     }
 
-    return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, countColumn, tupleType->GetElementsCount(), std::move(aggs));
+    return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, countColumn, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
 }
 
 }

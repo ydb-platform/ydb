@@ -3,12 +3,14 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+
 #include <arrow/scalar.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
-template <typename TIn, typename TState, typename TInScalar>
+template <typename TIn, typename TSum, typename TInScalar>
 class TSumBlockAggregator : public TBlockAggregatorBase {
 public:
     TSumBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
@@ -21,7 +23,7 @@ public:
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                State_ += batchLength * datum.scalar_as<TInScalar>().value;
+                Sum_ += batchLength * datum.scalar_as<TInScalar>().value;
                 Count_ += batchLength;
             }
         } else {
@@ -34,22 +36,22 @@ public:
             }
 
             Count_ += count;
-            TState state = State_;
+            TSum sum = Sum_;
             if (array->GetNullCount() == 0) {
                 for (int64_t i = 0; i < len; ++i) {
-                    state += ptr[i];
+                    sum += ptr[i];
                 }
             } else {
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                 for (int64_t i = 0; i < len; ++i) {
                     ui64 fullIndex = i + array->offset;
                     // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                    TState mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TState(1);
-                    state += ptr[i] & mask;
+                    TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                    sum += (ptr[i] & mask);
                 }
             }
 
-            State_ = state;
+            Sum_ = sum;
         }
     }
 
@@ -58,12 +60,77 @@ public:
             return NUdf::TUnboxedValuePod();
         }
 
-        return NUdf::TUnboxedValuePod(State_);
+        return NUdf::TUnboxedValuePod(Sum_);
     }
 
 private:
     const ui32 ArgColumn_;
-    TState State_ = 0;
+    TSum Sum_ = 0;
+    ui64 Count_ = 0;
+};
+
+template <typename TIn, typename TInScalar>
+class TAvgBlockAggregator : public TBlockAggregatorBase {
+public:
+    TAvgBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn, const THolderFactory& holderFactory)
+        : TBlockAggregatorBase(filterColumn)
+        , ArgColumn_(argColumn)
+        , HolderFactory_(holderFactory)
+    {
+    }
+
+    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength) final {
+        const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
+        if (datum.is_scalar()) {
+            if (datum.scalar()->is_valid) {
+                Sum_ += double(batchLength * datum.scalar_as<TInScalar>().value);
+                Count_ += batchLength;
+            }
+        } else {
+            const auto& array = datum.array();
+            auto ptr = array->GetValues<TIn>(1);
+            auto len = array->length;
+            auto count = len - array->GetNullCount();
+            if (!count) {
+                return;
+            }
+
+            Count_ += count;
+            double sum = Sum_;
+            if (array->GetNullCount() == 0) {
+                for (int64_t i = 0; i < len; ++i) {
+                    sum += double(ptr[i]);
+                }
+            } else {
+                auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
+                for (int64_t i = 0; i < len; ++i) {
+                    ui64 fullIndex = i + array->offset;
+                    // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
+                    TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                    sum += double(ptr[i] & mask);
+                }
+            }
+
+            Sum_ = sum;
+        }
+    }
+
+    NUdf::TUnboxedValue Finish() final {
+        if (!Count_) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        NUdf::TUnboxedValue* items;
+        auto arr = HolderFactory_.CreateDirectArrayHolder(2, items);
+        items[0] = NUdf::TUnboxedValuePod(Sum_);
+        items[1] = NUdf::TUnboxedValuePod(Count_);
+        return arr;
+    }
+
+private:
+    const ui32 ArgColumn_;
+    const THolderFactory& HolderFactory_;
+    double Sum_ = 0;
     ui64 Count_ = 0;
 };
 
@@ -72,7 +139,9 @@ public:
    std::unique_ptr<IBlockAggregator> Make(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
-       const std::vector<ui32>& argsColumns) const final {
+       const std::vector<ui32>& argsColumns,
+       const THolderFactory& holderFactory) const final {
+       Y_UNUSED(holderFactory);
        auto argType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]))->GetItemType();
        bool isOptional;
        auto dataType = UnpackOptionalData(argType, isOptional);
@@ -99,8 +168,45 @@ public:
    }
 };
 
+class TBlockAvgFactory : public IBlockAggregatorFactory {
+public:
+   std::unique_ptr<IBlockAggregator> Make(
+       TTupleType* tupleType,
+       std::optional<ui32> filterColumn,
+       const std::vector<ui32>& argsColumns,
+       const THolderFactory& holderFactory) const final {
+       auto argType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]))->GetItemType();
+       bool isOptional;
+       auto dataType = UnpackOptionalData(argType, isOptional);
+       switch (*dataType->GetDataSlot()) {
+       case NUdf::EDataSlot::Int8:
+           return std::make_unique<TAvgBlockAggregator<i8, arrow::Int8Scalar>>(filterColumn, argsColumns[0], holderFactory);
+       case NUdf::EDataSlot::Uint8:
+           return std::make_unique<TAvgBlockAggregator<ui8, arrow::UInt8Scalar>>(filterColumn, argsColumns[0], holderFactory);
+       case NUdf::EDataSlot::Int16:
+           return std::make_unique<TAvgBlockAggregator<i16, arrow::Int16Scalar>>(filterColumn, argsColumns[0], holderFactory);
+       case NUdf::EDataSlot::Uint16:
+           return std::make_unique<TAvgBlockAggregator<ui16, arrow::UInt16Scalar>>(filterColumn, argsColumns[0], holderFactory);
+       case NUdf::EDataSlot::Int32:
+           return std::make_unique<TAvgBlockAggregator<i32, arrow::Int32Scalar>>(filterColumn, argsColumns[0], holderFactory);
+       case NUdf::EDataSlot::Uint32:
+           return std::make_unique<TAvgBlockAggregator<ui32, arrow::UInt32Scalar>>(filterColumn, argsColumns[0], holderFactory);
+       case NUdf::EDataSlot::Int64:
+           return std::make_unique<TAvgBlockAggregator<i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0], holderFactory);
+       case NUdf::EDataSlot::Uint64:
+           return std::make_unique<TAvgBlockAggregator<ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0], holderFactory);
+       default:
+           throw yexception() << "Unsupported AVG input type";
+       }
+   }
+};
+
 std::unique_ptr<IBlockAggregatorFactory> MakeBlockSumFactory() {
     return std::make_unique<TBlockSumFactory>();
+}
+
+std::unique_ptr<IBlockAggregatorFactory> MakeBlockAvgFactory() {
+    return std::make_unique<TBlockAvgFactory>();
 }
  
 }

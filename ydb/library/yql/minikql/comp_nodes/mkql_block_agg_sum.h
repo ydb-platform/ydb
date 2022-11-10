@@ -5,6 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 std::unique_ptr<IBlockAggregatorFactory> MakeBlockSumFactory();
+std::unique_ptr<IBlockAggregatorFactory> MakeBlockAvgFactory();
 
 }
 }

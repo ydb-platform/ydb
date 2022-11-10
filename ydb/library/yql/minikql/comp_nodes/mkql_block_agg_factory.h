@@ -26,11 +26,14 @@ protected:
     const std::optional<ui32> FilterColumn_;
 };
 
+class THolderFactory;
+
 std::unique_ptr<IBlockAggregator> MakeBlockAggregator(
     TStringBuf name,
     TTupleType* tupleType,
     std::optional<ui32> filterColumn,
-    const std::vector<ui32>& argsColumns);
+    const std::vector<ui32>& argsColumns,
+    const THolderFactory& holderFactory);
 
 class IBlockAggregatorFactory {
 public:
@@ -39,7 +42,8 @@ public:
    virtual std::unique_ptr<IBlockAggregator> Make(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
-       const std::vector<ui32>& argsColumns) const = 0;
+       const std::vector<ui32>& argsColumns,
+       const THolderFactory& holderFactory) const = 0;
 };
 
 }

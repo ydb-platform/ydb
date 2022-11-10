@@ -4346,10 +4346,19 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
     }
 
     auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    TVector<const TTypeAnnotationNode*> allInputTypes;
     for (const auto& i : multiInputType->GetItems()) {
-        if (i->GetKind() == ETypeAnnotationKind::Block) {
+        if (i->GetKind() == ETypeAnnotationKind::Block || i->GetKind() == ETypeAnnotationKind::Scalar) {
             return node;
         }
+
+        allInputTypes.push_back(i);
+    }
+
+    bool supportedInputTypes = false;
+    YQL_ENSURE(types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allInputTypes, supportedInputTypes, ctx));
+    if (!supportedInputTypes) {
+        return node;
     }
 
     TExprNode::TListType blockArgs;

@@ -57,9 +57,11 @@ public:
    std::unique_ptr<IBlockAggregator> Make(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
-       const std::vector<ui32>& argsColumns) const final {
+       const std::vector<ui32>& argsColumns,
+       const THolderFactory& holderFactory) const final {
        Y_UNUSED(tupleType);
        Y_UNUSED(argsColumns);
+       Y_UNUSED(holderFactory);
        return std::make_unique<TCountAllBlockAggregator>(filterColumn);
    }
 };
@@ -69,8 +71,10 @@ public:
    std::unique_ptr<IBlockAggregator> Make(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
-       const std::vector<ui32>& argsColumns) const final {
+       const std::vector<ui32>& argsColumns,
+       const THolderFactory& holderFactory) const final {
        Y_UNUSED(tupleType);
+       Y_UNUSED(holderFactory);
        return std::make_unique<TCountBlockAggregator>(filterColumn, argsColumns[0]);
    }
 };

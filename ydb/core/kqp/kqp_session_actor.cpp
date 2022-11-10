@@ -345,7 +345,6 @@ public:
                     << " msg: "
                     << errMsg <<".");
                 ReplyProcessError(ev->Sender, proxyRequestId, event.GetYdbStatus(), errMsg);
-                FinalCleanup();
                 return;
             }
         }

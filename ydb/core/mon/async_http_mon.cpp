@@ -190,12 +190,15 @@ public:
         , ActorMonPage(actorMonPage)
     {}
 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_LEGACY_ACTOR_REQUEST;
+    }
+
     void Bootstrap() {
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
         Become(&THttpMonLegacyActorRequest::StateFunc);
-        Schedule(TDuration::Seconds(600), new TEvents::TEvWakeup());
         if (ActorMonPage->Authorizer) {
             NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Container);
             if (handle) {
@@ -294,13 +297,6 @@ public:
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
 
-    void HandleWakeup(TEvents::TEvWakeup::TPtr&) {
-        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        ReplyWith(request->CreateResponseGatewayTimeout(
-            TStringBuilder() << "Timeout requesting actor " << ActorMonPage->TargetActorId));
-        PassAway();
-    }
-
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         ReplyWith(request->CreateResponseServiceUnavailable(
@@ -341,7 +337,6 @@ public:
 
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvWakeup, HandleWakeup);
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NMon::IEvHttpInfoRes, HandleResponse);
             hFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult, Handle);
@@ -359,6 +354,10 @@ public:
         : Event(std::move(event))
         , Container(Event->Get()->Request, index)
     {}
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_LEGACY_INDEX_REQUEST;
+    }
 
     void Bootstrap() {
         ProcessRequest();
@@ -378,6 +377,10 @@ public:
     THttpMonServiceLegacyActor(TIntrusivePtr<TActorMonPage> actorMonPage)
         : ActorMonPage(std::move(actorMonPage))
     {
+    }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_LEGACY_ACTOR_SERVICE;
     }
 
     void Bootstrap() {
@@ -405,6 +408,10 @@ public:
         , IndexMonPage(std::move(indexMonPage))
         , RedirectRoot(redirectRoot)
     {
+    }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_LEGACY_INDEX_SERVICE;
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
@@ -469,6 +476,10 @@ public:
         , HttpProxyActorId(httpProxyActorId)
     {}
 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_SERVICE_NODE_REQUEST;
+    }
+
     static void FromProto(NHttp::THttpConfig::SocketAddressType& address, const NKikimrMonProto::TSockAddr& proto) {
         switch (proto.GetFamily()) {
             case AF_INET:
@@ -521,6 +532,10 @@ public:
         : Event(std::move(event))
         , NodeId(nodeId)
     {}
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_SERVICE_MON_REQUEST;
+    }
 
     static void ToProto(NKikimrMonProto::TSockAddr& proto, const NHttp::THttpConfig::SocketAddressType& address) {
         if (address) {
@@ -613,6 +628,10 @@ public:
         , HttpProxyActorId(httpProxyActorId)
         , Endpoint(std::make_shared<NHttp::THttpEndpointInfo>())
     {
+    }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_SERVICE_NODE_PROXY;
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {

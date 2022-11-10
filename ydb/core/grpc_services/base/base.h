@@ -244,15 +244,20 @@ public:
     }
 };
 
-class IRequestCtxBase {
+class IRequestCtxBaseMtSafe {
 public:
-    virtual ~IRequestCtxBase() = default;
-    // Returns true if client has the specified capability
-    virtual bool HasClientCapability(const TString& capability) const = 0;
+    virtual TMaybe<TString> GetTraceId() const = 0;
     // Returns client provided database name
     virtual const TMaybe<TString> GetDatabaseName() const = 0;
     // Returns "internal" token (result of ticket parser authentication)
     virtual const TString& GetInternalToken() const = 0;
+};
+
+class IRequestCtxBase : public virtual IRequestCtxBaseMtSafe {
+public:
+    virtual ~IRequestCtxBase() = default;
+    // Returns true if client has the specified capability
+    virtual bool HasClientCapability(const TString& capability) const = 0;
     // Reply using YDB status code
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
     // Reply using "transport error code"
@@ -268,7 +273,6 @@ public:
     // Raise issue on the context
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void RaiseIssues(const NYql::TIssues& issues) = 0;
-    virtual TMaybe<TString> GetTraceId() const = 0;
     virtual const TString& GetRequestName() const = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
     virtual bool GetDiskQuotaExceeded() const = 0;
@@ -372,17 +376,28 @@ public:
     virtual void Pass(const IFacilityProvider& facility) = 0;
 };
 
+// Provide methods which can be safly passed though actor system
+// as part of event
+class IRequestCtxMtSafe : public virtual IRequestCtxBaseMtSafe {
+public:
+    virtual ~IRequestCtxMtSafe() = default;
+    virtual const google::protobuf::Message* GetRequest() const = 0;
+    virtual const TMaybe<TString> GetRequestType() const = 0;
+};
+
 // Request context
 // The interface is used for rpc_ request actors
-class IRequestCtx : public virtual IRequestCtxBase  {
+class IRequestCtx
+    : public virtual IRequestCtxMtSafe
+    , public virtual IRequestCtxBase
+{
     friend class TProtoResponseHelper;
 
 public:
     virtual void SetClientLostAction(std::function<void()>&& cb) = 0;
-    virtual const google::protobuf::Message* GetRequest() const = 0;
     virtual google::protobuf::Message* GetRequestMut() = 0;
     virtual google::protobuf::Arena* GetArena() = 0;
-    virtual const TMaybe<TString> GetRequestType() const = 0;
+
     virtual void SetRuHeader(ui64 ru) = 0;
     virtual void AddServerHint(const TString& hint) = 0;
     virtual void SetCostInfo(float consumed_units) = 0;

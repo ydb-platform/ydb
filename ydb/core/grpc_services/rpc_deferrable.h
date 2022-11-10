@@ -116,7 +116,7 @@ protected:
     }
 
 protected:
-    std::unique_ptr<TRequestBase> Request_;
+    std::shared_ptr<TRequestBase> Request_;
 
     TActorId OperationTimeoutTimer;
     TActorId CancelAfterTimer;

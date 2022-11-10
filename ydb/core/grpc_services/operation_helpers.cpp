@@ -22,7 +22,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-using std::unique_ptr;
+using std::shared_ptr;
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
@@ -108,7 +108,7 @@ bool TryGetId(const NOperationId::TOperationId& operationId, ui64& id) {
 
 class TSSOpSubscriber : public TActorBootstrapped<TSSOpSubscriber> {
 public:
-    TSSOpSubscriber(ui64 schemeshardId, ui64 txId, TString dbName, TOpType opType, unique_ptr<IRequestOpCtx>&& op)
+    TSSOpSubscriber(ui64 schemeshardId, ui64 txId, TString dbName, TOpType opType, shared_ptr<IRequestOpCtx>&& op)
         : SchemeshardId(schemeshardId)
         , TxId(txId)
         , DatabaseName(dbName)
@@ -277,7 +277,7 @@ private:
     const ui64 TxId;
     const TString DatabaseName;
     const TOpType OpType;
-    unique_ptr<IRequestOpCtx> Req;
+    shared_ptr<IRequestOpCtx> Req;
     using TStateFunc = void (TSSOpSubscriber::*)(const TActorContext& ctx);
 
     TActorId SSPipeClient;
@@ -286,7 +286,7 @@ private:
     TString LogPrefix;
 };
 
-void CreateSSOpSubscriber(ui64 schemeshardId, ui64 txId, const TString& dbName, TOpType opType, unique_ptr<IRequestOpCtx>&& op, const TActorContext& ctx) {
+void CreateSSOpSubscriber(ui64 schemeshardId, ui64 txId, const TString& dbName, TOpType opType, shared_ptr<IRequestOpCtx>&& op, const TActorContext& ctx) {
     ctx.Register(new TSSOpSubscriber(schemeshardId, txId, dbName, opType, std::move(op)));
 }
 

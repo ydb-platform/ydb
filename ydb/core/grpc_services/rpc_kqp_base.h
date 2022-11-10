@@ -13,6 +13,16 @@
 namespace NKikimr {
 namespace NGRpcService {
 
+inline void SetAuthToken(NKikimrKqp::TEvQueryRequest& req, const IRequestCtxMtSafe& ctx) {
+    if (ctx.GetInternalToken()) {
+        req.SetUserToken(ctx.GetInternalToken());
+    }
+}
+
+inline void SetDatabase(NKikimrKqp::TEvQueryRequest& req, const IRequestCtxMtSafe& ctx) {
+    // Empty database in case of absent header
+    req.MutableRequest()->SetDatabase(CanonizePath(ctx.GetDatabaseName().GetOrElse("")));
+}
 
 inline TString DecodePreparedQueryId(const TString& in) {
     if (in.empty()) {

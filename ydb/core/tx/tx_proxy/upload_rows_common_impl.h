@@ -4,7 +4,6 @@
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/rpc_long_tx.h>
 #include <ydb/core/formats/arrow_batch_builder.h>
 #include <ydb/core/io_formats/csv.h>

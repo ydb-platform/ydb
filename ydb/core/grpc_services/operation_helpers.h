@@ -30,7 +30,7 @@ enum class TOpType {
     Export,
     Import
 };
-void CreateSSOpSubscriber(ui64 schemeshardId, ui64 txId, const TString& dbName, TOpType opType, std::unique_ptr<IRequestOpCtx>&& op, const TActorContext& ctx);
+void CreateSSOpSubscriber(ui64 schemeshardId, ui64 txId, const TString& dbName, TOpType opType, std::shared_ptr<IRequestOpCtx>&& op, const TActorContext& ctx);
 
 } // namespace NGRpcService
 } // namespace NKikimr

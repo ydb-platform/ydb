@@ -6,6 +6,8 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <ydb/core/grpc_services/base/base.h>
+
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -227,8 +229,57 @@ struct TKqpCompileResult {
 };
 
 struct TEvKqp {
-    struct TEvQueryRequest : public TEventPB<TEvQueryRequest, NKikimrKqp::TEvQueryRequest,
+    struct TEvQueryRequestRemote : public TEventPB<TEvQueryRequestRemote, NKikimrKqp::TEvQueryRequest,
         TKqpEvents::EvQueryRequest> {};
+
+    struct TEvQueryRequest : public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
+    public:
+        using TSerializerCb = void (*)(std::shared_ptr<NGRpcService::IRequestCtxMtSafe>&, NKikimrKqp::TEvQueryRequest*) noexcept;
+        TEvQueryRequest(std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx, TSerializerCb cb)
+            : RequestCtx(ctx)
+            , SerializerCb(cb)
+        { }
+
+        TEvQueryRequest() = default;
+
+        bool IsSerializable() const override {
+            return true;
+        }
+
+        // Same as TEventPBBase but without Rope
+        bool IsExtendedFormat() const override {
+            return false;
+        }
+
+        ui32 CalculateSerializedSize() const override {
+            PrepareRemote();
+            return Record.ByteSize();
+        }
+
+        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
+            PrepareRemote();
+            return Record.SerializeToZeroCopyStream(chunker);
+        }
+
+        static NActors::IEventBase* Load(TEventSerializedData* data) {
+            auto pbEv = THolder<TEvQueryRequestRemote>(static_cast<TEvQueryRequestRemote*>(TEvQueryRequestRemote::Load(data)));
+            auto req = new TEvQueryRequest();
+            req->Record.Swap(&pbEv->Record);
+            return req;
+        }
+
+        void PrepareRemote() const {
+            if (RequestCtx) {
+                Y_VERIFY(SerializerCb);
+                SerializerCb(RequestCtx, &Record);
+                RequestCtx.reset();
+            }
+        }
+        mutable NKikimrKqp::TEvQueryRequest Record;
+    private:
+        mutable std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RequestCtx;
+        TSerializerCb SerializerCb;
+    };
 
     struct TEvCloseSessionRequest : public TEventPB<TEvCloseSessionRequest,
         NKikimrKqp::TEvCloseSessionRequest, TKqpEvents::EvCloseSessionRequest> {};

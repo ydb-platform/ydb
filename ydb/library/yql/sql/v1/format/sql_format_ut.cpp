@@ -290,6 +290,10 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER TABLE user\n\tALTER CHANGEFEED user SET (user = 'foo');\n"},
             {"alter table user drop changefeed user",
              "ALTER TABLE user\n\tDROP CHANGEFEED user;\n"},
+            {"alter table user add changefeed user with (initial_scan = tRUe)",
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = TRUE);\n"},
+            {"alter table user add changefeed user with (initial_scan = FaLsE)",
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = FALSE);\n"},
         };
 
         TSetup setup;

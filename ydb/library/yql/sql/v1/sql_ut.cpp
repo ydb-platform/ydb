@@ -1471,7 +1471,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto res = SqlToYql(R"( USE plato;
             CREATE TABLE tableName (
                 Key Uint32, PRIMARY KEY (Key),
-                CHANGEFEED feedName WITH (MODE = 'KEYS_ONLY', FORMAT = 'json')
+                CHANGEFEED feedName WITH (MODE = 'KEYS_ONLY', FORMAT = 'json', INITIAL_SCAN = TRUE)
             );
         )");
         UNIT_ASSERT_C(res.Root, Err2Str(res));
@@ -1483,6 +1483,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("KEYS_ONLY"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("format"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("initial_scan"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
             }
         };
 
@@ -1651,7 +1653,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(AlterTableAlterChangefeedIsCorrect) {
         UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ALTER CHANGEFEED feed DISABLE").IsOk());
         ExpectFailWithError("USE plato; ALTER TABLE table ALTER CHANGEFEED feed SET (FORMAT = 'proto');",
-            "<main>:1:66: Error: FORMAT alter is not supported\n");
+            "<main>:1:57: Error: FORMAT alter is not supported\n");
     }
 
     Y_UNIT_TEST(AlterTableDropChangefeedIsCorrect) {
@@ -3103,7 +3105,20 @@ select FormatType($f());
         )";
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:70: Error: Unknown changefeed setting: FOO\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:64: Error: Unknown changefeed setting: FOO\n");
+    }
+
+    Y_UNIT_TEST(InvalidChangefeedInitialScan) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", INITIAL_SCAN = "foo")
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:80: Error: Invalid changefeed setting: INITIAL_SCAN\n");
     }
 
     Y_UNIT_TEST(ErrJoinWithGroupingSetsWithoutCorrelationName) {

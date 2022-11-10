@@ -961,6 +961,11 @@ public:
                                             TStringBuilder() << "Unknown changefeed format: " << format));
                                         return SyncError();
                                     }
+                                } else if (name == "initial_scan") {
+                                    // TODO: handle initial_scan setting
+                                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                        TStringBuilder() << name << " setting is not supported yet"));
+                                    return SyncError();
                                 } else if (name == "local") {
                                     // nop
                                 } else {

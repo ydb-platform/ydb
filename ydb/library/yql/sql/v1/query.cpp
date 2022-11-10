@@ -123,6 +123,9 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     if (desc.Settings.Format) {
         settings = node.L(settings, node.Q(node.Y(node.Q("format"), desc.Settings.Format)));
     }
+    if (desc.Settings.InitialScan) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("initial_scan"), desc.Settings.InitialScan)));
+    }
     if (const auto& sink = desc.Settings.SinkSettings) {
         switch (sink->index()) {
             case 0: // local

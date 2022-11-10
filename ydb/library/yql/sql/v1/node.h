@@ -1151,6 +1151,7 @@ namespace NSQLTranslationV1 {
 
         TNodePtr Mode;
         TNodePtr Format;
+        TNodePtr InitialScan;
         std::optional<std::variant<TLocalSinkSettings>> SinkSettings;
     };
 

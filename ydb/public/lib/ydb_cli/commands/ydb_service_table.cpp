@@ -939,7 +939,7 @@ TCommandAttributeAdd::TCommandAttributeAdd()
 void TCommandAttributeAdd::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    config.Opts->AddLongOption("attribute", "key=value pair to add.")
+    config.Opts->AddLongOption("attribute", "[At least one] key=value pair(s) to add.")
         .RequiredArgument("KEY=VALUE").KVHandler([&](TString key, TString value) {
             Attributes[key] = value;
         });

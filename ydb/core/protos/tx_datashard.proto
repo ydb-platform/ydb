@@ -789,6 +789,8 @@ message TEvPeriodicTableStats {
     optional uint64 StartTime = 11; // milliseconds since epoch
 
     optional uint64 TableOwnerId = 12;
+
+    optional bool IsDstSplit = 13;
 }
 
 message TEvS3ListingRequest {

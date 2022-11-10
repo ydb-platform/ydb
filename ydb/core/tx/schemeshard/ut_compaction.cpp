@@ -84,7 +84,7 @@ void WriteData(
         TString writeQuery = Sprintf(R"(
             (
                 (let key '( '('key (Uint64 '%lu)) ) )
-                (let value '('('value (Utf8 'MostMeaninglessValueInTheWorld)) ) )
+                (let value '('('value (Utf8 'MostMeaninglessValueInTheWorldButMaybeItIsSizeMeaningFullThusItIsMostMeaningFullValueInTheWorldOfMeaninglessFullness)) ) )
                 (return (AsList (UpdateRow '__user__%s key value) ))
             )
         )", key, tableName);
@@ -97,6 +97,32 @@ void WriteData(
 
     for (ui64 key = fromKeyInclusive; key < toKey; ++key) {
         fnWriteRow(tabletId, key, name);
+    }
+}
+
+void WriteDataSpreadKeys(
+    TTestActorRuntime &runtime,
+    const char* name,
+    ui64 rowCount,
+    ui64 tabletId = TTestTxConfig::FakeHiveTablets)
+{
+    auto fnWriteRow = [&] (ui64 tabletId, ui64 key, const char* tableName) {
+        TString writeQuery = Sprintf(R"(
+            (
+                (let key '( '('key (Uint64 '%lu)) ) )
+                (let value '('('value (Utf8 'MostMeaninglessValueInTheWorldButMaybeItIsSizeMeaningFullThusItIsMostMeaningFullValueInTheWorldOfMeaninglessFullness)) ) )
+                (return (AsList (UpdateRow '__user__%s key value) ))
+            )
+        )", key, tableName);
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+        UNIT_ASSERT_VALUES_EQUAL(err, "");
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+    };
+
+    for (ui64 key = 0; key < rowCount; ++key) {
+        fnWriteRow(tabletId, key * 1'000'000, name);
     }
 }
 
@@ -169,6 +195,12 @@ void SetBackgroundCompactionServerless(TTestActorRuntime &runtime, TTestEnv& env
 void SetBackgroundCompaction(TTestActorRuntime &runtime, TTestEnv& env, ui64 schemeShard, bool value) {
     NKikimrConfig::TFeatureFlags features;
     features.SetEnableBackgroundCompaction(value);
+    SetFeatures(runtime, env, schemeShard, features);
+}
+
+void SetEnableBorrowedSplitCompaction(TTestActorRuntime &runtime, TTestEnv& env, ui64 schemeShard, bool value) {
+    NKikimrConfig::TFeatureFlags features;
+    features.SetEnableBorrowedSplitCompaction(value);
     SetFeatures(runtime, env, schemeShard, features);
 }
 
@@ -731,15 +763,24 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
 };
 
 Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
-    Y_UNIT_TEST(SchemeshardShouldCompactBorrowed) {
+    Y_UNIT_TEST(SchemeshardShouldCompactBorrowedBeforeSplit) {
+        // In this test we check that
+        // 1. Copy table is not compacted until we want to split it
+        // 2. After borrow compaction both src and dst tables are background compacted
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         // in case it is not enabled by default
         SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+        SetEnableBorrowedSplitCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
 
         auto configRequest = GetTestCompactionConfig();
         auto* compactionConfig = configRequest->Record.MutableConfig()->MutableCompactionConfig();
@@ -755,10 +796,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
             // write to all shards in hacky way
             auto simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
             for (auto shard: simpleInfo.Shards) {
-                WriteData(runtime, "Simple", 0, 100, shard);
+                WriteDataSpreadKeys(runtime, "Simple", 100, shard);
             }
         }
         env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        auto simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(simpleInfo.Shards.size(), 5UL);
 
         // copy table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -769,8 +813,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
 
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        auto simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(simpleInfo.Shards.size(), 5UL);
+
         auto copyInfo = GetPathInfo(runtime, "/MyRoot/CopyTable");
+        UNIT_ASSERT_VALUES_EQUAL(copyInfo.Shards.size(), 5UL);
 
         // borrow compaction only runs when we split, so nothing should be borrow compacted yet
 
@@ -798,9 +845,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
                             }
                         })");
         env.TestWaitNotification(runtime, txId);
-
-        // schemeshard should get stats from DS to start borrower compactions
         env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(simpleInfo.Shards.size(), 5UL);
+
+        copyInfo = GetPathInfo(runtime, "/MyRoot/CopyTable");
+
+        UNIT_ASSERT(copyInfo.Shards.size() > 5);
 
         // should compact all borrowed data (note that background will not compact until then)
 
@@ -839,6 +891,158 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
             }
             auto copyCount2 = GetCompactionStats(runtime, "/MyRoot/CopyTable").CompactBorrowedCount;
             UNIT_ASSERT_VALUES_EQUAL(copyCount1, copyCount2);
+        }
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldCompactBorrowedAfterSplitMerge) {
+        // KIKIMR-15632: we want to compact shard right after split, merge.
+        // I.e. we compact borrowed data ASAP except copy table case, when
+        // we don't want to compact at all.
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        // in case it is not enabled by default
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+        SetEnableBorrowedSplitCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+
+        auto configRequest = GetTestCompactionConfig();
+        auto* compactionConfig = configRequest->Record.MutableConfig()->MutableCompactionConfig();
+        compactionConfig->MutableBorrowedCompactionConfig()->SetInflightLimit(1);
+
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(configRequest));
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        WriteDataSpreadKeys(runtime, "Simple", 1000);
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        auto simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(simpleInfo.Shards.size(), 1UL);
+
+        // borrow compaction only runs when we split, so nothing should be borrow compacted yet
+
+        {
+            for (auto shard: simpleInfo.Shards) {
+                CheckShardNotBorrowedCompacted(runtime, simpleInfo.UserTable, shard, simpleInfo.OwnerId);
+            }
+        }
+
+        // now force split
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Simple"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 2
+                                MaxPartitionsCount: 2
+                                SizeToSplit: 1
+                                FastSplitSettings {
+                                    SizeThreshold: 10
+                                    RowCountThreshold: 10
+                                }
+                            }
+                        })");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        while (simpleInfo.Shards.size() < 2) {
+            // schemeshard should get stats from DS to start borrower compactions
+            env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+            simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        }
+
+        // should compact all borrowed data (note that background will not compact until then)
+
+        {
+            for (auto shard: simpleInfo.Shards) {
+                CheckShardBorrowedCompacted(runtime, simpleInfo.UserTable, shard, simpleInfo.OwnerId);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactBorrowedAfterSplitMergeWhenDisabled) {
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        // in case it is not enabled by default
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+        SetEnableBorrowedSplitCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
+
+        auto configRequest = GetTestCompactionConfig();
+        auto* compactionConfig = configRequest->Record.MutableConfig()->MutableCompactionConfig();
+        compactionConfig->MutableBorrowedCompactionConfig()->SetInflightLimit(1);
+
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(configRequest));
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        WriteDataSpreadKeys(runtime, "Simple", 1000);
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        auto simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(simpleInfo.Shards.size(), 1UL);
+
+        // borrow compaction only runs when we split, so nothing should be borrow compacted yet
+
+        {
+            for (auto shard: simpleInfo.Shards) {
+                CheckShardNotBorrowedCompacted(runtime, simpleInfo.UserTable, shard, simpleInfo.OwnerId);
+            }
+        }
+
+        // now force split
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Simple"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 2
+                                MaxPartitionsCount: 2
+                                SizeToSplit: 1
+                                FastSplitSettings {
+                                    SizeThreshold: 10
+                                    RowCountThreshold: 10
+                                }
+                            }
+                        })");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        while (simpleInfo.Shards.size() < 2) {
+            // schemeshard should get stats from DS to start borrower compactions
+            env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+            simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        }
+
+        // should not compact borrowed data
+
+        {
+            for (auto shard: simpleInfo.Shards) {
+                CheckShardNotBorrowedCompacted(runtime, simpleInfo.UserTable, shard, simpleInfo.OwnerId);
+                CheckShardNotBackgroundCompacted(runtime, simpleInfo.UserTable, shard, simpleInfo.OwnerId);
+            }
         }
     }
 

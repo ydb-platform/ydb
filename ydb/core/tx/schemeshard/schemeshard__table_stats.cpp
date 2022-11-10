@@ -260,6 +260,10 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
 
         if (!newStats.HasBorrowedData) {
             Self->RemoveBorrowedCompaction(shardIdx);
+        } else if (Self->EnableBorrowedSplitCompaction && rec.GetIsDstSplit()) {
+            // note that we want to compact only shards originating
+            // from split/merge and not shards created via copytable
+            Self->EnqueueBorrowedCompaction(shardIdx);
         }
 
         if (!table->IsBackup && !table->IsShardsStatsDetached()) {

@@ -2800,6 +2800,9 @@ protected:
             ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
             ev->Record.SetStartTime(StartTime().MilliSeconds());
 
+            if (DstSplitDescription)
+                ev->Record.SetIsDstSplit(true);
+
             NTabletPipe::SendData(ctx, DbStatsReportPipe, ev.Release());
         }
 

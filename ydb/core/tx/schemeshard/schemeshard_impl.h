@@ -252,6 +252,7 @@ public:
     THashSet<TShardIdx> ShardsWithLoaned;   // shards have parts loaned to another shards
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
+    bool EnableBorrowedSplitCompaction = false;
     bool EnableMoveIndex = false;
 
     TShardDeleter ShardDeleter;

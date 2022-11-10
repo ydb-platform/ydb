@@ -18,6 +18,7 @@ public:
     void ResponseBadRequestJson(Ydb::StatusIds::StatusCode status, const TString& json) const;
     void ResponseOK() const;
     void ResponseOKJson(const TString& json) const;
+    void ResponseOKUtf8Text(const TString& text) const;
     void ResponseNotFound() const;
     void ResponseNoContent() const;
     void ResponseUnauthenticated(const TString& message) const;

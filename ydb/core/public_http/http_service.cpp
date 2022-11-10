@@ -9,6 +9,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/http/http_proxy.h>
+#include <library/cpp/resource/resource.h>
 
 #include <util/stream/file.h>
 
@@ -21,6 +22,20 @@ namespace {
         return [](const THttpRequestContext& request) {
             return new T(request);
         };
+    }
+
+    TString LoadOpenApiSpec() {
+        TString blob;
+        if (!NResource::FindExact("resources/openapi.yaml", &blob)) {
+            return {};
+        }
+        return blob;
+    }
+
+    TString GetOpenApiSpec() {
+        // cache in static var
+        static TString spec = LoadOpenApiSpec();
+        return spec;
     }
 }
     using namespace NActors;
@@ -71,13 +86,10 @@ namespace {
                 return;
             }
 
-            /*
-            LOG_INFO_S(ctx, NKikimrServices::PUBLIC_HTTP,
-                "incoming request " <<
-                " method [" << httpRequest->Method << "]" <<
-                " url [" << httpRequest->URL << "]" <<
-                " from [" << httpRequest->Address << "]");
-            */
+            if (AsciiEqualsIgnoreCase(httpRequest->URL, "/resources/openapi.yaml")) {
+                requestContext.ResponseOKUtf8Text(GetOpenApiSpec());
+                return;
+            }
 
             TStringBuf url = httpRequest->URL.Before('?');
             auto handlerWithParamsO = Router.ResolveHandler(httpRequest->Method, url);

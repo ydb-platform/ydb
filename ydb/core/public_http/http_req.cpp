@@ -14,6 +14,7 @@ namespace NKikimr::NPublicHttp {
     constexpr TStringBuf IDEMPOTENCY_KEY_HEADER = "idempotency-key";
     
     constexpr TStringBuf APPLICATION_JSON = "application/json";
+    constexpr TStringBuf TEXT_PLAIN_UTF8 = "text/plain;charset=UTF-8";
 
     TString GenerateRequestId(const TString& sourceReqId) {
         if (sourceReqId.empty()) {
@@ -107,6 +108,10 @@ namespace NKikimr::NPublicHttp {
 
     void THttpRequestContext::ResponseOKJson(const TString& json) const {
         DoResponse("200", "OK", json, APPLICATION_JSON);
+    }
+
+    void THttpRequestContext::ResponseOKUtf8Text(const TString& text) const {
+        DoResponse("200", "OK", text, TEXT_PLAIN_UTF8);
     }
 
     void THttpRequestContext::ResponseNotFound() const {

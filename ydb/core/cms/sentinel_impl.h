@@ -106,11 +106,13 @@ class TClusterMap {
 public:
     using TPDiskIDSet = THashSet<TPDiskID, TPDiskIDHash>;
     using TDistribution = THashMap<TString, TPDiskIDSet>;
+    using TNodeIDSet = THashSet<ui32>;
 
     TCmsStatePtr State;
     TDistribution ByDataCenter;
     TDistribution ByRoom;
     TDistribution ByRack;
+    THashMap<TString, TNodeIDSet> NodeByRack;
 
     TClusterMap(TCmsStatePtr state);
 

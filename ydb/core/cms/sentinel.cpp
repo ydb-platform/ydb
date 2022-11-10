@@ -200,6 +200,7 @@ void TClusterMap::AddPDisk(const TPDiskID& id) {
     ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
     ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id);
     ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
+    NodeByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id.NodeId);
 }
 
 /// TGuardian
@@ -251,7 +252,8 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
     for (const auto& kv : ByRack) {
         Y_VERIFY(all.ByRack.contains(kv.first));
         // ignore check if there is only one node in a rack
-        if (kv.second.size() == 1) {
+        auto it = NodeByRack.find(kv.first);
+        if (it != NodeByRack.end() && it->second.size() == 1) {
             continue;
         }
         if (kv.first && !CheckRatio(kv, all.ByRack, RackRatio)) {

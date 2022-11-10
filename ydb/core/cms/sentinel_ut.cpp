@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         }
     }
 
-    TCmsStatePtr MockCmsState(ui16 numDataCenter, ui16 racksPerDataCenter, ui16 nodesPerRack, bool anyDC, bool anyRack) {
+    TCmsStatePtr MockCmsState(ui16 numDataCenter, ui16 racksPerDataCenter, ui16 nodesPerRack, ui16 pdisksPerNode, bool anyDC, bool anyRack) {
         TCmsStatePtr state = new TCmsState;
         state->ClusterInfo = new TClusterInfo;
 
@@ -157,11 +157,13 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 
                     state->ClusterInfo->AddNode(TEvInterconnect::TNodeInfo(id, name, name, name, 10000, TNodeLocation(location)), nullptr);
 
-                    NKikimrBlobStorage::TBaseConfig::TPDisk pdisk;
-                    pdisk.SetNodeId(id);
-                    pdisk.SetPDiskId(0);
-                    pdisk.SetPath("pdisk.data");
-                    state->ClusterInfo->AddPDisk(pdisk);
+                    for (ui64 npdisk : xrange(pdisksPerNode)) {
+                        NKikimrBlobStorage::TBaseConfig::TPDisk pdisk;
+                        pdisk.SetNodeId(id);
+                        pdisk.SetPDiskId(npdisk);
+                        pdisk.SetPath(TString("pdisk") + ToString(npdisk) + ".data");
+                        state->ClusterInfo->AddPDisk(pdisk);
+                    }
                 }
             }
         }
@@ -173,7 +175,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         UNIT_ASSERT(!anyDC || numDataCenter == 1);
 
         for (ui16 nodesPerDataCenter : nodesPerDataCenterVariants) {
-            TCmsStatePtr state = MockCmsState(numDataCenter, nodesPerDataCenter, 1, anyDC, false);
+            TCmsStatePtr state = MockCmsState(numDataCenter, nodesPerDataCenter, 1, 1, anyDC, false);
             TGuardian all(state);
             TGuardian changed(state, 50);
             THashSet<TPDiskID, TPDiskIDHash> changedSet;
@@ -229,9 +231,9 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         GuardianDataCenterRatio(1, {3, 4, 5}, true);
     }
 
-    void GuardianRackRatio(ui16 numRacks, const TVector<ui16>& nodesPerRackVariants, bool anyRack) {
+    void GuardianRackRatio(ui16 numRacks, const TVector<ui16>& nodesPerRackVariants, ui16 numPDisks, bool anyRack) {
         for (ui16 nodesPerRack : nodesPerRackVariants) {
-            TCmsStatePtr state = MockCmsState(1, numRacks, nodesPerRack, false, anyRack);
+            TCmsStatePtr state = MockCmsState(1, numRacks, nodesPerRack, numPDisks, false, anyRack);
 
             TGuardian all(state);
             TGuardian changed(state, 100, 100, 50);
@@ -242,12 +244,14 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             TVector<ui32> changedCount(numRacks);
             for (const auto& node : nodes) {
                 const ui64 nodeId = node.second->NodeId;
-                const TPDiskID id(nodeId, 0);
+                for (ui16 pdiskId : xrange(numPDisks)) {
+                    const TPDiskID id(nodeId, pdiskId);
 
-                all.AddPDisk(id);
-                if (changedCount[nodeId >> 16]++ < nodesPerRack / 2) {
-                    changed.AddPDisk(id);
-                    changedSet.insert(id);
+                    all.AddPDisk(id);
+                    if (changedCount[nodeId >> 16]++ < nodesPerRack * numPDisks / 2) {
+                        changed.AddPDisk(id);
+                        changedSet.insert(id);
+                    }
                 }
             }
 
@@ -261,11 +265,13 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             changedCount.assign(numRacks, 0);
             for (const auto& node : nodes) {
                 const ui64 nodeId = node.second->NodeId;
-                const TPDiskID id(nodeId, 0);
+                for (ui16 pdiskId : xrange(numPDisks)) {
+                    const TPDiskID id(nodeId, pdiskId);
 
-                if (changedCount[nodeId >> 16]++ < nodesPerRack / 2 + 1) {
-                    changed.AddPDisk(id);
-                    changedSet.insert(id);
+                    if (changedCount[nodeId >> 16]++ < nodesPerRack * numPDisks / 2 + 1) {
+                        changed.AddPDisk(id);
+                        changedSet.insert(id);
+                    }
                 }
             }
 
@@ -287,8 +293,9 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(GuardianRackRatio) {
         for (int anyRack = 0; anyRack < 2; ++anyRack) {
             for (int numRacks = 1; numRacks < 5; ++numRacks) {
-                GuardianRackRatio(numRacks, {1, 2, 3, 4, 5}, anyRack);
-
+                for (int numPDisks = 1; numPDisks < 4; ++numPDisks) {
+                    GuardianRackRatio(numRacks, {1, 2, 3, 4, 5}, numPDisks, anyRack);
+                }
             }
         }
     }

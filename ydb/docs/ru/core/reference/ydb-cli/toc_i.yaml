@@ -9,6 +9,12 @@ items:
     href: connect.md
   - name: Глобальные параметры
     href: commands/global-options.md
+  - name: Команды YDB CLI
+    items:
+    - name: table attribute add
+      href: table-attribute-add.md
+    - name: table attribute drop
+      href: table-attribute-drop.md
   - name: Работа со схемой БД
     items:
     - name: Список объектов

@@ -792,9 +792,6 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
 
         if (!checks) {
-            TString explain;
-            auto status = checks.GetStatus(&explain);
-
             if (Params.HasPathId()) {
                 pathStr = path.PathString();
             }
@@ -804,13 +801,13 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
                 Self->TabletID(),
                 pathId
                 ));
-            Result->Record.SetStatus(status);
-            Result->Record.SetReason(explain);
+            Result->Record.SetStatus(checks.GetStatus());
+            Result->Record.SetReason(checks.GetError());
 
             TPath firstExisted = path.FirstExistedParent();
             FillLastExistedPrefixDescr(firstExisted);
 
-            if (status ==  NKikimrScheme::StatusRedirectDomain) {
+            if (checks.GetStatus() == NKikimrScheme::StatusRedirectDomain) {
                 DescribeDomain(firstExisted.Base());
             }
 

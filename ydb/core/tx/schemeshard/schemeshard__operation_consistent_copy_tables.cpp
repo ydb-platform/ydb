@@ -68,10 +68,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
             .IsAtLocalSchemeShard();
 
         if (!checks) {
-            TStringBuilder explain = TStringBuilder() << "a path fails checks"
-                                                      << ", path: " << firstPath.PathString();
-            auto status = checks.GetStatus(&explain);
-            return {CreateReject(nextId, status, explain)};
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
         }
     }
 
@@ -106,10 +103,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
                   .IsTheSameDomain(firstPath);
 
             if (!checks) {
-                TStringBuilder explain = TStringBuilder() << "src path fail checks"
-                                               << ", path: " << srcStr;
-                auto status = checks.GetStatus(&explain);
-                return {CreateReject(nextId, status, explain)};
+                return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
             }
         }
 

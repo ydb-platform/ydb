@@ -91,9 +91,7 @@ public:
                 .IsLikeDirectory();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path checks failed, path: " << parentPath.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -111,9 +109,7 @@ public:
                 .IsCommonSensePath();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path checks failed, path: " << tablePath.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 if (tablePath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(tablePath.Base()->CreateTxId));
                     result->SetPathId(tablePath.Base()->PathId.LocalPathId);

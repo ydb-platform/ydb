@@ -484,10 +484,7 @@ public:
                 .IsLikeDirectory();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent path fail checks"
-                                                   << ", path: " << parentPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -519,10 +516,7 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "dst path fail checks"
-                                                   << ", path: " << dstPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
@@ -573,10 +567,7 @@ public:
                 .PathShardsLimit(shardsToCreate);
 
             if (!checks) {
-                TString explain = TStringBuilder() << "dst path fail checks"
-                                                   << ", path: " << dstPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);

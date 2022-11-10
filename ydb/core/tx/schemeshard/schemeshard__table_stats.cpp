@@ -392,12 +392,10 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
             .ShardsLimit(deltaShards);
 
         if (!checks) {
-            TString reason;
-            checks.GetStatus(&reason);
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "Do not request full stats from datashard"
                              << ", datashard: " << datashardId
-                             << ", reason: " << reason);
+                             << ", reason: " << checks.GetError());
             return true;
         }
     }

@@ -68,7 +68,7 @@ class TestSchemeShardLimitsCase0(Base):
             callee,
             raises(
                 ydb.GenericError,
-                "ACL is too long"
+                "ACL size limit exceeded"
             )
         )
 
@@ -104,6 +104,6 @@ class TestSchemeShardLimitsCase1(Base):
             callee,
             raises(
                 ydb.GenericError,
-                "ACL is too long"
+                "ACL size limit exceeded"
             )
         )

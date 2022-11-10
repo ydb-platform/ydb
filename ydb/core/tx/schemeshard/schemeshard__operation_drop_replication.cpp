@@ -262,9 +262,7 @@ public:
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path checks failed, path: " << path.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 if (path.IsResolved() && path->IsReplication() && (path->PlannedToDrop() || path->Dropped())) {
                     result->SetPathDropTxId(ui64(path->DropTxId));
                     result->SetPathId(path->PathId.LocalPathId);
@@ -288,10 +286,7 @@ public:
                 .IsLikeDirectory();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent path checks failed, path: " << parentPath.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
-
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }

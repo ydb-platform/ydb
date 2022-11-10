@@ -692,7 +692,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         }
 
         if (!checks) {
-            result.Status = checks.GetStatus(&result.Reason);
+            result.Status = checks.GetStatus();
+            result.Reason = checks.GetError();
             result.Transactions.push_back(tx);
             return result;
         }
@@ -799,7 +800,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         }
 
         if (!checks) {
-            result.Status = checks.GetStatus(&result.Reason);
+            result.Status = checks.GetStatus();
+            result.Reason = checks.GetError();
             result.Transactions.clear();
             result.Transactions.push_back(tx);
             return result;

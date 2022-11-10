@@ -283,10 +283,7 @@ public:
                 .IsLikeDirectory();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent path checks failed, path: " << parentPath.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
-
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -323,9 +320,7 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path checks failed, path: " << path.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 if (path.IsResolved()) {
                     result->SetPathCreateTxId(ui64(path->CreateTxId));
                     result->SetPathId(path->PathId.LocalPathId);

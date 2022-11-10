@@ -70,14 +70,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 .IsLikeDirectory();
 
             if (!checks) {
-                TString explain;
-                checks.GetStatus(&explain);
-
-                return Reply(
-                    std::move(response),
-                    Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "Failed database check: " << explain
-                );
+                return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());
             }
         }
 
@@ -202,7 +195,7 @@ private:
                     .IsTable();
 
                 if (!checks) {
-                    checks.GetStatus(&explain);
+                    explain = checks.GetError();
                     return false;
                 }
             }

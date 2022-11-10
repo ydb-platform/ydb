@@ -1013,39 +1013,3 @@ TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
 
 } // NLs
 } // NSchemeShardUT_Private
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::TTTLSettings::EUnit, o, x) {
-    o << NKikimrSchemeOp::TTTLSettings::EUnit_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrScheme::EStatus, o, x) {
-    o << NKikimrScheme::EStatus_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::EPathType, o, x) {
-    o << NKikimrSchemeOp::EPathType_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::EFreezeState, o, x) {
-    o << NKikimrSchemeOp::EFreezeState_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::EIndexType, o, x) {
-    o << NKikimrSchemeOp::EIndexType_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::EIndexState, o, x) {
-    o << NKikimrSchemeOp::EIndexState_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::ECdcStreamMode, o, x) {
-    o << NKikimrSchemeOp::ECdcStreamMode_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::ECdcStreamFormat, o, x) {
-    o << NKikimrSchemeOp::ECdcStreamFormat_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::ECdcStreamState, o, x) {
-    o << NKikimrSchemeOp::ECdcStreamState_Name(x);
-}

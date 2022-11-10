@@ -79,9 +79,7 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
         .ShardsLimit(shardsToCreate);
 
     if (!checks) {
-        TString msg;
-        checks.GetStatus(&msg);
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
+        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};
     }
 
     THashMap<TString, TTableColumns> indexes;

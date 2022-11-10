@@ -350,12 +350,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
             .IsCommonSensePath();
 
         if (!checks) {
-            TString explain = TStringBuilder()
-                << "path fail checks"
-                << ", path: " << path.PathString();
-
-            auto status = checks.GetStatus(&explain);
-            result->SetError(status, explain);
+            result->SetError(checks.GetStatus(), checks.GetError());
             return result;
         }
     }

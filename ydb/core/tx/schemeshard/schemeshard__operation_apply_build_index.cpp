@@ -123,10 +123,7 @@ TVector<ISubOperationBase::TPtr> CancelBuildIndex(TOperationId nextId, const TTx
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path impl table fail checks"
-                                                   << ", index path: " << implTable.PathString();
-                auto status = checks.GetStatus(&explain);
-                return {CreateReject(nextId, status, explain)};
+                return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
             }
         }
         Y_VERIFY(implTable.Base()->PathId == indexChildItems.second);

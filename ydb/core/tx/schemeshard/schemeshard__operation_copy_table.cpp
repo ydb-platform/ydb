@@ -356,10 +356,7 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent path fail checks"
-                                                   << ", path: " << parent.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -387,10 +384,7 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "src path fail checks"
-                                                   << ", path: " << srcPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -435,10 +429,7 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path fail checks"
-                                                   << ", path: " << dstPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -711,10 +702,7 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
             .IsCommonSensePath(); //forbid copy impl index tables directly
 
         if (!checks) {
-            TString explain = TStringBuilder() << "src path fail checks"
-                                               << ", path: " << srcPath.PathString();
-            auto status = checks.GetStatus(&explain);
-            return {CreateReject(nextId, status, explain)};
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
         }
     }
 

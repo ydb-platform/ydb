@@ -152,9 +152,7 @@ public:
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path checks failed, path: " << streamPath.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -174,9 +172,7 @@ public:
                 .IsUnderTheSameOperation(OperationId.GetTxId());
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path checks failed, path: " << tablePath.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -351,9 +347,7 @@ public:
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path checks failed, path: " << tablePath.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -372,9 +366,7 @@ public:
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path checks failed, path: " << streamPath.PathString();
-                const auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -491,9 +483,7 @@ TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TT
             .NotUnderOperation();
 
         if (!checks) {
-            TString explain = TStringBuilder() << "path checks failed, path: " << tablePath.PathString();
-            const auto status = checks.GetStatus(&explain);
-            return {CreateReject(opId, status, explain)};
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
         }
     }
 
@@ -511,9 +501,7 @@ TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TT
             .NotUnderOperation();
 
         if (!checks) {
-            TString explain = TStringBuilder() << "path checks failed, path: " << streamPath.PathString();
-            const auto status = checks.GetStatus(&explain);
-            return {CreateReject(opId, status, explain)};
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
         }
     }
 

@@ -40,9 +40,7 @@ TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId opId, const TTxTr
             .ShardsLimit(1); // impl-table
 
         if (!checks) {
-            TString explain = TStringBuilder() << "path checks failed, path: " << index.PathString();
-            const auto status = checks.GetStatus(&explain);
-            return {CreateReject(opId, status, explain)};
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
         }
     }
 

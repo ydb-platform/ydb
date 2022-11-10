@@ -261,9 +261,7 @@ namespace NKikimr::NSchemeShard {
                         .IsLikeDirectory();
 
                     if (!checks) {
-                        TString reason;
-                        const auto status = checks.GetStatus(&reason);
-                        return MakeHolder<TProposeResponse>(status, txId, ssId, reason);
+                        return MakeHolder<TProposeResponse>(checks.GetStatus(), txId, ssId, checks.GetError());
                     }
                 }
 
@@ -296,9 +294,7 @@ namespace NKikimr::NSchemeShard {
                     }
 
                     if (!checks) {
-                        TString reason;
-                        const auto status = checks.GetStatus(&reason);
-                        auto resp = MakeHolder<TProposeResponse>(status, txId, ssId, reason);
+                        auto resp = MakeHolder<TProposeResponse>(checks.GetStatus(), txId, ssId, checks.GetError());
                         if (dstPath.IsResolved()) {
                             resp->SetPathCreateTxId(ui64(dstPath->CreateTxId));
                             resp->SetPathId(dstPath->PathId.LocalPathId);

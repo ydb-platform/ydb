@@ -602,10 +602,7 @@ public:
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path fail checks"
-                                                   << ", path: " << srcPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -639,10 +636,7 @@ public:
                 }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent dst path fail checks"
-                                                   << ", path: " << dstParent.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -685,10 +679,7 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "dst path fail checks"
-                                                   << ", path: " << dstPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }

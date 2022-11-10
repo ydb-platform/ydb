@@ -1,41 +1,39 @@
 #pragma once
 
-#include "schemeshard.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
 
-#include "schemeshard__operation_memory_changes.h"
-
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
-struct TPathElement;
 
 class TPath {
-private:
     TSchemeShard* SS;
     TVector<TString> NameParts;
     TVector<TPathElement::TPtr> Elements;
 
 public:
     class TChecker {
-    private:
-        using EStatus = TEvSchemeShard::EStatus;
+        using EStatus = NKikimrScheme::EStatus;
 
         const TPath& Path;
         mutable bool Failed;
         mutable EStatus Status;
-        mutable TStringBuilder Explain;
+        mutable TString Error;
+
+    private:
+        TString BasicPathInfo(TPathElement::TPtr element) const;
+        const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
-        TChecker(const TPath& path);
+        explicit TChecker(const TPath& path);
 
-        operator bool() const;
+        explicit operator bool() const;
+        EStatus GetStatus() const;
+        const TString& GetError() const;
 
-        EStatus GetStatus(TString* explain = nullptr) const;
         const TChecker& IsResolved(EStatus status = EStatus::StatusPathDoesNotExist) const;
         const TChecker& NotEmpty(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& NotRoot(EStatus status = EStatus::StatusNameConflict) const;
@@ -45,7 +43,7 @@ public:
         const TChecker& NotUnderDomainUpgrade(EStatus status = EStatus::StatusMultipleModifications) const;
         const TChecker& IsDeleted(EStatus status = EStatus::StatusMultipleModifications) const;
         const TChecker& IsUnderDeleting(EStatus status = EStatus::StatusMultipleModifications) const;
-        const TChecker& IsUnderMoving(TPath::TChecker::EStatus status = EStatus::StatusMultipleModifications) const;
+        const TChecker& IsUnderMoving(EStatus status = EStatus::StatusMultipleModifications) const;
         const TChecker& NotUnderOperation(EStatus status = EStatus::StatusMultipleModifications) const;
         const TChecker& IsUnderCreating(EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& IsUnderOperation(EStatus status = EStatus::StatusMultipleModifications) const;
@@ -61,7 +59,7 @@ public:
         const TChecker& IsInsideTableIndexPath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideCdcStreamPath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTable(EStatus status = EStatus::StatusNameConflict) const;
-        const TChecker& NotBackupTable(EStatus status = NKikimrScheme::StatusSchemeError) const;
+        const TChecker& NotBackupTable(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& IsBlockStoreVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsFileStore(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsKesus(EStatus status = EStatus::StatusNameConflict) const;
@@ -75,7 +73,7 @@ public:
         const TChecker& IsLikeDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsTheSameDomain(const TPath& another, EStatus status = EStatus::StatusInvalidParameter) const;
-        const TChecker& FailOnExist(TSet<TPathElement::EPathType> expectedTypes, bool acceptAlreadyExist) const;
+        const TChecker& FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const;
         const TChecker& FailOnExist(TPathElement::EPathType expectedType, bool acceptAlreadyExist) const;
         const TChecker& IsValidLeafName(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& DepthLimit(ui64 delta = 0, EStatus status = EStatus::StatusSchemeError) const;
@@ -169,6 +167,7 @@ public:
 private:
     EAttachChildResult MaterializeImpl(const TString& owner, const TPathId& newPathId);
     TPath& DiveByPathId(const TPathId& pathId);
+    TPathId GetPathIdSafe() const;
 };
 
-}}
+}

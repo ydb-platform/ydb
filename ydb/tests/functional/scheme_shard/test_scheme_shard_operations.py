@@ -148,7 +148,7 @@ class TestSchemeShardSimpleOps(object):
             callee,
             raises(
                 ydb.SchemeError,
-                "unexpected path type for path"
+                "unexpected path type"
             )
         )
 

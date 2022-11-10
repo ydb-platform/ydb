@@ -340,10 +340,7 @@ public:
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path table index fail checks"
-                                                   << ", path: " << index.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -360,10 +357,7 @@ public:
                 .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path table index fail checks"
-                                                   << ", path: " << parentTable.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -470,15 +464,8 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
         }
 
         if (!checks) {
-            TString explain = TStringBuilder() << "path table fail checks"
-                                               << ", path: " << table.PathString();
-            auto status = checks.GetStatus(&explain);
-
-            THolder<TProposeResponse> result = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
-                NKikimrScheme::StatusAccepted, 0, 0);
-
-            result->SetError(status, explain);
-
+            auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, 0, 0);
+            result->SetError(checks.GetStatus(), checks.GetError());
             if (table.IsResolved() && table.Base()->IsTable() && (table.Base()->PlannedToDrop() || table.Base()->Dropped())) {
                 result->SetPathDropTxId(ui64(table.Base()->DropTxId));
                 result->SetPathId(table.Base()->PathId.LocalPathId);
@@ -518,10 +505,7 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path index fail checks"
-                                                   << ", index path: " << child.PathString();
-                auto status = checks.GetStatus(&explain);
-                return {CreateReject(nextId, status, explain)};
+                return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
             }
         }
         Y_VERIFY(child.Base()->PathId == childPathId);
@@ -572,10 +556,7 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
                 }
 
                 if (!checks) {
-                    TString explain = TStringBuilder() << "path impl table fail checks"
-                                                       << ", index path: " << implPath.PathString();
-                    auto status = checks.GetStatus(&explain);
-                    return {CreateReject(nextId, status, explain)};
+                    return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
                 }
             }
             Y_VERIFY(implPath.Base()->PathId == implPathId);

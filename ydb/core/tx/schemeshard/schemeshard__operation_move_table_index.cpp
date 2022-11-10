@@ -179,7 +179,6 @@ public:
     }
 };
 
-
 class TDeleteTableBarrier: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -249,7 +248,6 @@ public:
     }
 };
 
-
 class TDone: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -295,7 +293,6 @@ public:
         return true;
     }
 };
-
 
 class TMoveTableIndex: public TSubOperation {
     const TOperationId OperationId;
@@ -397,10 +394,7 @@ public:
                 .IsTableIndex();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path fail checks"
-                                                   << ", path: " << srcPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -420,10 +414,7 @@ public:
                 .IsUnderTheSameOperation(OperationId.GetTxId());
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent src path fail checks"
-                                                   << ", path: " << srcParentPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -447,10 +438,7 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent dst path fail checks"
-                                                   << ", path: " << dstParentPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -496,15 +484,10 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "dst path fail checks"
-                                                   << ", path: " << dstPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
-
-
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);

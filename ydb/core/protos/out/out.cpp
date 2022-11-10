@@ -14,47 +14,47 @@
 #include <util/stream/output.h>
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EPutHandleClass, stream, value) {
-        stream << NKikimrBlobStorage::EPutHandleClass_Name(value);
+    stream << NKikimrBlobStorage::EPutHandleClass_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EGetHandleClass, stream, value) {
-        stream << NKikimrBlobStorage::EGetHandleClass_Name(value);
+    stream << NKikimrBlobStorage::EGetHandleClass_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TVDiskKind::EVDiskKind, stream, value) {
-        stream << NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(value);
+    stream << NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus, stream, value) {
-        stream << NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(value);
+    stream << NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TSyncGuidInfo::EState, stream, value) {
-        stream << NKikimrBlobStorage::TSyncGuidInfo::EState_Name(value);
+    stream << NKikimrBlobStorage::TSyncGuidInfo::EState_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TLocalGuidInfo::EState, stream, value) {
-        stream << NKikimrBlobStorage::TLocalGuidInfo::EState_Name(value);
+    stream << NKikimrBlobStorage::TLocalGuidInfo::EState_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TSyncerStatus::EPhase, stream, value) {
-        stream << NKikimrBlobStorage::TSyncerStatus::EPhase_Name(value);
+    stream << NKikimrBlobStorage::TSyncerStatus::EPhase_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EVDiskQueueId, stream, value) {
-        stream << NKikimrBlobStorage::EVDiskQueueId_Name(value);
+    stream << NKikimrBlobStorage::EVDiskQueueId_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EVDiskInternalQueueId, stream, value) {
-        stream << NKikimrBlobStorage::EVDiskInternalQueueId_Name(value);
+    stream << NKikimrBlobStorage::EVDiskInternalQueueId_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::ESyncFullStage, stream, value) {
-        stream << NKikimrBlobStorage::ESyncFullStage_Name(value);
+    stream << NKikimrBlobStorage::ESyncFullStage_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrProto::EReplyStatus, stream, value) {
-        stream << NKikimrProto::EReplyStatus_Name(value);
+    stream << NKikimrProto::EReplyStatus_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrCms::TStatus::ECode, stream, value) {
@@ -162,9 +162,49 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvCompactTableResult::EStatus, stream,
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrKqp::EQueryAction, stream, value) {
-        stream << NKikimrKqp::EQueryAction_Name(value);
+    stream << NKikimrKqp::EQueryAction_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrKqp::EQueryType, stream, value) {
-        stream << NKikimrKqp::EQueryType_Name(value);
+    stream << NKikimrKqp::EQueryType_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTTLSettings::EUnit, stream, value) {
+    stream << NKikimrSchemeOp::TTTLSettings::EUnit_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrScheme::EStatus, stream, value) {
+    stream << NKikimrScheme::EStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::EPathType, stream, value) {
+    stream << NKikimrSchemeOp::EPathType_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::EPathState, stream, value) {
+    stream << NKikimrSchemeOp::EPathState_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::EFreezeState, stream, value) {
+    stream << NKikimrSchemeOp::EFreezeState_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::EIndexType, stream, value) {
+    stream << NKikimrSchemeOp::EIndexType_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::EIndexState, stream, value) {
+    stream << NKikimrSchemeOp::EIndexState_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamMode, stream, value) {
+    stream << NKikimrSchemeOp::ECdcStreamMode_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamFormat, stream, value) {
+    stream << NKikimrSchemeOp::ECdcStreamFormat_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamState, stream, value) {
+    stream << NKikimrSchemeOp::ECdcStreamState_Name(value);
 }

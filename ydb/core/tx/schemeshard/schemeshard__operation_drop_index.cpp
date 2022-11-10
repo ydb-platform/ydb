@@ -321,10 +321,7 @@ public:
                 .IsCommonSensePath();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path fail checks"
-                                                   << ", path: " << tablePath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -355,10 +352,7 @@ public:
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path fail checks"
-                                                   << ", path: " << indexPath.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -470,10 +464,7 @@ TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId nextId, const TTxT
             .IsCommonSensePath();
 
         if (!checks) {
-            TString explain = TStringBuilder() << "path fail checks"
-                                               << ", path: " << mainTablePath.PathString();
-            auto status = checks.GetStatus(&explain);
-            return {CreateReject(nextId, status, explain)};
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
         }
     }
 
@@ -491,10 +482,7 @@ TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId nextId, const TTxT
             .NotUnderOperation();
 
         if (!checks) {
-            TString explain = TStringBuilder() << "path fail checks"
-                                               << ", path: " << indexPath.PathString();
-            auto status = checks.GetStatus(&explain);
-            return {CreateReject(nextId, status, explain)};
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
         }
     }
 

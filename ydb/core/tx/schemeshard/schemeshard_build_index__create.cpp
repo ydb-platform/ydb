@@ -62,10 +62,7 @@ public:
                 .NotUnderDomainUpgrade();
 
             if (!checks) {
-                TString explain;
-                const auto status = checks.GetStatus(&explain);
-                return Reply(std::move(response), TranslateStatusCode(status), TStringBuilder()
-                    << "Failed database check: " << explain);
+                return Reply(std::move(response), TranslateStatusCode(checks.GetStatus()), checks.GetError());
             }
         }
 
@@ -95,10 +92,7 @@ public:
                 .IsTheSameDomain(domainPath);
 
             if (!checks) {
-                TString explain;
-                const auto status = checks.GetStatus(&explain);
-                return Reply(std::move(response), TranslateStatusCode(status), TStringBuilder()
-                    << "Failed table check: " << explain);
+                return Reply(std::move(response), TranslateStatusCode(checks.GetStatus()), checks.GetError());
             }
         }
 
@@ -126,10 +120,7 @@ public:
                 .ShardsLimit(1); // impl-table
 
             if (!checks) {
-                TString explain;
-                const auto status = checks.GetStatus(&explain);
-                return Reply(std::move(response), TranslateStatusCode(status), TStringBuilder()
-                    << "Failed index check: " << explain);
+                return Reply(std::move(response), TranslateStatusCode(checks.GetStatus()), checks.GetError());
             }
         }
 

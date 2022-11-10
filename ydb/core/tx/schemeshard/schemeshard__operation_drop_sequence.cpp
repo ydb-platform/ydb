@@ -298,10 +298,7 @@ public:
                 .NotUnderOperation();
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path fail checks"
-                                                   << ", path: " << path.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 if (path.IsResolved() && path->IsSequence() && (path->PlannedToDrop() || path->Dropped())) {
                     result->SetPathDropTxId(ui64(path->DropTxId));
                     result->SetPathId(path->PathId.LocalPathId);
@@ -335,10 +332,7 @@ public:
             }
 
             if (!checks) {
-                TString explain = TStringBuilder() << "parent path fail checks"
-                                                   << ", path: " << parent.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }

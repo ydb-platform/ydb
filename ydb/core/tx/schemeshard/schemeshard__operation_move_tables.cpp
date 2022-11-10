@@ -36,10 +36,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId nextId, 
               .IsCommonSensePath();
 
         if (!checks) {
-            TStringBuilder explain = TStringBuilder() << "src path fail checks"
-                                           << ", path: " << srcStr;
-            auto status = checks.GetStatus(&explain);
-            return {CreateReject(nextId, status, explain)};
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
         }
     }
 

@@ -58,10 +58,7 @@ public:
                 .NotChildren(NKikimrScheme::StatusNameConflict);
 
             if (!checks) {
-                TString explain = TStringBuilder() << "path table fail checks"
-                                                   << ", path: " << path.PathString();
-                auto status = checks.GetStatus(&explain);
-                result->SetError(status, explain);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 if (path.IsResolved() && path.Base()->IsDirectory() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);

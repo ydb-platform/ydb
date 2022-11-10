@@ -1581,8 +1581,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountAll_FilterL) {
-        //https://st.yandex-team.ru/KIKIMR-16073
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                     SELECT

@@ -60,8 +60,11 @@ bool ValidateIfArgument(const TCoOptionalIf& optionalIf, const TExprNode* rawLam
     auto asStruct = maybeAsStruct.Cast();
 
     // SELECT `field` has only one item
-    if (asStruct.ArgCount() != 1) {
+    if (asStruct.ArgCount() > 1) {
         return false;
+    } else if (asStruct.ArgCount() == 0) {
+        // In case of COUNT(*) we use empty AsStruct
+        return true;
     }
 
     // Check that second tuple element is Member(lambda arg)
@@ -773,10 +776,10 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .Done();
 
     auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
-        .Args({"row"})
+        .Args({"olap_filter_row"})
         .Body<TExprApplier>()
             .Apply(olapFilter)
-            .With(read.Process().Args().Arg(0), "row")
+            .With(read.Process().Args().Arg(0), "olap_filter_row")
             .Build()
         .Done();
 

@@ -459,6 +459,10 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
 }
 
 void CompileProjection(const TKqpOlapExtractMembers& extractMembers, TKqpOlapCompileContext& ctx) {
+    if (extractMembers.Members().Size() == 0) {
+        // Case for single COUNT(*), no columns are extracted
+        return;
+    }
     auto* projection = ctx.CreateProjection();
     for (auto col : extractMembers.Members()) {
         auto colName = col.StringValue();

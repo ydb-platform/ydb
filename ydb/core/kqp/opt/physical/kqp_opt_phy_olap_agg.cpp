@@ -108,10 +108,10 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
         .Done();
 
     auto olapAggLambda = Build<TCoLambda>(ctx, node.Pos())
-        .Args({"row"})
+        .Args({"olap_agg_row"})
         .Body<TExprApplier>()
             .Apply(olapAgg)
-            .With(read.Process().Args().Arg(0), "row")
+            .With(read.Process().Args().Arg(0), "olap_agg_row")
             .Build()
         .Done();
 
@@ -137,17 +137,17 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         return node;
     }
 
-    if (!node.Maybe<TDqPhyLength>().Input().Maybe<TKqpReadOlapTableRanges>()) {
+    if (!node.Maybe<TDqPhyLength>()) {
         return node;
     }
 
     auto dqPhyLength = node.Cast<TDqPhyLength>();
-    auto read = dqPhyLength.Input().Cast<TKqpReadOlapTableRanges>();
-
-    if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
+    auto maybeRead = dqPhyLength.Input().Maybe<TKqpReadOlapTableRanges>();
+    if (!maybeRead) {
         return node;
     }
 
+    auto read = maybeRead.Cast();
     auto aggs = Build<TKqpOlapAggOperationList>(ctx, node.Pos());
     aggs.Add<TKqpOlapAggOperation>()
             .Name(dqPhyLength.Name())
@@ -157,7 +157,7 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Done();
 
     auto olapAgg = Build<TKqpOlapAgg>(ctx, node.Pos())
-        .Input(read.Process().Body())
+        .Input(read.Process().Args().Arg(0))
         .Aggregates(std::move(aggs.Done()))
         .KeyColumns(std::move(
             Build<TCoAtomList>(ctx, node.Pos())
@@ -166,15 +166,16 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         )
         .Done();
 
-    auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
-        .Args({"row"})
+    auto olapAggLambda = Build<TCoLambda>(ctx, node.Pos())
+        .Args({"olap_agg_row"})
         .Body<TExprApplier>()
             .Apply(olapAgg)
-            .With(read.Process().Args().Arg(0), "row")
+            .With(read.Process().Args().Arg(0), "olap_agg_row")
             .Build()
         .Done();
 
-    YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
+    auto newProcessLambda = ctx.FuseLambdas(olapAggLambda.Ref(), read.Process().Ref());
+    YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(*newProcessLambda, ctx);
 
     return Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
         .Table(read.Table())

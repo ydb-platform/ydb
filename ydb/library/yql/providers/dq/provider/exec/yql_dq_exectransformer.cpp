@@ -315,7 +315,7 @@ private:
             YQL_CLOG(WARN, ProviderDq) << "Empty md5 for " << pathWithMd5.Path;
         }
         return GetPathAndObjectId(pathWithMd5.Path,
-            pathWithMd5.Md5.empty()
+            (pathWithMd5.Md5.empty() && !pathWithMd5.Path.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix))
             ? MD5::File(pathWithMd5.Path) /* used for local run only */
             : pathWithMd5.Md5,
             pathWithMd5.Md5);

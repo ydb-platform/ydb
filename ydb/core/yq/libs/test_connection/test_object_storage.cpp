@@ -30,14 +30,17 @@ struct TEvPrivate {
     struct TEvDiscoveryResponse : NActors::TEventLocal<TEvDiscoveryResponse, EvDiscoveryResponse> {
         bool IsSuccess = false;
         TString ErrorMessage;
+        TString RequestId;
 
-        TEvDiscoveryResponse(const TString& errorMessage)
+        TEvDiscoveryResponse(const TString& errorMessage, const TString& requestId)
             : IsSuccess(false)
             , ErrorMessage(errorMessage)
+            , RequestId(requestId)
         {}
 
-        TEvDiscoveryResponse()
+        TEvDiscoveryResponse(const TString& requestId)
             : IsSuccess(true)
+            , RequestId(requestId)
         {}
     };
 };
@@ -108,48 +111,48 @@ public:
     void Handle(TEvPrivate::TEvDiscoveryResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (response.IsSuccess) {
-            ReplyOk();
+            ReplyOk(response.RequestId);
         } else {
-            ReplyError(response.ErrorMessage);
+            ReplyError(TStringBuilder{} << response.ErrorMessage << ", request id: [" << response.RequestId << "]");
         }
     }
 
 private:
-    static void SendError(TActorId self, NActors::TActorSystem* as, const TString& errorMessage) {
-        as->Send(new IEventHandle(self, self, new TEvPrivate::TEvDiscoveryResponse(errorMessage), 0));
+    static void SendError(TActorId self, NActors::TActorSystem* as, const TString& errorMessage, const TString& requestId) {
+        as->Send(new IEventHandle(self, self, new TEvPrivate::TEvDiscoveryResponse(errorMessage, requestId), 0));
     }
 
-    static void SendOk(TActorId self, NActors::TActorSystem* as) {
-        as->Send(new IEventHandle(self, self, new TEvPrivate::TEvDiscoveryResponse(), 0));
+    static void SendOk(TActorId self, NActors::TActorSystem* as, const TString& requestId) {
+        as->Send(new IEventHandle(self, self, new TEvPrivate::TEvDiscoveryResponse(requestId), 0));
     }
 
-    static void DiscoveryCallback(NYql::IHTTPGateway::TResult&& result, TActorId self, NActors::TActorSystem* as) {
+    static void DiscoveryCallback(NYql::IHTTPGateway::TResult&& result, TActorId self, const TString& requestId, NActors::TActorSystem* as) {
         switch (result.index()) {
         case 0U: try {
             const NXml::TDocument xml(std::get<NYql::IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
             if (const auto& root = xml.Root(); root.Name() == "Error") {
                 const auto& code = root.Node("Code", true).Value<TString>();
                 const auto& message = root.Node("Message", true).Value<TString>();
-                SendError(self, as, TStringBuilder() << message << ", code: " << code);
+                SendError(self, as, TStringBuilder() << message << ", code: " << code, requestId);
                 return;
             } else if (root.Name() != "ListBucketResult") {
-                SendError(self, as, TStringBuilder() << "Unexpected response '" << root.Name() << "' on discovery.");
+                SendError(self, as, TStringBuilder() << "Unexpected response '" << root.Name() << "' on discovery.", requestId);
                 return;
             } else {
                 break;
             }
         } catch (const std::exception& ex) {
-            SendError(self, as, TStringBuilder() << "Exception occurred: " << ex.what());
+            SendError(self, as, TStringBuilder() << "Exception occurred: " << ex.what(), requestId);
             return;
         }
         case 1U:
-            SendError(self, as, TStringBuilder() << "Issues occurred: " << std::get<NYql::TIssues>(result).ToString());
+            SendError(self, as, TStringBuilder() << "Issues occurred: " << std::get<NYql::TIssues>(result).ToString(), requestId);
             return;
         default:
-            SendError(self, as, TStringBuilder() << "Undefined variant index: " << result.index());
+            SendError(self, as, TStringBuilder() << "Undefined variant index: " << result.index(), requestId);
             return;
         }
-        SendOk(self, as);
+        SendOk(self, as, requestId);
     }
 
     static ERetryErrorClass RetryS3SlowDown(long httpResponseCode) {
@@ -166,6 +169,9 @@ private:
             headers.push_back(TString("X-YaCloud-SubjectToken:") += authToken);
         }
 
+        TString requestId = CreateGuidAsString();
+        headers.emplace_back(TString{"X-Request-ID:"} + requestId);
+
         const auto retryPolicy = IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown);
 
         NYql::TUrlBuilder urlBuilder(ClusterConfig.GetUrl());
@@ -177,7 +183,7 @@ private:
                 url,
                 headers,
                 0U,
-                std::bind(&DiscoveryCallback, std::placeholders::_1, SelfId(), TActivationContext::ActorSystem()),
+                std::bind(&DiscoveryCallback, std::placeholders::_1, SelfId(), requestId, TActivationContext::ActorSystem()),
                 /*data=*/"",
                 retryPolicy
             );
@@ -198,8 +204,8 @@ private:
         DestroyActor(false /* success */);
     }
 
-    void ReplyOk() {
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Access is valid for object storage connection");
+    void ReplyOk(const TString& requestId) {
+        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Access is valid for object storage connection, request id: [" << requestId << "]");
         Counters->Ok->Inc();
         Send(Sender, new NYq::TEvTestConnection::TEvTestConnectionResponse(YandexQuery::TestConnectionResult{}), 0, Cookie);
         DestroyActor();

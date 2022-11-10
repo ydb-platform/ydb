@@ -23,14 +23,12 @@ target_link_libraries(providers-s3-provider PUBLIC
   library-cpp-time_provider
   cpp-xml-document
   library-yql-ast
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
-  providers-common-structured_token
-  common-token_accessor-client
   library-yql-core
   yql-core-type_ann
   yql-dq-expr_nodes
+  library-yql-minikql
+  yql-minikql-comp_nodes
+  yql-minikql-computation
   providers-common-config
   providers-common-dq
   providers-common-http_gateway
@@ -38,11 +36,14 @@ target_link_libraries(providers-s3-provider PUBLIC
   providers-common-proto
   providers-common-provider
   common-schema-expr
+  providers-common-structured_token
+  common-token_accessor-client
   providers-common-transform
   providers-dq-common
   providers-dq-expr_nodes
   providers-dq-interface
   providers-result-expr_nodes
+  providers-s3-common
   providers-s3-expr_nodes
   providers-s3-path_generator
   providers-s3-proto

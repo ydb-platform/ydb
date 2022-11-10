@@ -2,6 +2,7 @@
 #include "yql_s3_path.h"
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -13,8 +14,9 @@
 #endif
 #include <library/cpp/threading/future/async_semaphore.h>
 #include <library/cpp/xml/document/xml-document.h>
-#include <util/string/builder.h>
 #include <util/folder/iterator.h>
+#include <util/generic/guid.h>
+#include <util/string/builder.h>
 
 namespace NYql {
 
@@ -134,6 +136,7 @@ private:
         const TString& token,
         const TString& urlStr,
         const TString& prefix,
+        const TString& requestId,
         ui64 maxDiscoveryFilesPerQuery)
     try {
         auto gateway = gatewayWeak.lock();
@@ -146,17 +149,17 @@ private:
                 if (const auto& root = xml.Root(); root.Name() == "Error") {
                     const auto& code = root.Node("Code", true).Value<TString>();
                     const auto& message = root.Node("Message", true).Value<TString>();
-                    ythrow yexception() << message << ", error: code: " << code << " [" << urlStr << prefix << "]";
+                    ythrow yexception() << message << ", error: code: " << code << " [" << urlStr << prefix << "], request id: [" << requestId << "]";
                 } else if (root.Name() != "ListBucketResult") {
-                    ythrow yexception() << "Unexpected response '" << root.Name() << "' on discovery.";
+                    ythrow yexception() << "Unexpected response '" << root.Name() << "' on discovery, request id: [" << requestId << "]";
                 } else if (
                     const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
                     root.Node("s3:KeyCount", false, nss).Value<unsigned>() > 0U)
                 {
                     const auto& contents = root.XPath("s3:Contents", false, nss);
-                    YQL_CLOG(INFO, ProviderS3) << "Listing of " << urlStr << prefix << ": have " << output->size() << " entries, got another " << contents.size() << " entries";
+                    YQL_CLOG(INFO, ProviderS3) << "Listing of " << urlStr << prefix << ": have " << output->size() << " entries, got another " << contents.size() << " entries, request id: [" << requestId << "]";
                     if (maxDiscoveryFilesPerQuery && output->size() + contents.size() > maxDiscoveryFilesPerQuery) {
-                        ythrow yexception() << "Over " << maxDiscoveryFilesPerQuery << " files discovered in '" << urlStr << prefix << "'";
+                        ythrow yexception() << "Over " << maxDiscoveryFilesPerQuery << " files discovered in '" << urlStr << prefix << "', request id: [" << requestId << "]";
                     }
 
                     for (const auto& content : contents) {
@@ -184,6 +187,9 @@ private:
                             headers.emplace_back("X-YaCloud-SubjectToken:" + token);
                         }
 
+                        TString requestId = CreateGuidAsString();
+                        headers.emplace_back(TString{"X-Request-ID:"} + requestId);
+
                         TUrlBuilder urlBuilder(urlStr);
                         auto url = urlBuilder.AddUrlParam("list-type", "2")
                             .AddUrlParam("prefix", prefix)
@@ -205,6 +211,7 @@ private:
                                       token,
                                       urlStr,
                                       prefix,
+                                      requestId,
                                       maxDiscoveryFilesPerQuery),
                             /*data=*/"",
                             retryPolicy);
@@ -215,18 +222,19 @@ private:
             }
             case 1U: {
                 auto issues = std::get<TIssues>(std::move(result));
+                issues = NS3Util::AddParentIssue(TStringBuilder{} << "request id: [" << requestId << "]", std::move(issues));
                 YQL_CLOG(INFO, ProviderS3) << "Listing of " << urlStr << prefix << ": got error from http gateway: " << issues.ToString(true);
                 promise.SetValue(std::move(issues));
                 break;
             }
             default:
-                ythrow yexception() << "Undefined variant index: " << result.index();
+                ythrow yexception() << "Undefined variant index: " << result.index() << ", request id: [" << requestId << "]";
         }
     } catch (const std::exception& ex) {
         YQL_CLOG(INFO, ProviderS3) << "Listing of " << urlStr << prefix << " : got exception: " << ex.what();
         promise.SetException(std::current_exception());
     }
-    #include <iostream>
+
     TFuture<TListResult> DoList(const TString& token, const TString& urlStr, const TString& pattern, const TMaybe<TString>& pathPrefix) {
         TString prefix;
         TResultFilter filter = MakeFilter(pattern, pathPrefix, prefix);
@@ -244,7 +252,7 @@ private:
                         ythrow yexception() << "Security violation: trying access parent directory in path";
                     }
                 }
-                
+
                 IS3Lister::TListEntries output;
 
                 for (const auto& entry: TDirIterator(fullPath)) {
@@ -261,14 +269,14 @@ private:
                         output.back().MatchedGlobs.swap(matches);
                     }
                 }
-                
+
                 promise.SetValue(std::move(output));
             } catch (const std::exception& ex) {
                 promise.SetException(std::current_exception());
             }
             return future;
         }
-        
+
 
         const auto retryPolicy = GetHTTPDefaultRetryPolicy();
         TUrlBuilder urlBuilder(urlStr);
@@ -281,6 +289,9 @@ private:
         if (!token.empty()) {
             headers.emplace_back("X-YaCloud-SubjectToken:" + token);
         }
+
+        TString requestId = CreateGuidAsString();
+        headers.emplace_back(TString{"X-Request-ID:"} + requestId);
 
         Gateway->Download(
             url,
@@ -296,6 +307,7 @@ private:
                       token,
                       urlStr,
                       prefix,
+                      requestId,
                       MaxFilesPerQuery),
             /*data=*/"",
             retryPolicy);

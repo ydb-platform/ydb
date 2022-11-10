@@ -32,6 +32,7 @@ target_link_libraries(providers-s3-actors PUBLIC
   providers-common-http_gateway
   common-schema-mkql
   common-token_accessor-client
+  providers-s3-common
   providers-s3-compressors
   providers-s3-proto
   providers-s3-range_helpers

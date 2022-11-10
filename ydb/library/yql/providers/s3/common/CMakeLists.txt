@@ -6,12 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(actors)
-add_subdirectory(common)
-add_subdirectory(compressors)
-add_subdirectory(expr_nodes)
-add_subdirectory(path_generator)
-add_subdirectory(proto)
-add_subdirectory(provider)
-add_subdirectory(range_helpers)
-add_subdirectory(serializations)
+
+add_library(providers-s3-common)
+target_link_libraries(providers-s3-common PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-issue
+  public-issue-protos
+)
+target_sources(providers-s3-common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/common/util.cpp
+)

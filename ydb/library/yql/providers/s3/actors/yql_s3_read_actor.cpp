@@ -48,6 +48,7 @@
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
@@ -133,8 +134,14 @@ struct TEvPrivate {
 
     // Events
     struct TEvReadResult : public TEventLocal<TEvReadResult, EvReadResult> {
-        TEvReadResult(IHTTPGateway::TContent&& result, size_t pathInd): Result(std::move(result)), PathIndex(pathInd) {}
+        TEvReadResult(IHTTPGateway::TContent&& result, const TString& requestId, size_t pathInd)
+            : Result(std::move(result))
+            , RequestId(requestId)
+            , PathIndex(pathInd)
+        {}
+
         IHTTPGateway::TContent Result;
+        const TString RequestId;
         const size_t PathIndex;
     };
 
@@ -160,8 +167,14 @@ struct TEvPrivate {
     };
 
     struct TEvReadError : public TEventLocal<TEvReadError, EvReadError> {
-        TEvReadError(TIssues&& error, size_t pathInd = std::numeric_limits<size_t>::max()) : Error(std::move(error)), PathIndex(pathInd) {}
+        TEvReadError(TIssues&& error, const TString& requestId, size_t pathInd = std::numeric_limits<size_t>::max())
+            : Error(std::move(error))
+            , RequestId(requestId)
+            , PathIndex(pathInd)
+        {}
+
         const TIssues Error;
+        const TString RequestId;
         const size_t PathIndex;
     };
 
@@ -190,17 +203,6 @@ struct TEvPrivate {
 
 };
 
-TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
-    if (!issues) {
-        return TIssues{};
-    }
-    TIssue result(prefix);
-    for (auto& issue: issues) {
-        result.AddSubIssue(MakeIntrusive<TIssue>(issue));
-    }
-    return TIssues{result};
-}
-
 using namespace NKikimr::NMiniKQL;
 
 class TS3ReadActor : public TActorBootstrapped<TS3ReadActor>, public IDqComputeActorAsyncInput {
@@ -225,7 +227,7 @@ public:
         , RetryPolicy(retryPolicy)
         , ActorSystem(TActivationContext::ActorSystem())
         , Url(url)
-        , Headers(MakeHeader(token))
+        , Token(token)
         , Paths(std::move(paths))
         , AddPathIndex(addPathIndex)
         , StartPathIndex(startPathIndex)
@@ -239,9 +241,10 @@ public:
             const TPath& path = Paths[pathInd];
             auto url = Url + std::get<TString>(path);
             auto id = pathInd + StartPathIndex;
-            LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id);
-            Gateway->Download(url, Headers, std::min(std::get<size_t>(path), SizeLimit),
-                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, id), {}, RetryPolicy);
+            const TString requestId = CreateGuidAsString();
+            LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
+            Gateway->Download(url, MakeHeaders(Token, requestId), std::min(std::get<size_t>(path), SizeLimit),
+                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id), {}, RetryPolicy);
         };
     }
 
@@ -258,13 +261,13 @@ private:
         hFunc(TEvPrivate::TEvReadError, Handle);
     )
 
-    static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, IHTTPGateway::TResult&& result, size_t pathInd) {
+    static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd) {
         switch (result.index()) {
         case 0U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::get<IHTTPGateway::TContent>(std::move(result)), pathInd)));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::get<IHTTPGateway::TContent>(std::move(result)), requestId, pathInd)));
             return;
         case 1U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)), pathInd)));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)), requestId, pathInd)));
             return;
         default:
             break;
@@ -307,7 +310,8 @@ private:
         const auto id = result->Get()->PathIndex;
         const auto path = std::get<TString>(Paths[id - StartPathIndex]);
         const auto httpCode = result->Get()->Result.HttpResponseCode;
-        LOG_D("TS3ReadActor", "ID: " << id << ", Path: " << path << ", read size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode);
+        const auto requestId = result->Get()->RequestId;
+        LOG_D("TS3ReadActor", "ID: " << id << ", Path: " << path << ", read size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode << ", request id: [" << requestId << "]");
         if (200 == httpCode || 206 == httpCode) {
             Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), id));
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
@@ -318,7 +322,7 @@ private:
             if (!ParseS3ErrorResponse(errorText, errorCode, message)) {
                 message = errorText;
             }
-            message = TStringBuilder{} << "Error while reading file " << path << ", details: " << message;
+            message = TStringBuilder{} << "Error while reading file " << path << ", details: " << message << ", request id: [" << requestId << "]";
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, BuildIssues(httpCode, errorCode, message), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         }
     }
@@ -326,9 +330,10 @@ private:
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
         ++IsDoneCounter;
         auto id = result->Get()->PathIndex;
+        const auto requestId = result->Get()->RequestId;
         const auto path = std::get<TString>(Paths[id - StartPathIndex]);
-        LOG_W("TS3ReadActor", "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString());
-        auto issues = AddParentIssue(TStringBuilder{} << "Error while reading file " << path, TIssues{result->Get()->Error});
+        LOG_W("TS3ReadActor", "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString() << ", request id: [" << requestId << "]");
+        auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
@@ -339,8 +344,12 @@ private:
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
 
-    static IHTTPGateway::THeaders MakeHeader(const TString& token) {
-        return token.empty() ? IHTTPGateway::THeaders() : IHTTPGateway::THeaders{TString("X-YaCloud-SubjectToken:") += token};
+    static IHTTPGateway::THeaders MakeHeaders(const TString& token, const TString& requestId) {
+        IHTTPGateway::THeaders headers{TString{"X-Request-ID:"} += requestId};
+        if (token) {
+            headers.emplace_back(TString("X-YaCloud-SubjectToken:") += token);
+        }
+        return headers;
     }
 
 private:
@@ -358,7 +367,7 @@ private:
     TActorSystem* const ActorSystem;
 
     const TString Url;
-    const IHTTPGateway::THeaders Headers;
+    const TString Token;
     const TPathList Paths;
     const bool AddPathIndex;
     const ui64 StartPathIndex;
@@ -387,8 +396,17 @@ struct TRetryStuff {
         const IHTTPGateway::THeaders& headers,
         std::size_t sizeLimit,
         const TTxId& txId,
+        const TString& requestId,
         const IRetryPolicy<long>::TPtr& retryPolicy
-    ) : Gateway(std::move(gateway)), Url(std::move(url)), Headers(headers), Offset(0U), SizeLimit(sizeLimit), TxId(txId), RetryState(retryPolicy->CreateRetryState()), Cancelled(false)
+    ) : Gateway(std::move(gateway))
+      , Url(std::move(url))
+      , Headers(headers)
+      , Offset(0U)
+      , SizeLimit(sizeLimit)
+      , TxId(txId)
+      , RequestId(requestId)
+      , RetryState(retryPolicy->CreateRetryState())
+      , Cancelled(false)
     {}
 
     const IHTTPGateway::TPtr Gateway;
@@ -396,6 +414,7 @@ struct TRetryStuff {
     const IHTTPGateway::THeaders Headers;
     std::size_t Offset, SizeLimit;
     const TTxId TxId;
+    const TString RequestId;
     const IRetryPolicy<long>::IRetryState::TPtr RetryState;
     IHTTPGateway::TCancelHook CancelHook;
     TMaybe<TDuration> NextRetryDelay;
@@ -535,23 +554,23 @@ public:
                 Issues.Clear();
                 value.clear();
                 RetryStuff->NextRetryDelay = RetryStuff->RetryState->GetNextRetryDelay(HttpResponseCode = ev->Get<TEvPrivate::TEvReadStarted>()->HttpResponseCode);
-                LOG_CORO_D("TS3ReadCoroImpl", "TEvReadStarted, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", Http code: " << HttpResponseCode << ", retry after: " << RetryStuff->NextRetryDelay);
+                LOG_CORO_D("TS3ReadCoroImpl", "TEvReadStarted, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", Http code: " << HttpResponseCode << ", retry after: " << RetryStuff->NextRetryDelay << ", request id: [" << RetryStuff->RequestId << "]");
                 return true;
             case TEvPrivate::TEvReadFinished::EventType:
                 Issues = std::move(ev->Get<TEvPrivate::TEvReadFinished>()->Issues);
                 if (Issues) {
                     if (RetryStuff->NextRetryDelay = RetryStuff->RetryState->GetNextRetryDelay(0L); !RetryStuff->NextRetryDelay) {
                         InputFinished = true;
-                        LOG_CORO_W("TS3ReadCoroImpl", "ReadError: " << Issues.ToOneLineString() << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
+                        LOG_CORO_W("TS3ReadCoroImpl", "ReadError: " << Issues.ToOneLineString() << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText() << ", request id: [" << RetryStuff->RequestId << "]");
                         throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
                     }
                 }
 
                 if (!RetryStuff->IsCancelled() && RetryStuff->NextRetryDelay && RetryStuff->SizeLimit > 0ULL) {
-                    LOG_CORO_D("TS3ReadCoroImpl", "TS3ReadCoroActor" << ": " << SelfActorId << ", TxId: " << RetryStuff->TxId << ". Retry Download, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
+                    LOG_CORO_D("TS3ReadCoroImpl", "TS3ReadCoroActor" << ": " << SelfActorId << ", TxId: " << RetryStuff->TxId << ". Retry Download, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", request id: [" << RetryStuff->RequestId << "]");
                     GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvPrivate::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId))));
                 } else {
-                    LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", Error: " << ServerReturnedError << ", LastData: " << GetLastDataAsText());
+                    LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", Error: " << ServerReturnedError << ", LastData: " << GetLastDataAsText() << ", request id: [" << RetryStuff->RequestId << "]");
                     InputFinished = true;
                     if (ServerReturnedError) {
                         throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
@@ -566,7 +585,7 @@ public:
                     RetryStuff->SizeLimit -= value.size();
                     LastOffset = RetryStuff->Offset;
                     LastData = value;
-                    LOG_CORO_T("TS3ReadCoroImpl", "TEvDataPart, size: " << value.size() << ", Url: " << RetryStuff->Url << ", Offset (updated): " << RetryStuff->Offset);
+                    LOG_CORO_T("TS3ReadCoroImpl", "TEvDataPart, size: " << value.size() << ", Url: " << RetryStuff->Url << ", Offset (updated): " << RetryStuff->Offset << ", request id: [" << RetryStuff->RequestId << "]");
                     Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
                 } else if (HttpResponseCode && !RetryStuff->IsCancelled() && !RetryStuff->NextRetryDelay) {
                     ServerReturnedError = true;
@@ -575,7 +594,7 @@ public:
                     else if (!ErrorText.EndsWith(TruncatedSuffix))
                         ErrorText.append(TruncatedSuffix);
                     value.clear();
-                    LOG_CORO_W("TS3ReadCoroImpl", "TEvDataPart, ERROR: " << ErrorText << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
+                    LOG_CORO_W("TS3ReadCoroImpl", "TEvDataPart, ERROR: " << ErrorText << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText() << ", request id: [" << RetryStuff->RequestId << "]");
                 }
                 return true;
             default:
@@ -675,7 +694,7 @@ private:
             Issues.AddIssue(exceptIssue);
         }
 
-        auto issues = AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
+        auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
         if (issues)
             Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), fatalCode));
         else
@@ -797,13 +816,9 @@ private:
     void Registered(TActorSystem* actorSystem, const TActorId& parent) override {
         TActorCoro::Registered(actorSystem, parent); // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
         if (RetryStuff->Url.substr(0, 6) != "file://") {
-            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3ReadCoroActor" << ": " << SelfId() << ", TxId: " << RetryStuff->TxId << ". " << "Start Download, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset);
+            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3ReadCoroActor" << ": " << SelfId() << ", TxId: " << RetryStuff->TxId << ". " << "Start Download, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", request id: [" << RetryStuff->RequestId << "]");
             DownloadStart(RetryStuff, actorSystem, SelfId(), parent);
         }
-    }
-
-    static IHTTPGateway::THeaders MakeHeader(const TString& token) {
-        return token.empty() ? IHTTPGateway::THeaders() : IHTTPGateway::THeaders{TString("X-YaCloud-SubjectToken:") += token};
     }
 
     const TRetryStuff::TPtr RetryStuff;
@@ -863,7 +878,7 @@ public:
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
         , Url(url)
-        , Headers(MakeHeader(token))
+        , Token(token)
         , Paths(std::move(paths))
         , AddPathIndex(addPathIndex)
         , StartPathIndex(startPathIndex)
@@ -877,7 +892,8 @@ public:
         Become(&TS3StreamReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
             const TPath& path = Paths[pathInd];
-            auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + std::get<TString>(path), Headers, std::get<std::size_t>(path), TxId, RetryPolicy);
+            const TString requestId = CreateGuidAsString();
+            auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + std::get<TString>(path), MakeHeaders(Token, requestId), std::get<std::size_t>(path), TxId, requestId, RetryPolicy);
             RetryStuffForFile.push_back(stuff);
             auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, stuff, ReadSpec, pathInd + StartPathIndex, std::get<TString>(path), Url, MaxBlocksInFly, ReadActorFactoryCfg);
             RegisterWithSameMailbox(std::make_unique<TS3ReadCoroActor>(std::move(impl), std::move(stuff)).release());
@@ -980,8 +996,12 @@ private:
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
 
-    static IHTTPGateway::THeaders MakeHeader(const TString& token) {
-        return token.empty() ? IHTTPGateway::THeaders() : IHTTPGateway::THeaders{TString("X-YaCloud-SubjectToken:") += token};
+    static IHTTPGateway::THeaders MakeHeaders(const TString& token, const TString& requestId) {
+        IHTTPGateway::THeaders headers{TString{"X-Request-ID:"} += requestId};
+        if (token) {
+            headers.emplace_back(TString("X-YaCloud-SubjectToken:") += token);
+        }
+        return headers;
     }
 
     STRICT_STFUNC(StateFunc,
@@ -1034,7 +1054,7 @@ private:
     const IRetryPolicy<long>::TPtr RetryPolicy;
 
     const TString Url;
-    const IHTTPGateway::THeaders Headers;
+    const TString Token;
     const TPathList Paths;
     const bool AddPathIndex;
     const ui64 StartPathIndex;
@@ -1200,7 +1220,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                 auto memberType = structType->GetMemberType(i);
                 bool isOptional;
                 std::shared_ptr<arrow::DataType> dataType;
-                
+
                 YQL_ENSURE(ConvertArrowType(memberType, isOptional, dataType), "Unsupported arrow type");
                 THROW_ARROW_NOT_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(structType->GetMemberName(i)), dataType, isOptional)));
             }

@@ -95,23 +95,6 @@ namespace NKqpHelpers {
         return request;
     }
 
-    inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeBeginRequest(
-            const TString& sessionId,
-            const TString& sql,
-            const TString& database = {})
-    {
-        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        request->Record.MutableRequest()->SetSessionId(sessionId);
-        request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->Record.MutableRequest()->SetQuery(sql);
-        if (!database.empty()) {
-            request->Record.MutableRequest()->SetDatabase(database);
-        }
-        return request;
-    }
-
     inline void SendRequest(
             TTestActorRuntime& runtime,
             TActorId sender,

@@ -4368,28 +4368,28 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
     TString txId;
     {
         Cerr << "... performing the first select" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
     }
 
     // Arrange for another distributed tx stuck at readset exchange
     TString sessionIdBlocker = CreateSessionRPC(runtime);
     TString txIdBlocker;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionIdBlocker, txIdBlocker, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txIdBlocker = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2`)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
     }
 
     auto waitFor = [&](const auto& condition, const TString& description) {
@@ -4491,14 +4491,14 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
     TString sessionIdBlocker = CreateSessionRPC(runtime);
     TString txIdBlocker;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionIdBlocker, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionIdBlocker, txIdBlocker, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txIdBlocker = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2`)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
     }
 
     auto waitFor = [&](const auto& condition, const TString& description) {
@@ -4546,14 +4546,14 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
     TString txId;
     {
         Cerr << "... performing the first select" << Endl;
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+        auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result,
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
     }
 }
 
@@ -4603,14 +4603,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
     };
 
     auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
-        auto reqSender = runtime.AllocateEdgeActor();
-        sessionId = CreateSessionRPC(runtime);
-        auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        return KqpSimpleBegin(runtime, sessionId, txId, query);
     };
 
     auto continueSnapshotRequest = [&](const TString& sessionId, const TString& txId, const TString& query) -> TString {
@@ -4641,10 +4634,8 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
 
     // Spam schedules in the runtime to prevent mediator time jumping prematurely
     {
@@ -4681,10 +4672,8 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
 
     // Wait for the write to finish
     {
@@ -4711,11 +4700,9 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+        "{ items { uint32_value: 5 } items { uint32_value: 5 } }");
 
     // Start a new write and sleep again
     SendRequest(runtime, senderImmediateWrite, MakeSimpleRequest(Q_(R"(
@@ -4782,11 +4769,9 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+        "{ items { uint32_value: 5 } items { uint32_value: 5 } }");
 
     // Wait for result of the second write
     {
@@ -4815,13 +4800,11 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
-        "List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 7 } } } "
-        "List { Struct { Optional { Uint32: 9 } } Struct { Optional { Uint32: 9 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+        "{ items { uint32_value: 5 } items { uint32_value: 5 } }, "
+        "{ items { uint32_value: 7 } items { uint32_value: 7 } }, "
+        "{ items { uint32_value: 9 } items { uint32_value: 9 } }");
 
     // Spam schedules in the runtime to prevent mediator time jumping prematurely
     {
@@ -4856,14 +4839,12 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
-        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
-        "List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 7 } } } "
-        "List { Struct { Optional { Uint32: 9 } } Struct { Optional { Uint32: 9 } } } "
-        "List { Struct { Optional { Uint32: 11 } } Struct { Optional { Uint32: 11 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
+        "{ items { uint32_value: 5 } items { uint32_value: 5 } }, "
+        "{ items { uint32_value: 7 } items { uint32_value: 7 } }, "
+        "{ items { uint32_value: 9 } items { uint32_value: 9 } }, "
+        "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
 }
 
 Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
@@ -4990,14 +4971,7 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
     };
 
     auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
-        auto reqSender = runtime.AllocateEdgeActor();
-        sessionId = CreateSessionRPC(runtime);
-        auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        txId = response.GetResponse().GetTxMeta().id();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        return KqpSimpleBegin(runtime, sessionId, txId, query);
     };
 
     auto continueSnapshotRequest = [&](const TString& sessionId, const TString& txId, const TString& query) -> TString {
@@ -5028,9 +5002,7 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
 
     // Stop updating mediator timecast on the second node
     mustWaitForSteps[1] = true;
@@ -5070,10 +5042,8 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
             SELECT key, value FROM `/Root/table-1`
             ORDER BY key
             )")),
-        "Struct { "
-        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
-        "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
-        "} Struct { Bool: false }");
+        "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+        "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
 }
 
 Y_UNIT_TEST(UncommittedReadSetAck) {

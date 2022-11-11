@@ -113,6 +113,19 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
         )", {"city", "code"}, 2), yexception, "The limit on the number of paths has been reached: 2 of 2");
     }
 
+    Y_UNIT_TEST(CheckClash) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
+            {
+                "projection.enabled" : true,
+                "projection.city.type" : "enum",
+                "projection.city.values" : "00,0",
+                "projection.code.type" : "enum",
+                "projection.code.values" : "0,00",
+                "storage.location.template" : "/${city}${code}/"
+            }
+        )", {"city", "code"}), yexception, "Location path /000/ is composed by different projection value sets { ${city} = 00 , ${code} = 0, } and { ${city} = 0 , ${code} = 00, }");
+    }
+
     Y_UNIT_TEST(CheckHiveFormat) {
         auto generator = CreatePathGenerator({}, {"city", "code", "device_id"}, 1);
         auto rules = generator->GetRules();

@@ -3995,10 +3995,9 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, UseMvcc) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    auto myCommit2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
@@ -4102,10 +4101,9 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, UseMvcc) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+    auto myCommit2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"), sessionId, txId, true));
 
     // Wait until we captured both readsets
     waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
@@ -4118,9 +4116,8 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, UseMvcc) {
 
     // The result of commit should be SUCCESS
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender2);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto response = AwaitResponse(runtime, myCommit2);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 
     // Select key 3 and verify its value was updated
@@ -4384,7 +4381,6 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
     }
 
     // Arrange for another distributed tx stuck at readset exchange
-    auto senderBlocker = runtime.AllocateEdgeActor();
     TString sessionIdBlocker = CreateSessionRPC(runtime);
     TString txIdBlocker;
     {
@@ -4425,9 +4421,9 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    SendRequest(runtime, senderBlocker, MakeCommitRequest(sessionIdBlocker, txIdBlocker, Q_(R"(
+    auto thisCommit2 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (99, 99);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (99, 99))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (99, 99))"), sessionIdBlocker, txIdBlocker, true));
 
     // Wait until we captured both readsets
     waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
@@ -4494,7 +4490,6 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
     SimulateSleep(server, TDuration::Seconds(1));
 
     // Arrange for a distributed tx stuck at readset exchange
-    auto senderBlocker = runtime.AllocateEdgeActor();
     TString sessionIdBlocker = CreateSessionRPC(runtime);
     TString txIdBlocker;
     {
@@ -4535,9 +4530,9 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    SendRequest(runtime, senderBlocker, MakeCommitRequest(sessionIdBlocker, txIdBlocker, Q_(R"(
+    auto sCommit = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (99, 99);
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (99, 99))")));
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (99, 99))"), sessionIdBlocker, txIdBlocker, true));
 
     // Wait until we captured both readsets
     waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
@@ -5202,16 +5197,14 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureCommitAfterReadSet);
 
     // Make two commits in parallel, one of them will receive a readset and become complete
-    auto reqCommit1Sender = runtime.AllocateEdgeActor();
-    SendRequest(runtime, reqCommit1Sender, MakeCommitRequest(sessionId1, txId1,
+    SendRequest(runtime, MakeSimpleRequestRPC(
         Q_(R"(
             UPSERT INTO `/Root/table-3` (key, value) VALUES (4, 4)
-        )")));
-    auto reqCommit2Sender = runtime.AllocateEdgeActor();
-    SendRequest(runtime, reqCommit2Sender, MakeCommitRequest(sessionId2, txId2,
+        )"), sessionId1, txId1, true));
+    SendRequest(runtime, MakeSimpleRequestRPC(
         Q_(R"(
             UPSERT INTO `/Root/table-3` (key, value) VALUES (5, 5)
-        )")));
+        )"), sessionId2, txId2, true));
 
     auto waitFor = [&](const auto& condition, const TString& description) {
         while (!condition()) {

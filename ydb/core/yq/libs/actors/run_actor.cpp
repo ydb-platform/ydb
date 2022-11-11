@@ -1036,10 +1036,10 @@ private:
         KillExecuter();
     }
 
-    void Handle(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
+    bool HandleEvalQueryResponse(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
         auto it = EvalInfos.find(ev->Sender);
-        if (it != EvalInfos.end()) {
-
+        auto eval = it != EvalInfos.end();
+        if (eval) {
             IDqGateway::TResult QueryResult;
 
             auto& result = ev->Get()->Record;
@@ -1069,8 +1069,18 @@ private:
             QueryResult.RowsCount = result.GetRowsCount();
             it->second.Result.SetValue(QueryResult);
             EvalInfos.erase(it);
+        }
+        return eval;
+    }
 
+    void Handle(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
+        if (HandleEvalQueryResponse(ev)) {
             return;
+        }
+
+        if (ev->Sender != ExecuterId) {
+           LOG_E("TEvQueryResponse received from UNKNOWN Actor (TDqExecuter?) " << ev->Sender);
+           return;
         }
 
         SaveQueryResponse(ev);
@@ -1109,6 +1119,15 @@ private:
         // This logic is located in SaveQueryResponse() method.
         if (ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS) {
             ev->Get()->Record.SetStatusCode(NYql::NDqProto::StatusIds::CANCELLED);
+        }
+
+        if (HandleEvalQueryResponse(ev)) {
+            return;
+        }
+
+        if (ev->Sender != ExecuterId) {
+           LOG_E("TEvQueryResponse received from UNKNOWN Actor (TDqExecuter?) when FINISHED " << ev->Sender);
+           return;
         }
 
         QueryResponseArrived = true;

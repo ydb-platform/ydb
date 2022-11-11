@@ -1,11 +1,13 @@
-#include <ydb/library/yql/public/udf/udf_helpers.h>
-#include <ydb/library/yql/public/udf/tz/udf_tz.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/public/udf/tz/udf_tz.h>
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/minikql/datetime/datetime.h>
 
 #include <util/datetime/base.h>
 
 using namespace NKikimr;
 using namespace NUdf;
+using namespace NYql::DateTime;
 
 extern const char SplitName[] = "Split";
 extern const char ToSecondsName[] = "ToSeconds";
@@ -16,160 +18,37 @@ extern const char TMResourceName[] = "DateTime2.TM";
 
 namespace {
 
-    constexpr size_t MAX_TIMEZONE_NAME_LEN = 64;
+const TTMStorage& Reference(const NUdf::TUnboxedValuePod& value) {
+    return *reinterpret_cast<const TTMStorage*>(value.GetRawPtr());
+}
 
-    struct TTMStorage {
-        unsigned int Year : 12;
-        unsigned int DayOfYear : 9;
-        unsigned int WeekOfYear : 6;
-        unsigned int WeekOfYearIso8601 : 6;
-        unsigned int DayOfWeek : 3;
-        unsigned int Month : 4;
-        unsigned int Day : 5;
-        unsigned int Hour : 5;
-        unsigned int Minute : 6;
-        unsigned int Second : 6;
-        unsigned int Microsecond : 20;
-        unsigned int TimezoneId : 16;
+TTMStorage& Reference(NUdf::TUnboxedValuePod& value) {
+    return *reinterpret_cast<TTMStorage*>(value.GetRawPtr());
+}
 
-        inline static bool IsUniversal(ui16 timezoneId) {
-            return timezoneId == 0;
-        }
-
-        inline void MakeDefault() {
-            Year = 1970;
-            Month = 1;
-            Day = 1;
-            Hour = 0;
-            Minute = 0;
-            Second = 0;
-            Microsecond = 0;
-            TimezoneId = 0;
-        }
-
-        inline void FromDate(const IDateBuilder& builder, ui16 value, ui16 timezoneId = 0) {
-            ui32 year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-
-            if (!builder.FullSplitDate2(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
-                ythrow yexception() << "Error in FullSplitDate";
-            }
-
-            TimezoneId = timezoneId;
-
-            Year = year;
-            Month = month;
-            Day = day;
-
-            DayOfYear = dayOfYear;
-            WeekOfYear = weekOfYear;
-            WeekOfYearIso8601 = weekOfYearIso8601;
-            DayOfWeek = dayOfWeek;
-        }
-
-        inline ui16 ToDate(const IDateBuilder& builder, bool local) const {
-            if (!IsUniversal(TimezoneId)) {
-                ui32 datetime;
-                if (!builder.MakeDatetime(Year, Month, Day, local ? 0 : Hour, local ? 0 : Minute, local ? 0 : Second, datetime, TimezoneId)) {
-                    ythrow yexception() << "Error in MakeDatetime";
-                }
-                return datetime / 86400u;
-            } else {
-                ui16 date;
-                if (!builder.MakeDate(Year, Month, Day, date)) {
-                    ythrow yexception() << "Error in MakeDate";
-                }
-                return date;
-            }
-        }
-
-        inline void FromDatetime(const IDateBuilder& builder, ui32 value, ui16 timezoneId = 0) {
-            ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-
-            if (!builder.FullSplitDatetime2(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
-                ythrow yexception() << "Error in FullSplitDatetime";
-            }
-
-            TimezoneId = timezoneId;
-            Year = year;
-            Month = month;
-            Day = day;
-            Hour = hour;
-            Minute = minute;
-            Second = second;
-
-            DayOfYear = dayOfYear;
-            WeekOfYear = weekOfYear;
-            WeekOfYearIso8601 = weekOfYearIso8601;
-            DayOfWeek = dayOfWeek;
-        }
-
-        inline ui32 ToDatetime(const IDateBuilder& builder) const {
-            ui32 datetime = 0;
-            if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
-                ythrow yexception() << "Error in MakeDatetime";
-            }
-            return datetime;
-        }
-
-        inline void FromTimestamp(const IDateBuilder& builder, ui64 value, ui16 timezoneId = 0) {
-            const ui32 seconds = value / 1000000ull;
-            FromDatetime(builder, seconds, timezoneId);
-            Microsecond = value - seconds * 1000000ull;
-        }
-
-        inline ui64 ToTimestamp(const IDateBuilder& builder) const {
-            return ToDatetime(builder) * 1000000ull + Microsecond;
-        }
-
-        inline bool Validate(const IDateBuilder& builder) {
-            ui32 datetime;
-            if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
-                return false;
-            }
-
-            ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-            if (!builder.FullSplitDatetime2(datetime, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, TimezoneId)) {
-                ythrow yexception() << "Error in FullSplitDatetime.";
-            }
-
-            DayOfYear = dayOfYear;
-            WeekOfYear = weekOfYear;
-            WeekOfYearIso8601 = weekOfYearIso8601;
-            DayOfWeek = dayOfWeek;
-
-            return true;
-        }
-
-        inline void FromTimeOfDay(ui64 value) {
-            Hour = value / 3600000000ull;
-            value -= Hour * 3600000000ull;
-            Minute = value / 60000000ull;
-            value -= Minute * 60000000ull;
-            Second = value / 1000000ull;
-            Microsecond = value - Second * 1000000ull;
-        }
-
-        inline ui64 ToTimeOfDay() const {
-            return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
-        }
-
-        static const TTMStorage& Reference(const TUnboxedValuePod& value) {
-            return *reinterpret_cast<const TTMStorage*>(value.GetRawPtr());
-        }
-
-        static TTMStorage& Reference(TUnboxedValuePod& value) {
-            return *reinterpret_cast<TTMStorage*>(value.GetRawPtr());
-        }
-    };
-
-    static_assert(sizeof(TTMStorage) == 16, "TTMStorage size must be equal to TUnboxedValuePod size");
+NUdf::TUnboxedValuePod DoAddMonths(const NUdf::TUnboxedValuePod& date, i64 months, const NUdf::IDateBuilder& builder) {
+    auto result = date;
+    auto& storage = Reference(result);
+    if (!NYql::DateTime::DoAddMonths(storage, months, builder)) {
+        return NUdf::TUnboxedValuePod{};
+    }
+    return result;
+}
+NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years, const NUdf::IDateBuilder& builder) {
+    auto result = date;
+    auto& storage = Reference(result);
+    if (!NYql::DateTime::DoAddYears(storage, years, builder)) {
+        return NUdf::TUnboxedValuePod{};
+    }
+    return result;
+}
 
 #define ACCESSORS(field, type)                                                  \
     inline type Get##field(const TUnboxedValuePod& tm) {                        \
-        return (type)TTMStorage::Reference(tm).field;                           \
+        return (type)Reference(tm).field;                           \
     }                                                                           \
     Y_DECLARE_UNUSED inline void Set##field(TUnboxedValuePod& tm, type value) { \
-        TTMStorage::Reference(tm).field = value;                                \
+        Reference(tm).field = value;                                \
     }
 
     ACCESSORS(Year, ui16)
@@ -330,7 +209,7 @@ namespace {
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = TTMStorage::Reference(result);
+            auto& storage = Reference(result);
             storage.FromDate(builder, args[0].Get<ui16>());
             return result;
         } catch (const std::exception& e) {
@@ -348,7 +227,7 @@ namespace {
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = TTMStorage::Reference(result);
+            auto& storage = Reference(result);
             storage.FromDatetime(builder, args[0].Get<ui32>());
             return result;
         } catch (const std::exception& e) {
@@ -366,7 +245,7 @@ namespace {
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = TTMStorage::Reference(result);
+            auto& storage = Reference(result);
             storage.FromTimestamp(builder, args[0].Get<ui64>());
             return result;
         } catch (const std::exception& e) {
@@ -384,7 +263,7 @@ namespace {
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = TTMStorage::Reference(result);
+            auto& storage = Reference(result);
             storage.FromDate(builder, args[0].Get<ui16>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
@@ -402,7 +281,7 @@ namespace {
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = TTMStorage::Reference(result);
+            auto& storage = Reference(result);
             storage.FromDatetime(builder, args[0].Get<ui32>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
@@ -420,7 +299,7 @@ namespace {
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = TTMStorage::Reference(result);
+            auto& storage = Reference(result);
             storage.FromTimestamp(builder, args[0].Get<ui64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
@@ -432,25 +311,25 @@ namespace {
 
     SIMPLE_UDF(TMakeDate, TDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = TTMStorage::Reference(args[0]);
+        auto& storage = Reference(args[0]);
         return TUnboxedValuePod(storage.ToDate(builder, false));
     }
 
     SIMPLE_UDF(TMakeDatetime, TDatetime(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = TTMStorage::Reference(args[0]);
+        auto& storage = Reference(args[0]);
         return TUnboxedValuePod(storage.ToDatetime(builder));
     }
 
     SIMPLE_UDF(TMakeTimestamp, TTimestamp(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = TTMStorage::Reference(args[0]);
+        auto& storage = Reference(args[0]);
         return TUnboxedValuePod(storage.ToTimestamp(builder));
     }
 
     SIMPLE_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = TTMStorage::Reference(args[0]);
+        auto& storage = Reference(args[0]);
         TUnboxedValuePod result(storage.ToDate(builder, true));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
@@ -458,7 +337,7 @@ namespace {
 
     SIMPLE_UDF(TMakeTzDatetime, TTzDatetime(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = TTMStorage::Reference(args[0]);
+        auto& storage = Reference(args[0]);
         TUnboxedValuePod result(storage.ToDatetime(builder));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
@@ -466,7 +345,7 @@ namespace {
 
     SIMPLE_UDF(TMakeTzTimestamp, TTzTimestamp(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = TTMStorage::Reference(args[0]);
+        auto& storage = Reference(args[0]);
         TUnboxedValuePod result(storage.ToTimestamp(builder));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
@@ -626,7 +505,7 @@ namespace {
                 }
 
                 auto& builder = valueBuilder->GetDateBuilder();
-                auto& storage = TTMStorage::Reference(result);
+                auto& storage = Reference(result);
                 if (!storage.Validate(builder)) {
                     return TUnboxedValuePod();
                 }
@@ -828,7 +707,7 @@ namespace {
 
     SIMPLE_UDF(TStartOfYear, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
-        auto& storage = TTMStorage::Reference(result);
+        auto& storage = Reference(result);
         storage.Month = 1;
         storage.Day = 1;
         storage.Hour = 0;
@@ -845,7 +724,7 @@ namespace {
 
     SIMPLE_UDF(TStartOfQuarter, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
-        auto& storage = TTMStorage::Reference(result);
+        auto& storage = Reference(result);
         storage.Month = (storage.Month - 1) / 3 * 3 + 1;
         storage.Day = 1;
         storage.Hour = 0;
@@ -862,7 +741,7 @@ namespace {
 
     SIMPLE_UDF(TStartOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
-        auto& storage = TTMStorage::Reference(result);
+        auto& storage = Reference(result);
         storage.Day = 1;
         storage.Hour = 0;
         storage.Minute = 0;
@@ -878,7 +757,7 @@ namespace {
 
     SIMPLE_UDF(TStartOfWeek, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
-        auto& storage = TTMStorage::Reference(result);
+        auto& storage = Reference(result);
         auto& builder = valueBuilder->GetDateBuilder();
 
         const auto date = storage.ToDatetime(builder);
@@ -897,7 +776,7 @@ namespace {
 
     SIMPLE_UDF(TStartOfDay, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
         auto result = args[0];
-        auto& storage = TTMStorage::Reference(result);
+        auto& storage = Reference(result);
         storage.Hour = 0;
         storage.Minute = 0;
         storage.Second = 0;
@@ -916,7 +795,7 @@ namespace {
         if (interval == 0) {
             return result;
         }
-        auto& storage = TTMStorage::Reference(result);
+        auto& storage = Reference(result);
         if (interval >= 86400000000ull) {
             // treat as StartOfDay
             storage.Hour = 0;
@@ -938,47 +817,14 @@ namespace {
 
     SIMPLE_UDF(TTimeOfDay, TInterval(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
-        auto& storage = TTMStorage::Reference(args[0]);
+        auto& storage = Reference(args[0]);
         return TUnboxedValuePod((i64)storage.ToTimeOfDay());
     }
 
     // Add ...
 
     SIMPLE_UDF(TShiftYears, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
-        auto result = args[0];
-        auto& storage = TTMStorage::Reference(result);
-        storage.Year += args[1].Get<i32>();
-        if (storage.Month == 2 && storage.Day == 29) {
-            bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
-            if (!isLeap) {
-                storage.Day--;
-            }
-        }
-        auto& builder = valueBuilder->GetDateBuilder();
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
-        }
-        return result;
-    }
-
-    TUnboxedValuePod DoAddMonths(const TUnboxedValuePod& date, i64 months, const IDateBuilder& builder) {
-        auto result = date;
-        auto& storage = TTMStorage::Reference(result);
-        i64 newMonth = months + storage.Month;
-        storage.Year += (newMonth - 1) / 12;
-        newMonth = 1 + (newMonth - 1) % 12;
-        if (newMonth <= 0) {
-            storage.Year--;
-            newMonth += 12;
-        }
-        storage.Month = newMonth;
-        bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
-        ui32 monthLength = NKikimr::NMiniKQL::GetMonthLength(storage.Month, isLeap);
-        storage.Day = std::min(monthLength, storage.Day);
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
-        }
-        return result;
+        return DoAddYears(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
     }
 
     SIMPLE_UDF(TShiftQuarters, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
@@ -1401,7 +1247,7 @@ namespace {
                 const std::string_view buffer = args[0].AsStringRef();
 
                 TUnboxedValuePod result(0);
-                auto& storage = TTMStorage::Reference(result);
+                auto& storage = Reference(result);
                 storage.MakeDefault();
 
                 auto& builder = valueBuilder->GetDateBuilder();
@@ -1629,7 +1475,7 @@ namespace {
         }                                                                               \
         auto& builder = valueBuilder->GetDateBuilder();                                 \
         TUnboxedValuePod result(0);                                                     \
-        auto& storage = TTMStorage::Reference(result);                                  \
+        auto& storage = Reference(result);                                  \
         storage.FromTimestamp(builder, instant.MicroSeconds());                         \
         return result;                                                                  \
     }

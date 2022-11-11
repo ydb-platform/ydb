@@ -8,6 +8,11 @@
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
+#include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
+#include <ydb/library/yql/minikql/datetime/datetime.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
+
 namespace NYql::NPathGenerator {
 
 namespace {
@@ -164,13 +169,45 @@ TDuration FromUnit(int64_t interval, IPathGenerator::EIntervalUnit unit) {
         return TDuration::Days(interval);
     case IPathGenerator::EIntervalUnit::WEEKS:
         return TDuration::Days(interval *  7);
-    case IPathGenerator::EIntervalUnit::MONTHS:
-        return TDuration::Seconds(interval *  2629746LL); /// Exactly 1/12 of a year.
+    case IPathGenerator::EIntervalUnit::MONTHS: // external special handling
     case IPathGenerator::EIntervalUnit::YEARS:
-        return TDuration::Seconds(interval * 31556952LL); /// The average length of a Gregorian year is equal to 365.2425 days
     default:
         ythrow yexception() << "Only the " << GetEnumAllNames<IPathGenerator::EIntervalUnit>() << " units are supported but got " << unit;
     }
+}
+
+TInstant DoAddMonths(TInstant current, i64 months) {
+    NKikimr::NMiniKQL::TScopedAlloc alloc{__LOCATION__};
+    NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("MemoryAddMonths");
+    NKikimr::NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
+    NKikimr::NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+    return DateTime::DoAddMonths(current, months, builder.GetDateBuilder());
+}
+
+TInstant DoAddYears(TInstant current, i64 years) {
+    NKikimr::NMiniKQL::TScopedAlloc alloc{__LOCATION__};
+    NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("MemoryAddYears");
+    NKikimr::NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
+    NKikimr::NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+    return DateTime::DoAddYears(current, years, builder.GetDateBuilder());
+}
+
+TInstant AddUnit(TInstant current, int64_t interval, IPathGenerator::EIntervalUnit unit) {
+    if (unit == IPathGenerator::EIntervalUnit::MONTHS) {
+        return DoAddMonths(current, interval);
+    }
+
+    if (unit == IPathGenerator::EIntervalUnit::YEARS) {
+        return DoAddYears(current, interval);
+    }
+
+
+    const TDuration delta = FromUnit(interval, unit);
+    if (IsOverflow(current.GetValue(), delta.GetValue())) {
+        ythrow yexception() << "Timestamp is overflowed";
+    }
+
+    return current + delta;
 }
 
 TInstant ParseDate(const TString& dateStr, const TInstant& now) {
@@ -194,7 +231,7 @@ TInstant ParseDate(const TString& dateStr, const TInstant& now) {
         const TString offset = (it + 4)->str();
         const TString unit = (it + 5)->str();
         if (sign) {
-            return now + (sign.front() == '+' ? 1 : -1) * FromUnit(stoll(offset), ToIntervalUnit(unit));
+            return AddUnit(now, (sign.front() == '+' ? 1 : -1) * stoll(offset), ToIntervalUnit(unit));
         } else {
             return now;
         }
@@ -535,17 +572,17 @@ private:
                     size_t p = 0) {
         const auto& rule = rules[p];
         const TInstant to = ParseDate(rule.To, now);
-        const TDuration interval = FromUnit(rule.Interval, rule.IntervalUnit);
-        for (TInstant current = ParseDate(rule.From, now); current <= to; current += interval) {
-            TString copyLocationTemplate = locationTemplate;
-            const TString time = Strftime(rule.Format.c_str(), current);
-            ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);
-            columnsWithValue.push_back(TColumnWithValue{.Name=rule.Name, .Type=NUdf::EDataSlot::Date, .Value=Strftime("%F", current)});
-            DoGenerate(rules, copyLocationTemplate, columnsWithValue, result, pathsLimit, now, p + 1);
-            columnsWithValue.pop_back();
-            if (IsOverflow(current.GetValue(), interval.GetValue())) {
-                return; // correct overflow handling
+        try {
+            for (TInstant current = ParseDate(rule.From, now); current <= to; current = AddUnit(current, rule.Interval, rule.IntervalUnit)) {
+                TString copyLocationTemplate = locationTemplate;
+                const TString time = Strftime(rule.Format.c_str(), current);
+                ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);
+                columnsWithValue.push_back(TColumnWithValue{.Name=rule.Name, .Type=NUdf::EDataSlot::Date, .Value=Strftime("%F", current)});
+                DoGenerate(rules, copyLocationTemplate, columnsWithValue, result, pathsLimit, now, p + 1);
+                columnsWithValue.pop_back();
             }
+        } catch (...) {
+            // correct overflow handling
         }
     }
 

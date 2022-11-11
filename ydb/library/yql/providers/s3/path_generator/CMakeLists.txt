@@ -9,10 +9,14 @@
 add_subdirectory(ut)
 
 add_library(providers-s3-path_generator)
+target_compile_options(providers-s3-path_generator PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(providers-s3-path_generator PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-scheme
+  yql-minikql-datetime
   yql-public-udf
   tools-enum_parser-enum_serialization_runtime
 )

@@ -235,11 +235,13 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
         )", {"dt"});
 
         auto rules = generator->GetRules();
-        UNIT_ASSERT_VALUES_EQUAL(rules.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rules.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "yellow_tripdata_asdf%0 asdf2012%0 444-01.csv");
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rules[1].Path, "yellow_tripdata_asdf%0 asdf2013%0 444-01.csv");
         UNIT_ASSERT_VALUES_EQUAL(rules[1].ColumnValues.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rules[2].Path, "yellow_tripdata_asdf%0 asdf2014%0 444-01.csv");
+        UNIT_ASSERT_VALUES_EQUAL(rules[2].ColumnValues.size(), 1);
     }
 
     Y_UNIT_TEST(TimestampFormatCheck) {

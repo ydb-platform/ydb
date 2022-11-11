@@ -31,9 +31,6 @@ target_link_libraries(core-kqp-host PUBLIC
 )
 target_sources(core-kqp-host PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_host.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_run_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_explain_prepared.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_run_physical.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_run_scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_runner.cpp
 )

@@ -1044,8 +1044,10 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml)
 {
     auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-    request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-    request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+    if (dml) {
+        request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+    }
     request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     request->Record.MutableRequest()->SetType(dml
                                               ? NKikimrKqp::QUERY_TYPE_SQL_DML

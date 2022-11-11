@@ -111,23 +111,8 @@ public:
     };
 
 public:
-    /* Snapshots */
-    virtual NThreading::TFuture<TKqpSnapshotHandle> CreatePersistentSnapshot(const TVector<TString>& tablePaths,
-        TDuration queryTimeout) = 0;
-
-    virtual void DiscardPersistentSnapshot(const TKqpSnapshotHandle& handle) = 0;
-
-    virtual NThreading::TFuture<TKqpSnapshotHandle> AcquireMvccSnapshot(TDuration queryTimeout) = 0;
-
-    /* Physical */
-    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePhysical(TExecPhysicalRequest&& request,
-        const NActors::TActorId& target) = 0;
-
-    virtual NThreading::TFuture<TExecPhysicalResult> ExecuteScanQuery(TExecPhysicalRequest&& request,
-        const NActors::TActorId& target) = 0;
-
-    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request,
-        const NActors::TActorId& target) = 0;
+    /* Compute */
+    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request) = 0;
 
     /* Scripting */
     virtual NThreading::TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) = 0;
@@ -147,9 +132,6 @@ public:
 
     virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
         TKqpParamsMap&& params, const TAstQuerySettings& settings, const NActors::TActorId& target) = 0;
-
-public:
-    virtual TInstant GetCurrentTime() const = 0;
 };
 
 } // namespace NKqp

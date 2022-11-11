@@ -475,6 +475,74 @@ private:
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
+class TKqpExecPureRequestHandler: public TActorBootstrapped<TKqpExecPureRequestHandler> {
+public:
+    using TResult = IKqpGateway::TExecPhysicalResult;
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KQP_EXEC_PHYSICAL_REQUEST_HANDLER;
+    }
+
+    TKqpExecPureRequestHandler(const TActorId& executerId, TPromise<TResult> promise)
+        : ExecuterId(executerId)
+        , Promise(promise) {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        auto executerEv = MakeHolder<NKqp::TEvKqpExecuter::TEvTxRequest>();
+        ActorIdToProto(ctx.SelfID, executerEv->Record.MutableTarget());
+        executerEv->Record.MutableRequest()->SetTxId(0);
+        ctx.Send(ExecuterId, executerEv.Release());
+
+        Become(&TKqpExecPureRequestHandler::ProcessState);
+    }
+
+private:
+    void Handle(TEvKqpExecuter::TEvTxResponse::TPtr &ev, const TActorContext &) {
+        auto* response = ev->Get()->Record.MutableResponse();
+
+        TResult result;
+        if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
+            result.SetSuccess();
+        }
+        for (auto& issue : response->GetIssues()) {
+            result.AddIssue(NYql::IssueFromMessage(issue));
+        }
+
+        result.ExecuterResult.Swap(response->MutableResult());
+
+        Promise.SetValue(std::move(result));
+        this->PassAway();
+    }
+
+    void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
+        Y_UNUSED(ev);
+        Y_UNUSED(ctx);
+    }
+
+    void HandleUnexpectedEvent(ui32 eventType, const TActorContext &ctx) {
+        LOG_CRIT_S(ctx, NKikimrServices::KQP_GATEWAY,
+            "TKqpExecPureRequestHandler, unexpected event, type: " << eventType);
+
+        Promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::UNEXPECTED, TStringBuilder()
+            << "TKqpExecPureRequestHandler, unexpected event, type: " << eventType)));
+
+        this->PassAway();
+    }
+
+    STFUNC(ProcessState) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvKqpExecuter::TEvTxResponse, Handle);
+            HFunc(TEvKqpExecuter::TEvExecuterProgress, Handle);
+        default:
+            HandleUnexpectedEvent(ev->GetTypeRewrite(), ctx);
+        }
+    }
+
+private:
+    TActorId ExecuterId;
+    TPromise<TResult> Promise;
+};
+
 class TSchemeOpRequestHandler: public TRequestHandlerBase<
     TSchemeOpRequestHandler,
     TEvTxUserProxy::TEvProposeTransaction,
@@ -638,127 +706,6 @@ public:
 
 private:
     TActorId ShemePipeActorId;
-};
-
-class TKqpExecPhysicalRequestHandler: public TActorBootstrapped<TKqpExecPhysicalRequestHandler> {
-public:
-    using TRequest = TEvTxUserProxy::TEvProposeKqpTransaction;
-    using TResult = IKqpGateway::TExecPhysicalResult;
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_EXEC_PHYSICAL_REQUEST_HANDLER;
-    }
-
-    TKqpExecPhysicalRequestHandler(TRequest* request, bool streaming, const TActorId& target, TPromise<TResult> promise, bool needTxId)
-        : Request(request)
-        , Streaming(streaming)
-        , Executer(request->ExecuterId)
-        , Target(target)
-        , Promise(promise)
-        , NeedTxId(needTxId) {}
-
-    void Bootstrap(const TActorContext& ctx) {
-        if (NeedTxId) {
-            ctx.Send(MakeTxProxyID(), this->Request.Release());
-        } else {
-            auto executerEv = MakeHolder<NKqp::TEvKqpExecuter::TEvTxRequest>();
-            ActorIdToProto(ctx.SelfID, executerEv->Record.MutableTarget());
-            executerEv->Record.MutableRequest()->SetTxId(0);
-            ctx.Send(Request->ExecuterId, executerEv.Release());
-        }
-
-        Become(&TKqpExecPhysicalRequestHandler::ProcessState);
-    }
-
-private:
-    void Handle(TEvKqpExecuter::TEvStreamData::TPtr &ev, const TActorContext &ctx) {
-        if (Streaming) {
-            TlsActivationContext->Send(ev->Forward(Target));
-        } else {
-            HandleUnexpectedEvent(ev->GetTypeRewrite(), ctx);
-        }
-    }
-
-    void Handle(TEvKqpExecuter::TEvStreamDataAck::TPtr &ev, const TActorContext &ctx) {
-        if (Streaming) {
-            TlsActivationContext->Send(ev->Forward(Executer));
-        } else {
-            HandleUnexpectedEvent(ev->GetTypeRewrite(), ctx);
-        }
-    }
-
-    void Handle(TEvKqpExecuter::TEvTxResponse::TPtr &ev, const TActorContext &) {
-        auto* response = ev->Get()->Record.MutableResponse();
-
-        TResult result;
-        if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
-            result.SetSuccess();
-        }
-        for (auto& issue : response->GetIssues()) {
-            result.AddIssue(NYql::IssueFromMessage(issue));
-        }
-
-        result.ExecuterResult.Swap(response->MutableResult());
-        result.LockHandle = std::move(ev->Get()->LockHandle);
-
-        Promise.SetValue(std::move(result));
-        this->PassAway();
-    }
-
-    void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext&) {
-        this->Send(Target, ev->Release().Release());
-    }
-
-    void Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
-        auto& msg = ev->Get()->Record;
-        NYql::TIssues issues = ev->Get()->GetIssues();
-
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_GATEWAY,
-            "TKqpExecPhysicalRequestHandler, got EvAbortExecution event."
-             << " Code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-             << ", reason: " << issues.ToOneLineString());
-
-        auto issueCode = NYql::YqlStatusFromYdbStatus(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()));
-        NYql::TIssues resultIssues;
-        for (const auto& i : issues) {
-            NYql::TIssue issue(i);
-            NYql::SetIssueCode(issueCode, issue);
-            resultIssues.AddIssue(std::move(issue));
-        }
-        Promise.SetValue(ResultFromError<TResult>(std::move(resultIssues)));
-
-        this->PassAway();
-    }
-
-    void HandleUnexpectedEvent(ui32 eventType, const TActorContext &ctx) {
-        LOG_CRIT_S(ctx, NKikimrServices::KQP_GATEWAY,
-            "TKqpExecPhysicalRequestHandler, unexpected event, type: " << eventType);
-
-        Promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::UNEXPECTED, TStringBuilder()
-            << "TKqpExecPhysicalRequestHandler, unexpected event, type: " << eventType)));
-
-        this->PassAway();
-    }
-
-    STFUNC(ProcessState) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvKqpExecuter::TEvStreamData, Handle);
-            HFunc(TEvKqpExecuter::TEvStreamDataAck, Handle);
-            HFunc(TEvKqpExecuter::TEvTxResponse, Handle);
-            HFunc(TEvKqpExecuter::TEvExecuterProgress, Handle);
-            HFunc(TEvKqp::TEvAbortExecution, Handle);
-        default:
-            HandleUnexpectedEvent(ev->GetTypeRewrite(), ctx);
-        }
-    }
-
-private:
-    THolder<TRequest> Request;
-    bool Streaming;
-    TActorId Executer;
-    TActorId Target;
-    TPromise<TResult> Promise;
-    bool NeedTxId;
 };
 
 template<typename TResult>
@@ -1609,13 +1556,10 @@ public:
         }
     }
 
-    TFuture<TExecPhysicalResult> ExecutePhysical(TExecPhysicalRequest&& request, const NActors::TActorId& target) override {
-        return ExecutePhysicalQueryInternal(std::move(request), target, false);
-    }
-
-    TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, const NActors::TActorId& target) override {
+    TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.Locks.empty());
+        YQL_ENSURE(!request.NeedTxId);
 
         auto containOnlyPureStages = [](const auto& request) {
             for (const auto& tx : request.Transactions) {
@@ -1634,7 +1578,19 @@ public:
         };
 
         YQL_ENSURE(containOnlyPureStages(request));
-        return ExecutePhysicalQueryInternal(std::move(request), target, false);
+
+        auto executerActor = CreateKqpExecuter(std::move(request), Database,
+            UserToken ? TMaybe<TString>(UserToken->Serialized) : Nothing(), Counters);
+        auto executerId = RegisterActor(executerActor);
+
+        LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Created new KQP executer: " << executerId);
+
+        auto promise = NewPromise<TExecPhysicalResult>();
+
+        IActor* requestHandler = new TKqpExecPureRequestHandler(executerId, promise);
+        RegisterActor(requestHandler);
+
+        return promise.GetFuture();
     }
 
     TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,
@@ -1845,70 +1801,6 @@ public:
             });
     }
 
-    TFuture<TExecPhysicalResult> ExecuteScanQuery(TExecPhysicalRequest&& request, const TActorId& target) override {
-        return ExecutePhysicalQueryInternal(std::move(request), target, true);
-    }
-
-    TFuture<TKqpSnapshotHandle> CreatePersistentSnapshot(const TVector<TString>& tablePaths, TDuration queryTimeout) override {
-        auto* snapMgr = CreateKqpSnapshotManager(Database, queryTimeout);
-        auto snapMgrActorId = RegisterActor(snapMgr);
-
-        auto ev = MakeHolder<TEvKqpSnapshot::TEvCreateSnapshotRequest>(tablePaths);
-
-        return SendActorRequest<
-            TEvKqpSnapshot::TEvCreateSnapshotRequest,
-            TEvKqpSnapshot::TEvCreateSnapshotResponse,
-            IKqpGateway::TKqpSnapshotHandle>
-        (
-            snapMgrActorId,
-            ev.Release(),
-            [snapMgrActorId](TPromise<IKqpGateway::TKqpSnapshotHandle> promise,
-                             TEvKqpSnapshot::TEvCreateSnapshotResponse&& response) mutable
-            {
-                IKqpGateway::TKqpSnapshotHandle handle;
-                handle.Snapshot = response.Snapshot;
-                handle.ManagingActor = snapMgrActorId;
-                handle.Status = response.Status;
-                handle.AddIssues(response.Issues);
-                promise.SetValue(handle);
-            }
-        );
-    }
-
-    NThreading::TFuture<TKqpSnapshotHandle> AcquireMvccSnapshot(TDuration queryTimeout) override {
-        auto* snapMgr = CreateKqpSnapshotManager(Database, queryTimeout);
-        auto snapMgrActorId = RegisterActor(snapMgr);
-
-        auto ev = MakeHolder<TEvKqpSnapshot::TEvCreateSnapshotRequest>();
-
-        return SendActorRequest<
-            TEvKqpSnapshot::TEvCreateSnapshotRequest,
-            TEvKqpSnapshot::TEvCreateSnapshotResponse,
-            IKqpGateway::TKqpSnapshotHandle>
-            (
-                snapMgrActorId,
-                ev.Release(),
-                [](TPromise<IKqpGateway::TKqpSnapshotHandle> promise,
-                                 TEvKqpSnapshot::TEvCreateSnapshotResponse&& response) mutable
-                {
-                    IKqpGateway::TKqpSnapshotHandle handle;
-                    handle.Snapshot = response.Snapshot;
-                    handle.Status = response.Status;
-                    handle.AddIssues(response.Issues);
-                    promise.SetValue(handle);
-                }
-            );
-    }
-
-    void DiscardPersistentSnapshot(const TKqpSnapshotHandle& handle) override {
-        if (handle.ManagingActor)
-            ActorSystem->Send(handle.ManagingActor, new TEvKqpSnapshot::TEvDiscardSnapshot(handle.Snapshot));
-    }
-
-    TInstant GetCurrentTime() const override {
-        return TAppData::TimeProvider->Now();
-    }
-
 private:
     using TDescribeSchemeResponse = TEvSchemeShard::TEvDescribeSchemeResult;
     using TTransactionResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
@@ -2021,25 +1913,6 @@ private:
 
     bool CheckCluster(const TString& cluster) {
         return cluster == Cluster;
-    }
-
-    TFuture<TExecPhysicalResult> ExecutePhysicalQueryInternal(TExecPhysicalRequest&& request, const TActorId& target,
-        bool streaming)
-    {
-        const bool needTxId = request.NeedTxId;
-        auto executerActor = CreateKqpExecuter(std::move(request), Database,
-            UserToken ? TMaybe<TString>(UserToken->Serialized) : Nothing(), Counters);
-        auto executerId = RegisterActor(executerActor);
-
-        LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Created new KQP executer: " << executerId);
-
-        auto promise = NewPromise<TExecPhysicalResult>();
-
-        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeKqpTransaction>(executerId);
-        IActor* requestHandler = new TKqpExecPhysicalRequestHandler(ev.Release(), streaming, target, promise, needTxId);
-        RegisterActor(requestHandler);
-
-        return promise.GetFuture();
     }
 
     bool GetDatabaseForLoginOperation(TString& database) {

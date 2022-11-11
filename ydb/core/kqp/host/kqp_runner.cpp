@@ -24,32 +24,6 @@ using namespace NThreading;
 
 namespace {
 
-class TAsyncRunResult : public TKqpAsyncResultBase<IKikimrQueryExecutor::TQueryResult, false> {
-public:
-    using TResult = IKikimrQueryExecutor::TQueryResult;
-
-    TAsyncRunResult(const TExprNode::TPtr& queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
-        const TKqlTransformContext& transformCtx)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
-        , TransformCtx(transformCtx) {}
-
-    void FillResult(TResult& queryResult) const override {
-        if (TransformCtx.QueryCtx->PrepareOnly) {
-            return;
-        }
-
-        if (!TransformCtx.MkqlResults.empty() && TransformCtx.MkqlResults.back()) {
-            queryResult.Results = UnpackKikimrRunResult(*TransformCtx.MkqlResults.back(),
-                queryResult.ProtobufArenaPtr.get());
-        }
-
-        queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
-    }
-
-private:
-    const TKqlTransformContext& TransformCtx;
-};
-
 class TPhysicalAsyncRunResult : public TKqpAsyncResultBase<IKikimrQueryExecutor::TQueryResult, false> {
 public:
     using TResult = IKikimrQueryExecutor::TQueryResult;
@@ -77,55 +51,6 @@ private:
     const TKqlTransformContext& TransformCtx;
 };
 
-class TScanAsyncRunResult : public TKqpAsyncResultBase<IKikimrQueryExecutor::TQueryResult, false> {
-public:
-    using TResult = IKikimrQueryExecutor::TQueryResult;
-
-    TScanAsyncRunResult(const TExprNode::TPtr& queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
-        const TKqlTransformContext& transformCtx)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
-        , TransformCtx(transformCtx) {}
-
-    void FillResult(TResult& queryResult) const override {
-        queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
-    }
-
-private:
-    const TKqlTransformContext& TransformCtx;
-};
-
-class TKqpIterationGuardTransformer : public TSyncTransformerBase {
-public:
-    const ui32 MaxTransformIterations = 100;
-
-public:
-    TKqpIterationGuardTransformer()
-        : Iterations(0) {}
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input;
-
-        if (Iterations > MaxTransformIterations) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                << "Exceeded maximum allowed KQP iterations: " << MaxTransformIterations));
-            return TStatus::Error;
-        }
-
-        ++Iterations;
-        YQL_CLOG(DEBUG, ProviderKqp) << "Iteration #" << Iterations << ":" << Endl
-            << KqpExprToPrettyString(*input, ctx);
-
-        return TStatus::Ok;
-    }
-
-    void Rewind() override {
-        Iterations = 0;
-    }
-
-private:
-    ui32 Iterations;
-};
-
 class TKqpRunner : public IKqpRunner {
 public:
     TKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
@@ -136,7 +61,6 @@ public:
         , TypesCtx(*typesCtx)
         , FuncRegistry(funcRegistry)
         , Config(sessionCtx->ConfigPtr())
-        , TxState(MakeIntrusive<TKqpTransactionState>(sessionCtx))
         , TransformCtx(MakeIntrusive<TKqlTransformContext>(Config, sessionCtx->QueryPtr(), sessionCtx->TablesPtr()))
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr()))
@@ -193,17 +117,6 @@ public:
                         CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config),
                     *typesCtx), *typesCtx, Config), "Peephole")
             .Build(false);
-
-        PhysicalRunQueryTransformer = TTransformationPipeline(typesCtx)
-            .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx), "AcquireMvccSnapshot")
-            .Add(CreateKqpExecutePhysicalDataTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecutePhysical")
-            .Build(false);
-
-        ScanRunQueryTransformer = TTransformationPipeline(typesCtx)
-            .Add(CreateKqpCreateSnapshotTransformer(Gateway, TransformCtx, TxState), "CreateSnapshot")
-            .Add(CreateKqpExecuteScanTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecuteScan")
-            .Add(CreateKqpReleaseSnapshotTransformer(Gateway, TxState), "ReleaseSnapshot")
-            .Build(false);
     }
 
     TIntrusivePtr<TAsyncQueryResult> PrepareDataQuery(const TString& cluster, const TExprNode::TPtr& query,
@@ -242,44 +155,7 @@ public:
         return PrepareQueryInternal(cluster, dataQuery, ctx, scanSettings);
     }
 
-    TIntrusivePtr<TAsyncQueryResult> ExecutePreparedQueryNewEngine(const TString& cluster,
-        const NYql::TExprNode::TPtr& world, std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery, TExprContext& ctx,
-        const IKikimrQueryExecutor::TExecuteSettings& settings) override
-    {
-        YQL_ENSURE(cluster == Cluster);
-        YQL_ENSURE(phyQuery->GetType() == NKqpProto::TKqpPhyQuery::TYPE_DATA);
-
-        return ExecutePhysicalDataQuery(world, std::move(phyQuery), ctx, settings);
-    }
-
-    TIntrusivePtr<TAsyncQueryResult> ExecutePreparedScanQuery(const TString& cluster,
-        const NYql::TExprNode::TPtr& world, std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery, TExprContext& ctx,
-        const NActors::TActorId& target) override
-    {
-        YQL_ENSURE(cluster == Cluster);
-        YQL_ENSURE(phyQuery->GetType() == NKqpProto::TKqpPhyQuery::TYPE_SCAN);
-
-        return ExecutePhysicalScanQuery(world, std::move(phyQuery), ctx, target);
-    }
-
 private:
-    bool ApplyTableOperations(const TVector<NKqpProto::TKqpTableOp>& operations,
-        const TVector<NKqpProto::TKqpTableInfo>& tableInfos, bool strictDml, TExprContext& ctx)
-    {
-        auto isolationLevel = *TxState->Tx().EffectiveIsolationLevel;
-        if (!TxState->Tx().ApplyTableOperations(operations, tableInfos, isolationLevel, strictDml, EKikimrQueryType::Dml, ctx)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    bool ApplyTableOperations(const NKqpProto::TKqpPhyQuery& query, bool strictDml, TExprContext& ctx) {
-        TVector<NKqpProto::TKqpTableOp> operations(query.GetTableOps().begin(), query.GetTableOps().end());
-        TVector<NKqpProto::TKqpTableInfo> tableInfos(query.GetTableInfos().begin(), query.GetTableInfos().end());
-        return ApplyTableOperations(operations, tableInfos, strictDml, ctx);
-    }
-
     TIntrusivePtr<TAsyncQueryResult> PrepareQueryInternal(const TString& cluster, const TKiDataQuery& dataQuery,
         TExprContext& ctx, const IKikimrQueryExecutor::TExecuteSettings& settings)
     {
@@ -386,43 +262,6 @@ private:
         return MakeIntrusive<TPhysicalAsyncRunResult>(builtQuery, ctx, *PreparedExplainTransformer, *TransformCtx);
     }
 
-    TIntrusivePtr<TAsyncQueryResult> ExecutePhysicalDataQuery(const TExprNode::TPtr& world,
-        std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery, TExprContext& ctx,
-        const IKikimrQueryExecutor::TExecuteSettings& settings)
-    {
-        PhysicalRunQueryTransformer->Rewind();
-
-        TransformCtx->Reset();
-        TransformCtx->PhysicalQuery = phyQuery;
-
-        YQL_ENSURE(TxState->Tx().EffectiveIsolationLevel);
-        YQL_ENSURE(TransformCtx->Settings.GetIsolationLevel() == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
-
-        // TODO: Avoid using KQL settings
-        TransformCtx->Settings.SetCommitTx(settings.CommitTx);
-        TransformCtx->Settings.SetRollbackTx(settings.RollbackTx);
-
-        bool strictDml = MergeFlagValue(Config->StrictDml.Get(Cluster), settings.StrictDml);
-        if (!ApplyTableOperations(*phyQuery, strictDml, ctx)) {
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
-        }
-        return MakeIntrusive<TPhysicalAsyncRunResult>(world, ctx, *PhysicalRunQueryTransformer, *TransformCtx);
-    }
-
-    TIntrusivePtr<TAsyncQueryResult> ExecutePhysicalScanQuery(const TExprNode::TPtr& world,
-        std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery, TExprContext& ctx, const NActors::TActorId& target)
-    {
-        ScanRunQueryTransformer->Rewind();
-
-        TransformCtx->Reset();
-        TransformCtx->PhysicalQuery = phyQuery;
-        TransformCtx->ReplyTarget = target;
-
-        Y_ASSERT(!TxState->Tx().GetSnapshot().IsValid());
-
-        return MakeIntrusive<TScanAsyncRunResult>(world, ctx, *ScanRunQueryTransformer, *TransformCtx);
-    }
-
     static bool MergeFlagValue(const TMaybe<bool>& configFlag, const TMaybe<bool>& flag) {
         if (flag) {
             return *flag;
@@ -442,7 +281,6 @@ private:
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TKikimrConfiguration::TPtr Config;
 
-    TIntrusivePtr<TKqpTransactionState> TxState;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
     TIntrusivePtr<TKqpOptimizeContext> OptimizeCtx;
     TIntrusivePtr<TKqpBuildQueryContext> BuildQueryCtx;
@@ -452,98 +290,9 @@ private:
     TAutoPtr<IGraphTransformer> PhysicalOptimizeTransformer;
     TAutoPtr<IGraphTransformer> PhysicalBuildQueryTransformer;
     TAutoPtr<IGraphTransformer> PhysicalPeepholeTransformer;
-    TAutoPtr<IGraphTransformer> PhysicalRunQueryTransformer;
-    TAutoPtr<IGraphTransformer> ScanRunQueryTransformer;
-};
-
-class TKqpAcquireMvccSnapshotTransformer : public TGraphTransformerBase {
-public:
-    TKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqlTransformContext> transformCtx,
-        TIntrusivePtr<TKqpTransactionState> txState)
-        : Gateway(std::move(gateway))
-        , TransformCtx(std::move(transformCtx))
-        , TxState(std::move(txState)) {}
-
-    TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) override {
-        output = input;
-
-        if (!NeedSnapshot(TxState->Tx(), *TransformCtx->Config, TransformCtx->Settings.GetRollbackTx(),
-            TransformCtx->Settings.GetCommitTx(), *TransformCtx->PhysicalQuery))
-        {
-            return TStatus::Ok;
-        }
-
-        auto timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime();
-        if (!timeout) {
-            // TODO: Just cancel request.
-            timeout = TDuration::MilliSeconds(1);
-        }
-        SnapshotFuture = Gateway->AcquireMvccSnapshot(timeout);
-
-        Promise = NewPromise();
-
-        SnapshotFuture.Apply([promise = Promise](const TFuture<IKqpGateway::TKqpSnapshotHandle> future) mutable {
-            YQL_ENSURE(future.HasValue());
-            promise.SetValue();
-        });
-
-        return TStatus::Async;
-    }
-
-    NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode&) override {
-        return Promise.GetFuture();
-    }
-
-    TStatus DoApplyAsyncChanges(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) override {
-        output = input;
-
-        auto handle = SnapshotFuture.ExtractValue();
-
-        if (handle.Snapshot.IsValid()) {
-            TxState->Tx().SnapshotHandle = handle;
-
-            return TStatus::Ok;
-        }
-
-        TIssue issue("Failed to acquire snapshot");
-        switch (handle.Status) {
-            case NKikimrIssues::TStatusIds::SCHEME_ERROR:
-                issue.SetCode(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, NYql::TSeverityIds::S_ERROR);
-                break;
-            case NKikimrIssues::TStatusIds::TIMEOUT:
-                issue.SetCode(NYql::TIssuesIds::KIKIMR_TIMEOUT, NYql::TSeverityIds::S_ERROR);
-                break;
-            case NKikimrIssues::TStatusIds::OVERLOADED:
-                issue.SetCode(NYql::TIssuesIds::KIKIMR_OVERLOADED, NYql::TSeverityIds::S_ERROR);
-                break;
-            default:
-                // Snapshot is acquired before reads or writes, so we can return UNAVAILABLE here
-                issue.SetCode(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, NYql::TSeverityIds::S_ERROR);
-                break;
-        }
-
-        for (const auto& subIssue: handle.Issues()) {
-            issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
-        }
-        ctx.AddError(issue);
-        return TStatus::Error;
-    }
-
-private:
-    TIntrusivePtr<IKqpGateway> Gateway;
-    TIntrusivePtr<TKqlTransformContext> TransformCtx;
-
-    NThreading::TFuture<IKqpGateway::TKqpSnapshotHandle> SnapshotFuture;
-    NThreading::TPromise<void> Promise;
-    TIntrusivePtr<TKqpTransactionState> TxState;
 };
 
 } // namespace
-
-TAutoPtr<NYql::IGraphTransformer> CreateKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx) {
-    return new TKqpAcquireMvccSnapshotTransformer(gateway, transformCtx, txState);
-}
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     TIntrusivePtr<TTypeAnnotationContext> typesCtx, TIntrusivePtr<TKikimrSessionContext> sessionCtx,

@@ -303,7 +303,6 @@ public:
     using TQueryResult = NYql::IKikimrGateway::TQueryResult;
     using TAsyncQueryResult = NYql::IKikimrAsyncResult<TQueryResult>;
 
-    /* Data queries */
     virtual TIntrusivePtr<TAsyncQueryResult> PrepareDataQuery(const TString& cluster,
         const NYql::TExprNode::TPtr& query, NYql::TExprContext& ctx,
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
@@ -311,39 +310,14 @@ public:
     virtual TIntrusivePtr<TAsyncQueryResult> PrepareScanQuery(const TString& cluster,
         const NYql::TExprNode::TPtr& query, NYql::TExprContext& ctx,
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
-
-    virtual TIntrusivePtr<TAsyncQueryResult> ExecutePreparedQueryNewEngine(const TString& cluster,
-        const NYql::TExprNode::TPtr& world, std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery,
-        NYql::TExprContext& ctx, const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
-
-    virtual TIntrusivePtr<TAsyncQueryResult> ExecutePreparedScanQuery(const TString& cluster,
-        const NYql::TExprNode::TPtr& world, std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery,
-        NYql::TExprContext& ctx, const NActors::TActorId& target) = 0;
 };
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     TIntrusivePtr<NYql::TTypeAnnotationContext> typesCtx, TIntrusivePtr<NYql::TKikimrSessionContext> sessionCtx,
     const NMiniKQL::IFunctionRegistry& funcRegistry);
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx);
-
-TAutoPtr<NYql::IGraphTransformer> CreateKqpExecutePhysicalDataTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState,
-    TIntrusivePtr<TKqlTransformContext> transformCtx);
-
 TAutoPtr<NYql::IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx);
-
-TAutoPtr<NYql::IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState,
-    TIntrusivePtr<TKqlTransformContext> transformCtx);
-
-TAutoPtr<NYql::IGraphTransformer> CreateKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqlTransformContext> transformCtx, TIntrusivePtr<TKqpTransactionState> txState);
-
-TAutoPtr<NYql::IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqpTransactionState> txState);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -20,7 +20,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
 
     CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline);
 
-    NYql::TIssues issues = ValidateWriteResultData(resultId, resultSet, deadline, Config.ResultSetsTtl);
+    NYql::TIssues issues = ValidateWriteResultData(resultId, resultSet, deadline, Config->ResultSetsTtl);
     if (issues) {
         CPS_LOG_D("WriteResultDataRequest, validation failed: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.DebugString() << " " << deadline << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
@@ -65,7 +65,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     );
 
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus result = Write(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
     auto success = SendResponse<TEvControlPlaneStorage::TEvWriteResultDataResponse, Fq::Private::WriteTaskResultResult>(

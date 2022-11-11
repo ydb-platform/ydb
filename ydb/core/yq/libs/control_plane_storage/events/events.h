@@ -115,33 +115,31 @@ public:
     }
 };
 
-namespace {
-    inline size_t GetIssuesByteSize(const NYql::TIssues& issues) {
-        size_t size = 0;
-        for (const auto& issue: issues) {
-            NYql::WalkThroughIssues(issue, false, [&size](const auto& issue, ui16) {
-                size += sizeof(issue);
-                size += issue.GetMessage().size();
-            });
-        }
-        size += issues.Size() * sizeof(NYql::TIssue);
-        return size;
+inline size_t GetIssuesByteSize(const NYql::TIssues& issues) {
+    size_t size = 0;
+    for (const auto& issue: issues) {
+        NYql::WalkThroughIssues(issue, false, [&size](const auto& issue, ui16) {
+            size += sizeof(issue);
+            size += issue.GetMessage().size();
+        });
     }
+    size += issues.Size() * sizeof(NYql::TIssue);
+    return size;
+}
 
-    inline size_t GetIssuesByteSize(const TMaybe<NYql::TIssues>& issues) {
-        return issues.Empty() ? 0 : GetIssuesByteSize(*issues);
-    }
+inline size_t GetIssuesByteSize(const TMaybe<NYql::TIssues>& issues) {
+    return issues.Empty() ? 0 : GetIssuesByteSize(*issues);
+}
 
-    inline size_t GetDebugInfoByteSize(const TDebugInfoPtr& infos) {
-        if (!infos) {
-            return 0;
-        }
-        size_t size = 0;
-        for (const auto& info: *infos) {
-            size += info.GetByteSize();
-        }
-        return size;
+inline size_t GetDebugInfoByteSize(const TDebugInfoPtr& infos) {
+    if (!infos) {
+        return 0;
     }
+    size_t size = 0;
+    for (const auto& info: *infos) {
+        size += info.GetByteSize();
+    }
+    return size;
 }
 
 struct TEvControlPlaneStorage {
@@ -201,6 +199,7 @@ struct TEvControlPlaneStorage {
         EvCreateRateLimiterResourceResponse,
         EvDeleteRateLimiterResourceRequest,
         EvDeleteRateLimiterResourceResponse,
+        EvDbRequestResult, // private // internal_events.h
         EvEnd,
     };
 
@@ -208,7 +207,8 @@ struct TEvControlPlaneStorage {
 
     template<typename ProtoMessage, ui32 EventType>
     struct TControlPlaneRequest : NActors::TEventLocal<TControlPlaneRequest<ProtoMessage, EventType>, EventType> {
-        using ProtoRequestType = ProtoMessage;
+        using TProto = ProtoMessage;
+
         explicit TControlPlaneRequest(const TString& scope,
                                              const ProtoMessage& request,
                                              const TString& user,
@@ -249,7 +249,8 @@ struct TEvControlPlaneStorage {
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>
     struct TControlPlaneResponse : NActors::TEventLocal<TDerived, EventType> {
-        using ProtoResultType = ProtoMessage;
+        using TProto = ProtoMessage;
+
         explicit TControlPlaneResponse(const ProtoMessage& result)
             : Result(result)
         {
@@ -279,6 +280,9 @@ struct TEvControlPlaneStorage {
 
     template<typename ProtoMessage, ui32 EventType>
     struct TControlPlaneNonAuditableResponse : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType> {
+        using TProto = ProtoMessage;
+        static constexpr bool Auditable = false;
+
         explicit TControlPlaneNonAuditableResponse(const ProtoMessage& result)
             : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(result)
         {
@@ -297,6 +301,10 @@ struct TEvControlPlaneStorage {
 
     template<typename ProtoMessage, typename AuditMessage, ui32 EventType>
     struct TControlPlaneAuditableResponse : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType> {
+        using TProto = ProtoMessage;
+        static constexpr bool Auditable = true;
+        using TAuditMessage = AuditMessage;
+
         explicit TControlPlaneAuditableResponse(const ProtoMessage& result,
                                         const TAuditDetails<AuditMessage>& auditDetails)
             : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(result)
@@ -383,6 +391,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvWriteResultDataResponse : NActors::TEventLocal<TEvWriteResultDataResponse, EvWriteResultDataResponse> {
+        static constexpr bool Auditable = false;
 
         explicit TEvWriteResultDataResponse(
             const Fq::Private::WriteTaskResultResult& record)
@@ -425,6 +434,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
+        static constexpr bool Auditable = false;
 
         explicit TEvGetTaskResponse(
             const Fq::Private::GetTaskResult& record)
@@ -489,6 +499,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, EvPingTaskResponse> {
+        static constexpr bool Auditable = false;
 
         explicit TEvPingTaskResponse(
             const Fq::Private::PingTaskResult& record)
@@ -530,6 +541,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, EvNodesHealthCheckResponse> {
+        static constexpr bool Auditable = false;
 
         explicit TEvNodesHealthCheckResponse(
             const Fq::Private::NodesHealthCheckResult& record)
@@ -570,6 +582,8 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvCreateRateLimiterResourceResponse : NActors::TEventLocal<TEvCreateRateLimiterResourceResponse, EvCreateRateLimiterResourceResponse> {
+        static constexpr bool Auditable = false;
+
         explicit TEvCreateRateLimiterResourceResponse(
             const Fq::Private::CreateRateLimiterResourceResult& record)
             : Record(record)
@@ -610,6 +624,8 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvDeleteRateLimiterResourceResponse : NActors::TEventLocal<TEvDeleteRateLimiterResourceResponse, EvDeleteRateLimiterResourceResponse> {
+        static constexpr bool Auditable = false;
+
         explicit TEvDeleteRateLimiterResourceResponse(
             const Fq::Private::DeleteRateLimiterResourceResult& record)
             : Record(record)

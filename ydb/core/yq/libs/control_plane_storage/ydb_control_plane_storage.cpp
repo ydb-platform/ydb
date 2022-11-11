@@ -35,7 +35,7 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     CPS_LOG_I("Starting ydb control plane storage service. Actor id: " << SelfId());
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
 
-    YdbConnection = NewYdbConnection(Config.Proto.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
+    YdbConnection = NewYdbConnection(Config->Proto.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
     DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
     CreateDirectory();
 
@@ -306,9 +306,9 @@ void TYdbControlPlaneStorageActor::AfterTablesCreated() {
     // Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
 }
 
-bool TYdbControlPlaneStorageActor::IsSuperUser(const TString& user)
+bool TControlPlaneStorageUtils::IsSuperUser(const TString& user)
 {
-    return AnyOf(Config.Proto.GetSuperUsers(), [&user](const auto& superUser) {
+    return AnyOf(Config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
         return superUser == user;
     });
 }

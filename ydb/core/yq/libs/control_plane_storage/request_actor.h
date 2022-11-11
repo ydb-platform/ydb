@@ -2,7 +2,7 @@
 #include "util.h"
 
 #include <ydb/core/yq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
-#include <ydb/core/yq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/yq/libs/control_plane_storage/events/internal_events.h>
 #include <ydb/core/yq/libs/control_plane_storage/schema.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/shared_resources/db_exec.h>
@@ -11,12 +11,17 @@
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/typetraits.h>
 
 namespace NYq {
 
+Y_HAS_MEMBER(User);
+Y_HAS_MEMBER(Token);
+
 template <class TRequest, class TResponse, class TDerived>
 class TControlPlaneRequestActor : public NActors::TActorBootstrapped<TDerived>,
-                                  public TDbRequester
+                                  public TDbRequester,
+                                  public TControlPlaneStorageUtils
 {
 public:
     using TResponseEvent = TResponse;
@@ -25,9 +30,12 @@ public:
 
     using TBaseActor::Send;
 
+    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE_REQUEST";
+
 protected:
-    TControlPlaneRequestActor(typename TRequestEvent::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPool::TPtr dbPool, TYdbConnectionPtr ydbConnection)
+    TControlPlaneRequestActor(typename TRequestEvent::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPool::TPtr dbPool, TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NYq::TControlPlaneStorageConfig>& config)
         : TDbRequester(std::move(dbPool), std::move(ydbConnection))
+        , TControlPlaneStorageUtils(config)
         , Request(std::move(ev))
         , RequestCounters(std::move(requestCounters))
         , DebugInfo(std::move(debugInfo))
@@ -37,8 +45,17 @@ protected:
     }
 
 public:
+    const TString RequestLogString() const {
+        TStringBuilder result;
+        result << TDerived::RequestTypeName << "Request: {" << Request->Get()->Request.DebugString() << "} ";
+        if constexpr (THasUser<TRequestEvent>::value && THasToken<TRequestEvent>::value) {
+            result << MakeUserInfo(Request->Get()->User, Request->Get()->Token);
+        }
+        return std::move(result);
+    }
+
     void Bootstrap() {
-        CPS_LOG_T(TDerived::RequestTypeName << "Request: {" << Request->Get()->Request.DebugString() << "}");
+        CPS_LOG_T(RequestLogString());
 
         AsDerived()->Start();
     }
@@ -72,8 +89,73 @@ protected:
 
         AsDerived()->LwProbe(success);
 
+        for (const auto& issue : event->Issues) {
+            NYql::WalkThroughIssues(issue, true, [this](const NYql::TIssue& err, ui16 level) {
+                Y_UNUSED(level);
+                RequestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+            });
+        }
+
         Send(Request->Sender, event.release(), 0, Request->Cookie);
+
         this->PassAway();
+    }
+
+    bool SendResponse(const TString& name,
+        const NYdb::TAsyncStatus& statusWithDbAnswer,
+        const std::function<typename TPrepareResponseResultType<TResponseEvent, typename TResponseEvent::TProto>::Type()>& prepare)
+    {
+        Y_VERIFY(statusWithDbAnswer.HasValue() || statusWithDbAnswer.HasException()); // ready
+        NYql::TIssues internalIssues;
+        NYql::TIssues issues;
+        typename TResponseEvent::TProto result;
+        typename TPrepareResponseResultType<TResponseEvent, typename TResponseEvent::TProto>::TResponseAuditDetails auditDetails; // void* for nonauditable events
+
+        try {
+            TStatus status = statusWithDbAnswer.GetValue();
+            if (status.IsSuccess()) {
+                if constexpr (TResponseEvent::Auditable) {
+                    auto p = prepare();
+                    result = std::move(p.first);
+                    auditDetails = std::move(p.second);
+                } else {
+                    result = prepare();
+                }
+            } else {
+                issues.AddIssues(status.GetIssues());
+                internalIssues.AddIssues(status.GetIssues());
+            }
+        } catch (const TControlPlaneStorageException& exception) {
+            NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
+            issues.AddIssue(issue);
+            NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
+            internalIssues.AddIssue(internalIssue);
+        } catch (const std::exception& exception) {
+            NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, exception.what());
+            issues.AddIssue(issue);
+            NYql::TIssue internalIssue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, CurrentExceptionMessage());
+            internalIssues.AddIssue(internalIssue);
+        } catch (...) {
+            NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, CurrentExceptionMessage());
+            issues.AddIssue(issue);
+            NYql::TIssue internalIssue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, CurrentExceptionMessage());
+            internalIssues.AddIssue(internalIssue);
+        }
+
+        std::unique_ptr<TResponseEvent> event;
+        if (issues) {
+            CPS_LOG_W(name << ": {" << TrimForLogs(Request->Get()->Request.DebugString()) << "} ERROR: " << internalIssues.ToOneLineString());
+            event = std::make_unique<TResponseEvent>(issues);
+        } else {
+            CPS_LOG_W(name << ": {" << TrimForLogs(Request->Get()->Request.DebugString()) << "} SUCCESS");
+            if constexpr (TResponseEvent::Auditable) {
+                event = std::make_unique<TResponseEvent>(result, auditDetails);
+            } else {
+                event = std::make_unique<TResponseEvent>(result);
+            }
+        }
+        SendResponseEventAndPassAway(std::move(event), !issues);
+        return !issues;
     }
 
     TDuration GetRequestDuration() const {
@@ -82,6 +164,14 @@ protected:
 
     TDerived* AsDerived() {
         return static_cast<TDerived*>(this);
+    }
+
+    void Subscribe(NYdb::TAsyncStatus& status, std::shared_ptr<TVector<NYdb::TResultSet>> resultSets = nullptr) {
+        status.Subscribe(
+            [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = this->SelfId(), resultSets] (const NYdb::TAsyncStatus& status) mutable {
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvControlPlaneStorageInternal::TEvDbRequestResult(status, std::move(resultSets))));
+            }
+        );
     }
 
 protected:

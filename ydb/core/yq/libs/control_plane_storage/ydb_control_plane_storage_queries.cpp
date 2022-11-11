@@ -1,4 +1,5 @@
 #include "ydb_control_plane_storage_impl.h"
+#include "request_actor.h"
 
 #include <cstdint>
 
@@ -73,14 +74,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                                 ? event.Permissions
                                 : TPermissions{TPermissions::QUERY_INVOKE | TPermissions::CONNECTIONS_USE | TPermissions::BINDINGS_USE | TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
     const size_t byteSize = request.ByteSizeLong();
-    const TString queryId = GetEntityIdAsString(Config.IdsPrefix, EEntityType::QUERY);
+    const TString queryId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::QUERY);
     CPS_LOG_T("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     NYql::TIssues issues = ValidateQuery(ev);
@@ -128,7 +129,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     }
 
     const TString idempotencyKey = request.idempotency_key();
-    const TString jobId = request.execute_mode() == YandexQuery::SAVE ? "" : GetEntityIdAsString(Config.IdsPrefix, EEntityType::JOB);
+    const TString jobId = request.execute_mode() == YandexQuery::SAVE ? "" : GetEntityIdAsString(Config->IdsPrefix, EEntityType::JOB);
 
     YandexQuery::Query query;
     YandexQuery::QueryContent& content = *query.mutable_content() = request.content();
@@ -195,7 +196,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         }
 
         YandexQuery::Internal::QueryInternal queryInternal;
-        if (!Config.Proto.GetDisableCurrentIam()) {
+        if (!Config->Proto.GetDisableCurrentIam()) {
             queryInternal.set_token(token);
         }
 
@@ -210,12 +211,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
             TSet<TString> disabledConnections;
             for (const auto& connection: GetEntities<YandexQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME)) {
-                if (!Config.AvailableConnections.contains(connection.content().setting().connection_case())) {
+                if (!Config->AvailableConnections.contains(connection.content().setting().connection_case())) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
 
-                if (GetIamAuth(connection) == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
+                if (GetIamAuth(connection) == YandexQuery::IamAuth::kCurrentIam && Config->Proto.GetDisableCurrentIam()) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
@@ -236,7 +237,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             if (permissions.Check(TPermissions::BINDINGS_USE)) {
                 auto bindings = GetEntitiesWithVisibilityPriority<YandexQuery::Binding>(resultSets[resultSets.size() - 1], BINDING_COLUMN_NAME);
                 for (const auto& [_, binding]: bindings) {
-                    if (!Config.AvailableBindings.contains(binding.content().setting().binding_case())) {
+                    if (!Config->AvailableBindings.contains(binding.content().setting().binding_case())) {
                         continue;
                     }
 
@@ -252,12 +253,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             }
         }
 
-        if (query.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config.Proto.GetMaxRequestSize() <<  ". Please shorten your request";
+        if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
-        if (queryInternal.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << Config.Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
+        if (queryInternal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         response->second.After.ConstructInPlace().CopyFrom(query);
@@ -278,7 +279,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         writeQueryBuilder.AddString("internal", queryInternal.SerializeAsString());
         writeQueryBuilder.AddString("job_id", jobId);
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config.IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config->IdempotencyKeyTtl);
 
         if (request.execute_mode() != YandexQuery::SAVE) {
             writeQueryBuilder.AddString("job", job.SerializeAsString());
@@ -320,10 +321,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     };
 
     const auto read = readQueryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus status = ReadModifyWrite(read.Sql, read.Params, prepareParams, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
-    auto success = SendAuditResponse<TEvControlPlaneStorage::TEvCreateQueryResponse, YandexQuery::CreateQueryResult, TAuditDetails<YandexQuery::Query>>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvCreateQueryResponse, YandexQuery::CreateQueryResult>(
         "CreateQueryRequest - CreateQueryResult",
         NActors::TActivationContext::ActorSystem(),
         status,
@@ -352,7 +353,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
 
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
         ? event.Permissions
         : TPermissions{TPermissions::VIEW_PUBLIC};
     if (IsSuperUser(user)) {
@@ -456,7 +457,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
     );
 
     const auto read = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
@@ -516,7 +517,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
         ? event.Permissions
         : TPermissions{TPermissions::VIEW_PUBLIC | TPermissions::VIEW_AST};
     if (IsSuperUser(user)) {
@@ -546,7 +547,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);"
     );
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
@@ -639,7 +640,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
         ? event.Permissions
         : TPermissions{TPermissions::VIEW_PUBLIC | TPermissions::VIEW_AST};
     if (IsSuperUser(user)) {
@@ -670,7 +671,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
     );
 
     const auto read = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
@@ -724,7 +725,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                             ? event.Permissions
                             : TPermissions{TPermissions::QUERY_INVOKE | TPermissions::CONNECTIONS_USE | TPermissions::BINDINGS_USE | TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
@@ -857,7 +858,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(query.meta().status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::STARTING) << " is not possible. Please wait for the query to complete or stop it";
         }
 
-        if (!Config.Proto.GetDisableCurrentIam()) {
+        if (!Config->Proto.GetDisableCurrentIam()) {
             internal.set_token(token);
         }
         if (request.execute_mode() != YandexQuery::SAVE) {
@@ -873,12 +874,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             // TODO: move to run actor priority selection
             TSet<TString> disabledConnections;
             for (const auto& connection: GetEntities<YandexQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME)) {
-                if (!Config.AvailableConnections.contains(connection.content().setting().connection_case())) {
+                if (!Config->AvailableConnections.contains(connection.content().setting().connection_case())) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
 
-                if (GetIamAuth(connection) == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
+                if (GetIamAuth(connection) == YandexQuery::IamAuth::kCurrentIam && Config->Proto.GetDisableCurrentIam()) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
@@ -899,7 +900,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             if (permissions.Check(TPermissions::BINDINGS_USE)) {
                 auto bindings = GetEntitiesWithVisibilityPriority<YandexQuery::Binding>(resultSets[resultSets.size() - 2], BINDING_COLUMN_NAME);
                 for (const auto& [_, binding]: bindings) {
-                    if (!Config.AvailableBindings.contains(binding.content().setting().binding_case())) {
+                    if (!Config->AvailableBindings.contains(binding.content().setting().binding_case())) {
                         continue;
                     }
 
@@ -915,16 +916,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             }
         }
 
-        if (query.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config.Proto.GetMaxRequestSize() <<  ". Please shorten your request";
+        if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
-        if (internal.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << Config.Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
+        if (internal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         YandexQuery::Job job;
-        const TString jobId = request.execute_mode() == YandexQuery::SAVE ? "" : GetEntityIdAsString(Config.IdsPrefix, EEntityType::JOB);
+        const TString jobId = request.execute_mode() == YandexQuery::SAVE ? "" : GetEntityIdAsString(Config->IdsPrefix, EEntityType::JOB);
         if (request.execute_mode() != YandexQuery::SAVE) {
             internal.clear_action();
             query.clear_result_set_meta();
@@ -970,7 +971,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         writeQueryBuilder.AddString("tenant", tenant);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
-        writeQueryBuilder.AddUint64("max_count_jobs", Config.Proto.GetMaxCountJobs());
+        writeQueryBuilder.AddUint64("max_count_jobs", Config->Proto.GetMaxCountJobs());
         writeQueryBuilder.AddInt64("visibility", query.content().acl().visibility());
         writeQueryBuilder.AddString("job_id", jobId);
         writeQueryBuilder.AddString("query", query.SerializeAsString());
@@ -992,7 +993,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             ");\n"
         );
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config.IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config->IdempotencyKeyTtl);
 
         if (request.content().acl().visibility() == oldVisibility) {
             writeQueryBuilder.AddInt64("visibility", query.content().acl().visibility());
@@ -1084,10 +1085,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     }
 
     const auto read = readQueryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(read.Sql, read.Params, prepareParams, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendAuditResponse<TEvControlPlaneStorage::TEvModifyQueryResponse, YandexQuery::ModifyQueryResult, TAuditDetails<YandexQuery::Query>>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvModifyQueryResponse, YandexQuery::ModifyQueryResult>(
         "ModifyQueryRequest - ModifyQueryResult",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -1115,7 +1116,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                         ? event.Permissions
                         : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
@@ -1141,7 +1142,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("query_id", queryId);
 
-    InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config.IdempotencyKeyTtl);
+    InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config->IdempotencyKeyTtl);
     queryBuilder.AddText(
         "DELETE FROM `" JOBS_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
@@ -1199,10 +1200,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
         YdbConnection->TablePathPrefix));
 
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendAuditResponse<TEvControlPlaneStorage::TEvDeleteQueryResponse, YandexQuery::DeleteQueryResult, TAuditDetails<YandexQuery::Query>>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvDeleteQueryResponse, YandexQuery::DeleteQueryResult>(
         "DeleteQueryRequest - DeleteQueryResult",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -1232,7 +1233,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
     const TString user = event.User;
     const TString queryId = request.query_id();
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                     ? event.Permissions
                     : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
@@ -1384,7 +1385,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         writeQueryBuilder.AddInt64("status", query.meta().status());
         writeQueryBuilder.AddString("internal", queryInternal.SerializeAsString());
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), now + Config.IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), now + Config->IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" JOBS_TABLE_NAME "` SET `" JOB_COLUMN_NAME "` = $job\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
@@ -1427,10 +1428,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
     }
 
     const auto readQuery = readQueryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendAuditResponse<TEvControlPlaneStorage::TEvControlQueryResponse, YandexQuery::ControlQueryResult, TAuditDetails<YandexQuery::Query>>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvControlQueryResponse, YandexQuery::ControlQueryResult>(
         "ControlQueryRequest - ControlQueryRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -1464,7 +1465,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
     const TString queryId = request.query_id();
     const int byteSize = event.Request.ByteSize();
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                 ? event.Permissions
                 : TPermissions{TPermissions::VIEW_PUBLIC};
     if (IsSuperUser(user)) {
@@ -1503,7 +1504,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
     );
 
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, resultSetIndex, user, permissions] {
         if (resultSets->size() != 2) {
@@ -1603,7 +1604,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
 
     const int byteSize = request.ByteSize();
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
             ? event.Permissions
             : TPermissions{TPermissions::VIEW_PUBLIC};
     if (IsSuperUser(user)) {
@@ -1661,7 +1662,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
     );
 
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
@@ -1731,7 +1732,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
 
     const int byteSize = request.ByteSize();
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
         ? event.Permissions
         : TPermissions{TPermissions::VIEW_PUBLIC};
     if (IsSuperUser(user)) {
@@ -1761,7 +1762,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
     );
 
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
 
     auto prepare = [=, id=request.job_id(), resultSets=resultSets] {

@@ -31,6 +31,12 @@ struct TEvRateLimiter {
         {
         }
 
+        explicit TEvCreateResource(const TString& cloudId, double cloudLimit)
+            : CloudId(cloudId)
+            , CloudLimit(cloudLimit)
+        {
+        }
+
         const TString CloudId;
         const TString Scope;
         const TString QueryId;

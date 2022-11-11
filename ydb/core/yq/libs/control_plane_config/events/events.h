@@ -32,7 +32,7 @@ struct TTenantInfo {
     TInstant StateTime;
 
     TString Assign(const TString& cloudId, const TString& /* scope */, const TString& DefaultTenantName = "") {
-        
+
         auto vTenant = SubjectMapping[SUBJECT_TYPE_CLOUD].Value(cloudId, "");
         if (!vTenant && CommonVTenants.size()) {
             vTenant = CommonVTenants[MultiHash(cloudId) % CommonVTenants.size()];

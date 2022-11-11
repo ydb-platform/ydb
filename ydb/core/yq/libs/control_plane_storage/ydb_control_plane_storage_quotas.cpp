@@ -25,12 +25,12 @@ using TQuotaCountExecuter = TDbExecuter<THashMap<TString, ui32>>;
 
 void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev) {
 
-    if (ev->Get()->SubjectType != SUBJECT_TYPE_CLOUD 
+    if (ev->Get()->SubjectType != SUBJECT_TYPE_CLOUD
         || (ev->Get()->MetricName != QUOTA_ANALYTICS_COUNT_LIMIT && ev->Get()->MetricName != QUOTA_STREAMING_COUNT_LIMIT) ) {
         Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(ev->Get()->SubjectType, ev->Get()->SubjectId, ev->Get()->MetricName, 0));
     }
 
-    if (QuotasUpdatedAt + Config.QuotaTtl > Now()) {
+    if (QuotasUpdatedAt + Config->QuotaTtl > Now()) {
         Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, ev->Get()->SubjectId, ev->Get()->MetricName, QueryQuotas.Value(ev->Get()->SubjectId, 0)));
     }
 
@@ -101,7 +101,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
 void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
     auto& record = *ev->Get();
     // LimitRequested is always accepted
-    Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(record.SubjectType, record.SubjectId, record.MetricName, 
+    Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(record.SubjectType, record.SubjectId, record.MetricName,
       record.LimitRequested, record.LimitRequested));
 }
 

@@ -10,6 +10,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/util.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
+#include <ydb/core/yq/libs/rate_limiter/events/control_plane_events.h>
 #include <ydb/core/yq/libs/test_connection/events/events.h>
 #include <ydb/core/yq/libs/test_connection/test_connection.h>
 #include <ydb/core/yq/libs/ydb/util.h>
@@ -357,6 +358,7 @@ private:
 
 template<class TRequestProto, class TRequest, class TResponse, class TResponseProxy>
 class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestProto, TRequest, TResponse, TResponseProxy>> {
+protected:
     using TBase = NActors::TActorBootstrapped<TRequestActor<TRequestProto, TRequest, TResponse, TResponseProxy>>;
     using TBase::SelfId;
     using TBase::Send;
@@ -379,6 +381,7 @@ class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestP
     TPermissions Permissions;
     TString CloudId;
     TQuotaMap Quotas;
+    TTenantInfo::TPtr TenantInfo;
     ui32 RetryCount = 0;
 
 public:
@@ -417,7 +420,10 @@ public:
         CPP_LOG_T("Request actor. Actor id: " << SelfId());
         Become(&TRequestActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
         Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
+        OnBootstrap();
     }
+
+    virtual void OnBootstrap() {}
 
     STRICT_STFUNC(StateFunc,
         cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
@@ -431,9 +437,9 @@ public:
     }
 
     void Handle(TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
-        auto tenantInfo = ev->Get()->TenantInfo;
-        if (tenantInfo) {
-            Send(ServiceId, new TRequest(Scope, RequestProto, User, Token, CloudId, Permissions, Quotas, tenantInfo), 0, Cookie);
+        TenantInfo = std::move(ev->Get()->TenantInfo);
+        if (TenantInfo) {
+            SendRequestIfCan();
         } else {
             RetryCount++;
             Schedule(Now() + Config.ConfigRetryPeriod * (1 << RetryCount), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
@@ -445,51 +451,118 @@ public:
         NYql::TIssues issues;
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Request timeout. Try repeating the request later");
         issues.AddIssue(issue);
-        Counters.IncError();
         Counters.IncTimeout();
+        ReplyWithError(issues, true);
+    }
+
+    void Handle(typename TResponse::TPtr& ev) {
+        auto& response = *ev->Get();
+        ProcessResponse(response);
+    }
+
+    template<typename T>
+    void ProcessResponse(const T& response) {
+        if (response.Issues) {
+            ReplyWithError(response.Issues);
+        } else {
+            ReplyWithSuccess(response.Result);
+        }
+    }
+
+    template<typename T> requires requires (T t) { t.AuditDetails; }
+    void ProcessResponse(const T& response) {
+        if (response.Issues) {
+            ReplyWithError(response.Issues);
+        } else {
+            ReplyWithSuccess(response.Result, response.AuditDetails);
+        }
+    }
+
+    void ReplyWithError(const NYql::TIssues& issues, bool isTimeout = false) {
         const TDuration delta = TInstant::Now() - StartTime;
-        Probe(delta, false, true);
+        Counters.IncError();
+        Probe(delta, false, isTimeout);
         Send(Sender, new TResponseProxy(issues), 0, Cookie);
         PassAway();
     }
 
-    void Handle(typename TResponse::TPtr& ev) {
+    template <class... TArgs>
+    void ReplyWithSuccess(TArgs&&... args) {
         const TDuration delta = TInstant::Now() - StartTime;
-        auto& response = *ev->Get();
-        ProcessResponse(delta, response);
-    }
-
-    template<typename T>
-    void ProcessResponse(const TDuration& delta, const T& response) {
-        if (response.Issues) {
-            Counters.IncError();
-            Probe(delta, false, false);
-            Send(Sender, new TResponseProxy(response.Issues), 0, Cookie);
-        } else {
-            Counters.IncOk();
-            Probe(delta, true, false);
-            Send(Sender, new TResponseProxy(response.Result), 0, Cookie);
-        }
+        Counters.IncOk();
+        Probe(delta, true, false);
+        Send(Sender, new TResponseProxy(std::forward<TArgs>(args)...), 0, Cookie);
         PassAway();
     }
 
-    template<typename T> requires requires (T t) { t.AuditDetails; }
-    void ProcessResponse(const TDuration& delta, const T& response) {
-        if (response.Issues) {
-            Counters.IncError();
-            Probe(delta, false, false);
-            Send(Sender, new TResponseProxy(response.Issues), 0, Cookie);
-        } else {
-            Counters.IncOk();
-            Probe(delta, true, false);
-            Send(Sender, new TResponseProxy(response.Result, response.AuditDetails), 0, Cookie);
+    virtual bool CanSendRequest() const {
+        return bool(TenantInfo);
+    }
+
+    void SendRequestIfCan() {
+        if (CanSendRequest()) {
+            Send(ServiceId, new TRequest(Scope, RequestProto, User, Token, CloudId, Permissions, Quotas, TenantInfo), 0, Cookie);
         }
-        PassAway();
     }
 
     virtual ~TRequestActor() {
         Counters.DecInFly();
         Counters.Common->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
+    }
+};
+
+class TCreateQueryRequestActor : public TRequestActor<YandexQuery::CreateQueryRequest,
+                                                      TEvControlPlaneStorage::TEvCreateQueryRequest,
+                                                      TEvControlPlaneStorage::TEvCreateQueryResponse,
+                                                      TEvControlPlaneProxy::TEvCreateQueryResponse>
+{
+    bool QuoterResourceCreated = false;
+public:
+    using TBaseRequestActor = TRequestActor<YandexQuery::CreateQueryRequest,
+                                            TEvControlPlaneStorage::TEvCreateQueryRequest,
+                                            TEvControlPlaneStorage::TEvCreateQueryResponse,
+                                            TEvControlPlaneProxy::TEvCreateQueryResponse>;
+    using TBaseRequestActor::TBaseRequestActor;
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvRateLimiter::TEvCreateResourceResponse, Handle);
+        default:
+            return TBaseRequestActor::StateFunc(ev, ctx);
+        }
+    }
+
+    void OnBootstrap() override {
+        Become(&TCreateQueryRequestActor::StateFunc);
+        SendCreateRateLimiterResourceRequest();
+    }
+
+    void SendCreateRateLimiterResourceRequest() {
+        if (auto quotaIt = Quotas.find(QUOTA_CPU_PERCENT_LIMIT); quotaIt != Quotas.end()) {
+            const double cloudLimit = static_cast<double>(quotaIt->second.Limit.Value * 10); // percent -> milliseconds
+            CPP_LOG_T("Create rate limiter resource for cloud with limit " << cloudLimit << "ms");
+            Send(RateLimiterControlPlaneServiceId(), new TEvRateLimiter::TEvCreateResource(CloudId, cloudLimit));
+        } else {
+            NYql::TIssues issues;
+            NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, TStringBuilder() << "CPU quota for cloud \"" << CloudId << "\" was not found");
+            issues.AddIssue(issue);
+            CPP_LOG_W("Failed to get cpu quota for cloud " << CloudId);
+            ReplyWithError(issues);
+        }
+    }
+
+    void Handle(TEvRateLimiter::TEvCreateResourceResponse::TPtr& ev) {
+        CPP_LOG_D("Create response from rate limiter service. Success: " << ev->Get()->Success);
+        if (ev->Get()->Success) {
+            QuoterResourceCreated = true;
+            SendRequestIfCan();
+        } else {
+            ReplyWithError(ev->Get()->Issues);
+        }
+    }
+
+    bool CanSendRequest() const override {
+        return QuoterResourceCreated && TBaseRequestActor::CanSendRequest();
     }
 };
 
@@ -796,15 +869,12 @@ private:
             | TPermissions::TPermission::MANAGE_PUBLIC
         };
 
-        Register(new TRequestActor<YandexQuery::CreateQueryRequest,
-                                   TEvControlPlaneStorage::TEvCreateQueryRequest,
-                                   TEvControlPlaneStorage::TEvCreateQueryResponse,
-                                   TEvControlPlaneProxy::TEvCreateQueryResponse>
-                                   (Config, ev->Sender, ev->Cookie, scope, folderId,
-                                    std::move(request), std::move(user), std::move(token),
-                                    ControlPlaneStorageServiceActorId(),
-                                    requestCounters,
-                                    probe, ExtractPermissions(ev, availablePermissions), cloudId, ev->Get()->Quotas));
+        Register(new TCreateQueryRequestActor
+                                            (Config, ev->Sender, ev->Cookie, scope, folderId,
+                                            std::move(request), std::move(user), std::move(token),
+                                            ControlPlaneStorageServiceActorId(),
+                                            requestCounters,
+                                            probe, ExtractPermissions(ev, availablePermissions), cloudId, ev->Get()->Quotas));
     }
 
     void Handle(TEvControlPlaneProxy::TEvListQueriesRequest::TPtr& ev) {

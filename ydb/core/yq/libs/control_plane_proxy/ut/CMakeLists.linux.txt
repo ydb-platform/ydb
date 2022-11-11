@@ -28,6 +28,8 @@ target_link_libraries(ydb-core-yq-libs-control_plane_proxy-ut PUBLIC
   libs-actors-logging
   yq-libs-control_plane_storage
   yq-libs-test_connection
+  libs-quota_manager-ut_helpers
+  libs-rate_limiter-control_plane_service
   ydb-library-folder_service
   library-folder_service-mock
 )

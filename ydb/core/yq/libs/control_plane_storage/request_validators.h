@@ -17,7 +17,7 @@
 namespace NYq {
 
 template<class P>
-NYql::TIssues ValidateEvent(P& ev, size_t maxSize)
+NYql::TIssues ValidateEvent(const P& ev, size_t maxSize)
 {
     const auto& request = ev->Get()->Request;
     const TString& scope = ev->Get()->Scope;
@@ -51,7 +51,7 @@ NYql::TIssues ValidateEvent(P& ev, size_t maxSize)
 }
 
 template<typename T>
-NYql::TIssues ValidateQuery(T& ev, size_t maxSize)
+NYql::TIssues ValidateQuery(const T& ev, size_t maxSize)
 {
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
     auto& request = ev->Get()->Request;
@@ -79,7 +79,7 @@ NYql::TIssues ValidateQuery(T& ev, size_t maxSize)
 NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting);
 
 template<typename T>
-NYql::TIssues ValidateBinding(T& ev, size_t maxSize, const TSet<YandexQuery::BindingSetting::BindingCase>& availableBindings)
+NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuery::BindingSetting::BindingCase>& availableBindings)
 {
     const auto& request = ev->Get()->Request;
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
@@ -150,7 +150,7 @@ NYql::TIssues ValidateBinding(T& ev, size_t maxSize, const TSet<YandexQuery::Bin
 NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& setting, const TSet<YandexQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true);
 
 template<typename T>
-NYql::TIssues ValidateConnection(T& ev, size_t maxSize, const TSet<YandexQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true)
+NYql::TIssues ValidateConnection(const T& ev, size_t maxSize, const TSet<YandexQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true)
 {
     const auto& request = ev->Get()->Request;
     NYql::TIssues issues = ValidateEvent(ev, maxSize);

@@ -459,7 +459,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
     CPS_LOG_T("PingTaskRequest: {" << request.DebugString() << "}");
 
-    NYql::TIssues issues = ValidatePingTask(scope, queryId, owner, deadline, Config.ResultSetsTtl);
+    NYql::TIssues issues = ValidatePingTask(scope, queryId, owner, deadline, Config->ResultSetsTtl);
 
     auto tenantInfo = ev->Get()->TenantInfo;
     if (tenantInfo && tenantInfo->TenantState.Value(tenant, TenantState::Active) == TenantState::Idle) {
@@ -485,13 +485,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     }
 
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
-        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl, Config.RetryPolicies, Counters.Counters, Config.Proto.GetMaxRequestSize()) :
-        ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config.TaskLeaseTtl);
+        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl, Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize()) :
+        ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config->TaskLeaseTtl);
     auto readQuery = std::get<0>(pingTaskParams); // Use std::get for win compiler
     auto readParams = std::get<1>(pingTaskParams);
     auto prepareParams = std::get<2>(pingTaskParams);
 
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(readQuery, readParams, prepareParams, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
     auto success = SendResponse<TEvControlPlaneStorage::TEvPingTaskResponse, Fq::Private::PingTaskResult>(

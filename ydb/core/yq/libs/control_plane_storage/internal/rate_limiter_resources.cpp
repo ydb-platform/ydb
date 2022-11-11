@@ -16,31 +16,6 @@ namespace NYq {
 
 namespace {
 
-struct TEvPrivate {
-    // Event ids
-    enum EEv : ui32 {
-        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-
-        EvDbRequestResult = EvBegin,
-
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-    // Events
-    struct TEvDbRequestResult : public NActors::TEventLocal<TEvDbRequestResult, EvDbRequestResult> {
-        TEvDbRequestResult(const TAsyncStatus& status, std::shared_ptr<TVector<NYdb::TResultSet>> resultSets)
-            : Status(status)
-            , ResultSets(std::move(resultSets))
-        {
-        }
-
-        TAsyncStatus Status;
-        std::shared_ptr<TVector<NYdb::TResultSet>> ResultSets;
-    };
-};
-
 template <class TRequest, class TResponse, class TDerived>
 class TRateLimiterRequestActor : public TControlPlaneRequestActor<TRequest, TResponse, TDerived> {
     using TRequestActorBase = TControlPlaneRequestActor<TRequest, TResponse, TDerived>;
@@ -49,8 +24,8 @@ protected:
     using TRequestActorBase::ReplyWithError;
 
 public:
-    TRateLimiterRequestActor(typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPool::TPtr dbPool, TYdbConnectionPtr ydbConnection)
-        : TRequestActorBase(std::move(ev), std::move(requestCounters), std::move(debugInfo), std::move(dbPool), std::move(ydbConnection))
+    TRateLimiterRequestActor(typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPool::TPtr dbPool, TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NYq::TControlPlaneStorageConfig>& config)
+        : TRequestActorBase(std::move(ev), std::move(requestCounters), std::move(debugInfo), std::move(dbPool), std::move(ydbConnection), config)
         , QueryId(this->Request->Get()->Request.query_id().value())
         , OwnerId(this->Request->Get()->Request.owner_id())
     {
@@ -91,14 +66,10 @@ public:
 
         const auto query = readQueryBuilder.Build();
         auto [readStatus, resultSets] = this->Read(query.Sql, query.Params, this->RequestCounters, this->DebugInfo);
-        readStatus.Subscribe(
-            [resultSets = resultSets, actorSystem = NActors::TActivationContext::ActorSystem(), selfId = this->SelfId()] (const TAsyncStatus& status) {
-                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvDbRequestResult(status, std::move(resultSets))));
-            }
-        );
+        this->Subscribe(readStatus, std::move(resultSets));
     }
 
-    void Handle(TEvPrivate::TEvDbRequestResult::TPtr& ev) {
+    void Handle(TEvControlPlaneStorageInternal::TEvDbRequestResult::TPtr& ev) {
         const auto& status = ev->Get()->Status.GetValueSync();
         CPS_LOG_D(TDerived::RequestTypeName << "Request. Got response from database: " << status.GetStatus());
         if (!status.IsSuccess()) {
@@ -192,7 +163,7 @@ public:
     using TCreateRequestActorBase::TCreateRequestActorBase;
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvDbRequestResult, Handle);
+        hFunc(TEvControlPlaneStorageInternal::TEvDbRequestResult, Handle);
         hFunc(TEvRateLimiter::TEvCreateResourceResponse, Handle);
         hFunc(TEvQuotaService::TQuotaGetResponse, Handle);
     )
@@ -246,7 +217,7 @@ public:
     using TDeleteRequestActorBase::TDeleteRequestActorBase;
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvDbRequestResult, Handle);
+        hFunc(TEvControlPlaneStorageInternal::TEvDbRequestResult, Handle);
         hFunc(TEvRateLimiter::TEvDeleteResourceResponse, Handle);
     )
 
@@ -282,9 +253,9 @@ template <class TEventPtr, class TRequestActor, TYdbControlPlaneStorageActor::ER
 void TYdbControlPlaneStorageActor::HandleRateLimiterImpl(TEventPtr& ev) {
     TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(requestType)};
 
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
 
-    const NActors::TActorId requestActor = Register(new TRequestActor(std::move(ev), std::move(requestCounters), std::move(debugInfo), DbPool, YdbConnection));
+    const NActors::TActorId requestActor = Register(new TRequestActor(std::move(ev), std::move(requestCounters), std::move(debugInfo), DbPool, YdbConnection, Config));
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr& ev) {

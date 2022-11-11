@@ -125,14 +125,23 @@ private:
 
     void ProcessRequest(ui64 cookie, TRequest& req, TEvRateLimiter::TEvCreateResource::TPtr& ev) {
         Y_UNUSED(req);
+        TString path;
+        std::vector<TMaybe<double>> limits;
+        if (!ev->Get()->Scope && !ev->Get()->QueryId && !ev->Get()->QueryLimit) { // cloud
+            path = GetRateLimiterResourcePath(ev->Get()->CloudId);
+            limits = {ev->Get()->CloudLimit};
+        } else {
+            path = GetRateLimiterResourcePath(ev->Get()->CloudId, ev->Get()->Scope, ev->Get()->QueryId);
+            limits = {ev->Get()->CloudLimit, Nothing(), ev->Get()->QueryLimit};
+        }
         NActors::TActivationContext::AsActorContext().Register(
             MakeCreateRateLimiterResourceActor(
                 NActors::TActivationContext::AsActorContext().SelfID,
                 NKikimrServices::YQ_RATE_LIMITER,
                 Connection,
                 RateLimiterPath,
-                GetRateLimiterResourcePath(ev->Get()->CloudId, ev->Get()->Scope, ev->Get()->QueryId),
-                {ev->Get()->CloudLimit, Nothing(), ev->Get()->QueryLimit},
+                path,
+                limits,
                 MakeSchemaRetryPolicy(),
                 cookie
             )

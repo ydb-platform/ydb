@@ -23,14 +23,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     const TString user = event.User;
     const TString token = event.Token;
     const int byteSize = request.ByteSize();
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                             ? event.Permissions
                             : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
     const TString idempotencyKey = request.idempotency_key();
-    const TString connectionId = GetEntityIdAsString(Config.IdsPrefix, EEntityType::CONNECTION);
+    const TString connectionId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::CONNECTION);
 
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "CreateConnectionRequest: "
@@ -77,7 +77,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     queryBuilder.AddInt64("revision", InitialRevision);
     queryBuilder.AddString("internal", connectionInternal.SerializeAsString());
 
-    InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config.IdempotencyKeyTtl);
+    InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config->IdempotencyKeyTtl);
 
     queryBuilder.AddText(
         "INSERT INTO `" CONNECTIONS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" NAME_COLUMN_NAME "`, `" CONNECTION_TYPE_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "`, `" REVISION_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`) VALUES\n"
@@ -96,8 +96,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     auto validatorCountConnections = CreateCountEntitiesValidator(
         scope,
         CONNECTIONS_TABLE_NAME,
-        Config.Proto.GetMaxCountConnections(),
-        "Too many connections in folder: " + ToString(Config.Proto.GetMaxCountConnections()) + ". Please remove unused connections",
+        Config->Proto.GetMaxCountConnections(),
+        "Too many connections in folder: " + ToString(Config->Proto.GetMaxCountConnections()) + ". Please remove unused connections",
         YdbConnection->TablePathPrefix);
 
     TVector<TValidationQuery> validators;
@@ -119,10 +119,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
 
     const auto query = queryBuilder.Build();
 
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendAuditResponse<TEvControlPlaneStorage::TEvCreateConnectionResponse, YandexQuery::CreateConnectionResult, TAuditDetails<YandexQuery::Connection>>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvCreateConnectionResponse, YandexQuery::CreateConnectionResult>(
         MakeLogPrefix(scope, user, connectionId) + "CreateConnectionRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -154,7 +154,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     const TString pageToken = request.page_token();
     const int byteSize = request.ByteSize();
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                         ? event.Permissions
                         : TPermissions{TPermissions::VIEW_PUBLIC};
     if (IsSuperUser(user)) {
@@ -227,7 +227,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     );
 
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
@@ -285,7 +285,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     const TString user = event.User;
     const TString connectionId = request.connection_id();
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                     ? event.Permissions
                     : TPermissions{TPermissions::VIEW_PUBLIC};
     if (IsSuperUser(user)) {
@@ -321,7 +321,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     );
 
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [=, resultSets=resultSets] {
         if (resultSets->size() != 1) {
@@ -379,7 +379,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                     ? event.Permissions
                     : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
@@ -473,7 +473,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         writeQueryBuilder.AddInt64("revision", meta.revision());
         writeQueryBuilder.AddString("internal", connectionInternal.SerializeAsString());
         writeQueryBuilder.AddString("connection", connection.SerializeAsString());
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config.IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config->IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" CONNECTIONS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" INTERNAL_COLUMN_NAME "` = $internal, `" CONNECTION_COLUMN_NAME "` = $connection\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
@@ -525,10 +525,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     }
 
     const auto readQuery = readQueryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendAuditResponse<TEvControlPlaneStorage::TEvModifyConnectionResponse, YandexQuery::ModifyConnectionResult, TAuditDetails<YandexQuery::Connection>>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvModifyConnectionResponse, YandexQuery::ModifyConnectionResult>(
         MakeLogPrefix(scope, user, connectionId) + "ModifyConnectionRequest",
         NActors::TActivationContext::ActorSystem(),
         result,
@@ -558,7 +558,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
 
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config.Proto.GetEnablePermissions()
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
                     ? event.Permissions
                     : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
@@ -592,7 +592,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("connection_id", connectionId);
 
-    InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config.IdempotencyKeyTtl);
+    InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config->IdempotencyKeyTtl);
     queryBuilder.AddText(
         "DELETE FROM `" CONNECTIONS_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
@@ -644,10 +644,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
         YdbConnection->TablePathPrefix));
 
     const auto query = queryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
-    auto success = SendAuditResponse<TEvControlPlaneStorage::TEvDeleteConnectionResponse, YandexQuery::DeleteConnectionResult, TAuditDetails<YandexQuery::Connection>>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvDeleteConnectionResponse, YandexQuery::DeleteConnectionResult>(
         MakeLogPrefix(scope, user, connectionId) + "DeleteConnectionRequest",
         NActors::TActivationContext::ActorSystem(),
         result,

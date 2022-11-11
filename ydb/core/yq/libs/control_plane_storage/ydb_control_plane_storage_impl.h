@@ -39,6 +39,7 @@
 #include <ydb/core/yq/libs/ydb/util.h>
 #include <ydb/core/yq/libs/ydb/ydb.h>
 
+#include <type_traits>
 
 namespace NYq {
 
@@ -211,6 +212,24 @@ void InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const
 
 void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey);
 
+template <bool auditable, class ResponseEvent, class Result>
+struct TPrepareResponseResultTypeImpl;
+
+template <class ResponseEvent, class Result>
+struct TPrepareResponseResultTypeImpl<false, ResponseEvent, Result> {
+    using Type = Result;
+    using TResponseAuditDetails = void*;
+};
+
+template <class ResponseEvent, class Result>
+struct TPrepareResponseResultTypeImpl<true, ResponseEvent, Result> {
+    using Type = std::pair<Result, TAuditDetails<typename ResponseEvent::TAuditMessage>>;
+    using TResponseAuditDetails = TAuditDetails<typename ResponseEvent::TAuditMessage>;
+};
+
+template <class ResponseEvent, class Result>
+struct TPrepareResponseResultType : TPrepareResponseResultTypeImpl<ResponseEvent::Auditable, ResponseEvent, Result> {};
+
 class TDbRequester {
 protected:
     explicit TDbRequester(TDbPool::TPtr pool = nullptr, TYdbConnectionPtr ydbConnection = nullptr)
@@ -260,8 +279,84 @@ protected:
     TYdbConnectionPtr YdbConnection;
 };
 
+class TControlPlaneStorageUtils {
+protected:
+    TControlPlaneStorageUtils(
+        const NConfig::TControlPlaneStorageConfig& config,
+        const NConfig::TCommonConfig& common)
+    : Config(std::make_shared<::NYq::TControlPlaneStorageConfig>(config, common))
+    {
+    }
+
+    explicit TControlPlaneStorageUtils(const std::shared_ptr<::NYq::TControlPlaneStorageConfig>& config)
+    : Config(config)
+    {
+    }
+
+    /*
+    * Utility
+    */
+    bool IsSuperUser(const TString& user);
+
+    template<typename T>
+    NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)
+    {
+        return ::NYq::ValidateConnection<T>(ev, Config->Proto.GetMaxRequestSize(),
+                                  Config->AvailableConnections, Config->Proto.GetDisableCurrentIam(),
+                                  clickHousePasswordRequire);
+    }
+
+    template<typename T>
+     NYql::TIssues ValidateBinding(T& ev)
+    {
+        return ::NYq::ValidateBinding<T>(ev, Config->Proto.GetMaxRequestSize(), Config->AvailableBindings);
+    }
+
+    template<typename T>
+    NYql::TIssues ValidateQuery(const T& ev)
+    {
+        return ::NYq::ValidateQuery<T>(ev, Config->Proto.GetMaxRequestSize());
+    }
+
+    template<class P>
+    NYql::TIssues ValidateEvent(const P& ev)
+    {
+        return ::NYq::ValidateEvent<P>(ev, Config->Proto.GetMaxRequestSize());
+    }
+
+    static TString MakeLogPrefix(const TString& scope, const TString& user, const TString& id = "") {
+        return "[" + scope + ", " + user + (id ? ", " + id : "") + "] ";
+    }
+
+    static TString MakeUserInfo(const TString& user, const TString& token = "") {
+        return "[" + user + (token ? ", " + NKikimr::MaskTicket(token) : "") + "] ";
+    }
+
+    static TString TrimForLogs(const TString& s, ui64 maxLength = 4096) {
+        return s.size() > maxLength ? (s.substr(0, maxLength - 3) + "...") : s;
+    }
+
+    static YandexQuery::CommonMeta CreateCommonMeta(const TString& id, const TString& user, const TInstant& startTime, int64_t revision) {
+        YandexQuery::CommonMeta common;
+        common.set_id(id);
+        common.set_created_by(user);
+        common.set_modified_by(user);
+        auto now = NProtoInterop::CastToProto(startTime);
+        *common.mutable_created_at() = now;
+        *common.mutable_modified_at() = now;
+        common.set_revision(revision);
+        return common;
+    }
+
+protected:
+    std::shared_ptr<::NYq::TControlPlaneStorageConfig> Config;
+
+    static constexpr int64_t InitialRevision = 1;
+};
+
 class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbControlPlaneStorageActor>,
-                                     public TDbRequester
+                                     public TDbRequester,
+                                     public TControlPlaneStorageUtils
 {
     enum ERequestTypeScope {
         RTS_CREATE_QUERY,
@@ -455,13 +550,9 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         }
     };
 
-    ::NYq::TControlPlaneStorageConfig Config;
-
     TCounters Counters;
 
     ::NYq::TYqSharedResources::TPtr YqSharedResources;
-
-    static constexpr int64_t InitialRevision = 1;
 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TString TenantName;
@@ -480,8 +571,8 @@ public:
         const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const TString& tenantName)
-        : Config(config, common)
-        , Counters(counters, Config)
+        : TControlPlaneStorageUtils(config, common)
+        , Counters(counters, *Config)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
         , TenantName(tenantName)
@@ -565,42 +656,16 @@ public:
     template <class TEventPtr, class TRequestActor, ERequestTypeCommon requestType>
     void HandleRateLimiterImpl(TEventPtr& ev);
 
-    template<typename T>
-    NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)
-    {
-        return ::NYq::ValidateConnection<T>(ev, Config.Proto.GetMaxRequestSize(),
-                                  Config.AvailableConnections, Config.Proto.GetDisableCurrentIam(),
-                                  clickHousePasswordRequire);
-    }
-
-    template<typename T>
-     NYql::TIssues ValidateBinding(T& ev)
-    {
-        return ::NYq::ValidateBinding<T>(ev, Config.Proto.GetMaxRequestSize(), Config.AvailableBindings);
-    }
-
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         TStringStream str;
         HTML(str) {
             PRE() {
                 str << "Current config:" << Endl;
-                str << Config.Proto.DebugString() << Endl;
+                str << Config->Proto.DebugString() << Endl;
                 str << Endl;
             }
         }
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
-    }
-
-    template<typename T>
-    NYql::TIssues ValidateQuery(T& ev)
-    {
-        return ::NYq::ValidateQuery<T>(ev, Config.Proto.GetMaxRequestSize());
-    }
-
-    template<class P>
-    NYql::TIssues ValidateEvent(P& ev)
-    {
-        return ::NYq::ValidateEvent<P>(ev, Config.Proto.GetMaxRequestSize());
     }
 
     /*
@@ -624,11 +689,6 @@ public:
     void AfterTablesCreated();
 
 private:
-    /*
-    * Utility
-    */
-    bool IsSuperUser(const TString& user);
-
     template<class ResponseEvent, class Result, class RequestEventPtr>
     TFuture<bool> SendResponse(const TString& name,
         NActors::TActorSystem* actorSystem,
@@ -637,18 +697,25 @@ private:
         const RequestEventPtr& ev,
         const TInstant& startTime,
         const TRequestCounters& requestCounters,
-        const std::function<Result()>& prepare,
+        const std::function<typename TPrepareResponseResultType<ResponseEvent, Result>::Type()>& prepare,
         TDebugInfoPtr debugInfo)
     {
         return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
+            typename TPrepareResponseResultType<ResponseEvent, Result>::TResponseAuditDetails auditDetails; // void* for nonauditable events
 
             try {
                 TStatus status = future.GetValue();
                 if (status.IsSuccess()) {
-                    result = prepare();
+                    if constexpr (ResponseEvent::Auditable) {
+                        auto p = prepare();
+                        result = std::move(p.first);
+                        auditDetails = std::move(p.second);
+                    } else {
+                        result = prepare();
+                    }
                 } else {
                     issues.AddIssues(status.GetIssues());
                     internalIssues.AddIssues(status.GetIssues());
@@ -687,82 +754,12 @@ private:
                 }
             } else {
                 CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(result.DebugString()) << "} SUCCESS");
-                auto event = std::make_unique<ResponseEvent>(result);
-                event->DebugInfo = debugInfo;
-                responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
-                requestCounters.IncOk();
-            }
-            requestCounters.IncInFly();
-            requestCounters.Common->ResponseBytes->Add(responseByteSize);
-            TDuration delta = TInstant::Now() - startTime;
-            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
-            return MakeFuture(!issues);
-        });
-    }
-
-    template<class ResponseEvent, class Result, class AuditDetails, class RequestEventPtr>
-    TFuture<bool> SendAuditResponse(const TString& name,
-        NActors::TActorSystem* actorSystem,
-        const TAsyncStatus& status,
-        TActorId self,
-        const RequestEventPtr& ev,
-        const TInstant& startTime,
-        const TRequestCounters& requestCounters,
-        const std::function<std::pair<Result, AuditDetails>()>& prepare,
-        TDebugInfoPtr debugInfo)
-    {
-        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
-            NYql::TIssues internalIssues;
-            NYql::TIssues issues;
-            Result result;
-            AuditDetails auditDetails;
-
-            try {
-                TStatus status = future.GetValue();
-                if (status.IsSuccess()) {
-                    auto p = prepare();
-                    result = std::move(p.first);
-                    auditDetails = std::move(p.second);
+                std::unique_ptr<ResponseEvent> event;
+                if constexpr (ResponseEvent::Auditable) {
+                    event = std::make_unique<ResponseEvent>(result, auditDetails);
                 } else {
-                    issues.AddIssues(status.GetIssues());
-                    internalIssues.AddIssues(status.GetIssues());
+                    event = std::make_unique<ResponseEvent>(result);
                 }
-            } catch (const TControlPlaneStorageException& exception) {
-                NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
-                issues.AddIssue(issue);
-                NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
-                internalIssues.AddIssue(internalIssue);
-            } catch (const std::exception& exception) {
-                NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, exception.what());
-                issues.AddIssue(issue);
-                NYql::TIssue internalIssue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, CurrentExceptionMessage());
-                internalIssues.AddIssue(internalIssue);
-            } catch (...) {
-                NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, CurrentExceptionMessage());
-                issues.AddIssue(issue);
-                NYql::TIssue internalIssue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, CurrentExceptionMessage());
-                internalIssues.AddIssue(internalIssue);
-            }
-
-            const auto& request = ev->Get()->Request;
-            size_t responseByteSize = 0;
-            if (issues) {
-                CPS_LOG_AS_W(*actorSystem, name << ": {" << request.DebugString() << "} ERROR: " << internalIssues.ToOneLineString());
-                auto event = std::make_unique<ResponseEvent>(issues);
-                event->DebugInfo = debugInfo;
-                responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
-                requestCounters.IncError();
-                for (const auto& issue : issues) {
-                    NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
-                      Y_UNUSED(level);
-                      requestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
-                    });
-                }
-            } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": {" << result.DebugString() << "} SUCCESS");
-                auto event = std::make_unique<ResponseEvent>(result, auditDetails);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
@@ -858,30 +855,6 @@ private:
         requestCounters.DecInFly();
         requestCounters.IncError();
         requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
-    }
-
-    static YandexQuery::CommonMeta CreateCommonMeta(const TString& id, const TString& user, const TInstant& startTime, int64_t revision) {
-        YandexQuery::CommonMeta common;
-        common.set_id(id);
-        common.set_created_by(user);
-        common.set_modified_by(user);
-        auto now = NProtoInterop::CastToProto(startTime);
-        *common.mutable_created_at() = now;
-        *common.mutable_modified_at() = now;
-        common.set_revision(revision);
-        return common;
-    }
-
-    static TString MakeLogPrefix(const TString& scope, const TString& user, const TString& id = "") {
-        return "[" + scope + ", " + user + (id ? ", " + id : "") + "] ";
-    }
-
-    static TString MakeUserInfo(const TString& user, const TString& token = "") {
-        return "[" + user + (token ? ", " + NKikimr::MaskTicket(token) : "") + "] ";
-    }
-
-    static TString TrimForLogs(const TString& s, ui64 maxLength = 4096) {
-        return s.size() > maxLength ? (s.substr(0, maxLength - 3) + "...") : s;
     }
 
     struct TPickTaskParams {

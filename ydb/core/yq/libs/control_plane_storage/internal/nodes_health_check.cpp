@@ -106,7 +106,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     };
 
     const auto readQuery = readQueryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus status = ReadModifyWrite(readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
     auto success = SendResponse<TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Fq::Private::NodesHealthCheckResult>(

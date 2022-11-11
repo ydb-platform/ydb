@@ -5,6 +5,11 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/test_connection/events/events.h>
 #include <ydb/core/yq/libs/test_connection/test_connection.h>
+#include <ydb/core/yq/libs/quota_manager/events/events.h>
+#include <ydb/core/yq/libs/quota_manager/quota_manager.h>
+#include <ydb/core/yq/libs/quota_manager/ut_helpers/fake_quota_manager.h>
+#include <ydb/core/yq/libs/rate_limiter/control_plane_service/rate_limiter_control_plane_service.h>
+#include <ydb/core/yq/libs/rate_limiter/events/control_plane_events.h>
 #include <ydb/core/yq/libs/ydb/util.h>
 #include <ydb/core/yq/libs/ydb/ydb.h>
 
@@ -89,6 +94,7 @@ struct TTestBootstrap {
     TRuntimePtr Runtime;
     TGrabActor* MetaStorageGrab;
     TGrabActor* TestConnectionGrab;
+    TGrabActor* RateLimiterGrab;
 
     TTestBootstrap(const NConfig::TControlPlaneProxyConfig& config = {})
         : Config(config)
@@ -100,9 +106,10 @@ struct TTestBootstrap {
     {
         MetaStorageGrab->Runtime.reset();
         TestConnectionGrab->Runtime.reset();
+        RateLimiterGrab->Runtime.reset();
     }
 
-    void SendCreateQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
+    void SendCreateQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff", bool processCreateRateLimiterResource = true)
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::CreateQueryRequest proto;
@@ -110,6 +117,27 @@ struct TTestBootstrap {
 
         auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateQueryRequest>("", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
+        Runtime->DispatchEvents({}, TDuration::Zero());
+        if (processCreateRateLimiterResource) {
+            auto req = RateLimiterGrab->GetRequest();
+            SendCreateRateLimiterResourceSuccess(req->Sender);
+        }
+    }
+
+    void SendCreateQueryRequestDontWaitForRateLimiter(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
+    {
+        SendCreateQueryRequest(permissions, user, false);
+    }
+
+    void SendCreateRateLimiterResourceSuccess(const TActorId& id, const TString& rateLimiter = "rate_limiter") {
+        Runtime->Send(new IEventHandle(id, id, new TEvRateLimiter::TEvCreateResourceResponse(rateLimiter, NYql::TIssues())));
+        Runtime->DispatchEvents({}, TDuration::Zero());
+    }
+
+    void SendCreateRateLimiterResourceError(const TActorId& id) {
+        NYql::TIssues issues;
+        issues.AddIssue("Trololo");
+        Runtime->Send(new IEventHandle(id, id, new TEvRateLimiter::TEvCreateResourceResponse(issues)));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
@@ -352,7 +380,7 @@ private:
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::STREAMS_CONTROL_PLANE_SERVICE, NLog::PRI_DEBUG);
 
-        auto controlPlaneProxy = CreateControlPlaneProxyActor(Config, MakeIntrusive<::NMonitoring::TDynamicCounters>(), false);
+        auto controlPlaneProxy = CreateControlPlaneProxyActor(Config, MakeIntrusive<::NMonitoring::TDynamicCounters>(), true);
         runtime->AddLocalService(
             ControlPlaneProxyActorId(),
             TActorSetupCmd(controlPlaneProxy, TMailboxType::Simple, 0));
@@ -383,6 +411,19 @@ private:
         runtime->AddLocalService(
             TestConnectionActorId(),
             TActorSetupCmd(TestConnectionGrab, TMailboxType::Simple, 0),
+            0
+        );
+
+        RateLimiterGrab = new TGrabActor(runtime);
+        runtime->AddLocalService(
+            RateLimiterControlPlaneServiceId(),
+            TActorSetupCmd(RateLimiterGrab, TMailboxType::Simple, 0),
+            0
+        );
+
+        runtime->AddLocalService(
+            NYq::MakeQuotaServiceActorId(runtime->GetNodeId(0)),
+            TActorSetupCmd(new TQuotaServiceFakeActor(), TMailboxType::Simple, 0),
             0
         );
 
@@ -449,6 +490,18 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyTest) {
         auto request = bootstrap.MetaStorageGrab->GetRequest();
         auto event = request->Get<TEvControlPlaneStorage::TEvCreateQueryRequest>();
         UNIT_ASSERT_VALUES_EQUAL(event->Request.content().name(), "my_query_name");
+    }
+
+    Y_UNIT_TEST(FailsOnCreateQueryWhenRateLimiterResourceNotCreated)
+    {
+        TTestBootstrap bootstrap;
+        bootstrap.SendCreateQueryRequestDontWaitForRateLimiter();
+
+        auto req = bootstrap.RateLimiterGrab->GetRequest();
+        bootstrap.SendCreateRateLimiterResourceError(req->Sender);
+
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateQueryResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Trololo");
     }
 
     Y_UNIT_TEST(ShouldSendListQueries)
@@ -638,7 +691,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsFailed) {
         NConfig::TControlPlaneProxyConfig config;
         config.SetEnablePermissions(true);
         TTestBootstrap bootstrap(config);
-        bootstrap.SendCreateQueryRequest();
+        bootstrap.SendCreateQueryRequestDontWaitForRateLimiter();
         const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateQueryResponse>();
         UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
     }
@@ -1921,7 +1974,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsFailed) {
         config.SetEnablePermissions(true);
         TTestBootstrap bootstrap(config);
         auto permissions = AllPermissionsExcept({"yq.queries.create@as"});
-        bootstrap.SendCreateQueryRequest(permissions);
+        bootstrap.SendCreateQueryRequestDontWaitForRateLimiter(permissions);
         const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateQueryResponse>();
         UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
     }
@@ -2663,7 +2716,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
 };
 
 Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
-    Y_UNIT_TEST(ShouldCheckScenraio) {
+    Y_UNIT_TEST(ShouldCheckScenario) {
         NConfig::TControlPlaneProxyConfig config;
         config.SetEnablePermissions(true);
         TTestBootstrap bootstrap(config);
@@ -3545,7 +3598,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             NConfig::TControlPlaneProxyConfig config;
             config.SetEnablePermissions(true);
             TTestBootstrap bootstrap(config);
-            bootstrap.SendCreateQueryRequest(testUser3Permissions, "test_user_3@staff");
+            bootstrap.SendCreateQueryRequestDontWaitForRateLimiter(testUser3Permissions, "test_user_3@staff");
             const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateQueryResponse>();
             UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
         }

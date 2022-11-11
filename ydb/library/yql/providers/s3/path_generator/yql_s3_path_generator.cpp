@@ -6,6 +6,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
@@ -242,16 +243,11 @@ TInstant ParseDate(const TString& dateStr, const TInstant& now) {
 }
 
 TString FormatColumnValues(const std::vector<IPathGenerator::TColumnWithValue>& columnsWithValue) {
-    TStringBuilder b;
-    b << "{";
-    std::string_view sep = " "sv;
-    for (auto& v : columnsWithValue) {
-        b << sep;
-        b << "${" << v.Name << "} = " << v.Value << sep;
-        sep = ", "sv;
-    }
-    b << "}";
-    return std::move(b);
+    std::vector<TString> parts;
+    std::transform(columnsWithValue.cbegin(), columnsWithValue.cend(),
+                   std::back_inserter(parts),
+                   [](auto v) { return TStringBuilder{} << "${" << v.Name << "} = " << v.Value; });
+    return TStringBuilder{} << "{ " << JoinSeq(", ", parts) << " }";
 }
 
 }

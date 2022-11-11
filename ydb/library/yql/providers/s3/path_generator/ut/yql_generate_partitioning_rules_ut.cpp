@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.values" : "0,00",
                 "storage.location.template" : "/${city}${code}/"
             }
-        )", {"city", "code"}), yexception, "Location path /000/ is composed by different projection value sets { ${city} = 00 , ${code} = 0, } and { ${city} = 0 , ${code} = 00, }");
+        )", {"city", "code"}), yexception, "Location path /000/ is composed by different projection value sets { ${city} = 00, ${code} = 0 } and { ${city} = 0, ${code} = 00 }");
     }
 
     Y_UNIT_TEST(CheckHiveFormat) {

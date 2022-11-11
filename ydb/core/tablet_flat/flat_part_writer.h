@@ -820,7 +820,7 @@ namespace NTable {
 
             size = CodecImpl->Compress(got.Page, out.mutable_begin() + 16);
 
-            auto trimmed = out.Trim(size + 16 /* label */);
+            auto trimmed = out.TrimBack(size + 16 /* label */);
             if (trimmed >= out.size()) {
                 // Make a hard copy and avoid wasting space in caches
                 out = TSharedData::Copy(out);

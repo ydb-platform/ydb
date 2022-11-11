@@ -43,6 +43,12 @@ namespace NActors {
             UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(1, 3)), TString("ell"));
             UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(1, 100)), TString("ello"));
             UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(0, 4)), TString("Hell"));
+
+            link = data;
+            UNIT_ASSERT(link.data() == data.data());
+            UNIT_ASSERT_VALUES_UNEQUAL(link.Detach(), data.data());
+            UNIT_ASSERT_EQUAL(data.size(), link.size());
+            UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice()), TString(link.Slice()));
         }
 
         Y_UNIT_TEST(TrimBehavior) {
@@ -53,14 +59,14 @@ namespace NActors {
 
             // Trim to non-zero does not change addresses
             const char* ptr1 = data.data();
-            data.Trim(31);
+            data.TrimBack(31);
             const char* ptr2 = data.data();
 
             UNIT_ASSERT_VALUES_EQUAL(data.size(), 31u);
             UNIT_ASSERT(ptr1 == ptr2);
 
             // Trim to zero releases underlying data
-            data.Trim(0);
+            data.TrimBack(0);
 
             UNIT_ASSERT_VALUES_EQUAL(data.size(), 0u);
             UNIT_ASSERT(data.data() == nullptr);
@@ -179,6 +185,18 @@ namespace NActors {
 
             UNIT_ASSERT(owner.NextDeallocated() == ptr);
             UNIT_ASSERT(owner.NextDeallocated() == nullptr);
+
+            // Test Detach copies correctly and doesn't affect owned data
+            {
+                auto data = owner.Allocate(42);
+                auto disowned = data;
+                disowned.Detach();
+                UNIT_ASSERT(owner.NextDeallocated() == nullptr);
+            }
+
+            UNIT_ASSERT(owner.NextDeallocated() == ptr);
+            UNIT_ASSERT(owner.NextDeallocated() == nullptr);
+
         }
 
     }

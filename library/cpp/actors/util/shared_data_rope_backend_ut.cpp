@@ -221,7 +221,7 @@ namespace NActors {
                 UNIT_ASSERT_EQUAL(dataCopy.data(), data.data());
                 rope.Insert(rope.End(), TRope(MakeIntrusive<TRopeSharedDataBackend>(data)));
                 rope.Insert(rope.End(), TRope(MakeIntrusive<TRopeSharedDataBackend>(data)));
-                dataCopy.Trim(10);
+                dataCopy.TrimBack(10);
                 UNIT_ASSERT_EQUAL(rope.GetSize(), data.size() * 3);
             }
             UNIT_ASSERT(data.IsPrivate());

@@ -101,7 +101,7 @@ namespace NActors {
          * Underlying data is not reallocated
          * Returns trimmed amount in bytes
          */
-        size_t Trim(size_t size) noexcept {
+        size_t TrimBack(size_t size) noexcept {
             size_t trimmed = 0;
             if (Size_ > size) {
                 trimmed = Size_ - size;
@@ -112,6 +112,18 @@ namespace NActors {
                 Size_ = size;
             }
             return trimmed;
+        }
+
+        /**
+         * Copies data to new allocated buffer if data is shared
+         * New container loses original owner
+         * Returns pointer to mutable buffer
+         */
+        char* Detach() {
+            if (IsShared()) {
+                *this = TSharedData::Copy(data(), size());
+            }
+            return Data_;
         }
 
         /**

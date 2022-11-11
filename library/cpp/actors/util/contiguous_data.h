@@ -639,7 +639,7 @@ class TContiguousData {
 
         NActors::TSharedData GetRawTrimmed(size_t size) const {
             NActors::TSharedData result = GetRaw<NActors::TSharedData>();
-            result.Trim(size);
+            result.TrimBack(size);
             return result;
         }
 

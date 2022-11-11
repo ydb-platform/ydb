@@ -78,7 +78,7 @@ namespace NPage {
 
             Y_VERIFY_DEBUG(BytesUsed() <= PageBytes);
 
-            Blob.Trim(BytesUsed());
+            Blob.TrimBack(BytesUsed());
 
             char *ptr = Blob.mutable_begin();
 

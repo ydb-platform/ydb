@@ -49,25 +49,19 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
 
             TOperation::TPtr operation = Self->Operations.at(txId);
 
-            for (auto& related: Self->PipeTracker.FindTablets(ui64(txId))) {
-                ui64 pipeTrackerCookie = related.first;
-                auto relatedTabletId = TTabletId(related.second);
-
-                if (tabletId != relatedTabletId) {
-                    continue;
-                }
-
+            for (ui64 pipeTrackerCookie : Self->PipeTracker.FindCookies(ui64(txId), ui64(tabletId))) {
                 auto opId = TOperationId(txId, pipeTrackerCookie);
                 SideEffects.ActivateTx(opId);
+            }
 
-                if (!operation->PipeBindedMessages.contains(tabletId)) {
-                    continue;
-                }
+            if (!operation->PipeBindedMessages.contains(tabletId)) {
+                continue;
+            }
 
-                for (auto& items: operation->PipeBindedMessages.at(tabletId)) {
-                    auto msgCookie = items.first;
-                    SideEffects.UnbindMsgFromPipe(opId, tabletId, msgCookie);
-                }
+            for (auto& item: operation->PipeBindedMessages.at(tabletId)) {
+                auto msgCookie = item.first;
+                auto& msg = item.second;
+                SideEffects.UnbindMsgFromPipe(msg.OpId, tabletId, msgCookie);
             }
         }
     }

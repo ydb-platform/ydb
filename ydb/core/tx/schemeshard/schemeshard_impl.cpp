@@ -5450,39 +5450,31 @@ void TSchemeShard::RestartPipeTx(TTabletId tabletId, const TActorContext& ctx) {
         }
 
         TOperation::TPtr operation = Operations.at(txId);
-        TSubTxId subTxId = operation->FindRelatedPartByTabletId(tabletId, ctx);
 
-        for (auto related: PipeTracker.FindTablets(item)) {
-            ui64 pipeTrackerCookie = related.first;
-            auto relatedTabletId = TTabletId(related.second);
-
-            if (tabletId != relatedTabletId) {
-                continue;
-            }
-
-            if (!operation->PipeBindedMessages.contains(tabletId)) {
+        if (!operation->PipeBindedMessages.contains(tabletId)) {
+            for (ui64 pipeTrackerCookie : PipeTracker.FindCookies(ui64(txId), ui64(tabletId))) {
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Pipe attached message is not found, ignore event"
                                 << ", opId:" << TOperationId(txId, pipeTrackerCookie)
                                 << ", tableId: " << tabletId
                                 << ", at schemeshardId: " << TabletID());
-                continue;
             }
+            continue;
+        }
 
-            for (auto& items: operation->PipeBindedMessages.at(tabletId)) {
-                TPipeMessageId msgCookie = items.first;
-                TOperation::TPreSerialisedMessage& preSerialisedMessages = items.second;
+        for (auto& item: operation->PipeBindedMessages.at(tabletId)) {
+            TPipeMessageId msgCookie = item.first;
+            TOperation::TPreSerializedMessage& msg = item.second;
 
-                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Pipe attached message is found and resent into the new pipe"
-                                << ", opId:" << TOperationId(txId, subTxId)
-                                << ", dst tableId: " << tabletId
-                                << ", msg type: " << preSerialisedMessages.first
-                                << ", msg cookie: " << msgCookie
-                                << ", at schemeshardId: " << TabletID());
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Pipe attached message is found and resent into the new pipe"
+                            << ", opId:" << msg.OpId
+                            << ", dst tableId: " << tabletId
+                            << ", msg type: " << msg.Type
+                            << ", msg cookie: " << msgCookie
+                            << ", at schemeshardId: " << TabletID());
 
-                PipeClientCache->Send(ctx, ui64(tabletId),  preSerialisedMessages.first, preSerialisedMessages.second, msgCookie.second);
-            }
+            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Data, msgCookie.second);
         }
     }
 }

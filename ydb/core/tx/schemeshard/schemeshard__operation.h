@@ -18,8 +18,21 @@ struct TOperation: TSimpleRefCount<TOperation> {
     THashSet<TTxId> DependentOperations;
     THashSet<TTxId> WaitOperations;
 
-    using TPreSerialisedMessage = std::pair<ui32, TIntrusivePtr<TEventSerializedData>>; // ui32 it's a type
-    THashMap<TTabletId, TMap<TPipeMessageId, TPreSerialisedMessage>> PipeBindedMessages; // std::pair<ui64, ui64> it's a cookie
+    struct TPreSerializedMessage {
+        ui32 Type;
+        TIntrusivePtr<TEventSerializedData> Data;
+        TOperationId OpId;
+
+        TPreSerializedMessage() = default;
+
+        TPreSerializedMessage(ui32 type, TIntrusivePtr<TEventSerializedData> data, TOperationId opId)
+            : Type(type)
+            , Data(std::move(data))
+            , OpId(opId)
+        { }
+    };
+
+    THashMap<TTabletId, TMap<TPipeMessageId, TPreSerializedMessage>> PipeBindedMessages; // std::pair<ui64, ui64> it's a cookie
 
     THashMap<TTabletId, TSubTxId> RelationsByTabletId;
     THashMap<TShardIdx, TSubTxId> RelationsByShardIdx;

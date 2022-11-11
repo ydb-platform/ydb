@@ -4,6 +4,7 @@
 #include <regex>
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -238,6 +239,19 @@ TInstant ParseDate(const TString& dateStr, const TInstant& now) {
     }
 
     return TInstant::ParseIso8601(dateStr);
+}
+
+TString FormatColumnValues(const std::vector<IPathGenerator::TColumnWithValue>& columnsWithValue) {
+    TStringBuilder b;
+    b << "{";
+    std::string_view sep = " "sv;
+    for (auto& v : columnsWithValue) {
+        b << sep;
+        b << "${" << v.Name << "} = " << v.Value << sep;
+        sep = ", "sv;
+    }
+    b << "}";
+    return std::move(b);
 }
 
 }
@@ -597,7 +611,11 @@ private:
             if (result.size() == pathsLimit) {
                 ythrow yexception() << "The limit on the number of paths has been reached: " << result.size() << " of " << pathsLimit;
             }
-            result[locationTemplate] = columnsWithValue;
+
+            auto pib = result.emplace(locationTemplate, columnsWithValue);
+            if (!pib.second) {
+                ythrow yexception() << "Location path " << locationTemplate << " is composed by different projection value sets " << FormatColumnValues(pib.first->second) << " and " << FormatColumnValues(columnsWithValue);
+            }
             return;
         }
 

@@ -125,8 +125,9 @@ struct AggregationMethodOneNumber
     AggregationMethodOneNumber(const Other & other) : data(other.data) {}
 
     /// To use one `Method` in different threads, use different `State`.
+    using FixedFieldType = std::conditional_t<std::is_same_v<FieldType, char8_t>, uint8_t, FieldType>;
     using State = ColumnsHashing::HashMethodOneNumber<typename Data::value_type,
-        Mapped, FieldType, consecutive_keys_optimization>;
+        Mapped, FixedFieldType, consecutive_keys_optimization>;
 
     /// Shuffle key columns before `insertKeyIntoColumns` call if needed.
     std::optional<Sizes> shuffleKeyColumns(std::vector<IColumn *> &, const Sizes &) { return {}; }
@@ -386,7 +387,7 @@ struct AggregatedDataVariants //: private boost::noncopyable
     std::unique_ptr<AggregationMethodOneNumber<UInt8, AggregatedDataWithUInt8Key, false>>    key8;
     std::unique_ptr<AggregationMethodOneNumber<UInt16, AggregatedDataWithUInt16Key, false>>  key16;
 
-    std::unique_ptr<AggregationMethodOneNumber<UInt32, AggregatedDataWithUInt64Key>>         key32;
+    std::unique_ptr<AggregationMethodOneNumber<UInt32, AggregatedDataWithUInt32Key>>         key32;
     std::unique_ptr<AggregationMethodOneNumber<UInt64, AggregatedDataWithUInt64Key>>         key64;
     std::unique_ptr<AggregationMethodStringNoCache<AggregatedDataWithShortStringKey>>        key_string;
     std::unique_ptr<AggregationMethodFixedStringNoCache<AggregatedDataWithShortStringKey>>   key_fixed_string;
@@ -588,6 +589,8 @@ public:
         /// Settings is used to determine cache size. No threads are created.
         size_t max_threads;
 
+        bool has_nullable_key = true;
+
         Params(const Header & src_header_,
                const Header & intermediate_header_,
                const ColumnNumbers & keys_,
@@ -631,12 +634,6 @@ public:
     using AggregateFunctionsPlainPtrs = std::vector<const IAggregateFunction *>;
 
     /// Process one block. Return false if the processing should be aborted (with group_by_overflow_mode = 'break').
-    bool executeOnBlock(const Block & block,
-        AggregatedDataVariants & result,
-        ColumnRawPtrs & key_columns,
-        AggregateColumns & aggregate_columns, /// Passed to not create them anew for each block
-        bool & no_more_keys) const;
-
     bool executeOnBlock(Columns columns,
         size_t row_begin, size_t row_end,
         AggregatedDataVariants & result,

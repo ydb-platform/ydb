@@ -31,18 +31,20 @@ struct HashMethodOneNumber
 {
     using Self = HashMethodOneNumber<Value, Mapped, FieldType, use_cache, need_offset>;
     using Base = columns_hashing_impl::HashMethodBase<Self, Value, Mapped, use_cache, need_offset>;
+    using ArrowType = typename arrow::CTypeTraits<FieldType>::ArrowType;
+    using ArrowArrayType = arrow::NumericArray<ArrowType>;
 
-    const uint8_t * vec{};
+    const FieldType * vec{};
 
     /// If the keys of a fixed length then key_sizes contains their lengths, empty otherwise.
     HashMethodOneNumber(const ColumnRawPtrs & key_columns, const Sizes & /*key_sizes*/, const HashMethodContextPtr &)
     {
-        vec = assert_cast<const ColumnUInt8 *>(key_columns[0])->raw_values();
+        vec = assert_cast<const ArrowArrayType *>(key_columns[0])->raw_values();
     }
 
     HashMethodOneNumber(const IColumn * column)
     {
-        vec = assert_cast<const ColumnUInt8 *>(column)->raw_values();
+        vec = assert_cast<const ArrowArrayType *>(column)->raw_values();
     }
 
     /// Creates context. Method is called once and result context is used in all threads.
@@ -60,7 +62,7 @@ struct HashMethodOneNumber
     using Base::getHash; /// (const Data & data, size_t row, Arena & pool) -> size_t
 
     /// Is used for default implementation in HashMethodBase.
-    FieldType getKeyHolder(size_t row, Arena &) const { return unalignedLoad<FieldType>(vec + row * sizeof(FieldType)); }
+    FieldType getKeyHolder(size_t row, Arena &) const { return unalignedLoad<FieldType>(vec + row); }
 
     const FieldType * getKeyData() const { return reinterpret_cast<const FieldType *>(vec); }
 };
@@ -162,7 +164,7 @@ struct HashMethodKeysFixed
 
     static constexpr bool has_nullable_keys = has_nullable_keys_;
 
-    Sizes key_sizes;
+    //Sizes key_sizes;
     size_t keys_size;
 
 #if 0 // shuffleKeyColumns disabled
@@ -181,8 +183,8 @@ struct HashMethodKeysFixed
     }
 #endif
 
-    HashMethodKeysFixed(const ColumnRawPtrs & key_columns, const Sizes & key_sizes_, const HashMethodContextPtr &)
-        : Base(key_columns), key_sizes(std::move(key_sizes_)), keys_size(key_columns.size())
+    HashMethodKeysFixed(const ColumnRawPtrs & key_columns, const Sizes & /*key_sizes_*/, const HashMethodContextPtr &)
+        : Base(key_columns), /*key_sizes(key_sizes_),*/ keys_size(key_columns.size())
     {
 #if 0
         if (usePreparedKeys(key_sizes))
@@ -195,7 +197,7 @@ struct HashMethodKeysFixed
         if constexpr (has_nullable_keys)
         {
             auto bitmap = Base::createBitmap(row);
-            return packFixed<Key>(row, keys_size, Base::getActualColumns(), key_sizes, bitmap);
+            return packFixed<Key>(row, keys_size, Base::getActualColumns(), bitmap);
         }
         else
         {
@@ -203,7 +205,7 @@ struct HashMethodKeysFixed
             if (!prepared_keys.empty())
                 return prepared_keys[row];
 #endif
-            return packFixed<Key>(row, keys_size, Base::getActualColumns(), key_sizes);
+            return packFixed<Key>(row, keys_size, Base::getActualColumns());
         }
     }
 #if 0

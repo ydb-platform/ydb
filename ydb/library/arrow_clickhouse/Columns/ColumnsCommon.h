@@ -79,6 +79,16 @@ inline bool insertNumber(MutableColumn & column, T value)
     throw Exception("unexpected type");
 }
 
+inline bool insertTimestamp(MutableColumn & column, Int64 value)
+{
+    return assert_cast<MutableColumnTimestamp &>(column).Append(value).ok();
+}
+
+inline bool insertDuration(MutableColumn & column, Int64 value)
+{
+    return assert_cast<MutableColumnDuration &>(column).Append(value).ok();
+}
+
 inline bool insertString(MutableColumn & column, const StringRef & value)
 {
     return assert_cast<MutableColumnBinary &>(column).Append(arrow::util::string_view{value.data, value.size}).ok();

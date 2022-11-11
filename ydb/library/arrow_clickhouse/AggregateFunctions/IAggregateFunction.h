@@ -147,7 +147,7 @@ public:
         AggregateDataPtr * places,
         size_t place_offset,
         std::function<void(AggregateDataPtr &)> init,
-        const UInt8 * key,
+        const uint8_t * key,
         const IColumn ** columns,
         Arena * arena) const = 0;
 
@@ -267,7 +267,7 @@ public:
         AggregateDataPtr * map,
         size_t place_offset,
         std::function<void(AggregateDataPtr &)> init,
-        const UInt8 * key,
+        const uint8_t * key,
         const IColumn ** columns,
         Arena * arena) const override
     {
@@ -393,7 +393,7 @@ public:
         AggregateDataPtr * map,
         size_t place_offset,
         std::function<void(AggregateDataPtr &)> init,
-        const UInt8 * key,
+        const uint8_t * key,
         const IColumn ** columns,
         Arena * arena) const override
     {
@@ -513,6 +513,7 @@ struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
 
     std::shared_ptr<arrow::Schema> schema; // types and names of input arguments
     std::vector<Assign> assigns; // aggregates and keys in needed result order
+    bool has_nullable_key = true;
 };
 
 AggregateFunctionPtr GetAggregateFunction(AggFunctionId, const DataTypes & argument_types);

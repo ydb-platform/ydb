@@ -21,13 +21,20 @@ public:
 
     arrow::Result<arrow::Datum> Execute(
         const std::vector<arrow::Datum>& args,
-        const arrow::compute::FunctionOptions* /*options*/,
+        const arrow::compute::FunctionOptions* options,
         arrow::compute::ExecContext* /*ctx*/) const override
     {
         static const std::string result_name = "res";
         static const std::vector<std::string> arg_names = {"0", "1", "2", "3", "4", "5"};
         if (args.size() > arg_names.size())
             return arrow::Status::Invalid("unexpected arguments count");
+
+        bool has_nullable_key = true;
+        if (options)
+        {
+            if (auto* opts = dynamic_cast<const GroupByOptions*>(options))
+                has_nullable_key = opts->has_nullable_key;
+        }
 
         std::vector<uint32_t> arg_positions;
         arg_positions.reserve(args.size());
@@ -72,6 +79,7 @@ public:
 
         // no agg keys, final aggregate states
         Aggregator::Params agg_params(false, input_stream->getHeader(), {}, {description}, false);
+        agg_params.has_nullable_key = has_nullable_key;
         AggregatingBlockInputStream agg_stream(input_stream, agg_params, true);
 
         auto result_batch = agg_stream.read();
@@ -228,6 +236,7 @@ public:
         auto input_stream = std::make_shared<OneBlockInputStream>(batch);
 
         Aggregator::Params agg_params(false, input_stream->getHeader(), keys, descriptions, false);
+        agg_params.has_nullable_key = opts->has_nullable_key;
         AggregatingBlockInputStream agg_stream(input_stream, agg_params, true);
 
         auto result_batch = agg_stream.read();

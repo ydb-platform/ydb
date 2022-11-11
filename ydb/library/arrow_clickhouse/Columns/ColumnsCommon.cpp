@@ -289,9 +289,9 @@ bool insertData(MutableColumn & column, const StringRef & value)
             return insertString(column, value);
 
         case arrow::Type::TIMESTAMP:
-            return insertNumber(column, *reinterpret_cast<const Int64 *>(value.data));
+            return insertTimestamp(column, *reinterpret_cast<const Int64 *>(value.data));
         case arrow::Type::DURATION:
-            return insertNumber(column, *reinterpret_cast<const Int64 *>(value.data));
+            return insertDuration(column, *reinterpret_cast<const Int64 *>(value.data));
         case arrow::Type::DECIMAL:
             return insertDecimal(column, value);
 

@@ -129,6 +129,9 @@ using DataTypeUInt16 = arrow::UInt16Type;
 using DataTypeUInt32 = arrow::UInt32Type;
 using DataTypeUInt64 = arrow::UInt64Type;
 
+using DataTypeFloat32 = arrow::FloatType;
+using DataTypeFloat64 = arrow::DoubleType;
+
 using DataTypeBinary = arrow::BinaryType;
 using DataTypeString = arrow::StringType;
 using DataTypeFixedString = arrow::FixedSizeBinaryType;
@@ -174,7 +177,16 @@ inline Block blockFromHeader(const Header& schema, size_t num_rows = 0)
 template <typename To, typename From>
 inline To assert_cast(From && from)
 {
+#ifndef NDEBUG
+    if constexpr (std::is_pointer_v<To>) {
+        if (!dynamic_cast<To>(from)) {
+            throw std::bad_cast();
+        }
+    }
+    return dynamic_cast<To>(from);
+#else
     return static_cast<To>(from);
+#endif
 }
 
 }

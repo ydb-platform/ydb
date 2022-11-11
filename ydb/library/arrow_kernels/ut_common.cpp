@@ -94,12 +94,21 @@ bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
 std::shared_ptr<arrow::Array> NumVecToArray(const std::shared_ptr<arrow::DataType>& type,
                                             const std::vector<double>& vec) {
     std::shared_ptr<arrow::Array> out;
-    SwitchType(type->id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        if constexpr (arrow::is_number_type<typename TWrap::T>::value) {
-            typename arrow::TypeTraits<typename TWrap::T>::BuilderType builder;
+    SwitchType(type->id(), [&](const auto& t) {
+        using TWrap = std::decay_t<decltype(t)>;
+        using T = typename TWrap::T;
+
+        if constexpr (arrow::is_number_type<T>::value) {
+            typename arrow::TypeTraits<T>::BuilderType builder;
             for (const auto val : vec) {
-                Y_VERIFY(builder.Append(static_cast<typename TWrap::T::c_type>(val)).ok());
+                Y_VERIFY(builder.Append(static_cast<typename T::c_type>(val)).ok());
+            }
+            Y_VERIFY(builder.Finish(&out).ok());
+            return true;
+        } else if constexpr (arrow::is_timestamp_type<T>()) {
+            typename arrow::TypeTraits<T>::BuilderType builder(type, arrow::default_memory_pool());
+            for (const auto val : vec) {
+                Y_VERIFY(builder.Append(static_cast<typename T::c_type>(val)).ok());
             }
             Y_VERIFY(builder.Finish(&out).ok());
             return true;

@@ -156,7 +156,7 @@ AggregatedDataVariants::Type Aggregator::chooseAggregationMethod()
         }
     }
 
-    //if (has_nullable_key)
+    if (params.has_nullable_key)
     {
         if (params.keys_size == num_fixed_contiguous_keys)
         {
@@ -172,13 +172,12 @@ AggregatedDataVariants::Type Aggregator::chooseAggregationMethod()
         return AggregatedDataVariants::Type::serialized;
     }
 
-#if 0 // TODO: keys with explicit NOT NULL
     /// No key has been found to be nullable.
 
     /// Single numeric key.
-    if (params.keys_size == 1 && types[0]->isValueRepresentedByNumber())
+    if (params.keys_size == 1 && arrow::is_primitive(types[0]->id()))
     {
-        size_t size_of_field = types[0]->getSizeOfValueInMemory();
+        size_t size_of_field = arrow::bit_width(types[0]->id()) / 8;
 
         if (size_of_field == 1)
             return AggregatedDataVariants::Type::key8;
@@ -194,12 +193,12 @@ AggregatedDataVariants::Type Aggregator::chooseAggregationMethod()
             return AggregatedDataVariants::Type::keys256;
         throw Exception("Logical error: numeric column has sizeOfField not in 1, 2, 4, 8, 16, 32.");
     }
-
+#if 0
     if (params.keys_size == 1 && isFixedString(types[0]))
     {
         return AggregatedDataVariants::Type::key_fixed_string;
     }
-
+#endif
     /// If all keys fits in N bits, will use hash table with all keys packed (placed contiguously) to single N-bit key.
     if (params.keys_size == num_fixed_contiguous_keys)
     {
@@ -214,15 +213,14 @@ AggregatedDataVariants::Type Aggregator::chooseAggregationMethod()
         if (keys_bytes <= 32)
             return AggregatedDataVariants::Type::keys256;
     }
-
+#if 0
     /// If single string key - will use hash table with references to it. Strings itself are stored separately in Arena.
     if (params.keys_size == 1 && isString(types[0]))
     {
         return AggregatedDataVariants::Type::key_string;
     }
-
-    return AggregatedDataVariants::Type::serialized;
 #endif
+    return AggregatedDataVariants::Type::serialized;
 }
 
 void Aggregator::createAggregateStates(AggregateDataPtr & aggregate_data) const
@@ -431,22 +429,6 @@ void Aggregator::prepareAggregateInstructions(Columns columns, AggregateColumns 
     }
 }
 
-
-bool Aggregator::executeOnBlock(const Block & block,
-    AggregatedDataVariants & result,
-    ColumnRawPtrs & key_columns,
-    AggregateColumns & aggregate_columns,
-    bool & no_more_keys) const
-{
-    return executeOnBlock(block->columns(),
-        /* row_begin= */ 0, block->num_rows(),
-        result,
-        key_columns,
-        aggregate_columns,
-        no_more_keys);
-}
-
-
 bool Aggregator::executeOnBlock(Columns columns,
     size_t row_begin, size_t row_end,
     AggregatedDataVariants & result,
@@ -580,7 +562,7 @@ void Aggregator::execute(const BlockInputStreamPtr & stream, AggregatedDataVaria
     /// Read all the data
     while (Block block = stream->read())
     {
-        if (!executeOnBlock(block, result, key_columns, aggregate_columns, no_more_keys))
+        if (!executeOnBlock(block->columns(), 0, block->num_rows(), result, key_columns, aggregate_columns, no_more_keys))
             break;
     }
 

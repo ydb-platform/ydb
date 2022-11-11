@@ -56,89 +56,67 @@ constexpr auto getBitmapSize()
         0)));
 }
 
+template <typename DataType>
+static inline size_t ALWAYS_INLINE packFixedKey(char * __restrict dst, const IColumn * column, size_t row)
+{
+    using ColumnType = typename arrow::TypeTraits<DataType>::ArrayType;
+    using CType = typename arrow::TypeTraits<DataType>::CType;
+
+    auto * typed_column = assert_cast<const ColumnType *>(column);
+    memcpy(dst, typed_column->raw_values() + row, sizeof(CType));
+    return sizeof(CType);
 }
 
-template<typename T, size_t step>
-void fillFixedBatch(size_t num_rows, const T * source, T * dest)
+static inline size_t ALWAYS_INLINE packFixedStringKey(char * __restrict bytes, const IColumn * column, size_t row)
 {
-    for (size_t i = 0; i < num_rows; ++i)
+    auto * typed_column = assert_cast<const ColumnFixedString *>(column);
+    int32_t key_size = typed_column->byte_width();
+    memcpy(bytes, typed_column->raw_values() + row * key_size, key_size);
+    return key_size;
+}
+
+static inline size_t ALWAYS_INLINE switchPackFixedKey(char * __restrict bytes, const IColumn * column, size_t row)
+{
+    switch (column->type_id())
     {
-        *dest = *source;
-        ++source;
-        dest += step;
+        case arrow::Type::UINT8:
+            return packFixedKey<DataTypeUInt8>(bytes, column, row);
+        case arrow::Type::UINT16:
+            return packFixedKey<DataTypeUInt16>(bytes, column, row);
+        case arrow::Type::UINT32:
+            return packFixedKey<DataTypeUInt32>(bytes, column, row);
+        case arrow::Type::UINT64:
+            return packFixedKey<DataTypeUInt64>(bytes, column, row);
+        case arrow::Type::INT8:
+            return packFixedKey<DataTypeInt8>(bytes, column, row);
+        case arrow::Type::INT16:
+            return packFixedKey<DataTypeInt16>(bytes, column, row);
+        case arrow::Type::INT32:
+            return packFixedKey<DataTypeInt32>(bytes, column, row);
+        case arrow::Type::INT64:
+            return packFixedKey<DataTypeInt64>(bytes, column, row);
+        case arrow::Type::FLOAT:
+            return packFixedKey<DataTypeFloat32>(bytes, column, row);
+        case arrow::Type::DOUBLE:
+            return packFixedKey<DataTypeFloat64>(bytes, column, row);
+        case arrow::Type::TIMESTAMP:
+            return packFixedKey<DataTypeTimestamp>(bytes, column, row);
+        case arrow::Type::DURATION:
+            return packFixedKey<DataTypeDuration>(bytes, column, row);
+        // TODO: TIME32 DATE64 TIME64 INTERVAL_DAY_TIME DECIMAL128 DECIMAL256
+        default:
+            return packFixedStringKey(bytes, column, row);
     }
+    return 0;
 }
 
-/// Move keys of size T into binary blob, starting from offset.
-/// It is assumed that offset is aligned to sizeof(T).
-/// Example: sizeof(key) = 16, sizeof(T) = 4, offset = 8
-/// out[0] : [--------****----]
-/// out[1] : [--------****----]
-/// ...
-template<typename T, typename Key>
-void fillFixedBatch(size_t keys_size, const ColumnRawPtrs & key_columns, const Sizes & key_sizes, PaddedPODArray<Key> & out, size_t & offset)
-{
-    for (size_t i = 0; i < keys_size; ++i)
-    {
-        if (key_sizes[i] == sizeof(T))
-        {
-            const auto * column = key_columns[i];
-            size_t num_rows = column->length();
-            out.resize_fill(num_rows);
-#if 0
-            /// Note: here we violate strict aliasing.
-            /// It should be ok as log as we do not reffer to any value from `out` before filling.
-            const char * source = assert_cast<const ColumnVectorHelper *>(column)->getRawDataBegin<sizeof(T)>();
-            T * dest = reinterpret_cast<T *>(reinterpret_cast<char *>(out.data()) + offset);
-            fillFixedBatch<T, sizeof(Key) / sizeof(T)>(num_rows, reinterpret_cast<const T *>(source), dest);
-            offset += sizeof(T);
-#else
-            T * dest = reinterpret_cast<T *>(reinterpret_cast<char *>(out.data()) + offset);
-            switch (sizeof(T))
-            {
-                case 1:
-                case 2:
-                case 4:
-                case 8:
-                {
-                    const uint8_t * source = assert_cast<const ColumnUInt8 *>(column)->raw_values();
-                    fillFixedBatch<T, sizeof(Key) / sizeof(T)>(num_rows, reinterpret_cast<const T *>(source), dest);
-                    break;
-                }
-                default:
-                {
-                    const uint8_t * source = assert_cast<const ColumnFixedString *>(column)->raw_values();
-                    fillFixedBatch<T, sizeof(Key) / sizeof(T)>(num_rows, reinterpret_cast<const T *>(source), dest);
-                    break;
-                }
-            }
-            offset += sizeof(T);
-#endif
-        }
-    }
 }
-
-/// Pack into a binary blob of type T a set of fixed-size keys. Granted that all the keys fit into the
-/// binary blob. Keys are placed starting from the longest one.
-template <typename T>
-void packFixedBatch(size_t keys_size, const ColumnRawPtrs & key_columns, const Sizes & key_sizes, PaddedPODArray<T> & out)
-{
-    size_t offset = 0;
-    fillFixedBatch<UInt128>(keys_size, key_columns, key_sizes, out, offset);
-    fillFixedBatch<UInt64>(keys_size, key_columns, key_sizes, out, offset);
-    fillFixedBatch<UInt32>(keys_size, key_columns, key_sizes, out, offset);
-    fillFixedBatch<UInt16>(keys_size, key_columns, key_sizes, out, offset);
-    fillFixedBatch<UInt8>(keys_size, key_columns, key_sizes, out, offset);
-}
-
-template <typename T>
-using KeysNullMap = std::array<UInt8, getBitmapSize<T>()>;
 
 /// Pack into a binary blob of type T a set of fixed-size keys. Granted that all the keys fit into the
 /// binary blob, they are disposed in it consecutively.
 template <typename T>
 static inline T ALWAYS_INLINE packFixed(
-    size_t i, size_t keys_size, const ColumnRawPtrs & key_columns, const Sizes & key_sizes)
+    size_t i, size_t keys_size, const ColumnRawPtrs & key_columns)
 {
     T key{};
     char * bytes = reinterpret_cast<char *>(&key);
@@ -146,52 +124,20 @@ static inline T ALWAYS_INLINE packFixed(
 
     for (size_t j = 0; j < keys_size; ++j)
     {
-        size_t index = i;
         const IColumn * column = key_columns[j];
-
-        switch (key_sizes[j])
-        {
-            case 1:
-                {
-                    memcpy(bytes + offset, assert_cast<const ColumnUInt8 *>(column)->raw_values() + index, 1);
-                    offset += 1;
-                }
-                break;
-            case 2:
-                if constexpr (sizeof(T) >= 2)   /// To avoid warning about memcpy exceeding object size.
-                {
-                    memcpy(bytes + offset, assert_cast<const ColumnUInt16 *>(column)->raw_values() + index, 2);
-                    offset += 2;
-                }
-                break;
-            case 4:
-                if constexpr (sizeof(T) >= 4)
-                {
-                    memcpy(bytes + offset, assert_cast<const ColumnUInt32 *>(column)->raw_values() + index, 4);
-                    offset += 4;
-                }
-                break;
-            case 8:
-                if constexpr (sizeof(T) >= 8)
-                {
-                    memcpy(bytes + offset, assert_cast<const ColumnUInt64 *>(column)->raw_values() + index, 8);
-                    offset += 8;
-                }
-                break;
-            default:
-                memcpy(bytes + offset, assert_cast<const ColumnFixedString *>(column)->raw_values() + index * key_sizes[j], key_sizes[j]);
-                offset += key_sizes[j];
-        }
+        offset += switchPackFixedKey(bytes + offset, column, i);
     }
 
     return key;
 }
 
+template <typename T>
+using KeysNullMap = std::array<UInt8, getBitmapSize<T>()>;
+
 /// Similar as above but supports nullable values.
 template <typename T>
 static inline T ALWAYS_INLINE packFixed(
-    size_t i, size_t keys_size, const ColumnRawPtrs & key_columns, const Sizes & key_sizes,
-    const KeysNullMap<T> & bitmap)
+    size_t i, size_t keys_size, const ColumnRawPtrs & key_columns, const KeysNullMap<T> & bitmap)
 {
     union
     {
@@ -226,28 +172,8 @@ static inline T ALWAYS_INLINE packFixed(
         if (is_null)
             continue;
 
-        switch (key_sizes[j])
-        {
-            case 1:
-                memcpy(bytes + offset, assert_cast<const ColumnUInt8 *>(key_columns[j])->raw_values() + i, 1);
-                offset += 1;
-                break;
-            case 2:
-                memcpy(bytes + offset, assert_cast<const ColumnUInt16 *>(key_columns[j])->raw_values() + i, 2);
-                offset += 2;
-                break;
-            case 4:
-                memcpy(bytes + offset, assert_cast<const ColumnUInt32 *>(key_columns[j])->raw_values() + i, 4);
-                offset += 4;
-                break;
-            case 8:
-                memcpy(bytes + offset, assert_cast<const ColumnUInt64 *>(key_columns[j])->raw_values() + i, 8);
-                offset += 8;
-                break;
-            default:
-                memcpy(bytes + offset, assert_cast<const ColumnFixedString *>(key_columns[j])->raw_values() + i * key_sizes[j], key_sizes[j]);
-                offset += key_sizes[j];
-        }
+        const IColumn * column = key_columns[j];
+        offset += switchPackFixedKey(bytes + offset, column, i);
     }
 
     return key;
@@ -268,25 +194,6 @@ static inline UInt128 ALWAYS_INLINE hash128(size_t row, size_t keys_size, const 
 }
 
 
-/// Copy keys to the pool. Then put into pool StringRefs to them and return the pointer to the first.
-static inline StringRef * ALWAYS_INLINE placeKeysInPool(
-    size_t keys_size, StringRefs & keys, Arena & pool)
-{
-    for (size_t j = 0; j < keys_size; ++j)
-    {
-        char * place = pool.alloc(keys[j].size);
-        memcpySmallAllowReadWriteOverflow15(place, keys[j].data, keys[j].size);
-        keys[j].data = place;
-    }
-
-    /// Place the StringRefs on the newly copied keys in the pool.
-    char * res = pool.alignedAlloc(keys_size * sizeof(StringRef), alignof(StringRef));
-    memcpySmallAllowReadWriteOverflow15(res, keys.data(), keys_size * sizeof(StringRef));
-
-    return reinterpret_cast<StringRef *>(res);
-}
-
-
 /** Serialize keys into a continuous chunk of memory.
   */
 static inline StringRef ALWAYS_INLINE serializeKeysToPoolContiguous(
@@ -300,38 +207,5 @@ static inline StringRef ALWAYS_INLINE serializeKeysToPoolContiguous(
 
     return {begin, sum_size};
 }
-
-
-/** Pack elements with shuffle instruction.
-  * See the explanation in ColumnsHashing.h
-  */
-#if defined(__SSSE3__) && !defined(MEMORY_SANITIZER)
-template <typename T>
-static T inline packFixedShuffle(
-    const char * __restrict * __restrict srcs,
-    size_t num_srcs,
-    const size_t * __restrict elem_sizes,
-    size_t idx,
-    const uint8_t * __restrict masks)
-{
-    assert(num_srcs > 0);
-
-    __m128i res = _mm_shuffle_epi8(
-        _mm_loadu_si128(reinterpret_cast<const __m128i *>(srcs[0] + elem_sizes[0] * idx)),
-        _mm_loadu_si128(reinterpret_cast<const __m128i *>(masks)));
-
-    for (size_t i = 1; i < num_srcs; ++i)
-    {
-        res = _mm_xor_si128(res,
-            _mm_shuffle_epi8(
-                _mm_loadu_si128(reinterpret_cast<const __m128i *>(srcs[i] + elem_sizes[i] * idx)),
-                _mm_loadu_si128(reinterpret_cast<const __m128i *>(&masks[i * sizeof(T)]))));
-    }
-
-    T out;
-    __builtin_memcpy(&out, &res, sizeof(T));
-    return out;
-}
-#endif
 
 }

@@ -28,6 +28,7 @@ struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
 
     std::shared_ptr<arrow::Schema> schema;
     std::vector<Assign> assigns;
+    bool has_nullable_key = true;
 };
 }
 #endif
@@ -549,6 +550,7 @@ arrow::Status TProgramStep::ApplyAggregates(
         CH::GroupByOptions funcOpts;
         funcOpts.schema = batch.schema;
         funcOpts.assigns.reserve(numResultColumns);
+        funcOpts.has_nullable_key = NullableGroupByKeys;
 
         for (auto& assign : GroupBy) {
             funcOpts.assigns.emplace_back(GetGroupByAssign(assign));

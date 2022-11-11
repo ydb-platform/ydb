@@ -831,11 +831,6 @@ public:
         return Cluster;
     }
 
-    TMaybe<NYql::TKikimrClusterConfig> GetClusterConfig(const TString& cluster) override {
-        Y_UNUSED(cluster);
-        return {};
-    }
-
     TMaybe<TString> GetSetting(const TString& cluster, const TString& name) override {
         Y_UNUSED(cluster);
         Y_UNUSED(name);

@@ -3,9 +3,9 @@
 #include "http_req.h"
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 namespace NKikimr::NHttpProxy {
+
 
 class IAuthFactory {
 public:
@@ -22,7 +22,10 @@ public:
     virtual ~IAuthFactory() = default;
 };
 
-class TAuthFactory : public IAuthFactory {
+
+class TIamAuthFactory : public IAuthFactory {
+    using THttpConfig = NKikimrConfig::THttpProxyConfig;
+
 public:
     void Initialize(
         NActors::TActorSystemSetup::TLocalServices&,
@@ -31,6 +34,13 @@ public:
         const NKikimrConfig::TGRpcConfig& grpcConfig) final;
 
     NActors::IActor* CreateAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const final;
+
+    virtual void InitTenantDiscovery(NActors::TActorSystemSetup::TLocalServices&,
+        const TAppData& appData,
+        const THttpConfig& config, ui16 grpcPort);
+
+    virtual bool UseSDK() const { return false; }
 };
 
 }
+

@@ -5,6 +5,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -69,5 +70,18 @@ static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorC
 #pragma clang diagnostic pop
 
 void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const TString& errorReason);
+
+
+static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId) {
+    static const TVector<TString> permissions = {"ydb.streams.write", "ydb.databases.list",
+                                                 "ydb.databases.create", "ydb.databases.connect"};
+    TVector<std::pair<TString, TString>> attributes;
+    if (!dbId.empty()) attributes.push_back({"database_id", dbId});
+    if (!folderId.empty()) attributes.push_back({"folder_id", folderId});
+    if (!attributes.empty()) {
+        return {{permissions, attributes}};
+    }
+    return {};
+}
 
 } //namespace NKikimr::NGRpcProxy::V1

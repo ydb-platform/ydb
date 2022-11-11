@@ -24,11 +24,15 @@ target_link_libraries(ydb-core-http_proxy PUBLIC
   yql-public-issue
   library-http_proxy-authorization
   library-http_proxy-error
+  library-ycloud-api
+  library-ycloud-impl
   ydb-library-naming_conventions
   cpp-client-ydb_datastreams
   cpp-client-ydb_persqueue_core
   client-ydb_persqueue_public-codecs
+  cpp-client-iam_private
   ydb-services-datastreams
+  services-persqueue_v1-actors
 )
 target_sources(ydb-core-http_proxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/auth_factory.cpp

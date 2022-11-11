@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     factories->YdbCredentialProviderFactory = NKikimr::CreateYdbCredentialsProviderFactory;
     factories->IoContextFactory = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
     factories->SqsAuthFactory = std::make_shared<NKikimr::NSQS::TAuthFactory>();
-    factories->DataStreamsAuthFactory = std::make_shared<NKikimr::NHttpProxy::TAuthFactory>();
+    factories->DataStreamsAuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     factories->AdditionalComputationNodeFactories = { NYql::GetPgFactory() };
 
     return ParameterizedMain(argc, argv, std::move(factories));

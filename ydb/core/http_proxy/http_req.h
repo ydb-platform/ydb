@@ -18,6 +18,7 @@
 #include <util/string/builder.h>
 
 
+
 namespace NKikimr::NHttpProxy {
 
 HttpCodes StatusToHttpCode(NYdb::EStatus status);
@@ -117,4 +118,10 @@ private:
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2Processor;
 };
 
+NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);
+NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);
+NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature);
+
+
 } // namespace NKinesis::NHttpProxy
+

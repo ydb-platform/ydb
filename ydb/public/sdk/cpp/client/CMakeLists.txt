@@ -9,6 +9,7 @@
 add_subdirectory(draft)
 add_subdirectory(extensions)
 add_subdirectory(iam)
+add_subdirectory(iam_private)
 add_subdirectory(impl)
 add_subdirectory(resources)
 add_subdirectory(ydb_common_client)

@@ -505,10 +505,9 @@ namespace NYql::NDqs {
         } else {
             if (const auto& wrap = FindNode(stage.Program().Ptr(), [](const TExprNode::TPtr& exprNode) {
                 if (const auto wrap = TMaybeNode<TDqReadWrapBase>(exprNode)) {
-                    if (const auto flags = wrap.Cast().Flags())
-                        for (const auto& flag : flags.Cast())
-                            if (flag.Value() == "Solid")
-                                return false;
+                    for (const auto& flag : wrap.Cast().Flags())
+                        if (flag.Value() == "Solid")
+                            return false;
 
                     return true;
                 }

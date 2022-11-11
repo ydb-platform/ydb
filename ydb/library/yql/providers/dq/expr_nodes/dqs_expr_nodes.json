@@ -12,8 +12,8 @@
       "Builder": {"Generate": "None"},
       "Children": [
         {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-        {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true},
-        {"Index": 2, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
+        {"Index": 1, "Name": "Flags", "Type": "TCoAtomList"},
+        {"Index": 2, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
       ]
     },
     {

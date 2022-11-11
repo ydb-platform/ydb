@@ -187,6 +187,7 @@ protected:
         const auto wrap = node.Cast<TDqReadWrap>();
         const auto read = Build<TDqReadWideWrap>(ctx, node.Pos())
                 .Input(wrap.Input())
+                .Flags().Build()
                 .Token(wrap.Token())
             .Done();
 

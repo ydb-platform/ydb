@@ -33,6 +33,10 @@ private:
             return TStatus::Error;
         }
 
+        if (!EnsureTupleOfAtoms(*input->Child(TDqReadWrapBase::idx_Flags), ctx)) {
+            return TStatus::Error;
+        }
+
         if (input->ChildrenSize() > TDqReadWrapBase::idx_Token) {
             if (!EnsureCallable(*input->Child(TDqReadWrapBase::idx_Token), ctx)) {
                 return TStatus::Error;
@@ -42,10 +46,6 @@ private:
                 ctx.AddError(TIssue(ctx.GetPosition(input->Child(TDqReadWrapBase::idx_Token)->Pos()), TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
                 return TStatus::Error;
             }
-        }
-
-        if (input->ChildrenSize() > TDqReadWrapBase::idx_Flags && !EnsureTupleOfAtoms(*input->Child(TDqReadWrapBase::idx_Flags), ctx)) {
-            return TStatus::Error;
         }
 
         if (!EnsureTupleTypeSize(input->Head(), 2, ctx)) {
@@ -113,6 +113,10 @@ private:
             return TStatus::Error;
         }
 
+        if (!EnsureTupleOfAtoms(*input->Child(TDqReadWrapBase::idx_Flags), ctx)) {
+            return TStatus::Error;
+        }
+
         if (input->ChildrenSize() > TDqReadWrapBase::idx_Token) {
             if (!EnsureCallable(*input->Child(TDqReadWrapBase::idx_Token), ctx)) {
                 return TStatus::Error;
@@ -124,13 +128,10 @@ private:
             }
         }
 
-        if (input->ChildrenSize() > TDqReadWrapBase::idx_Flags && !EnsureTupleOfAtoms(*input->Child(TDqReadWrapBase::idx_Flags), ctx)) {
-            return TStatus::Error;
-        }
-
         if (!EnsureTupleTypeSize(input->Head(), 2, ctx)) {
             return TStatus::Error;
         }
+
         const auto readerType = input->Head().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
         if (!EnsureListType(input->Head().Pos(), *readerType, ctx)) {
             return TStatus::Error;

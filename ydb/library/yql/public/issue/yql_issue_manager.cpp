@@ -11,7 +11,6 @@ void TIssueManager::AddScope(std::function<TIssuePtr()> fn) {
 
 void TIssueManager::LeaveScope() {
     Y_ASSERT(HasOpenScopes());
-
     if (RawIssues_.size() == 1) {
         // Last scope, just dump it
         auto maybeIssue = RawIssues_.top().first;
@@ -171,8 +170,11 @@ bool TIssueManager::HasOpenScopes() const {
 }
 
 TIssues TIssueManager::GetIssues() {
+    auto tmp = RawIssues_;
     LeaveAllScopes();
-    return GetCompletedIssues();
+    auto result = GetCompletedIssues();
+    RawIssues_ = tmp;
+    return result;
 }
 
 TIssues TIssueManager::GetCompletedIssues() const {

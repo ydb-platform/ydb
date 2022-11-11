@@ -15,13 +15,11 @@ class TIssueManager: private TNonCopyable {
 public:
     void AddScope(std::function<TIssuePtr()> fn);
     void LeaveScope();
-    void LeaveAllScopes();
     void RaiseIssue(const TIssue& issue);
     void RaiseIssues(const TIssues& issues);
     bool RaiseWarning(TIssue issue);
     void AddIssues(const TIssues& errors);
     void AddIssues(const TPosition& pos, const TIssues& issues);
-    bool HasOpenScopes() const;
 
     TIssues GetIssues();
     TIssues GetCompletedIssues() const;
@@ -41,6 +39,8 @@ public:
 private:
     TIssuePtr CheckUniqAndLimit(const TIssue& issue);
     TIssuePtr CheckUniqAndLimit(TIssuePtr issue);
+    void LeaveAllScopes();
+    bool HasOpenScopes() const;
 
     struct TIssueHash {
         ui64 operator()(const TIssuePtr& p) {

@@ -27,7 +27,6 @@ public:
         }
 
         Index = 0;
-        LastIssueScope = Nothing();
         CheckArgumentsCount = 0;
     }
 
@@ -42,17 +41,12 @@ public:
 #endif
 
         if (Index >= Stages.size()) {
-            if (LastIssueScope) {
-                ctx.IssueManager.LeaveScope();
-                LastIssueScope.Clear();
-            }
             return TStatus::Ok;
         }
 
-        if (UseIssueScopes) {
-            UpdateIssueScope(ctx.IssueManager);
-        }
-        auto status = Stages[Index].GetTransformer().Transform(input, output, ctx);
+        auto status = WithScope(ctx, [&]() {
+            return Stages[Index].GetTransformer().Transform(input, output, ctx);
+        });
 #ifndef NDEBUG
         if (DoCheckArguments && output && output != input) {
             try {
@@ -79,8 +73,12 @@ public:
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         YQL_ENSURE(Index < Stages.size());
-        const auto status = Stages[Index].GetTransformer().ApplyAsyncChanges(input, output, ctx);
-        return HandleStatus(status);
+        auto status = WithScope(ctx, [&]() {
+            return Stages[Index].GetTransformer().ApplyAsyncChanges(input, output, ctx);
+        });
+
+        status = HandleStatus(status);
+        return status;
     }
 
     TStatistics GetStatistics() const final {
@@ -116,20 +114,21 @@ private:
         return status;
     }
 
-    void UpdateIssueScope(TIssueManager& issueManager) {
-        YQL_ENSURE(Index < Stages.size());
-        const auto scopeIssueCode = Stages[Index].IssueCode;
-        const auto scopeIssueMessage = Stages[Index].IssueMessage;
-        if (LastIssueScope != scopeIssueCode) {
-            if (!LastIssueScope.Empty()) {
-                issueManager.LeaveScope();
-            }
-            issueManager.AddScope([scopeIssueCode, scopeIssueMessage]() {
-                auto issue = new TIssue(TPosition(), scopeIssueMessage ? scopeIssueMessage : IssueCodeToString(scopeIssueCode));
+    template <typename TFunc>
+    TStatus WithScope(TExprContext& ctx, TFunc func) {
+        if (UseIssueScopes) {
+            TIssueScopeGuard guard(ctx.IssueManager, [&]() {
+                const auto scopeIssueCode = Stages[Index].IssueCode;
+                const auto scopeIssueMessage = Stages[Index].IssueMessage;
+
+                auto issue = MakeIntrusive<TIssue>(TPosition(), scopeIssueMessage ? scopeIssueMessage : IssueCodeToString(scopeIssueCode));
                 issue->SetCode(scopeIssueCode, GetSeverity(scopeIssueCode));
                 return issue;
             });
-            LastIssueScope = scopeIssueCode;
+
+            return func();
+        } else {
+            return func();
         }
     }
 
@@ -138,7 +137,6 @@ protected:
     const bool UseIssueScopes;
     const bool DoCheckArguments;
     size_t Index = 0;
-    TMaybe<EYqlIssueCode> LastIssueScope;
     ui64 CheckArgumentsCount = 0;
 };
 

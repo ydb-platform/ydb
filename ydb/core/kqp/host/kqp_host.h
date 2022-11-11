@@ -70,6 +70,7 @@ public:
     virtual TQueryResult SyncExplainDataQuery(const TString& query, bool isSql) = 0;
 
     virtual IAsyncQueryResultPtr PrepareDataQuery(const TString& query, const TPrepareSettings& settings) = 0;
+    virtual IAsyncQueryResultPtr PrepareDataQueryAst(const TString& query, const TPrepareSettings& settings) = 0;
     virtual TQueryResult SyncPrepareDataQuery(const TString& query, const TPrepareSettings& settings) = 0;
 
     virtual IAsyncQueryResultPtr ExecuteDataQuery(const TString& txId, std::shared_ptr<const NKikimrKqp::TPreparedQuery>& query,

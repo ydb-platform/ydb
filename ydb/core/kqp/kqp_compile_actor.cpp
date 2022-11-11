@@ -108,9 +108,11 @@ public:
 
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
-        AsyncCompileResult = Query.Scan
-            ? KqpHost->PrepareScanQuery(Query.Text, true, prepareSettings)
-            : KqpHost->PrepareDataQuery(Query.Text, prepareSettings);
+        AsyncCompileResult = Query.IsScan()
+            ? KqpHost->PrepareScanQuery(Query.Text, Query.IsSql(), prepareSettings)
+            : Query.IsSql()
+                ? KqpHost->PrepareDataQuery(Query.Text, prepareSettings)
+                : KqpHost->PrepareDataQueryAst(Query.Text, prepareSettings);
 
         Continue(ctx);
 

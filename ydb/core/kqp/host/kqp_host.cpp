@@ -1231,6 +1231,13 @@ public:
             });
     }
 
+    IAsyncQueryResultPtr PrepareDataQueryAst(const TString& query, const TPrepareSettings& settings) override {
+        return CheckedProcessQuery(*ExprCtx,
+            [this, &query, settings] (TExprContext& ctx) mutable {
+                return PrepareDataQueryAstInternal(query, settings, ctx);
+            });
+    }
+
     TQueryResult SyncPrepareDataQuery(const TString& query, const TPrepareSettings& settings) override {
         return CheckedSyncProcessQuery(
             [this, &query, settings] () mutable {

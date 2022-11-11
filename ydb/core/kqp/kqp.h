@@ -150,15 +150,34 @@ struct TKqpQueryId {
     TString UserSid;
     TString Text;
     TKqpQuerySettings Settings;
-    bool Scan;
+    NKikimrKqp::EQueryType QueryType;
 
 public:
-    TKqpQueryId(const TString& cluster, const TString& database, const TString& text, bool scan)
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& text, NKikimrKqp::EQueryType type)
         : Cluster(cluster)
         , Database(database)
         , Text(text)
-        , Scan(scan)
-    {}
+        , QueryType(type)
+    {
+        switch (QueryType) {
+            case NKikimrKqp::QUERY_TYPE_SQL_DML:
+            case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
+            case NKikimrKqp::QUERY_TYPE_AST_DML:
+            case NKikimrKqp::QUERY_TYPE_AST_SCAN:
+            break;
+            default:
+            Y_ENSURE(false, "Unsupported request type");
+        }
+
+    }
+
+    bool IsScan() const {
+        return QueryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN || QueryType == NKikimrKqp::QUERY_TYPE_AST_SCAN;
+    }
+
+    bool IsSql() const {
+        return QueryType == NKikimrKqp::QUERY_TYPE_SQL_DML || QueryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN;
+    }
 
     bool operator==(const TKqpQueryId& other) const {
         return
@@ -167,7 +186,7 @@ public:
             UserSid == other.UserSid &&
             Text == other.Text &&
             Settings == other.Settings &&
-            Scan == other.Scan;
+            QueryType == other.QueryType;
     }
 
     bool operator!=(const TKqpQueryId& other) {
@@ -180,7 +199,7 @@ public:
     bool operator>=(const TKqpQueryId&) = delete;
 
     size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings, Scan);
+        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings, QueryType);
         return THash<decltype(tuple)>()(tuple);
     }
 };

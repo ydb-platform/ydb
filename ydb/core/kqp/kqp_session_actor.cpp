@@ -313,15 +313,15 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
             case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
+            case NKikimrKqp::QUERY_TYPE_AST_SCAN:
+            case NKikimrKqp::QUERY_TYPE_AST_DML:
                 return true;
 
             // should not be compiled. TODO: forward to request executer
             // not supported yet
             case NKikimrKqp::QUERY_TYPE_SQL_DDL:
-            case NKikimrKqp::QUERY_TYPE_AST_SCAN:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
-            case NKikimrKqp::QUERY_TYPE_AST_DML:
             case NKikimrKqp::QUERY_TYPE_UNDEFINED:
                 return false;
         }
@@ -519,16 +519,15 @@ public:
         TMaybe<TString> uid;
 
         bool keepInCache = false;
-        bool scan = queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN;
         switch (queryRequest.GetAction()) {
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
-                query = TKqpQueryId(Settings.Cluster, Settings.Database, queryRequest.GetQuery(), scan);
-                keepInCache = queryRequest.GetQueryCachePolicy().keep_in_cache();
+                query = TKqpQueryId(Settings.Cluster, Settings.Database, queryRequest.GetQuery(), queryRequest.GetType());
+                keepInCache = queryRequest.GetQueryCachePolicy().keep_in_cache() && query->IsSql();
                 break;
 
             case NKikimrKqp::QUERY_ACTION_PREPARE:
-                query = TKqpQueryId(Settings.Cluster, Settings.Database, queryRequest.GetQuery(), scan);
-                keepInCache = true;
+                query = TKqpQueryId(Settings.Cluster, Settings.Database, queryRequest.GetQuery(), queryRequest.GetType());
+                keepInCache = query->IsSql();
                 break;
 
             case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
@@ -603,7 +602,9 @@ public:
 
         QueryState->TxCtx->OnBeginQuery();
 
-        if (queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
+        if (queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
+            || queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_AST_SCAN
+        ) {
             AcquirePersistentSnapshot();
             return;
         } else if (NeedSnapshot(*QueryState->TxCtx, *Config, /*rollback*/ false, QueryState->Commit,
@@ -782,12 +783,15 @@ public:
         auto action = queryRequest.GetAction();
         auto type = queryRequest.GetType();
 
-        if (action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_SQL_DML) {
+        if (action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_SQL_DML
+            || action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_AST_DML)
+        {
             type = NKikimrKqp::QUERY_TYPE_PREPARED_DML;
             action = NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
         }
 
         YQL_ENSURE(action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_SQL_SCAN
+            || action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_AST_SCAN
             || action == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED && type == NKikimrKqp::QUERY_TYPE_PREPARED_DML,
             "Unexpected query action: " << action << " and type: " << type);
 
@@ -1234,9 +1238,12 @@ public:
         QueryState->Orbit = std::move(ev->Get()->Orbit);
 
         auto* response = ev->Get()->Record.MutableResponse();
+
         LOG_D("TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
             << "/" << (QueryState->PreparedQuery ? QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize() : 0)
-            << " response.status: " << response->GetStatus() << " results.size: " << response->GetResult().ResultsSize());
+            << " response.status: " << response->GetStatus()
+            << " results.size: " << (response->HasResult() ? std::to_string(response->GetResult().ResultsSize()) : " <no result>"));
+
         ExecuterId = TActorId{};
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -1516,7 +1523,11 @@ public:
 
         bool useYdbResponseFormat = QueryState->Request.GetUsePublicResponseDataFormat();
 
-        if (QueryState->PreparedQuery) {
+        // Result for scan query is sent directly to target actor.
+        bool isScanQuery = QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_AST_SCAN
+            || QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN;
+
+        if (QueryState->PreparedQuery && !isScanQuery) {
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 auto& rb = phyQuery.GetResultBindings(i);

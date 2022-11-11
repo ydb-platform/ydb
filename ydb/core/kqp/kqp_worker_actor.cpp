@@ -293,9 +293,7 @@ public:
         if (queryRequest.GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE) {
             switch (queryRequest.GetType()) {
                 case NKikimrKqp::QUERY_TYPE_SQL_DDL:
-                case NKikimrKqp::QUERY_TYPE_AST_DML:
                 case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
-                case NKikimrKqp::QUERY_TYPE_AST_SCAN:
                 case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
                     break;
 

@@ -796,8 +796,7 @@ private:
                 gatewayResult.Truncated = true;
                 gatewayResult.RowsCount = 0;
             } else {
-                // for resultless results expect infinite INSERT FROM SELECT and fail YQL facade (with well known secret code?)
-                gatewayResult.AddIssues({NYql::TIssue("MAGIC BREAK").SetCode(555, NYql::TSeverityIds::S_ERROR)});
+                // for resultless results expect infinite INSERT FROM SELECT and just return "nothing"
             }
             ev->Get()->Result.SetValue(gatewayResult);
         }

@@ -3229,10 +3229,9 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    auto senderCommit = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_(
+    auto qCommit = SendRequest(runtime, MakeSimpleRequestRPC(Q_(
         "UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); "
-        "UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2)")));
+        "UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2); "), sessionId, txId, true));
 
     // Wait until we captured all readsets
     if (readSets.size() < 4) {
@@ -3294,9 +3293,8 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
 
     // Wait for commit to succeed
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderCommit);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto response = AwaitResponse(runtime, qCommit);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 
     // Wait for immediate write to succeed

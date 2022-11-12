@@ -1955,40 +1955,34 @@ Y_UNIT_TEST(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // Note that key 3 is not written yet, but we pretend immediate tx
     // executes before that waiting transaction (no key 3 yet).
     {
-        auto sender3 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
     }
 
     // Upsert key 1, we expect this immediate tx to timeout
     // Another tx has already checked locks for that key, we must never
     // pretend some other conflicting write happened before that tx completes.
     {
-        auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
+        TString tmpSessionId = CreateSessionRPC(runtime);
+        TString tmpTxId;
+        auto req = MakeSimpleRequestRPC(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);"), tmpSessionId, tmpTxId, true);
+        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
+        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
+        auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
     }
 
     // Upsert key 5, this immediate tx should timeout because we currently
     // lose information on locked keys after reboot and it acts as a global
     // barrier.
     {
-        auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
+        TString tmpSessionId = CreateSessionRPC(runtime);
+        TString tmpTxId;
+        auto req = MakeSimpleRequestRPC(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);"), tmpSessionId, tmpTxId, true);
+        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
+        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
+        auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
     }
 
     // Release readsets allowing tx to progress
@@ -1999,14 +1993,8 @@ Y_UNIT_TEST(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
 
     // Select key 3, we expect a success
     {
-        auto sender9 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender9, MakeSimpleRequest(Q_(
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }");
     }
 }
 

@@ -27,6 +27,16 @@ struct TShardInfo {
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };
 
+struct TPhysicalShardReadSettings {
+    bool Sorted = true;
+    bool Reverse = false;
+    ui64 ItemsLimit = 0;
+    TString ItemsLimitParamName;
+    NYql::NDqProto::TData ItemsLimitBytes;
+    NKikimr::NMiniKQL::TType* ItemsLimitType = nullptr;
+    NKikimr::NMiniKQL::TType* ResultType = nullptr;
+};
+
 TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyKeyRange& range, const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
     const NMiniKQL::TTypeEnvironment& typeEnv);
@@ -68,6 +78,14 @@ THashMap<ui64, TShardInfo> PruneEffectPartitions(const TKqpTableKeys& tableKeys,
 
 THashMap<ui64, TShardInfo> PruneEffectPartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpDeleteRows& effect, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
+
+THashMap<ui64, TShardInfo> PruneEffectPartitions(TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
+
+TPhysicalShardReadSettings ExtractReadSettings(
+    const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
 } // namespace NKikimr::NKqp

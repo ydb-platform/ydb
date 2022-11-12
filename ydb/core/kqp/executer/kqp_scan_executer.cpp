@@ -496,40 +496,20 @@ private:
 
             auto columns = BuildKqpColumns(op, table);
             THashMap<ui64, TShardInfo> partitions = PrunePartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
-
-            bool reverse = false;
             const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
-            ui64 itemsLimit = 0;
-            bool sorted = true;
-            TString itemsLimitParamName;
-            NDqProto::TData itemsLimitBytes;
-            NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
-            NKikimr::NMiniKQL::TType* resultType = nullptr;
+            auto readSettings = ExtractReadSettings(op, stageInfo, holderFactory, typeEnv);
 
-            // TODO: Support reverse, skipnull and limit for kReadRanges
             if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
-                ExtractItemsLimit(stageInfo, op.GetReadRange().GetItemsLimit(), holderFactory,
-                    typeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
-                reverse = op.GetReadRange().GetReverse();
-
-                YQL_ENSURE(!reverse); // TODO: not supported yet
-
                 stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
                                                    op.GetReadRange().GetSkipNullKeys().end());
-            } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
-                sorted = op.GetReadOlapRange().GetSorted();
-                reverse = op.GetReadOlapRange().GetReverse();
-                ExtractItemsLimit(stageInfo, op.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv,
-                    itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
-                NKikimrMiniKQL::TType minikqlProtoResultType;
-                ConvertYdbTypeToMiniKQLType(op.GetReadOlapRange().GetResultType(), minikqlProtoResultType);
-                resultType = ImportTypeFromProto(minikqlProtoResultType, typeEnv);
+                // not supported for scan queries
+                YQL_ENSURE(!readSettings.Reverse);
             }
 
             for (auto& [shardId, shardInfo] : partitions) {
                 YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
-                auto& task = AssignTaskToShard(stageInfo, shardId, nodeTasks, assignedShardsCount, sorted, isOlapScan);
+                auto& task = AssignTaskToShard(stageInfo, shardId, nodeTasks, assignedShardsCount, readSettings.Sorted, isOlapScan);
 
                 for (auto& [name, value] : shardInfo.Params) {
                     auto ret = task.Meta.Params.emplace(name, std::move(value));
@@ -546,16 +526,16 @@ private:
                     .ShardId = shardId,
                 };
 
-                if (itemsLimitParamName && !task.Meta.Params.contains(itemsLimitParamName)) {
-                    task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
-                    task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
+                if (readSettings.ItemsLimitParamName && !task.Meta.Params.contains(readSettings.ItemsLimitParamName)) {
+                    task.Meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
+                    task.Meta.ParamTypes.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitType);
                 }
 
                 if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
                     const auto& readRange = op.GetReadOlapRange();
-                    FillReadInfo(task.Meta, itemsLimit, reverse, sorted, resultType, readRange);
+                    FillReadInfo(task.Meta, readSettings.ItemsLimit, readSettings.Reverse, readSettings.Sorted, readSettings.ResultType, readRange);
                 } else {
-                    FillReadInfo(task.Meta, itemsLimit, reverse, sorted, nullptr, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
+                    FillReadInfo(task.Meta, readSettings.ItemsLimit, readSettings.Reverse, readSettings.Sorted, nullptr, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
                 }
 
                 if (!task.Meta.Reads) {

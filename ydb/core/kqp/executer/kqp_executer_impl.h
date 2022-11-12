@@ -504,56 +504,6 @@ protected:
         meta->SetTableKind((ui32)stageInfo.Meta.TableKind);
     }
 
-    void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
-        const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-        ui64& itemsLimit, TString& itemsLimitParamName, NYql::NDqProto::TData& itemsLimitBytes,
-        NKikimr::NMiniKQL::TType*& itemsLimitType)
-    {
-        switch (protoItemsLimit.GetKindCase()) {
-            case NKqpProto::TKqpPhyValue::kLiteralValue: {
-                const auto& literalValue = protoItemsLimit.GetLiteralValue();
-
-                auto [type, value] = NMiniKQL::ImportValueFromProto(
-                    literalValue.GetType(), literalValue.GetValue(), typeEnv, holderFactory);
-
-                YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data, "" << this->DebugString());
-                itemsLimit = value.Get<ui64>();
-                itemsLimitType = type;
-
-                return;
-            }
-
-            case NKqpProto::TKqpPhyValue::kParamValue: {
-                itemsLimitParamName = protoItemsLimit.GetParamValue().GetParamName();
-                if (!itemsLimitParamName) {
-                    return;
-                }
-
-                auto* itemsLimitParam = stageInfo.Meta.Tx.Params.Values.FindPtr(itemsLimitParamName);
-                YQL_ENSURE(itemsLimitParam);
-
-                auto [type, value] = NMiniKQL::ImportValueFromProto(
-                    itemsLimitParam->GetType(), itemsLimitParam->GetValue(), typeEnv, holderFactory);
-
-                YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data, "" << this->DebugString());
-                itemsLimit = value.Get<ui64>();
-
-                NYql::NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NYql::NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-                itemsLimitBytes = dataSerializer.Serialize(value, type);
-                itemsLimitType = type;
-
-                return;
-            }
-
-            case NKqpProto::TKqpPhyValue::kParamElementValue:
-            case NKqpProto::TKqpPhyValue::kRowsList:
-                YQL_ENSURE(false, "Unexpected ItemsLimit kind " << protoItemsLimit.DebugString());
-
-            case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
-                return;
-        }
-    }
-
 protected:
     void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         for (const auto& task : this->TasksGraph.GetTasks()) {

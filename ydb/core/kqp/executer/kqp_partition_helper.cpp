@@ -2,6 +2,7 @@
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
@@ -635,6 +636,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(TKqpTableKeys& tableKeys,
     }
 }
 
+
 namespace {
 
 using namespace NMiniKQL;
@@ -890,6 +892,114 @@ THashMap<ui64, TShardInfo> PruneEffectPartitions(const TKqpTableKeys& tableKeys,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     return PruneEffectPartitionsImpl(tableKeys, effect, stageInfo, holderFactory, typeEnv);
+}
+
+THashMap<ui64, TShardInfo> PruneEffectPartitions(TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    switch(operation.GetTypeCase()) {
+        case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+            return PruneEffectPartitions(tableKeys, operation.GetUpsertRows(), stageInfo, holderFactory, typeEnv);
+        case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
+            return PruneEffectPartitions(tableKeys, operation.GetDeleteRows(), stageInfo, holderFactory, typeEnv);
+        default:
+            YQL_ENSURE(false, "Unexpected table operation: " << static_cast<ui32>(operation.GetTypeCase()));
+    }
+}
+
+
+namespace {
+
+void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
+    ui64& itemsLimit, TString& itemsLimitParamName, NYql::NDqProto::TData& itemsLimitBytes,
+    NKikimr::NMiniKQL::TType*& itemsLimitType)
+{
+    switch (protoItemsLimit.GetKindCase()) {
+        case NKqpProto::TKqpPhyValue::kLiteralValue: {
+            const auto& literalValue = protoItemsLimit.GetLiteralValue();
+
+            auto [type, value] = NMiniKQL::ImportValueFromProto(
+                literalValue.GetType(), literalValue.GetValue(), typeEnv, holderFactory);
+
+            YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
+            itemsLimit = value.Get<ui64>();
+            itemsLimitType = type;
+
+            return;
+        }
+
+        case NKqpProto::TKqpPhyValue::kParamValue: {
+            itemsLimitParamName = protoItemsLimit.GetParamValue().GetParamName();
+            if (!itemsLimitParamName) {
+                return;
+            }
+
+            auto* itemsLimitParam = stageInfo.Meta.Tx.Params.Values.FindPtr(itemsLimitParamName);
+            YQL_ENSURE(itemsLimitParam);
+
+            auto [type, value] = NMiniKQL::ImportValueFromProto(
+                itemsLimitParam->GetType(), itemsLimitParam->GetValue(), typeEnv, holderFactory);
+
+            YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
+            itemsLimit = value.Get<ui64>();
+
+            NYql::NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NYql::NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+            itemsLimitBytes = dataSerializer.Serialize(value, type);
+            itemsLimitType = type;
+
+            return;
+        }
+
+        case NKqpProto::TKqpPhyValue::kParamElementValue:
+        case NKqpProto::TKqpPhyValue::kRowsList:
+            YQL_ENSURE(false, "Unexpected ItemsLimit kind " << protoItemsLimit.DebugString());
+
+        case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
+            return;
+    }
+}
+
+}
+
+TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    TPhysicalShardReadSettings readSettings;
+
+    switch(operation.GetTypeCase()){
+        case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
+            ExtractItemsLimit(stageInfo, operation.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv,
+                readSettings.ItemsLimit, readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes, readSettings.ItemsLimitType);
+            readSettings.Reverse = operation.GetReadRanges().GetReverse();
+
+            break;
+        }
+
+        case NKqpProto::TKqpPhyTableOperation::kReadRange: {
+            ExtractItemsLimit(stageInfo, operation.GetReadRange().GetItemsLimit(), holderFactory, typeEnv,
+                readSettings.ItemsLimit, readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes, readSettings.ItemsLimitType);
+            readSettings.Reverse = operation.GetReadRange().GetReverse();
+            break;
+        }
+
+        case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: {
+            readSettings.Sorted = operation.GetReadOlapRange().GetSorted();
+            readSettings.Reverse = operation.GetReadOlapRange().GetReverse();
+            ExtractItemsLimit(stageInfo, operation.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv,
+                readSettings.ItemsLimit, readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes, readSettings.ItemsLimitType);
+            NKikimrMiniKQL::TType minikqlProtoResultType;
+            ConvertYdbTypeToMiniKQLType(operation.GetReadOlapRange().GetResultType(), minikqlProtoResultType);
+            readSettings.ResultType = ImportTypeFromProto(minikqlProtoResultType, typeEnv);
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    return readSettings;
 }
 
 } // namespace NKikimr::NKqp

@@ -1042,31 +1042,13 @@ private:
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, table);
-            THashMap<ui64, TShardInfo> partitions;
-
             switch (op.GetTypeCase()) {
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
-                    bool reverse = false;
-                    ui64 itemsLimit = 0;
-                    TString itemsLimitParamName;
-                    NDqProto::TData itemsLimitBytes;
-                    NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
 
-                    if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRanges) {
-                        partitions = PrunePartitions(TableKeys, op.GetReadRanges(), stageInfo, holderFactory, typeEnv);
-                        ExtractItemsLimit(stageInfo, op.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv,
-                            itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
-                        reverse = op.GetReadRanges().GetReverse();
-                    } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
-                        partitions = PrunePartitions(TableKeys, op.GetReadRange(), stageInfo, holderFactory, typeEnv);
-                        ExtractItemsLimit(stageInfo, op.GetReadRange().GetItemsLimit(), holderFactory, typeEnv,
-                            itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
-                        reverse = op.GetReadRange().GetReverse();
-                    } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kLookup) {
-                        partitions = PrunePartitions(TableKeys, op.GetLookup(), stageInfo, holderFactory, typeEnv);
-                    }
+                    THashMap<ui64, TShardInfo> partitions = PrunePartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
+                    auto readSettings = ExtractReadSettings(op, stageInfo, holderFactory, typeEnv);
 
                     for (auto& [shardId, shardInfo] : partitions) {
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -1080,15 +1062,15 @@ private:
                             YQL_ENSURE(retType.second);
                         }
 
-                        FillGeneralReadInfo(task.Meta, itemsLimit, reverse);
+                        FillGeneralReadInfo(task.Meta, readSettings.ItemsLimit, readSettings.Reverse);
 
                         TTaskMeta::TShardReadInfo readInfo;
                         readInfo.Ranges = std::move(*shardInfo.KeyReadRanges);
                         readInfo.Columns = columns;
 
-                        if (itemsLimitParamName) {
-                            task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
-                            task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
+                        if (readSettings.ItemsLimitParamName) {
+                            task.Meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
+                            task.Meta.ParamTypes.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitType);
                         }
 
                         if (!task.Meta.Reads) {
@@ -1132,10 +1114,7 @@ private:
                             ShardsWithEffects.insert(task.Meta.ShardId);
                         }
                     } else {
-                        auto result = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kUpsertRows)
-                            ? PruneEffectPartitions(TableKeys, op.GetUpsertRows(), stageInfo, holderFactory, typeEnv)
-                            : PruneEffectPartitions(TableKeys, op.GetDeleteRows(), stageInfo, holderFactory, typeEnv);
-
+                        auto result = PruneEffectPartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
                         for (auto& [shardId, shardInfo] : result) {
                             YQL_ENSURE(!shardInfo.KeyReadRanges);
                             YQL_ENSURE(shardInfo.KeyWriteRanges);

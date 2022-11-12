@@ -1520,24 +1520,20 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
 
     // Select keys 3 and 4 from both tables, either both or none should be inserted
     {
-        auto sender5 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(R"(
+        auto result = KqpSimpleExec(runtime, Q_(R"(
             $rows = (
                 SELECT key, value FROM `/Root/table-1` WHERE key = 3
                 UNION ALL
                 SELECT key, value FROM `/Root/table-2` WHERE key = 4
             );
-            SELECT key, value FROM $rows ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            SELECT key, value FROM $rows ORDER BY key)"));
         TString expected;
         if (committed) {
-            expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
+            expected = "{ items { uint32_value: 3 } items { uint32_value: 2 } }, { items { uint32_value: 4 } items { uint32_value: 2 } }";
         } else {
-            expected = "Struct { } Struct { Bool: false }";
+            expected = "";
         }
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        UNIT_ASSERT_VALUES_EQUAL(result, expected);
     }
 }
 
@@ -1552,7 +1548,6 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     auto &runtime = *server->GetRuntime();
 
     auto sender = runtime.AllocateEdgeActor();
-    auto sender3 = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
     runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
@@ -1624,11 +1619,10 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
 
     {
         // despite it's writing into the key that previous transaction reads this write should finish successfully
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
+        auto result = KqpSimpleExec(runtime, Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 10);
-            UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 10))")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 10))"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
     }
 
     // resend readsets, it will unblock both commit tx and read
@@ -1657,23 +1651,18 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
 
     {
         // Now we see the write
-        auto ev = ExecRequest(runtime, sender, MakeSimpleRequest(Q_(R"(
+        auto result = KqpSimpleExec(runtime, Q_(R"(
         $rows = (
             SELECT * FROM `/Root/table-1` WHERE key = 3 OR key = 5
             UNION ALL
             SELECT * FROM `/Root/table-2` WHERE key = 4 OR key = 6
         );
-        SELECT key, value FROM $rows ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { "
-                           "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } "
-                           "List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } "
-                           "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 10 } } } "
-                           "List { Struct { Optional { Uint32: 6 } } Struct { Optional { Uint32: 10 } } } "
-                           "} Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        SELECT key, value FROM $rows ORDER BY key)"));
+        TString expected = "{ items { uint32_value: 3 } items { uint32_value: 2 } }, "
+                           "{ items { uint32_value: 4 } items { uint32_value: 2 } }, "
+                           "{ items { uint32_value: 5 } items { uint32_value: 10 } }, "
+                           "{ items { uint32_value: 6 } items { uint32_value: 10 } }";
+        UNIT_ASSERT_VALUES_EQUAL(result, expected);
     }
 }
 
@@ -1744,14 +1733,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, UseMvcc) {
     // Now send a simple read request from table-1
     // Since it's readonly it cannot affect inflight transaction and shouled be allowed
     {
-        auto sender3 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(
-            "SELECT key, value FROM `/Root/table-1` ORDER BY key")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` ORDER BY key"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
     }
 
     // Whatever happens we should resend blocked readsets
@@ -1769,19 +1752,14 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, UseMvcc) {
 
     // Select keys 3 and 4 from both tables, both should have been be inserted
     {
-        auto sender4 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"(
+        auto result = KqpSimpleExec(runtime, Q_(R"(
             $rows = (
                 SELECT key, value FROM `/Root/table-1` WHERE key = 3
                 UNION ALL
                 SELECT key, value FROM `/Root/table-2` WHERE key = 4
             );
-            SELECT key, value FROM $rows ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+            SELECT key, value FROM $rows ORDER BY key)"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }, { items { uint32_value: 4 } items { uint32_value: 2 } }");
     }
 }
 
@@ -1851,21 +1829,16 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, UseMvcc) {
 
     // Now send non-conflicting upsert to both tables
     {
-        auto sender3 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
+        auto result = KqpSimpleExec(runtime, Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);
-            UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
     }
 
     // Check that immediate non-conflicting upsert is working too
     {
-        auto sender4 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(
-            "UPSERT INTO `/Root/table-1` (key, value) VALUES (7, 4)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto result = KqpSimpleExec(runtime, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (7, 4)"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
     }
 
     // Resend previousy blocked readsets
@@ -1883,19 +1856,14 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, UseMvcc) {
 
     // Select keys 3 and 4 from both tables, both should have been inserted
     {
-        auto sender5 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(R"(
+        auto result = KqpSimpleExec(runtime, Q_(R"(
             $rows = (
                 SELECT key, value FROM `/Root/table-1` WHERE key = 3
                 UNION ALL
                 SELECT key, value FROM `/Root/table-2` WHERE key = 4
             );
-            SELECT key, value FROM $rows ORDER BY key)")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+            SELECT key, value FROM $rows ORDER BY key)"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }, { items { uint32_value: 4 } items { uint32_value: 2 } }");
     }
 }
 

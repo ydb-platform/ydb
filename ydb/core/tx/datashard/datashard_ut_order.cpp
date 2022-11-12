@@ -1432,6 +1432,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
+    auto sender3Session = CreateSessionRPC(runtime);
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
@@ -1480,9 +1481,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
     // Now send a simple request that would upsert a new value into table-1
     // It would have broken locks if executed before the above commit
     // However the above commit must succeed (readsets are already being exchanged)
-    auto sender3 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender3, MakeSimpleRequest(Q_(
-        "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)")));
+    auto f3 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(
+        "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)"), sender3Session, "", true));
 
     // Schedule a simple timer to simulate some time passing
     {
@@ -1500,9 +1500,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
 
     // Read the immediate reply first, it must always succeed
     {
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender3);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto response = AwaitResponse(runtime, f3);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 
     // Read the commit reply next
@@ -1561,6 +1560,7 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);"));
 
     TString sessionId = CreateSessionRPC(runtime);
+    TString simpleSession = CreateSessionRPC(runtime);
 
     TString txId;
     {
@@ -1604,13 +1604,13 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     runtime.SetObserverFunc(prevObserverFunc);
 
     // it will be blocked by previous transaction that is waiting for its readsets
-    SendRequest(runtime, sender, MakeSimpleRequest(Q_(R"(
+    auto simpleF = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         $rows = (
             SELECT * FROM `/Root/table-1` WHERE key = 3 OR key = 5
             UNION ALL
             SELECT * FROM `/Root/table-2` WHERE key = 4 OR key = 6
         );
-        SELECT key, value FROM $rows ORDER BY key)")));
+        SELECT key, value FROM $rows ORDER BY key)"), simpleSession, "", true));
 
     // wait for the tx is planned
     TDispatchOptions opts;
@@ -1639,14 +1639,14 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
 
     {
         // Read should finish successfully and it doesn't see the write
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        TString expected = "Struct { "
-                           "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } "
-                           "List { Struct { Optional { Uint32: 4 } } Struct { Optional { Uint32: 2 } } } "
-                           "} Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        auto response = AwaitResponse(runtime, simpleF);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Table::ExecuteQueryResult result;
+        response.operation().result().UnpackTo(&result);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(result),
+            "{ items { uint32_value: 3 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 2 } }");
     }
 
     {
@@ -2086,36 +2086,20 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // Note that key 3 is not written yet, but we pretend immediate tx
     // executes before that waiting transaction (no key 3 yet).
     {
-        auto sender3 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
     }
 
     // Upsert key 1, we expect this immediate tx to be executed successfully because it lies to the right on the global timeline
     {
-        auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto result = KqpSimpleExec(runtime, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
     }
 
     // Upsert key 5, this immediate tx should be executed successfully too
     {
-        auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        auto result = KqpSimpleExec(runtime, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
     }
 
     // Release readsets allowing tx to progress
@@ -2126,14 +2110,8 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
 
     // Select key 3, we expect a success
     {
-        auto sender9 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender9, MakeSimpleRequest(Q_(
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }");
     }
 }
 
@@ -2214,13 +2192,12 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc) {
     // Select key 3, we expect a timeout, because logically writes
     // to 3 and 5 already happened, but physically write to 3 is still waiting.
     {
-        auto sender3 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender3, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
+        TString tmpSessionId = CreateSessionRPC(runtime);
+        auto req = MakeSimpleRequestRPC(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"), tmpSessionId, "", true);
+        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
+        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
+        auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
     }
 
     // Reboot table-1 tablet
@@ -2241,25 +2218,18 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc) {
 
     // Select key 3, we still expect a timeout
     {
-        auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
-        req->Record.MutableRequest()->SetCancelAfterMs(1000);
-        req->Record.MutableRequest()->SetTimeoutMs(1000);
-        auto ev = ExecRequest(runtime, sender4, std::move(req));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
+        TString tmpSessionId = CreateSessionRPC(runtime);
+        auto req = MakeSimpleRequestRPC(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"), tmpSessionId, "", true);
+        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
+        req.mutable_operation_params()->mutable_cancel_after()->set_seconds(1);
+        auto response = AwaitResponse(runtime, SendRequest(runtime, std::move(req)));
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::TIMEOUT);
     }
 
     // Select key 5, it shouldn't pose any problems
     {
-        auto sender5 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 5;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 3 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 5;"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 5 } items { uint32_value: 3 } }");
     }
 
     // Release readsets allowing tx to progress
@@ -2270,14 +2240,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc) {
 
     // Select key 3, we expect a success
     {
-        auto sender6 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender6, MakeSimpleRequest(Q_(
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;")));
-        auto& response = ev->Get()->Record.GetRef();
-        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
-        TString expected = "Struct { List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 2 } } } } Struct { Bool: false }";
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
+        auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
+        UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }");
     }
 }
 

@@ -15,7 +15,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::HandleStorageProxy(TAutoPtr<IEventHandle> ev) {
         std::unique_ptr<IEventHandle> p(ev.Release());
 
-        if (TabletId == Max<ui64>() || !PendingEventQ.empty()) {
+        if (!IsConnected || !PendingEventQ.empty()) {
             size_t size = Max<size_t>();
             switch (p->GetTypeRewrite()) {
 #define XX(TYPE) case TEvBlobStorage::TYPE: size = p->Get<TEvBlobStorage::T##TYPE>()->CalculateSize(); break;
@@ -67,6 +67,7 @@ namespace NKikimr::NBlobDepot {
         std::deque<TPendingEvent>::iterator it;
         for (it = PendingEventQ.begin(); it != PendingEventQ.end() && it->ExpirationTimestamp <= now; ++it) {
             CreateQuery<0>(std::move(it->Event))->EndWithError(NKikimrProto::ERROR, "pending event queue timeout");
+            PendingEventBytes -= it->Size;
         }
         PendingEventQ.erase(PendingEventQ.begin(), it);
 

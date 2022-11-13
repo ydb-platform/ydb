@@ -85,6 +85,7 @@ namespace NKikimr::NBlobDepot {
         const ui64 AgentInstanceId;
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
+        bool IsConnected = false;
 
     private:
         struct TEvPrivate {
@@ -148,7 +149,6 @@ namespace NKikimr::NBlobDepot {
                     if (TabletId && TabletId != Max<ui64>()) {
                         ConnectToBlobDepot();
                     }
-                    HandlePendingEvent();
                 }
                 if (!info->GetTotalVDisksNum()) {
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
@@ -204,6 +204,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
         void ConnectToBlobDepot();
+        void OnConnect();
         void OnDisconnect();
 
         void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override;

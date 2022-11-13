@@ -78,6 +78,8 @@ namespace NKikimr::NBlobDepot {
 
         SpaceColor = msg.GetSpaceColor();
         ApproximateFreeSpaceShare = msg.GetApproximateFreeSpaceShare();
+
+        OnConnect();
     }
 
     void TBlobDepotAgent::IssueAllocateIdsIfNeeded(TChannelKind& kind) {
@@ -110,8 +112,13 @@ namespace NKikimr::NBlobDepot {
             kind.IssueGivenIdRange(msg.GetGivenIdRange());
         }
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA09, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId),
-            (Msg, msg), (NumAvailableItems, kind.GetNumAvailableItems()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA09, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId), (Msg, msg),
+            (NumAvailableItems, kind.GetNumAvailableItems()));
+    }
+
+    void TBlobDepotAgent::OnConnect() {
+        IsConnected = true;
+        HandlePendingEvent();
     }
 
     void TBlobDepotAgent::OnDisconnect() {
@@ -124,6 +131,8 @@ namespace NKikimr::NBlobDepot {
         for (auto& [_, kind] : ChannelKinds) {
             kind.IdAllocInFlight = false;
         }
+
+        IsConnected = false;
     }
 
     void TBlobDepotAgent::ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) {

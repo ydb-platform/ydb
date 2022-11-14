@@ -61,10 +61,8 @@ bool NeedReportStats(const Ydb::Table::ExecuteScanQueryRequest& req) {
             }
 
             return false;
-
-        case ExecuteScanQueryRequest_Mode_ExecuteScanQueryRequest_Mode_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case ExecuteScanQueryRequest_Mode_ExecuteScanQueryRequest_Mode_INT_MAX_SENTINEL_DO_NOT_USE_:
-            YQL_ENSURE(false);
+        default:
+            return false;
     }
 }
 
@@ -88,9 +86,8 @@ bool NeedReportPlan(const Ydb::Table::ExecuteScanQueryRequest& req) {
 
             return false;
 
-        case ExecuteScanQueryRequest_Mode_ExecuteScanQueryRequest_Mode_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case ExecuteScanQueryRequest_Mode_ExecuteScanQueryRequest_Mode_INT_MAX_SENTINEL_DO_NOT_USE_:
-            YQL_ENSURE(false);
+        default:
+            return false;
     }
 }
 
@@ -170,19 +167,10 @@ bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::
     return true;
 }
 
-bool FillProfile(Ydb::Table::ExecuteScanQueryPartialResponse& response,
-    const NYql::NDqProto::TDqExecutionStats& profile)
-{
-    Y_UNUSED(response);
-    Y_UNUSED(profile);
-    return false;
-}
-
 using TEvStreamExecuteScanQueryRequest = TGrpcRequestNoOperationCall<Ydb::Table::ExecuteScanQueryRequest,
     Ydb::Table::ExecuteScanQueryPartialResponse>;
 
-template<typename TRequestEv, typename TResponse>
-class TStreamExecuteScanQueryRPC : public TActorBootstrapped<TStreamExecuteScanQueryRPC<TRequestEv, TResponse>> {
+class TStreamExecuteScanQueryRPC : public TActorBootstrapped<TStreamExecuteScanQueryRPC> {
 private:
     enum EWakeupTag : ui64 {
         ClientLostTag = 1,
@@ -194,7 +182,7 @@ public:
         return NKikimrServices::TActivity::GRPC_STREAM_REQ;
     }
 
-    TStreamExecuteScanQueryRPC(TRequestEv* request, ui64 rpcBufferSize)
+    TStreamExecuteScanQueryRPC(TEvStreamExecuteScanQueryRequest* request, ui64 rpcBufferSize)
         : Request_(request)
         , RpcBufferSize_(rpcBufferSize) {}
 
@@ -319,7 +307,7 @@ private:
         NYql::IssuesFromMessage(issueMessage, issues);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            TResponse response;
+            Ydb::Table::ExecuteScanQueryPartialResponse response;
             TString out;
             auto& kqpResponse = record.GetResponse();
             response.set_status(Ydb::StatusIds::SUCCESS);
@@ -377,7 +365,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
-        TResponse response;
+        Ydb::Table::ExecuteScanQueryPartialResponse response;
         response.set_status(StatusIds::SUCCESS);
         response.mutable_result()->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
@@ -508,22 +496,11 @@ private:
         // Skip sending empty result in case of success status - simplify client logic
         if (status != Ydb::StatusIds::SUCCESS) {
             TString out;
-            TResponse response;
+            Ydb::Table::ExecuteScanQueryPartialResponse response;
             response.set_status(status);
             response.mutable_issues()->CopyFrom(message);
             Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
             Request_->SendSerializedResult(std::move(out), status);
-        } else {
-            for (auto& profile : ExecutionProfiles_) {
-                TResponse response;
-                if (!FillProfile(response, *profile)) {
-                    break;
-                }
-
-                TString out;
-                Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-                Request_->SendSerializedResult(std::move(out), status);
-            }
         }
 
         Request_->FinishStream();
@@ -531,7 +508,7 @@ private:
     }
 
 private:
-    std::unique_ptr<TRequestEv> Request_;
+    std::unique_ptr<TEvStreamExecuteScanQueryRequest> Request_;
     const ui64 RpcBufferSize_;
 
     TDuration InactiveClientTimeout_;
@@ -552,8 +529,7 @@ void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacili
     ui64 rpcBufferSize = f.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
     auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(p.release());
     Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    TActivationContext::AsActorContext().Register(new TStreamExecuteScanQueryRPC<TEvStreamExecuteScanQueryRequest,
-        Ydb::Table::ExecuteScanQueryPartialResponse>(req, rpcBufferSize));
+    TActivationContext::AsActorContext().Register(new TStreamExecuteScanQueryRPC(req, rpcBufferSize));
 }
 
 } // namespace NGRpcService

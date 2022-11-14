@@ -100,6 +100,20 @@
 ))))
 
 # list_type:type
+# doesn't support optional values
+(let checked_sum_traits_factory_raw (lambda '(list_type) (block '(
+  (let init (lambda '(value) (MatchType (TypeOf (CheckedAdd value value))
+        'Optional (lambda '() (Just value))
+        (lambda '() value))))
+  (let update (lambda '(value state) (CheckedAdd value state)))
+  (let save (lambda '(state) state))
+  (let load (lambda '(state) state))
+  (let merge (lambda '(state1 state2) (CheckedAdd state1 state2)))
+  (let finish (lambda '(state) state))
+  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+))))
+
+# list_type:type
 # defval
 # support optional values
 (let list_traits_factory_opt_gen (lambda '(limit defval) (block '(
@@ -570,6 +584,7 @@
 (let min_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMin one two)))))
 (let max_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMax one two)))))
 (let sum_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory_map list_type (lambda '(one two) (AggrAdd one two)) (lambda '(x) (WidenIntegral x)) )))
+(let checked_sum_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type checked_sum_traits_factory_raw)))
 (let bit_and_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_and_traits_factory_raw)))
 (let bit_or_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_or_traits_factory_raw)))
 (let bit_xor_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_xor_traits_factory_raw)))
@@ -638,6 +653,7 @@
 (let min_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor min_traits_factory_opt)))
 (let max_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor max_traits_factory_opt)))
 (let sum_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor sum_traits_factory_opt)))
+(let checked_sum_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor checked_sum_traits_factory_opt)))
 (let count_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor count_traits_factory_opt)))
 (let count_all_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor count_all_traits_factory_opt)))
 (let count_if_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor count_if_traits_factory_opt)))
@@ -895,6 +911,11 @@
     (let pl (Apply payload value))
     (return (MatchType pl 'Optional (lambda '() pl) (lambda '() (Just pl)))))))))))
 
+(let checked_sum_if_traits_factory (lambda '(list_type payload predicate)
+(Apply checked_sum_traits_factory list_type (lambda '(value) (FlatOptionalIf (Coalesce (Apply predicate value) (Bool '0)) (block '(
+    (let pl (Apply payload value))
+    (return (MatchType pl 'Optional (lambda '() pl) (lambda '() (Just pl)))))))))))
+
 (let top_bottom_traits_factory (lambda '(list_type extractor count is_top)
     (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
         (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
@@ -920,6 +941,8 @@
 (export max_traits_factory)
 (export sum_traits_factory)
 (export sum_if_traits_factory)
+(export checked_sum_traits_factory)
+(export checked_sum_if_traits_factory)
 (export count_traits_factory)
 (export count_all_traits_factory)
 (export count_if_traits_factory)

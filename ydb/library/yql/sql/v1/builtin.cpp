@@ -52,6 +52,18 @@ TMaybe<TString> MakeTypeConfig(const TString& ns, const TVector<TNodePtr>& udfAr
     return Nothing();
 }
 
+void AdjustCheckedAggFuncName(TString& aggNormalizedName, TContext& ctx) {
+    if (!ctx.Scoped->PragmaCheckedOps) {
+        return;
+    }
+
+    if (aggNormalizedName == "sum") {
+        aggNormalizedName = "checked_sum";
+    } else if (aggNormalizedName == "sumif") {
+        aggNormalizedName = "checked_sumif";
+    }
+}
+
 class TGroupingNode final: public TAstListNode {
 public:
     TGroupingNode(TPosition pos, const TVector<TNodePtr>& args)
@@ -3041,6 +3053,9 @@ struct TBuiltinFuncData {
             {"sum", BuildAggrFuncFactoryCallback("Sum", "sum_traits_factory")},
             {"sumif", BuildAggrFuncFactoryCallback("SumIf", "sum_if_traits_factory", PAYLOAD_PREDICATE) },
 
+            {"checked_sum", BuildAggrFuncFactoryCallback("CheckedSum", "checked_sum_traits_factory")},
+            {"checked_sumif", BuildAggrFuncFactoryCallback("CheckedSumIf", "checked_sum_if_traits_factory", PAYLOAD_PREDICATE) },
+
             {"some", BuildAggrFuncFactoryCallback("Some", "some_traits_factory")},
             {"somevalue", BuildAggrFuncFactoryCallback("SomeValue", "some_traits_factory")},
 
@@ -3465,6 +3480,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 return BuildAggrFuncFactoryCallback(name, "", EAggrFuncTypeCallback::PG)(pos, args, aggMode, true);
             }
 
+            AdjustCheckedAggFuncName(aggNormalizedName, ctx);
+
             auto aggrCallback = aggrFuncs.find(aggNormalizedName);
             if (aggrCallback == aggrFuncs.end()) {
                 return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
@@ -3483,6 +3500,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             auto aggr = BuildFactoryAggregation(pos, name, "", aggMode, multi);
             return new TBasicAggrFunc(pos, name, aggr, args);
         }
+
+        AdjustCheckedAggFuncName(normalizedName, ctx);
 
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {

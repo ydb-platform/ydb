@@ -74,10 +74,16 @@ void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
     CdcStreams.emplace(pathId, nullptr);
 }
 
-void TMemoryChanges::GrabTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
+void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
     Y_VERIFY(!ss->TablesWithSnaphots.contains(pathId));
 
     TablesWithSnaphots.emplace(pathId, snapshotTxId);
+}
+
+void TMemoryChanges::GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId) {
+    Y_VERIFY(!ss->LockedPaths.contains(pathId));
+
+    LockedPaths.emplace(pathId, lockTxId);
 }
 
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
@@ -127,6 +133,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         }
 
         TablesWithSnaphots.pop();
+    }
+
+    while (LockedPaths) {
+        const auto& [id, _] = LockedPaths.top();
+        ss->LockedPaths.erase(id);
+        LockedPaths.pop();
     }
 
     while (Tables) {

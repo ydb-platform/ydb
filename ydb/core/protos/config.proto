@@ -742,6 +742,7 @@ message TFeatureFlags {
     optional bool EnableGrpcAudit = 74 [default = false];
     optional bool EnableKqpDataQueryStreamLookup = 75 [default = false];
     optional bool EnableBorrowedSplitCompaction = 76 [default = true];
+    optional bool EnableChangefeedInitialScan = 77 [default = false];
 }
 
 

@@ -506,6 +506,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
+    app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);

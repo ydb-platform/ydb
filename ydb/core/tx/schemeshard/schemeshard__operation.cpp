@@ -942,7 +942,9 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
         case TTxState::ETxType::TxCreateCdcStream:
             return CreateNewCdcStreamImpl(NextPartId(), txState);
         case TTxState::ETxType::TxCreateCdcStreamAtTable:
-            return CreateNewCdcStreamAtTable(NextPartId(), txState);
+            return CreateNewCdcStreamAtTable(NextPartId(), txState, false);
+        case TTxState::ETxType::TxCreateCdcStreamAtTableWithSnapshot:
+            return CreateNewCdcStreamAtTable(NextPartId(), txState, true);
         case TTxState::ETxType::TxAlterCdcStream:
             return CreateAlterCdcStreamImpl(NextPartId(), txState);
         case TTxState::ETxType::TxAlterCdcStreamAtTable:

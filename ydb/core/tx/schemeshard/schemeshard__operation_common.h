@@ -1461,6 +1461,7 @@ class TConfigurePartsAtTable: public TSubOperationState {
     static bool IsExpectedTxType(TTxState::ETxType txType) {
         switch (txType) {
         case TTxState::TxCreateCdcStreamAtTable:
+        case TTxState::TxCreateCdcStreamAtTableWithSnapshot:
         case TTxState::TxAlterCdcStreamAtTable:
         case TTxState::TxDropCdcStreamAtTable:
             return true;
@@ -1547,6 +1548,7 @@ class TProposeAtTable: public TSubOperationState {
     static bool IsExpectedTxType(TTxState::ETxType txType) {
         switch (txType) {
         case TTxState::TxCreateCdcStreamAtTable:
+        case TTxState::TxCreateCdcStreamAtTableWithSnapshot:
         case TTxState::TxAlterCdcStreamAtTable:
         case TTxState::TxDropCdcStreamAtTable:
             return true;
@@ -1620,7 +1622,7 @@ public:
         return false;
     }
 
-private:
+protected:
     const TOperationId OperationId;
 
 }; // TProposeAtTable

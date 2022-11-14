@@ -116,39 +116,37 @@ struct TTxState {
         item(TxDropBlobDepot, 70) \
         item(TxUpdateMainTableOnIndexMove, 71) \
         item(TxAllocatePQ, 72) \
-
+        item(TxCreateCdcStreamAtTableWithSnapshot, 73) \
 
     // TX_STATE_TYPE_ENUM
-
-    //TxMergeTablePartition only for sensors yet
 
     enum ETxType {
         TX_STATE_TYPE_ENUM(TX_STATE_DECLARE_ENUM)
     };
 
     static TString TypeName(ETxType t) {
-        switch(t) {
+        switch (t) {
             TX_STATE_TYPE_ENUM(TX_STATE_ENUM_NAME)
         default:
             return Sprintf("Unknown tx type %d", t);
         }
     }
     static ui32 TxTypeInFlightCounter(ETxType t) {
-        switch(t) {
+        switch (t) {
             TX_STATE_TYPE_ENUM(TX_STATE_IN_FLIGHT_COUNTER)
         default:
             return COUNTER_IN_FLIGHT_OPS_UNKNOWN;
         }
     }
     static ui32 TxTypeFinishedCounter(ETxType t) {
-        switch(t) {
+        switch (t) {
             TX_STATE_TYPE_ENUM(TX_STATE_FINISHED_COUNTER)
         default:
             return COUNTER_FINISHED_OPS_UNKNOWN;
         }
     }
     static ETxType ConvertToTxType(ESimpleCounters t) {
-        switch(t) {
+        switch (t) {
             TX_STATE_TYPE_ENUM(TX_STATE_FROM_COUNTER)
         default:
             return TTxState::ETxType::TxInvalid;
@@ -190,7 +188,7 @@ struct TTxState {
     };
 
     static TString StateName(ETxState s) {
-        switch(s) {
+        switch (s) {
             TX_STATE_STATE_ENUM(TX_STATE_ENUM_NAME)
         default:
             return Sprintf("Unknown state %d", s);
@@ -198,6 +196,7 @@ struct TTxState {
     }
     #undef TX_STATE_STATE_ENUM
 
+    #undef TX_STATE_FROM_COUNTER
     #undef TX_STATE_FINISHED_COUNTER
     #undef TX_STATE_IN_FLIGHT_COUNTER
     #undef TX_STATE_ENUM_NAME
@@ -328,6 +327,7 @@ struct TTxState {
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
+        case TxCreateCdcStreamAtTableWithSnapshot:
             return false;
         case TxCreateLock: //this is more like alter
         case TxDropLock: //this is more like alter
@@ -427,6 +427,7 @@ struct TTxState {
         case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
+        case TxCreateCdcStreamAtTableWithSnapshot:
         case TxCreateSequence:
         case TxCreateReplication:
         case TxCreateBlobDepot:
@@ -514,6 +515,7 @@ struct TTxState {
         case TxCreateTableIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
+        case TxCreateCdcStreamAtTableWithSnapshot:
         case TxCreateSequence:
         case TxCreateReplication:
         case TxCreateBlobDepot:

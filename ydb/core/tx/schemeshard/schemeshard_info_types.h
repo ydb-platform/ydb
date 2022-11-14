@@ -2257,6 +2257,9 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         TPtr result = New(desc.GetMode(), desc.GetFormat());
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
+        if (desc.HasState()) {
+            alterData->State = desc.GetState();
+        }
 
         return result;
     }

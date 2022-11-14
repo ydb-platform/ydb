@@ -409,10 +409,6 @@ public:
         const NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig& config,
         const TActorContext &ctx);
 
-    bool CheckInFlightLimit(
-        const TTxState::ETxType txType,
-        TString& errStr) const;
-
     void StartStopCompactionQueues();
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);
@@ -505,8 +501,10 @@ public:
     TTabletId SelectCoordinator(TTxId txId, TPathElement::TPtr pathEl) const;
 
     bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr);
-    bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr);
-    bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme &scheme, TString &errStr);
+    bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
+    bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
+    bool CheckInFlightLimit(const TTxState::ETxType txType, TString& errStr) const;
+    bool CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const;
 
     TShardIdx ReserveShardIdxs(ui64 count);
     TShardIdx NextShardIdx(const TShardIdx& shardIdx, ui64 inc) const;

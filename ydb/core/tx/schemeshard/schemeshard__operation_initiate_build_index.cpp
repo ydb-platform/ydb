@@ -381,38 +381,19 @@ public:
             }
         }
 
-        TString errStr;
-
         TPathElement::TPtr pathEl = dstPath.Base();
         TPathId tablePathId = pathEl->PathId;
         result->SetPathId(tablePathId.LocalPathId);
 
+        TString errStr;
         if (!context.SS->CheckLocks(dstPath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
 
-        if (context.SS->TablesWithSnaphots.contains(tablePathId)) {
-            TTxId shapshotTxId = context.SS->TablesWithSnaphots.at(tablePathId);
-            if (OperationId.GetTxId() == shapshotTxId) {
-                // already
-                errStr = TStringBuilder()
-                    << "Snapshot with the same txId already presents for table"
-                    << ", tableId:" << tablePathId
-                    << ", txId: " << OperationId.GetTxId()
-                    << ", snapshotTxId: " << shapshotTxId
-                    << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(shapshotTxId);
-                result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, errStr);
-                return result;
-            }
-
-            errStr = TStringBuilder()
-                << "Snapshot with another txId already presents for table, only one snapshot is allowed for table for now"
-                << ", tableId:" << tablePathId
-                << ", txId: " << OperationId.GetTxId()
-                << ", snapshotTxId: " << shapshotTxId
-                << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(shapshotTxId);
-            result->SetError(TEvSchemeShard::EStatus::StatusSchemeError, errStr);
+        NKikimrScheme::EStatus status;
+        if (!context.SS->CanCreateSnapshot(tablePathId, OperationId.GetTxId(), status, errStr)) {
+            result->SetError(status, errStr);
             return result;
         }
 
@@ -423,7 +404,7 @@ public:
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, tablePathId);
-        context.MemChanges.GrabTableSnapshot(context.SS, tablePathId, OperationId.GetTxId());
+        context.MemChanges.GrabNewTableSnapshot(context.SS, tablePathId, OperationId.GetTxId());
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistTableSnapshot(tablePathId, OperationId.GetTxId());

@@ -40,6 +40,7 @@ public:
     FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
     FEATURE_FLAG_SETTER(EnableArrowFormatAtDatashard)
     FEATURE_FLAG_SETTER(EnableGrpcAudit)
+    FEATURE_FLAG_SETTER(EnableChangefeedInitialScan)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

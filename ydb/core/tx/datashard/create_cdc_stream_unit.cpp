@@ -47,6 +47,15 @@ public:
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
+        if (params.HasSnapshotName()) {
+            Y_VERIFY(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateScan);
+            Y_VERIFY(tx->GetStep() != 0);
+
+            DataShard.GetSnapshotManager().AddSnapshot(txc.DB,
+                TSnapshotKey(pathId.OwnerId, pathId.LocalPathId, tx->GetStep(), tx->GetTxId()),
+                params.GetSnapshotName(), TSnapshot::FlagScheme, TDuration::Zero());
+        }
+
         AddSender.Reset(new TEvChangeExchange::TEvAddSender(
             pathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId
         ));

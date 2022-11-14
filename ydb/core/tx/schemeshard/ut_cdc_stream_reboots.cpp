@@ -1,10 +1,14 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
+
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
-    Y_UNIT_TEST(CreateStream) {
+    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing()) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -17,18 +21,42 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+            NKikimrSchemeOp::TCdcStreamDescription streamDesc;
+            streamDesc.SetName("Stream");
+            streamDesc.SetMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly);
+            streamDesc.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+            if (state) {
+                streamDesc.SetState(*state);
+            }
+
+            TString strDesc;
+            const bool ok = google::protobuf::TextFormat::PrintToString(streamDesc, &strDesc);
+            UNIT_ASSERT_C(ok, "protobuf serialization failed");
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
                 TableName: "Table"
-                StreamDescription {
-                  Name: "Stream"
-                  Mode: ECdcStreamModeKeysOnly
-                  Format: ECdcStreamFormatProto
-                }
-            )");
+                StreamDescription { %s }
+            )", strDesc.c_str()));
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathExist});
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                NLs::PathExist,
+                NLs::StreamState(state.GetOrElse(NKikimrSchemeOp::ECdcStreamStateReady)),
+            });
         });
+    }
+
+    Y_UNIT_TEST(CreateStream) {
+        CreateStream();
+    }
+
+    Y_UNIT_TEST(CreateStreamExplicitReady) {
+        CreateStream(NKikimrSchemeOp::ECdcStreamStateReady);
+    }
+
+    Y_UNIT_TEST(CreateStreamWithInitialScan) {
+        CreateStream(NKikimrSchemeOp::ECdcStreamStateScan);
     }
 
     Y_UNIT_TEST(AlterStream) {

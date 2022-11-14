@@ -17,6 +17,7 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> Tables;
     TDeque<std::pair<TPathId, TTxId>> TableSnapshots;
+    TDeque<std::pair<TPathId, TTxId>> LongLocks;
 
     TDeque<TShardIdx> Shards;
 
@@ -44,6 +45,10 @@ public:
 
     void PersistTableSnapshot(const TPathId& pathId, TTxId snapshotTxId) {
         TableSnapshots.emplace_back(pathId, snapshotTxId);
+    }
+
+    void PersistLongLock(const TPathId& pathId, TTxId lockTxId) {
+        LongLocks.emplace_back(pathId, lockTxId);
     }
 
     void PersistAlterUserAttrs(const TPathId& pathId) {

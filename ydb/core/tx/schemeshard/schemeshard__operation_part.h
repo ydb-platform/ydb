@@ -313,8 +313,8 @@ ISubOperationBase::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxSta
 TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperationBase::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewCdcStreamImpl(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool initialScan);
+ISubOperationBase::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool initialScan);
 // Alter
 TVector<ISubOperationBase::TPtr> CreateAlterCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperationBase::TPtr CreateAlterCdcStreamImpl(TOperationId id, const TTxTransaction& tx);

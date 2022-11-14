@@ -709,6 +709,7 @@ enum ECdcStreamState {
     ECdcStreamStateInvalid = 0;
     ECdcStreamStateReady = 1;
     ECdcStreamStateDisabled = 2;
+    ECdcStreamStateScan = 3;
 }
 
 enum ECdcStreamMode {

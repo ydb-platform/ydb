@@ -169,6 +169,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxUpdateMainTableOnIndexMove = 137 [(CounterOpts) = {Name: "InFlightOps/UpdateMainTableOnIndexMove"}];
 
     COUNTER_IN_FLIGHT_OPS_TxAllocatePQ   = 138            [(CounterOpts) = {Name: "InFlightOps/AllocatePQ"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateCdcStreamAtTableWithSnapshot = 139 [(CounterOpts) = {Name: "InFlightOps/CreateCdcStreamAtTableWithSnapshot"}];
 }
 
 enum ECumulativeCounters {
@@ -234,7 +235,6 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterColumnTable = 54          [(CounterOpts) = {Name: "FinishedOps/AlterColumnTable"}];
     COUNTER_FINISHED_OPS_TxDropColumnTable = 55           [(CounterOpts) = {Name: "FinishedOps/DropColumnTable"}];
 
-
     COUNTER_FINISHED_OPS_TxCreateCdcStream = 56           [(CounterOpts) = {Name: "FinishedOps/CreateCdcStream"}];
     COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTable = 57    [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTable"}];
     COUNTER_FINISHED_OPS_TxAlterCdcStream = 58            [(CounterOpts) = {Name: "FinishedOps/AlterCdcStream"}];
@@ -272,6 +272,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxUpdateMainTableOnIndexMove = 82 [(CounterOpts) = {Name: "FinishedOps/UpdateMainTableOnIndexMove"}];
 
     COUNTER_FINISHED_OPS_TxAllocatePQ   = 83              [(CounterOpts) = {Name: "FinishedOps/AllocatePQ"}];
+    COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTableWithSnapshot = 84 [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTableWithSnapshot"}];
 }
 
 enum EPercentileCounters {

@@ -1118,7 +1118,7 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
     return true;
 }
 
-bool TSchemeShard::CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme &scheme, TString &errStr) {
+bool TSchemeShard::CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme &scheme, TString &errStr) const {
     if (scheme.HasLockGuard() && scheme.GetLockGuard().HasOwnerTxId()) {
         return CheckLocks(pathId, TTxId(scheme.GetLockGuard().GetOwnerTxId()), errStr);
     }
@@ -1126,7 +1126,7 @@ bool TSchemeShard::CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModi
     return CheckLocks(pathId, InvalidTxId, errStr);
 }
 
-bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) {
+bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const {
     if (lockTxId == InvalidTxId) {
         // check lock is free
         if (LockedPaths.contains(pathId)) {
@@ -1165,7 +1165,56 @@ bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TStrin
     }
 
     return true;
+}
 
+bool TSchemeShard::CheckInFlightLimit(const TTxState::ETxType txType, TString& errStr) const {
+    auto it = InFlightLimits.find(txType);
+    if (it == InFlightLimits.end()) {
+        return true;
+    }
+
+    if (it->second != 0 && TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(txType)].Get() >= it->second) {
+        errStr = TStringBuilder() << "the limit of operations with type " << TTxState::TypeName(txType)
+            << " has been exceeded"
+            << ", limit: " << it->second;
+        return false;
+    }
+
+    return true;
+}
+
+bool TSchemeShard::CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const {
+    auto it = TablesWithSnaphots.find(tablePathId);
+    if (it == TablesWithSnaphots.end()) {
+        return true;
+    }
+
+    const auto& snapshotTxId = it->second;
+    TStepId snapshotStepId;
+
+    if (auto sit = SnapshotsStepIds.find(snapshotTxId); sit != SnapshotsStepIds.end()) {
+        snapshotStepId = sit->second;
+    }
+
+    if (txId == snapshotTxId) {
+        status = NKikimrScheme::StatusAlreadyExists;
+        errStr = TStringBuilder()
+            << "Snapshot with the same txId already presents for table"
+            << ", tableId:" << tablePathId
+            << ", txId: " << txId
+            << ", snapshotTxId: " << snapshotTxId
+            << ", snapshotStepId: " << snapshotStepId;
+    } else {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = TStringBuilder()
+            << "Snapshot with another txId already presents for table, only one snapshot is allowed for table for now"
+            << ", tableId:" << tablePathId
+            << ", txId: " << txId
+            << ", snapshotTxId: " << snapshotTxId
+            << ", snapshotStepId: " << snapshotStepId;
+    }
+
+    return false;
 }
 
 TShardIdx TSchemeShard::ReserveShardIdxs(ui64 count) {
@@ -1298,6 +1347,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterCdcStream:
     case TTxState::TxAlterCdcStreamAtTable:
     case TTxState::TxCreateCdcStreamAtTable:
+    case TTxState::TxCreateCdcStreamAtTableWithSnapshot:
     case TTxState::TxDropCdcStreamAtTable:
     case TTxState::TxAlterSequence:
     case TTxState::TxAlterReplication:
@@ -6294,22 +6344,6 @@ void TSchemeShard::ConfigureStatsOperations(const NKikimrConfig::TSchemeShardCon
                     "OperationsProcessing config: type " << TTxState::TypeName(it->first)
                     << ", limit " << it->second);
     }
-}
-
-bool TSchemeShard::CheckInFlightLimit(const TTxState::ETxType txType, TString& errStr) const {
-    auto it = InFlightLimits.find(txType);
-    if (it == InFlightLimits.end()) {
-        return true;
-    }
-    if (it->second != 0 && TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(txType)].Get() >= it->second)
-    {
-        errStr = TStringBuilder() << "the limit of operations with type " << TTxState::TypeName(txType)
-                                            << " has been exceeded"
-                                            << ", limit: " << it->second;
-        return false;
-    }
-
-    return true;
 }
 
 void TSchemeShard::ConfigureCompactionQueues(

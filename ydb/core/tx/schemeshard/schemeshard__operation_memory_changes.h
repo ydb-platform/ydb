@@ -26,6 +26,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TTableSnapshotState = std::pair<TPathId, TTxId>;
     TStack<TTableSnapshotState> TablesWithSnaphots;
 
+    using TLockState = std::pair<TPathId, TTxId>;
+    TStack<TLockState> LockedPaths;
+
     using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
     TStack<TTableState> Tables;
 
@@ -59,7 +62,8 @@ public:
 
     void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId);
+    void GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId);
+    void GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId);
 
     void UnDo(TSchemeShard* ss);
 };

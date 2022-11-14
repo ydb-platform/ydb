@@ -2562,7 +2562,7 @@ void MirrorRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDa
                             TContiguousData newOutBuffer(outBuffer);
                             Y_VERIFY(outBuffer.size() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
                                     " fullDataSize# %" PRIu64, (ui64)outBuffer.size(), (ui64)partSet.FullDataSize);
-                            newOutBuffer.Trim(partSet.FullDataSize); // To pad with zeroes!
+                            newOutBuffer.TrimBack(partSet.FullDataSize); // To pad with zeroes!
                             outBuffer = TRope(newOutBuffer);
                         }
                         partSet.FullDataFragment.ReferenceTo(outBuffer);
@@ -2688,7 +2688,8 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 Y_VERIFY_S(diffShift + bufferSize <= diff.Buffer.size(), "diffShift# " << diffShift
                         << " bufferSize# " << bufferSize << " diff.GetDiffLength()# " << diff.GetDiffLength());
                 TContiguousData newBuffer(diff.Buffer);
-                newBuffer.Trim(bufferSize, diffShift);
+                newBuffer.TrimBack(bufferSize + diffShift);
+                newBuffer.TrimFront(bufferSize);
                 part.Diffs.emplace_back(newBuffer, 0, false, true);
 
                 if (diffEnd <= nextOffset) {
@@ -2714,7 +2715,7 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 ui32 bufferSize = nextOffset - diff.Offset + lineOffset;
                 TContiguousData newBuffer = diff.Buffer;
                 newBuffer.GrowFront(lineOffset); // FIXME(innokentii) should the [0..lineOffset) be zeroed?
-                newBuffer.Trim(bufferSize);
+                newBuffer.TrimBack(bufferSize);
                 Y_VERIFY(bufferSize);
                 part.Diffs.emplace_back(newBuffer, diff.Offset - partOffset, false, true);
                 break;

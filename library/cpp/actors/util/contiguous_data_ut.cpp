@@ -50,6 +50,16 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
             constSharedData);
     }
 
+    Y_UNIT_TEST(Detach) {
+        TContiguousData data = TContiguousData::Copy(TString("test"));
+        TContiguousData data2 = data;
+        char* res = data2.Detach();
+        UNIT_ASSERT_UNEQUAL(data.GetData(), data2.GetData());
+        UNIT_ASSERT_EQUAL(res, data2.GetData());
+        UNIT_ASSERT_EQUAL(::memcmp(res, "test", 4), 0);
+        UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+    }
+
     Y_UNIT_TEST(Resize) {
         TContiguousData data = TContiguousData::Uninitialized(10, 20, 30);
         UNIT_ASSERT_EQUAL(data.size(), 10);
@@ -108,7 +118,8 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
         UNIT_ASSERT_EQUAL(otherData.Headroom(), 15);
         UNIT_ASSERT_EQUAL(otherData.Tailroom(), 30);
         UNIT_ASSERT_EQUAL(otherData.GetOccupiedMemorySize(), 60);
-        data.Trim(10, 5);
+        data.TrimBack(15);
+        data.TrimFront(10);
         UNIT_ASSERT_EQUAL(data.size(), 10);
         UNIT_ASSERT_EQUAL(data.Headroom(), 20);
         UNIT_ASSERT_EQUAL(data.Tailroom(), 30);
@@ -118,16 +129,18 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
     Y_UNIT_TEST(Trim) {
         TContiguousData data = TContiguousData::Uninitialized(10, 20, 30);
         TContiguousData otherData(data);
-        otherData.Trim(5);
+        otherData.TrimBack(5);
         UNIT_ASSERT_EQUAL(data.data(), otherData.data());
         UNIT_ASSERT_EQUAL(otherData.Headroom(), 20);
         UNIT_ASSERT_EQUAL(otherData.Tailroom(), 0);
         TContiguousData otherData2(data);
-        otherData2.Trim(1, 1);
+        otherData2.TrimBack(2);
+        otherData2.TrimFront(1);
         UNIT_ASSERT_EQUAL(data.data() + 1, otherData2.data());
         UNIT_ASSERT_EQUAL(otherData2.Headroom(), 0);
         UNIT_ASSERT_EQUAL(otherData2.Tailroom(), 0);
-        otherData.Trim(1, 1);
+        otherData.TrimBack(2);
+        otherData.TrimFront(1);
         UNIT_ASSERT_EQUAL(otherData.data(), otherData2.data());
         data.GrowFront(5);
         data.GrowBack(5);
@@ -139,7 +152,7 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
         UNIT_ASSERT_UNEQUAL(data.data() + 6, otherData2.data());
         data = TContiguousData::Uninitialized(10);
         otherData = data;
-        data.Trim(5);
+        data.TrimBack(5);
         UNIT_ASSERT_EQUAL(data.data(), otherData.data());
         UNIT_ASSERT_EQUAL(data.size(), 5);
     }

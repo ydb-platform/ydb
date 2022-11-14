@@ -882,6 +882,16 @@ public:
         }
     }
 
+    static TContiguousData Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {
+        TContiguousData res = Uninitialized(data.size(), headroom, tailroom);
+        std::memcpy(res.UnsafeGetDataMut(), data.GetData(), data.GetSize());
+        return res;
+    }
+
+    static TContiguousData Copy(const char* data, size_t size, size_t headroom = 0, size_t tailroom = 0) {
+        return Copy({data, size}, headroom, tailroom);
+    }
+
     static NActors::TSharedData UninitializedSharedData(size_t size) {
         return NActors::TSharedData::AttachUnsafe(TBackend::TSharedDataControllingOwner::Allocate(size), size);
     }
@@ -1062,10 +1072,18 @@ public:
         }
     }
 
-    void Trim(size_t size, size_t frontOffset = 0) {
-        Y_VERIFY(size <= End - Begin - frontOffset);
-        Begin = Begin + frontOffset;
-        End = Begin + size;
+    void TrimBack(size_t size) {
+        Y_VERIFY(size <= GetSize());
+        End = End - (GetSize() - size);
+    }
+
+    void TrimFront(size_t size) {
+        Y_VERIFY(size <= GetSize());
+        Begin = Begin + (GetSize() - size);
+    }
+
+    char* Detach() {
+        return GetDataMut();
     }
 
     size_t UnsafeHeadroom() const {

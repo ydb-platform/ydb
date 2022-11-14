@@ -743,7 +743,9 @@ namespace {
                 binFields[HistogramIndexes.Position] = current.GetElement(HistogramIndexes.Position);
                 resultBins.emplace_back(std::move(resultCurrent));
             }
-            fields[HistogramIndexes.Kind] = args[0].GetElement(HistogramIndexes.Kind);
+
+            auto kind = args[0].GetElement(HistogramIndexes.Kind);
+            fields[HistogramIndexes.Kind] = valueBuilder->AppendString(kind, "Cdf");
             fields[HistogramIndexes.Bins] = valueBuilder->NewList(resultBins.data(), resultBins.size());
             fields[HistogramIndexes.Max] = TUnboxedValuePod(maxValue);
             fields[HistogramIndexes.Min] = TUnboxedValuePod(minValue);
@@ -824,7 +826,12 @@ namespace {
                 resultBins.emplace_back(std::move(resultCurrent));
             }
 
-            fields[HistogramIndexes.Kind] = args[0].GetElement(HistogramIndexes.Kind);
+            TUnboxedValue kind = args[0].GetElement(HistogramIndexes.Kind);
+            if (cdfNormalization) {
+                kind = valueBuilder->AppendString(kind, "Cdf");
+            }
+
+            fields[HistogramIndexes.Kind] = kind;
             fields[HistogramIndexes.Bins] = valueBuilder->NewList(resultBins.data(), resultBins.size());
             fields[HistogramIndexes.Max] = TUnboxedValuePod(maxValue);
             fields[HistogramIndexes.Min] = TUnboxedValuePod(minValue);

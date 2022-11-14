@@ -3128,6 +3128,17 @@ size_t TExprContext::GetHash(TPositionHandle p) const {
     return CombineHashes(h, NumericHash(pos.Column));
 }
 
+std::string_view TExprContext::GetIndexAsString(ui32 index) {
+    const auto it = Indexes.find(index);
+    if (it != Indexes.cend()) {
+        return it->second;
+    }
+
+    const auto& newBuf = AppendString(ToString(index));
+    Indexes.emplace_hint(it, index, newBuf);
+    return newBuf;
+}
+
 template<class T, typename... Args>
 const T* MakeSinglethonType(TExprContext& ctx, Args&&... args) {
     auto& singleton = std::get<const T*>(ctx.SingletonTypeCache);

@@ -2387,6 +2387,7 @@ struct TExprContext : private TNonCopyable {
 
     TMemoryPool StringPool;
     std::unordered_set<std::string_view> Strings;
+    std::unordered_map<ui32, std::string_view> Indexes;
 
     std::stack<std::unique_ptr<const TTypeAnnotationNode>> TypeNodes;
     std::stack<std::unique_ptr<const TConstraintNode>> ConstraintNodes;
@@ -2604,6 +2605,7 @@ struct TExprContext : private TNonCopyable {
         return DisabledConstraints.find(TConstraint::Name()) == DisabledConstraints.end();
     }
 
+    std::string_view GetIndexAsString(ui32 index);
 private:
     using TPositionHandleEqualPred = std::function<bool(TPositionHandle, TPositionHandle)>;
     using TPositionHandleHasher = std::function<size_t(TPositionHandle)>;

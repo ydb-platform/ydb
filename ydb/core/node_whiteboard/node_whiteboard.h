@@ -264,6 +264,8 @@ struct TEvWhiteboard{
             Record.SetErasureSpecies(groupInfo->Type.ErasureSpeciesName(groupInfo->Type.GetErasure()));
             for (ui32 i = 0; i < groupInfo->GetTotalVDisksNum(); ++i) {
                 VDiskIDFromVDiskID(groupInfo->GetVDiskId(i), Record.AddVDiskIds());
+                const TActorId& actorId = groupInfo->GetActorId(i);
+                Record.AddVDiskNodeIds(actorId.NodeId());
             }
             Record.SetStoragePoolName(groupInfo->GetStoragePoolName());
             if (groupInfo->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {

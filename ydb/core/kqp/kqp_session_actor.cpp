@@ -191,7 +191,7 @@ public:
     TString LogPrefix() const {
         TStringBuilder result = TStringBuilder()
             << "SessionId: " << SessionId << ", "
-            << "WorkerId: " << SelfId() << ", ";
+            << "ActorId: " << SelfId() << ", ";
         if (Y_LIKELY(QueryState)) {
             result << "TraceId: " << QueryState->TraceId << ", ";
         }
@@ -353,7 +353,7 @@ public:
             // we reached the soft timeout, so at this point we don't allow to accept new queries for session.
             LOG_N("system shutdown requested: soft timeout reached, no queries can be accepted");
             ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
-            FinalCleanup();
+            CleanupAndPassAway();
             return;
         }
 
@@ -1701,7 +1701,7 @@ public:
     void HandleReady(TEvKqp::TEvCloseSessionRequest::TPtr&) {
         LOG_I("Session closed due to explicit close event");
         Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
-        FinalCleanup();
+        CleanupAndPassAway();
     }
 
     void HandleCompile(TEvKqp::TEvCloseSessionRequest::TPtr&) {
@@ -1773,7 +1773,7 @@ public:
         if (timerId == IdleTimerId) {
             LOG_N("SessionActor idle timeout, worker destroyed");
             Counters->ReportSessionActorClosedIdle(Settings.DbCounters);
-            FinalCleanup();
+            CleanupAndPassAway();
         }
     }
 
@@ -1806,7 +1806,7 @@ public:
         ReplyBusy(ev);
     }
 
-    void FinalCleanup() {
+    void CleanupAndPassAway() {
         Cleanup(true);
     }
 
@@ -1816,7 +1816,7 @@ public:
     }
 
     void Cleanup(bool isFinal = false) {
-        isFinal = isFinal || !QueryState->KeepSession;
+        isFinal = isFinal || QueryState && !QueryState->KeepSession;
 
         if (QueryState && QueryState->TxCtx && QueryState->TxCtx->IsInvalidated()) {
             InvalidateExplicitTransaction(QueryState->TxCtx, QueryState->TxId);
@@ -2100,7 +2100,7 @@ private:
         if (QueryState) {
             ReplyQueryError(Ydb::StatusIds::INTERNAL_ERROR, message);
         } else {
-            FinalCleanup();
+            CleanupAndPassAway();
         }
     }
 

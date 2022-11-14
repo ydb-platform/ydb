@@ -4,7 +4,7 @@ This section describes how to deploy a local single-node {{ ydb-short-name }} cl
 
 ## Connection parameters {#conn}
 
-As a result of completing the steps described below, you'll get a YDB database running on your local machine, which you can connect to using the following parameters:
+As a result of completing the steps below, you'll get a YDB database running on a local machine that you can connect to using the following:
 
 - [Endpoint](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
 - [DB path](../../../concepts/connect.md#database): `/Root/test`
@@ -22,7 +22,7 @@ curl https://binaries.ydb.tech/local_scripts/install.sh | bash
 
 ## Starting {#start}
 
-You can start a local YDB server with a disk or in-memory storage:
+The local YDB server can be started in two modes:
 
 {% list tabs %}
 

@@ -22,7 +22,7 @@ Database commands are mainly written in YQL, an SQL dialect. This gives the user
 
 {{ ydb-short-name }} supports high-performance distributed [ACID](https://en.wikipedia.org/wiki/ACID_(computer_science)) transactions that may affect multiple records in different tables. It provides the serializable isolation level, which is the strictest transaction isolation. You can also lower the level of isolation to raise performance.
 
-{{ ydb-short-name }} is designed to service different workload types, such as [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) and [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing). The current version offers limited analytical query support. This is why we can say that {{ ydb-short-name }} is currently an OLTP database.
+{{ ydb-short-name }} natively supports different processing methods, such as [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) and [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing). The current version offers limited analytical query support. This is why we can say that {{ ydb-short-name }} is currently an OLTP database.
 
 {{ ydb-short-name }} is used in Yandex services as a high-performance [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) DBMS. In particular, {{ yandex-cloud }} {{ objstorage-full-name}} use {{ ydb-short-name }} to store data and are based on its components.
 

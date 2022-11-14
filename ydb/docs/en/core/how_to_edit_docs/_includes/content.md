@@ -16,7 +16,7 @@ When adding content, you should first choose where to add it: to the OpenSource 
 
 {% include [custom_extension.md](content/custom_extension.md) %}
 
-In the sections below where the requirements differ for basic content and customization, there are two corresponding tabs:
+In the sections where the requirements differ for basic content and customization, there are two corresponding tabs:
 
 - **Core**: The core of any documentation, the basic content.
 - **Overlay**: Content that is overlaid on top of the core and adapting it to a custom build.
@@ -43,7 +43,7 @@ The presence of the "Overview" article lets you refer to the entire directory ra
 
 - Core
 
-  Any article in the basic OpenSource documentation is created with a perspective to extend or adjust it in the customized documentation created on its basis. At the same time, improvements to the base documentation should be applied in a customized version with no manual merge of content changes, otherwise maintaining a lot of derived documentation versions becomes a very labor-intensive task and monitoring the completeness of manual adaptations becomes impossible.
+  Every article in the basic OpenSource documentation is created with the understanding that it can be extended or adjusted in any customized documentation derived from it. At the same time, improvements to the base documentation should be applied in a customized version with no manual merge of content changes, otherwise maintaining a lot of derived documentation versions becomes a very labor-intensive task and monitoring the completeness of manual adaptations becomes impossible.
 
   To achieve this goal using the existing tools, a file with an article inside a subject directory does not directly contain any content and is designed to be redefined when customizing the documentation. The content is located in one or more files with content blocks included in the article file through include directives.
 
@@ -162,9 +162,10 @@ The presence of the "Overview" article lets you refer to the entire directory ra
 
 ### Other use cases for include {#include-reuse}
 
-The `{% include ... %}` directive can technically be used not just to support the creation of derivative documentation versions, but also to reuse content in several articles. However, this is undesirable, since the appearance of the same content in different articles confuses the user, and editing the included content without understanding the context it is given in can easily lead to loss of meaning.
+The `{% include ... %}` directive can be used to support the creation of derivative documentation versions. It can also reuse content in different articles, but we do not recommend this: seeing the same content in different articles may confuse the user and editing included content without knowing its context can easily distort the meaning.
 
-An acceptable and good way to leverage the reusable content is to provide the same information in different grouping options within the same context. For example, the FAQ section contains both articles on certain topics and the "All questions on all topics" article. Similarly, information about prices can be given both in specialized articles on some chargeable functions and in the general article with the price list.
+A good way to leverage reusable content is to provide the same information in different grouping options within the same context. For example, the FAQ section contains articles on certain topics and the "All questions on all topics" article. Similarly, information about prices can be given in specialized articles on some chargeable functions and in the general article with the price list.
+
 
 ## Table of contents {#toc}
 

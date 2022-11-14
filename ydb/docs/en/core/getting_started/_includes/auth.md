@@ -1,9 +1,9 @@
 # Authentication - Getting started
 
-A local YDB database with self-deployment does not require authentication, that is, runs in [anonymous mode](../../concepts/auth.md).
+A local YDB database deployed with one of the self-hosted 'Getting started' scenarios does not require authentication. It runs in [anonymous mode](../../concepts/auth.md).
 
 To learn every detail about available authentication methods, see [DB connection](../../concepts/connect.md) under Concepts.
 
-## Learn more about YDB {#next}
+## Next step {#next}
 
-Go to [YDB CLI: Getting started](../cli.md) to learn more about YDB.
+Go to [YDB CLI: Getting started](../cli.md).

@@ -12,7 +12,6 @@ One of the following methods can be used to deploy a local single-node cluster o
 
 Documentation on the deployment of mupltiple nodes clusters running number of databases is given in the [Cluster management](../../deploy/index.md) section.
 
-## Learn more about YDB {#next}
+## Next step {#next}
 
-After creating your database, proceed to the [Authentication - Getting started](../auth.md) article to learn more about YDB.
-
+After creating your database, go to [Authentication - Getting started](../auth.md).

@@ -4,7 +4,7 @@ A table in {{ ydb-short-name }} is a [relational table](https://en.wikipedia.org
 
 ![Datamodel_of_a_relational_table](../../_assets/datamodel_rtable.png)
 
-{{ ydb-short-name }} uses [YQL datatypes](../../datatypes.md). Columns may use [simple YQL data types](../../../yql/reference/types/primitive.md). All columns may contain the special `NULL` value to signify that a value is missing.
+{{ ydb-short-name }} uses [YQL data types](../../datatypes.md). Columns may use [simple YQL data types](../../../yql/reference/types/primitive.md). All columns may contain the special `NULL` value to signify that a value is missing.
 
 {{ ydb-short-name }} tables always have one or more columns that make up the [primary key](https://en.wikipedia.org/wiki/Unique_key). Each table row has a unique key value, so there can be no more than one row per key value. {{ ydb-short-name }} tables are always ordered by key. This means that you can efficiently make point reads by key and range-based queries by key or key prefix (actually using an index). In the example above, the key columns are highlighted in gray and marked with a special sign. Tables consisting only of key columns are supported. However, you can't create tables without a primary key.
 

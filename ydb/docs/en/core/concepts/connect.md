@@ -20,7 +20,7 @@ Database path (`database`) is a string that defines where the queried database i
 
 A {{ ydb-short-name }} cluster may have multiple databases deployed, with their paths determined by the cluster configuration. Like the endpoint, `database` for cloud databases is displayed in the management console on the desired database page, and can also be obtained via the CLI of the cloud provider.
 
-For cloud solutions, databases are created and hosted on the {{ ydb-short-name }} cluster in self-service mode, with no need in attendance of the cluster owner or administrators.
+For cloud solutions, databases are created and hosted on the {{ ydb-short-name }} cluster in self-service mode without the involvement of the cluster owner or administrators.
 
 {% include [overlay/database.md](_includes/connect_overlay/database.md) %}
 

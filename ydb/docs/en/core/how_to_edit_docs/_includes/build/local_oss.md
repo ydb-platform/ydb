@@ -15,7 +15,7 @@ Where:
 - `source_dir` is the directory where the contents of [{{ ydb-doc-repo }}]({{ ydb-doc-repo }}) is cloned.
 - `output_dir` is the output directory for HTML files.
 
-Building the documentation takes a few seconds and there should be no errors logged to the stdout.
+Building the documentation takes a few seconds and there should be no errors logged to stdout.
 
 You can specify `.` (a dot) as `source_dir` if the yfm command is called directly from `source_dir`. For example:
 

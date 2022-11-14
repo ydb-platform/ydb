@@ -24,7 +24,7 @@ In {{ ydb-short-name }}, you can make YQL queries to a database using:
 
 ### {{ ydb-short-name }} CLI {#cli}
 
-To execute scripts using the {{ ydb-short-name }} CLI, first do the following:
+To enable script execution using the {{ ydb-short-name }} CLI, do the following:
 
 * [Install the CLI](../cli.md#install).
 * Define and check [DB connection parameters](../cli#scheme-ls).
@@ -100,9 +100,9 @@ Commands for running YQL queries and scripts in the YDB CLI and the web interfac
 
 ### UPSERT: Adding data {#upsert}
 
-The most efficient way to add data to {{ ydb-short-name }} is through the [`UPSERT` command](../../yql/reference/syntax/upsert_into.md). It inserts new data by primary keys regardless of whether data by these keys previously existed in the table. As a result, unlike regular `INSERT`and `UPDATE`, it does not require a data pre-fetch from the server to verify that a key is unique before it runs. When working with {{ ydb-short-name }}, always consider `UPSERT` as the main way to add data and only use other statements when absolutely necessary.
+The most efficient way to add data to {{ ydb-short-name }} is through the [`UPSERT`](../../yql/reference/syntax/upsert_into.md) statement. It inserts new data by primary keys regardless of whether data by these keys previously existed in the table. As a result, unlike regular `INSERT` and `UPDATE`, it does not require a data pre-fetch on the server to verify that a key is unique. When working with {{ ydb-short-name }}, always consider `UPSERT` as the main way to add data and only use other statements when absolutely necessary.
 
-All commands that write data to {{ ydb-short-name }} support working with both samples and multiple logs passed directly in a query.
+All statements that write data to {{ ydb-short-name }} support working with both subqueries and multiple entries passed directly in a query.
 
 Let's add data to the previously created tables:
 
@@ -178,7 +178,7 @@ To learn more about the commands for selecting data, see the YQL reference:
 
 ### Parameterized queries {#param}
 
-Transactional applications working with a database are characterized by the execution of multiple similar queries that only differ in parameters. Like most databases, {{ ydb-short-name }} will work more efficiently if you define updateable parameters and their types and then initiate the execution of a query by passing the parameter values separately from its text.
+Transactional applications working with a database are characterized by the execution of multiple similar queries that only differ in parameters. Like most databases, {{ ydb-short-name }} will work more efficiently if you define variable parameters and their types and then initiate the execution of a query by passing the parameter values separately from its text.
 
 To define parameters in the text of a YQL query, use the [DECLARE](../../yql/reference/syntax/declare.md).
 
@@ -210,6 +210,6 @@ For a full description of the ways to pass parameters, see the [{{ ydb-short-nam
 
 You can learn more about YQL use cases by completing tasks from the [YQL tutorial](../../yql/tutorial/index.md).
 
-## Learn more about YDB {#next}
+## Next step {#next}
 
-Proceed to the [YDB SDK - Getting started](../sdk.md) article to learn more about YDB.
+Go to [YDB SDK - Getting started](../sdk.md).

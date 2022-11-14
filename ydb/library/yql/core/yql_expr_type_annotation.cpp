@@ -5228,7 +5228,7 @@ const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, boo
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto name = input->Child(0)->Content();
-    if (name == "count" || name == "count_all" || name == "sum") {
+    if (name == "count" || name == "count_all" || name == "sum" || name == "min" || name == "max") {
         return input->GetTypeAnn();
     } else if (name == "avg") {
         auto itemType = input->Content().StartsWith("AggBlock") ?
@@ -5341,6 +5341,16 @@ bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& ite
             TStringBuilder() << "Unsupported type: " << FormatType(&itemType) << ". Expected Data or Optional of Data."));
         return false;
     }
+}
+
+bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& itemType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
+    if (!itemType.IsComparable()) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected comparable type, but got: " << itemType));
+        return false;
+    }
+
+    retType = &itemType;
+    return true;
 }
 
 } // NYql

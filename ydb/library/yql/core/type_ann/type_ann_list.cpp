@@ -5232,6 +5232,13 @@ namespace {
             } else {
                 input->SetTypeAnn(retType);
             }
+        } else if (name == "min" || name == "max") {
+            const TTypeAnnotationNode* retType;
+            if (!GetMinMaxResultType(input->Pos(), *lambda->GetTypeAnn(), retType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            input->SetTypeAnn(retType);
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported agg name: " << name));

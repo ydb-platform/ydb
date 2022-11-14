@@ -179,12 +179,16 @@ struct TProgramStep {
     std::vector<TAggregateAssign> GroupBy;
     std::vector<std::string> GroupByKeys; // TODO: it's possible to use them without GROUP BY for DISTINCT
     std::vector<std::string> Projection; // Step's result columns (remove others)
-    bool NullableGroupByKeys = true;
 
     struct TDatumBatch {
-        std::shared_ptr<arrow::Schema> schema;
-        int64_t rows;
-        std::vector<arrow::Datum> datums;
+        std::shared_ptr<arrow::Schema> Schema;
+        std::vector<arrow::Datum> Datums;
+        int64_t Rows{};
+
+        arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
+        arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
+        std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
+        static std::shared_ptr<TProgramStep::TDatumBatch> FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& batch);
     };
 
     bool Empty() const {

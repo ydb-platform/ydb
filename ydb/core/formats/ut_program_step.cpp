@@ -53,11 +53,16 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
 }
 
 void SumGroupBy(bool nullable, ui32 numKeys = 1) {
+    std::optional<double> null;
+    if (nullable) {
+        null = 0;
+    }
+
     auto schema = std::make_shared<arrow::Schema>(std::vector{
                                                 std::make_shared<arrow::Field>("x", arrow::int16()),
                                                 std::make_shared<arrow::Field>("y", arrow::uint32())});
-    auto batch = arrow::RecordBatch::Make(schema, 4, std::vector{NumVecToArray(arrow::int16(), {-1, 1, 1, -1}),
-                                                                    NumVecToArray(arrow::uint32(), {1, 2, 2, 1})});
+    auto batch = arrow::RecordBatch::Make(schema, 4, std::vector{NumVecToArray(arrow::int16(), {-1, 0, 0, -1}, null),
+                                                                 NumVecToArray(arrow::uint32(), {1, 0, 0, 1}, null)});
     UNIT_ASSERT(batch->ValidateFull().ok());
 
     auto step = std::make_shared<TProgramStep>();
@@ -65,11 +70,10 @@ void SumGroupBy(bool nullable, ui32 numKeys = 1) {
         TAggregateAssign("sum_x", EAggregate::Sum, {"x"}),
         TAggregateAssign("sum_y", EAggregate::Sum, {"y"})
     };
-    step->GroupByKeys.push_back("y");
+    step->GroupByKeys.push_back("x");
     if (numKeys == 2) {
-        step->GroupByKeys.push_back("x");
+        step->GroupByKeys.push_back("y");
     }
-    step->NullableGroupByKeys = nullable;
 
     UNIT_ASSERT(ApplyProgram(batch, {step}, GetCustomExecContext()).ok());
     UNIT_ASSERT(batch->ValidateFull().ok());
@@ -77,20 +81,26 @@ void SumGroupBy(bool nullable, ui32 numKeys = 1) {
     UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
     UNIT_ASSERT_EQUAL(batch->column(0)->type_id(), arrow::Type::INT64);
     UNIT_ASSERT_EQUAL(batch->column(1)->type_id(), arrow::Type::UINT64);
-    UNIT_ASSERT_EQUAL(batch->column(2)->type_id(), arrow::Type::UINT32);
+    UNIT_ASSERT_EQUAL(batch->column(2)->type_id(), arrow::Type::INT16);
     if (numKeys == 2) {
-        UNIT_ASSERT_EQUAL(batch->column(3)->type_id(), arrow::Type::INT16);
+        UNIT_ASSERT_EQUAL(batch->column(3)->type_id(), arrow::Type::UINT32);
     }
 
-    ui32 row0 = 0;
-    ui32 row1 = 1;
-    if (static_cast<arrow::Int32Array&>(*batch->column(2)).Value(0) == 2) {
-        std::swap(row0, row1);
+    auto& sumX = static_cast<arrow::Int64Array&>(*batch->column(0));
+    auto& sumY = static_cast<arrow::UInt64Array&>(*batch->column(1));
+    auto& colX = static_cast<arrow::Int16Array&>(*batch->column(2));
+
+    for (ui32 row = 0; row < 2; ++row) {
+        if (colX.IsNull(row) || colX.Value(row) == 0) {
+            UNIT_ASSERT_VALUES_EQUAL(sumX.Value(row), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sumY.Value(row), 0);
+        } else if (colX.Value(row) == -1) {
+            UNIT_ASSERT_VALUES_EQUAL(sumX.Value(row), -2);
+            UNIT_ASSERT_VALUES_EQUAL(sumY.Value(row), 2);
+        } else {
+            UNIT_ASSERT(false);
+        }
     }
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<arrow::Int64Array&>(*batch->column(0)).Value(row0), -2);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<arrow::Int64Array&>(*batch->column(0)).Value(row1), 2);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<arrow::UInt64Array&>(*batch->column(1)).Value(row0), 2);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<arrow::UInt64Array&>(*batch->column(1)).Value(row1), 4);
 }
 
 }

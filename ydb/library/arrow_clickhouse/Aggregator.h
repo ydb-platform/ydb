@@ -136,7 +136,7 @@ struct AggregationMethodOneNumber
     template <typename ColPtr>
     static void insertKeyIntoColumns(const Key & key, const std::vector<ColPtr> & key_columns, const Sizes & /*key_sizes*/)
     {
-        insertNumber(*key_columns[0], key);
+        insertSameSizeNumber(*key_columns[0], key);
     }
 };
 

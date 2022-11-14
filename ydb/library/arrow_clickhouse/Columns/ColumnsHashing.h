@@ -39,12 +39,12 @@ struct HashMethodOneNumber
     /// If the keys of a fixed length then key_sizes contains their lengths, empty otherwise.
     HashMethodOneNumber(const ColumnRawPtrs & key_columns, const Sizes & /*key_sizes*/, const HashMethodContextPtr &)
     {
-        vec = assert_cast<const ArrowArrayType *>(key_columns[0])->raw_values();
+        vec = assert_same_size_cast<const ArrowArrayType *>(key_columns[0])->raw_values();
     }
 
     HashMethodOneNumber(const IColumn * column)
     {
-        vec = assert_cast<const ArrowArrayType *>(column)->raw_values();
+        vec = assert_same_size_cast<const ArrowArrayType *>(column)->raw_values();
     }
 
     /// Creates context. Method is called once and result context is used in all threads.

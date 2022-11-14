@@ -79,6 +79,33 @@ inline bool insertNumber(MutableColumn & column, T value)
     throw Exception("unexpected type");
 }
 
+template <typename T>
+inline bool insertSameSizeNumber(MutableColumn & column, T value)
+{
+    if constexpr (std::is_same_v<T, UInt8>)
+        return assert_same_size_cast<MutableColumnUInt8 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, UInt16>)
+        return assert_same_size_cast<MutableColumnUInt16 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, UInt32>)
+        return assert_same_size_cast<MutableColumnUInt32 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, UInt64>)
+        return assert_same_size_cast<MutableColumnUInt64 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, Int8>)
+        return assert_same_size_cast<MutableColumnInt8 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, Int16>)
+        return assert_same_size_cast<MutableColumnInt16 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, Int32>)
+        return assert_same_size_cast<MutableColumnInt32 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, Int64>)
+        return assert_same_size_cast<MutableColumnInt64 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, float>)
+        return assert_same_size_cast<MutableColumnFloat32 &>(column).Append(value).ok();
+    else if constexpr (std::is_same_v<T, double>)
+        return assert_same_size_cast<MutableColumnFloat64 &>(column).Append(value).ok();
+
+    throw Exception("unexpected type");
+}
+
 inline bool insertTimestamp(MutableColumn & column, Int64 value)
 {
     return assert_cast<MutableColumnTimestamp &>(column).Append(value).ok();

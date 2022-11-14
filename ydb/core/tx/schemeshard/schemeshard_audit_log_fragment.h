@@ -1,17 +1,17 @@
 #pragma once
 
-#include "schemeshard_identificators.h"
-
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-
-#include <util/generic/string.h>
 #include <util/generic/maybe.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimrSchemeOp {
+    class TModifyScheme;
+}
+
+namespace NKikimr::NSchemeShard {
 
 struct TAuditLogFragment {
-    TString Operation;
+    const TString Operation;
     TMaybe<TString> Path;
     TVector<TString> SrcPaths;
     TVector<TString> DstPaths;
@@ -29,6 +29,4 @@ struct TAuditLogFragment {
     TString ToString() const;
 };
 
-
-} // NSchemeShard
-} // NKikimr
+}

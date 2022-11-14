@@ -1,45 +1,80 @@
 #include "schemeshard_audit_log_fragment.h"
 
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/aclib/aclib.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+#include <util/string/builder.h>
+
+namespace NKikimr::NSchemeShard {
 
 TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
     switch (type) {
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-        return "CREATE DIRECTORY";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        return "CREATE TABLE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-        return "CREATE PERSISTENT QUEUE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
-        return "ALLOCATE PERSISTENT QUEUE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
-        return "DROP TABLE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
-        return "DROP PERSISTENT QUEUE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
-        return "DEALLOCATE PERSISTENT QUEUE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
-        return "ALTER TABLE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
-        return "ALTER PERSISTENT QUEUE";
+    // common
     case NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL:
         return "MODIFY ACL";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes:
+        return "ALTER USER ATTRIBUTES";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe:
+        return "DROP PATH UNSAFE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
+        return "CREATE LOCK";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
+        return "DROP LOCK";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
+        return "ALTER LOGIN";
+    case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
+        return "ESchemeOp_DEPRECATED_35";
+    // dir
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
+        return "CREATE DIRECTORY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRmDir:
         return "DROP DIRECTORY";
+    // table
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
+        return "CREATE TABLE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
+        return "ALTER TABLE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
+        return "DROP TABLE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables:
+        return "CREATE TABLE COPY FROM";
     case NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions:
         return "ALTER TABLE PARTITIONS";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackup:
         return "BACKUP TABLE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestore:
+        return "RESTORE TABLE";
+    // topic
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
+        return "CREATE PERSISTENT QUEUE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
+        return "ALTER PERSISTENT QUEUE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+        return "DROP PERSISTENT QUEUE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
+        return "ALLOCATE PERSISTENT QUEUE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
+        return "DEALLOCATE PERSISTENT QUEUE";
+    // database
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
         return "CREATE DATABASE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
+        return "ALTER DATABASE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain:
         return "DROP DATABASE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain:
+        return "ALTER DATABASE MIGRATE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
+        return "ALTER DATABASE MIGRATE DECISION";
+    // rtmr
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
         return "CREATE RTMR VOLUME";
+    // blockstore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
         return "CREATE BLOCK STORE VOLUME";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume:
@@ -48,60 +83,37 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
         return "ALTER BLOCK STORE VOLUME ASSIGN";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume:
         return "DROP BLOCK STORE VOLUME";
+    // kesus
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
         return "CREATE KESUS";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus:
-        return "DROP KESUS";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
-        return "DROP DATABASE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-        return "CREATE SOLOMON VOLUME";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume:
-        return "DROP SOLOMON VOLUME";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterKesus:
         return "ALTER KESUS";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain:
-        return "ALTER DATABASE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes:
-        return "ALTER USER ATTRIBUTES";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe:
-        return "DROP PATH UNSAFE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus:
+        return "DROP KESUS";
+    // solomon
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
+        return "CREATE SOLOMON VOLUME";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume:
+        return "ALTER SOLOMON VOLUME";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume:
+        return "DROP SOLOMON VOLUME";
+    // index
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
         return "CREATE TABLE WITH INDEXES";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex:
         return "CREATE INDEX";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables:
-        return "CREATE TABLE COPY FROM";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex:
         return "DROP INDEX";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-        return "CREATE DATABASE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
-        return "ALTER DATABASE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain:
-        return "DROP DATABASE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
-        return "ESchemeOp_DEPRECATED_35";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain:
-        return "ALTER DATABASE MIGRATE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
-        return "ALTER DATABASE MIGRATE DECISION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         return "BUILD INDEX";
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         return "ALTER TABLE BUILD INDEX INIT";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
-        return "ALTER TABLE LOCK";
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         return "ALTER TABLE BUILD INDEX APPLY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
         return "ALTER TABLE BUILD INDEX FINISH";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex:
         return "ALTER INDEX";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume:
-        return "ALTER SOLOMON VOLUME";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
-        return "ALTER TABLE UNLOCK";
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
         return "ALTER TABLE BUILD INDEX FINISH";
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
@@ -112,71 +124,68 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
         return "ALTER TABLE DROP INDEX";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
         return "ALTER TABLE BUILD INDEX CANCEL";
+    // rename
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
+        return "ALTER TABLE RENAME";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
+        return "ALTER TABLE INDEX RENAME";
+    // filestore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
         return "CREATE FILE STORE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterFileStore:
         return "ALTER FILE STORE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore:
         return "DROP FILE STORE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestore:
-        return "RESTORE TABLE";
+    // columnstore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
         return "CREATE COLUMN STORE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore:
         return "ALTER COLUMN STORE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
         return "DROP COLUMN STORE";
+    // columntable
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
         return "CREATE COLUMN TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
         return "ALTER COLUMN TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
         return "DROP COLUMN TABLE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
-        return "ALTER LOGIN";
+    // changefeed
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream:
-        return "ATER TABLE CREATE CDC STREAM";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl:
-        return "CREATE CDC STREAM";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable:
-        return "ATER TABLE CREATE CDC STREAM";
+        return "ALTER TABLE ADD CHANGEFEED";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream:
-        return "ATER CDC STREAM";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl:
-        return "ATER CDC STREAM";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable:
-        return "ATER TABLE ATER CDC STREAM";
+        return "ALTER TABLE ALTER CHANGEFEED";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream:
-        return "DROP CDC STREAM";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
-        return "DROP CDC STREAM";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
-        return "ATER TABLE DROP CDC STREAM";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
-        return "ALTER TABLE RENAME";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
-        return "ALTER TABLE INDEX RENAME";
+        return "ALTER TABLE DROP CHANGEFEED";
+    // sequence
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return "CREATE SEQUENCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
         return "ALTER SEQUENCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
         return "DROP SEQUENCE";
+    // replication
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
         return "CREATE REPLICATION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
         return "ALTER REPLICATION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
         return "DROP REPLICATION";
+    // blob depot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
         return "CREATE BLOB DEPOT";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlobDepot:
         return "ALTER BLOB DEPOT";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot:
         return "DROP BLOB DEPOT";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
-        return "ALTER TABLE INDEX RENAME";
-    };
+    }
 }
 
 TAuditLogFragment::TAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx)
@@ -193,7 +202,7 @@ void TAuditLogFragment::FillACL(const NKikimrSchemeOp::TModifyScheme& tx) {
     bool hasACL = tx.HasModifyACL() && tx.GetModifyACL().HasDiffACL();
     if (hasACL) {
         NACLib::TDiffACL diffACL(tx.GetModifyACL().GetDiffACL());
-        for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
+        for (const auto& diffACE : diffACL.GetDiffACE()) {
             const NACLibProto::TACE& ace = diffACE.GetACE();
             switch (static_cast<EDiffType>(diffACE.GetDiffType())) {
             case EDiffType::Add:
@@ -308,7 +317,7 @@ void TAuditLogFragment::FillPathes(const NKikimrSchemeOp::TModifyScheme& tx) {
         Path = JoinPath({tx.GetWorkingDir(), tx.GetCreateTableIndex().GetName()});
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables:
-        for (const auto& item: tx.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
+        for (const auto& item : tx.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
             SrcPaths.push_back(item.GetSrcPath());
             DstPaths.push_back(item.GetDstPath());
         }
@@ -467,7 +476,7 @@ void TAuditLogFragment::FillPathes(const NKikimrSchemeOp::TModifyScheme& tx) {
         SrcPaths.push_back(JoinPath({tx.GetMoveIndex().GetTablePath(), tx.GetMoveIndex().GetSrcPath()}));
         DstPaths.push_back(JoinPath({tx.GetMoveIndex().GetTablePath(), tx.GetMoveIndex().GetDstPath()}));
         break;
-    };
+    }
 }
 
 TString TAuditLogFragment::GetAnyPath() const {
@@ -504,11 +513,11 @@ TString TAuditLogFragment::ToString() const {
         result << ", set owner: " << NewOwner;
     }
 
-    for (const auto& acl: AddACL)  {
+    for (const auto& acl : AddACL)  {
         result << ", add access: " << acl;
     }
 
-    for (const auto& acl: RmACL)  {
+    for (const auto& acl : RmACL)  {
         result << ", remove access: " << acl;
     }
 
@@ -519,5 +528,4 @@ TString TAuditLogFragment::ToString() const {
     return result;
 }
 
-}
 }

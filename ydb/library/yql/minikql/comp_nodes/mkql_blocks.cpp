@@ -271,7 +271,7 @@ public:
 class TBoolBlockReader : public TBlockReaderBase {
 public:
     NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
-        return NUdf::TUnboxedValuePod(arrow::BitUtil::GetBit(data.GetValues<uint8_t>(1), index));
+        return NUdf::TUnboxedValuePod(arrow::BitUtil::GetBit(data.GetValues<uint8_t>(1, 0), index + data.offset));
     }
 
     NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
@@ -358,7 +358,7 @@ private:
         }
 
         bool HasValue() const {
-            return arrow::BitUtil::GetBit(Array_->GetValues<uint8_t>(0), Index_ + Array_->offset);
+            return arrow::BitUtil::GetBit(Array_->GetValues<uint8_t>(0, 0), Index_ + Array_->offset);
         }
 
         std::unique_ptr<TBlockReaderBase> Reader_;
@@ -435,7 +435,7 @@ public:
             const auto& array = s.Arrays_[i];
             if (array) {
                 const auto nullCount = array->GetNullCount();
-                if (nullCount == array->length || (nullCount > 0 && !arrow::BitUtil::GetBit(array->GetValues<uint8_t>(0), s.Index_ + array->offset))) {
+                if (nullCount == array->length || (nullCount > 0 && !arrow::BitUtil::GetBit(array->GetValues<uint8_t>(0, 0), s.Index_ + array->offset))) {
                     *(output[i]) = NUdf::TUnboxedValue();
                 } else {
                     *(output[i]) = s.Readers_[i]->Get(*array, s.Index_);
@@ -603,6 +603,8 @@ IComputationNode* WrapFromBlocks(TCallable& callable, const TComputationNodeFact
 }
 
 IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
+
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
     const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
     MKQL_ENSURE(tupleType->GetElementsCount() > 0, "Expected at least one column");

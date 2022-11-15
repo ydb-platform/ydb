@@ -9,21 +9,9 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TDeallocatePQ: public ISubOperationBase {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-
+class TDeallocatePQ: public TSubOperationBase {
 public:
-    TDeallocatePQ(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TDeallocatePQ(TOperationId id)
-        : OperationId(id)
-    {
-    }
+    using TSubOperationBase::TSubOperationBase;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -182,17 +170,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateDeallocatePQ(TOperationId id, const TTxTransaction& tx) {
-    return new TDeallocatePQ(id, tx);
+    return MakeSubOperation<TDeallocatePQ>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateDeallocatePQ(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid);
-    return new TDeallocatePQ(id);
+    return MakeSubOperation<TDeallocatePQ>(id);
 }
 
-}
 }

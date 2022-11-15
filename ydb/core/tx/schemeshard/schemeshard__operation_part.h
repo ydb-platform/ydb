@@ -162,7 +162,7 @@ public:
 
     TDbGuard DbGuard() {
         return TDbGuard(*this);
-     }
+    }
 };
 
 using TProposeRequest = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction;
@@ -197,8 +197,12 @@ public:
     // call it inside multipart operations after failed propose
     virtual void AbortPropose(TOperationContext& context) = 0;
 
-    //call it only before execute ForceDrop operaion for path
+    // call it only before execute ForceDrop operaion for path
     virtual void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) = 0;
+
+    // getters
+    virtual const TOperationId& GetOperationId() const = 0;
+    virtual const TTxTransaction& GetTransaction() const = 0;
 };
 
 class TSubOperationState {
@@ -230,12 +234,33 @@ public:
     virtual bool ProgressState(TOperationContext& context) = 0;
 };
 
-class TSubOperation: public ISubOperationBase {
+class TSubOperationBase: public ISubOperationBase {
 protected:
     const TOperationId OperationId;
     const TTxTransaction Transaction;
 
-private:
+public:
+    explicit TSubOperationBase(const TOperationId& id)
+        : OperationId(id)
+    {
+    }
+
+    explicit TSubOperationBase(const TOperationId& id, const TTxTransaction& tx)
+        : OperationId(id)
+        , Transaction(tx)
+    {
+    }
+
+    const TOperationId& GetOperationId() const override final {
+        return OperationId;
+    }
+
+    const TTxTransaction& GetTransaction() const override final {
+        return Transaction;
+    }
+};
+
+class TSubOperation: public TSubOperationBase {
     TTxState::ETxState State = TTxState::Invalid;
     TSubOperationState::TPtr Base = nullptr;
 
@@ -253,14 +278,10 @@ protected:
     }
 
 public:
-    explicit TSubOperation(const TOperationId& id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
+    using TSubOperationBase::TSubOperationBase;
 
     explicit TSubOperation(const TOperationId& id, TTxState::ETxState state)
-        : OperationId(id)
+        : TSubOperationBase(id)
         , State(state)
     {
     }
@@ -294,6 +315,11 @@ public:
         SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
     #undef DefaultHandleReply
 };
+
+template <typename T>
+ISubOperationBase::TPtr MakeSubOperation(const TOperationId& id) {
+    return new T(id);
+}
 
 template <typename T, typename... Args>
 ISubOperationBase::TPtr MakeSubOperation(const TOperationId& id, const TTxTransaction& tx, Args&&... args) {

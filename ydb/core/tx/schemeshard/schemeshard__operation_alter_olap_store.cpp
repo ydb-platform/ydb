@@ -640,10 +640,6 @@ public:
             result->SetError(status, errStr);
             return result;
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterOlapStore, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         NIceDb::TNiceDb db(context.GetDB());
 

@@ -171,11 +171,6 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateLock, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
-
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, pathId);
         context.MemChanges.GrabNewLongLock(context.SS, pathId, OperationId.GetTxId());

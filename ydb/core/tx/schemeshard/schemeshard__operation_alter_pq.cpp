@@ -559,10 +559,6 @@ public:
                              "Unable to construct channel binding for PQ with the storage pool");
             return result;
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterPQGroup, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         // This channel bindings are for PersQueue shards. They either use
         // explicit channel profiles, or reuse channel profile above.

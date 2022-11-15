@@ -335,11 +335,6 @@ public:
                 return result;
             }
         }
-        TString errStr;
-        if (!context.SS->CheckInFlightLimit(TTxState::TxDropTableIndex, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         Y_VERIFY(context.SS->Indexes.contains(index.Base()->PathId));
 

@@ -6,21 +6,9 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TAssignBlockStoreVolume: public ISubOperationBase {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-
+class TAssignBlockStoreVolume: public TSubOperationBase {
 public:
-    TAssignBlockStoreVolume(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TAssignBlockStoreVolume(TOperationId id)
-        : OperationId(id)
-    {
-    }
+    using TSubOperationBase::TSubOperationBase;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -102,7 +90,6 @@ public:
 
     void ProgressState(TOperationContext&) override {
         Y_FAIL("no progress state for assign bsc");
-        return;
     }
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
@@ -112,17 +99,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateAssignBSV(TOperationId id, const TTxTransaction& tx) {
-    return new TAssignBlockStoreVolume(id, tx);
+    return MakeSubOperation<TAssignBlockStoreVolume>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateAssignBSV(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
-    return new TAssignBlockStoreVolume(id);
+    return MakeSubOperation<TAssignBlockStoreVolume>(id);
 }
 
-}
 }

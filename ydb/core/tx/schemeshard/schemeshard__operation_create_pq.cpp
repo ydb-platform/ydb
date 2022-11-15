@@ -437,10 +437,6 @@ public:
         } else {
             pqChannelsBinding = tabletChannelsBinding;
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxCreatePQGroup, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);

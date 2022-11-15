@@ -1201,10 +1201,6 @@ public:
             result->SetError(NKikimrScheme::StatusMultipleModifications, msg);
             return result;
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxUpgradeSubDomain, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         TSubDomainInfo::TPtr alterData = new TSubDomainInfo(*subDomain,
                                                             subDomain->GetPlanResolution(),
@@ -1440,10 +1436,6 @@ public:
         case NKikimrSchemeOp::TUpgradeSubDomain::Invalid:
             errStr = "Invalid task param";
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result;
-        };
-        if (!context.SS->CheckInFlightLimit(TTxState::TxUpgradeSubDomainDecision, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 

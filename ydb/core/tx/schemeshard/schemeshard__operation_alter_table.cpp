@@ -570,10 +570,6 @@ public:
                 return result;
             }
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterTable, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         table->PrepareAlter(alterData);
         PrepareChanges(OperationId, path.Base(), table, bindingChanges, context);
@@ -615,6 +611,7 @@ ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const
     obj->SetAllowShadowDataForBuildIndex();
     return obj.Release();
 }
+
 ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     auto obj = MakeHolder<TAlterTable>(id, state);

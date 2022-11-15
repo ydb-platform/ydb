@@ -328,10 +328,6 @@ public:
                 return result;
             }
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxDropTableIndexAtMainTable, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);

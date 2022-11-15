@@ -7,21 +7,9 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TAlterUserAttrs: public ISubOperationBase {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-
+class TAlterUserAttrs: public TSubOperationBase {
 public:
-    TAlterUserAttrs(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TAlterUserAttrs(TOperationId id)
-        : OperationId(id)
-    {
-    }
+    using TSubOperationBase::TSubOperationBase;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -78,10 +66,6 @@ public:
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterUserAttributes, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 
@@ -173,17 +157,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, const TTxTransaction& tx) {
-    return new TAlterUserAttrs(id, tx);
+    return MakeSubOperation<TAlterUserAttrs>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
-    return new TAlterUserAttrs(id);
+    return MakeSubOperation<TAlterUserAttrs>(id);
 }
 
-}
 }

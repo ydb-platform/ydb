@@ -404,10 +404,6 @@ public:
                 return result;
             }
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateSequence, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath->PathId.LocalPathId);

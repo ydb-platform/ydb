@@ -7,21 +7,9 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TAlterLogin: public ISubOperationBase {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-
+class TAlterLogin: public TSubOperationBase {
 public:
-    TAlterLogin(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TAlterLogin(TOperationId id)
-        : OperationId(id)
-    {
-    }
+    using TSubOperationBase::TSubOperationBase;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
@@ -173,17 +161,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx) {
-    return new TAlterLogin(id, tx);
+    return MakeSubOperation<TAlterLogin>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
-    return new TAlterLogin(id);
+    return MakeSubOperation<TAlterLogin>(id);
 }
 
-}
 }

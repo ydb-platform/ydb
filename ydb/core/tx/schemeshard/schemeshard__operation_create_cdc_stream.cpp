@@ -200,11 +200,6 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateCdcStream, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
-
         auto stream = TCdcStreamInfo::Create(streamDesc);
         Y_VERIFY(stream);
 
@@ -446,15 +441,6 @@ public:
             return result;
         }
 
-        const auto txType = InitialScan
-            ? TTxState::TxCreateCdcStreamAtTableWithSnapshot
-            : TTxState::TxCreateCdcStreamAtTable;
-
-        if (!context.SS->CheckInFlightLimit(txType, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
-
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
@@ -473,6 +459,10 @@ public:
 
         Y_VERIFY(table->AlterVersion != 0);
         Y_VERIFY(!table->AlterData);
+
+        const auto txType = InitialScan
+            ? TTxState::TxCreateCdcStreamAtTableWithSnapshot
+            : TTxState::TxCreateCdcStreamAtTable;
 
         Y_VERIFY(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);

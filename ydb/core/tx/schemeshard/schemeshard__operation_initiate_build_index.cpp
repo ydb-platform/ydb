@@ -373,11 +373,6 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckInFlightLimit(TTxState::TxInitializeBuildIndex, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
-
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, tablePathId);
         context.MemChanges.GrabNewTableSnapshot(context.SS, tablePathId, OperationId.GetTxId());

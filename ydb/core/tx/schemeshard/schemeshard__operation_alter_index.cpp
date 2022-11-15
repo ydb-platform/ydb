@@ -173,13 +173,8 @@ public:
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         TString errStr;
-
         if (!context.SS->CheckLocks(parentPath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
-            return result;
-        }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterTableIndex, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 

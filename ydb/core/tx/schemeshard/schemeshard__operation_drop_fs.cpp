@@ -270,10 +270,6 @@ THolder<TProposeResponse> TDropFileStore::Propose(
         result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
         return result;
     }
-    if (!context.SS->CheckInFlightLimit(TTxState::TxDropFileStore, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-    }
 
     TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropFileStore, path.Base()->PathId);
     // Dirty hack: operation step must not be zero because 0 is treated as "hasn't been operationped"

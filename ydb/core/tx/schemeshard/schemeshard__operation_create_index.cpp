@@ -201,11 +201,6 @@ public:
             }
         }
 
-        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateTableIndex, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
-
         auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);

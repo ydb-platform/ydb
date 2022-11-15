@@ -564,10 +564,6 @@ public:
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxDropTable, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabNewTxState(context.SS, OperationId);

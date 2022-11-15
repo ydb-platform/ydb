@@ -275,10 +275,6 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxDropReplication, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         Y_VERIFY(context.SS->Replications.contains(path->PathId));
         auto replication = context.SS->Replications.at(path->PathId);

@@ -8,8 +8,7 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TReject: public ISubOperationBase {
-private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
     THolder<TProposeResponse> Response;
 
 public:
@@ -27,16 +26,13 @@ public:
         Response->SetError(status, explain);
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TReject");
+    const TOperationId& GetOperationId() const override {
+        return OperationId;
     }
 
-    void ProgressState(TOperationContext&) override {
-        Y_FAIL("no ProgressState for TReject");
-    }
-
-    void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_FAIL("no AbortUnsafe for TReject");
+    const TTxTransaction& GetTransaction() const override {
+        static const TTxTransaction fake;
+        return fake;
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
@@ -54,12 +50,23 @@ public:
         Response->Record.SetSchemeshardId(ui64(ssId));
         return std::move(Response);
     }
+
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TReject");
+    }
+
+    void ProgressState(TOperationContext&) override {
+        Y_FAIL("no ProgressState for TReject");
+    }
+
+    void AbortUnsafe(TTxId, TOperationContext&) override {
+        Y_FAIL("no AbortUnsafe for TReject");
+    }
 };
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response) {
     return new TReject(id, std::move(response));
@@ -69,5 +76,4 @@ ISubOperationBase::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus sta
     return new TReject(id, status, message);
 }
 
-}
 }

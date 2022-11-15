@@ -513,10 +513,6 @@ public:
                 return result;
             }
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxCopyTable, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();

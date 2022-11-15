@@ -5,13 +5,12 @@
 
 #include <util/generic/set.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 struct TOperation: TSimpleRefCount<TOperation> {
     using TPtr = TIntrusivePtr<TOperation>;
 
-    TTxId TxId;
+    const TTxId TxId;
     TVector<ISubOperationBase::TPtr> Parts;
 
     THashSet<TActorId> Subscribers;
@@ -37,7 +36,6 @@ struct TOperation: TSimpleRefCount<TOperation> {
     THashMap<TTabletId, TSubTxId> RelationsByTabletId;
     THashMap<TShardIdx, TSubTxId> RelationsByShardIdx;
 
-    TSet<TSubTxId> ReadyToProposeParts;
     using TProposeRec = std::tuple<TSubTxId, TPathId, TStepId>;
     TDeque<TProposeRec> Proposes;
 
@@ -47,6 +45,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     using TPublishPath = std::pair<TPathId, ui64>;
     TSet<TPublishPath> Publications;
 
+    TSet<TSubTxId> ReadyToProposeParts;
     THashSet<TSubTxId> ReadyToNotifyParts;
     THashSet<TSubTxId> DoneParts;
     THashMap<TPathId, NKikimrSchemeOp::EPathState> ReleasePathAtDone;
@@ -78,14 +77,12 @@ struct TOperation: TSimpleRefCount<TOperation> {
     TTxId GetTxId() const { return TxId; }
 
     static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, TOperationContext& context);
-
     static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
 
-    ISubOperationBase::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState);
-
-    ISubOperationBase::TPtr ConstructPart(NKikimrSchemeOp::EOperationType opType, const TTxTransaction& tx);
-    TVector<ISubOperationBase::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context);
-    void AddPart(ISubOperationBase::TPtr part) { Parts.push_back(part);}
+    ISubOperationBase::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState) const;
+    ISubOperationBase::TPtr ConstructPart(NKikimrSchemeOp::EOperationType opType, const TTxTransaction& tx) const;
+    TVector<ISubOperationBase::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context) const;
+    void AddPart(ISubOperationBase::TPtr part);
 
     bool AddPublishingPath(TPathId pathId, ui64 version);
     bool IsPublished() const;
@@ -98,59 +95,62 @@ struct TOperation: TSimpleRefCount<TOperation> {
 
     bool IsReadyToDone(const TActorContext& ctx) const;
 
-    //propose operation to coordinator
+    // propose operation to coordinator
     bool IsReadyToPropose(const TActorContext& ctx) const;
     bool IsReadyToPropose() const;
     void ProposePart(TSubTxId partId, TPathId pathId, TStepId minStep);
     void ProposePart(TSubTxId partId, TTabletId tableId);
     void DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TActorContext& ctx) const;
 
-    //route incomming messages to the parts
+    // route incomming messages to the parts
     void RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, const TActorContext& ctx);
     void RegisterRelationByShardIdx(TSubTxId partId, TShardIdx shardIdx, const TActorContext& ctx);
-    TSubTxId FindRelatedPartByTabletId(TTabletId tablet, const TActorContext& ctx);
-    TSubTxId FindRelatedPartByShardIdx(TShardIdx shardIdx, const TActorContext& ctx);
+    TSubTxId FindRelatedPartByTabletId(TTabletId tablet, const TActorContext& ctx) const;
+    TSubTxId FindRelatedPartByShardIdx(TShardIdx shardIdx, const TActorContext& ctx) const;
 
     void WaitShardCreated(TShardIdx shardIdx, TSubTxId partId);
     TVector<TSubTxId> ActivateShardCreated(TShardIdx shardIdx);
 
     void RegisterWaitPublication(TSubTxId partId, TPathId pathId, ui64 pathVersion);
     TSet<TOperationId> ActivatePartsWaitPublication(TPathId pathId, ui64 pathVersion);
-    ui64 CountWaitPublication(TOperationId opId);
+    ui64 CountWaitPublication(TOperationId opId) const;
 
-    void RegisterBarrier(TSubTxId partId, TString name) {
+    void RegisterBarrier(TSubTxId partId, const TString& name) {
         Barriers[name].insert(partId);
         Y_VERIFY(Barriers.size() == 1);
     }
 
-    bool HasBarrier() {
+    bool HasBarrier() const {
         Y_VERIFY(Barriers.size() <= 1);
         return Barriers.size() == 1;
     }
 
-    bool IsDoneBarrier() {
+    bool IsDoneBarrier() const {
         Y_VERIFY(Barriers.size() <= 1);
-        for (const auto& item: Barriers) {
-            for (TSubTxId blocked: item.second) {
+
+        for (const auto& [_, subTxIds] : Barriers) {
+            for (const auto blocked : subTxIds) {
                 Y_VERIFY_S(!DoneParts.contains(blocked), "part is blocked and done: " << blocked);
             }
-            return item.second.size() + DoneParts.size() == Parts.size();
+            return subTxIds.size() + DoneParts.size() == Parts.size();
         }
 
         return false;
     }
 
-    void DropBarrier(TString name) {
+    void DropBarrier(const TString& name) {
         Y_VERIFY(IsDoneBarrier());
         Y_VERIFY(Barriers.begin()->first == name);
         Barriers.erase(name);
     }
-    TOperationId NextPartId() { return TOperationId(TxId, TSubTxId(Parts.size())); }
+
+    TOperationId NextPartId() const {
+        return TOperationId(TxId, TSubTxId(Parts.size()));
+    }
 };
 
 inline TOperationId NextPartId(const TOperationId& opId, const TVector<ISubOperationBase::TPtr>& parts) {
     return TOperationId(opId.GetTxId(), opId.GetSubTxId() + parts.size());
 }
 
-}
 }

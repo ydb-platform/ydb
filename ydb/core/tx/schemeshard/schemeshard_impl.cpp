@@ -1167,7 +1167,7 @@ bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TStrin
     return true;
 }
 
-bool TSchemeShard::CheckInFlightLimit(const TTxState::ETxType txType, TString& errStr) const {
+bool TSchemeShard::CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const {
     auto it = InFlightLimits.find(txType);
     if (it == InFlightLimits.end()) {
         return true;
@@ -1178,6 +1178,14 @@ bool TSchemeShard::CheckInFlightLimit(const TTxState::ETxType txType, TString& e
             << " has been exceeded"
             << ", limit: " << it->second;
         return false;
+    }
+
+    return true;
+}
+
+bool TSchemeShard::CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TString& errStr) const {
+    if (const auto txType = TTxState::ConvertToTxType(opType); txType != TTxState::TxInvalid) {
+        return CheckInFlightLimit(txType, errStr);
     }
 
     return true;

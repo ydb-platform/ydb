@@ -6,21 +6,9 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TRmDir: public ISubOperationBase {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-
+class TRmDir: public TSubOperationBase {
 public:
-    TRmDir(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TRmDir(TOperationId id)
-        : OperationId(id)
-    {
-    }
+    using TSubOperationBase::TSubOperationBase;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -68,13 +56,8 @@ public:
         }
 
         TString errStr;
-
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxRmDir, errStr)) {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 
@@ -199,17 +182,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateRmDir(TOperationId id, const TTxTransaction& tx) {
-    return new TRmDir(id, tx);
+    return MakeSubOperation<TRmDir>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateRmDir(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
-    return new TRmDir(id);
+    return MakeSubOperation<TRmDir>(id);
 }
 
-}
 }

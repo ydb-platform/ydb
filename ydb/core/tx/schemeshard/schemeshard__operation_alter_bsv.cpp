@@ -591,11 +591,6 @@ public:
             volume->ForgetAlter();
             return result;
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterBlockStoreVolume, errStr))
-        {
-            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            return result;
-        }
 
         // Increase in occupied space is applied immediately
         domainDir->ChangeVolumeSpaceBegin(newVolumeSpace, oldVolumeSpace);

@@ -370,10 +370,6 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
         return result;
     }
-    if (!context.SS->CheckInFlightLimit(TTxState::TxAlterFileStore, errStr)) {
-        result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-        return result;
-    }
 
     fs->PrepareAlter(*alterConfig);
 

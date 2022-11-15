@@ -15,8 +15,7 @@
 
 #include <util/generic/algorithm.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
@@ -107,11 +106,11 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     auto txId = TTxId(record.GetTxId());
 
     if (Operations.contains(txId)) {
-        response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
-            NKikimrScheme::StatusAccepted, ui64(txId), ui64(selfId)));
-
-        response->SetError(NKikimrScheme::StatusAccepted, "There is operation with the same txId has been found in flight. Actually that shouldn't have happened."
-                                                                " Note that tx body equality isn't granted. StatusAccepted is just returned on retries.");
+        response.Reset(new TProposeResponse(NKikimrScheme::StatusAccepted, ui64(txId), ui64(selfId)));
+        response->SetError(NKikimrScheme::StatusAccepted, "There is operation with the same txId has been found in flight."
+            " Actually that shouldn't have happened."
+            " Note that tx body equality isn't granted."
+            " StatusAccepted is just returned on retries.");
         return std::move(response);
     }
 
@@ -120,25 +119,22 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
     if (record.GetUserToken()) {
          NACLibProto::TUserToken tokenPb;
-         bool parseOk = tokenPb.ParseFromString(record.GetUserToken());
-         if (!parseOk) {
-             response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
-                 NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId)));
+         if (!tokenPb.ParseFromString(record.GetUserToken())) {
+             response.Reset(new TProposeResponse(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId)));
              response->SetError(NKikimrScheme::StatusInvalidParameter, "Failed to parse user token");
              return std::move(response);
          }
          context.UserToken.Reset(new NACLib::TUserToken(tokenPb));
     }
 
-    for (const auto& transaction: record.GetTransaction()) {
+    for (const auto& transaction : record.GetTransaction()) {
         context.AddAuditLogFragment(transaction);
     }
 
-    for (const auto& transaction: record.GetTransaction()) {
+    for (const auto& transaction : record.GetTransaction()) {
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
-            response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
-                quotaResult.Status, ui64(txId), ui64(selfId)));
+            response.Reset(new TProposeResponse(quotaResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(quotaResult.Status, quotaResult.Reason);
             Operations.erase(txId);
 
@@ -149,19 +145,18 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
     if (record.HasFailOnExist()) {
         // inherit FailOnExist from TEvModifySchemeTransaction into TModifyScheme
-        for (auto transaction: *record.MutableTransaction()) {
+        for (auto& transaction : *record.MutableTransaction()) {
             if (!transaction.HasFailOnExist()) {
                 transaction.SetFailOnExist(record.GetFailOnExist());
             }
         }
     }
 
-    TVector<TTxTransaction> transactions;
-    for (const auto& transaction: record.GetTransaction()) {
+    TVector<std::pair<TTxTransaction, TVector<ISubOperationBase::TPtr>>> transactions;
+    for (const auto& transaction : record.GetTransaction()) {
         auto splitResult = operation->SplitIntoTransactions(transaction, context);
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
-            response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
-                splitResult.Status, ui64(txId), ui64(selfId)));
+            response.Reset(new TProposeResponse(splitResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(splitResult.Status, splitResult.Reason);
             Operations.erase(txId);
 
@@ -169,16 +164,32 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             return std::move(response);
         }
 
-        transactions.insert(transactions.end(), splitResult.Transactions.begin(), splitResult.Transactions.end());
+        for (auto& tx : splitResult.Transactions) {
+            auto parts = operation->ConstructParts(tx, context);
+            for (const auto& part : parts) {
+                operation->AddPart(part); // temporarily add a part (to form correct operation ids)
+
+                TString errStr;
+                if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
+                    response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+                    response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+                    Operations.erase(txId);
+
+                    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
+                    return std::move(response);
+                }
+            }
+
+            transactions.emplace_back(std::move(tx), std::move(parts));
+        }
     }
 
     const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
     context.ClearAuditLogFragments();
+    operation->Parts.clear(); // IMPORTANT: remove temporarily added parts (above)
 
     //for all tx in transactions
-    for (const auto& transaction: transactions) {
-        TVector<ISubOperationBase::TPtr> parts = operation->ConstructParts(transaction, context);
-
+    for (auto& [transaction, parts] : transactions) {
         if (parts.size() > 1) {
             // les't allow altering impl index tables as part of consistent operation
             context.IsAllowedPrivateTables = true;
@@ -186,9 +197,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
         context.AddAuditLogFragment(transaction);
 
-        for (auto& part: parts) {
-            const TOperationId pathOpId = operation->NextPartId();
-
+        for (auto& part : parts) {
             response = part->Propose(owner, context);
             Y_VERIFY(response);
 
@@ -201,20 +210,19 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
             if (response->IsDone()) {
                 operation->AddPart(part); //at ApplyOnExecute parts is erased
-                context.OnComplete.DoneOperation(pathOpId); //mark it here by self for sure
+                context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
             } else if (response->IsConditionalAccepted()) {
                 //happens on retries, we answer like AlreadyExist or StatusSuccess with error message and do nothing in operation
                 operation->AddPart(part); //at ApplyOnExecute parts is erased
-                context.OnComplete.DoneOperation(pathOpId); //mark it here by self for sure
+                context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
             } else if (response->IsAccepted()) {
                 operation->AddPart(part);
-                //context.OnComplete.ActivateTx(pathOpId) ///TODO maybe it is good idea
+                //context.OnComplete.ActivateTx(partOpId) ///TODO maybe it is good idea
             } else {
-
                 if (!operation->Parts.empty()) {
                     LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                                 "Abort operation: IgniteOperation fail to propose a part"
-                                    << ", opId: " << pathOpId
+                                    << ", opId: " << part->GetOperationId()
                                     << ", at schemeshard:  " << selfId
                                     << ", already accepted parts: " << operation->Parts.size()
                                     << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
@@ -225,18 +233,17 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 Y_VERIFY_S(context.IsUndoChangesSafe(),
                            "Operation is aborted and all changes should be reverted"
                                << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
-                               << ", opId: " << pathOpId
+                               << ", opId: " << part->GetOperationId()
                                << ", at schemeshard:  " << selfId
                                << ", already accepted parts: " << operation->Parts.size()
                                << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                                << ", with reason: " << response->Record.GetReason()
                                << ", tx message: " << GetRecordForPrint(record).ShortDebugString());
 
-
                 context.OnComplete = {}; // recreate
                 context.DbChanges = {};
 
-                for (auto& toAbort: operation->Parts) {
+                for (auto& toAbort : operation->Parts) {
                     toAbort->AbortPropose(context);
                 }
 
@@ -822,178 +829,178 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     return result;
 }
 
-ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) {
+ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
     switch (txType) {
-        case TTxState::ETxType::TxMkDir:
-            return CreateMkDir(NextPartId(), txState);
-        case TTxState::ETxType::TxRmDir:
-            return CreateRmDir(NextPartId(), txState);
-        case TTxState::ETxType::TxModifyACL:
-            return CreateModifyACL(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterUserAttributes:
-            return CreateAlterUserAttrs(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateTable:
-            return CreateNewTable(NextPartId(), txState);
-        case TTxState::ETxType::TxCopyTable:
-            return CreateCopyTable(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterTable:
-            return CreateAlterTable(NextPartId(), txState);
-        case TTxState::ETxType::TxSplitTablePartition:
-        case TTxState::ETxType::TxMergeTablePartition:
-            return CreateSplitMerge(NextPartId(), txState);
-        case TTxState::ETxType::TxBackup:
-            return CreateBackup(NextPartId(), txState);
-        case TTxState::ETxType::TxRestore:
-            return CreateRestore(NextPartId(), txState);
-        case TTxState::ETxType::TxDropTable:
-            return CreateDropTable(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateTableIndex:
-            return CreateNewTableIndex(NextPartId(), txState);
-        case TTxState::ETxType::TxDropTableIndex:
-            return CreateDropTableIndex(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateRtmrVolume:
-            return CreateNewRTMR(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateOlapStore:
-            return CreateNewOlapStore(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterOlapStore:
-            return CreateAlterOlapStore(NextPartId(), txState);
-        case TTxState::ETxType::TxDropOlapStore:
-            return CreateDropOlapStore(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateColumnTable:
-            return CreateNewColumnTable(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterColumnTable:
-            return CreateAlterColumnTable(NextPartId(), txState);
-        case TTxState::ETxType::TxDropColumnTable:
-            return CreateDropColumnTable(NextPartId(), txState);
+    case TTxState::ETxType::TxMkDir:
+        return CreateMkDir(NextPartId(), txState);
+    case TTxState::ETxType::TxRmDir:
+        return CreateRmDir(NextPartId(), txState);
+    case TTxState::ETxType::TxModifyACL:
+        return CreateModifyACL(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterUserAttributes:
+        return CreateAlterUserAttrs(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateTable:
+        return CreateNewTable(NextPartId(), txState);
+    case TTxState::ETxType::TxCopyTable:
+        return CreateCopyTable(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterTable:
+        return CreateAlterTable(NextPartId(), txState);
+    case TTxState::ETxType::TxSplitTablePartition:
+    case TTxState::ETxType::TxMergeTablePartition:
+        return CreateSplitMerge(NextPartId(), txState);
+    case TTxState::ETxType::TxBackup:
+        return CreateBackup(NextPartId(), txState);
+    case TTxState::ETxType::TxRestore:
+        return CreateRestore(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTable:
+        return CreateDropTable(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateTableIndex:
+        return CreateNewTableIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTableIndex:
+        return CreateDropTableIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateRtmrVolume:
+        return CreateNewRTMR(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateOlapStore:
+        return CreateNewOlapStore(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterOlapStore:
+        return CreateAlterOlapStore(NextPartId(), txState);
+    case TTxState::ETxType::TxDropOlapStore:
+        return CreateDropOlapStore(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateColumnTable:
+        return CreateNewColumnTable(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterColumnTable:
+        return CreateAlterColumnTable(NextPartId(), txState);
+    case TTxState::ETxType::TxDropColumnTable:
+        return CreateDropColumnTable(NextPartId(), txState);
 
-        case TTxState::ETxType::TxCreatePQGroup:
-            return CreateNewPQ(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterPQGroup:
-            return CreateAlterPQ(NextPartId(), txState);
-        case TTxState::ETxType::TxDropPQGroup:
-            return CreateDropPQ(NextPartId(), txState);
-        case TTxState::ETxType::TxAllocatePQ:
-            return CreateAllocatePQ(NextPartId(), txState);
+    case TTxState::ETxType::TxCreatePQGroup:
+        return CreateNewPQ(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterPQGroup:
+        return CreateAlterPQ(NextPartId(), txState);
+    case TTxState::ETxType::TxDropPQGroup:
+        return CreateDropPQ(NextPartId(), txState);
+    case TTxState::ETxType::TxAllocatePQ:
+        return CreateAllocatePQ(NextPartId(), txState);
 
-        case TTxState::ETxType::TxCreateSolomonVolume:
-            return CreateNewSolomon(NextPartId(), txState);
-        case TTxState::ETxType::TxDropSolomonVolume:
-            return CreateDropSolomon(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateSubDomain:
-            return CreateSubDomain(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterSubDomain:
-            return CreateAlterSubDomain(NextPartId(), txState);
-        case TTxState::ETxType::TxUpgradeSubDomain:
-            return CreateUpgradeSubDomain(NextPartId(), txState);
-        case TTxState::ETxType::TxUpgradeSubDomainDecision:
-            return CreateUpgradeSubDomainDecision(NextPartId(), txState);
-        case TTxState::ETxType::TxDropSubDomain:
-            return CreateDropSubdomain(NextPartId(), txState);
-        case TTxState::ETxType::TxForceDropSubDomain:
-            return CreateFroceDropSubDomain(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateExtSubDomain:
-            return CreateExtSubDomain(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateKesus:
-            return CreateNewKesus(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterKesus:
-            return CreateAlterKesus(NextPartId(), txState);
-        case TTxState::ETxType::TxDropKesus:
-            return CreateDropKesus(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterExtSubDomain:
-            return CreateAlterExtSubDomain(NextPartId(), txState);
-        case TTxState::ETxType::TxForceDropExtSubDomain:
-            return CreateFroceDropExtSubDomain(NextPartId(), txState);
-        case TTxState::ETxType::TxInitializeBuildIndex:
-            return CreateInitializeBuildIndexMainTable(NextPartId(), txState);
-        case TTxState::ETxType::TxFinalizeBuildIndex:
-            return CreateFinalizeBuildIndexMainTable(NextPartId(), txState);
-        case TTxState::ETxType::TxDropTableIndexAtMainTable:
-            return CreateDropTableIndexAtMainTable(NextPartId(), txState);
-        case TTxState::ETxType::TxUpdateMainTableOnIndexMove:
-            return CreateUpdateMainTableOnIndexMove(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateLock:
-            return CreateLock(NextPartId(), txState);
-        case TTxState::ETxType::TxDropLock:
-            return DropLock(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterTableIndex:
-            return CreateAlterTableIndex(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterSolomonVolume:
-            return CreateAlterSolomon(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateSolomonVolume:
+        return CreateNewSolomon(NextPartId(), txState);
+    case TTxState::ETxType::TxDropSolomonVolume:
+        return CreateDropSolomon(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateSubDomain:
+        return CreateSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterSubDomain:
+        return CreateAlterSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxUpgradeSubDomain:
+        return CreateUpgradeSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxUpgradeSubDomainDecision:
+        return CreateUpgradeSubDomainDecision(NextPartId(), txState);
+    case TTxState::ETxType::TxDropSubDomain:
+        return CreateDropSubdomain(NextPartId(), txState);
+    case TTxState::ETxType::TxForceDropSubDomain:
+        return CreateFroceDropSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateExtSubDomain:
+        return CreateExtSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateKesus:
+        return CreateNewKesus(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterKesus:
+        return CreateAlterKesus(NextPartId(), txState);
+    case TTxState::ETxType::TxDropKesus:
+        return CreateDropKesus(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterExtSubDomain:
+        return CreateAlterExtSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxForceDropExtSubDomain:
+        return CreateFroceDropExtSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxInitializeBuildIndex:
+        return CreateInitializeBuildIndexMainTable(NextPartId(), txState);
+    case TTxState::ETxType::TxFinalizeBuildIndex:
+        return CreateFinalizeBuildIndexMainTable(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTableIndexAtMainTable:
+        return CreateDropTableIndexAtMainTable(NextPartId(), txState);
+    case TTxState::ETxType::TxUpdateMainTableOnIndexMove:
+        return CreateUpdateMainTableOnIndexMove(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateLock:
+        return CreateLock(NextPartId(), txState);
+    case TTxState::ETxType::TxDropLock:
+        return DropLock(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterTableIndex:
+        return CreateAlterTableIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterSolomonVolume:
+        return CreateAlterSolomon(NextPartId(), txState);
 
-        // BlockStore
-        case TTxState::ETxType::TxCreateBlockStoreVolume:
-            return CreateNewBSV(NextPartId(), txState);
-        case TTxState::ETxType::TxAssignBlockStoreVolume:
-            return CreateAssignBSV(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterBlockStoreVolume:
-            return CreateAlterBSV(NextPartId(), txState);
-        case TTxState::ETxType::TxDropBlockStoreVolume:
-            return CreateDropBSV(NextPartId(), txState);
+    // BlockStore
+    case TTxState::ETxType::TxCreateBlockStoreVolume:
+        return CreateNewBSV(NextPartId(), txState);
+    case TTxState::ETxType::TxAssignBlockStoreVolume:
+        return CreateAssignBSV(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterBlockStoreVolume:
+        return CreateAlterBSV(NextPartId(), txState);
+    case TTxState::ETxType::TxDropBlockStoreVolume:
+        return CreateDropBSV(NextPartId(), txState);
 
-        // FileStore
-        case TTxState::ETxType::TxCreateFileStore:
-            return CreateNewFileStore(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterFileStore:
-            return CreateAlterFileStore(NextPartId(), txState);
-        case TTxState::ETxType::TxDropFileStore:
-            return CreateDropFileStore(NextPartId(), txState);
+    // FileStore
+    case TTxState::ETxType::TxCreateFileStore:
+        return CreateNewFileStore(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterFileStore:
+        return CreateAlterFileStore(NextPartId(), txState);
+    case TTxState::ETxType::TxDropFileStore:
+        return CreateDropFileStore(NextPartId(), txState);
 
-        // CDC
-        case TTxState::ETxType::TxCreateCdcStream:
-            return CreateNewCdcStreamImpl(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateCdcStreamAtTable:
-            return CreateNewCdcStreamAtTable(NextPartId(), txState, false);
-        case TTxState::ETxType::TxCreateCdcStreamAtTableWithSnapshot:
-            return CreateNewCdcStreamAtTable(NextPartId(), txState, true);
-        case TTxState::ETxType::TxAlterCdcStream:
-            return CreateAlterCdcStreamImpl(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterCdcStreamAtTable:
-            return CreateAlterCdcStreamAtTable(NextPartId(), txState);
-        case TTxState::ETxType::TxDropCdcStream:
-            return CreateDropCdcStreamImpl(NextPartId(), txState);
-        case TTxState::ETxType::TxDropCdcStreamAtTable:
-            return CreateDropCdcStreamAtTable(NextPartId(), txState);
+    // CDC
+    case TTxState::ETxType::TxCreateCdcStream:
+        return CreateNewCdcStreamImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateCdcStreamAtTable:
+        return CreateNewCdcStreamAtTable(NextPartId(), txState, false);
+    case TTxState::ETxType::TxCreateCdcStreamAtTableWithSnapshot:
+        return CreateNewCdcStreamAtTable(NextPartId(), txState, true);
+    case TTxState::ETxType::TxAlterCdcStream:
+        return CreateAlterCdcStreamImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterCdcStreamAtTable:
+        return CreateAlterCdcStreamAtTable(NextPartId(), txState);
+    case TTxState::ETxType::TxDropCdcStream:
+        return CreateDropCdcStreamImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxDropCdcStreamAtTable:
+        return CreateDropCdcStreamAtTable(NextPartId(), txState);
 
-        // Sequences
-        case TTxState::ETxType::TxCreateSequence:
-            return CreateNewSequence(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterSequence:
-            Y_FAIL("TODO: implement");
-        case TTxState::ETxType::TxDropSequence:
-            return CreateDropSequence(NextPartId(), txState);
+    // Sequences
+    case TTxState::ETxType::TxCreateSequence:
+        return CreateNewSequence(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterSequence:
+        Y_FAIL("TODO: implement");
+    case TTxState::ETxType::TxDropSequence:
+        return CreateDropSequence(NextPartId(), txState);
 
-        case TTxState::ETxType::TxFillIndex:
-            Y_FAIL("deprecated");
+    case TTxState::ETxType::TxFillIndex:
+        Y_FAIL("deprecated");
 
-        case TTxState::ETxType::TxMoveTable:
-            return CreateMoveTable(NextPartId(), txState);
-        case TTxState::ETxType::TxMoveTableIndex:
-            return CreateMoveTableIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxMoveTable:
+        return CreateMoveTable(NextPartId(), txState);
+    case TTxState::ETxType::TxMoveTableIndex:
+        return CreateMoveTableIndex(NextPartId(), txState);
 
-        // Replication
-        case TTxState::ETxType::TxCreateReplication:
-            return CreateNewReplication(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterReplication:
-            Y_FAIL("TODO: implement");
-        case TTxState::ETxType::TxDropReplication:
-            return CreateDropReplication(NextPartId(), txState);
+    // Replication
+    case TTxState::ETxType::TxCreateReplication:
+        return CreateNewReplication(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterReplication:
+        Y_FAIL("TODO: implement");
+    case TTxState::ETxType::TxDropReplication:
+        return CreateDropReplication(NextPartId(), txState);
 
-        // BlobDepot
-        case TTxState::ETxType::TxCreateBlobDepot:
-            return CreateNewBlobDepot(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterBlobDepot:
-            return CreateAlterBlobDepot(NextPartId(), txState);
-        case TTxState::ETxType::TxDropBlobDepot:
-            return CreateDropBlobDepot(NextPartId(), txState);
+    // BlobDepot
+    case TTxState::ETxType::TxCreateBlobDepot:
+        return CreateNewBlobDepot(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterBlobDepot:
+        return CreateAlterBlobDepot(NextPartId(), txState);
+    case TTxState::ETxType::TxDropBlobDepot:
+        return CreateDropBlobDepot(NextPartId(), txState);
 
-        case TTxState::ETxType::TxInvalid:
-            Y_UNREACHABLE();
+    case TTxState::ETxType::TxInvalid:
+        Y_UNREACHABLE();
     }
 
     Y_UNREACHABLE();
 }
 
-ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType opType, const TTxTransaction& tx) {
+ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType opType, const TTxTransaction& tx) const {
     switch (opType) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
         return CreateMkDir(NextPartId(), tx);
@@ -1186,7 +1193,7 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     Y_UNREACHABLE();
 }
 
-TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {
     const auto& opType = tx.GetOperationType();
 
     switch (opType) {
@@ -1229,6 +1236,10 @@ TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction
     default:
         return {ConstructPart(opType, tx)};
     }
+}
+
+void TOperation::AddPart(ISubOperationBase::TPtr part) {
+    Parts.push_back(part);
 }
 
 bool TOperation::AddPublishingPath(TPathId pathId, ui64 version) {
@@ -1402,7 +1413,7 @@ void TOperation::RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, c
     RelationsByTabletId[tablet] = partId;
 }
 
-TSubTxId TOperation::FindRelatedPartByTabletId(TTabletId tablet, const TActorContext& ctx) {
+TSubTxId TOperation::FindRelatedPartByTabletId(TTabletId tablet, const TActorContext& ctx) const {
     auto partIdPtr = RelationsByTabletId.FindPtr(tablet);
     auto partId = partIdPtr == nullptr ? InvalidSubTxId : *partIdPtr;
 
@@ -1431,7 +1442,7 @@ void TOperation::RegisterRelationByShardIdx(TSubTxId partId, TShardIdx shardIdx,
 }
 
 
-TSubTxId TOperation::FindRelatedPartByShardIdx(TShardIdx shardIdx, const TActorContext& ctx) {
+TSubTxId TOperation::FindRelatedPartByShardIdx(TShardIdx shardIdx, const TActorContext& ctx) const {
     auto partIdPtr = RelationsByShardIdx.FindPtr(shardIdx);
     auto partId = partIdPtr == nullptr ? InvalidSubTxId : *partIdPtr;
 
@@ -1505,12 +1516,13 @@ TSet<TOperationId> TOperation::ActivatePartsWaitPublication(TPathId pathId, ui64
     return activateParts;
 }
 
-ui64 TOperation::CountWaitPublication(TOperationId opId) {
-    if (WaitingPublicationsByPart.contains(opId.GetSubTxId())) {
-        return WaitingPublicationsByPart.at(opId.GetSubTxId()).size();
+ui64 TOperation::CountWaitPublication(TOperationId opId) const {
+    auto it = WaitingPublicationsByPart.find(opId.GetSubTxId());
+    if (it == WaitingPublicationsByPart.end()) {
+        return 0;
     }
-    return 0;
+
+    return it->second.size();
 }
 
-}
 }

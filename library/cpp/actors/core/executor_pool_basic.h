@@ -45,6 +45,14 @@ namespace NActors {
             }
         };
 
+        struct TTimers {
+            NHPTimer::STime Elapsed = 0;
+            NHPTimer::STime Parked = 0;
+            NHPTimer::STime Blocked = 0;
+            NHPTimer::STime HPStart = GetCycleCountFast();
+            NHPTimer::STime HPNow;
+        };
+
         const ui64 SpinThreshold;
         const ui64 SpinThresholdCycles;
 
@@ -67,6 +75,31 @@ namespace NActors {
         TMutex ChangeThreadsLock;
 
     public:
+        struct TSemaphore {
+            i64 OldSemaphore = 0; // 34 bits
+            // Sign bit
+            i8 Reserved1 = 0; // 5 bits
+            i16 CurrentSleepThreadCount = 0; // 16 bits
+            i8 Reserved2 = 0; // 8 bits
+
+            inline i64 ConverToI64() {
+                i64 value = (1ll << 34) + OldSemaphore;
+                return value
+                    | ((i64)Reserved1 << 35)
+                    | ((i64)CurrentSleepThreadCount << 40)
+                    | ((i64)Reserved2 << 56);
+            }
+
+            static inline TSemaphore GetSemaphore(i64 value) {
+                TSemaphore semaphore;
+                semaphore.OldSemaphore = (value & 0x7ffffffffll) - (1ll << 34);
+                semaphore.Reserved1 = (value >> 35) & 0x1f;
+                semaphore.CurrentSleepThreadCount = (value >> 40) & 0xffff;
+                semaphore.Reserved2 = (value >> 56) & 0xff;
+                return semaphore;
+            }
+        };
+
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 
@@ -107,5 +140,9 @@ namespace NActors {
 
     private:
         void WakeUpLoop();
+        bool GoToWaiting(TThreadCtx& threadCtx, TTimers &timers, bool needToBlock);
+        void GoToSpin(TThreadCtx& threadCtx);
+        bool GoToSleep(TThreadCtx& threadCtx, TTimers &timers);
+        bool GoToBeBlocked(TThreadCtx& threadCtx, TTimers &timers);
     };
 }

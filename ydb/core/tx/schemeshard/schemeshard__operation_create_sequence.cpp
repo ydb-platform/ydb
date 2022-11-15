@@ -5,8 +5,7 @@
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/mind/hive/hive.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
@@ -244,16 +243,12 @@ public:
 };
 
 class TCreateSequence : public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
@@ -267,10 +262,10 @@ class TCreateSequence : public TSubOperation {
         return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         using TPtr = TSubOperationState::TPtr;
 
-        switch(state) {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TPtr(new TCreateParts(OperationId));
@@ -285,27 +280,8 @@ class TCreateSequence : public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TCreateSequence(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {}
-
-    TCreateSequence(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -519,8 +495,7 @@ public:
         domainInfo->IncPathsInside();
         parentPath->IncAliveChildren();
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -541,14 +516,12 @@ public:
 
 }
 
-
 ISubOperationBase::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx) {
-    return new TCreateSequence(id ,tx);
+    return MakeSubOperation<TCreateSequence>(id ,tx);
 }
 
 ISubOperationBase::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state) {
-    return new TCreateSequence(id, state);
+    return MakeSubOperation<TCreateSequence>(id, state);
 }
 
-}
 }

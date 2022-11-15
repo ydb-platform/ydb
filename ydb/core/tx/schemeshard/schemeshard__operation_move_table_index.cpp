@@ -295,34 +295,28 @@ public:
 };
 
 class TMoveTableIndex: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
     TTxState::ETxState AfterPropose = TTxState::Invalid;
 
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
             return AfterPropose;
-
         case TTxState::WaitShadowPathPublication:
             return TTxState::DeletePathBarrier;
         case TTxState::DeletePathBarrier:
             return TTxState::Done;
-
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId, AfterPropose);
@@ -337,28 +331,8 @@ class TMoveTableIndex: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TMoveTableIndex(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TMoveTableIndex(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -548,9 +522,8 @@ public:
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);
 
         context.OnComplete.ActivateTx(OperationId);
-        State = NextState();
-        SetState(SelectStateFunc(State));
 
+        SetState(NextState());
         return result;
     }
 
@@ -574,17 +547,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& tx) {
-    return new TMoveTableIndex(id, tx);
+    return MakeSubOperation<TMoveTableIndex>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TMoveTableIndex(id, state);
+    return MakeSubOperation<TMoveTableIndex>(id, state);
 }
 
-}
 }

@@ -9,8 +9,7 @@
 
 #include <util/generic/utility.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 template <typename TKind>
 class TConfigurePart: public TSubOperationState {
@@ -448,26 +447,23 @@ class TBackupRestoreOperationBase: public TSubOperation {
     const TTxState::ETxType TxType;
     const TPathElement::EPathState Lock;
 
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState) const override {
+        Y_FAIL("unreachable");
+    }
+
+    TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
-
         case TTxState::ConfigureParts:
             return TTxState::Propose;
-
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
-
         case TTxState::ProposedWaitParts: {
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_VERIFY(txState);
@@ -485,15 +481,13 @@ class TBackupRestoreOperationBase: public TSubOperation {
         }
         case TTxState::Aborting:
             return TTxState::Done;
-
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return THolder(new TCreateParts(OperationId));
@@ -513,10 +507,10 @@ class TBackupRestoreOperationBase: public TSubOperation {
     }
 
     void StateDone(TOperationContext& context) override {
-        State = NextState(State, context);
+        auto state = NextState(GetState(), context);
+        SetState(state);
 
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
+        if (state != TTxState::Invalid) {
             context.OnComplete.ActivateTx(OperationId);
         }
     }
@@ -525,22 +519,20 @@ public:
     TBackupRestoreOperationBase(
             TTxState::ETxType type, TPathElement::EPathState lock,
             TOperationId id, const TTxTransaction& tx)
-        : TxType(type)
+        : TSubOperation(id, tx)
+        , TxType(type)
         , Lock(lock)
-        , OperationId(id)
-        , Transaction(tx)
     {
     }
 
     TBackupRestoreOperationBase(
             TTxState::ETxType type, TPathElement::EPathState lock,
             TOperationId id, TTxState::ETxState state)
-        : TxType(type)
+        : TSubOperation(id, state)
+        , TxType(type)
         , Lock(lock)
-        , OperationId(id)
-        , State(state)
     {
-        SetState(SelectStateFunc(state));
+        SetState(state);
     }
 
     void PrepareChanges(TPathElement::TPtr path, TOperationContext& context) {
@@ -642,8 +634,7 @@ public:
 
         PrepareChanges(path.Base(), context);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -662,5 +653,4 @@ public:
     }
 };
 
-}
 }

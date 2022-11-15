@@ -349,19 +349,15 @@ public:
 };
 
 class TCreateTable: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
     bool AllowShadowData = false;
     THashSet<TString> LocalSequences;
 
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
@@ -374,11 +370,10 @@ class TCreateTable: public TSubOperation {
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return THolder(new TCreateParts(OperationId));
@@ -395,28 +390,8 @@ class TCreateTable: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TCreateTable(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TCreateTable(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     void SetAllowShadowDataForBuildIndex() {
         AllowShadowData = true;
@@ -718,8 +693,7 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         parentPath.Base()->IncAliveChildren();
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -740,32 +714,30 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
-    auto obj = MakeHolder<TCreateTable>(id, tx);
-    obj->SetLocalSequences(localSequences);
-    return obj.Release();
+    auto obj = MakeSubOperation<TCreateTable>(id, tx);
+    static_cast<TCreateTable*>(obj.Get())->SetLocalSequences(localSequences);
+    return obj;
 }
 
 ISubOperationBase::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TCreateTable(id, state);
+    return MakeSubOperation<TCreateTable>(id, state);
 }
 
 ISubOperationBase::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
-    auto obj = MakeHolder<TCreateTable>(id, tx);
-    obj->SetAllowShadowDataForBuildIndex();
-    return obj.Release();
+    auto obj = MakeSubOperation<TCreateTable>(id, tx);
+    static_cast<TCreateTable*>(obj.Get())->SetAllowShadowDataForBuildIndex();
+    return obj;
 }
 
 ISubOperationBase::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    auto obj = MakeHolder<TCreateTable>(id, state);
-    obj->SetAllowShadowDataForBuildIndex();
-    return obj.Release();
+    auto obj = MakeSubOperation<TCreateTable>(id, state);
+    static_cast<TCreateTable*>(obj.Get())->SetAllowShadowDataForBuildIndex();
+    return obj;
 }
 
-}
 }

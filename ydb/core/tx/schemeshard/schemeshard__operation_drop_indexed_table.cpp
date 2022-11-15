@@ -239,34 +239,28 @@ public:
     }
 };
 
-
 class TDropTableIndex: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
     TTxState::ETxState AfterPropose = TTxState::Invalid;
 
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Propose:
             return AfterPropose;
-
         case TTxState::WaitShadowPathPublication:
             return TTxState::DeletePathBarrier;
         case TTxState::DeletePathBarrier:
             return TTxState::Done;
-
         default:
             return TTxState::Invalid;
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::Propose:
             return THolder(new TPropose(OperationId, AfterPropose));
         case TTxState::WaitShadowPathPublication:
@@ -280,28 +274,8 @@ class TDropTableIndex: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TDropTableIndex(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TDropTableIndex(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -386,8 +360,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -411,17 +384,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, const TTxTransaction& tx) {
-    return new TDropTableIndex(id, tx);
+    return MakeSubOperation<TDropTableIndex>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState state) {
-    return new TDropTableIndex(id, state);
+    return MakeSubOperation<TDropTableIndex>(id, state);
 }
-
 
 TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
@@ -578,5 +549,4 @@ TVector<ISubOperationBase::TPtr> CreateDropIndexedTable(TOperationId nextId, con
     return result;
 }
 
-}
 }

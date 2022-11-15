@@ -9,8 +9,7 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_W(stream) LOG_WARN_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
@@ -202,7 +201,7 @@ class TCreateReplication: public TSubOperation {
         return TTxState::CreateParts;
     }
 
-    static TTxState::ETxState NextState(TTxState::ETxState state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
@@ -216,7 +215,7 @@ class TCreateReplication: public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
@@ -232,29 +231,8 @@ class TCreateReplication: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    explicit TCreateReplication(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-        , State(TTxState::Invalid)
-    {
-    }
-
-    explicit TCreateReplication(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -437,9 +415,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
-
+        SetState(NextState());
         return result;
     }
 
@@ -454,22 +430,16 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 
-private:
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State;
-
 }; // TCreateReplication
 
 } // anonymous
 
 ISubOperationBase::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
-    return new TCreateReplication(id, tx);
+    return MakeSubOperation<TCreateReplication>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state) {
-    return new TCreateReplication(id, state);
+    return MakeSubOperation<TCreateReplication>(id, state);
 }
 
-} // NSchemeShard
-} // NKikimr
+}

@@ -9,8 +9,7 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_W(stream) LOG_WARN_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
@@ -188,7 +187,7 @@ class TDropReplication: public TSubOperation {
         return TTxState::DropParts;
     }
 
-    static TTxState::ETxState NextState(TTxState::ETxState state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::DropParts:
             return TTxState::Propose;
@@ -199,7 +198,7 @@ class TDropReplication: public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::DropParts:
             return MakeHolder<TDropParts>(OperationId);
@@ -212,28 +211,8 @@ class TDropReplication: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
 public:
-    explicit TDropReplication(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-        , State(TTxState::Invalid)
-    {
-    }
-
-    explicit TDropReplication(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -337,9 +316,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
-
+        SetState(NextState());
         return result;
     }
 
@@ -354,22 +331,16 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 
-private:
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State;
-
 }; // TDropReplication
 
 } // anonymous
 
 ISubOperationBase::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx) {
-    return new TDropReplication(id, tx);
+    return MakeSubOperation<TDropReplication>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state) {
-    return new TDropReplication(id, state);
+    return MakeSubOperation<TDropReplication>(id, state);
 }
 
-} // NSchemeShard
-} // NKikimr
+}

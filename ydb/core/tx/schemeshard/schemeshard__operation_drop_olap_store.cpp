@@ -4,12 +4,11 @@
 
 #include <ydb/core/base/subdomain.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
-class TDropParts : public TSubOperationState {
+class TDropParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
@@ -48,7 +47,7 @@ public:
     }
 };
 
-class TPropose : public TSubOperationState {
+class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
@@ -132,7 +131,7 @@ public:
     }
 };
 
-class TProposedWaitParts : public TSubOperationState {
+class TProposedWaitParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
@@ -207,7 +206,7 @@ public:
     }
 };
 
-class TProposedDeleteParts : public TSubOperationState {
+class TProposedDeleteParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
@@ -252,21 +251,10 @@ public:
     }
 };
 
-class TDropOlapStore : public TSubOperation {
+class TDropOlapStore: public TSubOperation {
 public:
-    TDropOlapStore(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {}
+    using TSubOperation::TSubOperation;
 
-    TDropOlapStore(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
-
-public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -392,8 +380,7 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
         }
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -424,12 +411,12 @@ public:
     }
 
 private:
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::DropParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::DropParts:
             return TTxState::Propose;
         case TTxState::Propose:
@@ -441,8 +428,8 @@ private:
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::DropParts:
             return MakeHolder<TDropParts>(OperationId);
         case TTxState::Propose:
@@ -455,32 +442,17 @@ private:
             return nullptr;
         }
     }
-
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
-private:
-    const TOperationId OperationId;
-    TTxState::ETxState State = TTxState::Invalid;
-    const NKikimrSchemeOp::TModifyScheme Transaction;
 };
 
-} // namespace
+}
 
 ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx) {
-    return new TDropOlapStore(id, tx);
+    return MakeSubOperation<TDropOlapStore>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TDropOlapStore(id, state);
+    return MakeSubOperation<TDropOlapStore>(id, state);
 }
 
-} // namespace NSchemeShard
-} // namespace NKikimr
+}

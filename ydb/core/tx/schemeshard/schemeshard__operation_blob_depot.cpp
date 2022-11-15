@@ -14,9 +14,6 @@ namespace NKikimr::NSchemeShard {
 
         class TBlobDepot : public TSubOperation {
             const EAction Action;
-            const TOperationId OperationId;
-            const TTxTransaction Transaction;
-            TTxState::ETxState State = TTxState::Invalid;
 
         public:
             template<TTxState::ETxState ExpectedState>
@@ -139,18 +136,16 @@ namespace NKikimr::NSchemeShard {
 
         public:
             TBlobDepot(EAction action, TOperationId id, const TTxTransaction& tx)
-                : Action(action)
-                , OperationId(id)
-                , Transaction(tx)
+                : TSubOperation(id, tx)
+                , Action(action)
             {}
 
             TBlobDepot(EAction action, TOperationId id, TTxState::ETxState state)
-                : Action(action)
-                , OperationId(id)
-                , State(state)
+                : TSubOperation(id, state)
+                , Action(action)
             {
-                Y_VERIFY(State != TTxState::Invalid);
-                SetState(PickStateFunc());
+                Y_VERIFY(state != TTxState::Invalid);
+                SetState(state);
             }
 
             THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
@@ -199,20 +194,19 @@ namespace NKikimr::NSchemeShard {
                     {{EAction::Drop, TTxState::DeleteParts}, TTxState::Propose},
                 };
 
-                const auto it = stateMachine.find({Action, State});
+                const auto it = stateMachine.find({Action, GetState()});
                 Y_VERIFY(it != stateMachine.end());
 
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::StateDone"
                     << " OperationId# " << OperationId
                     << " at schemeshard# " << context.SS->TabletID()
-                    << " State# " << TTxState::StateName(State)
+                    << " State# " << TTxState::StateName(GetState())
                     << " next State# " << TTxState::StateName(it->second));
 
-                State = it->second;
-                if (State != TTxState::Invalid) {
+                if (it->second != TTxState::Invalid) {
                     NIceDb::TNiceDb db(context.GetDB());
-                    context.SS->ChangeTxState(db, OperationId, State);
-                    SetState(PickStateFunc());
+                    context.SS->ChangeTxState(db, OperationId, it->second);
+                    SetState(it->second);
                     context.OnComplete.ActivateTx(OperationId);
                 }
             }
@@ -382,8 +376,7 @@ namespace NKikimr::NSchemeShard {
                 dstPath->IncShardsInside();
                 parentPath->IncAliveChildren();
 
-                State = TTxState::CreateParts;
-                SetState(PickStateFunc());
+                SetState(TTxState::CreateParts);
                 
                 auto resp = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, txId, ssId);
                 resp->SetPathId(pathId.LocalPathId);
@@ -392,15 +385,13 @@ namespace NKikimr::NSchemeShard {
 
             THolder<TProposeResponse> ProposeAlter(const TString& owner, TOperationContext& context) {
                 (void)owner, (void)context;
-                State = TTxState::ConfigureParts;
-                SetState(PickStateFunc());
+                SetState(TTxState::ConfigureParts);
                 return nullptr;
             }
 
             THolder<TProposeResponse> ProposeDrop(const TString& owner, TOperationContext& context) {
                 (void)owner, (void)context;
-                State = TTxState::DeleteParts;
-                SetState(PickStateFunc());
+                SetState(TTxState::DeleteParts);
                 return nullptr;
             }
 
@@ -412,7 +403,11 @@ namespace NKikimr::NSchemeShard {
                 }
             };
 
-            TSubOperationState::TPtr PickStateFunc() const {
+            TTxState::ETxState NextState(TTxState::ETxState) const override {
+                Y_FAIL("unreachable");
+            }
+
+            TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
                 using TFactory = std::function<TSubOperationState::TPtr(TOperationId)>;
                 static const std::unordered_map<std::pair<EAction, TTxState::ETxState>, TFactory> FactoryMap{
                     {{EAction::Create, TTxState::Waiting}, TFactoryImpl<TCreateParts>()},
@@ -422,8 +417,8 @@ namespace NKikimr::NSchemeShard {
                     {{EAction::Create, TTxState::Done}, TFactoryImpl<TDone>()},
                 };
 
-                Y_VERIFY(State != TTxState::Invalid);
-                const auto it = FactoryMap.find({Action, State});
+                Y_VERIFY(state != TTxState::Invalid);
+                const auto it = FactoryMap.find({Action, state});
                 Y_VERIFY(it != FactoryMap.end());
                 return it->second(OperationId);
             }

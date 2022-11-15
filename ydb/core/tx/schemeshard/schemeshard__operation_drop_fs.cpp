@@ -148,25 +148,8 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDropFileStore: public TSubOperation {
-private:
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-
-    TTxState::ETxState State = TTxState::Invalid;
-
 public:
-    TDropFileStore(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TDropFileStore(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(
         const TString& owner,
@@ -201,33 +184,23 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 private:
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::DeleteParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::DeleteParts:
             return TTxState::Propose;
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::DeleteParts:
             return MakeHolder<TDeleteParts>(OperationId);
@@ -343,26 +316,21 @@ THolder<TProposeResponse> TDropFileStore::Propose(
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
     }
 
-    State = NextState();
-    SetState(SelectStateFunc(State));
+    SetState(NextState());
     return result;
 }
 
-}   // namespace
+}
 
-namespace NKikimr {
-namespace NSchemeShard {
-
-////////////////////////////////////////////////////////////////////////////////
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, const TTxTransaction& tx) {
-    return new TDropFileStore(id, tx);
+    return MakeSubOperation<TDropFileStore>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TDropFileStore(id, state);
+    return MakeSubOperation<TDropFileStore>(id, state);
 }
 
-}   // namespace NSchemeShard
-}   // namespace NKikimr
+}

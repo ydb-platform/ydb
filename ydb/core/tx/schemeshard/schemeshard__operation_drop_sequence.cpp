@@ -4,12 +4,11 @@
 
 #include <ydb/core/tx/sequenceshard/public/events.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
-class TDropParts : public TSubOperationState {
+class TDropParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
@@ -125,7 +124,7 @@ public:
     }
 };
 
-class TPropose : public TSubOperationState {
+class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
@@ -209,17 +208,13 @@ public:
     }
 };
 
-class TDropSequence : public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
-    TTxState::ETxState NextState() {
+class TDropSequence: public TSubOperation {
+    static TTxState::ETxState NextState() {
         return TTxState::DropParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::DropParts:
             return TTxState::Propose;
         case TTxState::Propose:
@@ -229,8 +224,8 @@ class TDropSequence : public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::DropParts:
             return MakeHolder<TDropParts>(OperationId);
         case TTxState::Propose:
@@ -242,27 +237,8 @@ class TDropSequence : public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TDropSequence(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {}
-
-    TDropSequence(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -399,8 +375,7 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
         }
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -434,12 +409,11 @@ public:
 }
 
 ISubOperationBase::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx) {
-    return new TDropSequence(id ,tx);
+    return MakeSubOperation<TDropSequence>(id ,tx);
 }
 
 ISubOperationBase::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state) {
-    return new TDropSequence(id, state);
+    return MakeSubOperation<TDropSequence>(id, state);
 }
 
-}
 }

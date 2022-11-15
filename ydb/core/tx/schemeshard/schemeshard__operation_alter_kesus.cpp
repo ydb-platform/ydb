@@ -1,4 +1,3 @@
-
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -7,7 +6,6 @@
 #include <ydb/core/persqueue/config/config.h>
 
 namespace {
-
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -145,7 +143,6 @@ public:
     }
 };
 
-
 class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -213,29 +210,23 @@ public:
     }
 };
 
-
 class TAlterKesus: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::ConfigureParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
             return TTxState::Propose;
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
             return THolder(new TConfigureParts(OperationId));
@@ -246,28 +237,8 @@ class TAlterKesus: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TAlterKesus(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TAlterKesus(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     const Ydb::Coordination::Config* ParseParams(
             const NKikimrSchemeOp::TKesusDescription& alter,
@@ -372,8 +343,7 @@ public:
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -394,17 +364,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateAlterKesus(TOperationId id, const TTxTransaction& tx) {
-    return new TAlterKesus(id, tx);
+    return MakeSubOperation<TAlterKesus>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateAlterKesus(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TAlterKesus(id, state);
+    return MakeSubOperation<TAlterKesus>(id, state);
 }
 
-}
 }

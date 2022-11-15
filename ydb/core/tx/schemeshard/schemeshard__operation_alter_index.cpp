@@ -75,16 +75,12 @@ public:
 };
 
 class TAlterTableIndex: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Propose:
             return TTxState::Done;
         default:
@@ -92,8 +88,8 @@ class TAlterTableIndex: public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::Propose:
             return THolder(new TPropose(OperationId));
         case TTxState::Done:
@@ -103,28 +99,8 @@ class TAlterTableIndex: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TAlterTableIndex(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TAlterTableIndex(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -147,7 +123,6 @@ public:
             result->SetError(NKikimrScheme::StatusInvalidParameter, "AlterTableIndex is not present");
             return result;
         }
-
 
         if (!tableIndexAlter.HasName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Name is not present in AlterTableIndex");
@@ -233,8 +208,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -258,17 +232,14 @@ public:
 
 }
 
-
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx) {
-    return new TAlterTableIndex(id, tx);
+    return MakeSubOperation<TAlterTableIndex>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state) {
-    return new TAlterTableIndex(id, state);
+    return MakeSubOperation<TAlterTableIndex>(id, state);
 }
 
-}
 }

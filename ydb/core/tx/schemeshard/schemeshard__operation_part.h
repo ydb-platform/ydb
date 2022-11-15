@@ -231,36 +231,81 @@ public:
 };
 
 class TSubOperation: public ISubOperationBase {
+protected:
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
+
 private:
+    TTxState::ETxState State = TTxState::Invalid;
     TSubOperationState::TPtr Base = nullptr;
 
-public:
-    virtual void StateDone(TOperationContext& context) = 0;
+protected:
+    virtual TTxState::ETxState NextState(TTxState::ETxState state) const = 0;
+    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) = 0;
 
-    void SetState(TSubOperationState::TPtr state) {
-        Base = std::move(state);
+    virtual void StateDone(TOperationContext& context) {
+        auto state = NextState(GetState());
+        SetState(state);
+
+        if (state != TTxState::Invalid) {
+            context.OnComplete.ActivateTx(OperationId);
+        }
+    }
+
+public:
+    explicit TSubOperation(const TOperationId& id, const TTxTransaction& tx)
+        : OperationId(id)
+        , Transaction(tx)
+    {
+    }
+
+    explicit TSubOperation(const TOperationId& id, TTxState::ETxState state)
+        : OperationId(id)
+        , State(state)
+    {
+    }
+
+    TTxState::ETxState GetState() const {
+        return State;
+    }
+
+    void SetState(TTxState::ETxState state) {
+        State = state;
+        Base = SelectStateFunc(state);
     }
 
     void ProgressState(TOperationContext& context) override {
         Y_VERIFY(Base);
-        bool isDone = Base->ProgressState(context);
+        const bool isDone = Base->ProgressState(context);
         if (isDone) {
             StateDone(context);
         }
     }
 
-    #define DefaultHandleReply(TEvType, ...)          \
-        void HandleReply(TEvType::TPtr& ev, TOperationContext& context) override {      \
-            Y_VERIFY(Base);                             \
-            bool isDone = Base->HandleReply(ev, context);   \
-            if (isDone) {                               \
-                StateDone(context);                     \
-            }                                           \
+    #define DefaultHandleReply(TEvType, ...)                                       \
+        void HandleReply(TEvType::TPtr& ev, TOperationContext& context) override { \
+            Y_VERIFY(Base);                                                        \
+            bool isDone = Base->HandleReply(ev, context);                          \
+            if (isDone) {                                                          \
+                StateDone(context);                                                \
+            }                                                                      \
         }
 
         SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
     #undef DefaultHandleReply
 };
+
+template <typename T, typename... Args>
+ISubOperationBase::TPtr MakeSubOperation(const TOperationId& id, const TTxTransaction& tx, Args&&... args) {
+    return new T(id, tx, std::forward<Args>(args)...);
+}
+
+template <typename T, typename... Args>
+ISubOperationBase::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, Args&&... args) {
+    auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
+    result->SetState(state);
+    return result.Release();
+}
 
 ISubOperationBase::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response);
 ISubOperationBase::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message);

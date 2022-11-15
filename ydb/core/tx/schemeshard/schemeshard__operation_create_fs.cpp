@@ -198,25 +198,8 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCreateFileStore: public TSubOperation {
-private:
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-
-    TTxState::ETxState State = TTxState::Invalid;
-
 public:
-    TCreateFileStore(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TCreateFileStore(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(
         const TString& owner,
@@ -236,22 +219,13 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 private:
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
@@ -262,11 +236,10 @@ private:
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return MakeHolder<TCreateParts>(OperationId);
@@ -451,8 +424,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
     dstPath.Base()->IncShardsInside(shardsToCreate);
     parentPath.Base()->IncAliveChildren();
 
-    State = NextState();
-    SetState(SelectStateFunc(State));
+    SetState(NextState());
     return result;
 }
 
@@ -539,21 +511,17 @@ TTxState& TCreateFileStore::PrepareChanges(
     return txState;
 }
 
-}   // namespace
+}
 
-namespace NKikimr {
-namespace NSchemeShard {
-
-////////////////////////////////////////////////////////////////////////////////
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx) {
-    return new TCreateFileStore(id, tx);
+    return MakeSubOperation<TCreateFileStore>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TCreateFileStore(id, state);
+    return MakeSubOperation<TCreateFileStore>(id, state);
 }
 
-}   // namespace NSchemeShard
-}   // namespace NKikimr
+}

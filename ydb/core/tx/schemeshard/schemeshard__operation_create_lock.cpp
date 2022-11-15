@@ -55,12 +55,9 @@ private:
 }; // TPropose
 
 class TCreateLock: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
     const bool ProposeToCoordinator;
-    TTxState::ETxState State;
 
-    TTxState::ETxState NextState() {
+    TTxState::ETxState NextState() const {
         if (ProposeToCoordinator) {
             return TTxState::Propose;
         } else {
@@ -68,7 +65,7 @@ class TCreateLock: public TSubOperation {
         }
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Waiting:
             return NextState();
@@ -79,7 +76,7 @@ class TCreateLock: public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
             return THolder(new TPropose(OperationId));
@@ -90,30 +87,17 @@ class TCreateLock: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
     explicit TCreateLock(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
+        : TSubOperation(id, tx)
         , ProposeToCoordinator(AppData()->FeatureFlags.GetEnableChangefeedInitialScan())
-        , State(TTxState::Invalid)
     {
     }
 
     explicit TCreateLock(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
+        : TSubOperation(id, state)
         , ProposeToCoordinator(AppData()->FeatureFlags.GetEnableChangefeedInitialScan())
-        , State(state)
     {
-        SetState(SelectStateFunc(state));
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
@@ -220,9 +204,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
-
+        SetState(NextState());
         return result;
     }
 
@@ -243,12 +225,12 @@ public:
 } // anonymous namespace
 
 ISubOperationBase::TPtr CreateLock(TOperationId id, const TTxTransaction& tx) {
-    return new TCreateLock(id, tx);
+    return MakeSubOperation<TCreateLock>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateLock(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TCreateLock(id, state);
+    return MakeSubOperation<TCreateLock>(id, state);
 }
 
 }

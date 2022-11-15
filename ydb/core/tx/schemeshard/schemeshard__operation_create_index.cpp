@@ -73,15 +73,11 @@ public:
 };
 
 class TCreateTableIndex: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Propose:
             return TTxState::Done;
@@ -90,7 +86,7 @@ class TCreateTableIndex: public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
             return THolder(new TPropose(OperationId));
@@ -101,28 +97,8 @@ class TCreateTableIndex: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TCreateTableIndex(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TCreateTableIndex(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -270,8 +246,7 @@ public:
         dstPath.DomainInfo()->IncPathsInside();
         parentPath.Base()->IncAliveChildren();
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -298,11 +273,11 @@ public:
 namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, const TTxTransaction& tx) {
-    return new TCreateTableIndex(id, tx);
+    return MakeSubOperation<TCreateTableIndex>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState state) {
-    return new TCreateTableIndex(id, state);
+    return MakeSubOperation<TCreateTableIndex>(id, state);
 }
 
 }

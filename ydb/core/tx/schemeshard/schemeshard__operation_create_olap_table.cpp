@@ -8,8 +8,7 @@
 
 #include <util/random/shuffle.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
@@ -655,19 +654,15 @@ public:
 };
 
 class TCreateColumnTable: public TSubOperation {
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
-    TTxState::ETxState NextState(bool inStore) {
+    static TTxState::ETxState NextState(bool inStore) {
         if (inStore) {
             return TTxState::ConfigureParts;
         }
         return TTxState::CreateParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
@@ -680,13 +675,12 @@ class TCreateColumnTable: public TSubOperation {
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         using TPtr = TSubOperationState::TPtr;
 
-        switch(state) {
+        switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TPtr(new TCreateParts(OperationId));
@@ -703,27 +697,8 @@ class TCreateColumnTable: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TCreateColumnTable(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {}
-
-    TCreateColumnTable(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -1002,8 +977,7 @@ public:
         }
         parentPath.Base()->IncAliveChildren();
 
-        State = NextState(!!storeInfo);
-        SetState(SelectStateFunc(State));
+        SetState(NextState(!!storeInfo));
         return result;
     }
 
@@ -1022,18 +996,15 @@ public:
     }
 };
 
-
-} // namespace
+}
 
 ISubOperationBase::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& tx) {
-    return new TCreateColumnTable(id, tx);
+    return MakeSubOperation<TCreateColumnTable>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateNewColumnTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TCreateColumnTable(id, state);
+    return MakeSubOperation<TCreateColumnTable>(id, state);
 }
 
-
-} // namespace NSchemeShard
-} // namespace NKikimr
+}

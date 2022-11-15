@@ -6,8 +6,7 @@
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
@@ -81,7 +80,7 @@ class TDropCdcStream: public TSubOperation {
         return TTxState::Propose;
     }
 
-    static TTxState::ETxState NextState(TTxState::ETxState state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Propose:
             return TTxState::Done;
@@ -90,7 +89,7 @@ class TDropCdcStream: public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
             return THolder(new TPropose(OperationId));
@@ -101,29 +100,8 @@ class TDropCdcStream: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    explicit TDropCdcStream(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-        , State(TTxState::Invalid)
-    {
-    }
-
-    explicit TDropCdcStream(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -199,9 +177,7 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, streamPath.Base()->PathId);
         context.OnComplete.ActivateTx(OperationId);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
-
+        SetState(NextState());
         return result;
     }
 
@@ -215,11 +191,6 @@ public:
             << ", txId# " << txId);
         context.OnComplete.DoneOperation(OperationId);
     }
-
-private:
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State;
 
 }; // TDropCdcStream
 
@@ -264,7 +235,7 @@ class TDropCdcStreamAtTable: public TSubOperation {
         return TTxState::ConfigureParts;
     }
 
-    static TTxState::ETxState NextState(TTxState::ETxState state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
@@ -276,11 +247,9 @@ class TDropCdcStreamAtTable: public TSubOperation {
         default:
             return TTxState::Invalid;
         }
-
-        return TTxState::Invalid;
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
@@ -296,29 +265,8 @@ class TDropCdcStreamAtTable: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    explicit TDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-        , State(TTxState::Invalid)
-    {
-    }
-
-    explicit TDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -413,9 +361,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
-
+        SetState(NextState());
         return result;
     }
 
@@ -430,29 +376,24 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 
-private:
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State;
-
 }; // TDropCdcStreamAtTable
 
 } // anonymous
 
 ISubOperationBase::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
-    return new TDropCdcStream(id, tx);
+    return MakeSubOperation<TDropCdcStream>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state) {
-    return new TDropCdcStream(id, state);
+    return MakeSubOperation<TDropCdcStream>(id, state);
 }
 
 ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx) {
-    return new TDropCdcStreamAtTable(id, tx);
+    return MakeSubOperation<TDropCdcStreamAtTable>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state) {
-    return new TDropCdcStreamAtTable(id, state);
+    return MakeSubOperation<TDropCdcStreamAtTable>(id, state);
 }
 
 TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
@@ -550,5 +491,4 @@ TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TT
     return result;
 }
 
-} // NSchemeShard
-} // NKikimr
+}

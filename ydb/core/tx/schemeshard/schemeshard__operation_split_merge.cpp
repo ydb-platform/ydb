@@ -178,7 +178,6 @@ public:
     }
 };
 
-
 class TTranserData: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -482,17 +481,12 @@ public:
 };
 
 class TSplitMerge: public TSubOperation {
-private:
-    const TOperationId OperationId;
-    const TTxTransaction Transaction;
-    TTxState::ETxState State = TTxState::Invalid;
-
-    TTxState::ETxState NextState() {
+    static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) {
-        switch(state) {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch (state) {
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
@@ -506,8 +500,8 @@ private:
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
-        switch(state) {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch (state) {
         case TTxState::CreateParts:
             return THolder(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
@@ -521,28 +515,8 @@ private:
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        State = NextState(State);
-
-        if (State != TTxState::Invalid) {
-            SetState(SelectStateFunc(State));
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    TSplitMerge(TOperationId id, const TTxTransaction& tx)
-        : OperationId(id)
-        , Transaction(tx)
-    {
-    }
-
-    TSplitMerge(TOperationId id, TTxState::ETxState state)
-        : OperationId(id)
-        , State(state)
-    {
-        SetState(SelectStateFunc(state));
-    }
+    using TSubOperation::TSubOperation;
 
     bool AllocateDstForMerge(
             const NKikimrSchemeOp::TSplitMergeTablePartitions& info,
@@ -999,8 +973,7 @@ public:
         path.DomainInfo()->AddInternalShards(op); //allow over commit for merge
         path->IncShardsInside(dstCount);
 
-        State = NextState();
-        SetState(SelectStateFunc(State));
+        SetState(NextState());
         return result;
     }
 
@@ -1034,17 +1007,15 @@ public:
 
 }
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 ISubOperationBase::TPtr CreateSplitMerge(TOperationId id, const TTxTransaction& tx) {
-    return new TSplitMerge(id, tx);
+    return MakeSubOperation<TSplitMerge>(id, tx);
 }
 
 ISubOperationBase::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TSplitMerge(id, state);
+    return MakeSubOperation<TSplitMerge>(id, state);
 }
 
-}
 }

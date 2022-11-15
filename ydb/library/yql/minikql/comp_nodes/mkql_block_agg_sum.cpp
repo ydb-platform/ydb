@@ -11,9 +11,9 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 template <typename TIn, typename TSum, typename TInScalar>
-class TSumBlockAggregator : public TBlockAggregatorBase {
+class TSumBlockAggregatorNullableOrScalar : public TBlockAggregatorBase {
 public:
-    TSumBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
+    TSumBlockAggregatorNullableOrScalar(std::optional<ui32> filterColumn, ui32 argColumn)
         : TBlockAggregatorBase(filterColumn)
         , ArgColumn_(argColumn)
     {
@@ -24,7 +24,7 @@ public:
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
                 Sum_ += batchLength * datum.scalar_as<TInScalar>().value;
-                Count_ += batchLength;
+                IsValid_ = true;
             }
         } else {
             const auto& array = datum.array();
@@ -35,7 +35,7 @@ public:
                 return;
             }
 
-            Count_ += count;
+            IsValid_ = true;
             TSum sum = Sum_;
             if (array->GetNullCount() == 0) {
                 for (int64_t i = 0; i < len; ++i) {
@@ -56,7 +56,7 @@ public:
     }
 
     NUdf::TUnboxedValue Finish() final {
-        if (!Count_) {
+        if (!IsValid_) {
             return NUdf::TUnboxedValuePod();
         }
 
@@ -66,7 +66,43 @@ public:
 private:
     const ui32 ArgColumn_;
     TSum Sum_ = 0;
-    ui64 Count_ = 0;
+    bool IsValid_ = false;
+};
+
+template <typename TIn, typename TSum, typename TInScalar>
+class TSumBlockAggregator : public TBlockAggregatorBase {
+public:
+    TSumBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
+        : TBlockAggregatorBase(filterColumn)
+        , ArgColumn_(argColumn)
+    {
+    }
+
+    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength) final {
+        Y_UNUSED(batchLength);
+        const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
+        MKQL_ENSURE(datum.is_array(), "Expected array");
+        const auto& array = datum.array();
+        auto ptr = array->GetValues<TIn>(1);
+        auto len = array->length;
+        MKQL_ENSURE(array->GetNullCount() == 0, "Expected no nulls");
+        MKQL_ENSURE(len > 0, "Expected at least one value");
+
+        TSum sum = Sum_;
+        for (int64_t i = 0; i < len; ++i) {
+            sum += ptr[i];
+        }
+
+        Sum_ = sum;
+    }
+
+    NUdf::TUnboxedValue Finish() final {
+        return NUdf::TUnboxedValuePod(Sum_);
+    }
+
+private:
+    const ui32 ArgColumn_;
+    TSum Sum_ = 0;
 };
 
 template <typename TIn, typename TInScalar>
@@ -142,28 +178,52 @@ public:
        const std::vector<ui32>& argsColumns,
        const THolderFactory& holderFactory) const final {
        Y_UNUSED(holderFactory);
-       auto argType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]))->GetItemType();
+       auto blockType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]));
+       auto argType = blockType->GetItemType();
        bool isOptional;
        auto dataType = UnpackOptionalData(argType, isOptional);
-       switch (*dataType->GetDataSlot()) {
-       case NUdf::EDataSlot::Int8:
-           return std::make_unique<TSumBlockAggregator<i8, i64, arrow::Int8Scalar>>(filterColumn, argsColumns[0]);
-       case NUdf::EDataSlot::Uint8:
-           return std::make_unique<TSumBlockAggregator<ui8, ui64, arrow::UInt8Scalar>>(filterColumn, argsColumns[0]);
-       case NUdf::EDataSlot::Int16:
-           return std::make_unique<TSumBlockAggregator<i16, i64, arrow::Int16Scalar>>(filterColumn, argsColumns[0]);
-       case NUdf::EDataSlot::Uint16:
-           return std::make_unique<TSumBlockAggregator<ui16, ui64, arrow::UInt16Scalar>>(filterColumn, argsColumns[0]);
-       case NUdf::EDataSlot::Int32:
-           return std::make_unique<TSumBlockAggregator<i32, i64, arrow::Int32Scalar>>(filterColumn, argsColumns[0]);
-       case NUdf::EDataSlot::Uint32:
-           return std::make_unique<TSumBlockAggregator<ui32, ui64, arrow::UInt32Scalar>>(filterColumn, argsColumns[0]);
-       case NUdf::EDataSlot::Int64:
-           return std::make_unique<TSumBlockAggregator<i64, i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0]);
-       case NUdf::EDataSlot::Uint64:
-           return std::make_unique<TSumBlockAggregator<ui64, ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0]);
-       default:
-           throw yexception() << "Unsupported SUM input type";
+       if (blockType->GetShape() == TBlockType::EShape::Scalar || isOptional) {
+           switch (*dataType->GetDataSlot()) {
+           case NUdf::EDataSlot::Int8:
+               return std::make_unique<TSumBlockAggregatorNullableOrScalar<i8, i64, arrow::Int8Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Uint8:
+               return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui8, ui64, arrow::UInt8Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Int16:
+               return std::make_unique<TSumBlockAggregatorNullableOrScalar<i16, i64, arrow::Int16Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Uint16:
+               return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui16, ui64, arrow::UInt16Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Int32:
+               return std::make_unique<TSumBlockAggregatorNullableOrScalar<i32, i64, arrow::Int32Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Uint32:
+               return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui32, ui64, arrow::UInt32Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Int64:
+               return std::make_unique<TSumBlockAggregatorNullableOrScalar<i64, i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Uint64:
+               return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui64, ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0]);
+           default:
+               throw yexception() << "Unsupported SUM input type";
+           }
+       } else {
+           switch (*dataType->GetDataSlot()) {
+           case NUdf::EDataSlot::Int8:
+               return std::make_unique<TSumBlockAggregator<i8, i64, arrow::Int8Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Uint8:
+               return std::make_unique<TSumBlockAggregator<ui8, ui64, arrow::UInt8Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Int16:
+               return std::make_unique<TSumBlockAggregator<i16, i64, arrow::Int16Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Uint16:
+               return std::make_unique<TSumBlockAggregator<ui16, ui64, arrow::UInt16Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Int32:
+               return std::make_unique<TSumBlockAggregator<i32, i64, arrow::Int32Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Uint32:
+               return std::make_unique<TSumBlockAggregator<ui32, ui64, arrow::UInt32Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Int64:
+               return std::make_unique<TSumBlockAggregator<i64, i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Uint64:
+               return std::make_unique<TSumBlockAggregator<ui64, ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0]);
+           default:
+               throw yexception() << "Unsupported SUM input type";
+           }
        }
    }
 };

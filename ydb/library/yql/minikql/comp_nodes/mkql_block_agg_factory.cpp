@@ -1,6 +1,7 @@
 #include "mkql_block_agg_factory.h"
 #include "mkql_block_agg_count.h"
 #include "mkql_block_agg_sum.h"
+#include "mkql_block_agg_minmax.h"
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -14,6 +15,8 @@ struct TAggregatorFactories {
         Factories["count"] = MakeBlockCountFactory();
         Factories["sum"] = MakeBlockSumFactory();
         Factories["avg"] = MakeBlockAvgFactory();
+        Factories["min"] = MakeBlockMinFactory();
+        Factories["max"] = MakeBlockMaxFactory();
     }
 };
 

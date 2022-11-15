@@ -5262,7 +5262,7 @@ namespace {
         ui32 expectedArgs;
         if (name == "count_all") {
             expectedArgs = 1;
-        } else if (name == "count" || name == "sum" || name == "avg") {
+        } else if (name == "count" || name == "sum" || name == "avg" || name == "min" || name == "max") {
             expectedArgs = 2;
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -5294,6 +5294,14 @@ namespace {
             auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType;
             if (!GetAvgResultType(input->Pos(), *itemType, retType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            input->SetTypeAnn(retType);
+        } else if (name == "min" || name == "max") {
+            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            const TTypeAnnotationNode* retType;
+            if (!GetMinMaxResultType(input->Pos(), *itemType, retType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 

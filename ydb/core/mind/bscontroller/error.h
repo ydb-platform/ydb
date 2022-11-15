@@ -35,6 +35,7 @@ namespace NKikimr::NBsController {
         P(ItemConfigGenerationProvided, ui64)
         P(ItemConfigGenerationExpected, ui64)
         P(GroupId, ui32)
+        P(StoragePoolName, TString)
 
         struct TVDiskIdTraits {
             using Type = TVDiskID;

@@ -54,6 +54,7 @@ public:
                         reportedGroup->SetErasureSpecies(group->ErasureSpecies);
                         reportedGroup->SetGroupID(group->ID);
                         reportedGroup->SetStoragePoolName(Self->StoragePools.at(group->StoragePoolId).Name);
+                        reportedGroup->SetPhysicalGroup(group->IsPhysicalGroup());
                         group->FillInGroupParameters(reportedGroup);
                     }
                 }

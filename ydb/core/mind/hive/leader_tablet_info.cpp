@@ -209,7 +209,7 @@ bool TLeaderTabletInfo::ReleaseAllocationUnit(ui32 channelId) {
 const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) {
     TStoragePoolInfo* storagePool = Hive.FindStoragePool(GetChannelStoragePoolName(channelId));
     if (storagePool != nullptr) {
-        THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> params = Hive.BuildGroupParametersForChannel(*this, channelId);
+        auto params = Hive.BuildGroupParametersForChannel(*this, channelId);
         const TStorageGroupInfo* currentGroup = nullptr;
 
         // searching for last change of this channel

@@ -802,6 +802,10 @@ public:
             return res;
         }
 
+        bool IsPhysicalGroup() const {
+            return !BlobDepotId && DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+        }
+
         void OnCommit();
     };
 

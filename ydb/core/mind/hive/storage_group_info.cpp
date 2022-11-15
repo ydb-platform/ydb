@@ -44,8 +44,12 @@ void TStorageGroupInfo::UpdateStorageGroup(const TEvControllerSelectGroupsResult
     GroupParameters.CopyFrom(groupParameters);
 }
 
-bool TStorageGroupInfo::IsMatchesParameters(const TEvControllerSelectGroups::TGroupParameters& groupParameters) const {
+bool TStorageGroupInfo::IsMatchesParameters(const TGroupFilter& filter) const {
+    const auto& groupParameters = filter.GroupParameters;
     if (groupParameters.GetStoragePoolSpecifier().GetName() != GroupParameters.GetStoragePoolName()) {
+        return false;
+    }
+    if (filter.PhysicalGroupsOnly && GroupParameters.HasPhysicalGroup() && !GroupParameters.GetPhysicalGroup()) {
         return false;
     }
     if (StoragePool.GetSafeMode()) {

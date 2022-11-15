@@ -605,7 +605,7 @@ public:
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void SendPing(const TActorId& local, TNodeId id);
     void SendReconnect(const TActorId& local);
-    static THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
+    static THolder<TGroupFilter> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
     void KickTablet(const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, TFullTabletId tabletId);

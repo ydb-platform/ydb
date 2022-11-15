@@ -78,10 +78,10 @@ Y_UNIT_TEST_SUITE(StoragePool) {
         TMap<ui32, ui32> groupUnits;
         TMap<ui32, ui32> groupChannels[CHANNELS];
 
-        TEvControllerSelectGroups::TGroupParameters unit1;
-        unit1.SetRequiredIOPS(1);
-        unit1.SetRequiredThroughput(10);
-        unit1.SetRequiredDataSize(100);
+        TGroupFilter unit1;
+        unit1.GroupParameters.SetRequiredIOPS(1);
+        unit1.GroupParameters.SetRequiredThroughput(10);
+        unit1.GroupParameters.SetRequiredDataSize(100);
 
         auto checkUnit1 = [&unit1](const TStorageGroupInfo& group) -> bool {
             return group.IsMatchesParameters(unit1);
@@ -94,9 +94,9 @@ Y_UNIT_TEST_SUITE(StoragePool) {
             ui32 groupId = found->GetGroupID();
             groupUnits[groupId]++;
             groupChannels[channel][groupId]++;
-            pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GetRequiredIOPS();
-            pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GetRequiredThroughput();
-            pool.GetStorageGroup(groupId).AcquiredSize += unit1.GetRequiredDataSize();
+            pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GroupParameters.GetRequiredIOPS();
+            pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GroupParameters.GetRequiredThroughput();
+            pool.GetStorageGroup(groupId).AcquiredSize += unit1.GroupParameters.GetRequiredDataSize();
         }
 
         if (strategy != NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN) {
@@ -114,9 +114,9 @@ Y_UNIT_TEST_SUITE(StoragePool) {
                 ui32 groupId = found->GetGroupID();
                 groupUnits[groupId]++;
                 groupChannels[channel][groupId]++;
-                pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GetRequiredIOPS();
-                pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GetRequiredThroughput();
-                pool.GetStorageGroup(groupId).AcquiredSize += unit1.GetRequiredDataSize();
+                pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GroupParameters.GetRequiredIOPS();
+                pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GroupParameters.GetRequiredThroughput();
+                pool.GetStorageGroup(groupId).AcquiredSize += unit1.GroupParameters.GetRequiredDataSize();
             }
         }
 
@@ -171,10 +171,10 @@ Y_UNIT_TEST_SUITE(StoragePool) {
 
         TMap<ui32, ui32> groupUnits;
 
-        TEvControllerSelectGroups::TGroupParameters unit1;
-        unit1.SetRequiredIOPS(1);
-        unit1.SetRequiredThroughput(10);
-        unit1.SetRequiredDataSize(1000);
+        TGroupFilter unit1;
+        unit1.GroupParameters.SetRequiredIOPS(1);
+        unit1.GroupParameters.SetRequiredThroughput(10);
+        unit1.GroupParameters.SetRequiredDataSize(1000);
         auto checkUnit1 = [&unit1](const TStorageGroupInfo& group) -> bool {
             return group.IsMatchesParameters(unit1);
         };
@@ -183,9 +183,9 @@ Y_UNIT_TEST_SUITE(StoragePool) {
             UNIT_ASSERT(found);
             ui32 groupId = found->GetGroupID();
             groupUnits[groupId]++;
-            pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GetRequiredIOPS();
-            pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GetRequiredThroughput();
-            pool.GetStorageGroup(groupId).AcquiredSize += unit1.GetRequiredDataSize();
+            pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GroupParameters.GetRequiredIOPS();
+            pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GroupParameters.GetRequiredThroughput();
+            pool.GetStorageGroup(groupId).AcquiredSize += unit1.GroupParameters.GetRequiredDataSize();
         }
 
 #ifndef _NDEBUG

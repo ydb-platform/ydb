@@ -110,17 +110,6 @@ namespace NKikimr::NBsController {
                 throw TExError() << "group is already being decommitted" << TErrorParams::GroupId(groupId);
             }
 
-            auto& sp = StoragePools.Get();
-            const auto it = sp.find(group->StoragePoolId);
-            if (it == sp.end()) {
-                throw TExError() << "invalid storage pool for decommitted group";
-            }
-            for (const auto& ch : cmd.GetChannelProfiles()) {
-                if (ch.GetStoragePoolName() == it->second.Name) {
-                    throw TExError() << "BlobDepot can't reside on the same Storage Pool as the decommitted group itself";
-                }
-            }
-
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::PENDING;
             group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::NEW;
             group->HiveId = cmd.GetHiveId();
@@ -129,7 +118,56 @@ namespace NKikimr::NBsController {
             NKikimrBlobDepot::TBlobDepotConfig config;
             config.SetVirtualGroupId(groupId);
             config.SetIsDecommittingGroup(true);
-            config.MutableChannelProfiles()->CopyFrom(cmd.GetChannelProfiles());
+
+            auto *profiles = config.MutableChannelProfiles();
+            profiles->CopyFrom(cmd.GetChannelProfiles());
+            if (profiles->empty()) {
+                const auto& sp = StoragePools.Get();
+                const auto it = sp.find(group->StoragePoolId);
+                if (it == sp.end()) {
+                    throw TExError() << "no storage pool found" << TErrorParams::GroupId(groupId)
+                        << TErrorParams::BoxId(std::get<0>(group->StoragePoolId))
+                        << TErrorParams::StoragePoolId(std::get<1>(group->StoragePoolId));
+                }
+                const TString& storagePoolName = it->second.Name;
+
+                bool found = false;
+                for (const auto& [_, pool] : sp) {
+                    if (pool.Name == storagePoolName) {
+                        if (found) {
+                            throw TExError() << "ambiguous storage pool name"
+                                << TErrorParams::StoragePoolName(pool.Name);
+                        } else {
+                            found = true;
+                        }
+                    }
+                }
+
+                ui32 numPhysicalGroups = 0;
+                for (auto [begin, end] = StoragePoolGroups.Get().equal_range(group->StoragePoolId); begin != end; ++begin) {
+                    if (const TGroupInfo *poolGroup = Groups.Find(begin->second)) {
+                        numPhysicalGroups += poolGroup->IsPhysicalGroup();
+                    } else {
+                        throw TExError() << "group not found" << TErrorParams::GroupId(begin->second)
+                            << TErrorParams::BoxId(std::get<0>(group->StoragePoolId))
+                            << TErrorParams::StoragePoolId(std::get<1>(group->StoragePoolId));
+                    }
+                }
+                if (!numPhysicalGroups) {
+                    throw TExError() << "no physical groups for decommission"
+                        << TErrorParams::BoxId(std::get<0>(group->StoragePoolId))
+                        << TErrorParams::StoragePoolId(std::get<1>(group->StoragePoolId));
+                }
+
+                auto *sys = profiles->Add();
+                sys->SetStoragePoolName(storagePoolName);
+                sys->SetChannelKind(NKikimrBlobDepot::TChannelKind::System);
+                sys->SetCount(2);
+                auto *data = profiles->Add();
+                data->SetStoragePoolName(storagePoolName);
+                data->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
+                data->SetCount(numPhysicalGroups);
+            }
 
             const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
             Y_VERIFY(success);
@@ -285,6 +323,9 @@ namespace NKikimr::NBsController {
                 for (ui32 i = 0; i < item.GetCount(); ++i) {
                     NKikimrStoragePool::TChannelBind binding;
                     binding.SetStoragePoolName(item.GetStoragePoolName());
+                    if (config.GetIsDecommittingGroup()) {
+                        binding.SetPhysicalGroupsOnly(true);
+                    }
                     bindings.push_back(std::move(binding));
                 }
             }

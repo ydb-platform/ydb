@@ -10,6 +10,11 @@ using namespace NKikimrBlobStorage;
 
 struct TStoragePoolInfo;
 
+struct TGroupFilter {
+    NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters GroupParameters;
+    bool PhysicalGroupsOnly = false;
+};
+
 struct TStorageGroupInfo {
     const TStoragePoolInfo& StoragePool;
     TStorageGroupId Id;
@@ -30,7 +35,7 @@ struct TStorageGroupInfo {
     bool AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel);
     bool ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel);
     void UpdateStorageGroup(const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters);
-    bool IsMatchesParameters(const TEvControllerSelectGroups::TGroupParameters& groupParameters) const;
+    bool IsMatchesParameters(const TGroupFilter& filter) const;
     double GetUsage() const;
     double GetMaximumIOPS() const;
     ui64 GetMaximumThroughput() const;

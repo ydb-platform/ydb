@@ -685,6 +685,7 @@ message TConfigResponse {
                 uint32 GroupId = 11;
                 NKikimrBlobStorage.TVDiskID VDiskId = 12;
                 NKikimrBlobStorage.TVSlotId VSlotId = 13;
+                string StoragePoolName = 14;
             }
         }
 

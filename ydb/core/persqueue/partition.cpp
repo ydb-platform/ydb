@@ -33,6 +33,8 @@ static const ui32 MAX_INLINE_SIZE = 1000;
 static const ui32 LEVEL0 = 32;
 static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100);
 static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
+static const ui32 MAX_USERS = 1000;
+static const ui64 SET_OFFSET_COOKIE = 1;
 
 struct TPartition::THasDataReq {
     ui64 Num;
@@ -221,6 +223,50 @@ ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp
     }
 }
 
+bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig,
+                      bool isLocalDC)
+{
+    const auto& quotingConfig = pqConfig.GetQuotingConfig();
+    return isLocalDC && !pqConfig.GetTopicsAreFirstClassCitizen() && quotingConfig.GetEnableQuoting();
+}
+
+void CalcTopicWriteQuotaParams(const NKikimrPQ::TPQConfig& pqConfig,
+                               bool isLocalDC,
+                               NPersQueue::TTopicConverterPtr topicConverter,
+                               ui64 tabletId,
+                               const TActorContext& ctx,
+                               TString& topicWriteQuoterPath,
+                               TString& topicWriteQuotaResourcePath)
+{
+    if (IsQuotingEnabled(pqConfig, isLocalDC)) { // Mirrored topics are not quoted in local dc.
+        const auto& quotingConfig = pqConfig.GetQuotingConfig();
+
+        Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
+
+        // ToDo[migration] - double check
+        auto topicPath = topicConverter->GetFederationPath();
+
+        // ToDo[migration] - separate quoter paths?
+        auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
+        if (topicParts.size() < 2) {
+            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
+                       "tablet " << tabletId << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
+            return;
+        }
+        topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic
+
+        topicWriteQuotaResourcePath = JoinPath(topicParts);
+        topicWriteQuoterPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << topicConverter->GetAccount();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "topicWriteQuutaResourcePath '" << topicWriteQuotaResourcePath
+                    << "' topicWriteQuoterPath '" << topicWriteQuoterPath
+                    << "' account '" << topicConverter->GetAccount()
+                    << "'"
+        );
+    }
+}
+
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error) {
     ReplyPersQueueError(
         dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicConverter->GetClientsideName(), Partition,
@@ -229,11 +275,7 @@ void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst) {
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
-    NKikimrClient::TResponse& resp = response->Response;
-    resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
-    resp.SetErrorCode(NPersQueue::NErrorCode::OK);
-    ctx.Send(Tablet, response.Release());
+    ctx.Send(Tablet, MakeReplyOk(dst).Release());
 }
 
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie) {
@@ -278,24 +320,7 @@ void TPartition::ReplyWrite(
 
 void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset,
     const TInstant writeTimestamp, const TInstant createTimestamp) {
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
-    NKikimrClient::TResponse& resp = response->Response;
-    resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
-    resp.SetErrorCode(NPersQueue::NErrorCode::OK);
-
-    auto user = resp.MutablePartitionResponse()->MutableCmdGetClientOffsetResult();
-    if (offset > -1)
-        user->SetOffset(offset);
-    if (writeTimestamp)
-        user->SetWriteTimestampMS(writeTimestamp.MilliSeconds());
-    if (createTimestamp) {
-        Y_VERIFY(writeTimestamp);
-        user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
-    }
-    user->SetEndOffset(EndOffset);
-    user->SetSizeLag(GetSizeLag(offset));
-    user->SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
-    ctx.Send(Tablet, response.Release());
+    ctx.Send(Tablet, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp).Release());
 }
 
 
@@ -395,7 +420,7 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
         if (userInfo.ReadRuleGeneration != rrGen) {
             THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer, 0, "", 0, 0,
                                                 TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, rrGen);
-            userInfo.UserActs.push_back(event.Release());
+            AddUserAct(event.Release());
             userInfo.Session = "";
             userInfo.Offset = 0;
             if (userInfo.Important) {
@@ -419,14 +444,14 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
         userInfo.Session = "";
         userInfo.Offset = 0;
         userInfo.Step = userInfo.Generation = 0;
-        userInfo.UserActs.push_back(event.Release());
+        AddUserAct(event.Release());
     }
 }
 
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId,
                        const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
-                       const TActorContext &ctx, bool newPartition)
+                       bool newPartition)
     : TabletID(tabletId)
     , Partition(partition)
     , Config(config)
@@ -452,14 +477,11 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
             CloudId, DbId, config.GetYdbDatabasePath(), FolderId
     )
     , ReadingTimestamp(false)
-    , SetOffsetCookie(0)
     , Cookie(0)
-    , CreationTime(ctx.Now())
     , InitDuration(TDuration::Zero())
     , InitDone(false)
     , NewPartition(newPartition)
     , Subscriber(partition, TabletCounters, Tablet)
-    , WriteCycleStartTime(ctx.Now())
     , WriteCycleSize(0)
     , WriteNewSize(0)
     , WriteNewSizeInternal(0)
@@ -468,36 +490,21 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , WriteNewMessagesInternal(0)
     , DiskIsFull(false)
     , HasDataReqNum(0)
-    , WriteQuota(Config.GetPartitionConfig().GetBurstSize(), Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), ctx.Now())
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , ReservedSize(0)
     , Channel(0)
     , TotalChannelWritesByHead(Config.GetPartitionConfig().GetNumChannels(), 0)
     , WriteBufferIsFullCounter(nullptr)
-    , WriteTimestamp(ctx.Now())
     , WriteLagMs(TDuration::Minutes(1), 100)
-    , LastUsedStorageMeterTimestamp(ctx.Now()) {
+{
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
     } else {
         ManageWriteTimestampEstimate = IsLocalDC;
     }
 
-    WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
-
-    CalcTopicWriteQuotaParams();
-
     TabletCounters.Populate(counters);
-
-    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        PartitionCountersLabeled.Reset(
-            new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition,
-                                          config.GetYdbDatabasePath()));
-    } else {
-        PartitionCountersLabeled.Reset(
-            new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition));
-    }
 }
 
 void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx) {
@@ -695,6 +702,32 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
 
 
 void TPartition::Bootstrap(const TActorContext& ctx) {
+    CreationTime = ctx.Now();
+    WriteCycleStartTime = ctx.Now();
+    WriteQuota.ConstructInPlace(Config.GetPartitionConfig().GetBurstSize(),
+                                Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
+                                ctx.Now());
+    WriteTimestamp = ctx.Now();
+    LastUsedStorageMeterTimestamp = ctx.Now();
+    WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
+
+    CalcTopicWriteQuotaParams(AppData()->PQConfig,
+                              IsLocalDC,
+                              TopicConverter,
+                              TabletID,
+                              ctx,
+                              TopicWriteQuoterPath,
+                              TopicWriteQuotaResourcePath);
+
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicConverter->GetClientsideName(),
+                                                                     Partition,
+                                                                     Config.GetYdbDatabasePath()));
+    } else {
+        PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicConverter->GetClientsideName(),
+                                                                     Partition));
+    }
+
     UsersInfoStorage.Init(Tablet, SelfId());
 
     Y_VERIFY(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
@@ -939,7 +972,7 @@ void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
     FilterDeadlinedWrites(ctx);
 
     auto now = ctx.Now();
-    WriteQuota.Update(now);
+    WriteQuota->Update(now);
     for (auto &c : UsersInfoStorage.GetAll()) {
         while (true) {
             c.second.ReadQuota.Update(now);
@@ -1697,9 +1730,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     FillReadFromTimestamps(Config, ctx);
 
-    for (auto& ui : UsersInfoStorage.GetAll()) {
-        ProcessUserActs(ui.second, ctx);
-    }
+    ProcessUserActs(ctx);
 
     ctx.Send(ctx.SelfID, new TEvents::TEvWakeup());
     if (!NewPartition) {
@@ -1753,14 +1784,14 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
         Owners[owner];
         it = Owners.find(owner);
     }
-    WriteQuota.Update(ctx.Now());
+    WriteQuota->Update(ctx.Now());
     if (it->second.NeedResetOwner || ev->Force) { //change owner
         Y_VERIFY(ReservedSize >= it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
 
         it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicConverter->GetClientsideName(), Partition, ctx);//will change OwnerCookie
         //cookie is generated. but answer will be sent when all inflight writes will be done - they in the same queue 'Requests'
-        Requests.emplace_back(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+        Requests.emplace_back(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
 
         TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
         UpdateWriteBufferIsFullState(ctx.Now());
@@ -1824,7 +1855,7 @@ void TPartition::Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorC
 
     UsersInfoStorage.UpdateConfig(ev->Get()->Config);
 
-    WriteQuota.UpdateConfig(Config.GetPartitionConfig().GetBurstSize(), Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond());
+    WriteQuota->UpdateConfig(Config.GetPartitionConfig().GetBurstSize(), Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond());
     if (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
         for (auto& userInfo : UsersInfoStorage.GetAll()) {
             userInfo.second.ReadQuota.UpdateConfig(Config.GetPartitionConfig().GetBurstSize() * 2, Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2);
@@ -1840,9 +1871,7 @@ void TPartition::Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorC
         InitUserInfoForImportantClients(ctx);
         FillReadFromTimestamps(Config, ctx);
 
-        for (auto& ui : UsersInfoStorage.GetAll()) {
-            ProcessUserActs(ui.second, ctx);
-        }
+        ProcessUserActs(ctx);
     }
 
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
@@ -2019,7 +2048,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     result.SetSourceIdCount(SourceIdStorage.GetInMemorySourceIds().size());
     result.SetSourceIdRetentionPeriodSec((ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now())).Seconds());
 
-    result.SetWriteBytesQuota(WriteQuota.GetTotalSpeed());
+    result.SetWriteBytesQuota(WriteQuota->GetTotalSpeed());
 
     TVector<ui64> resSpeed;
     resSpeed.resize(4);
@@ -2187,31 +2216,19 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
-    const TString& user = ev->Get()->ClientId;
-    auto& userInfo = UsersInfoStorage.GetOrCreate(user, ctx);
-
-    if (userInfo.UserActs.size() > MAX_USER_ACTS) {
+    if (size_t count = GetUserActCount(ev->Get()->ClientId); count > MAX_USER_ACTS) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::OVERLOAD,
-            TStringBuilder() << "too big inflight: " << userInfo.UserActs.size());
+            TStringBuilder() << "too big inflight: " << count);
         return;
     }
-
 
     const ui64& offset = ev->Get()->Offset;
     Y_VERIFY(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
 
-    userInfo.UserActs.push_back(ev->Release());
+    AddUserAct(ev->Release());
 
-    ProcessUserActs(userInfo, ctx);
-}
-
-void TPartition::ProcessUserActs(TUserInfo& userInfo, const TActorContext& ctx) {
-    if (userInfo.WriteInProgress || userInfo.UserActs.empty())
-        return;
-    ui64 cookie = ++SetOffsetCookie;
-    CookieToUser[cookie] = userInfo.User;
-    WriteClientInfo(cookie, userInfo, ctx);
+    ProcessUserActs(ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
@@ -3346,19 +3363,19 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
         PartitionCountersLabeled->GetCounters()[METRIC_GAPS_COUNT].Set(gapsCount);
     }
 
-    ui64 speed = WriteQuota.GetTotalSpeed();
+    ui64 speed = WriteQuota->GetTotalSpeed();
     if (speed != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Get()) {
         haveChanges = true;
         PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Set(speed);
     }
 
-    ui64 availSec = WriteQuota.GetAvailableAvgSec(ctx.Now());
+    ui64 availSec = WriteQuota->GetAvailableAvgSec(ctx.Now());
     if (availSec != PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC].Get()) {
         haveChanges = true;
         PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC].Set(availSec);
     }
 
-    ui64 availMin = WriteQuota.GetAvailableAvgMin(ctx.Now());
+    ui64 availMin = WriteQuota->GetAvailableAvgMin(ctx.Now());
     if (availMin != PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN].Get()) {
         haveChanges = true;
         PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN].Set(availMin);
@@ -3389,8 +3406,8 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
     }
     Y_VERIFY(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
 
-    if (WriteQuota.GetTotalSpeed()) {
-        ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / WriteQuota.GetTotalSpeed() / 60;
+    if (WriteQuota->GetTotalSpeed()) {
+        ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / WriteQuota->GetTotalSpeed() / 60;
         if (quotaUsage != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Get()) {
             haveChanges = true;
             PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Set(quotaUsage);
@@ -3485,7 +3502,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         DiskIsFull = !diskIsOk;
 
     if (response.HasCookie()) {
-        HandleSetOffsetResponse(response, ctx);
+        HandleSetOffsetResponse(response.GetCookie(), ctx);
     } else {
         if (ctx.Now() - WriteStartTime > TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetMinWriteLatencyMs())) {
             HandleWriteResponse(ctx);
@@ -3499,83 +3516,283 @@ void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContex
     HandleWriteResponse(ctx);
 }
 
-void TPartition::HandleSetOffsetResponse(NKikimrClient::TResponse& response, const TActorContext& ctx) {
-    ui64 cookie = response.GetCookie();
-    auto it = CookieToUser.find(cookie);
-    Y_VERIFY(it != CookieToUser.end());
-    TString user = it->second;
-    CookieToUser.erase(it);
+void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) {
+    Y_VERIFY(cookie == SET_OFFSET_COOKIE);
 
-    TUserInfo* userInfo = UsersInfoStorage.GetIfExists(user);
-    Y_VERIFY(userInfo);
+    for (auto& user : AffectedUsers) {
+        if (auto* actual = GetPendingUserIfExists(user)) {
+            TUserInfo& userInfo = UsersInfoStorage.GetOrCreate(user, ctx);
+            bool offsetHasChanged = (userInfo.Offset != actual->Offset);
 
-    Y_VERIFY(!userInfo->UserActs.empty());
+            userInfo.Session = actual->Session;
+            userInfo.Generation = actual->Generation;
+            userInfo.Step = actual->Step;
+            userInfo.Offset = actual->Offset;
+            userInfo.ReadRuleGeneration = actual->ReadRuleGeneration;
 
-    auto ev = userInfo->UserActs.front();
-    userInfo->UserActs.pop_front();
+            if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
+                userInfo.ActualTimestamps = false;
+                ReadTimestampForOffset(user, userInfo, ctx);
+            } else {
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_HIT].Increment(1);
+            }
+        } else {
+            UsersInfoStorage.Remove(user, ctx);
+        }
+    }
 
-    ui64 offset = ev->Offset;
-    const TString& session = ev->SessionId;
-    ui32 generation = ev->Generation;
-    ui32 step = ev->Step;
-    const ui64 readRuleGeneration = ev->ReadRuleGeneration;
-    bool setSession = ev->Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION;
-    bool dropSession = ev->Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION;
-    if (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
-        userInfo->ReadRuleGeneration = 0;
-        userInfo->Session = "";
-        userInfo->Generation = userInfo->Step = 0;
-        userInfo->Offset = 0;
+    for (auto& reply : Replies) {
+        ctx.Send(Tablet, reply.release());
+    }
+
+    PendingUsersInfo.clear();
+    Replies.clear();
+    AffectedUsers.clear();
+
+    UsersInfoWriteInProgress = false;
+    ProcessUserActs(ctx);
+}
+
+void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
+{
+    UserActs.push_back(std::move(act));
+    ++UserActCount[UserActs.back()->ClientId];
+}
+
+void TPartition::RemoveUserAct()
+{
+    Y_VERIFY(!UserActs.empty());
+
+    auto p = UserActCount.find(UserActs.front()->ClientId);
+    Y_VERIFY(p != UserActCount.end());
+
+    Y_VERIFY(p->second > 0);
+    if (!--p->second) {
+        UserActCount.erase(p);
+    }
+
+    UserActs.pop_front();
+}
+
+size_t TPartition::GetUserActCount(const TString& consumer) const
+{
+    if (auto i = UserActCount.find(consumer); i != UserActCount.end()) {
+        return i->second;
+    } else {
+        return 0;
+    }    
+}
+
+void TPartition::ProcessUserActs(const TActorContext& ctx)
+{
+    if (UsersInfoWriteInProgress || UserActs.empty()) {
+        return;
+    }
+
+    Y_VERIFY(PendingUsersInfo.empty());
+    Y_VERIFY(Replies.empty());
+    Y_VERIFY(AffectedUsers.empty());
+
+    while (!UserActs.empty() && (AffectedUsers.size() < MAX_USERS)) {
+        ProcessUserAct(*UserActs.front(), ctx);
+
+        RemoveUserAct();
+    }
+
+    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+
+    request->Record.SetCookie(SET_OFFSET_COOKIE);
+
+    for (auto& user : AffectedUsers) {
+        TKeyPrefix ikey(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUser);
+        ikey.Append(user.c_str(), user.size());
+        TKeyPrefix ikeyDeprecated(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUserDeprecated);
+        ikeyDeprecated.Append(user.c_str(), user.size());
+
+        if (TUserInfo* userInfo = GetPendingUserIfExists(user)) {
+            AddCmdWrite(request->Record,
+                        ikey, ikeyDeprecated,
+                        userInfo->Offset, userInfo->Generation, userInfo->Step, userInfo->Session,
+                        userInfo->ReadOffsetRewindSum,
+                        userInfo->ReadRuleGeneration);
+        } else {
+            AddCmdDeleteRange(request->Record,
+                              ikey, ikeyDeprecated);
+        }
+    }
+
+    ctx.Send(Tablet, request.Release());
+    UsersInfoWriteInProgress = true;
+}
+
+void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
+                                const TActorContext& ctx)
+{
+    Y_VERIFY(!UsersInfoWriteInProgress);
+    Y_VERIFY(!UserActs.empty());
+
+    const TString& user = act.ClientId;
+
+    if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
+        switch (act.Type) {
+        case TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE:
+            break;
+        case TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE:
+            return;
+        default:
+            ScheduleReplyError(act.Cookie,
+                               NPersQueue::NErrorCode::WRONG_COOKIE,
+                               "request to deleted read rule");
+            return;
+        }
+    }
+
+    TUserInfo& userInfo = GetOrCreatePendingUser(user, ctx);
+
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
+        LOG_DEBUG_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                    << " user " << user << " drop request"
+        );
+
+        EmulatePostProcessUserAct(act, userInfo, ctx);
+
+        return;
+    }
+
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && act.SessionId == userInfo.Session) { //this is retry of current request, answer ok
+        auto ts = GetTime(userInfo, userInfo.Offset);
+
+        ScheduleReplyGetClientOffsetOk(act.Cookie,
+                                       userInfo.Offset,
+                                       ts.first, ts.second);
+
+        return;
+    }
+
+    if (act.Type != TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && act.Type != TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE
+            && !act.SessionId.empty() && userInfo.Session != act.SessionId //request to wrong session
+            && (act.Type != TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION || !userInfo.Session.empty()) //but allow DropSession request when session is already dropped - for idempotence
+            || (act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && !userInfo.Session.empty()
+                 && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
+        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+
+        ScheduleReplyError(act.Cookie,
+                           NPersQueue::NErrorCode::WRONG_COOKIE,
+                           TStringBuilder() << "set offset in already dead session " << act.SessionId << " actual is " << userInfo.Session);
+
+        return;
+    }
+
+    if (!act.SessionId.empty() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && (i64)act.Offset <= userInfo.Offset) { //this is stale request, answer ok for it
+        ScheduleReplyOk(act.Cookie);
+
+        return;
+    }
+
+    //request in correct session - make it
+
+    ui64 offset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET ? act.Offset : userInfo.Offset);
+    ui64 readRuleGeneration = userInfo.ReadRuleGeneration;
+
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
+        readRuleGeneration = act.ReadRuleGeneration;
+        offset = 0;
+        LOG_DEBUG_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                    << " user " << act.ClientId << " reinit request with generation " << readRuleGeneration
+        );
+    }
+
+    Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
+
+    if (offset > EndOffset) {
+        LOG_ERROR_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "commit to future - topic " << TopicConverter->GetClientsideName() << " partition " << Partition
+                    << " client " << act.ClientId << " EndOffset " << EndOffset << " offset " << offset
+        );
+        act.Offset = EndOffset;
+/*
+        TODO:
+        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
+            TStringBuilder() << "can't commit to future. Offset " << offset << " EndOffset " << EndOffset);
+        userInfo.UserActrs.pop_front();
+        continue;
+*/
+    }
+
+    EmulatePostProcessUserAct(act, userInfo, ctx);
+}
+
+void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
+                                           TUserInfo& userInfo,
+                                           const TActorContext& ctx)
+{
+    const TString& user = act.ClientId;
+    ui64 offset = act.Offset;
+    const TString& session = act.SessionId;
+    ui32 generation = act.Generation;
+    ui32 step = act.Step;
+    const ui64 readRuleGeneration = act.ReadRuleGeneration;
+
+    bool setSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION;
+    bool dropSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION;
+
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
+        userInfo.ReadRuleGeneration = 0;
+        userInfo.Session = "";
+        userInfo.Generation = userInfo.Step = 0;
+        userInfo.Offset = 0;
+
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
                 "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition << " user " << user
-                    << " drop done; " << (userInfo->UserActs.empty() ? "dropping state" : "preserve state for existed init")
+                    << " drop done"
         );
 
-        while (!userInfo->UserActs.empty() && userInfo->UserActs.front()->Type != TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
-            if (userInfo->UserActs.front()->Type != TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
-                ReplyError(ctx, userInfo->UserActs.front()->Cookie, NPersQueue::NErrorCode::WRONG_COOKIE,
-                    TStringBuilder() << "request to deleted read rule ");
-            }
-            userInfo->UserActs.pop_front();
-        }
-        if (userInfo->UserActs.empty()) {
-            UsersInfoStorage.Remove(user, ctx);
-            return;
-        }
-    } else if (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
+        PendingUsersInfo.erase(user);
+    } else if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
                 "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition << " user " << user
                     << " reinit with generation " << readRuleGeneration << " done"
         );
-        userInfo->ReadRuleGeneration = readRuleGeneration;
-        userInfo->Session = "";
-        userInfo->Generation = userInfo->Step = 0;
-        userInfo->Offset = 0;
-        userInfo->ReadScheduled = false;
-        if (userInfo->Important) {
-            userInfo->Offset = StartOffset;
+
+        userInfo.ReadRuleGeneration = readRuleGeneration;
+        userInfo.Session = "";
+        userInfo.Generation = userInfo.Step = 0;
+        userInfo.Offset = 0;
+        userInfo.ReadScheduled = false;
+
+        if (userInfo.Important) {
+            userInfo.Offset = StartOffset;
         }
     } else {
         if (setSession || dropSession) {
-            offset = userInfo->Offset;
-            auto ts = GetTime(*userInfo, offset);
-            ReplyGetClientOffsetOk(ctx, ev->Cookie, offset, ts.first, ts.second);
+            offset = userInfo.Offset;
+            auto ts = GetTime(userInfo, offset);
+
+            ScheduleReplyGetClientOffsetOk(act.Cookie,
+                                           offset,
+                                           ts.first, ts.second);
         } else {
-            ReplyOk(ctx, ev->Cookie);
+            ScheduleReplyOk(act.Cookie);
         }
 
         if (setSession) {
-            userInfo->Session = session;
-            userInfo->Generation = generation;
-            userInfo->Step = step;
+            userInfo.Session = session;
+            userInfo.Generation = generation;
+            userInfo.Step = step;
+        } else if (dropSession) {
+            userInfo.Session = "";
+            userInfo.Generation = 0;
+            userInfo.Step = 0;
         }
-        if (dropSession) {
-            userInfo->Session = "";
-            userInfo->Generation = 0;
-            userInfo->Step = 0;
-        }
+
         Y_VERIFY(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
@@ -3583,21 +3800,177 @@ void TPartition::HandleSetOffsetResponse(NKikimrClient::TResponse& response, con
                     << (setSession || dropSession ? " session" : " offset")
                     << " is set to " << offset << " (startOffset " << StartOffset << ") session " << session
         );
-        i64 poffset = userInfo->Offset;
-        userInfo->Offset = offset;
-        if (poffset != userInfo->Offset && !userInfo->UpdateTimestampFromCache()) {
-            userInfo->ActualTimestamps = false;
-            ReadTimestampForOffset(user, *userInfo, ctx);
-        } else {
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_HIT].Increment(1);
-        }
+
+        userInfo.Offset = offset;
+
         auto counter = setSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
         TabletCounters.Cumulative()[counter].Increment(1);
     }
-    userInfo->WriteInProgress = false;
-    ProcessUserActs(*userInfo, ctx);
 }
 
+void TPartition::ScheduleReplyOk(const ui64 dst)
+{
+    Replies.emplace_back(MakeReplyOk(dst).Release());
+}
+
+void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
+                                                const i64 offset,
+                                                const TInstant writeTimestamp, const TInstant createTimestamp)
+{
+    Replies.emplace_back(MakeReplyGetClientOffsetOk(dst,
+                                                    offset,
+                                                    writeTimestamp, createTimestamp).Release());
+
+}
+
+void TPartition::ScheduleReplyError(const ui64 dst,
+                                    NPersQueue::NErrorCode::EErrorCode errorCode,
+                                    const TString& error)
+{
+    Replies.emplace_back(MakeReplyError(dst,
+                                        errorCode,
+                                        error).Release());
+}
+
+void TPartition::AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
+                                   const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated)
+{
+    auto del = request.AddCmdDeleteRange();
+    auto range = del->MutableRange();
+    range->SetFrom(ikey.Data(), ikey.Size());
+    range->SetTo(ikey.Data(), ikey.Size());
+    range->SetIncludeFrom(true);
+    range->SetIncludeTo(true);
+
+    del = request.AddCmdDeleteRange();
+    range = del->MutableRange();
+    range->SetFrom(ikeyDeprecated.Data(), ikeyDeprecated.Size());
+    range->SetTo(ikeyDeprecated.Data(), ikeyDeprecated.Size());
+    range->SetIncludeFrom(true);
+    range->SetIncludeTo(true);
+}
+
+void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
+                             const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated,
+                             ui64 offset, ui32 gen, ui32 step, const TString& session,
+                             ui64 readOffsetRewindSum,
+                             ui64 readRuleGeneration)
+{
+    TBuffer idata;
+    {
+        NKikimrPQ::TUserInfo userData;
+        userData.SetOffset(offset);
+        userData.SetGeneration(gen);
+        userData.SetStep(step);
+        userData.SetSession(session);
+        userData.SetOffsetRewindSum(readOffsetRewindSum);
+        userData.SetReadRuleGeneration(readRuleGeneration);
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out);
+
+        idata.Append(out.c_str(), out.size());
+    }
+
+    auto write = request.AddCmdWrite();
+    write->SetKey(ikey.Data(), ikey.Size());
+    write->SetValue(idata.Data(), idata.Size());
+    write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+
+    TBuffer idataDeprecated = NDeprecatedUserData::Serialize(offset, gen, step, session);
+
+    write = request.AddCmdWrite();
+    write->SetKey(ikeyDeprecated.Data(), ikeyDeprecated.Size());
+    write->SetValue(idataDeprecated.Data(), idataDeprecated.Size());
+    write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+}
+
+TUserInfo& TPartition::GetOrCreatePendingUser(const TString& user,
+                                              const TActorContext& ctx,
+                                              TMaybe<ui64> readRuleGeneration)
+{
+    TUserInfo* userInfo = UsersInfoStorage.GetIfExists(user);
+
+    auto i = PendingUsersInfo.find(user);
+    if (i == PendingUsersInfo.end()) {
+        auto [p, _] = PendingUsersInfo.emplace(user, UsersInfoStorage.CreateUserInfo(user,
+                                                                                     ctx,
+                                                                                     readRuleGeneration));
+
+        if (userInfo) {
+            p->second.Session = userInfo->Session;
+            p->second.Generation = userInfo->Generation;
+            p->second.Step = userInfo->Step;
+            p->second.Offset = userInfo->Offset;
+            p->second.ReadRuleGeneration = userInfo->ReadRuleGeneration;
+            p->second.ReadScheduled = userInfo->ReadScheduled;
+        }
+
+        userInfo = &p->second;
+    } else {
+        userInfo = &i->second;
+    }
+
+    AffectedUsers.insert(user);
+
+    return *userInfo;
+}
+
+TUserInfo* TPartition::GetPendingUserIfExists(const TString& user)
+{
+    if (auto i = PendingUsersInfo.find(user); i != PendingUsersInfo.end()) {
+        return &i->second;
+    }
+
+    return nullptr;
+}
+
+THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst)
+{
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    NKikimrClient::TResponse& resp = response->Response;
+
+    resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    resp.SetErrorCode(NPersQueue::NErrorCode::OK);
+
+    return response;
+}
+
+THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui64 dst,
+                                                                        const i64 offset,
+                                                                        const TInstant writeTimestamp, const TInstant createTimestamp)
+{
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    NKikimrClient::TResponse& resp = response->Response;
+
+    resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    resp.SetErrorCode(NPersQueue::NErrorCode::OK);
+
+    auto user = resp.MutablePartitionResponse()->MutableCmdGetClientOffsetResult();
+    if (offset > -1)
+        user->SetOffset(offset);
+    if (writeTimestamp)
+        user->SetWriteTimestampMS(writeTimestamp.MilliSeconds());
+    if (createTimestamp) {
+        Y_VERIFY(writeTimestamp);
+        user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
+    }
+    user->SetEndOffset(EndOffset);
+    user->SetSizeLag(GetSizeLag(offset));
+    user->SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
+
+    return response;
+}
+
+THolder<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
+                                                    NPersQueue::NErrorCode::EErrorCode errorCode,
+                                                    const TString& error)
+{
+    //
+    // FIXME(abcdef): в ReplyPersQueueError есть дополнительные действия
+    //
+    return MakeHolder<TEvPQ::TEvError>(errorCode, error, dst);
+}
 
 void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_AVAIL_SIZE_INTERVAL, new TEvPQ::TEvUpdateAvailableSize());
@@ -3649,9 +4022,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     auto now = ctx.Now();
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
-        WriteQuota.Exaust(WriteNewSize, now);
+        WriteQuota->Exaust(WriteNewSize, now);
     } else {
-        WriteQuota.Exaust(WriteCycleSize, now);
+        WriteQuota->Exaust(WriteCycleSize, now);
     }
     for (auto& avg : AvgWriteBytes) {
         avg.Update(WriteNewSize, now);
@@ -3787,11 +4160,11 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
     ui64 size = 0;
-    WriteQuota.Update(ctx.Now());
+    WriteQuota->Update(ctx.Now());
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        Requests.emplace_back(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+        Requests.emplace_back(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
         if (offset && needToChangeOffset)
             ++*offset;
     }
@@ -3837,8 +4210,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
             "SourceId not found, registration cannot be completed");
     }
 
-    WriteQuota.Update(ctx.Now());
-    Requests.emplace_back(TRegisterMessageGroupMsg(*ev->Get()), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+    WriteQuota->Update(ctx.Now());
+    Requests.emplace_back(TRegisterMessageGroupMsg(*ev->Get()), WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -3855,8 +4228,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const
             "SourceId doesn't exist");
     }
 
-    WriteQuota.Update(ctx.Now());
-    Requests.emplace_back(TDeregisterMessageGroupMsg(*ev->Get()), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+    WriteQuota->Update(ctx.Now());
+    Requests.emplace_back(TDeregisterMessageGroupMsg(*ev->Get()), WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
@@ -3894,8 +4267,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TAct
         }
     }
 
-    WriteQuota.Update(ctx.Now());
-    Requests.emplace_back(std::move(msg), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+    WriteQuota->Update(ctx.Now());
+    Requests.emplace_back(std::move(msg), WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
 }
 
 std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool headCleared) {
@@ -3939,144 +4312,6 @@ void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
 void TPartition::BecomeIdle(const TActorContext&) {
     Become(&TThis::StateIdle);
 }
-
-
-void TPartition::WriteClientInfo(const ui64 cookie, TUserInfo& userInfo, const TActorContext& ctx) {
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-
-    Y_VERIFY(!userInfo.WriteInProgress);
-    Y_VERIFY(!userInfo.UserActs.empty());
-    while (!userInfo.UserActs.empty()) {
-        const auto ev = userInfo.UserActs.front().Get();
-
-        TKeyPrefix ikey(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUser);
-        ikey.Append(ev->ClientId.c_str(), ev->ClientId.size());
-        TKeyPrefix ikeyDeprecated(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUserDeprecated);
-        ikeyDeprecated.Append(ev->ClientId.c_str(), ev->ClientId.size());
-
-        if (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
-            LOG_DEBUG_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
-                        << " user " << ev->ClientId << " drop request"
-            );
-
-            auto del = request->Record.AddCmdDeleteRange();
-            auto range = del->MutableRange();
-            range->SetFrom(ikey.Data(), ikey.Size());
-            range->SetTo(ikey.Data(), ikey.Size());
-            range->SetIncludeFrom(true);
-            range->SetIncludeTo(true);
-            del = request->Record.AddCmdDeleteRange();
-            range = del->MutableRange();
-            range->SetFrom(ikeyDeprecated.Data(), ikeyDeprecated.Size());
-            range->SetTo(ikeyDeprecated.Data(), ikeyDeprecated.Size());
-            range->SetIncludeFrom(true);
-            range->SetIncludeTo(true);
-            request->Record.SetCookie(cookie);
-
-            ctx.Send(Tablet, request.Release());
-            userInfo.WriteInProgress = true;
-            return;
-        }
-
-        if (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && ev->SessionId == userInfo.Session) { //this is retry of current request, answer ok
-            auto ts = GetTime(userInfo, userInfo.Offset);
-            ReplyGetClientOffsetOk(ctx, ev->Cookie, userInfo.Offset, ts.first, ts.second);
-            userInfo.UserActs.pop_front();
-            continue;
-        }
-
-        if (ev->Type != TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && ev->Type != TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE
-                && !ev->SessionId.empty() && userInfo.Session != ev->SessionId //request to wrong session
-                && (ev->Type != TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION || !userInfo.Session.empty()) //but allow DropSession request when session is already dropped - for idempotence
-                || (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && !userInfo.Session.empty()
-                     && (ev->Generation < userInfo.Generation || ev->Generation == userInfo.Generation && ev->Step <= userInfo.Step))) { //old generation request
-            TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-            ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::WRONG_COOKIE,
-                TStringBuilder() << "set offset in already dead session " << ev->SessionId << " actual is " << userInfo.Session);
-            userInfo.UserActs.pop_front();
-            continue;
-        }
-
-        if (!ev->SessionId.empty() && ev->Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && (i64)ev->Offset <= userInfo.Offset) { //this is stale request, answer ok for it
-            ReplyOk(ctx, ev->Cookie);
-            userInfo.UserActs.pop_front();
-            continue;
-        }
-
-        //request in correct session - make it
-
-        TString session = (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION ? ev->SessionId : (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION ? "" : userInfo.Session));
-        ui32 gen = (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION ? ev->Generation : (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION ? 0 : userInfo.Generation));
-        ui32 step = (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION ? ev->Step : (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION ? 0 : userInfo.Step));
-        ui64 offset = (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET ? ev->Offset : userInfo.Offset);
-        ui64 readRuleGeneration = userInfo.ReadRuleGeneration;
-        if (ev->Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
-            readRuleGeneration = ev->ReadRuleGeneration;
-            gen = step = 0;
-            offset = 0;
-            session = "";
-            LOG_DEBUG_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
-                        << " user " << ev->ClientId << " reinit request with generation " << readRuleGeneration
-            );
-        }
-
-        Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
-        if (offset > EndOffset) {
-            LOG_ERROR_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "commit to future - topic " << TopicConverter->GetClientsideName() << " partition " << Partition
-                        << " client " << ev->ClientId << " EndOffset " << EndOffset << " offset " << offset
-            );
-            offset = EndOffset;
-            ev->Offset = offset;
-/*
-            TODO:
-            TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-            ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
-                TStringBuilder() << "can't commit to future. Offset " << offset << " EndOffset " << EndOffset);
-            userInfo.UserActrs.pop_front();
-            continue;
-*/
-        }
-
-        TBuffer idata;
-        {
-            NKikimrPQ::TUserInfo userData;
-            userData.SetOffset(offset);
-            userData.SetGeneration(gen);
-            userData.SetStep(step);
-            userData.SetSession(session);
-            userData.SetOffsetRewindSum(userInfo.ReadOffsetRewindSum);
-            userData.SetReadRuleGeneration(readRuleGeneration);
-            TString out;
-            Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out);
-
-            idata.Append(out.c_str(), out.size());
-        }
-        TBuffer idataDeprecated = NDeprecatedUserData::Serialize(offset, gen, step, session);
-
-        auto write = request->Record.AddCmdWrite();
-        write->SetKey(ikey.Data(), ikey.Size());
-        write->SetValue(idata.Data(), idata.Size());
-        write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-        auto write2 = request->Record.AddCmdWrite();
-        write2->SetKey(ikeyDeprecated.Data(), ikeyDeprecated.Size());
-        write2->SetValue(idataDeprecated.Data(), idataDeprecated.Size());
-        write2->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-
-        request->Record.SetCookie(cookie);
-
-        ctx.Send(Tablet, request.Release());
-        userInfo.WriteInProgress = true;
-
-        break;
-    }
-}
-
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
@@ -4134,7 +4369,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
     //Process is following: if batch contains already written messages or only one client message part -> unpack it and process as several TClientBlobs
     //otherwise write this batch as is to head;
 
-    WriteQuota.Update(ctx.Now());
+    WriteQuota->Update(ctx.Now());
 
     while (!Requests.empty() && WriteCycleSize < MAX_WRITE_CYCLE_SIZE) { //head is not too big
         auto pp = Requests.front();
@@ -4171,7 +4406,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 Y_VERIFY(pp.IsOwnership());
             }
 
-            pp.QuotedTime = WriteQuota.GetQuotedTime() - pp.QuotedTime; //change to duration
+            pp.QuotedTime = WriteQuota->GetQuotedTime() - pp.QuotedTime; //change to duration
             pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
             pp.WriteTime = ctx.Now().MilliSeconds();
             Responses.push_back(pp);
@@ -4213,7 +4448,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             }
 
             TString().swap(p.Msg.Data);
-            pp.QuotedTime = WriteQuota.GetQuotedTime() - pp.QuotedTime; //change to duration
+            pp.QuotedTime = WriteQuota->GetQuotedTime() - pp.QuotedTime; //change to duration
             pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
             pp.WriteTime = ctx.Now().MilliSeconds();
             Responses.push_back(pp);
@@ -4427,7 +4662,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
         }
         TString().swap(p.Msg.Data);
-        pp.QuotedTime = WriteQuota.GetQuotedTime() - pp.QuotedTime; //change to duration
+        pp.QuotedTime = WriteQuota->GetQuotedTime() - pp.QuotedTime; //change to duration
         pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
         pp.WriteTime = ctx.Now().MilliSeconds();
         Responses.push_back(pp);
@@ -4612,7 +4847,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
 
     FilterDeadlinedWrites(ctx);
 
-    if (!WriteQuota.CanExaust()) { // Waiting for partition quota.
+    if (!WriteQuota->CanExaust()) { // Waiting for partition quota.
         SetDeadlinesForWrites(ctx);
         return false;
     }
@@ -4731,7 +4966,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
             bool res = ProcessWrites(request.Get(), ctx);
             Y_VERIFY(!res);
         }
-        Y_VERIFY(Requests.empty() || !WriteQuota.CanExaust() || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left
+        Y_VERIFY(Requests.empty() || !WriteQuota->CanExaust() || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;
@@ -4904,35 +5139,6 @@ void TPartition::WriteBlobWithQuota(THolder<TEvKeyValue::TEvRequest>&& request) 
 #endif
 }
 
-void TPartition::CalcTopicWriteQuotaParams() {
-    const auto& pqConfig = AppData()->PQConfig;
-    const auto& quotingConfig = pqConfig.GetQuotingConfig();
-    if (IsQuotingEnabled()) { // Mirrored topics are not quoted in local dc.
-        Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
-
-        // ToDo[migration] - double check
-        auto topicPath = TopicConverter->GetFederationPath();
-
-        // ToDo[migration] - separate quoter paths?
-        auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
-        if (topicParts.size() < 2) {
-            LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
-                       "tablet " << TabletID << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
-            return;
-        }
-        topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic
-
-        TopicWriteQuotaResourcePath = JoinPath(topicParts);
-        TopicWriteQuoterPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << TopicConverter->GetAccount();
-
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
-                   "topicWriteQuutaResourcePath '" << TopicWriteQuotaResourcePath
-                   << "' topicWriteQuoterPath '" << TopicWriteQuoterPath
-                   << "' account " << TopicConverter->GetAccount()
-       );
-    }
-}
-
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
         Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
@@ -4940,10 +5146,10 @@ void TPartition::CreateMirrorerActor() {
     );
 }
 
-bool TPartition::IsQuotingEnabled() const {
-    const auto& pqConfig = AppData()->PQConfig;
-    const auto& quotingConfig = pqConfig.GetQuotingConfig();
-    return IsLocalDC && !pqConfig.GetTopicsAreFirstClassCitizen() && quotingConfig.GetEnableQuoting();
+bool TPartition::IsQuotingEnabled() const
+{
+    return NPQ::IsQuotingEnabled(AppData()->PQConfig,
+                                 IsLocalDC);
 }
 
 } // namespace NKikimr::NPQ

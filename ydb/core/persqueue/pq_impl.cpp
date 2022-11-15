@@ -658,7 +658,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId, TPartitionInfo(
                 ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                            IsLocalDC, DCId, Config, *Counters, ctx, true)),
+                                            IsLocalDC, DCId, Config, *Counters,
+                                            true)),
                 GetPartitionKeyRange(partition),
                 true,
                 *Counters
@@ -788,7 +789,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                        IsLocalDC, DCId, Config, *Counters, ctx, false)),
+                                        IsLocalDC, DCId, Config, *Counters,
+                                        false)),
             GetPartitionKeyRange(partition),
             false,
             *Counters

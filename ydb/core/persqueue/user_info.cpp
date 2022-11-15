@@ -152,11 +152,14 @@ THashMap<TString, TUserInfo>& TUsersInfoStorage::GetAll() {
     return UsersInfo;
 }
 
-TUserInfo& TUsersInfoStorage::Create(
-    const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
-    ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum, TInstant readFromTimestamp
-) {
-
+TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
+                                            const TString& user,
+                                            const ui64 readRuleGeneration,
+                                            bool important,
+                                            const TString& session,
+                                            ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
+                                            TInstant readFromTimestamp) const
+{
     ui64 burst = 1'000'000'000, speed = 1'000'000'000;
     if (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
         burst = Config.GetPartitionConfig().GetBurstSize() * 2;
@@ -175,15 +178,33 @@ TUserInfo& TUsersInfoStorage::Create(
     bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
 
     TMaybe<TString> dbPath = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() ? TMaybe<TString>(DbPath) : Nothing();
-    auto result = UsersInfo.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(user),
-        std::forward_as_tuple(
-                ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
-                session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, dbPath, FolderId,
-                meterRead, burst, speed
-        )
-    );
+
+    return {
+        ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
+        session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, dbPath, FolderId,
+        meterRead, burst, speed
+    };
+}
+
+TUserInfo TUsersInfoStorage::CreateUserInfo(const TString& user,
+                                            const TActorContext& ctx,
+                                            TMaybe<ui64> readRuleGeneration) const
+{
+    return CreateUserInfo(ctx,
+                          user,
+                          readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration,
+                          false,
+                          "",
+                          0, 0, 0, 0,
+                          TInstant::Zero());
+}
+
+TUserInfo& TUsersInfoStorage::Create(
+    const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
+    ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum, TInstant readFromTimestamp
+) {
+    auto userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, session, gen, step, offset, readOffsetRewindSum, readFromTimestamp);
+    auto result = UsersInfo.emplace(user, std::move(userInfo));
     Y_VERIFY(result.second);
     return result.first->second;
 }

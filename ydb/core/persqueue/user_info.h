@@ -179,8 +179,6 @@ struct TUserInfo {
     ui64 ReadRuleGeneration = 0;
     NPersQueue::TTopicConverterPtr TopicConverter;
 
-    std::deque<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>> UserActs;
-
     std::deque<std::pair<TReadInfo, ui64>> ReadRequests;
 
     TQuotaTracker ReadQuota;
@@ -201,8 +199,6 @@ struct TUserInfo {
     std::shared_ptr<TPercentileCounter> ReadTimeLag;
     bool DoInternalRead = false;
     bool MeterRead = true;
-
-    bool WriteInProgress = false;
 
     bool Parsed = false;
 
@@ -507,6 +503,9 @@ public:
 
     THashMap<TString, TUserInfo>& GetAll();
 
+    TUserInfo CreateUserInfo(const TString& user,
+                             const TActorContext& ctx,
+                             TMaybe<ui64> readRuleGeneration = {}) const;
     TUserInfo& Create(
         const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString &session,
         ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum, TInstant readFromTimestamp
@@ -518,6 +517,14 @@ public:
 
 private:
     THolder<TReadSpeedLimiterHolder> CreateReadSpeedLimiter(const TString& user) const;
+
+    TUserInfo CreateUserInfo(const TActorContext& ctx,
+                             const TString& user,
+                             const ui64 readRuleGeneration,
+                             bool important,
+                             const TString& session,
+                             ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
+                             TInstant readFromTimestamp) const;
 
 private:
     THashMap<TString, TUserInfo> UsersInfo;
@@ -536,7 +543,7 @@ private:
     TString DbId;
     TString DbPath;
     TString FolderId;
-    ui64 CurReadRuleGeneration;
+    mutable ui64 CurReadRuleGeneration;
 };
 
 } //NPQ

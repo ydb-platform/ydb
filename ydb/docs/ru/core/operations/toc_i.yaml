@@ -2,5 +2,5 @@ items:
 - name: Чтение и запись данных
   href: crud.md
   hidden: true
-- name: Пользовательские атрибуты талицы
+- name: Пользовательские атрибуты таблицы
   href: manage-users-attr.md

@@ -214,14 +214,18 @@ public:
            case NUdf::EDataSlot::Int16:
                return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<i16, arrow::Int16Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint16:
+           case NUdf::EDataSlot::Date:
                return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<ui16, arrow::UInt16Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int32:
                return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<i32, arrow::Int32Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint32:
+           case NUdf::EDataSlot::Datetime:
                return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<ui32, arrow::UInt32Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int64:
+           case NUdf::EDataSlot::Interval:
                return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<i64, arrow::Int64Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint64:
+           case NUdf::EDataSlot::Timestamp:
                return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<ui64, arrow::UInt64Scalar, IsMin>>(filterColumn, argsColumns[0]);
            default:
                throw yexception() << "Unsupported MIN/MAX input type";
@@ -237,14 +241,18 @@ public:
            case NUdf::EDataSlot::Int16:
                return std::make_unique<TMinMaxBlockAggregator<i16, arrow::Int16Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint16:
+           case NUdf::EDataSlot::Date:
                return std::make_unique<TMinMaxBlockAggregator<ui16, arrow::UInt16Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int32:
                return std::make_unique<TMinMaxBlockAggregator<i32, arrow::Int32Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint32:
+           case NUdf::EDataSlot::Datetime:
                return std::make_unique<TMinMaxBlockAggregator<ui32, arrow::UInt32Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int64:
+           case NUdf::EDataSlot::Interval:
                return std::make_unique<TMinMaxBlockAggregator<i64, arrow::Int64Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint64:
+           case NUdf::EDataSlot::Timestamp:
                return std::make_unique<TMinMaxBlockAggregator<ui64, arrow::UInt64Scalar, IsMin>>(filterColumn, argsColumns[0]);
            default:
                throw yexception() << "Unsupported MIN/MAX input type";

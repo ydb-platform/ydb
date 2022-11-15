@@ -398,14 +398,18 @@ private:
         case NUdf::EDataSlot::Int16:
             CompressArray(src->GetValues<i16>(1),  bitmapData, bitmapOffset, (i16*)mutDstBase  + dstPos, length); break;
         case NUdf::EDataSlot::Uint16:
+        case NUdf::EDataSlot::Date:
             CompressArray(src->GetValues<ui16>(1), bitmapData, bitmapOffset, (ui16*)mutDstBase + dstPos, length); break;
         case NUdf::EDataSlot::Int32:
             CompressArray(src->GetValues<i32>(1),  bitmapData, bitmapOffset, (i32*)mutDstBase  + dstPos, length); break;
         case NUdf::EDataSlot::Uint32:
+        case NUdf::EDataSlot::Datetime:
             CompressArray(src->GetValues<ui32>(1), bitmapData, bitmapOffset, (ui32*)mutDstBase + dstPos, length); break;
         case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
             CompressArray(src->GetValues<i64>(1),  bitmapData, bitmapOffset, (i64*)mutDstBase  + dstPos, length); break;
         case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Timestamp:
             CompressArray(src->GetValues<ui64>(1), bitmapData, bitmapOffset, (ui64*)mutDstBase + dstPos, length); break;
         default:
             MKQL_ENSURE(false, "Unsupported data slot");

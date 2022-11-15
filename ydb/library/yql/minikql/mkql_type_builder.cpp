@@ -1335,21 +1335,25 @@ bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::
         type = arrow::int8();
         return true;
     case NUdf::EDataSlot::Uint16:
+    case NUdf::EDataSlot::Date:
         type = arrow::uint16();
         return true;
     case NUdf::EDataSlot::Int16:
         type = arrow::int16();
         return true;
     case NUdf::EDataSlot::Uint32:
+    case NUdf::EDataSlot::Datetime:
         type = arrow::uint32();
         return true;
     case NUdf::EDataSlot::Int32:
         type = arrow::int32();
         return true;
     case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Interval:
         type = arrow::int64();
         return true;
     case NUdf::EDataSlot::Uint64:
+    case NUdf::EDataSlot::Timestamp:
         type = arrow::uint64();
         return true;
     default:

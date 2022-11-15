@@ -191,14 +191,18 @@ public:
            case NUdf::EDataSlot::Int16:
                return std::make_unique<TSumBlockAggregatorNullableOrScalar<i16, i64, arrow::Int16Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint16:
+           case NUdf::EDataSlot::Date:
                return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui16, ui64, arrow::UInt16Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int32:
                return std::make_unique<TSumBlockAggregatorNullableOrScalar<i32, i64, arrow::Int32Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint32:
+           case NUdf::EDataSlot::Datetime:
                return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui32, ui64, arrow::UInt32Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int64:
+           case NUdf::EDataSlot::Interval:
                return std::make_unique<TSumBlockAggregatorNullableOrScalar<i64, i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint64:
+           case NUdf::EDataSlot::Timestamp:
                return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui64, ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0]);
            default:
                throw yexception() << "Unsupported SUM input type";
@@ -212,14 +216,18 @@ public:
            case NUdf::EDataSlot::Int16:
                return std::make_unique<TSumBlockAggregator<i16, i64, arrow::Int16Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint16:
+           case NUdf::EDataSlot::Date:
                return std::make_unique<TSumBlockAggregator<ui16, ui64, arrow::UInt16Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int32:
                return std::make_unique<TSumBlockAggregator<i32, i64, arrow::Int32Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint32:
+           case NUdf::EDataSlot::Datetime:
                return std::make_unique<TSumBlockAggregator<ui32, ui64, arrow::UInt32Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int64:
+           case NUdf::EDataSlot::Interval:
                return std::make_unique<TSumBlockAggregator<i64, i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint64:
+           case NUdf::EDataSlot::Timestamp:
                return std::make_unique<TSumBlockAggregator<ui64, ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0]);
            default:
                throw yexception() << "Unsupported SUM input type";
@@ -246,14 +254,18 @@ public:
        case NUdf::EDataSlot::Int16:
            return std::make_unique<TAvgBlockAggregator<i16, arrow::Int16Scalar>>(filterColumn, argsColumns[0], holderFactory);
        case NUdf::EDataSlot::Uint16:
+       case NUdf::EDataSlot::Date:
            return std::make_unique<TAvgBlockAggregator<ui16, arrow::UInt16Scalar>>(filterColumn, argsColumns[0], holderFactory);
        case NUdf::EDataSlot::Int32:
            return std::make_unique<TAvgBlockAggregator<i32, arrow::Int32Scalar>>(filterColumn, argsColumns[0], holderFactory);
        case NUdf::EDataSlot::Uint32:
+       case NUdf::EDataSlot::Datetime:
            return std::make_unique<TAvgBlockAggregator<ui32, arrow::UInt32Scalar>>(filterColumn, argsColumns[0], holderFactory);
        case NUdf::EDataSlot::Int64:
+       case NUdf::EDataSlot::Interval:
            return std::make_unique<TAvgBlockAggregator<i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0], holderFactory);
        case NUdf::EDataSlot::Uint64:
+       case NUdf::EDataSlot::Timestamp:
            return std::make_unique<TAvgBlockAggregator<ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0], holderFactory);
        default:
            throw yexception() << "Unsupported AVG input type";

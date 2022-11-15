@@ -99,14 +99,18 @@ std::unique_ptr<TBlockBuilderBase> MakeBlockBuilder(TComputationContext& ctx, NU
     case NUdf::EDataSlot::Int16:
         return std::make_unique<TFixedSizeBlockBuilder<i16, arrow::Int16Builder>>(ctx, arrow::int16());
     case NUdf::EDataSlot::Uint16:
+    case NUdf::EDataSlot::Date:
         return std::make_unique<TFixedSizeBlockBuilder<ui16, arrow::UInt16Builder>>(ctx, arrow::uint16());
     case NUdf::EDataSlot::Int32:
         return std::make_unique<TFixedSizeBlockBuilder<i32, arrow::Int32Builder>>(ctx, arrow::int32());
     case NUdf::EDataSlot::Uint32:
+    case NUdf::EDataSlot::Datetime:
         return std::make_unique<TFixedSizeBlockBuilder<ui32, arrow::UInt32Builder>>(ctx, arrow::uint32());
     case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Interval:
         return std::make_unique<TFixedSizeBlockBuilder<i64, arrow::Int64Builder>>(ctx, arrow::int64());
     case NUdf::EDataSlot::Uint64:
+    case NUdf::EDataSlot::Timestamp:
         return std::make_unique<TFixedSizeBlockBuilder<ui64, arrow::UInt64Builder>>(ctx, arrow::uint64());
     default:
         MKQL_ENSURE(false, "Unsupported data slot");
@@ -290,14 +294,18 @@ std::unique_ptr<TBlockReaderBase> MakeBlockReader(NUdf::EDataSlot slot) {
     case NUdf::EDataSlot::Int16:
         return std::make_unique<TFixedSizeBlockReader<i16>>();
     case NUdf::EDataSlot::Uint16:
+    case NUdf::EDataSlot::Date:
         return std::make_unique<TFixedSizeBlockReader<ui16>>();
     case NUdf::EDataSlot::Int32:
         return std::make_unique<TFixedSizeBlockReader<i32>>();
     case NUdf::EDataSlot::Uint32:
+    case NUdf::EDataSlot::Datetime:
         return std::make_unique<TFixedSizeBlockReader<ui32>>();
     case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Interval:
         return std::make_unique<TFixedSizeBlockReader<i64>>();
     case NUdf::EDataSlot::Uint64:
+    case NUdf::EDataSlot::Timestamp:
         return std::make_unique<TFixedSizeBlockReader<ui64>>();
     default:
         MKQL_ENSURE(false, "Unsupported data slot");
@@ -531,18 +539,22 @@ public:
                 result = arrow::Datum(static_cast<int16_t>(value.Get<i16>()));
                 break;
             case NUdf::EDataSlot::Uint16:
+            case NUdf::EDataSlot::Date:
                 result = arrow::Datum(static_cast<uint16_t>(value.Get<ui16>()));
                 break;
             case NUdf::EDataSlot::Int32:
                 result = arrow::Datum(static_cast<int32_t>(value.Get<i32>()));
                 break;
             case NUdf::EDataSlot::Uint32:
+            case NUdf::EDataSlot::Datetime:
                 result = arrow::Datum(static_cast<uint32_t>(value.Get<ui32>()));
                 break;
             case NUdf::EDataSlot::Int64:
+            case NUdf::EDataSlot::Interval:
                 result = arrow::Datum(static_cast<int64_t>(value.Get<i64>()));
                 break;
             case NUdf::EDataSlot::Uint64:
+            case NUdf::EDataSlot::Timestamp:
                 result = arrow::Datum(static_cast<uint64_t>(value.Get<ui64>()));
                 break;
             default:

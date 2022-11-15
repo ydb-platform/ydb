@@ -371,6 +371,14 @@ public:
                     return true;
                 }
 
+                if (name == "filepattern"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "file_pattern"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
                 YQL_ENSURE(name == "projection"sv);
                 haveProjection = true;
                 if (!EnsureAtom(setting.Tail(), ctx)) {
@@ -386,7 +394,7 @@ public:
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
                                      { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv,
-                                       "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv }, validator, ctx))
+                                       "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv }, validator, ctx))
             {
                 return TStatus::Error;
             }

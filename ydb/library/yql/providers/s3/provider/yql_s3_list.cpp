@@ -22,56 +22,6 @@ namespace NYql {
 
 namespace {
 
-TString RegexFromWildcards(const std::string_view& pattern) {
-    const auto& escaped = NS3::EscapeRegex(ToString(pattern));
-    TStringBuilder result;
-    result << "(?s)";
-    bool slash = false;
-    bool group = false;
-
-    for (const char& c : escaped) {
-        switch (c) {
-            case '{':
-                result << '(';
-                group = true;
-                slash = false;
-                break;
-            case '}':
-                result << ')';
-                group = false;
-                slash = false;
-                break;
-            case ',':
-                if (group)
-                    result << '|';
-                else
-                    result << "\\,";
-                slash = false;
-                break;
-            case '\\':
-                if (slash)
-                    result << "\\\\";
-                slash = !slash;
-                break;
-            case '*':
-                result << "(.*)";
-                slash = false;
-                break;
-            case '?':
-                result << "(.)";
-                slash = false;
-                break;
-            default:
-                if (slash)
-                    result << '\\';
-                result << c;
-                slash = false;
-                break;
-        }
-    }
-    return result;
-}
-
 using namespace NThreading;
 
 class TS3Lister : public IS3Lister {
@@ -95,10 +45,9 @@ private:
             };
         }
 
-        const auto regex = isRegex ? pattern : RegexFromWildcards(pattern);
+        const auto regex = isRegex ? pattern : NS3::RegexFromWildcards(pattern);
         auto re = std::make_shared<RE2>(re2::StringPiece(regex), RE2::Options());
         YQL_ENSURE(re->ok());
-        YQL_ENSURE(re->NumberOfCapturingGroups() > 0);
 
         const size_t numGroups = re->NumberOfCapturingGroups();
         YQL_CLOG(INFO, ProviderS3) << "Got prefix: '" << prefix << "', regex: '" << regex
@@ -108,7 +57,7 @@ private:
         auto reArgs = std::make_shared<std::vector<re2::RE2::Arg>>(numGroups);
         auto reArgsPtr = std::make_shared<std::vector<re2::RE2::Arg*>>(numGroups);
 
-        for (size_t i = 0; i < size_t(numGroups); ++i) {
+        for (size_t i = 0; i < numGroups; ++i) {
             (*reArgs)[i] = &(*groups)[i];
             (*reArgsPtr)[i] = &(*reArgs)[i];
         }

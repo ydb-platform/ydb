@@ -31,12 +31,31 @@ std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
     return {};
 }
 
+bool FindFilePattern(const TExprNode& settings, TExprContext& ctx, TString& filePattern) {
+    auto filePatternSetting = GetSetting(settings, "filepattern");
+    if (!filePatternSetting) {
+        // it is ok if settings is not set
+        return true;
+    }
+
+    if (!EnsureTupleSize(*filePatternSetting, 2, ctx)) {
+        return false;
+    }
+
+    if (!EnsureAtom(filePatternSetting->Tail(), ctx)) {
+        return false;
+    }
+
+    filePattern = filePatternSetting->Tail().Content();
+    return true;
+}
+
 using namespace NPathGenerator;
 
 struct TListRequest {
     TString Token;
     TString Url;
-    TString Pattern;
+    TString Pattern; // can contain capturing groups
     TMaybe<TString> PathPrefix; // set iff Pattern is regex (not glob pattern)
     TVector<IPathGenerator::TColumnWithValue> ColumnValues;
 };
@@ -303,8 +322,7 @@ private:
                                 extraValues->push_back(std::move(value));
                             }
                         } else {
-                            // last entry matches file name
-                            YQL_ENSURE(entry.MatchedGlobs.size() == generatedColumnsConfig->Columns.size() + 1);
+                            YQL_ENSURE(entry.MatchedGlobs.size() == generatedColumnsConfig->Columns.size());
                             for (size_t i = 0; i < generatedColumnsConfig->Columns.size(); ++i) {
                                 TExtraColumnValue value;
                                 value.Name = generatedColumnsConfig->Columns[i];
@@ -461,8 +479,6 @@ private:
     }
 
     bool LaunchListsForNode(const TDqSourceWrap& source, TVector<NThreading::TFuture<IS3Lister::TListResult>>& futures, TExprContext& ctx) {
-        Y_UNUSED(ctx);
-
         TS3DataSource dataSource = source.DataSource().Maybe<TS3DataSource>().Cast();
         const auto& connect = State_->Configuration->Clusters.at(dataSource.Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(dataSource.Cluster().StringValue());
@@ -471,15 +487,25 @@ private:
         const TString url = connect.Url;
         const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
-        for (auto path : source.Input().Maybe<TS3ParseSettingsBase>().Cast().Paths()) {
+        auto s3ParseSettingsBase = source.Input().Maybe<TS3ParseSettingsBase>().Cast();
+        TString filePattern;
+        if (s3ParseSettingsBase.Ref().ChildrenSize() > TS3ParseSettingsBase::idx_Settings) {
+            const auto& settings = *s3ParseSettingsBase.Ref().Child(TS3ParseSettingsBase::idx_Settings);
+            if (!FindFilePattern(settings, ctx, filePattern)) {
+                return false;
+            }
+        }
+        const TString effectiveFilePattern = filePattern ? filePattern : "*";
+
+        for (auto path : s3ParseSettingsBase.Paths()) {
             NS3Details::TPathList directories;
             NS3Details::UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), directories);
 
             TListRequest req;
             req.Token = tokenStr;
             req.Url = url;
-            for (auto directory : directories) {
-                req.Pattern = NS3::NormalizePath(TStringBuilder() << std::get<0>(directory) << "/*");
+            for (const auto& directory : directories) {
+                req.Pattern = NS3::NormalizePath(TStringBuilder() << std::get<0>(directory) << "/" << effectiveFilePattern);
                 RequestsByNode_[source.Raw()].push_back(req);
                 if (PendingRequests_.find(req) == PendingRequests_.end()) {
                     auto future = Lister_->List(req.Token, req.Url, req.Pattern);
@@ -550,6 +576,12 @@ private:
             projectionPos = projectionSetting->Tail().Pos();
         }
 
+        TString filePattern;
+        if (!FindFilePattern(settings, ctx, filePattern)) {
+            return false;
+        }
+        const TString effectiveFilePattern = filePattern ? filePattern : "*";
+
         TVector<TString> paths;
         const auto& object = read.Arg(2).Ref();
         YQL_ENSURE(object.IsCallable("MrTableConcat"));
@@ -589,9 +621,14 @@ private:
                     return false;
                 }
                 if (path.EndsWith("/")) {
-                    req.Pattern = path + "*";
+                    req.Pattern = path + effectiveFilePattern;
                 } else {
                     // treat paths as regular wildcard patterns
+                    if (filePattern) {
+                        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path pattern cannot be used with file_pattern"));
+                        return false;
+                    }
+
                     req.Pattern = path;
                 }
                 req.Pattern = NS3::NormalizePath(req.Pattern);
@@ -623,7 +660,7 @@ private:
                         }
                         generated << NS3::EscapeRegex(col) << "=(.*?)";
                     }
-                    generated << "/(.*)";
+                    generated << '/' << NS3::RegexFromWildcards(effectiveFilePattern);
                     req.Pattern = generated;
                     reqs.push_back(req);
                 } else {

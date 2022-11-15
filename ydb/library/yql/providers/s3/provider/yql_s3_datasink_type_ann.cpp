@@ -164,10 +164,15 @@ private:
                     return true;
                 }
 
+                if (name == "filepattern") {
+                    // just skip, used in reading only
+                    return true;
+                }
+
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "csvdelimiter"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "csvdelimiter", "filepattern"}, validator, ctx)) {
                 return TStatus::Error;
             }
         }

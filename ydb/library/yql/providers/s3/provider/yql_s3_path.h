@@ -16,5 +16,8 @@ inline bool HasWildcards(const TString& path) {
 
 /// quotes regex meta characters
 TString EscapeRegex(const TString& str);
+TString EscapeRegex(const std::string_view& str);
+
+TString RegexFromWildcards(const std::string_view& pattern);
 
 }

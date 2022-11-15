@@ -106,22 +106,29 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
 }
 
 NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting) {
-     NYql::TIssues issues;
+    NYql::TIssues issues;
     for (const auto& [key, value]: formatSetting) {
-        if (key == "data.interval.unit") {
+        if (key == "file_pattern"sv) {
+            continue;
+        }
+
+        if (key == "data.interval.unit"sv) {
             if (!IsValidIntervalUnit(value)) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown value for data.interval.unit " + value));
             }
-        } else if (key == "csv_delimiter") {
-            if (format != "csv_with_names") {
+            continue;
+        }
+        if (key == "csv_delimiter"sv) {
+            if (format != "csv_with_names"sv) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "csv_delimiter should be used only with format csv_with_names"));
             }
             if (value.size() != 1) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "csv_delimiter should contain only one character"));
             }
-        } else {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown format setting " + key));
+            continue;
         }
+
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown format setting " + key));
     }
     return issues;
 }

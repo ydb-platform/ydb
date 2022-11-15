@@ -34,8 +34,62 @@ size_t GetFirstWildcardPos(const TString& path) {
     return path.find_first_of("*?{");
 }
 
-TString EscapeRegex(const TString& str) {
+TString EscapeRegex(const std::string_view& str) {
     return RE2::QuoteMeta(re2::StringPiece(str));
+
+}
+
+TString EscapeRegex(const TString& str) {
+    return EscapeRegex(static_cast<std::string_view>(str));
+}
+
+TString RegexFromWildcards(const std::string_view& pattern) {
+    const auto& escaped = EscapeRegex(pattern);
+    TStringBuilder result;
+    bool slash = false;
+    bool group = false;
+
+    for (const char& c : escaped) {
+        switch (c) {
+            case '{':
+                result << "(?:";
+                group = true;
+                slash = false;
+                break;
+            case '}':
+                result << ')';
+                group = false;
+                slash = false;
+                break;
+            case ',':
+                if (group)
+                    result << '|';
+                else
+                    result << "\\,";
+                slash = false;
+                break;
+            case '\\':
+                if (slash)
+                    result << "\\\\";
+                slash = !slash;
+                break;
+            case '*':
+                result << ".*";
+                slash = false;
+                break;
+            case '?':
+                result << ".";
+                slash = false;
+                break;
+            default:
+                if (slash)
+                    result << '\\';
+                result << c;
+                slash = false;
+                break;
+        }
+    }
+    return result;
 }
 
 }

@@ -325,7 +325,10 @@ TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueB
 
 TString SerializeJsonDom(const NUdf::TUnboxedValuePod dom, bool skipMapEntity, bool encodeUtf8) {
     TStringStream output;
-    TJsonWriter writer(&output, /* formatOutput */ false);
+    TJsonWriterConfig config;
+    config.SetFormatOutput(false);
+    config.FloatToStringMode = EFloatToStringMode::PREC_AUTO;
+    TJsonWriter writer(&output, config);
     if (skipMapEntity)
         if (encodeUtf8)
             WriteValue<true, true>(dom, writer);

@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
         )", {"city"});
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
-        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "/${city}/");
+        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${city}/");
         UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
         const auto& rule = result.Rules.front();
         UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::ENUM);
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
         )", {"city"});
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
-        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "/${city}/");
+        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${city}/");
         UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
         const auto& rule = result.Rules.front();
         UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::ENUM);
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : "MSK,SPB",
                 "storage.location.template" : "/${city}/"
             }
-        )", {"aba"}), yexception, "Template /${city}/ must include ${aba}");
+        )", {"aba"}), yexception, "Template ${city}/ must include ${aba}");
     }
 
     Y_UNIT_TEST(InvalidProjectionTemplate) {
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : "MSK,SPB",
                 "storage.location.template" : "/${device_id}/"
             }
-        )", {"city"}), yexception, "Template /${device_id}/ must include ${city}");
+        )", {"city"}), yexception, "Template ${device_id}/ must include ${city}");
     }
 
     Y_UNIT_TEST(InvalidTemplate) {
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : "MSK,SPB",
                 "storage.location.template" : "/${city}/${device_id}/"
             }
-        )", {"city"}), yexception, "Colum named device_id does not exist for template /${city}/${device_id}");
+        )", {"city"}), yexception, "Colum named device_id does not exist for template ${city}/${device_id}/");
     }
 
     Y_UNIT_TEST(StartSubstition) {
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
         )", {"city", "device_id"});
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
-        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "/${city}/${device_id}/");
+        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${city}/${device_id}/");
         UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
         const auto& rule = result.Rules.front();
         UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::ENUM);
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
         )", {"id"});
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
-        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "/${id}/");
+        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${id}/");
         UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
         const auto& rule = result.Rules.front();
         UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::INTEGER);
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
         )", {"id"});
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, false);
-        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "/${id}/");
+        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${id}/");
         UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
         const auto& rule = result.Rules.front();
         UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::INTEGER);

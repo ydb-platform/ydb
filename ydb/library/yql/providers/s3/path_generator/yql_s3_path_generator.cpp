@@ -348,9 +348,11 @@ private:
         }
 
         if (!config) {
+            TStringBuilder builder;
             for (const auto& columnName: partitionedBy) {
-                Config.LocationTemplate += "/" + columnName + "=${" +  columnName + "}";
+                builder << columnName << "=${" <<  columnName << "}/";
             }
+            Config.LocationTemplate = builder;
             return;
         }
 
@@ -407,7 +409,10 @@ private:
             ythrow yexception() << "The key must be storage.location.template, but received " << key;
         }
 
-        Config.LocationTemplate = GetStringOrThrow(json, "The storage.location.template must be a string");
+        TString locationTemplate = GetStringOrThrow(json, "The storage.location.template must be a string");
+        // normalize: no slash at the begginging, single slash at the end
+        locationTemplate = StripString(locationTemplate, EqualsStripAdapter('/'));
+        Config.LocationTemplate = TStringBuilder() << locationTemplate << '/';
     }
 
 

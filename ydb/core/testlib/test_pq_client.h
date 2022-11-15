@@ -1000,7 +1000,19 @@ public:
 
     }
 
-    void DeleteTopic2(const TString& name, NPersQueue::NErrorCode::EErrorCode expectedStatus = NPersQueue::NErrorCode::OK, bool waitForTopicDeletion = true) {
+    NYdb::TStatus DropTopic(const TString& path) {
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        Cerr << "Drop topic: " << path << Endl;
+        auto res = pqClient.DropTopic(path).GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+        return res;
+    }
+
+    void DeleteTopic2(
+            const TString& name, NPersQueue::NErrorCode::EErrorCode expectedStatus = NPersQueue::NErrorCode::OK,
+            bool waitForTopicDeletion = true
+    ) {
+
         Y_VERIFY(name.StartsWith("rt3."));
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDeletePQ{name}.GetRequest();
 

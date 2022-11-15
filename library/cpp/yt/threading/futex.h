@@ -1,3 +1,5 @@
+#pragma once
+
 #include <util/datetime/base.h>
 
 namespace NYT::NThreading {

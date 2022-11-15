@@ -177,7 +177,8 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
 
     bool isDataShard = Self->Tables.contains(pathId);
     bool isOlapStore = Self->OlapStores.contains(pathId);
-    if (!isDataShard && !isOlapStore) {
+    bool isColumnTable = Self->ColumnTables.contains(pathId);
+    if (!isDataShard && !isOlapStore && !isColumnTable) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unexpected stats from shard " << datashardId);
         return true;
     }
@@ -278,6 +279,12 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
         olapStore->UpdateShardStats(shardIdx, newStats);
         newAggrStats = olapStore->GetStats().Aggregated;
         updateSubdomainInfo = true;
+    } else if (isColumnTable) {
+        TColumnTableInfo::TPtr columnTable = Self->ColumnTables[pathId];
+        oldAggrStats = columnTable->GetStats().Aggregated;
+        columnTable->UpdateShardStats(shardIdx, newStats);
+        newAggrStats = columnTable->GetStats().Aggregated;
+        updateSubdomainInfo = true;
     }
 
     if (updateSubdomainInfo) {
@@ -308,7 +315,7 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
             Self->BuildStatsForCollector(pathId, shardIdx, datashardId, nodeId, startTime, newStats).Release());
     }
 
-    if (isOlapStore) {
+    if (isOlapStore || isColumnTable) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Aggregated stats for pathId " << pathId.LocalPathId
                     << ": RowCount " << newAggrStats.RowCount << ", DataSize " << newAggrStats.DataSize);

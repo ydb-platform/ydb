@@ -128,6 +128,8 @@ void TTxWrite::Complete(const TActorContext& ctx) {
 
 // EvWrite -> WriteActor (attach BlobId without proto changes) -> EvWrite
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    LastAccessTime = TAppData::TimeProvider->Now();
+
     OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
 
     auto& record = Proto(ev->Get());

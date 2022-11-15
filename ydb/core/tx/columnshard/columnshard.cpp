@@ -320,7 +320,7 @@ void TColumnShard::SendPeriodicStats() {
             tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
             // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
             //tabletStats->SetIndexSize(); // TODO: calc size of internal tables
-            //tabletStats->SetLastAccessTime(); // TODO: last read/write time
+            tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
             tabletStats->SetLastUpdateTime(lastIndexUpdate.PlanStep);
         }
     }

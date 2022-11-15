@@ -889,9 +889,9 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
     TMaybe<TPathId> OlapStorePathId; // PathId of the table store
     TMaybe<TOlapSchema> Schema; // schema for standalone table
 
-    // Current list of column shards
-    TVector<ui64> ColumnShards;
+    TVector<ui64> ColumnShards; // Current list of column shards
     TVector<TShardIdx> OwnedColumnShards;
+    TAggregatedStats Stats;
 
     TColumnTableInfo() = default;
     TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
@@ -909,7 +909,14 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
         return !OwnedColumnShards.empty();
     }
 
-    // TODO: UpdateShardStats(), GetStats() for standalone table
+    const TAggregatedStats& GetStats() const {
+        return Stats;
+    }
+
+    void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
+        Stats.PartitionStats[shardIdx]; // insert if none
+        Stats.UpdateShardStats(shardIdx, newStats);
+    }
 };
 
 struct TPQShardInfo : TSimpleRefCount<TPQShardInfo> {

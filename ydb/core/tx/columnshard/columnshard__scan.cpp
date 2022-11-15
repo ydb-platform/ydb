@@ -825,7 +825,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
         return;
     }
 
-    ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
+    LastAccessTime = TAppData::TimeProvider->Now();
+    ScanTxInFlight.insert({txId, LastAccessTime});
     SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new TTxScan(this, ev), ctx);
 }

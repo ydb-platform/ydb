@@ -136,6 +136,8 @@ void TTxRead::Complete(const TActorContext& ctx) {
 
 
 void TColumnShard::Handle(TEvColumnShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
+    LastAccessTime = TAppData::TimeProvider->Now();
+
     const auto* msg = ev->Get();
     TRowVersion readVersion(msg->Record.GetPlanStep(), msg->Record.GetTxId());
     TRowVersion maxReadVersion = GetMaxReadVersion();

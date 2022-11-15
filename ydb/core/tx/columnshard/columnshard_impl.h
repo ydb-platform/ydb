@@ -346,6 +346,7 @@ private:
     TDuration ActivationPeriod = TDuration::Seconds(60);
     TDuration FailActivationDelay = TDuration::Seconds(1);
     TDuration StatsReportInterval = TDuration::Seconds(10);
+    TInstant LastAccessTime;
     TInstant LastBackActivation;
     TInstant LastStatsReport;
 

@@ -1489,6 +1489,30 @@ TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode flow, ui32 bitmapIndex) {
+    auto blockItemTypes = ValidateBlockFlowType(flow.GetStaticType());
+
+    MKQL_ENSURE(blockItemTypes.size() >= 2, "Expected at least two input columns");
+    MKQL_ENSURE(bitmapIndex < blockItemTypes.size() - 1, "Invalid bitmap index");
+    MKQL_ENSURE(AS_TYPE(TDataType, blockItemTypes[bitmapIndex])->GetSchemeType() == NUdf::TDataType<bool>::Id, "Expected Bool as bitmap column type");
+
+
+    const auto* inputTupleType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType());
+    MKQL_ENSURE(inputTupleType->GetElementsCount() == blockItemTypes.size(), "Unexpected tuple size");
+    std::vector<TType*> flowItems;
+    for (size_t i = 0; i < inputTupleType->GetElementsCount(); ++i) {
+        if (i == bitmapIndex) {
+            continue;
+        }
+        flowItems.push_back(inputTupleType->GetElementType(i));
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(NewTupleType(flowItems)));
+    callableBuilder.Add(flow);
+    callableBuilder.Add(NewDataLiteral<ui32>(bitmapIndex));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");

@@ -26,6 +26,54 @@ IGraphTransformer::TStatus AsScalarWrapper(const TExprNode::TPtr& input, TExprNo
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TTypeAnnotationNode::TListType blockItemTypes;
+    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (blockItemTypes.size() < 2) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected at least two columns, got " << blockItemTypes.size()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    ui32 index = 0;
+    if (!TryFromString(input->Child(1)->Content(), index)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
+                          TStringBuilder() << "Failed to convert to integer: " << input->Child(1)->Content()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (index >= blockItemTypes.size() - 1) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
+                          TStringBuilder() << "Index out of range. Index: " << index << ", maximum is: " << blockItemTypes.size() - 1));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto bitmapType = blockItemTypes[index];
+    if (bitmapType->GetKind() != ETypeAnnotationKind::Data || bitmapType->Cast<TDataExprType>()->GetSlot() != NUdf::EDataSlot::Bool) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
+                          TStringBuilder() << "Expecting Bool as bitmap column type, but got: " << *bitmapType));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->Cast<TMultiExprType>()->GetItems();
+    flowItemTypes.erase(flowItemTypes.begin() + index);
+
+    auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(flowItemTypes);
+    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 1U, ctx.Expr)) {

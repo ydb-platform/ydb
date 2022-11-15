@@ -2421,6 +2421,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockCombineAll(arg, countColumn, filterColumn, aggs, returnType);
     });
 
+    AddCallable("BlockCompress", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto flow = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = FromString<ui32>(node.Child(1)->Content());
+        return ctx.ProgramBuilder.BlockCompress(flow, index);
+    });
+
     AddCallable("PgArray", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         std::vector<TRuntimeNode> args;
         args.reserve(node.ChildrenSize());

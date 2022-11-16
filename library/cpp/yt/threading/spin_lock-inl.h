@@ -26,9 +26,9 @@ inline void TSpinLock::Acquire() noexcept
 inline void TSpinLock::Release() noexcept
 {
 #ifdef NDEBUG
-    Value_.store(UnlockedValue, std::memory_order_release);
+    Value_.store(UnlockedValue, std::memory_order::release);
 #else
-    YT_ASSERT(Value_.exchange(UnlockedValue, std::memory_order_release) != UnlockedValue);
+    YT_ASSERT(Value_.exchange(UnlockedValue, std::memory_order::release) != UnlockedValue);
 #endif
 }
 
@@ -50,7 +50,7 @@ inline bool TSpinLock::TryAcquire() noexcept
 
 inline bool TSpinLock::TryAndTryAcquire() noexcept
 {
-    auto value = Value_.load(std::memory_order_relaxed);
+    auto value = Value_.load(std::memory_order::relaxed);
 #ifdef YT_ENABLE_SPIN_LOCK_OWNERSHIP_TRACKING
     YT_ASSERT(value != GetSequentialThreadId());
 #endif

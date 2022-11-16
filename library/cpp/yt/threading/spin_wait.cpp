@@ -17,9 +17,9 @@ namespace {
 TDuration SuggestSleepDelay(int iteration)
 {
     static std::atomic<ui64> Rand;
-    auto rand = Rand.load(std::memory_order_relaxed);
+    auto rand = Rand.load(std::memory_order::relaxed);
     rand = 0x5deece66dLL * rand + 0xb;   // numbers from nrand48()
-    Rand.store(rand, std::memory_order_relaxed);
+    Rand.store(rand, std::memory_order::relaxed);
 
     constexpr ui64 MinDelayUs = 128;
 

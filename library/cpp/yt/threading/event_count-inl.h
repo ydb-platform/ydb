@@ -34,7 +34,7 @@ inline void TEventCount::NotifyMany(int count)
     TGuard<TMutex> guard(Mutex_);
 #endif
 
-    ui64 prev = Value_.fetch_add(AddEpoch, std::memory_order_acq_rel);
+    ui64 prev = Value_.fetch_add(AddEpoch, std::memory_order::acq_rel);
     if (Y_UNLIKELY((prev & WaiterMask) != 0)) {
 #ifdef _linux_
         FutexWake(
@@ -52,7 +52,7 @@ inline void TEventCount::NotifyMany(int count)
 
 inline TEventCount::TCookie TEventCount::PrepareWait()
 {
-    ui64 value = Value_.load(std::memory_order_acquire);
+    ui64 value = Value_.load(std::memory_order::acquire);
     return TCookie(static_cast<ui32>(value >> EpochShift));
 }
 
@@ -61,11 +61,11 @@ inline void TEventCount::CancelWait()
 
 inline bool TEventCount::Wait(TCookie cookie, TInstant deadline)
 {
-    Value_.fetch_add(AddWaiter, std::memory_order_acq_rel);
+    Value_.fetch_add(AddWaiter, std::memory_order::acq_rel);
 
     bool result = true;
 #ifdef _linux_
-    while ((Value_.load(std::memory_order_acquire) >> EpochShift) == cookie.Epoch_) {
+    while ((Value_.load(std::memory_order::acquire) >> EpochShift) == cookie.Epoch_) {
         auto timeout = deadline - TInstant::Now();
 
         auto futexResult = FutexWait(
@@ -80,11 +80,11 @@ inline bool TEventCount::Wait(TCookie cookie, TInstant deadline)
     }
 #else
     TGuard<TMutex> guard(Mutex_);
-    if ((Value_.load(std::memory_order_acquire) >> EpochShift) == cookie.Epoch_) {
+    if ((Value_.load(std::memory_order::acquire) >> EpochShift) == cookie.Epoch_) {
         result = ConditionVariable_.WaitD(Mutex_, deadline);
     }
 #endif
-    ui64 prev = Value_.fetch_add(SubWaiter, std::memory_order_seq_cst);
+    ui64 prev = Value_.fetch_add(SubWaiter, std::memory_order::seq_cst);
     YT_ASSERT((prev & WaiterMask) != 0);
     return result;
 }
@@ -131,26 +131,26 @@ bool TEventCount::Await(TCondition&& condition, TDuration timeout)
 
 inline void TEvent::NotifyOne()
 {
-    Set_.store(true, std::memory_order_release);
+    Set_.store(true, std::memory_order::release);
     EventCount_.NotifyOne();
 }
 
 inline void TEvent::NotifyAll()
 {
-    Set_.store(true, std::memory_order_release);
+    Set_.store(true, std::memory_order::release);
     EventCount_.NotifyAll();
 }
 
 inline bool TEvent::Test() const
 {
-    return Set_.load(std::memory_order_acquire);
+    return Set_.load(std::memory_order::acquire);
 }
 
 inline bool TEvent::Wait(TInstant deadline)
 {
     return EventCount_.Await(
         [&] {
-            return Set_.load(std::memory_order_acquire);
+            return Set_.load(std::memory_order::acquire);
         },
         deadline);
 }

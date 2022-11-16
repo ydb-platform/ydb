@@ -57,7 +57,7 @@ inline bool TRecursiveSpinLock::IsLockedByCurrentThread() const noexcept
 
 inline bool TRecursiveSpinLock::TryAndTryAcquire() noexcept
 {
-    auto value = Value_.load(std::memory_order_relaxed);
+    auto value = Value_.load(std::memory_order::relaxed);
     auto recursionDepth = value & RecursionDepthMask;
     if (recursionDepth > 0 && (value >> ThreadIdShift) != GetSequentialThreadId()) {
         return false;

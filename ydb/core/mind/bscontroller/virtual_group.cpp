@@ -319,15 +319,28 @@ namespace NKikimr::NBsController {
             Y_VERIFY(success);
 
             TChannelsBindings bindings;
+            std::unordered_set<TString> names;
+            auto invalidateEv = std::make_unique<TEvHive::TEvInvalidateStoragePools>();
+            auto& record = invalidateEv->Record;
+
             for (const auto& item : config.GetChannelProfiles()) {
                 for (ui32 i = 0; i < item.GetCount(); ++i) {
+                    const TString& storagePoolName = item.GetStoragePoolName();
+
                     NKikimrStoragePool::TChannelBind binding;
-                    binding.SetStoragePoolName(item.GetStoragePoolName());
+                    binding.SetStoragePoolName(storagePoolName);
                     if (config.GetIsDecommittingGroup()) {
                         binding.SetPhysicalGroupsOnly(true);
+                        if (i == 0 && names.insert(storagePoolName).second) {
+                            record.AddStoragePoolName(storagePoolName);
+                        }
                     }
                     bindings.push_back(std::move(binding));
                 }
+            }
+
+            if (!names.empty()) {
+                NTabletPipe::SendData(SelfId(), HivePipeId, invalidateEv.release());
             }
 
             auto ev = std::make_unique<TEvHive::TEvCreateTablet>(Self->TabletID(), group->ID, TTabletTypes::BlobDepot, bindings);
@@ -364,6 +377,11 @@ namespace NKikimr::NBsController {
             } else if (clientId == BlobDepotPipeId) {
                 BlobDepotPipeId = {};
             }
+        }
+
+        void Handle(TEvHive::TEvInvalidateStoragePoolsReply::TPtr ev) {
+            STLOG(PRI_INFO, BS_CONTROLLER, BSCVG06, "received TEvInvalidateStoragePoolsReply", (TabletId, Self->TabletID()),
+                (Msg, ev->Get()->Record));
         }
 
         void Handle(TEvHive::TEvCreateTabletReply::TPtr ev) {
@@ -451,6 +469,7 @@ namespace NKikimr::NBsController {
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 hFunc(TEvHive::TEvCreateTabletReply, Handle);
                 hFunc(TEvHive::TEvTabletCreationResult, Handle);
+                hFunc(TEvHive::TEvInvalidateStoragePoolsReply, Handle);
                 hFunc(TEvBlobDepot::TEvApplyConfigResult, Handle);
 
                 default:

@@ -22,6 +22,8 @@ using namespace NYdb::NTable;
 
 namespace {
 
+static const char DefaultTablePath[] = "clickbench/hits";
+
 struct TTestInfo {
     TDuration ColdTime;
     TDuration Min;
@@ -312,7 +314,7 @@ void TClickBenchCommandInit::Config(TConfig& config) {
     config.Opts->AddLongOption('p', "path", "Table name to work with")
         .Optional()
         .RequiredArgument("NAME")
-        .DefaultValue("clickbench/hits")
+        .DefaultValue(DefaultTablePath)
         .Handler1T<TStringBuf>([this](TStringBuf arg) {
             if (arg.StartsWith('/')) {
                 ythrow NLastGetopt::TUsageException() << "Path must be relative";
@@ -333,6 +335,47 @@ int TClickBenchCommandInit::Run(TConfig& config) {
     }));
 
     Cout << "Table created" << Endl;
+    driver.Stop(true);
+    return 0;
+};
+
+TClickBenchCommandClean::TClickBenchCommandClean()
+    : TYdbCommand("clean", {}, "Drop table")
+{}
+
+void TClickBenchCommandClean::Config(TConfig& config) {
+    NYdb::NConsoleClient::TClientCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption('p', "path", "Table name to work with")
+        .Optional()
+        .RequiredArgument("NAME")
+        .DefaultValue(DefaultTablePath)
+        .Handler1T<TStringBuf>([this](TStringBuf arg) {
+            if (arg.StartsWith('/')) {
+                ythrow NLastGetopt::TUsageException() << "Path must be relative";
+            }
+            Table = arg;
+        });
+};
+
+int TClickBenchCommandClean::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+
+    static const char DropDdlTmpl[] = "DROP TABLE `%s`;";
+    char dropDdl[sizeof(DropDdlTmpl) + 8192*3]; // 32*256 for DbPath
+    TString fullPath = FullTablePath(config.Database, Table);
+    int res = std::sprintf(dropDdl, DropDdlTmpl, fullPath.c_str());
+    if (res < 0) {
+        Cerr << "Failed to generate DROP DDL query for `" << fullPath << "` table." << Endl;
+        return -1;
+    }
+    TTableClient client(driver);
+
+    ThrowOnError(client.RetryOperationSync([dropDdl](TSession session) {
+        return session.ExecuteSchemeQuery(dropDdl).GetValueSync();
+    }));
+
+    Cout << "Clean succeeded." << Endl;
     driver.Stop(true);
     return 0;
 };
@@ -368,7 +411,7 @@ void TClickBenchCommandRun::Config(TConfig& config) {
     config.Opts->AddLongOption("table", "Table to work with")
         .Optional()
         .RequiredArgument("NAME")
-        .DefaultValue("clickbench/hits")
+        .DefaultValue(DefaultTablePath)
         .Handler1T<TStringBuf>([this](TStringBuf arg) {
             if (arg.StartsWith('/')) {
                 ythrow NLastGetopt::TUsageException() << "Path must be relative";
@@ -428,6 +471,7 @@ TCommandClickBench::TCommandClickBench()
 {
     AddCommand(std::make_unique<TClickBenchCommandRun>());
     AddCommand(std::make_unique<TClickBenchCommandInit>());
+    AddCommand(std::make_unique<TClickBenchCommandClean>());
 }
 
 } // namespace NYdb::NConsoleClient

@@ -152,7 +152,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
-    TVector<std::pair<TTxTransaction, TVector<ISubOperationBase::TPtr>>> transactions;
+    TVector<TTxTransaction> transactions;
     for (const auto& transaction : record.GetTransaction()) {
         auto splitResult = operation->SplitIntoTransactions(transaction, context);
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
@@ -164,32 +164,15 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             return std::move(response);
         }
 
-        for (auto& tx : splitResult.Transactions) {
-            auto parts = operation->ConstructParts(tx, context);
-            for (const auto& part : parts) {
-                operation->AddPart(part); // temporarily add a part (to form correct operation ids)
-
-                TString errStr;
-                if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
-                    response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
-                    response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-                    Operations.erase(txId);
-
-                    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
-                    return std::move(response);
-                }
-            }
-
-            transactions.emplace_back(std::move(tx), std::move(parts));
-        }
+        std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(transactions));
     }
 
     const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
     context.ClearAuditLogFragments();
-    operation->Parts.clear(); // IMPORTANT: remove temporarily added parts (above)
 
-    //for all tx in transactions
-    for (auto& [transaction, parts] : transactions) {
+    for (const auto& transaction : transactions) {
+        auto parts = operation->ConstructParts(transaction, context);
+
         if (parts.size() > 1) {
             // les't allow altering impl index tables as part of consistent operation
             context.IsAllowedPrivateTables = true;
@@ -198,7 +181,14 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         context.AddAuditLogFragment(transaction);
 
         for (auto& part : parts) {
-            response = part->Propose(owner, context);
+            TString errStr;
+            if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
+                response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+                response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            } else {
+                response = part->Propose(owner, context);
+            }
+
             Y_VERIFY(response);
 
             LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

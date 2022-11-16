@@ -286,7 +286,7 @@ private:
 
         bool includePathColumn = !record.HasIncludePathColumn() || record.GetIncludePathColumn();
 
-        for (size_t count = 0; count < BatchSize && it != itEnd; ++it) {
+        for (size_t count = 0; count < BatchSize && it != itEnd && it != tables.end(); ++it) {
             auto& pathId = it->first;
             const auto& tableStats = it->second;
 

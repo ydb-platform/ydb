@@ -53,6 +53,10 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     THolder<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
 
+    // indexes
+    THashMap<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo*> VDiskId2vDiskStateInfo;
+    THashMap<ui32, std::vector<TNodeId>> Group2NodeId;
+
     struct TStoragePoolInfo {
         TString Kind;
         TSet<TString> Groups;
@@ -75,6 +79,11 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
         Everything,
         MissingDisks,
         SpaceProblems,
+    };
+
+    enum ETimeoutTag {
+        TimeoutBSC,
+        TimeoutFinal,
     };
 
     EWith With = EWith::Everything;
@@ -146,7 +155,9 @@ public:
 
         RequestBSControllerConfig();
 
-        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        TBase::Become(&TThis::StateWork);
+        Schedule(TDuration::MilliSeconds(Timeout / 100 * 70), new TEvents::TEvWakeup(TimeoutBSC)); // 70% timeout (for bsc)
+        Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
     }
 
     void PassAway() override {
@@ -198,7 +209,6 @@ public:
                         }
                     }
                     for (TNodeId nodeId : additionalNodeIds) {
-                        FilterNodeIds.insert(nodeId);
                         SendNodeRequests(nodeId);
                     }
                 }
@@ -300,7 +310,13 @@ public:
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        VDiskInfo[nodeId] = ev->Release();
+        auto& vDiskInfo = VDiskInfo[nodeId] = ev->Release();
+        if (vDiskInfo != nullptr) {
+            for (auto& vDiskStateInfo : *(vDiskInfo->Record.MutableVDiskStateInfo())) {
+                vDiskStateInfo.SetNodeId(nodeId);
+                VDiskId2vDiskStateInfo[VDiskIDFromVDiskID(vDiskStateInfo.GetVDiskId())] = &vDiskStateInfo;
+            }
+        }
         RequestDone();
     }
 
@@ -317,6 +333,9 @@ public:
                 continue;
             }
             StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
+            for (const auto& vDiskNodeId : info.GetVDiskNodeIds()) {
+                Group2NodeId[info.GetGroupID()].push_back(vDiskNodeId);
+            }
         }
         ui64 nodeId = ev.Get()->Cookie;
         BSGroupInfo[nodeId] = ev->Release();
@@ -337,7 +356,7 @@ public:
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(TEvents::TEvWakeup, HandleTimeout);
         }
     }
 
@@ -459,6 +478,34 @@ public:
     }
 
     void ReplyAndPassAway() {
+        if (!FilterNodeIds.empty()) {
+            for (const auto& [nodeId, vDiskInfo] : VDiskInfo) {
+                if (FilterNodeIds.count(nodeId) == 0) {
+                    continue;
+                }
+                if (vDiskInfo != nullptr) {
+                    THashSet<ui32> additionalNodes;
+                    for (const auto& vDiskStateInfo : vDiskInfo->Record.GetVDiskStateInfo()) {
+                        ui32 groupId = vDiskStateInfo.GetVDiskId().GetGroupID();
+                        auto itNodes = Group2NodeId.find(groupId);
+                        if (itNodes != Group2NodeId.end()) {
+                            for (TNodeId groupNodeId : itNodes->second) {
+                                if (groupNodeId != nodeId && additionalNodes.insert(groupNodeId).second) {
+                                    SendNodeRequests(groupNodeId);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            FilterNodeIds.clear(); // we don't need it anymore
+
+            if (Requests != 0) {
+                return; // retry requests for neighbours of our groups (when BSC wasn't available)
+            }
+        }
+
         TStringStream json;
         MergedBSGroupInfo = MergeWhiteboardResponses(BSGroupInfo, TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetDefaultMergeField());
         MergedVDiskInfo = MergeWhiteboardResponses(VDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetDefaultMergeField());
@@ -654,7 +701,14 @@ public:
         PassAway();
     }
 
-    void HandleTimeout() {
+    void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
+        switch (ev->Get()->Tag) {
+            case TimeoutBSC:
+                break;
+            case TimeoutFinal:
+                FilterNodeIds.clear();
+                break;
+        }
         ReplyAndPassAway();
     }
 };

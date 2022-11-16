@@ -2378,6 +2378,10 @@ private:
             hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
         }
 
+        if (metadata->TableSettings.MinPartitions) {
+            tableDesc.SetColumnShardCount(*metadata->TableSettings.MinPartitions);
+        }
+
         return true;
     }
 

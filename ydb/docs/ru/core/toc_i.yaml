@@ -16,7 +16,7 @@ items:
 
 - { name: Управление базами данных,                include: { mode: link, path: db/toc_p.yaml } }
 - { name: Управление кластером,                    include: { mode: link, path: cluster/toc_p.yaml } }
-# References  
+# References
 - { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }
 - { name: Работа с YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Работа с YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
@@ -27,6 +27,24 @@ items:
     items:
     - name: Тестирование с помощью нагружающих акторов
       href: development/testing-load-actor.md
+    - name: key-value нагрузка
+      href: development/key-value-load-start.md
+    - name: KQP нагрузка
+      href: development/kqp-load-start.md
+    - name: DSProxy нагрузка
+      href: development/load-start.md
+    - name: Остановка нагрузки
+      href: development/load-stop.md
+    - name: Нагрузка, проверяющая память
+      href: development/memory-load-start.md
+    - name: PDisk нагрузка на запись
+      href: development/pdisk-load-start.md
+    - name: PDisk нагрузка, пишущая в лог
+      href: development/pdisk-log-load-start.md
+    - name: PDisk нагрузка на чтение
+      href: development/pdisk-read-load-start.md
+    - name: VDisk нагрузка
+      href: development/vdisk-load-start.md
 
 # Footer
 - { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }
@@ -35,4 +53,4 @@ items:
   href: public-talks.md
 - name: История изменений
   href: changelog.md
-  
+

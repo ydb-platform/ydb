@@ -10,24 +10,24 @@
 
 Тип | Описание
 --- | ---
-`LoadStart` | нагружающий актор, подающий нагрузку от лица таблетки. Имитирует таблетку, создает себе TabletId и пишет в указанные storage-группы.
-`PDiskLoadStart` | нагружающий актор для подачи write-only нагрузки на PDisk. Имитирует VDisk.
-`VDiskLoadStart` | нагружающий актор для подачи нагрузки на VDisk. Имитирует DSProxy и пишет в локальный VDisk.
-`PDiskReadLoadStart` | нагружающий актор для подачи read-only нагрузки на PDisk. Имитирует VDisk.
-`PDiskLogLoadStart` | специальный нагружающий актор, написанный для тестирования вырезания из середины лога PDisk. Имитирует VDisk. Не является нагружающим, в первую очередь направлен на тестирование корректности.
-`KeyValueLoadStart` | нагружающий актор для подачи нагрузки на KvTablet.
-`KqpLoadStart` | нагружающий актор для подачи нагрузки на KQP часть и, соответственно, на весь кластер в целом. Аналогичен `ydb_cli workload`, есть два подвида - stock и kv.
-`MemoryLoadStart` | специальный нагружающий актор, проверяет производительность работы памяти. Кажется, используется в math bench - иногда запускается на кластере и рисует график времени работы.
-`LoadStop` | остановить нагрузку либо с конкретным тегом, либо со всеми.
+[LoadStart](load-start.md) | нагружающий актор, подающий нагрузку от лица таблетки. Имитирует таблетку, создает себе TabletId и пишет в указанные storage-группы.
+[PDiskLoadStart](pdisk-load-start.md) | нагружающий актор для подачи write-only нагрузки на PDisk. Имитирует VDisk.
+[VDiskLoadStart](vdisk-load-start.md) | нагружающий актор для подачи нагрузки на VDisk. Имитирует DSProxy и пишет в локальный VDisk.
+[PDiskReadLoadStart](pdisk-read-load-start.md) | нагружающий актор для подачи read-only нагрузки на PDisk. Имитирует VDisk.
+[PDiskLogLoadStart](pdisk-log-load-start.md) | специальный нагружающий актор, написанный для тестирования вырезания из середины лога PDisk. Имитирует VDisk. Не является нагружающим, в первую очередь направлен на тестирование корректности.
+[KeyValueLoadStart](key-value-load-start.md) | нагружающий актор для подачи нагрузки на KvTablet.
+[KqpLoadStart](kqp-load-start.md) | нагружающий актор для подачи нагрузки на KQP часть и, соответственно, на весь кластер в целом. Аналогичен `ydb_cli workload`, есть два подвида - stock и kv.
+[MemoryLoadStart](memory-load-start.md) | специальный нагружающий актор, проверяет производительность работы памяти. Кажется, используется в math bench - иногда запускается на кластере и рисует график времени работы.
+[LoadStop](load-stop.md) | остановить нагрузку либо с конкретным тегом, либо со всеми.
 
 ## Запуск нагрузки {load-actor-start}
 
 Вы можете запустить нагрузку следующими способами:
 
-* kikimr-bin
-* bash-scripts - по своей сути удобная обёртка над явным вызовом `kikimr bs-load-test`
+* командой через бинарник ydbd -- `ydbd bs-load-test`
+* viewer UI кластера
 
-В обоих случаях подачи нагрузки через [kikimr]{#kikimr-bin-load} необходимо создать proto-файл с текстовым описанием нагрузки. Пример файла:
+В обоих вариантах подачи нагрузки необходимо создать proto-файл с текстовым описанием. Пример файла:
 
 ```proto
 NodeId: 1
@@ -52,22 +52,20 @@ Event:
 }
 ```
 
-### kikimr/tools/storage_perf
 
-### kikimr/tools/kqp_load
+### ydbd
 
-### kikimr bin {kikimr-bin-load}
+Запустить нагрузку можно используя бинарник `ydbd`. Для этого в нём существует команда `bs-load-test`
 
 ```bash
-kikimr bs-load-test -s $SERVER --protobuf "$PROTO"
+ydbd bs-load-test -s $SERVER --protobuf "$PROTO"
 ```
 
-### ui
-
-<span style="color:grey">в процессе реализации, готово не до конца</span>
+### Подача нагрузки через viewer UI
 
 ![пример UI](../_assets/load_actor_ui.jpeg)
-Уже сейчас - можно на ноде по прото-описанию создать нагружающего актора либо на одной текущей ноде, либо сразу на всех нодах тенанта (если страница принадлежит тенанту). В перспективе появятся кнопки, подставляющие разные дефолтные прото-конфиги нагрузки.
+<br>
+UI позволяет по proto-описанию создать нагружающего актора либо на одной текущей ноде, либо сразу на всех нодах тенанта (если страница принадлежит тенанту). За созданными акторами можно сделить на той же странице.
 
 ## Примеры {#load-examples}
 
@@ -95,71 +93,10 @@ Event: { KqpLoadStart: {
 ```
 
 ```proto
-NodeId: ${NODEID}
-Event: { LoadStart: {
-    DurationSeconds: ${DURATION}
-    ScheduleThresholdUs: 0
-    ScheduleRoundingUs: 0
-    Tablets: {
-        Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
-        Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-        WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }
-        MaxInFlightRequests: 1
-
-        ReadSizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-        ReadIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
-        MaxInFlightReadRequests: ${IN_FLIGHT}
-        FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
-        PutHandleClass: ${PUT_HANDLE_CLASS}
-        GetHandleClass: ${GET_HANDLE_CLASS}
-        Soft: true
-    }
-}}
-```
-
-```proto
-NodeId: ${NODEID}
-Event: { LoadStart: {
-    DurationSeconds: ${DURATION}
-    ScheduleThresholdUs: 0
-    ScheduleRoundingUs: 0
-    Tablets: {
-        Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
-        Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-        WriteIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
-        MaxInFlightRequests: ${IN_FLIGHT}
-        FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
-        PutHandleClass: ${PUT_HANDLE_CLASS}
-        Soft: true
-    }
-}}
-```
-
-```proto
-NodeId: ${NODEID}
+NodeId: 2
 Event: { MemoryLoadStart: {
-    DurationSeconds: ${DURATION}
-    IntervalUs: ${INTERVAL}
-    BlockSize: ${SIZE}
+    DurationSeconds: 60
+    IntervalUs: 1000
+    BlockSize: 4096
 }}
-```
-
-### Остановка нагрузки {load-examples-stop}
-
-```proto
-NodeId: 1
-Event:
-    LoadStop: {
-        RemoveAllTags: true
-    }
-}
-```
-или
-```proto
-NodeId: 1
-Event:
-    LoadStop: {
-        Tag: 123
-    }
-}
 ```

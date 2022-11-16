@@ -17,3 +17,5 @@ items:
       href: ../administration/monitoring.md
     - name: Дашборды Grafana
       href: ../administration/grafana-dashboards.md
+- name: Обновление
+  href: ../administration/upgrade.md

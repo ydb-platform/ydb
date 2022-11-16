@@ -1,5 +1,6 @@
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/base.proto";
+import "google/protobuf/any.proto";
 
 package NKikimrTx;
 option java_package = "ru.yandex.kikimr.proto";
@@ -251,6 +252,37 @@ message TBalanceTrack {
 
 message TBalanceTrackList {
     repeated TBalanceTrack Track = 1;
+}
+
+// Generic readset data format
+message TReadSetData {
+    enum EDecision {
+        // Unknown decision
+        // This may happen when transaction is aborted and no longer exists in
+        // memory, and also when readset is acknowledged and transaction is
+        // committed, so the previous decision is not known. Note, that this
+        // is similar to abort decision in practice.
+        DECISION_UNKNOWN = 0;
+
+        // Commit decision
+        // Distributed transactions are committed when all participants decide
+        // to commit. Transaction is aborted when at least one participant
+        // decides not to commit. Participants must really commit to this
+        // decision, it cannot be changed unless consensus is to abort.
+        DECISION_COMMIT = 1;
+
+        // Abort decision
+        // Distributed transactions are aborted when at least one participant
+        // decides to abort. This decision is ephemeral and may change to
+        // unknown at any time, or even be unknown from the start.
+        DECISION_ABORT = 2;
+    }
+
+    // Local decision on the outcome of a distributed transaction
+    optional EDecision Decision = 1;
+
+    // Optional data attached to readset, specific between a pair of tablets
+    optional google.protobuf.Any Data = 2;
 }
 
 // tablet to tablet

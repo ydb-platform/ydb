@@ -22,4 +22,5 @@ The SDK documentation contains the following sections:
 - [Authentication](../auth.md)
 - [Test app](../example/index.md)
 - [Code recipes](../recipes/index.md)
+- [Comparison of SDK features](../feature-parity.md)
 

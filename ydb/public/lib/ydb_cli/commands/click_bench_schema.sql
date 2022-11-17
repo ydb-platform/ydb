@@ -107,6 +107,10 @@ CREATE TABLE `{table}`
     URLHash Int64,
     CLID Int64,
     PRIMARY KEY (CounterID, EventDate, UserID, EventTime, WatchID)
-) WITH (
-    AUTO_PARTITIONING_BY_SIZE = ENABLED
+)
+{partition}
+WITH (
+    {store}
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 128
 );

@@ -321,20 +321,38 @@ void TClickBenchCommandInit::Config(TConfig& config) {
             }
             Table = arg;
         });
+    config.Opts->AddLongOption("store", "Storage type."
+            " Options: row, column\n"
+            "row - use row-based storage engine;\n"
+            "column - use column-based storage engine.")
+        .DefaultValue("column").StoreResult(&StoreType);
 };
 
 int TClickBenchCommandInit::Run(TConfig& config) {
+    StoreType = to_lower(StoreType);
+    TString partitionBy = "";
+    TString storageType = "";
+    if (StoreType == "column") {
+        partitionBy = "PARTITION BY HASH(CounterID)";
+        storageType = "STORE = COLUMN,";
+    } else if (StoreType != "row") {
+        throw yexception() << "Incorrect storage type. Available options: \"row\", \"column\"." << Endl;
+    }
+
     auto driver = CreateDriver(config);
 
     TString createSql = NResource::Find("click_bench_schema.sql");
     TTableClient client(driver);
 
     SubstGlobal(createSql, "{table}", FullTablePath(config.Database, Table));
+    SubstGlobal(createSql, "{partition}", partitionBy);
+    SubstGlobal(createSql, "{store}", storageType);
+
     ThrowOnError(client.RetryOperationSync([createSql](TSession session) {
         return session.ExecuteSchemeQuery(createSql).GetValueSync();
     }));
 
-    Cout << "Table created" << Endl;
+    Cout << "Table created." << Endl;
     driver.Stop(true);
     return 0;
 };
@@ -467,7 +485,7 @@ int TClickBenchCommandRun::Run(TConfig& config) {
 };
 
 TCommandClickBench::TCommandClickBench()
-    : TClientCommandTree("clickbench")
+    : TClientCommandTree("clickbench", {}, "ClickBench workload (ClickHouse OLAP test)")
 {
     AddCommand(std::make_unique<TClickBenchCommandRun>());
     AddCommand(std::make_unique<TClickBenchCommandInit>());

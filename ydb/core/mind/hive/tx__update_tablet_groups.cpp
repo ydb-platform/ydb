@@ -28,6 +28,7 @@ public:
 
         ETabletState newTabletState = ETabletState::GroupAssignment;
         bool needToBlockStorage = false;
+        bool needToIncreaseGeneration = false;
         bool changed = false;
         TStringBuilder tabletBootState;
 
@@ -160,11 +161,8 @@ public:
             if (channel->History.empty()) {
                 fromGeneration = 0;
             } else {
-                if (!changed) {
-                    tablet->IncreaseGeneration();
-                    db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration);
-                }
-                fromGeneration = tablet->KnownGeneration;
+                needToIncreaseGeneration = true;
+                fromGeneration = tablet->KnownGeneration + 1;
             }
 
             if (!changed) {
@@ -281,6 +279,10 @@ public:
                 // Use best effort to kill currently running tablet
                 SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
             }
+        }
+        if (needToIncreaseGeneration) {
+            tablet->IncreaseGeneration();
+            db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration);
         }
         if (!tablet->TryToBoot()) {
             BLOG_NOTICE("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"

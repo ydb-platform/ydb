@@ -625,6 +625,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(CreateNotNullColumnTableWithReboots) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableNotNullDataColumns(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
             TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB", R"(
@@ -650,6 +651,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(DropNotNullColumnTableWithReboots) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableNotNullDataColumns(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

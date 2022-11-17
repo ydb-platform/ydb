@@ -45,6 +45,7 @@ namespace NSchemeShardUT_Private {
         OPTION(THashSet<TString>, SystemBackupSIDs, {});
         OPTION(std::optional<bool>, EnableMoveIndex, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedInitialScan, std::nullopt);
+        OPTION(std::optional<bool>, EnableNotNullDataColumns, std::nullopt);
 
         #undef OPTION
     };

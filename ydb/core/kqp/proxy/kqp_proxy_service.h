@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/protos/kqp.pb.h>
 
@@ -271,6 +272,12 @@ private:
 TSimpleResourceStats CalcPeerStats(
     const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId, bool localDatacenterPolicy,
     std::function<double(const NKikimrKqp::TKqpProxyNodeResources& entry)> ExtractValue);
+
 TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId);
+
+IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    TVector<NKikimrKqp::TKqpSetting>&& settings,
+    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory);
 
 }  // namespace NKikimr::NKqp

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "kqp_query_replay.h"
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -561,6 +560,50 @@ private:
     TString SessionId;
 };
 
+class IQueryReplayBackend : public TNonCopyable {
+public:
+
+    /// Collect details about query:
+    /// Accepts query text
+    virtual void Collect(const TString& queryData) = 0;
+
+    virtual ~IQueryReplayBackend() {};
+
+    //// Updates configuration onn running backend, if applicable.
+    virtual void UpdateConfig(const NKikimrConfig::TTableServiceConfig& serviceConfig) = 0;
+};
+
+
+class TNullQueryReplayBackend : public IQueryReplayBackend {
+public:
+    void Collect(const TString&) {
+    }
+
+    virtual void UpdateConfig(const NKikimrConfig::TTableServiceConfig&) {
+    }
+
+    ~TNullQueryReplayBackend() {
+    }
+};
+
+class IQueryReplayBackendFactory {
+public:
+    virtual ~IQueryReplayBackendFactory() {}
+    virtual IQueryReplayBackend *Create(
+        const NKikimrConfig::TTableServiceConfig& serviceConfig,
+        TIntrusivePtr<TKqpCounters> counters) = 0;
+};
+
+inline IQueryReplayBackend* CreateQueryReplayBackend(
+        const NKikimrConfig::TTableServiceConfig& serviceConfig,
+        TIntrusivePtr<TKqpCounters> counters,
+        std::shared_ptr<IQueryReplayBackendFactory> factory) {
+    if (!factory) {
+        return new TNullQueryReplayBackend();
+    } else {
+        return factory->Create(serviceConfig, std::move(counters));
+    }
+}
 
 static inline IOutputStream& operator<<(IOutputStream& stream, const TKqpRequestInfo& requestInfo) {
     if (!requestInfo.GetTraceId().empty()) {
@@ -572,11 +615,6 @@ static inline IOutputStream& operator<<(IOutputStream& stream, const TKqpRequest
 
     return stream;
 }
-
-IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    TVector<NKikimrKqp::TKqpSetting>&& settings,
-    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory);
 
 } // namespace NKqp
 } // namespace NKikimr

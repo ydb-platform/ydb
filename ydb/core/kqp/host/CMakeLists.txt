@@ -17,7 +17,6 @@ target_link_libraries(core-kqp-host PUBLIC
   ydb-core-base
   core-kqp-common
   core-kqp-opt
-  core-kqp-prepare
   core-kqp-provider
   tx-long_tx_service-public
   yql-core-services
@@ -30,7 +29,9 @@ target_link_libraries(core-kqp-host PUBLIC
   providers-result-provider
 )
 target_sources(core-kqp-host PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_host.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_explain_prepared.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_host.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_runner.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_transform.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_type_ann.cpp
 )

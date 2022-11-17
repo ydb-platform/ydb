@@ -1,6 +1,4 @@
 #include "kqp_impl.h"
-#include "kqp_query_replay.h"
-
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>

@@ -1,7 +1,7 @@
 #include "datashard_kqp.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>

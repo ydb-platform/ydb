@@ -2,8 +2,6 @@
 
 #include "kqp_opt.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h>
-
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>

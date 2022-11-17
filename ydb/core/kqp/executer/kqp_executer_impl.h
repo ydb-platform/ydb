@@ -15,7 +15,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/kqp/executer/kqp_tasks_graph.h>
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>

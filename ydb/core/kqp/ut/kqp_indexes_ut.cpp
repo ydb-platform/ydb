@@ -2,7 +2,8 @@
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/kqp_impl.h>
-#include <ydb/core/kqp/kqp_metadata_loader.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>

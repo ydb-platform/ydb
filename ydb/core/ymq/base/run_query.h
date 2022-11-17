@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <library/cpp/actors/core/actor.h>

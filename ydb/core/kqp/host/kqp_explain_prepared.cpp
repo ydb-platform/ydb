@@ -1,9 +1,9 @@
 #include "kqp_host_impl.h"
 
-#include <ydb/core/kqp/common/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/common/kqp_transform.h>
-#include <ydb/core/kqp/prepare/kqp_query_plan.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/core/kqp/host/kqp_transform.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 
 namespace NKikimr {
 namespace NKqp {

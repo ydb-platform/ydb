@@ -5,7 +5,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <util/generic/size_literals.h>
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer/kqp_executer.h>
 
 namespace NKikimr {

@@ -1,4 +1,4 @@
-#include "kqp.h"
+#include <ydb/core/kqp/common/kqp.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 

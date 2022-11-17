@@ -4,7 +4,7 @@
 
 #include <ydb/core/kqp/executer/kqp_executer_stats.h>
 
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 
 #include <util/generic/size_literals.h>
 

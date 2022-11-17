@@ -1,4 +1,4 @@
-#include "kqp_prepare.h"
+#include "kqp_host_impl.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>

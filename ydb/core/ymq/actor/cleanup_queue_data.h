@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/ymq/base/counters.h>
 
@@ -24,7 +24,7 @@ private:
 
 public:
     TCleanupQueueDataActor(TIntrusivePtr<TMonitoringCounters> monitoringCounters);
-    
+
     void Bootstrap(const TActorContext& ctx);
 
     STRICT_STFUNC(StateFunc,
@@ -47,9 +47,9 @@ public:
     void ClearNextTable(const TActorContext& ctx);
     void OnRemovedData(ui64 removedRows, const TActorContext& ctx);
     void RunRemoveData(const TActorContext& ctx);
-    
+
     void Finish(const TActorContext& ctx);
-    
+
 
 private:
     TIntrusivePtr<TMonitoringCounters> MonitoringCounters;
@@ -60,10 +60,10 @@ private:
     TString SelectQueuesQuery;
     TString RemoveQueueFromListQuery;
     TString RemoveDataQuery;
-    
+
     EState State;
     TInstant StartProcessTimestamp;
-    
+
     // Queue info
     ui64 RemoveQueueTimetsamp;
     ui64 QueueIdNumber;

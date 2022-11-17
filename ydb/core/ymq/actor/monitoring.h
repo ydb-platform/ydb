@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
@@ -23,7 +23,7 @@ private:
 
 public:
     TMonitoringActor(TIntrusivePtr<TMonitoringCounters> counters);
-    
+
     void Bootstrap(const TActorContext& ctx);
 
     STRICT_STFUNC(StateFunc,
@@ -33,13 +33,13 @@ public:
     )
 
     void RequestMetrics(TDuration runAfter, const TActorContext& ctx);
-    
+
     void HandleError(const TString& error, const TActorContext& ctx);
 
     void HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
     void HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx);
 
-    
+
 
 private:
     TIntrusivePtr<TMonitoringCounters> Counters;

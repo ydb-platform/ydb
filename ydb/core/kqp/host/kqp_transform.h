@@ -1,0 +1,77 @@
+#pragma once
+
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/core/kqp/common/kqp_tx_info.h>
+#include <ydb/core/kqp/common/kqp_topic.h>
+
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+
+#include <ydb/library/yql/dq/common/dq_value.h>
+#include <ydb/library/yql/utils/log/log.h>
+
+namespace NKikimr {
+namespace NKqp {
+
+struct TKqlTransformContext : TThrRefBase {
+    TKqlTransformContext(NYql::TKikimrConfiguration::TPtr& config, TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
+        TIntrusivePtr<NYql::TKikimrTablesData> tables)
+        : Config(config)
+        , QueryCtx(queryCtx)
+        , Tables(tables) {}
+
+    NYql::TKikimrConfiguration::TPtr Config;
+    TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
+    TIntrusivePtr<NYql::TKikimrTablesData> Tables;
+    NKikimrKqp::TKqlSettings Settings;
+    NActors::TActorId ReplyTarget;
+
+    NKqpProto::TKqpStatsQuery QueryStats;
+    std::shared_ptr<const NKqpProto::TKqpPhyQuery> PhysicalQuery;
+
+    TVector<TSimpleSharedPtr<NKikimrMiniKQL::TResult>> MkqlResults;
+    TVector<NKikimrMiniKQL::TResult> PhysicalQueryResults;
+
+    void Reset() {
+        Settings = {};
+        ReplyTarget = {};
+        MkqlResults.clear();
+        QueryStats = {};
+        PhysicalQuery = nullptr;
+        PhysicalQueryResults.clear();
+    }
+};
+
+class TLogExprTransformer {
+public:
+    TLogExprTransformer(const TString& description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)
+        : Description(description)
+        , Component(component)
+        , Level(level) {}
+
+    NYql::IGraphTransformer::TStatus operator()(const NYql::TExprNode::TPtr& input, NYql::TExprNode::TPtr& output,
+        NYql::TExprContext& ctx);
+
+    static TAutoPtr<NYql::IGraphTransformer> Sync(const TString& description,
+        NYql::NLog::EComponent component = NYql::NLog::EComponent::ProviderKqp,
+        NYql::NLog::ELevel level = NYql::NLog::ELevel::INFO);
+
+    static void LogExpr(const NYql::TExprNode& input, NYql::TExprContext& ctx, const TString& description,
+        NYql::NLog::EComponent component = NYql::NLog::EComponent::ProviderKqp,
+        NYql::NLog::ELevel level = NYql::NLog::ELevel::INFO);
+
+private:
+    TString Description;
+    NYql::NLog::EComponent Component;
+    NYql::NLog::ELevel Level;
+};
+
+TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TTimeAndRandomProvider& randomCtx, NYql::TKikimrParamsMap& parameters,
+    const TVector<TVector<NKikimrMiniKQL::TResult>>& txResults, const NKqpProto::TKqpPhyParamBinding& paramBinding);
+
+} // namespace NKqp
+} // namespace NKikimr

@@ -1,7 +1,7 @@
 #include "actors.h"
 
 #include <ydb/core/base/tablet.h>
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/public/lib/operation_id/operation_id.h>

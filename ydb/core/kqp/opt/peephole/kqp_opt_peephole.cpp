@@ -1,6 +1,8 @@
+#include "kqp_opt_peephole.h"
 #include "kqp_opt_peephole_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
 
@@ -24,6 +26,62 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
+
+TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& ctx,
+    THashMap<TString, TKqpParamBinding>* paramBindings)
+{
+    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
+        "RandomNumber",
+        "Random",
+        "RandomUuid",
+        "Now",
+        "CurrentUtcDate",
+        "CurrentUtcDatetime",
+        "CurrentUtcTimestamp"
+    };
+
+    TOptimizeExprSettings settings(nullptr);
+    settings.VisitChanges = true;
+
+    TExprNode::TPtr output;
+    auto status = OptimizeExpr(input, output, [paramBindings](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+        if (auto maybeCallable = TMaybeNode<TCallable>(node)) {
+            auto callable = maybeCallable.Cast();
+            if (nonDeterministicFunctions.contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
+                const auto paramName = TStringBuilder() << ParamNamePrefix
+                    << NNaming::CamelToSnakeCase(TString(callable.CallableName()));
+
+                auto param = Build<TCoParameter>(ctx, node->Pos())
+                    .Name().Build(paramName)
+                    .Type(ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
+                    .Done();
+
+                if (paramBindings && !paramBindings->contains(paramName)) {
+                    auto binding = Build<TKqpTxInternalBinding>(ctx, node->Pos())
+                        .Type(ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
+                        .Kind().Build(callable.CallableName())
+                        .Done();
+
+                    auto paramBinding = Build<TKqpParamBinding>(ctx, param.Pos())
+                        .Name().Build(paramName)
+                        .Binding(binding)
+                        .Done();
+
+                    paramBindings->insert({paramName, std::move(paramBinding)});
+                }
+                return param.Ptr();
+            }
+        }
+
+        return node;
+    }, ctx, settings);
+
+    if (output) {
+        input = output;
+    }
+
+    return status;
+}
 
 class TKqpPeepholeTransformer : public TOptimizeTransformerBase {
 public:
@@ -335,60 +393,6 @@ TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(TAutoPtr<NYql::IGrap
     TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)
 {
     return new TKqpTxsPeepholeTransformer(std::move(typeAnnTransformer), typesCtx, config);
-}
-
-TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& ctx, THashMap<TString, TKqpParamBinding>* paramBindings) {
-    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
-        "RandomNumber",
-        "Random",
-        "RandomUuid",
-        "Now",
-        "CurrentUtcDate",
-        "CurrentUtcDatetime",
-        "CurrentUtcTimestamp"
-    };
-
-    TOptimizeExprSettings settings(nullptr);
-    settings.VisitChanges = true;
-
-    TExprNode::TPtr output;
-    auto status = OptimizeExpr(input, output, [paramBindings](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (auto maybeCallable = TMaybeNode<TCallable>(node)) {
-            auto callable = maybeCallable.Cast();
-            if (nonDeterministicFunctions.contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
-                const auto paramName = TStringBuilder() << ParamNamePrefix
-                    << NNaming::CamelToSnakeCase(TString(callable.CallableName()));
-
-                auto param = Build<TCoParameter>(ctx, node->Pos())
-                    .Name().Build(paramName)
-                    .Type(ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
-                    .Done();
-
-                if (paramBindings && !paramBindings->contains(paramName)) {
-                    auto binding = Build<TKqpTxInternalBinding>(ctx, node->Pos())
-                        .Type(ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
-                        .Kind().Build(callable.CallableName())
-                        .Done();
-
-                    auto paramBinding = Build<TKqpParamBinding>(ctx, param.Pos())
-                        .Name().Build(paramName)
-                        .Binding(binding)
-                        .Done();
-
-                    paramBindings->insert({paramName, std::move(paramBinding)});
-                }
-                return param.Ptr();
-            }
-        }
-
-        return node;
-    }, ctx, settings);
-
-    if (output) {
-        input = output;
-    }
-
-    return status;
 }
 
 } // namespace NKikimr::NKqp::NOpt

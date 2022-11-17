@@ -1,3 +1,5 @@
+#include "kqp_session_actor.h"
+
 #include <ydb/core/kqp/kqp_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -131,4 +133,13 @@ inline bool IsDocumentApiRestricted(const TString& requestType) {
     return requestType != "_document_api_request"sv;
 }
 
+TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const NYql::TIssue& issue);
+Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult);
+Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::TIssues& issues);
+void AddQueryIssues(NKikimrKqp::TQueryResponse& response, const NYql::TIssues& issues);
+bool HasSchemeOrFatalIssues(const NYql::TIssues& issues);
+
+IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
+    const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters);
 }

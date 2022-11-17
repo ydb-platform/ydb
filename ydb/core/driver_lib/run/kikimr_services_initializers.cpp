@@ -60,7 +60,8 @@
 
 #include <ydb/core/health_check/health_check.h>
 
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/proxy/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm/kqp_rm.h>
 
 #include <ydb/core/metering/metering.h>

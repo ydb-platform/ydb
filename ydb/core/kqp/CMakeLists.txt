@@ -12,14 +12,15 @@ add_subdirectory(compute_actor)
 add_subdirectory(counters)
 add_subdirectory(executer)
 add_subdirectory(expr_nodes)
+add_subdirectory(gateway)
 add_subdirectory(host)
 add_subdirectory(node)
 add_subdirectory(opt)
-add_subdirectory(prepare)
 add_subdirectory(provider)
 add_subdirectory(proxy)
 add_subdirectory(rm)
 add_subdirectory(runtime)
+add_subdirectory(session_actor)
 add_subdirectory(ut)
 
 add_library(ydb-core-kqp)
@@ -45,11 +46,13 @@ target_link_libraries(ydb-core-kqp PUBLIC
   core-kqp-compute_actor
   core-kqp-counters
   core-kqp-executer
+  core-kqp-gateway
   core-kqp-host
   core-kqp-node
   core-kqp-proxy
   core-kqp-rm
   core-kqp-runtime
+  core-kqp-session_actor
   ydb-core-protos
   core-sys_view-service
   ydb-core-util
@@ -70,12 +73,6 @@ target_sources(ydb-core-kqp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compile_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compute.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_shutdown_controller.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_ic_gateway.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_metadata_loader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_response.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_worker_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_worker_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_session_actor.cpp
 )
 
 add_global_library_for(ydb-core-kqp.global ydb-core-kqp)
@@ -101,11 +98,13 @@ target_link_libraries(ydb-core-kqp.global PUBLIC
   core-kqp-compute_actor
   core-kqp-counters
   core-kqp-executer
+  core-kqp-gateway
   core-kqp-host
   core-kqp-node
   core-kqp-proxy
   core-kqp-rm
   core-kqp-runtime
+  core-kqp-session_actor
   ydb-core-protos
   core-sys_view-service
   ydb-core-util

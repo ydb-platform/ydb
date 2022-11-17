@@ -7,7 +7,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/mon/mon.h>
 
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/rm/kqp_resource_estimation.h>
 #include <ydb/core/kqp/rm/kqp_rm.h>

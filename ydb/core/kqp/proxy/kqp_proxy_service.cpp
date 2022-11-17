@@ -10,7 +10,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
-#include <ydb/core/kqp/kqp_worker_common.h>
+#include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node/kqp_node.h>
 #include <ydb/core/kqp/rm/kqp_rm.h>
 #include <ydb/core/kqp/runtime/kqp_spilling_file.h>

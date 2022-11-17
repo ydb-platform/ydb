@@ -9,7 +9,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -480,7 +480,7 @@ private:
 
             CheckEntrySetHasTopicPath(FullTopicsCache.get());
             auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
- 
+
             for (auto& entry : FullTopicsCache->ResultSet) {
                 if (!entry.PQGroupInfo) {
                     CurrentTopicsFullConverters.push_back(nullptr);
@@ -494,7 +494,7 @@ private:
             }
 
             Y_VERIFY(CurrentTopicsFullConverters.size() == FullTopicsCache->ResultSet.size());
- 
+
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Updated topics cache with " << FullTopicsCache->ResultSet.size());
             while (!DescribeAllTopicsWaiters.empty()) {
                 SendDescribeAllTopicsResponse(DescribeAllTopicsWaiters.front()->WaiterId, CurrentTopicsFullConverters, ctx);

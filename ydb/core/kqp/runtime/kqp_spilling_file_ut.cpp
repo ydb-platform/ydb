@@ -1,7 +1,7 @@
 #include "kqp_spilling_file.h"
 #include "kqp_spilling.h"
 
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 

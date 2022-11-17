@@ -1,21 +1,9 @@
-#include "kqp_prepare.h"
-
-#include <ydb/core/engine/mkql_engine_flat.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/tx/datashard/sys_tables.h>
-
-#include <ydb/library/yql/utils/log/log.h>
-
-#include <google/protobuf/text_format.h>
+#include "kqp_tx.h"
 
 namespace NKikimr {
 namespace NKqp {
 
 using namespace NYql;
-using namespace NYql::NNodes;
-using namespace NYql::NCommon;
-using namespace NThreading;
 
 TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TMaybe<TKqpTxLock>& invalidatedLock) {
     TStringBuilder message;
@@ -38,8 +26,8 @@ TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TMayb
 }
 
 std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
-        TKqpTransactionContext& txCtx) {
-
+    TKqpTransactionContext& txCtx)
+{
     std::pair<bool, std::vector<TIssue>> res;
     auto& locks = txCtx.Locks;
 
@@ -110,20 +98,41 @@ bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue&
     return true;
 }
 
-bool UnpackMergeLocks(const NKikimrMiniKQL::TResult& result, TKqpTransactionContext& txCtx, TExprContext& ctx) {
-    auto structType = result.GetType().GetStruct();
-    ui32 locksIndex;
-    bool found = GetRunResultIndex(structType, TString(NKikimr::NMiniKQL::TxLocksResultLabel2), locksIndex);
-    YQL_ENSURE(found ^ txCtx.Locks.Broken());
+TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
+    TKqpTransactionInfo txInfo;
 
-    if (found) {
-        auto locksType = structType.GetMember(locksIndex).GetType().GetOptional().GetItem();
-        auto locksValue = result.GetValue().GetStruct(locksIndex).GetOptional();
-
-        return MergeLocks(locksType, locksValue, txCtx, ctx);
+    // Status
+    if (Invalidated) {
+        txInfo.Status = TKqpTransactionInfo::EStatus::Aborted;
+    } else if (Closed) {
+        txInfo.Status = TKqpTransactionInfo::EStatus::Committed;
+    } else {
+        txInfo.Status = TKqpTransactionInfo::EStatus::Active;
     }
 
-    return false;
+    // Kind
+    bool hasReads = false;
+    bool hasWrites = false;
+    for (auto& pair : TableOperations) {
+        hasReads = hasReads || (pair.second & KikimrReadOps());
+        hasWrites = hasWrites || (pair.second & KikimrModifyOps());
+    }
+
+    if (hasReads) {
+        txInfo.Kind = hasWrites
+            ? TKqpTransactionInfo::EKind::ReadWrite
+            : TKqpTransactionInfo::EKind::ReadOnly;
+    } else {
+        txInfo.Kind = hasWrites
+            ? TKqpTransactionInfo::EKind::WriteOnly
+            : TKqpTransactionInfo::EKind::Pure;
+    }
+
+    txInfo.TotalDuration = FinishTime - CreationTime;
+    txInfo.ServerDuration = QueriesDuration;
+    txInfo.QueriesCount = QueriesCount;
+
+    return txInfo;
 }
 
 } // namespace NKqp

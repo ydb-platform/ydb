@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/kqp_common.h>
-#include <ydb/core/kqp/common/kqp_gateway.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 
 #include <library/cpp/actors/core/actor.h>
 

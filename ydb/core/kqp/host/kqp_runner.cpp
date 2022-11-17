@@ -3,8 +3,10 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compile/kqp_compile.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
-#include <ydb/core/kqp/prepare/kqp_query_plan.h>
-#include <ydb/core/kqp/prepare/kqp_prepare.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
+#include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/core/yql_graph_transformer.h>

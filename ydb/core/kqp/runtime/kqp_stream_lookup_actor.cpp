@@ -6,7 +6,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
-#include <ydb/core/kqp/common/kqp_gateway.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>

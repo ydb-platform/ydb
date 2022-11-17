@@ -23,6 +23,7 @@ target_link_libraries(core-kqp-opt PUBLIC
   kqp-opt-physical
   yql-dq-common
   yql-dq-opt
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt.cpp
@@ -33,4 +34,10 @@ target_sources(core-kqp-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_check.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_finalize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_range_legacy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.cpp
+)
+generate_enum_serilization(core-kqp-opt
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.h
+  INCLUDE_HEADERS
+  ydb/core/kqp/opt/kqp_query_plan.h
 )

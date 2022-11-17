@@ -1,14 +1,13 @@
 #include "kqp_impl.h"
-#include "kqp_metadata_loader.h"
-
-#include "kqp_worker_common.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/wilson.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
+#include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 

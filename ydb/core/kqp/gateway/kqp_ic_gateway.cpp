@@ -1,5 +1,5 @@
+#include "kqp_gateway.h"
 #include "kqp_ic_gateway_actors.h"
-#include "kqp_impl.h"
 #include "kqp_metadata_loader.h"
 
 #include <ydb/core/base/appdata.h>
@@ -8,10 +8,9 @@
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/kqp/common/kqp_gateway.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer/kqp_executer.h>
 #include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>

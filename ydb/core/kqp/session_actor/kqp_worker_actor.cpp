@@ -1,7 +1,4 @@
-#include "kqp_impl.h"
-#include "kqp_metadata_loader.h"
 #include "kqp_worker_common.h"
-#include <ydb/core/kqp/common/kqp_ru_calc.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -11,8 +8,10 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/kqp_ru_calc.h>
+#include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
+#include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/aclib/aclib.h>
 

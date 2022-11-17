@@ -1,7 +1,7 @@
 #pragma once
 #include "log_backend.h"
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_devicemode.h>
-#include <ydb/core/kqp/kqp_query_replay.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/auth.pb.h>

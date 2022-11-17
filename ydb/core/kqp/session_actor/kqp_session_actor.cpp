@@ -1,14 +1,13 @@
-#include "kqp_impl.h"
+#include "kqp_session_actor.h"
+#include "kqp_tx.h"
 #include "kqp_worker_common.h"
 
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
-#include <ydb/core/kqp/common/kqp_transform.h>
 #include <ydb/core/kqp/executer/kqp_executer.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
-#include <ydb/core/kqp/prepare/kqp_prepare.h>
-#include <ydb/core/kqp/prepare/kqp_query_plan.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
@@ -53,6 +52,60 @@ namespace {
 #define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
+
+inline bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
+    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
+{
+    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
+        return false;
+
+    if (!config.FeatureFlags.GetEnableMvccSnapshotReads())
+        return false;
+
+    if (txCtx.GetSnapshot().IsValid())
+        return false;
+
+    if (rollbackTx)
+        return false;
+    if (!commitTx)
+        return true;
+
+    size_t readPhases = 0;
+    bool hasEffects = false;
+
+    for (const auto &tx : physicalQuery.GetTransactions()) {
+        switch (tx.GetType()) {
+            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+                // ignore pure computations
+                break;
+
+            default:
+                ++readPhases;
+                break;
+        }
+
+        if (tx.GetHasEffects()) {
+            hasEffects = true;
+        }
+    }
+
+    // We don't want snapshot when there are effects at the moment,
+    // because it hurts performance when there are multiple single-shard
+    // reads and a single distributed commit. Taking snapshot costs
+    // similar to an additional distributed transaction, and it's very
+    // hard to predict when that happens, causing performance
+    // degradation.
+    if (hasEffects) {
+        return false;
+    }
+
+    // We need snapshot when there are multiple table read phases, most
+    // likely it involves multiple tables and we would have to use a
+    // distributed commit otherwise. Taking snapshot helps as avoid TLI
+    // for read-only transactions, and costs less than a final distributed
+    // commit.
+    return readPhases > 1;
+}
 
 class TRequestFail : public yexception {
 public:
@@ -220,7 +273,7 @@ public:
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
-                    ModuleResolverState, Counters));
+                ModuleResolverState, Counters));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), ev->Release().Release(), ev->Flags, ev->Cookie,

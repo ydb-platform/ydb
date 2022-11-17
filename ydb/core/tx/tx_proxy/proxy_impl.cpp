@@ -8,7 +8,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer/kqp_executer.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/protos/counters_tx_proxy.pb.h>

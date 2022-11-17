@@ -1,5 +1,3 @@
-#include "kqp_prepare.h"
-
 #include "kqp_query_plan.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>

@@ -1,36 +1,14 @@
 #pragma once
 
-#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
-
-#include <ydb/core/kqp/common/kqp_gateway.h>
-#include <ydb/core/kqp/common/kqp_tx_info.h>
-#include <ydb/core/kqp/common/kqp_topic.h>
-
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
-#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
-#include <ydb/library/yql/dq/common/dq_value.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <library/cpp/actors/core/actorid.h>
 
-namespace NKikimr {
-namespace NKqp {
-
-const TStringBuf ParamNamePrefix = "%kqp%";
-const TStringBuf LocksAcquireParamName = "%kqp%locks_acquire";
-const TStringBuf LocksTxIdParamName = "%kqp%locks_txid";
-const TStringBuf LocksListParamName = "%kqp%locks_list";
-const TStringBuf ReadTargetParamName = "%kqp%read_target";
-
-/* Non-deterministic internal params */
-const std::string_view NowParamName = "%kqp%now";
-const std::string_view CurrentDateParamName = "%kqp%current_utc_date";
-const std::string_view CurrentDatetimeParamName = "%kqp%current_utc_datetime";
-const std::string_view CurrentTimestampParamName = "%kqp%current_utc_timestamp";
-const std::string_view RandomParamName = "%kqp%random";
-const std::string_view RandomNumberParamName = "%kqp%random_number";
-const std::string_view RandomUuidParamName = "%kqp%random_uuid";
+namespace NKikimr::NKqp {
 
 class TKqpTxLock {
 public:
@@ -93,6 +71,7 @@ struct TDeferredEffect {
     explicit TDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx)
         : PhysicalTx(std::move(physicalTx)) {}
 };
+
 
 class TKqpTransactionContext;
 
@@ -252,32 +231,10 @@ public:
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
 };
 
-class TLogExprTransformer {
-public:
-    TLogExprTransformer(const TString& description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)
-        : Description(description)
-        , Component(component)
-        , Level(level) {}
+bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx,
+    NYql::TExprContext& ctx);
 
-    NYql::IGraphTransformer::TStatus operator()(const NYql::TExprNode::TPtr& input, NYql::TExprNode::TPtr& output,
-        NYql::TExprContext& ctx);
+std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
+    const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 
-    static TAutoPtr<NYql::IGraphTransformer> Sync(const TString& description,
-        NYql::NLog::EComponent component = NYql::NLog::EComponent::ProviderKqp,
-        NYql::NLog::ELevel level = NYql::NLog::ELevel::INFO);
-
-    static void LogExpr(const NYql::TExprNode& input, NYql::TExprContext& ctx, const TString& description,
-        NYql::NLog::EComponent component = NYql::NLog::EComponent::ProviderKqp,
-        NYql::NLog::ELevel level = NYql::NLog::ELevel::INFO);
-
-private:
-    TString Description;
-    NYql::NLog::EComponent Component;
-    NYql::NLog::ELevel Level;
-};
-
-TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TTimeAndRandomProvider& randomCtx, NYql::TKikimrParamsMap& parameters,
-    const TVector<TVector<NKikimrMiniKQL::TResult>>& txResults, const NKqpProto::TKqpPhyParamBinding& paramBinding);
-
-} // namespace NKqp
-} // namespace NKikimr
+}  // namespace NKikimr::NKqp

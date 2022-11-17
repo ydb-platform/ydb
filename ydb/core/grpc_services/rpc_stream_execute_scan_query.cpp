@@ -9,7 +9,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/kqp/executer/kqp_executer.h>
-#include <ydb/core/kqp/prepare/kqp_query_plan.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/protos/ydb_table_impl.pb.h>

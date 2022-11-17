@@ -8,7 +8,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/engine/kikimr_program_builder.h>
-#include <ydb/core/kqp/kqp.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>

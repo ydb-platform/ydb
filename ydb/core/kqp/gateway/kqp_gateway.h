@@ -5,17 +5,52 @@
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_value.h>
+#include <ydb/core/kqp/common/kqp_topic.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 
 #include <library/cpp/actors/wilson/wilson_trace.h>
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/lwtrace/shuttle.h>
-
-#include <ydb/core/kqp/common/kqp_topic.h>
+#include <library/cpp/protobuf/util/pb_io.h>
 
 namespace NKikimr {
 namespace NKqp {
+
+const TStringBuf ParamNamePrefix = "%kqp%";
+
+struct TKqpSettings {
+    using TConstPtr = std::shared_ptr<const TKqpSettings>;
+
+    TKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& settings)
+        : Settings(settings)
+    {
+        auto defaultSettingsData = NResource::Find("kqp_default_settings.txt");
+        TStringInput defaultSettingsStream(defaultSettingsData);
+        Y_VERIFY(TryParseFromTextFormat(defaultSettingsStream, DefaultSettings));
+    }
+
+    TKqpSettings()
+        : Settings()
+    {
+        auto defaultSettingsData = NResource::Find("kqp_default_settings.txt");
+        TStringInput defaultSettingsStream(defaultSettingsData);
+        Y_VERIFY(TryParseFromTextFormat(defaultSettingsStream, DefaultSettings));
+    }
+
+    NKikimrKqp::TKqpDefaultSettings DefaultSettings;
+    TVector<NKikimrKqp::TKqpSetting> Settings;
+};
+
+struct TModuleResolverState : public TThrRefBase {
+    NYql::TExprContext ExprCtx;
+    NYql::IModuleResolver::TPtr ModuleResolver;
+    THolder<NYql::TExprContext::TFreezeGuard> FreezeGuardHolder;
+};
+
+void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConfig::TTableServiceConfig& serviceConfig);
 
 struct TKqpParamsMap {
     TKqpParamsMap() {}
@@ -133,6 +168,10 @@ public:
     virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
         TKqpParamsMap&& params, const TAstQuerySettings& settings, const NActors::TActorId& target) = 0;
 };
+
+TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const TString& database,
+    std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem,
+    ui32 nodeId, TKqpRequestCounters::TPtr counters);
 
 } // namespace NKqp
 } // namespace NKikimr

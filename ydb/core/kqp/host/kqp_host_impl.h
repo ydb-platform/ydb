@@ -2,8 +2,7 @@
 
 #include "kqp_host.h"
 
-#include <ydb/core/kqp/common/kqp_transform.h>
-#include <ydb/core/kqp/prepare/kqp_prepare.h>
+#include <ydb/core/kqp/host/kqp_transform.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -225,79 +224,6 @@ TIntrusivePtr<NYql::IKikimrAsyncResult<TApplyResult>> AsyncApplyResult(
     return MakeIntrusive<TKqpAsyncApplyResult<TResult, TApplyResult>>(result, callback);
 }
 
-template<typename TResult, bool copyIssues = true>
-class TKqpAsyncExecuteResultBase : public TKqpAsyncResultBase<TResult, copyIssues> {
-public:
-    TKqpAsyncExecuteResultBase(const NYql::TExprNode::TPtr& exprRoot, NYql::TExprContext& exprCtx,
-        NYql::IGraphTransformer& transformer, TIntrusivePtr<NYql::TKikimrTransactionContextBase> txCtx)
-        : TKqpAsyncResultBase<TResult, copyIssues>(exprRoot, exprCtx, transformer,
-            [txCtx](const auto& status) {
-                if (txCtx) {
-                    auto& kqpTxCtx = static_cast<TKqpTransactionContext&>(*txCtx);
-                    if (status == NYql::IGraphTransformer::TStatus::Ok) {
-                        kqpTxCtx.OnEndQuery();
-                    } else {
-                        kqpTxCtx.Invalidate();
-                    }
-                }
-            }) {}
-};
-
-inline bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
-    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
-{
-    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
-        return false;
-
-    if (!config.FeatureFlags.GetEnableMvccSnapshotReads())
-        return false;
-
-    if (txCtx.GetSnapshot().IsValid())
-        return false;
-
-    if (rollbackTx)
-        return false;
-    if (!commitTx)
-        return true;
-
-    size_t readPhases = 0;
-    bool hasEffects = false;
-
-    for (const auto &tx : physicalQuery.GetTransactions()) {
-        switch (tx.GetType()) {
-            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                // ignore pure computations
-                break;
-
-            default:
-                ++readPhases;
-                break;
-        }
-
-        if (tx.GetHasEffects()) {
-            hasEffects = true;
-        }
-    }
-
-    // We don't want snapshot when there are effects at the moment,
-    // because it hurts performance when there are multiple single-shard
-    // reads and a single distributed commit. Taking snapshot costs
-    // similar to an additional distributed transaction, and it's very
-    // hard to predict when that happens, causing performance
-    // degradation.
-    if (hasEffects) {
-        return false;
-    }
-
-    // We need snapshot when there are multiple table read phases, most
-    // likely it involves multiple tables and we would have to use a
-    // distributed commit otherwise. Taking snapshot helps as avoid TLI
-    // for read-only transactions, and costs less than a final distributed
-    // commit.
-    return readPhases > 1;
-}
-
-
 class IKqpRunner : public TThrRefBase {
 public:
     using TQueryResult = NYql::IKikimrGateway::TQueryResult;
@@ -318,6 +244,12 @@ TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, co
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx);
+
+TAutoPtr<NYql::IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
+    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TTypeAnnotationContext& typesCtx,
+    NYql::TKikimrConfiguration::TPtr config);
+
+TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckQueryTransformer();
 
 } // namespace NKqp
 } // namespace NKikimr

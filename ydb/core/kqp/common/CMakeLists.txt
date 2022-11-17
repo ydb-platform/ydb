@@ -31,7 +31,6 @@ target_sources(core-kqp-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_resolve.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_ru_calc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_transform.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_yql.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_timeouts.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_lwtrace_probes.cpp

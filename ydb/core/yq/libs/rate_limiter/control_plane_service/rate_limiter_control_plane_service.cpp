@@ -180,7 +180,7 @@ private:
 
     void ProcessResponse(TRequest& req, TEvents::TEvSchemaCreated::TPtr& ev) {
         TEvRateLimiter::TEvCreateResource::TPtr& originalRequest = std::get<TEvRateLimiter::TEvCreateResource::TPtr>(req.OriginalRequest);
-        if (ev->Get()->Result.IsSuccess() || ev->Get()->Result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
+        if (IsResourceCreationSuccess(ev)) {
             NActors::TActivationContext::AsActorContext().Send(
                 originalRequest->Sender,
                 new TEvRateLimiter::TEvCreateResourceResponse(
@@ -230,6 +230,21 @@ private:
             0, // flags
             originalRequest->Cookie
         );
+    }
+
+    static bool IsResourceCreationSuccess(TEvents::TEvSchemaCreated::TPtr& ev) {
+        if (ev->Get()->Result.IsSuccess() || ev->Get()->Result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
+            return true;
+        }
+        // Special case: when resource os already created, but have its quota altered manually
+        if (ev->Get()->Result.GetStatus() == NYdb::EStatus::BAD_REQUEST) {
+            for (const NYql::TIssue& i : ev->Get()->Result.GetIssues()) {
+                if (i.GetMessage().find("Resource already exists") != TString::npos) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
 private:

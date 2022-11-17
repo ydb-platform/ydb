@@ -557,7 +557,13 @@ public:
             QuoterResourceCreated = true;
             SendRequestIfCan();
         } else {
-            ReplyWithError(ev->Get()->Issues);
+            NYql::TIssue issue("Failed to create rate limiter resource");
+            for (const NYql::TIssue& i : ev->Get()->Issues) {
+                issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+            }
+            NYql::TIssues issues;
+            issues.AddIssue(issue);
+            ReplyWithError(issues);
         }
     }
 

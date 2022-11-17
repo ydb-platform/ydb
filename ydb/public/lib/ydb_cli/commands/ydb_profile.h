@@ -36,6 +36,7 @@ protected:
             IamTokenFile, IamEndpoint, User, PasswordFile;
 
     bool UseMetadataCredentials = false;
+    bool AnonymousAuth = false;
 
 private:
     void SetupProfileSetting(const TString& name, const TString& value, bool existingProfile, const TString &profileName,

@@ -375,6 +375,12 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         config.UseMetadataCredentials = true;
         return true;
     }
+    if (authMethod == "anonymous-auth") {
+        if (IsVerbose()) {
+            PrintSettingFromProfile("anonymous authentication", profile, explicitOption);
+        }
+        return true;
+    }
     bool knownMethod = false;
     if (config.UseIamAuth) {
         knownMethod |= (authMethod == "iam-token" || authMethod == "yc-token" || authMethod == "sa-key-file" ||

@@ -487,7 +487,14 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
         );
     }
     picker.AddOption(
-            TStringBuilder() << "Don't save authentication data for profile \"" << profileName << "\"",
+            TStringBuilder() << "Set anonymous authentication for profile \"" << profileName << "\"",
+            [&profile, &profileName]() {
+                Cout << "Setting anonymous authentication method for profile \"" << profileName << "\"" << Endl;
+                PutAuthMethodWithoutPars(profile, "anonymous-auth");
+            }
+    );
+    picker.AddOption(
+            TStringBuilder() << "Don't save authentication data for profile (environment variables can be used) \"" << profileName << "\"",
             [&profile]() {
                 profile->RemoveValue(AuthNode);
             }
@@ -530,6 +537,8 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
         PutAuthMethod( profile, "sa-key-file", SaKeyFile);
     } else if (User) {
         PutAuthStatic( profile, User, PasswordFile, true );
+    } else if (AnonymousAuth) {
+        PutAuthMethodWithoutPars(profile, "anonymous-auth");
     } else {
         return false;
     }
@@ -540,7 +549,7 @@ void TCommandProfileCommon::ValidateAuth() {
     size_t authMethodCount =
             (bool) (TokenFile) + (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
-            (bool) (SaKeyFile) +
+            (bool) (SaKeyFile) + AnonymousAuth +
             (User || PasswordFile);
 
     if (!User && PasswordFile) {
@@ -560,7 +569,7 @@ void TCommandProfileCommon::ValidateAuth() {
             str << " YCTokenFile (" << YcTokenFile << ")";
         }
         if (UseMetadataCredentials) {
-            str << " Metadata credentials" << ")";
+            str << " Metadata credentials";
         }
         if (SaKeyFile) {
             str << " SAKeyFile (" << SaKeyFile << ")";
@@ -571,6 +580,9 @@ void TCommandProfileCommon::ValidateAuth() {
         if (PasswordFile) {
             str << " Password file (" << PasswordFile << ")";
         }
+        if (AnonymousAuth) {
+            str << " Anonymous authentication";
+        }
 
         throw TMisuseException() << str << ". Choose exactly one of them";
     }
@@ -580,7 +592,7 @@ bool TCommandProfileCommon::AnyProfileOptionInCommandLine() {
     return Endpoint || Database || TokenFile ||
            IamTokenFile || YcTokenFile ||
            SaKeyFile || UseMetadataCredentials || User ||
-           PasswordFile || IamEndpoint;
+           PasswordFile || IamEndpoint || AnonymousAuth;
 }
 
 TCommandCreateProfile::TCommandCreateProfile()
@@ -599,6 +611,7 @@ void TCommandProfileCommon::Config(TConfig& config) {
 
     opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH").StoreResult(&TokenFile);
     opts.AddLongOption("iam-token-file", "Access token file").RequiredArgument("PATH").Hidden().StoreResult(&IamTokenFile);
+    opts.AddLongOption("anonymous-auth", "Anonymous authentication").Optional().StoreTrue(&AnonymousAuth);
     if (config.UseIamAuth) {
         opts.AddLongOption("yc-token-file", "YC OAuth refresh token file").RequiredArgument("PATH").StoreResult(&YcTokenFile);
         opts.AddLongOption("use-metadata-credentials", "Metadata service authentication").Optional().StoreTrue(&UseMetadataCredentials);
@@ -970,7 +983,7 @@ void TCommandUpdateProfile::ValidateNoOptions() {
     size_t authMethodCount =
             (bool) (TokenFile) + (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
-            (bool) (SaKeyFile) +
+            (bool) (SaKeyFile) + AnonymousAuth +
             (User || PasswordFile);
 
     if (authMethodCount > 0 && NoAuth) {

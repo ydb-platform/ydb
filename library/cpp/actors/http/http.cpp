@@ -22,6 +22,10 @@ inline TStringBuf operator +=(TStringBuf& l, TStringBuf r) {
     return l = l + r;
 }
 
+static bool is_not_number(TStringBuf v) {
+    return v.empty() || std::find_if_not(v.begin(), v.end(), [](unsigned char c) { return std::isdigit(c); }) != v.end();
+}
+
 namespace NHttp {
 
 template <> TStringBuf THttpRequest::GetName<&THttpRequest::Host>() { return "Host"; }
@@ -126,13 +130,16 @@ void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
                 [[fallthrough]];
             }
             case EParseStage::Body: {
-                if (!ContentLength.empty()) {
-                    if (ProcessData(Content, data, FromString(ContentLength))) {
+                if (TEqNoCase()(TransferEncoding, "chunked")) {
+                    Stage = EParseStage::ChunkLength;
+                } else if (!ContentLength.empty()) {
+                    if (is_not_number(ContentLength)) {
+                        // Invalid content length
+                        Stage = EParseStage::Error;
+                    } else if (ProcessData(Content, data, FromStringWithDefault(ContentLength, 0))) {
                         Body = Content;
                         Stage = EParseStage::Done;
                     }
-                } else if (TEqNoCase()(TransferEncoding, "chunked")) {
-                    Stage = EParseStage::ChunkLength;
                 } else if (TotalSize.has_value()) {
                     if (ProcessData(Content, data, GetBodySizeFromTotalSize())) {
                         Body = Content;
@@ -282,16 +289,19 @@ void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
                 [[fallthrough]];
             }
             case EParseStage::Body: {
-                if (!ContentLength.empty()) {
-                    if (ProcessData(Body, data, FromString(ContentLength))) {
+                if (TEqNoCase()(TransferEncoding, "chunked")) {
+                    Stage = EParseStage::ChunkLength;
+                } else if (!ContentLength.empty()) {
+                    if (is_not_number(ContentLength)) {
+                        // Invalid content length
+                        Stage = EParseStage::Error;
+                    } else if (ProcessData(Body, data, FromStringWithDefault(ContentLength, 0))) {
                         Stage = EParseStage::Done;
                         if (Body && ContentEncoding == "deflate") {
                             Content = DecompressDeflate(Body);
                             Body = Content;
                         }
                     }
-                } else if (TEqNoCase()(TransferEncoding, "chunked")) {
-                    Stage = EParseStage::ChunkLength;
                 } else if (TotalSize.has_value()) {
                     if (ProcessData(Content, data, GetBodySizeFromTotalSize())) {
                         Body = Content;
@@ -401,9 +411,11 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
                 }
             }
         }
+        headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
         response->Set(headers);
         response->SetBody(parser.Body);
     } else {
+        headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
         response->Set(headers);
         if (!response->ContentLength) {
             response->Set<&THttpResponse::ContentLength>("0");

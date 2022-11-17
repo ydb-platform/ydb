@@ -349,7 +349,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
     NActors::TMon::TConfig monConfig;
     monConfig.Port = appConfig.HasMonitoringConfig() ? appConfig.GetMonitoringConfig().GetMonitoringPort() : 0;
     if (monConfig.Port) {
-        monConfig.Title = appConfig.HasMonitoringConfig() ? appConfig.GetMonitoringConfig().GetMonitoringCaption() : "YDB Monitoring";
+        monConfig.Title = appConfig.GetMonitoringConfig().GetMonitoringCaption();
         monConfig.Threads = appConfig.GetMonitoringConfig().GetMonitoringThreads();
         monConfig.Address = appConfig.GetMonitoringConfig().GetMonitoringAddress();
         monConfig.Certificate = appConfig.GetMonitoringConfig().GetMonitoringCertificate();

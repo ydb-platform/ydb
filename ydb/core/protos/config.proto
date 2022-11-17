@@ -494,7 +494,7 @@ message TMonitoringConfig {
 
     optional uint32 MonitoringPort = 1 [default = 0];
     optional uint32 MonitoringThreads = 2 [default = 10];
-    optional string MonitoringCaption = 3 [default = "YDB Monitoring"];
+    optional string MonitoringCaption = 3 [default = "YDB Developer UI"];
     optional uint32 TabletMonitoringRetries = 4 [default = 1];
     optional bool ForceDatabaseLabels = 5 [default = false];
     optional string MonitoringAddress = 6;

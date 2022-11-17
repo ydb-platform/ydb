@@ -901,6 +901,24 @@ private:
         VisitAllFields(TRule_drop_role_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateObject(const TRule_create_object_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_object_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterObject(const TRule_alter_object_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_alter_object_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropObject(const TRule_drop_object_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_object_stmt::GetDescriptor(), msg);
+    }
+
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
@@ -1762,7 +1780,10 @@ TStaticData::TStaticData()
         {TRule_create_group_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateGroup)},
         {TRule_alter_group_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterGroup)},
         {TRule_drop_role_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropRole)},
-    })
+        {TRule_create_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateObject)},
+        {TRule_alter_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterObject)},
+        {TRule_drop_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropObject)},
+        })
 {
     // ensure that all statements has a visitor
     auto coreDescr = TRule_sql_stmt_core::GetDescriptor();

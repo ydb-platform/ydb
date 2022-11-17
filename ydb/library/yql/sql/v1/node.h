@@ -82,6 +82,7 @@ namespace NSQLTranslationV1 {
     class ITableKeys;
     class ISource;
     class IAggregation;
+    class TObjectOperatorContext;
     typedef TIntrusivePtr<IAggregation> TAggregationPtr;
 
     struct TScopedState;
@@ -1380,6 +1381,12 @@ namespace NSQLTranslationV1 {
         TScopedStatePtr scoped);
     TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
     TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped);
+    TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+        std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+    TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+        std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+    TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+        std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context);
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,
         TScopedStatePtr scoped);
     TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);

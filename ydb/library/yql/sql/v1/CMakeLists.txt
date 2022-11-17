@@ -51,6 +51,7 @@ target_sources(yql-sql-v1 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/select.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/object_processing.cpp
 )
 generate_enum_serilization(yql-sql-v1
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/node.h

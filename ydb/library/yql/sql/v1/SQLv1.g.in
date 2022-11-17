@@ -44,6 +44,9 @@ sql_stmt_core:
   | create_group_stmt
   | alter_group_stmt
   | drop_role_stmt
+  | create_object_stmt
+  | alter_object_stmt
+  | drop_object_stmt
 ;
 
 expr:
@@ -450,6 +453,38 @@ values_source_row: LPAREN expr_list RPAREN;
 
 simple_values_source: expr_list | select_stmt;
 
+create_object_stmt: CREATE OBJECT object_ref
+    LPAREN
+    TYPE object_type_ref
+    create_object_features?
+    RPAREN
+;
+create_object_features: WITH object_features;
+
+alter_object_stmt: ALTER OBJECT object_ref
+    LPAREN
+    TYPE object_type_ref
+    alter_object_features
+    RPAREN
+;
+alter_object_features: SET object_features;
+
+drop_object_stmt: DROP OBJECT object_ref
+    LPAREN
+    TYPE object_type_ref
+    drop_object_options?
+    RPAREN
+;
+drop_object_options: WITH object_features;
+
+object_feature_value: an_id_or_type | bind_parameter;
+object_feature_kv: an_id_or_type EQUALS object_feature_value;
+object_feature_flag: an_id_or_type;
+object_feature: object_feature_kv | object_feature_flag;
+object_features: object_feature (COMMA object_feature)*;
+
+object_type_ref: an_id_or_type;
+
 create_table_stmt: CREATE (TABLE | TABLESTORE) simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* RPAREN
     table_inherits?
     table_partition_by?
@@ -534,7 +569,7 @@ changefeed_setting_value:
     STRING_VALUE
   | bool_value
 ;
-changefeed_alter_settings: 
+changefeed_alter_settings:
     DISABLE
   | SET LPAREN changefeed_settings RPAREN
 ;
@@ -593,7 +628,8 @@ table_hint:
     | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
 ;
 
-simple_table_ref_core: ((cluster_expr DOT)? id_or_at) | AT? bind_parameter;
+object_ref: (cluster_expr DOT)? id_or_at;
+simple_table_ref_core: object_ref | AT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
@@ -1002,6 +1038,7 @@ keyword_compat: (
   | TEMPORARY
   | THEN
   | TIES
+  | TYPE
   | TO
   | TRANSACTION
   | TRIGGER
@@ -1318,6 +1355,7 @@ TEMP: T E M P;
 TEMPORARY: T E M P O R A R Y;
 THEN: T H E N;
 TIES: T I E S;
+TYPE: T Y P E;
 TO: T O;
 TRANSACTION: T R A N S A C T I O N;
 TRIGGER: T R I G G E R;

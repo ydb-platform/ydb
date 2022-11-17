@@ -3,6 +3,7 @@
 #include "context.h"
 #include "node.h"
 #include "sql_call_param.h"
+#include "object_processing.h"
 #include "ydb/library/yql/ast/yql_ast.h"
 #include <ydb/library/yql/parser/lexer_common/hints.h>
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
@@ -496,27 +497,6 @@ static TIdentifier IdEx(const TRule& node, TTranslation& ctx) {
     return TIdentifier(pos, name);
 }
 
-static TString OptIdPrefixAsStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
-    if (!node.HasBlock1()) {
-        return defaultStr;
-    }
-    return Id(node.GetBlock1().GetRule_an_id1(), ctx);
-}
-
-static TString OptIdPrefixAsStr(const TRule_opt_id_prefix_or_type& node, TTranslation& ctx, const TString& defaultStr = {}) {
-    if (!node.HasBlock1()) {
-        return defaultStr;
-    }
-    return Id(node.GetBlock1().GetRule_an_id_or_type1(), ctx);
-}
-
-static void PureColumnListStr(const TRule_pure_column_list& node, TTranslation& ctx, TVector<TString>& outList) {
-    outList.push_back(Id(node.GetRule_an_id2(), ctx));
-    for (auto& block: node.GetBlock3()) {
-        outList.push_back(Id(block.GetRule_an_id2(), ctx));
-    }
-}
-
 static bool NamedNodeImpl(const TRule_bind_parameter& node, TString& name, TTranslation& ctx) {
     // bind_parameter: DOLLAR (an_id_or_type | TRUE | FALSE);
     TString id;
@@ -541,6 +521,27 @@ static bool NamedNodeImpl(const TRule_bind_parameter& node, TString& name, TTran
 
     name = dollar + id;
     return true;
+}
+
+static TString OptIdPrefixAsStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
+    if (!node.HasBlock1()) {
+        return defaultStr;
+    }
+    return Id(node.GetBlock1().GetRule_an_id1(), ctx);
+}
+
+static TString OptIdPrefixAsStr(const TRule_opt_id_prefix_or_type& node, TTranslation& ctx, const TString& defaultStr = {}) {
+    if (!node.HasBlock1()) {
+        return defaultStr;
+    }
+    return Id(node.GetBlock1().GetRule_an_id_or_type1(), ctx);
+}
+
+static void PureColumnListStr(const TRule_pure_column_list& node, TTranslation& ctx, TVector<TString>& outList) {
+    outList.push_back(Id(node.GetRule_an_id2(), ctx));
+    for (auto& block: node.GetBlock3()) {
+        outList.push_back(Id(block.GetRule_an_id2(), ctx));
+    }
 }
 
 static bool NamedNodeImpl(const TRule_opt_bind_parameter& node, TString& name, bool& isOptional, TTranslation& ctx) {
@@ -896,6 +897,10 @@ protected:
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const;
 
+    bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature);
+    bool BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result);
+    bool ObjectFeatureValueClause(const TRule_object_feature_value & node, TDeferredAtom & result);
+    bool ParseObjectFeatures(std::map<TString, TDeferredAtom> & result, const TRule_object_features & features);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result) ;
 private:
@@ -3143,13 +3148,13 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
     TDeferredAtom cluster = Context().Scoped->CurrCluster;
     switch (node.Alt_case()) {
     case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
-        if (node.GetAlt_simple_table_ref_core1().GetBlock1().HasBlock1()) {
+        if (node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
             if (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
                 Error() << "Cluster should not be used in limited view";
                 return false;
             }
 
-            if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetBlock1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+            if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
                 return false;
             }
         }
@@ -3160,7 +3165,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         }
 
         result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
-        auto tableOrAt = Id(node.GetAlt_simple_table_ref_core1().GetBlock1().GetRule_id_or_at2(), *this);
+        auto tableOrAt = Id(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
         auto tableAndView = TableKeyImpl(tableOrAt, "", *this);
         result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster,
             TDeferredAtom(Context().Pos(), tableAndView.first), tableAndView.second);
@@ -6407,22 +6412,17 @@ bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPo
 bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles) {
     // role_name: an_id_or_type | bind_parameter;
     switch (node.Alt_case()) {
-        case TRule_role_name::kAltRoleName1: {
+        case TRule_role_name::kAltRoleName1:
+        {
             TString name = Id(node.GetAlt_role_name1().GetRule_an_id_or_type1(), *this);
             result = TDeferredAtom(Ctx.Pos(), name);
             break;
         }
-        case TRule_role_name::kAltRoleName2: {
-            TString paramName;
-            if (!NamedNodeImpl(node.GetAlt_role_name2().GetRule_bind_parameter1(), paramName, *this)) {
+        case TRule_role_name::kAltRoleName2:
+        {
+            if (!BindParameterClause(node.GetAlt_role_name2().GetRule_bind_parameter1(), result)) {
                 return false;
             }
-            auto named = GetNamedNode(paramName);
-            if (!named) {
-                return false;
-            }
-
-            result = MakeAtomFromExpression(Ctx, named);
             break;
         }
         default:
@@ -8219,9 +8219,9 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     bool isBinding = false;
     switch (tableRefCore.Alt_case()) {
         case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
-            if (tableRefCore.GetAlt_simple_table_ref_core1().GetBlock1().HasBlock1()) {
-                const auto& clusterExpr = tableRefCore.GetAlt_simple_table_ref_core1().GetBlock1().GetBlock1().GetRule_cluster_expr1();
-                bool hasAt = tableRefCore.GetAlt_simple_table_ref_core1().GetBlock1().GetRule_id_or_at2().HasBlock1();
+            if (tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
+                const auto& clusterExpr = tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1();
+                bool hasAt = tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1();
                 bool result = !hasAt ?
                     ClusterExprOrBinding(clusterExpr, service, cluster, isBinding) : ClusterExpr(clusterExpr, false, service, cluster);
                 if (!result) {
@@ -8234,7 +8234,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
                 return nullptr;
             }
 
-            auto id = Id(tableRefCore.GetAlt_simple_table_ref_core1().GetBlock1().GetRule_id_or_at2(), *this);
+            auto id = Id(tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
             nameOrAt = std::make_pair(id.first, TDeferredAtom(Ctx.Pos(), id.second));
             break;
         }
@@ -9000,7 +9000,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, stmt);
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore25: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore25:
+        {
             // drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
             Ctx.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core25().GetRule_drop_role_stmt1();
@@ -9033,6 +9034,76 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             AddStatementToBlocks(blocks, BuildDropRoles(pos, service, cluster, roles, isUser, force, Ctx.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore26:
+        {
+            // create_object_stmt: CREATE OBJECT name (TYPE type [WITH k=v,...]);
+            auto& node = core.GetAlt_sql_stmt_core26().GetRule_create_object_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
+            std::map<TString, TDeferredAtom> kv;
+            if (node.HasBlock7()) {
+                if (!ParseObjectFeatures(kv, node.GetBlock7().GetRule_create_object_features1().GetRule_object_features2())) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore27:
+        {
+            // create_object_stmt: ALTER OBJECT name (TYPE type [SET k=v,...]);
+            auto& node = core.GetAlt_sql_stmt_core27().GetRule_alter_object_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseObjectFeatures(kv, node.GetRule_alter_object_features7().GetRule_object_features2())) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore28:
+        {
+            // create_object_stmt: DROP OBJECT name (TYPE type [WITH k=v,...]);
+            auto& node = core.GetAlt_sql_stmt_core28().GetRule_drop_object_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
+            std::map<TString, TDeferredAtom> kv;
+            if (node.HasBlock7()) {
+                if (!ParseObjectFeatures(kv, node.GetBlock7().GetRule_drop_object_options1().GetRule_object_features2())) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
         default:
@@ -10510,6 +10581,70 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
         ctx.WarningPolicy.Clear();
     }
     return res;
+}
+
+bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result) {
+    TString paramName;
+    if (!NamedNodeImpl(node, paramName, *this)) {
+        return false;
+    }
+    auto named = GetNamedNode(paramName);
+    if (!named) {
+        return false;
+    }
+
+    result = MakeAtomFromExpression(Ctx, named);
+    return true;
+}
+
+bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result) {
+    // object_feature_value: an_id_or_type | bind_parameter;
+    switch (node.Alt_case()) {
+        case TRule_object_feature_value::kAltObjectFeatureValue1:
+        {
+            TString name = Id(node.GetAlt_object_feature_value1().GetRule_an_id_or_type1(), *this);
+            result = TDeferredAtom(Ctx.Pos(), name);
+            break;
+        }
+        case TRule_object_feature_value::kAltObjectFeatureValue2:
+        {
+            if (!BindParameterClause(node.GetAlt_object_feature_value2().GetRule_bind_parameter1(), result)) {
+                return false;
+            }
+            break;
+        }
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+    return true;
+}
+
+bool TSqlTranslation::AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature) {
+    if (feature.has_alt_object_feature1()) {
+        auto& kv = feature.GetAlt_object_feature1().GetRule_object_feature_kv1();
+        const TString& key = Id(kv.GetRule_an_id_or_type1(), *this);
+        auto& ruleValue = kv.GetRule_object_feature_value3();
+        TDeferredAtom value;
+        if (!ObjectFeatureValueClause(ruleValue, value)) {
+            return false;
+        }
+        result[key] = value;
+    } else if (feature.has_alt_object_feature2()) {
+        result[Id(feature.GetAlt_object_feature2().GetRule_object_feature_flag1().GetRule_an_id_or_type1(), *this)] = TDeferredAtom();
+    }
+    return true;
+}
+
+bool TSqlTranslation::ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features) {
+    if (!AddObjectFeature(result, features.GetRule_object_feature1())) {
+        return false;
+    }
+    for (auto&& i : features.GetBlock2()) {
+        if (!AddObjectFeature(result, i.GetRule_object_feature2())) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace NSQLTranslationV1

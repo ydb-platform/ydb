@@ -562,14 +562,29 @@ protected:
         if (GRpcPublicHost) {
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetPublicHost(GRpcPublicHost);
+            for (auto& ext : *conf.MutableExtEndpoints()) {
+                if (!ext.HasPublicHost()) {
+                    ext.SetPublicHost(GRpcPublicHost);
+                }
+            }
         }
         if (GRpcPublicPort) {
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetPublicPort(GRpcPublicPort);
+            for (auto& ext : *conf.MutableExtEndpoints()) {
+                if (!ext.HasPublicPort()) {
+                    ext.SetPublicPort(GRpcPublicPort);
+                }
+            }
         }
         if (GRpcsPublicPort) {
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetPublicSslPort(GRpcsPublicPort);
+            for (auto& ext : *conf.MutableExtEndpoints()) {
+                if (!ext.HasPublicSslPort()) {
+                    ext.SetPublicSslPort(GRpcsPublicPort);
+                }
+            }
         }
         for (const auto& addr : GRpcPublicAddressesV4) {
             AppConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);

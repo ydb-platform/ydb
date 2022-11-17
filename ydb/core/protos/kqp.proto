@@ -89,7 +89,8 @@ message TQueryRequest {
     optional NKikimrMiniKQL.TParams Parameters = 7;
     reserved 8; // (deprecated) SqlAutoCommit
     optional EQueryAction Action = 9;
-    optional bool Profile = 10; // DEPRECATED, use StatsMode instead
+    // optional bool Profile = 10; // DEPRECATED, use StatsMode instead
+    reserved 10;
     optional bytes PreparedQuery = 11;
     optional uint32 ReplyFlags = 12 [default = 1];
     optional Ydb.Table.TransactionControl TxControl = 13;
@@ -235,7 +236,8 @@ message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
     repeated NKikimrMiniKQL.TResult Results = 3;
-    optional TQueryProfile Profile = 4; // TODO: Deprecate, use QueryStats
+    // optional TQueryProfile Profile = 4; // TODO: Deprecate, use QueryStats
+    reserved 4;
     optional bytes PreparedQuery = 5;
     optional string QueryAst = 6;
     reserved 7;

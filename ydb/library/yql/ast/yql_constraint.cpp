@@ -573,6 +573,40 @@ void TPartOfUniqueConstraintNode::ToJson(NJson::TJsonWriter& out) const {
     out.CloseMap();
 }
 
+const TPartOfUniqueConstraintNode* TPartOfUniqueConstraintNode::ExtractField(TExprContext& ctx, const std::string_view& field) const {
+    TMapType passtrought;
+    for (const auto& part : Mapping_) {
+        auto it = part.second.lower_bound(TKeyType(1U, field));
+        if (part.second.cend() == it || it->first.front() != field)
+            continue;
+
+        TPartType mapping;
+        mapping.reserve(part.second.size());
+        while (it < part.second.cend() && !it->first.empty() && field == it->first.front()) {
+            auto item = *it++;
+            item.first.pop_front();
+            mapping.emplace_back(std::move(item));
+        }
+
+        if (!mapping.empty()) {
+            passtrought.emplace(part.first, std::move(mapping));
+        }
+    }
+    return passtrought.empty() ? nullptr : ctx.MakeConstraint<TPartOfUniqueConstraintNode>(std::move(passtrought));
+}
+
+TPartOfUniqueConstraintNode::TMapType TPartOfUniqueConstraintNode::GetColumnMapping(const std::string_view& asField) const {
+    auto mapping = Mapping_;
+    if (!asField.empty()) {
+        for (auto& item : mapping) {
+            for (auto& part : item.second) {
+                part.first.emplace_front(asField);
+            }
+        }
+    }
+    return mapping;
+}
+
 const TPartOfUniqueConstraintNode* TPartOfUniqueConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
     if (constraints.empty()) {
         return nullptr;
@@ -692,20 +726,6 @@ void TPartOfUniqueConstraintNode::FilterFields(TMapType& mapping, const std::fun
     }
 }
 
-void TPartOfUniqueConstraintNode::ExtractField(TMapType& mapping, const std::string_view& field) {
-    for (auto part = mapping.begin(); mapping.end() != part;) {
-        auto it = part->second.lower_bound(TKeyType(1U, field));
-        if (part->second.cend() == it || it->first.empty() || it->first.front() != field) {
-            part = mapping.erase(part);
-            continue;
-        }
-
-        do it->first.pop_front();
-        while (++it < part->second.cend() && !it->first.empty() && field == it->first.front());
-        ++part;
-    }
-}
-
 TPartOfUniqueConstraintNode::TMapType
 TPartOfUniqueConstraintNode::ExtractField(const TMapType& mapping, const std::string_view& field) {
     TMapType parts;
@@ -729,10 +749,8 @@ TPartOfUniqueConstraintNode::ExtractField(const TMapType& mapping, const std::st
     return parts;
 }
 
-std::tuple<const TUniqueConstraintNode*, const TPartOfUniqueConstraintNode*>
-TPartOfUniqueConstraintNode::MakeBoth(TExprContext& ctx, TMapType&& mapping) {
-    std::vector<TUniqueConstraintNode::TSetType> newSets;
-    for (auto it = mapping.cbegin(); mapping.cend() != it;) {
+const TUniqueConstraintNode* TPartOfUniqueConstraintNode::MakeComplete(TExprContext& ctx, const TMapType& mapping, const TUniqueConstraintNode* original) {
+    if (const auto it = mapping.find(original); mapping.cend() != it) {
         auto columns = it->first->GetColumns();
         TUniqueConstraintNode::TSetType newColumns;
         for (const auto& column : it->second) {
@@ -740,17 +758,11 @@ TPartOfUniqueConstraintNode::MakeBoth(TExprContext& ctx, TMapType&& mapping) {
             newColumns.insert_unique(column.first.empty() ? "" : column.first.front()); // TODO: full key instead of front.
         }
 
-        if (columns.empty()) {
-            newSets.emplace_back(std::move(newColumns));
-            it = mapping.erase(it);
-        } else
-            ++it;
+        if (columns.empty())
+            return ctx.MakeConstraint<TUniqueConstraintNode>(std::move(newColumns));
     }
 
-    return {
-        newSets.empty() ?  nullptr : ctx.MakeConstraint<TUniqueConstraintNode>(*newSets.cbegin()), //TODO: full set
-        mapping.empty() ?  nullptr : ctx.MakeConstraint<TPartOfUniqueConstraintNode>(std::move(mapping))
-    };
+    return nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////

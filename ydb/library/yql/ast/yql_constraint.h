@@ -264,21 +264,23 @@ public:
 
     const TMapType& GetColumnMapping() const;
     TReverseMapType GetReverseMapping() const;
+    TMapType GetColumnMapping(const std::string_view& asField) const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
     void Out(IOutputStream& out) const override;
     void ToJson(NJson::TJsonWriter& out) const override;
 
+    const TPartOfUniqueConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
+
     static const TPartOfUniqueConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
     static TMapType GetCommonMapping(const TUniqueConstraintNode* complete, const TPartOfUniqueConstraintNode* incomplete, const std::string_view& field = {});
     static void UniqueMerge(TMapType& output, TMapType&& input);
     static void FilterFields(TMapType& mapping, const std::function<bool(const std::string_view& front)>& predicate);
-    static void ExtractField(TMapType& mapping, const std::string_view& field);
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);
 
-    static std::tuple<const TUniqueConstraintNode*, const TPartOfUniqueConstraintNode*> MakeBoth(TExprContext& ctx, TMapType&& mapping);
+    static const TUniqueConstraintNode* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TUniqueConstraintNode* original);
 private:
     TMapType Mapping_;
 };

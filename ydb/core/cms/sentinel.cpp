@@ -187,15 +187,14 @@ void TPDiskInfo::AddState(EPDiskState state) {
 
 /// TClusterMap
 
-TClusterMap::TClusterMap(TCmsStatePtr state)
+TClusterMap::TClusterMap(TSentinelState::TPtr state)
     : State(state)
 {
 }
 
 void TClusterMap::AddPDisk(const TPDiskID& id) {
-    Y_VERIFY(State->ClusterInfo->HasNode(id.NodeId));
-    Y_VERIFY(State->ClusterInfo->HasPDisk(id));
-    const auto& location = State->ClusterInfo->Node(id.NodeId).Location;
+    Y_VERIFY(State->Nodes.contains(id.NodeId));
+    const auto& location = State->Nodes[id.NodeId].Location;
 
     ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
     ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id);
@@ -205,7 +204,7 @@ void TClusterMap::AddPDisk(const TPDiskID& id) {
 
 /// TGuardian
 
-TGuardian::TGuardian(TCmsStatePtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio)
+TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio)
     : TClusterMap(state)
     , DataCenterRatio(dataCenterRatio)
     , RoomRatio(roomRatio)
@@ -271,15 +270,6 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
     return result;
 }
 
-/// Main state
-struct TSentinelState: public TSimpleRefCount<TSentinelState> {
-    using TPtr = TIntrusivePtr<TSentinelState>;
-
-    TMap<TPDiskID, TPDiskInfo::TPtr> PDisks;
-    THashSet<ui32> StateUpdaterWaitNodes;
-    ui32 ConfigUpdaterAttempt = 0;
-};
-
 /// Actors
 
 template <typename TDerived>
@@ -339,14 +329,44 @@ protected:
 }; // TUpdaterBase
 
 class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfigUpdater> {
-    void Retry() {
-        ++SentinelState->ConfigUpdaterAttempt;
-        Schedule(Config.RetryUpdateConfig, new TEvSentinel::TEvRetry());
+    enum class RetryCookie {
+        BSC,
+        CMS,
+    };
+
+    void MaybeReply() {
+        if (SentinelState->ConfigUpdaterState.GotBSCResponse && SentinelState->ConfigUpdaterState.GotCMSResponse) {
+            Reply();
+        }
+    }
+
+    void RetryBSC() {
+        ++SentinelState->ConfigUpdaterState.BSCAttempt;
+        Schedule(Config.RetryUpdateConfig, new TEvents::TEvWakeup(static_cast<ui64>(RetryCookie::BSC)));
+    }
+
+    void RetryCMS() {
+        ++SentinelState->ConfigUpdaterState.CMSAttempt;
+        Schedule(Config.RetryUpdateConfig, new TEvents::TEvWakeup(static_cast<ui64>(RetryCookie::CMS)));
+    }
+
+    void OnRetry(TEvents::TEvWakeup::TPtr& ev) {
+        const auto* msg = ev->Get();
+        switch (static_cast<RetryCookie>(msg->Tag)) {
+            case RetryCookie::BSC:
+                RequestBSConfig();
+                break;
+            case RetryCookie::CMS:
+                RequestCMSClusterState();
+                break;
+            default:
+                Y_FAIL("Unexpected case");
+        }
     }
 
     void RequestBSConfig() {
         LOG_D("Request blobstorage config"
-            << ": attempt# " << SentinelState->ConfigUpdaterAttempt);
+            << ": attempt# " << SentinelState->ConfigUpdaterState.BSCAttempt);
 
         if (!CmsState->BSControllerPipe) {
             ConnectBSC();
@@ -355,6 +375,46 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
         auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release());
+    }
+
+    void RequestCMSClusterState() {
+        LOG_D("Request CMS cluster state"
+            << ": attempt# " << SentinelState->ConfigUpdaterState.CMSAttempt);
+        // We aren't tracking delivery due to invariant that CMS always kills sentinel when dies itself
+        Send(CmsState->CmsActorId, new TEvCms::TEvClusterStateRequest());
+    }
+
+    void Handle(TEvCms::TEvClusterStateResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvCms::TEvClusterStateResponse"
+            << ": response# " << record.ShortDebugString());
+
+        if (!record.HasStatus() || !record.GetStatus().HasCode() || record.GetStatus().GetCode() != NKikimrCms::TStatus::OK) {
+            TString error = "<no description>";
+            if (record.HasStatus() && record.GetStatus().HasCode() && record.GetStatus().HasReason()) {
+                error = NKikimrCms::TStatus::ECode_Name(record.GetStatus().GetCode()) + " " + record.GetStatus().GetReason();
+            }
+
+            LOG_E("Unsuccesful response from CMS"
+                << ", error# " << error);
+
+            RetryCMS();
+
+            return;
+        }
+
+        if (record.HasState()) {
+            SentinelState->Nodes.clear();
+            for (ui32 i = 0; i < record.GetState().HostsSize(); ++i) {
+                const auto& host = record.GetState().GetHosts(i);
+                if (host.HasNodeId() && host.HasLocation() && host.HasName()) {
+                    SentinelState->Nodes.emplace(host.GetNodeId(), TNodeInfo{host.GetName(), NActors::TNodeLocation(host.GetLocation())});
+                }
+            }
+        }
+        SentinelState->ConfigUpdaterState.GotCMSResponse = true;
+        MaybeReply();
     }
 
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
@@ -372,7 +432,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             LOG_E("Unsuccesful response from BSC"
                 << ", size# " << response.StatusSize()
                 << ", error# " << error);
-            Retry();
+            RetryBSC();
         } else {
             auto& pdisks = SentinelState->PDisks;
 
@@ -387,13 +447,15 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                 pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit, Config.StateLimits));
             }
 
-            Reply();
+            SentinelState->ConfigUpdaterState.GotBSCResponse = true;
+
+            MaybeReply();
         }
     }
 
     void OnPipeDisconnected() {
         LOG_E("Pipe to BSC disconnected");
-        Retry();
+        RetryBSC();
     }
 
 public:
@@ -409,18 +471,21 @@ public:
 
     void Bootstrap() {
         RequestBSConfig();
+        RequestCMSClusterState();
         Become(&TThis::StateWork);
     }
 
     void PassAway() override {
-        SentinelState->ConfigUpdaterAttempt = 0;
+        SentinelState->ConfigUpdaterState.Clear();
         TActor::PassAway();
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvSentinel::TEvRetry, RequestBSConfig);
+            hFunc(TEvents::TEvWakeup, OnRetry);
             sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
+
+            hFunc(TEvCms::TEvClusterStateResponse, Handle);
 
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
@@ -833,8 +898,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         action.SetCurrentStatus(status);
         action.SetRequiredStatus(requiredStatus);
 
-        Y_VERIFY(CmsState->ClusterInfo->HasNode(id.NodeId));
-        action.SetHost(CmsState->ClusterInfo->Node(id.NodeId).Host);
+        Y_VERIFY(SentinelState->Nodes.contains(id.NodeId));
+        action.SetHost(SentinelState->Nodes[id.NodeId].Host);
 
         if (reason) {
             action.SetReason(reason);
@@ -869,7 +934,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
         EnsureAllTouched();
 
-        if (!CmsState->ClusterInfo) {
+        if (SentinelState->Nodes.empty()) {
             LOG_C("Missing cluster info");
             ScheduleUpdate<TEvSentinel::TEvUpdateState, TConfigUpdater>(
                 StateUpdater, Config.UpdateStateInterval, ConfigUpdater
@@ -878,22 +943,16 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             return;
         }
 
-        TClusterMap all(CmsState);
-        TGuardian changed(CmsState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio);
+        TClusterMap all(SentinelState);
+        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio);
         TClusterMap::TPDiskIDSet alwaysAllowed;
 
         for (auto& pdisk : SentinelState->PDisks) {
             const TPDiskID& id = pdisk.first;
             TPDiskInfo& info = *(pdisk.second);
 
-            if (!CmsState->ClusterInfo->HasNode(id.NodeId)) {
+            if (!SentinelState->Nodes.contains(id.NodeId)) {
                 LOG_E("Missing node info"
-                    << ": pdiskId# " << id);
-                continue;
-            }
-
-            if (!CmsState->ClusterInfo->HasPDisk(id)) {
-                LOG_E("Missing pdisk info"
                     << ": pdiskId# " << id);
                 continue;
             }
@@ -981,7 +1040,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             configUpdater.MutableUpdaterInfo()->SetActorId(ConfigUpdater.Id.ToString());
             configUpdater.MutableUpdaterInfo()->SetStartedAt(ConfigUpdater.StartedAt.ToString());
             configUpdater.MutableUpdaterInfo()->SetDelayed(ConfigUpdater.Delayed);
-            configUpdater.SetAttempt(SentinelState->ConfigUpdaterAttempt);
+            configUpdater.SetBSCAttempt(SentinelState->ConfigUpdaterState.BSCAttempt);
+            configUpdater.SetCMSAttempt(SentinelState->ConfigUpdaterState.CMSAttempt);
 
             for (const auto& [id, info] : SentinelState->PDisks) {
                 auto& entry = *record.AddPDisks();

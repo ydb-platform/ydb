@@ -249,7 +249,8 @@ function onCmsSentinelStateLoaded(data) {
         renderPVEntry(CmsSentinelState.stateUpdater, flattenStateUpdaterResp);
 
         var flattenConfigUpdaterResp = data["ConfigUpdater"]["UpdaterInfo"];
-        flattenConfigUpdaterResp["Attempt"] = data["ConfigUpdater"]["Attempt"];
+        flattenConfigUpdaterResp["BSCAttempt"] = data["ConfigUpdater"]["BSCAttempt"];
+        flattenConfigUpdaterResp["CMSAttempt"] = data["ConfigUpdater"]["CMSAttempt"];
         renderPVEntry(CmsSentinelState.configUpdater, flattenConfigUpdaterResp);
     } else {
         $("#sentinel-error").text("Error while updating state");

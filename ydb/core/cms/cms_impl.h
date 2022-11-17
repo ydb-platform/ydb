@@ -75,6 +75,8 @@ public:
 
     void PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx);
 
+    static void AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &node, NKikimrCms::TClusterStateResponse &resp, TInstant timestamp);
+
 private:
     using TActorBase = TActor<TCms>;
     using EStatusCode = NKikimrCms::TStatus::ECode;
@@ -354,7 +356,6 @@ private:
     void Cleanup(const TActorContext &ctx);
     void Die(const TActorContext& ctx) override;
 
-    void AddHostState(const TNodeInfo &node, NKikimrCms::TClusterStateResponse &resp, TInstant timestamp);
     void GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all, const TActorContext &ctx);
     void RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool done, const TActorContext &ctx);
     void GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const TActorContext &ctx);

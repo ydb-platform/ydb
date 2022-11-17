@@ -1075,7 +1075,7 @@ void TCms::Die(const TActorContext& ctx)
     TActorBase::Die(ctx);
 }
 
-void TCms::AddHostState(const TNodeInfo &node, TClusterStateResponse &resp, TInstant timestamp)
+void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &node, TClusterStateResponse &resp, TInstant timestamp)
 {
     auto *host = resp.MutableState()->AddHosts();
     host->SetName(node.Host);
@@ -1083,6 +1083,7 @@ void TCms::AddHostState(const TNodeInfo &node, TClusterStateResponse &resp, TIns
     host->SetNodeId(node.NodeId);
     host->SetInterconnectPort(node.IcPort);
     host->SetTimestamp(timestamp.GetValue());
+    node.Location.Serialize(host->MutableLocation(), false);
     if (node.State == UP || node.VDisks || node.PDisks) {
         for (const auto flag : GetEnumAllValues<EService>()) {
             if (!(node.Services & flag)) {
@@ -1099,7 +1100,7 @@ void TCms::AddHostState(const TNodeInfo &node, TClusterStateResponse &resp, TIns
         }
 
         for (const auto &vdId : node.VDisks) {
-            const auto &vdisk = ClusterInfo->VDisk(vdId);
+            const auto &vdisk = clusterInfo->VDisk(vdId);
             auto *device = host->AddDevices();
             device->SetName(vdisk.GetDeviceName());
             device->SetState(vdisk.State);
@@ -1107,7 +1108,7 @@ void TCms::AddHostState(const TNodeInfo &node, TClusterStateResponse &resp, TIns
         }
 
         for (const auto &pdId : node.PDisks) {
-            const auto &pdisk = ClusterInfo->PDisk(pdId);
+            const auto &pdisk = clusterInfo->PDisk(pdId);
             auto *device = host->AddDevices();
             device->SetName(pdisk.GetDeviceName());
             device->SetState(pdisk.State);
@@ -1604,7 +1605,7 @@ void TCms::Handle(TEvCms::TEvClusterStateRequest::TPtr &ev,
         for (const auto &host : rec.GetHosts()) {
             if (ClusterInfo->NodesCount(host) >= 1) {
                 for (const TNodeInfo *node : ClusterInfo->HostNodes(host)) {
-                    AddHostState(*node, resp->Record, ClusterInfo->GetTimestamp());
+                    AddHostState(ClusterInfo, *node, resp->Record, ClusterInfo->GetTimestamp());
                 }
             } else {
                 return ReplyWithError<TEvCms::TEvClusterStateResponse>(
@@ -1613,7 +1614,7 @@ void TCms::Handle(TEvCms::TEvClusterStateRequest::TPtr &ev,
         }
     } else {
         for (const auto &entry : ClusterInfo->AllNodes())
-            AddHostState(*entry.second, resp->Record, ClusterInfo->GetTimestamp());
+            AddHostState(ClusterInfo, *entry.second, resp->Record, ClusterInfo->GetTimestamp());
     }
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);

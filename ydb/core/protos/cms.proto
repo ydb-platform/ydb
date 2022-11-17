@@ -1,5 +1,6 @@
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "library/cpp/actors/protos/interconnect.proto";
 
 package NKikimrCms;
 option java_package = "ru.yandex.kikimr.proto";
@@ -67,14 +68,15 @@ message TDeviceState {
 }
 
 message THostState {
-  optional string        Name      = 1;
-  optional EState        State     = 2;
-  repeated TServiceState Services  = 3;
-  repeated TDeviceState  Devices   = 4;
-  optional uint64        Timestamp = 5;
-  optional uint32        NodeId    = 6;
-  optional uint32        InterconnectPort = 7;
-  repeated EMarker       Markers   = 8;
+  optional string        Name                         = 1;
+  optional EState        State                        = 2;
+  repeated TServiceState Services                     = 3;
+  repeated TDeviceState  Devices                      = 4;
+  optional uint64        Timestamp                    = 5;
+  optional uint32        NodeId                       = 6;
+  optional uint32        InterconnectPort             = 7;
+  repeated EMarker       Markers                      = 8;
+  optional NActorsInterconnect.TNodeLocation Location = 9;
 }
 
 message TClusterState {
@@ -621,7 +623,8 @@ message TStateUpdaterState {
 
 message TConfigUpdaterState {
     optional TUpdaterInfo UpdaterInfo = 1;
-    optional uint32 Attempt = 2;
+    optional uint32 BSCAttempt = 2;
+    optional uint32 CMSAttempt = 3;
 }
 
 message TGetSentinelStateResponse {

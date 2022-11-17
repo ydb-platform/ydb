@@ -61,6 +61,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   cpp-deprecated-enum_codegen
   cpp-html-pcdata
   ydb-core-actorlib_impl
+  ydb-core-audit
   ydb-core-base
   ydb-core-blob_depot
   core-blockstore-core

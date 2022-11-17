@@ -6,6 +6,7 @@
 #include "schemeshard__operation_db_changes.h"
 
 #include "schemeshard_audit_log_fragment.h"
+#include "ydb/core/audit/audit_log.h"
 
 #include "schemeshard_impl.h"
 
@@ -70,32 +71,23 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
     return recordForPrint;
 }
 
-TString GetAuditLogEntry(const TTxId& txId, const THolder<TProposeResponse>& response, TOperationContext& context) {
-    auto auditLog = TStringBuilder();
-
-    auditLog << "txId: " << txId;
-    
+void MakeAuditLog(const TTxId& txId, const THolder<TProposeResponse>& response, TOperationContext& context) {    
     auto fragPath = TPath::Resolve(context.AuditLogFragments.front().GetAnyPath(), context.SS);
     if (!fragPath.IsResolved()) {
         fragPath.RiseUntilFirstResolvedParent();
     }
-    if (!fragPath.IsEmpty()) {
-        auditLog << ", database: " << fragPath.GetDomainPathString();
+
+    auto operations = TStringBuilder();
+    for (auto it = context.AuditLogFragments.begin(); it != context.AuditLogFragments.end(); it++) {
+        AUDIT_LOG(
+            AUDIT_PART("txId", std::to_string(txId.GetValue()))
+            AUDIT_PART("database", fragPath.GetDomainPathString(), !fragPath.IsEmpty())
+            AUDIT_PART("subject", context.GetSubject())
+            AUDIT_PART("status", NKikimrScheme::EStatus_Name(response->Record.GetStatus()))
+            AUDIT_PART("reason", response->Record.GetReason(), response->Record.HasReason())
+            AUDIT_PART("operation", (*it).ToString())
+        );
     }
-
-    auditLog << ", subject: " << context.GetSubject();
-
-    auditLog << ", status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus());
-    if (response->Record.HasReason()) {
-        auditLog << ", reason: " << response->Record.GetReason();
-    }
-
-    for (const auto& frag: context.AuditLogFragments) {
-        auditLog << ", ";
-        auditLog << frag.ToString();
-    }
-
-    return auditLog;
 }
 
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
@@ -138,7 +130,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             response->SetError(quotaResult.Status, quotaResult.Reason);
             Operations.erase(txId);
 
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
+            MakeAuditLog(txId, response, context);
             return std::move(response);
         }
     }
@@ -160,7 +152,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             response->SetError(splitResult.Status, splitResult.Reason);
             Operations.erase(txId);
 
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
+            MakeAuditLog(txId, response, context);
             return std::move(response);
         }
 
@@ -241,13 +233,13 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 context.OnComplete.ApplyOnExecute(context.SS, context.GetTxc(), context.Ctx);
                 Operations.erase(txId);
 
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
+                MakeAuditLog(txId, response, context);
                 return std::move(response);
             }
         }
     }
 
-    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  GetAuditLogEntry(txId, response, context));
+    MakeAuditLog(txId, response, context);
     return std::move(response);
 }
 

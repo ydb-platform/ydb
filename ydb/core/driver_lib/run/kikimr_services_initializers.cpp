@@ -8,6 +8,8 @@
 #include <ydb/core/actorlib_impl/mad_squirrel.h>
 #include <ydb/core/actorlib_impl/node_identifier.h>
 
+#include "ydb/core/audit/audit_log.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/config_units.h>
 #include <ydb/core/base/counters.h>
@@ -2274,7 +2276,7 @@ TMeteringWriterInitializer::TMeteringWriterInitializer(const TKikimrRunConfig &r
 {
 }
 
-void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup *setup, const TAppData *appData)
+void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
 {
     if (!Config.HasMeteringConfig() || !Config.GetMeteringConfig().HasMeteringFilePath()) {
         return;
@@ -2294,6 +2296,35 @@ void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup *setup, co
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         NMetering::MakeMeteringServiceID(),
+        TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->IOPoolId)));
+}
+
+TAuditWriterInitializer::TAuditWriterInitializer(const TKikimrRunConfig &runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
+{
+    if (!Config.HasAuditConfig() || !Config.GetAuditConfig().HasAuditFilePath() || !Config.GetAuditConfig().HasFormat()) {
+        return;
+    }
+
+    const auto& filePath = Config.GetAuditConfig().GetAuditFilePath();
+    const auto format = Config.GetAuditConfig().GetFormat();
+
+    THolder<TFileLogBackend> fileBackend;
+    try {
+        fileBackend = MakeHolder<TFileLogBackend>(filePath);
+    } catch (const TFileError& ex) {
+        Cerr << "TAuditWriterInitializer: failed to open file '" << filePath << "': " << ex.what() << Endl;
+        exit(1);
+    }
+
+    auto actor = NAudit::CreateAuditWriter(std::move(fileBackend), format);
+
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NAudit::MakeAuditServiceID(),
         TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->IOPoolId)));
 }
 

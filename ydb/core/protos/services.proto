@@ -283,6 +283,8 @@ enum EServiceKikimr {
 
     BUILD_INDEX = 1000;
 
+    AUDIT_LOG_WRITER = 1005;
+
     METERING_WRITER = 1010;
 
     // Streaming
@@ -939,5 +941,6 @@ message TActivity {
         HTTP_MON_SERVICE_NODE_REQUEST = 593;
         HTTP_MON_SERVICE_MON_REQUEST = 594;
         HTTP_MON_SERVICE_NODE_PROXY = 595;
+        AUDIT_WRITER_ACTOR = 596;
     };
 };

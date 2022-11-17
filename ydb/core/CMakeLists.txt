@@ -7,6 +7,7 @@
 
 
 add_subdirectory(actorlib_impl)
+add_subdirectory(audit)
 add_subdirectory(base)
 add_subdirectory(blob_depot)
 add_subdirectory(blobstorage)

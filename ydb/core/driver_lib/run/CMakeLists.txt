@@ -36,6 +36,7 @@ target_link_libraries(run PUBLIC
   cpp-string_utils-parse_size
   library-cpp-svnversion
   ydb-core-actorlib_impl
+  ydb-core-audit
   ydb-core-base
   ydb-core-blob_depot
   ydb-core-blobstorage

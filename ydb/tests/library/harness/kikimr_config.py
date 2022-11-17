@@ -126,6 +126,7 @@ class KikimrConfigGenerator(object):
             use_in_memory_pdisks=False,
             enable_pqcd=True,
             enable_metering=False,
+            enable_audit_log=False,
             grpc_tls_data_path=None,
             fq_config_path=None,
             public_http_config_path=None,
@@ -236,6 +237,9 @@ class KikimrConfigGenerator(object):
 
         if enable_metering:
             self.__set_enable_metering()
+
+        if enable_audit_log:
+            self.__set_enable_audit_log()
 
         self.naming_config = config_pb2.TAppConfig()
         dc_it = itertools.cycle(self._dcs)
@@ -353,9 +357,31 @@ class KikimrConfigGenerator(object):
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
 
+    def __set_enable_audit_log(self):
+        def ensure_path_exists(path):
+            if not os.path.isdir(path):
+                os.makedirs(path)
+            return path
+
+        def get_cwd_for_test(output_path):
+            test_name = yatest_common.context.test_name or ""
+            test_name = test_name.replace(':', '_')
+            return os.path.join(output_path, test_name)
+
+        cwd = get_cwd_for_test(self.__output_path)
+        ensure_path_exists(cwd)
+        audit_file_path = os.path.join(cwd, 'audit.txt')
+        with open(audit_file_path, "w") as audit_file:
+            audit_file.write('')
+        self.yaml_config['audit_config'] = {'audit_file_path': audit_file_path}
+
     @property
     def metering_file_path(self):
         return self.yaml_config.get('metering_config', {}).get('metering_file_path')
+
+    @property
+    def audit_file_path(self):
+        return self.yaml_config.get('audit_config', {}).get('audit_file_path')
 
     @property
     def nbs_enable(self):

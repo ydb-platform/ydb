@@ -137,6 +137,7 @@ struct TAppData {
     NKikimrConfig::TDataShardConfig DataShardConfig;
     NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
     NKikimrConfig::TMeteringConfig MeteringConfig;
+    NKikimrConfig::TAuditConfig AuditConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     NKikimrConfig::TDomainsConfig DomainsConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;

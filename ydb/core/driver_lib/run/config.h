@@ -58,6 +58,7 @@ union TBasicKikimrServicesMask {
         bool EnablePersQueueClusterTracker:1;
         bool EnableSysViewService:1;
         bool EnableMeteringWriter:1;
+        bool EnableAuditWriter:1;
         bool EnableSchemeBoardMonitoring:1;
         bool EnableConfigsCache:1;
         bool EnableLongTxService:1;

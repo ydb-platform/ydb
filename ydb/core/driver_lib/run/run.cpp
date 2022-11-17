@@ -1032,6 +1032,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->MeteringConfig = runConfig.AppConfig.GetMeteringConfig();
     }
 
+    if (runConfig.AppConfig.HasAuditConfig()) {
+        AppData->AuditConfig = runConfig.AppConfig.GetAuditConfig();
+    }
+
     AppData->TenantName = runConfig.TenantName;
 
     if (runConfig.AppConfig.HasBootstrapConfig()) {
@@ -1462,6 +1466,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableMeteringWriter) {
         sil->AddServiceInitializer(new TMeteringWriterInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableAuditWriter) {
+        sil->AddServiceInitializer(new TAuditWriterInitializer(runConfig));
     }
 
     if (serviceMask.EnableLongTxService) {

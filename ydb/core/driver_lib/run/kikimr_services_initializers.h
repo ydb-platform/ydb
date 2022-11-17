@@ -483,6 +483,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TAuditWriterInitializer : public IKikimrServicesInitializer {
+public:
+    TAuditWriterInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TSchemeBoardMonitoringInitializer : public IKikimrServicesInitializer {
 public:
     TSchemeBoardMonitoringInitializer(const TKikimrRunConfig& runConfig);

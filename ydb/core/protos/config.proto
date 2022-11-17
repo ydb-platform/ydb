@@ -1374,6 +1374,16 @@ message TMeteringConfig {
     repeated string SystemBackupSIDs = 2;
 };
 
+message TAuditConfig {
+    enum EFormat {
+        JSON = 1;
+        TXT = 2;
+    }
+
+    optional string AuditFilePath = 1;
+    optional EFormat Format = 2;
+};
+
 message THiveTabletLimit {
     optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
     optional uint64 MaxCount = 2;
@@ -1660,6 +1670,7 @@ message TAppConfig {
     optional THttpProxyConfig PublicHttpConfig = 57;
     optional TMetadataProviderConfig MetadataProviderConfig = 59;
     optional TBackgroundTasksConfig BackgroundTasksConfig = 60;
+    optional TAuditConfig AuditConfig = 61;
 
     optional NYq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
 

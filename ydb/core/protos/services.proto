@@ -942,5 +942,6 @@ message TActivity {
         HTTP_MON_SERVICE_MON_REQUEST = 594;
         HTTP_MON_SERVICE_NODE_PROXY = 595;
         AUDIT_WRITER_ACTOR = 596;
+        SCHEMESHARD_SVP_MIGRATOR = 597;
     };
 };

@@ -42,10 +42,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool 
     featureFlags.SetEnableBackgroundCompaction(false);
     Settings->SetFeatureFlags(featureFlags);
 
-    if (enableSVP) {
-        Settings->SetEnablePersistentQueryStats(true);
-        Settings->SetEnableDbCounters(true);
-    }
+    Settings->SetEnablePersistentQueryStats(enableSVP);
+    Settings->SetEnableDbCounters(enableSVP);
 
     for (ui32 i : xrange(storagePools)) {
         TString poolName = Sprintf("test%d", i);

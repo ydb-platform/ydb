@@ -1,5 +1,6 @@
 #include "schemeshard.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_svp_migration.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -81,6 +82,36 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx,
 
     if (blockStoreVolumesToClean) {
         Execute(CreateTxCleanBlockStoreVolumes(std::move(blockStoreVolumesToClean)), ctx);
+    }
+
+    if (IsDomainSchemeShard) {
+        std::queue<TSVPMigrationInfo> migrations;
+        for (auto& [pathId, subdomain] : SubDomains) {
+            if (subdomain->GetTenantSchemeShardID() == InvalidTabletId) { // no tenant schemeshard
+                continue;
+            }
+            if (subdomain->GetTenantSysViewProcessorID() != InvalidTabletId) { // tenant has SVP
+                continue;
+            }
+
+            auto path = TPath::Init(pathId, this);
+            if (path->IsRoot()) { // do not migrate main domain
+                continue;
+            }
+
+            auto workingDir = path.Parent().PathString();
+            auto dbName = path.LeafName();
+            TSVPMigrationInfo migration{workingDir, dbName};
+            migrations.push(std::move(migration));
+
+            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "SVPMigrator - creating SVP"
+                << ", working dir: " << workingDir
+                << ", db name: " << dbName
+                << ", at schemeshard: " << TabletID());
+        }
+
+        SVPMigrator = Register(CreateSVPMigrator(TabletID(), SelfId(), std::move(migrations)).Release());
     }
 
     ResumeExports(exportIds, ctx);
@@ -3916,6 +3947,10 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     ctx.Send(SchemeBoardPopulator, new TEvents::TEvPoisonPill());
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
+
+    if (SVPMigrator) {
+        ctx.Send(SVPMigrator, new TEvents::TEvPoisonPill());
+    }
 
     ShardDeleter.Shutdown(ctx);
     ParentDomainLink.Shutdown(ctx);

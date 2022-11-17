@@ -126,7 +126,7 @@ public:
 
         Tenant->IsExternalSubdomain = Self->FeatureFlags.GetEnableExternalSubdomains();
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
-        Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnablePersistentQueryStats();
+        Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnableSystemViews();
 
         if (rec.options().disable_external_subdomain()) {
             Tenant->IsExternalSubdomain = false;

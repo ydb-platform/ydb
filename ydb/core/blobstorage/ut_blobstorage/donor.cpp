@@ -251,4 +251,73 @@ Y_UNIT_TEST_SUITE(Donor) {
         }
     }
 
+    Y_UNIT_TEST(MultipleEvicts) {
+        ui32 numDCs = 4;
+        ui32 reassignsInFlight = 10;
+        ui32 numNodes = numDCs * reassignsInFlight + 3;
+
+        TEnvironmentSetup env{{
+            .NodeCount = numNodes,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+            .NumDataCenters = numDCs,
+        }};
+
+        env.EnableDonorMode();
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(20));
+
+        auto config = env.FetchBaseConfig();
+
+        auto makeVDiskId = [](const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+            return TVDiskIdShort(vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
+        };
+
+        UNIT_ASSERT_VALUES_UNEQUAL(config.VSlotSize(), 0);
+        const auto& evictedVSlot = config.GetVSlot(RandomNumber(config.VSlotSize()));
+        const auto& evictedVDiskId = makeVDiskId(evictedVSlot);
+
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvDropDonor) {
+                env.Runtime->Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected).Release(), nodeId);
+                return false;
+            }
+            return true;
+        };
+
+        auto printDonorList = [&] (NKikimrBlobStorage::TBaseConfig::TVSlot slot) {
+            TStringStream str;
+            for (const auto& donor : slot.GetDonors()) {
+                const auto& vslot = donor.GetVSlotId();
+                str << vslot.GetNodeId() << ':' << vslot.GetPDiskId() << ' ';
+            }
+            return str.Str();
+        };
+
+        for (ui32 i = 0; i < reassignsInFlight; ++i) {
+            config = env.FetchBaseConfig();
+            for (const auto& slot : config.GetVSlot()) {
+                if (makeVDiskId(slot) == evictedVDiskId) {
+                    NKikimrBlobStorage::TConfigRequest request;
+                    auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
+                    cmd->SetGroupId(slot.GetGroupId());
+                    cmd->SetGroupGeneration(slot.GetGroupGeneration());
+                    cmd->SetFailRealmIdx(slot.GetFailRealmIdx());
+                    cmd->SetFailDomainIdx(slot.GetFailDomainIdx());
+                    cmd->SetVDiskIdx(slot.GetVDiskIdx());
+                    auto response = env.Invoke(request);
+                    // UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+                    std::set<TPDiskId> pdisks;
+                    Cerr << slot.DonorsSize() << " donors: " << printDonorList(slot) << Endl;
+                    for (const auto& donor : slot.GetDonors()) {
+                        const auto& vslotId = donor.GetVSlotId();
+                        UNIT_ASSERT_C(pdisks.emplace(vslotId.GetNodeId(), vslotId.GetPDiskId()).second, 
+                                slot.DonorsSize() << " donors: " << printDonorList(slot));
+                    }
+                    break;
+                }
+            }
+        }
+       // env.Sim(TDuration::Seconds(10));
+    }
 }

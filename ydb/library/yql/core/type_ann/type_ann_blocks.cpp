@@ -66,7 +66,7 @@ IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TE
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->Cast<TMultiExprType>()->GetItems();
+    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
     flowItemTypes.erase(flowItemTypes.begin() + index);
 
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(flowItemTypes);

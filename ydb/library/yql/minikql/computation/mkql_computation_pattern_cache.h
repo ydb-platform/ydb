@@ -17,7 +17,9 @@ struct TPatternCacheEntry {
 
     ui32 ProgramInputsCount;
     TRuntimeNode ProgramParams;
+    TVector<TString> InputItemTypesRaw;
     TVector<TType*> InputItemTypes;
+    TVector<TString> OutputItemTypesRaw;
     TVector<TType*> OutputItemTypes;
     TVector<TNode*> EntryPoints; // last entry node stands for parameters
 

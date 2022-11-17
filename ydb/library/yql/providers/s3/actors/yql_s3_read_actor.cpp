@@ -24,6 +24,7 @@
 
 #include <arrow/api.h>
 #include <arrow/io/api.h>
+#include <arrow/compute/cast.h>
 #include <arrow/status.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/file_reader.h>
@@ -476,11 +477,14 @@ private:
     std::unique_ptr<NDB::IBlockInputStream> Stream;
 };
 
+using TColumnConverter = std::function<std::shared_ptr<arrow::Array>(const std::shared_ptr<arrow::Array>&)>;
+
 class TArrowParquetBatchReader : public IBatchReader<std::shared_ptr<arrow::RecordBatch>> {
 public:
-    TArrowParquetBatchReader(std::unique_ptr<parquet::arrow::FileReader>&& fileReader, std::vector<int>&& columnIndices)
+    TArrowParquetBatchReader(std::unique_ptr<parquet::arrow::FileReader>&& fileReader, std::vector<int>&& columnIndices, std::vector<TColumnConverter>&& columnConverters)
         : FileReader(std::move(fileReader))
         , ColumnIndices(std::move(columnIndices))
+        , ColumnConverters(std::move(columnConverters))
         , TotalGroups(FileReader->num_row_groups())
         , CurrentGroup(0)
     {}
@@ -498,6 +502,15 @@ public:
 
             THROW_ARROW_NOT_OK(CurrentBatchReader->ReadNext(&value));
             if (value) {
+                auto columns = value->columns();
+                for (size_t i = 0; i < ColumnConverters.size(); ++i) {
+                    auto converter = ColumnConverters[i];
+                    if (converter) {
+                        columns[i] = converter(columns[i]);
+                    }
+                }
+
+                value = arrow::RecordBatch::Make(value->schema(), value->num_rows(), columns);
                 return true;
             }
 
@@ -509,6 +522,7 @@ public:
 private:
     std::unique_ptr<parquet::arrow::FileReader> FileReader;
     const std::vector<int> ColumnIndices;
+    std::vector<TColumnConverter> ColumnConverters;
     const int TotalGroups;
     int CurrentGroup;
     std::shared_ptr<arrow::Table> CurrentTable;
@@ -651,16 +665,29 @@ private:
                 THROW_ARROW_NOT_OK(fileReader->GetSchema(&schema));
 
                 std::vector<int> columnIndices;
+                std::vector<TColumnConverter> columnConverters;
                 for (int i = 0; i < ReadSpec->ArrowSchema->num_fields(); ++i) {
                     const auto& targetField = ReadSpec->ArrowSchema->field(i);
                     auto srcFieldIndex = schema->GetFieldIndex(targetField->name());
                     YQL_ENSURE(srcFieldIndex != -1, "Missing field: " << targetField->name());
-                    YQL_ENSURE(targetField->type()->Equals(schema->field(srcFieldIndex)->type()), "Mismatch type for field: " << targetField->name() << ", expected: "
-                        << targetField->type()->ToString() << ", got: " << schema->field(srcFieldIndex)->type()->ToString());
+                    auto targetType = targetField->type();
+                    auto originalType = schema->field(srcFieldIndex)->type();
+                    if (targetType->Equals(originalType)) {
+                        columnConverters.emplace_back();
+                    } else {
+                        YQL_ENSURE(arrow::compute::CanCast(*originalType, *targetType), "Mismatch type for field: " << targetField->name() << ", expected: "
+                            << targetType->ToString() << ", got: " << originalType->ToString());
+                        columnConverters.emplace_back([targetType](const std::shared_ptr<arrow::Array>& value) {
+                            auto res = arrow::compute::Cast(*value, targetType);
+                            THROW_ARROW_NOT_OK(res.status());
+                            return std::move(res).ValueOrDie();
+                        });
+                    }
+
                     columnIndices.push_back(srcFieldIndex);
                 }
 
-                TArrowParquetBatchReader reader(std::move(fileReader), std::move(columnIndices));
+                TArrowParquetBatchReader reader(std::move(fileReader), std::move(columnIndices), std::move(columnConverters));
                 ProcessBatches<std::shared_ptr<arrow::RecordBatch>, TEvPrivate::TEvNextRecordBatch>(reader, isLocal);
             } else {
                 auto stream = std::make_unique<NDB::InputStreamFromInputFormat>(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : *buffer, NDB::Block(ReadSpec->CHColumns), nullptr, ReadActorFactoryCfg.RowsInBatch, ReadSpec->Settings));

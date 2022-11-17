@@ -418,6 +418,8 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration MessagePendingTimeout = 32;
     optional uint64 MessagePendingSize = 33;
     optional bool SuppressConnectivityCheck = 39 [default = false];
+    optional uint32 PreallocatedBufferSize = 40;
+    optional uint32 NumPreallocatedBuffers = 41;
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

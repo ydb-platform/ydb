@@ -527,6 +527,13 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.MessagePendingSize = config.GetMessagePendingSize();
     }
 
+    if (config.HasPreallocatedBufferSize()) {
+        result.PreallocatedBufferSize = config.GetPreallocatedBufferSize();
+    }
+    if (config.HasNumPreallocatedBuffers()) {
+        result.NumPreallocatedBuffers = config.GetNumPreallocatedBuffers();
+    }
+
     return result;
 }
 

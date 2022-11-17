@@ -368,13 +368,15 @@ namespace NActors {
     bool TInputSessionTCP::ReadMore() {
         PreallocateBuffers();
 
-        TStackVec<TIoVec, NumPreallocatedBuffers> buffs;
+        TStackVec<TIoVec, 16> buffs;
+        size_t offset = FirstBufferOffset;
         for (const auto& item : Buffers) {
-            TIoVec iov{item->GetBuffer(), item->GetCapacity()};
+            TIoVec iov{item->GetBuffer() + offset, item->GetCapacity() - offset};
             buffs.push_back(iov);
             if (Params.Encryption) {
                 break; // do not put more than one buffer in queue to prevent using ReadV
             }
+            offset = 0;
         }
 
         const struct iovec* iovec = reinterpret_cast<const struct iovec*>(buffs.data());
@@ -421,15 +423,19 @@ namespace NActors {
 
         Y_VERIFY(recvres > 0);
         Metrics->AddTotalBytesRead(recvres);
-        TDeque<TIntrusivePtr<TRopeAlignedBuffer>>::iterator it;
-        for (it = Buffers.begin(); recvres; ++it) {
-            Y_VERIFY(it != Buffers.end());
-            const size_t bytesFromFrontBuffer = Min<size_t>(recvres, (*it)->GetCapacity());
-            (*it)->AdjustSize(bytesFromFrontBuffer);
-            IncomingData.Insert(IncomingData.End(), TRope(std::move(*it)));
-            recvres -= bytesFromFrontBuffer;
+
+        while (recvres) {
+            Y_VERIFY(!Buffers.empty());
+            auto& buffer = Buffers.front();
+            const size_t bytes = Min<size_t>(recvres, buffer->GetCapacity() - FirstBufferOffset);
+            IncomingData.Insert(IncomingData.End(), TContiguousData{buffer, {buffer->GetBuffer() + FirstBufferOffset, bytes}});
+            recvres -= bytes;
+            FirstBufferOffset += bytes;
+            if (FirstBufferOffset == buffer->GetCapacity()) {
+                Buffers.pop_front();
+                FirstBufferOffset = 0;
+            }
         }
-        Buffers.erase(Buffers.begin(), it);
 
         LastReceiveTimestamp = TActivationContext::Now();
 
@@ -439,9 +445,8 @@ namespace NActors {
     void TInputSessionTCP::PreallocateBuffers() {
         // ensure that we have exactly "numBuffers" in queue
         LWPROBE_IF_TOO_LONG(SlowICReadLoopAdjustSize, ms) {
-            const ui32 target = Params.Encryption ? 1 : NumPreallocatedBuffers;
-            while (Buffers.size() < target) {
-                Buffers.emplace_back(TRopeAlignedBuffer::Allocate(sizeof(TTcpPacketBuf)));
+            while (Buffers.size() < Common->Settings.NumPreallocatedBuffers) {
+                Buffers.emplace_back(TRopeAlignedBuffer::Allocate(Common->Settings.PreallocatedBufferSize));
             }
         }
     }

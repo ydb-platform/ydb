@@ -73,11 +73,6 @@ public:
     char *GetBuffer() {
         return Data + Offset;
     }
-
-    void AdjustSize(size_t size) {
-        Y_VERIFY(size <= Capacity);
-        Size = size;
-    }
 };
 
 namespace NRopeDetails {

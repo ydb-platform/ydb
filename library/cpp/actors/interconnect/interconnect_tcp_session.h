@@ -257,8 +257,8 @@ namespace NActors {
         void PassAway() override;
 
         TDeque<TIntrusivePtr<TRopeAlignedBuffer>> Buffers;
+        size_t FirstBufferOffset = 0;
 
-        static constexpr size_t NumPreallocatedBuffers = 16;
         void PreallocateBuffers();
 
         inline ui64 GetMaxCyclesPerEvent() const {

@@ -97,10 +97,13 @@ struct TMergeTaskInput {
     {}
 };
 
+struct TSourceInput {};
+
 // Enum values must match to ConnectionInfo variant alternatives
 enum class TTaskInputType {
     UnionAll,
-    Merge
+    Merge,
+    Source
 };
 
 struct TTransform {
@@ -114,7 +117,7 @@ struct TTransform {
 
 template <class TInputMeta>
 struct TTaskInput {
-    std::variant<std::monostate, TMergeTaskInput> ConnectionInfo;
+    std::variant<std::monostate, TMergeTaskInput, TSourceInput> ConnectionInfo;
     TChannelList Channels;
     TMaybe<::google::protobuf::Any> SourceSettings;
     TString SourceType;

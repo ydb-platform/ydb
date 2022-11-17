@@ -745,6 +745,7 @@ message TFeatureFlags {
     optional bool EnableKqpDataQueryStreamLookup = 75 [default = false];
     optional bool EnableBorrowedSplitCompaction = 76 [default = true];
     optional bool EnableChangefeedInitialScan = 77 [default = false];
+    optional bool EnableKqpScanQuerySourceRead = 78 [default = false];
 }
 
 

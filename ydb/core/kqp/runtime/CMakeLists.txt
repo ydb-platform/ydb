@@ -39,6 +39,7 @@ target_sources(core-kqp-runtime PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_effects.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_output_stream.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_program_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_read_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_spilling_file.cpp

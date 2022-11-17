@@ -238,6 +238,17 @@ private:
                     }
                 }
 
+                for (auto& source : stage.GetSources()) {
+                    if (source.HasReadRangesSource()) {
+                        auto& table = TableKeys.GetOrAddTable(
+                            MakeTableId(source.GetReadRangesSource().GetTable()),
+                            source.GetReadRangesSource().GetTable().GetPath());
+                        for (auto& column : source.GetReadRangesSource().GetColumns()) {
+                            table.Columns.emplace(column.GetName(), TKqpTableKeys::TColumn());
+                        }
+                    }
+                }
+
                 for (const auto& input : stage.GetInputs()) {
                     if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
                         const auto& streamLookup = input.GetStreamLookup();

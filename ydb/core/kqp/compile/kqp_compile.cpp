@@ -414,11 +414,19 @@ private:
 
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
             const auto& input = stage.Inputs().Item(inputIndex);
-            YQL_ENSURE(input.Maybe<TDqConnection>());
-            auto connection = input.Cast<TDqConnection>();
 
-            auto& protoInput = *stageProto.AddInputs();
-            FillConnection(connection, stagesMap, protoInput, ctx);
+            if (input.Maybe<TDqSource>()) {
+                auto* protoSource = stageProto.AddSources();
+                FillSource(input.Cast<TDqSource>(), protoSource, true);
+                protoSource->SetInputIndex(inputIndex);
+            } else {
+                YQL_ENSURE(input.Maybe<TDqConnection>());
+                auto connection = input.Cast<TDqConnection>();
+
+                auto& protoInput = *stageProto.AddInputs();
+                FillConnection(connection, stagesMap, protoInput, ctx);
+                protoInput.SetInputIndex(inputIndex);
+            }
         }
 
         bool hasSort = false;
@@ -628,6 +636,54 @@ private:
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
             }
+        }
+    }
+
+    void FillSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns) {
+        if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>()) {
+            NKqpProto::TKqpReadRangesSource& readProto = *protoSource->MutableReadRangesSource();
+            FillTable(settings.Table().Cast(), *readProto.MutableTable());
+
+            auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillColumns(settings.Columns().Cast(), *tableMeta, readProto, allowSystemColumns);
+            auto readSettings = TKqpReadTableSettings::Parse(settings.Settings().Cast());
+
+            readProto.SetReverse(readSettings.Reverse);
+            readProto.SetSorted(readSettings.Sorted);
+            for (auto&& key : readSettings.SkipNullKeys) {
+                readProto.AddSkipNullKeys(key);
+            }
+
+            auto ranges = settings.RangesExpr().template Maybe<TCoParameter>();
+            if (ranges.IsValid()) {
+                auto& rangesParam = *readProto.MutableRanges();
+                rangesParam.SetParamName(ranges.Cast().Name().StringValue());
+            } else {
+                YQL_ENSURE(
+                    TCoVoid::Match(settings.RangesExpr().Raw()),
+                    "Read ranges should be parameter or void, got: " << settings.RangesExpr().Cast().Ptr()->Content()
+                );
+            }
+
+            if (readSettings.ItemsLimit) {
+                TExprBase expr(readSettings.ItemsLimit);
+                if (expr.template Maybe<TCoUint64>()) {
+                    auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
+
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+
+                    literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+                } else if (expr.template Maybe<TCoParameter>()) {
+                    readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.template Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
+                }
+            }
+        } else {
+            YQL_ENSURE(false, "unsupported source type");
         }
     }
 

@@ -235,6 +235,44 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
 
     return TStatus::Ok;
 }
+TStatus AnnotateKqpSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+    auto table = ResolveTable(node->Child(TKqpReadRangesSourceSettings::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqpReadRangesSourceSettings::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    auto ranges = node->Child(TKqpReadRangesSourceSettings::idx_RangesExpr);
+    if (!TCoVoid::Match(ranges) &&
+        !TCoArgument::Match(ranges) &&
+        !TCoParameter::Match(ranges) &&
+        !TCoRangeFinalize::Match(ranges) &&
+        !TDqPhyPrecompute::Match(ranges) &&
+        !TKqpTxResultBinding::Match(ranges))
+    {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(ranges->Pos()),
+            TStringBuilder()
+                << "Expected Void, Parameter, Argument or RangeFinalize in ranges, but got: "
+                << ranges->Content()
+        ));
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    return TStatus::Ok;
+}
 
 TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
@@ -1307,6 +1345,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpEnsure::Match(input.Get())) {
                 return AnnotateKqpEnsure(input, ctx);
+            }
+
+            if (TKqpReadRangesSourceSettings::Match(input.Get())) {
+                return AnnotateKqpSourceSettings(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
 
             return dqTransformer->Transform(input, output, ctx);

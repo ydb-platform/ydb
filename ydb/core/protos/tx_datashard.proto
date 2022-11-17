@@ -238,6 +238,24 @@ message TKqpTransaction {
     optional NKikimrKqp.TKqpSnapshot Snapshot = 6;
 }
 
+message TKqpReadRangesSourceSettings {
+    optional TKqpTransaction.TTableMeta Table = 1;
+
+    oneof RangeType {
+        NKikimrTx.TKeyRange FullRange = 2;
+        TKqpTransaction.TTableKeyRange Ranges = 3;
+    }
+
+    repeated TKqpTransaction.TColumnMeta Columns = 4;
+    optional uint64 ItemsLimit = 5;
+    optional bool Reverse = 6;
+    repeated string SkipNullKeys = 7;
+    repeated uint32 KeyColumnTypes = 8;
+    optional EScanDataFormat DataFormat = 9;
+    optional NKikimrProto.TRowVersion Snapshot = 10;
+    optional uint64 ShardIdHint = 11;
+}
+
 message TKqpTaskInfo {
     optional uint64 TaskId = 1;
     optional NActorsProto.TActorId ComputeActor = 2;

@@ -587,6 +587,57 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     return shardInfoMap;
 }
 
+THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
+    YQL_ENSURE(table);
+
+    const auto& keyColumnTypes = table->KeyColumnTypes;
+    TVector<TSerializedPointOrRange> ranges;
+
+    if (source.HasRanges()) {
+        ranges = FillRangesFromParameter(
+            keyColumnTypes, source.GetRanges(), stageInfo, holderFactory, typeEnv
+        );
+    } else if (source.HasKeyRange()) {
+        //TODO: support KeyRange
+        Y_ENSURE(false);
+    } else {
+        ranges = BuildFullRange(keyColumnTypes);
+    }
+
+    THashMap<ui64, TShardInfo> shardInfoMap;
+
+    // KeyReadRanges must be sorted & non-intersecting, they came in such condition from predicate extraction.
+    for (auto& range: ranges) {
+        TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
+            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
+            : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+
+        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
+            keyColumnTypes);
+
+        for (TPartitionWithRange& partitionWithRange : readPartitions) {
+            auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
+
+            if (!shardInfo.KeyReadRanges) {
+                shardInfo.KeyReadRanges.ConstructInPlace();
+            }
+
+            if (partitionWithRange.FullRange) {
+                shardInfo.KeyReadRanges->MakeFullRange(std::move(*partitionWithRange.FullRange));
+                continue;
+            }
+
+            shardInfo.KeyReadRanges->Add(std::move(partitionWithRange.PointOrRange));
+        }
+    }
+
+    return shardInfoMap;
+}
+
 
 THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
@@ -908,9 +959,6 @@ THashMap<ui64, TShardInfo> PruneEffectPartitions(TKqpTableKeys& tableKeys,
     }
 }
 
-
-namespace {
-
 void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
     ui64& itemsLimit, TString& itemsLimitParamName, NYql::NDqProto::TData& itemsLimitBytes,
@@ -959,8 +1007,6 @@ void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValu
         case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
             return;
     }
-}
-
 }
 
 TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,

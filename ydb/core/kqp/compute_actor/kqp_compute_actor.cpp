@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
+#include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 
 namespace NKikimr {
@@ -48,6 +49,7 @@ namespace NKqp {
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory() {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterStreamLookupActorFactory(*factory);
+    RegisterKqpReadActor(*factory);
     return factory;
 }
 

@@ -185,6 +185,19 @@ protected:
         }
     }
 
+    TMaybe<size_t> FindReadRangesSource(const NKqpProto::TKqpPhyStage& stage) {
+        TMaybe<size_t> res;
+        for (size_t i = 0; i < stage.SourcesSize(); ++i) {
+            auto& source = stage.GetSources(i);
+            if (source.HasReadRangesSource()) {
+                YQL_ENSURE(!res);
+                res = i;
+
+            }
+        }
+        return res;
+    }
+
 protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
@@ -406,6 +419,11 @@ protected:
 
     void FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
         switch (input.Type()) {
+            case NYql::NDq::TTaskInputType::Source:
+                inputDesc.MutableSource()->SetType(input.SourceType);
+                inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
+                inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
+                break;
             case NYql::NDq::TTaskInputType::UnionAll: {
                 inputDesc.MutableUnionAll();
                 break;

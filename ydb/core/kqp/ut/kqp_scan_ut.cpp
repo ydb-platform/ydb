@@ -1960,6 +1960,26 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         CompareYson("[[%false]]", StreamResultToYson(result));
     }
 
+    Y_UNIT_TEST(DqSource) {
+        TKikimrSettings settings;
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TFeatureFlags flags;
+        flags.SetEnablePredicateExtractForDataQueries(true);
+        flags.SetEnableKqpScanQuerySourceRead(true);
+        settings.SetFeatureFlags(flags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        CreateSampleTables(kikimr);
+
+        {
+            auto result = db.StreamExecuteScanQuery(R"(
+                SELECT Key, Data FROM `/Root/EightShard` WHERE Key = 101 or (Key >= 202 and Key < 200+4) ORDER BY Key;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[101u];[1]];[[202u];[1]];[[203u];[3]]])", StreamResultToYson(result));
+        }
+    }
+
     Y_UNIT_TEST(StreamLookup) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

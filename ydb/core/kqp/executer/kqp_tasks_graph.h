@@ -12,6 +12,7 @@
 namespace NKikimrTxDataShard {
 class TKqpTransaction_TDataTaskMeta_TKeyRange;
 class TKqpTransaction_TScanTaskMeta_TReadOpMeta;
+class TKqpReadRangesSourceSettings;
 }
 
 namespace NKikimr {
@@ -91,6 +92,7 @@ struct TShardKeyRanges {
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta_TReadOpMeta* proto) const;
+    void SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto) const;
 
     std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };
@@ -171,7 +173,23 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
 void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const NKqpProto::TKqpPhyTx& tx, ui64 txIdx);
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tableKeys, const TStageInfo& stageInfo,
     ui64 txId, bool enableSpilling);
-TVector<TTaskMeta::TColumn> BuildKqpColumns(const NKqpProto::TKqpPhyTableOperation& op, const TKqpTableKeys::TTable& table);
+
+template<typename Proto>
+TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, const TKqpTableKeys::TTable& table) {
+    TVector<TTaskMeta::TColumn> columns;
+    columns.reserve(op.GetColumns().size());
+
+    for (const auto& column : op.GetColumns()) {
+        TTaskMeta::TColumn c;
+        c.Id = column.GetId();
+        c.Type = table.Columns.at(column.GetName()).Type;
+        c.Name = column.GetName();
+
+        columns.emplace_back(std::move(c));
+    }
+
+    return columns;
+}
 
 struct TKqpTaskOutputType {
     enum : ui32 {

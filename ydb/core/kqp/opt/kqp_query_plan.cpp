@@ -535,6 +535,251 @@ private:
         }
     }
 
+    void Visit(const TKqpReadRangesSourceSettings& sourceSettings, TQueryPlanNode& planNode) {
+        if (sourceSettings.RangesExpr().Maybe<TKqlKeyRange>()) {
+            auto table = TString(sourceSettings.Table().Path());
+            auto range = sourceSettings.RangesExpr().Cast<TKqlKeyRange>();
+
+            TOperator op;
+            TTableRead readInfo;
+
+            auto describeBoundary = [this](const TExprBase& key) {
+                if (auto param = key.Maybe<TCoParameter>()) {
+                   return param.Cast().Name().StringValue();
+                }
+
+                if (auto param = key.Maybe<TCoNth>().Tuple().Maybe<TCoParameter>()) {
+                    if (auto maybeResultBinding = ContainResultBinding(param.Cast().Name().StringValue())) {
+                        auto [txId, resId] = *maybeResultBinding;
+                        if (auto result = GetResult(txId, resId)) {
+                            auto index = FromString<ui32>(key.Cast<TCoNth>().Index());
+                            Y_ENSURE(index < result->Size());
+                            return (*result)[index].GetDataText();
+                        }
+                    }
+                }
+
+                if (auto literal = key.Maybe<TCoDataCtor>()) {
+                    return literal.Cast().Literal().StringValue();
+                }
+
+                return TString("n/a");
+            };
+
+            /* Collect info about scan range */
+            struct TKeyPartRange {
+                TString From;
+                TString To;
+                TString ColumnName;
+            };
+            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
+            op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+            planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+            TVector<TKeyPartRange> scanRangeDescr(tableData.Metadata->KeyColumnNames.size());
+
+            auto maybeFromKey = range.From().Maybe<TKqlKeyTuple>();
+            auto maybeToKey = range.To().Maybe<TKqlKeyTuple>();
+            if (maybeFromKey && maybeToKey) {
+                auto fromKey = maybeFromKey.Cast();
+                auto toKey = maybeToKey.Cast();
+
+                for (ui32 i = 0; i < fromKey.ArgCount(); ++i) {
+                    scanRangeDescr[i].From = describeBoundary(fromKey.Arg(i));
+                }
+                for (ui32 i = 0; i < toKey.ArgCount(); ++i) {
+                    scanRangeDescr[i].To = describeBoundary(toKey.Arg(i));
+                }
+                for (ui32 i = 0; i < scanRangeDescr.size(); ++i) {
+                    scanRangeDescr[i].ColumnName = tableData.Metadata->KeyColumnNames[i];
+                }
+
+                TString leftParen = range.From().Maybe<TKqlKeyInc>().IsValid() ? "[" : "(";
+                TString rightParen = range.To().Maybe<TKqlKeyInc>().IsValid() ? "]" : ")";
+                bool hasRangeScans = false;
+                auto& ranges = op.Properties["ReadRange"];
+                for (const auto& keyPartRange : scanRangeDescr) {
+                    TStringBuilder rangeDescr;
+
+                    if (keyPartRange.From == keyPartRange.To) {
+                        if (keyPartRange.From.Empty()) {
+                            rangeDescr << keyPartRange.ColumnName << " (-∞, +∞)";
+                            readInfo.ScanBy.push_back(rangeDescr);
+                        } else {
+                            rangeDescr << keyPartRange.ColumnName
+                                       << " (" << keyPartRange.From << ")";
+                            readInfo.LookupBy.push_back(rangeDescr);
+                        }
+                    } else {
+                        rangeDescr << keyPartRange.ColumnName << " "
+                                   << (keyPartRange.From.Empty() ? "(" : leftParen)
+                                   << (keyPartRange.From.Empty() ? "-∞" : keyPartRange.From) << ", "
+                                   << (keyPartRange.To.Empty() ? "+∞" : keyPartRange.To)
+                                   << (keyPartRange.To.Empty() ? ")" : rightParen);
+                        readInfo.ScanBy.push_back(rangeDescr);
+                        hasRangeScans = true;
+                    }
+
+                    ranges.AppendValue(rangeDescr);
+                }
+
+                // Scan which fixes only few first members of compound primary key were called "Lookup"
+                // by older explain version. We continue to do so.
+                if (readInfo.LookupBy.size() > 0) {
+                    readInfo.Type = EPlanTableReadType::Lookup;
+                } else {
+                    readInfo.Type = hasRangeScans ? EPlanTableReadType::Scan : EPlanTableReadType::FullScan;
+                }
+            }
+
+            auto& columns = op.Properties["ReadColumns"];
+            for (auto const& col : sourceSettings.Columns()) {
+                readInfo.Columns.emplace_back(TString(col.Value()));
+                columns.AppendValue(col.Value());
+            }
+
+            auto settings = NYql::TKqpReadTableSettings::Parse(sourceSettings.Settings());
+            if (settings.ItemsLimit && !readInfo.Limit) {
+                auto limit = GetExprStr(TExprBase(settings.ItemsLimit), false);
+                if (auto maybeResultBinding = ContainResultBinding(limit)) {
+                    const auto [txId, resId] = *maybeResultBinding;
+                    if (auto result = GetResult(txId, resId)) {
+                        limit = result->GetDataText();
+                    }
+                }
+
+                readInfo.Limit = limit;
+                op.Properties["ReadLimit"] = limit;
+            }
+            if (settings.Reverse) {
+                readInfo.Reverse = true;
+                op.Properties["Reverse"] = true;
+            }
+
+            SerializerCtx.Tables[table].Reads.push_back(readInfo);
+
+            ui32 operatorId;
+            if (readInfo.Type == EPlanTableReadType::Scan) {
+                op.Properties["Name"] = "TableRangeScan";
+                operatorId = AddOperator(planNode, "TableRangeScan", std::move(op));
+            } else if (readInfo.Type == EPlanTableReadType::FullScan) {
+                op.Properties["Name"] = "TableFullScan";
+                operatorId = AddOperator(planNode, "TableFullScan", std::move(op));
+            } else if (readInfo.Type == EPlanTableReadType::Lookup) {
+                op.Properties["Name"] = "TablePointLookup";
+                operatorId = AddOperator(planNode, "TablePointLookup", std::move(op));
+            } else {
+                op.Properties["Name"] = "TableScan";
+                operatorId = AddOperator(planNode, "TableScan", std::move(op));
+            }
+        } else {
+            const auto table = TString(sourceSettings.Table().Path());
+            const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(sourceSettings.ExplainPrompt().Cast());
+
+            TTableRead readInfo;
+            TOperator op;
+
+            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
+            op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+            planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+
+            auto rangesDesc = PrettyExprStr(sourceSettings.RangesExpr());
+            if (rangesDesc == "Void" || explainPrompt.UsedKeyColumns.empty()) {
+                readInfo.Type = EPlanTableReadType::FullScan;
+
+                auto& ranges = op.Properties["ReadRanges"];
+                for (const auto& col : tableData.Metadata->KeyColumnNames) {
+                    TStringBuilder rangeDesc;
+                    rangeDesc << col << " (-∞, +∞)";
+                    readInfo.ScanBy.push_back(rangeDesc);
+                    ranges.AppendValue(rangeDesc);
+                }
+            } else if (auto maybeResultBinding = ContainResultBinding(rangesDesc)) {
+                readInfo.Type = EPlanTableReadType::Scan;
+
+                auto [txId, resId] = *maybeResultBinding;
+                if (auto result = GetResult(txId, resId)) {
+                    auto ranges = (*result)[0];
+                    const auto& keyColumns = tableData.Metadata->KeyColumnNames;
+                    for (size_t rangeId = 0; rangeId < ranges.Size(); ++rangeId) {
+                        Y_ENSURE(ranges[rangeId].HaveValue() && ranges[rangeId].Size() == 2);
+                        auto from = ranges[rangeId][0];
+                        auto to = ranges[rangeId][1];
+
+                        for (size_t colId = 0; colId < keyColumns.size(); ++colId) {
+                            if (!from[colId].HaveValue() && !to[colId].HaveValue()) {
+                                continue;
+                            }
+
+                            TStringBuilder rangeDesc;
+                            rangeDesc << keyColumns[colId] << " "
+                                << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
+                                << (from[colId].HaveValue() ? from[colId].GetDataText() : "-∞") << ", "
+                                << (to[colId].HaveValue() ? to[colId].GetDataText() : "+∞")
+                                << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
+
+                            readInfo.ScanBy.push_back(rangeDesc);
+                            op.Properties["ReadRanges"].AppendValue(rangeDesc);
+                        }
+                    }
+                } else {
+                    op.Properties["ReadRanges"] = rangesDesc;
+                }
+            } else {
+                Y_ENSURE(false, rangesDesc);
+            }
+
+            if (!explainPrompt.UsedKeyColumns.empty()) {
+                auto& usedColumns = op.Properties["ReadRangesKeys"];
+                for (const auto& col : explainPrompt.UsedKeyColumns) {
+                    usedColumns.AppendValue(col);
+                }
+            }
+
+            if (explainPrompt.ExpectedMaxRanges) {
+                op.Properties["ReadRangesExpectedSize"] = explainPrompt.ExpectedMaxRanges;
+            }
+
+            auto& columns = op.Properties["ReadColumns"];
+            for (const auto& col : sourceSettings.Columns()) {
+                readInfo.Columns.emplace_back(TString(col.Value()));
+                columns.AppendValue(col.Value());
+            }
+
+            auto settings = NYql::TKqpReadTableSettings::Parse(sourceSettings.Settings());
+            if (settings.ItemsLimit && !readInfo.Limit) {
+                auto limit = GetExprStr(TExprBase(settings.ItemsLimit), false);
+                if (auto maybeResultBinding = ContainResultBinding(limit)) {
+                    const auto [txId, resId] = *maybeResultBinding;
+                    if (auto result = GetResult(txId, resId)) {
+                        limit = result->GetDataText();
+                    }
+                }
+
+                readInfo.Limit = limit;
+                op.Properties["ReadLimit"] = limit;
+            }
+            if (settings.Reverse) {
+                readInfo.Reverse = true;
+                op.Properties["Reverse"] = true;
+            }
+
+            if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
+                op.Properties["PredicatePushdown"] = SerializerCtx.Config.Get()->PushOlapProcess();
+            }
+
+            ui32 operatorId;
+            if (readInfo.Type == EPlanTableReadType::FullScan) {
+                op.Properties["Name"] = "TableFullScan";
+                operatorId = AddOperator(planNode, "TableFullScan", std::move(op));
+            } else {
+                op.Properties["Name"] = "TableRangesScan";
+                operatorId = AddOperator(planNode, "TableRangesScan", std::move(op));
+            }
+
+            SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
+        }
+    }
+
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
         if (expr.Maybe<TDqPhyStage>()) {
             auto stageGuid = NDq::TDqStageSettings::Parse(expr.Cast<TDqPhyStage>()).Id;
@@ -575,12 +820,18 @@ private:
             }
 
             for (const auto& input : expr.Cast<TDqStageBase>().Inputs()) {
-                auto inputCn = input.Cast<TDqConnection>();
+                if (auto source = input.Maybe<TDqSource>()) {
+                    auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>();
+                    YQL_ENSURE(settings.IsValid(), "only readranges sources are supported");
+                    Visit(settings.Cast(), stagePlanNode);
+                } else {
+                    auto inputCn = input.Cast<TDqConnection>();
 
-                auto& inputPlanNode = AddPlanNode(stagePlanNode);
-                FillConnectionPlanNode(inputCn, inputPlanNode);
+                    auto& inputPlanNode = AddPlanNode(stagePlanNode);
+                    FillConnectionPlanNode(inputCn, inputPlanNode);
 
-                Visit(inputCn.Output().Stage(), inputPlanNode);
+                    Visit(inputCn.Output().Stage(), inputPlanNode);
+                }
             }
         } else {
             Visit(expr.Ptr(),  planNode);

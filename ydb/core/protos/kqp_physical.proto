@@ -223,6 +223,7 @@ message TKqpPhyCnStreamLookup {
 message TKqpPhyConnection {
     uint32 StageIndex = 1;
     uint32 OutputIndex = 2;
+    uint32 InputIndex = 13;
 
     oneof Type {
         TKqpPhyCnUnionAll UnionAll = 3;
@@ -238,6 +239,29 @@ message TKqpPhyConnection {
     };
 }
 
+message TKqpReadRangesSource {
+    TKqpPhyTable Table = 1;
+    repeated TKqpPhyColumn Columns = 2;
+    TKqpPhyValue ItemsLimit = 3;
+    bool Reverse = 4;
+    bool Sorted = 5;
+
+    oneof RangesExpr {
+        TKqpPhyParamValue Ranges = 6;
+        TKqpPhyKeyRange KeyRange = 7;
+    }
+
+    repeated string SkipNullKeys = 8;
+}
+
+message TKqpSource {
+    uint32 InputIndex = 1;
+
+    oneof Type {
+        TKqpReadRangesSource ReadRangesSource = 3;
+    }
+};
+
 message TKqpPhyStage {
     NYql.NDqProto.TProgram Program = 1;
     repeated string ProgramParameters = 2;
@@ -247,6 +271,7 @@ message TKqpPhyStage {
     repeated TKqpPhyTableOperation TableOps = 6;
     bool IsEffectsStage = 7;
     string StageGuid = 8;
+    repeated TKqpSource Sources = 9;
 }
 
 message TKqpPhyResult {

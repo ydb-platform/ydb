@@ -22,6 +22,23 @@ namespace NKikimrTxDataShard {
 namespace NKikimr {
 namespace NMiniKQL {
 
+struct TBytesStatistics {
+    ui64 AllocatedBytes = 0;
+    ui64 DataBytes = 0;
+
+    void AddStatistics(const TBytesStatistics& other) {
+        AllocatedBytes += other.AllocatedBytes;
+        DataBytes += other.DataBytes;
+    }
+
+};
+
+TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type);
+TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
+    const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeInfo columnType);
+
+void FillSystemColumn(NUdf::TUnboxedValue& rowItem, TMaybe<ui64> shardId, NTable::TTag tag, NScheme::TTypeInfo type);
+
 std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type);
 
 class IKqpTableReader : public TSimpleRefCount<IKqpTableReader> {

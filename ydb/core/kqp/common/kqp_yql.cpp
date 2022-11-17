@@ -127,16 +127,15 @@ NNodes::TCoNameValueTupleList TKqpPhyTxSettings::BuildNode(TExprContext& ctx, TP
 
 namespace {
 
-template <typename TKqlReadOperation>
-TKqpReadTableSettings ParseInternal(const TKqlReadOperation& node) {
+TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
     TKqpReadTableSettings settings;
 
-    for (const auto& tuple : node.Settings()) {
+    for (const auto& tuple : node) {
         TStringBuf name = tuple.Name().Value();
 
         if (name == TKqpReadTableSettings::SkipNullKeysSettingName) {
-            YQL_ENSURE(tuple.Value().template Maybe<TCoAtomList>());
-            for (const auto& key : tuple.Value().template Cast<TCoAtomList>()) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+            for (const auto& key : tuple.Value().Cast<TCoAtomList>()) {
                 settings.SkipNullKeys.emplace_back(TString(key.Value()));
             }
         } else if (name == TKqpReadTableSettings::ItemsLimitSettingName) {
@@ -158,12 +157,16 @@ TKqpReadTableSettings ParseInternal(const TKqlReadOperation& node) {
 
 } // anonymous namespace end
 
-TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableBase& node) {
+TKqpReadTableSettings TKqpReadTableSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
     return ParseInternal(node);
 }
 
+TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableBase& node) {
+    return TKqpReadTableSettings::Parse(node.Settings());
+}
+
 TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableRangesBase& node) {
-    return ParseInternal(node);
+    return TKqpReadTableSettings::Parse(node.Settings());
 }
 
 NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
@@ -297,9 +300,13 @@ TCoNameValueTupleList TKqpReadTableExplainPrompt::BuildNode(TExprContext& ctx, T
 }
 
 TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TKqlReadTableRangesBase& node) {
+    return TKqpReadTableExplainPrompt::Parse(node.ExplainPrompt());
+}
+
+TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNameValueTupleList& node) {
     TKqpReadTableExplainPrompt prompt;
 
-    for (const auto& tuple : node.ExplainPrompt()) {
+    for (const auto& tuple : node) {
         TStringBuf name = tuple.Name().Value();
 
         if (name == TKqpReadTableExplainPrompt::UsedKeyColumnsName) {

@@ -88,6 +88,18 @@
             ]
         },
         {
+            "Name": "TKqpReadRangesSourceSettings",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpRowsSourceSettings"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 3, "Name": "RangesExpr", "Type": "TExprBase"},
+                {"Index": 4, "Name": "ExplainPrompt", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
+        },
+        {
             "Name": "TKqlReadTableRanges",
             "Base": "TKqlReadTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"}

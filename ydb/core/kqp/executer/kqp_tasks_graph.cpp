@@ -44,8 +44,18 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
 
             TStageInfoMeta meta(tx);
 
+            for (auto& source : stage.GetSources()) {
+                if (source.HasReadRangesSource()) {
+                    YQL_ENSURE(source.GetInputIndex() == 0);
+                    YQL_ENSURE(stage.SourcesSize() == 1);
+                    meta.TableId = MakeTableId(source.GetReadRangesSource().GetTable());
+                    meta.TablePath = source.GetReadRangesSource().GetTable().GetPath();
+                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
+                }
+            }
+
             bool stageAdded = tasksGraph.AddStageInfo(
-                TStageInfo(stageId, stage.InputsSize(), stage.GetOutputsCount(), std::move(meta)));
+                TStageInfo(stageId, stage.InputsSize() + stage.SourcesSize(), stage.GetOutputsCount(), std::move(meta)));
             YQL_ENSURE(stageAdded);
 
             auto& stageInfo = tasksGraph.GetStageInfo(stageId);
@@ -267,8 +277,8 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tabl
             << (spilling ? " with spilling" : " without spilling"));
     };
 
-    for (ui32 inputIdx = 0; inputIdx < stage.InputsSize(); ++inputIdx) {
-        const auto& input = stage.GetInputs(inputIdx);
+    for (const auto& input : stage.GetInputs()) {
+        ui32 inputIdx = input.GetInputIndex();
         const auto& inputStageInfo = tasksGraph.GetStageInfo(TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
         const auto& outputIdx = input.GetOutputIndex();
 
@@ -316,22 +326,6 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tabl
                 YQL_ENSURE(false, "Unexpected stage input type: " << (ui32)input.GetTypeCase());
         }
     }
-}
-
-TVector<TTaskMeta::TColumn> BuildKqpColumns(const NKqpProto::TKqpPhyTableOperation& op, const TKqpTableKeys::TTable& table) {
-    TVector<TTaskMeta::TColumn> columns;
-    columns.reserve(op.GetColumns().size());
-
-    for (const auto& column : op.GetColumns()) {
-        TTaskMeta::TColumn c;
-        c.Id = column.GetId();
-        c.Type = table.Columns.at(column.GetName()).Type;
-        c.Name = column.GetName();
-
-        columns.emplace_back(std::move(c));
-    }
-
-    return columns;
 }
 
 bool IsCrossShardChannel(TKqpTasksGraph& tasksGraph, const TChannel& channel) {
@@ -613,6 +607,41 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskM
                 keyRange.SetTo(x.GetBuffer());
                 keyRange.SetFromInclusive(true);
                 keyRange.SetToInclusive(true);
+            }
+        }
+    }
+}
+
+void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto) const {
+    if (IsFullRange()) {
+        auto& protoRange = *proto->MutableRanges()->AddKeyRanges();
+        FullRange->Serialize(protoRange);
+    } else {
+        bool usePoints = true;
+        for (auto& range : Ranges) {
+            if (std::holds_alternative<TSerializedCellVec>(range)) {
+                usePoints = false;
+            }
+        }
+        auto* protoRanges = proto->MutableRanges();
+        for (auto& range : Ranges) {
+            if (std::holds_alternative<TSerializedCellVec>(range)) {
+                if (usePoints) {
+                    const auto& x = std::get<TSerializedCellVec>(range);
+                    protoRanges->AddKeyPoints(x.GetBuffer());
+                } else {
+                    const auto& x = std::get<TSerializedCellVec>(range);
+                    auto& keyRange = *protoRanges->AddKeyRanges();
+                    keyRange.SetFrom(x.GetBuffer());
+                    keyRange.SetTo(x.GetBuffer());
+                    keyRange.SetFromInclusive(true);
+                    keyRange.SetToInclusive(true);
+                }
+            } else {
+                auto& x = std::get<TSerializedTableRange>(range);
+                Y_VERIFY_DEBUG(!x.Point);
+                auto& keyRange = *protoRanges->AddKeyRanges();
+                x.Serialize(keyRange);
             }
         }
     }

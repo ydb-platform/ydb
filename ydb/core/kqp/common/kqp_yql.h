@@ -39,6 +39,8 @@ struct TKqpPhyTxSettings {
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
+constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
+
 struct TKqpReadTableSettings {
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
@@ -57,6 +59,7 @@ struct TKqpReadTableSettings {
 
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableBase& node);
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableRangesBase& node);
+    static TKqpReadTableSettings Parse(const NNodes::TCoNameValueTupleList& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
@@ -88,6 +91,7 @@ struct TKqpReadTableExplainPrompt {
 
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
     static TKqpReadTableExplainPrompt Parse(const NNodes::TKqlReadTableRangesBase& node);
+    static TKqpReadTableExplainPrompt Parse(const NNodes::TCoNameValueTupleList& node);
 };
 
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx);

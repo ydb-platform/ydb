@@ -10,19 +10,6 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
-struct TBytesStatistics {
-    ui64 AllocatedBytes = 0;
-    ui64 DataBytes = 0;
-
-    void AddStatistics(const TBytesStatistics& other) {
-        AllocatedBytes += other.AllocatedBytes;
-        DataBytes += other.DataBytes;
-    }
-
-};
-
 TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type) {
     namespace NTypeIds = NScheme::NTypeIds;
     if (!value) {
@@ -86,6 +73,18 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::
     }
 }
 
+void FillSystemColumn(NUdf::TUnboxedValue& rowItem, TMaybe<ui64> shardId, NTable::TTag tag, NScheme::TTypeInfo) {
+    YQL_ENSURE(tag == TKeyDesc::EColumnIdDataShard, "Unknown system column tag: " << tag);
+
+    if (shardId) {
+        rowItem = NUdf::TUnboxedValuePod(*shardId);
+    } else {
+        rowItem = NUdf::TUnboxedValue();
+    }
+}
+
+namespace {
+
 TBytesStatistics GetRowSize(const NUdf::TUnboxedValue* row, const TSmallVec<TKqpComputeContextBase::TColumn>& columns,
     const TSmallVec<TKqpComputeContextBase::TColumn>& systemColumns)
 {
@@ -101,13 +100,7 @@ TBytesStatistics GetRowSize(const NUdf::TUnboxedValue* row, const TSmallVec<TKqp
 
 void FillSystemColumns(NUdf::TUnboxedValue* rowItems, TMaybe<ui64> shardId, const TSmallVec<TKqpComputeContextBase::TColumn>& systemColumns) {
     for (ui32 i = 0; i < systemColumns.size(); ++i) {
-        YQL_ENSURE(systemColumns[i].Tag == TKeyDesc::EColumnIdDataShard, "Unknown system column tag: " << systemColumns[i].Tag);
-
-        if (shardId) {
-            rowItems[i] = NUdf::TUnboxedValuePod(*shardId);
-        } else {
-            rowItems[i] = NUdf::TUnboxedValue();
-        }
+        FillSystemColumn(rowItems[i], shardId, systemColumns[i].Tag, systemColumns[i].Type);
     }
 }
 
@@ -142,6 +135,8 @@ NUdf::TUnboxedValue MakeUnboxedValueFromDecimal128Array(arrow::Array* column, ui
     std::memcpy(reinterpret_cast<char*>(&val), data.data(), data.size());
     return NUdf::TUnboxedValuePod(val);
 }
+
+} // namespace
 
 TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
     const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeInfo columnType)
@@ -250,7 +245,7 @@ TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>&
     return columnStats;
 }
 
-} // namespace
+
 
 std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type) {
     auto sizes = GetUnboxedValueSize(value, type);

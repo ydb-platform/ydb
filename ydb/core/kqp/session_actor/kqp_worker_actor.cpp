@@ -35,6 +35,14 @@ using namespace NRuCalc;
 
 namespace {
 
+#define LOG_C(msg) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() << msg)
+#define LOG_E(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() << msg)
+#define LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() << msg)
+#define LOG_N(msg) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() << msg)
+#define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() << msg)
+#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() << msg)
+#define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() << msg)
+
 using TQueryResult = IKqpHost::TQueryResult;
 
 struct TKqpQueryState {
@@ -107,7 +115,6 @@ public:
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , CreationTime(TInstant::Now())
         , QueryId(0)
-        , IdleTimerId(0)
         , ShutdownState(std::nullopt)
     {
         Y_VERIFY(ModuleResolverState);
@@ -130,7 +137,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Worker bootstrapped, workerId: " << ctx.SelfID);
+        LOG_D("Worker bootstrapped");
         Counters->ReportWorkerCreated(Settings.DbCounters);
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), false);
@@ -143,38 +150,24 @@ public:
             AppData(ctx)->FunctionRegistry, !Settings.LongSession);
 
         Become(&TKqpWorkerActor::ReadyState);
-        StartIdleTimer(ctx);
+    }
+
+    TString LogPrefix() const {
+        TStringBuilder result = TStringBuilder() << "SessionId: " << SessionId << ", " << "ActorId: " << SelfId();
+        if (Y_LIKELY(QueryState)) {
+            result << ", " << QueryState->TraceId;
+        }
+
+        return result;
     }
 
     void HandleReady(TEvKqp::TEvCloseSessionRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
-        auto& event = ev->Get()->Record;
-        auto requestInfo = TKqpRequestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
-        if (CheckRequest(requestInfo, ev->Sender, proxyRequestId, ctx)) {
-            LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, requestInfo << "Session closed due to explicit close event");
+        if (CheckRequest(ev->Get()->Record.GetRequest().GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
+            LOG_I("Session closed due to explicit close event");
             Counters->ReportWorkerClosedRequest(Settings.DbCounters);
             FinalCleanup(ctx);
         }
-    }
-
-    void HandleReady(TEvKqp::TEvPingSessionRequest::TPtr &ev, const TActorContext &ctx) {
-        ui64 proxyRequestId = ev->Cookie;
-        auto& event = ev->Get()->Record;
-        auto requestInfo = TKqpRequestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
-        if (!CheckRequest(requestInfo, ev->Sender, proxyRequestId, ctx)) {
-            return;
-        }
-
-        if (ShutdownState) {
-            ReplyProcessError(ev->Sender, proxyRequestId, requestInfo, Ydb::StatusIds::BAD_SESSION,
-                "Session is under shutdown.", ctx);
-            FinalCleanup(ctx);
-            return;
-        }
-
-        StartIdleTimer(ctx);
-
-        ReplyPingStatus(ev->Sender, proxyRequestId, true, ctx);
     }
 
     void HandleReady(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
@@ -185,26 +178,11 @@ public:
     void HandleReady(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
         auto& event = ev->Get()->Record;
-        auto requestInfo = TKqpRequestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
-
-        if (!CheckRequest(requestInfo, ev->Sender, proxyRequestId, ctx)) {
+        if (!CheckRequest(event.GetRequest().GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
             return;
         }
 
-        if (ShutdownState && ShutdownState->SoftTimeoutReached()) {
-            // we reached the soft timeout, so at this point we don't allow to accept new
-            // queries for session.
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
-                << "System shutdown requested: soft timeout reached, no queries can be accepted. Closing session.");
-
-            ReplyProcessError(ev->Sender, proxyRequestId, requestInfo,
-                Ydb::StatusIds::BAD_SESSION, "Session is under shutdown.", ctx);
-            FinalCleanup(ctx);
-            return;
-        }
-
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo << "Received request, proxyRequestId: "
-            << proxyRequestId);
+        LOG_D("Received request, proxyRequestId: " << proxyRequestId);
 
         Y_VERIFY(!QueryState);
         MakeNewQueryState();
@@ -221,7 +199,7 @@ public:
         QueryState->Sender = ev->Sender;
         QueryState->ProxyRequestId = proxyRequestId;
         QueryState->KeepSession = Settings.LongSession || queryRequest.GetKeepSession();
-        QueryState->TraceId = requestInfo.GetTraceId();
+        QueryState->TraceId = event.GetTraceId();
         QueryState->RequestType = event.GetRequestType();
         QueryState->StartTime = now;
         QueryState->ReplyFlags = queryRequest.GetReplyFlags();
@@ -245,8 +223,8 @@ public:
         auto timeoutMs = GetQueryTimeout(queryRequest.GetType(), queryRequest.GetTimeoutMs(), Settings.Service);
         QueryState->QueryDeadlines.TimeoutAt = now + timeoutMs;
 
-        auto onError = [this, &ctx, &requestInfo] (Ydb::StatusIds::StatusCode status, const TString& message) {
-            ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, requestInfo, status, message, ctx);
+        auto onError = [this, &ctx] (Ydb::StatusIds::StatusCode status, const TString& message) {
+            ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, status, message, ctx);
 
             if (Settings.LongSession) {
                 QueryState.Reset();
@@ -266,7 +244,7 @@ public:
             return;
         }
 
-        if (!CheckLegacyYql(requestInfo, queryRequest, ctx)) {
+        if (!CheckLegacyYql(queryRequest)) {
             onBadRequest(TStringBuilder() << "Legacy YQL requests are restricted in current database, action: "
                 << (ui32)queryRequest.GetAction() << ", type: " << (ui32)queryRequest.GetType());
             return;
@@ -324,38 +302,9 @@ public:
     }
 
     void HandleQueryRequest(NCpuTime::TCpuTimer& timer, const TActorContext& ctx) {
-        StopIdleTimer(ctx);
         PerformQuery(ctx);
         if (QueryState) {
             QueryState->CpuTime += timer.GetTime();
-        }
-    }
-
-    void HandleContinueShutdown(TEvKqp::TEvContinueShutdown::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        CheckContinueShutdown(ctx);
-    }
-
-    void HandleInitiateShutdown(TEvKqp::TEvInitiateSessionShutdown::TPtr &ev, const TActorContext &ctx) {
-        if (!ShutdownState) {
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, "Started session shutdown " << TKqpRequestInfo("", SessionId));
-            auto softTimeout = ev->Get()->SoftTimeoutMs;
-            auto hardTimeout = ev->Get()->HardTimeoutMs;
-            ShutdownState = TSessionShutdownState(softTimeout, hardTimeout);
-            ScheduleNextShutdownTick(ctx);
-        }
-    }
-
-    void HandleReady(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
-        auto timerId = ev->Get()->TimerId;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Received TEvIdleTimeout in ready state, timer id: "
-            << timerId << ", sender: " << ev->Sender);
-
-        if (timerId == IdleTimerId) {
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
-                << "Worker idle timeout, worker destroyed");
-            Counters->ReportWorkerClosedIdle(Settings.DbCounters);
-            FinalCleanup(ctx);
         }
     }
 
@@ -367,11 +316,6 @@ public:
         Y_UNUSED(ev);
         Y_UNUSED(ctx);
         QueryState->KeepSession = false;
-    }
-
-    void HandlePerformQuery(TEvKqp::TEvPingSessionRequest::TPtr &ev, const TActorContext &ctx) {
-        ui64 proxyRequestId = ev->Cookie;
-        ReplyPingStatus(ev->Sender, proxyRequestId, false, ctx);
     }
 
     void HandlePerformQuery(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
@@ -392,31 +336,22 @@ public:
         }
     }
 
-    void HandlePerformQuery(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-    }
-
     void HandlePerformCleanup(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
         auto& event = ev->Get()->Record;
-        auto requestInfo = TKqpRequestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
-
-        if (!CheckRequest(requestInfo, ev->Sender, proxyRequestId, ctx)) {
+        if (!CheckRequest(event.GetRequest().GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
             return;
         }
 
         Y_VERIFY(CleanupState);
         if (CleanupState->Final) {
-            ReplyProcessError(ev->Sender, proxyRequestId, requestInfo, Ydb::StatusIds::BAD_SESSION,
-                "Session is being closed", ctx);
+            ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is being closed", ctx);
         } else {
             auto busyStatus = Settings.Service.GetUseSessionBusyStatus()
                 ? Ydb::StatusIds::SESSION_BUSY
                 : Ydb::StatusIds::PRECONDITION_FAILED;
 
-            ReplyProcessError(ev->Sender, proxyRequestId, requestInfo,
-                busyStatus, "Pending previous query completion", ctx);
+            ReplyProcessError(ev->Sender, proxyRequestId, busyStatus, "Pending previous query completion", ctx);
         }
     }
 
@@ -431,21 +366,6 @@ public:
         }
     }
 
-    void HandlePerformCleanup(TEvKqp::TEvPingSessionRequest::TPtr &ev, const TActorContext &ctx) {
-        Y_VERIFY(CleanupState);
-
-        ui64 proxyRequestId = ev->Cookie;
-        auto& event = ev->Get()->Record;
-        TKqpRequestInfo requestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
-
-        if (CleanupState->Final) {
-            ReplyProcessError(ev->Sender, proxyRequestId, requestInfo,
-                Ydb::StatusIds::BAD_SESSION, "Session is being closed", ctx);
-        } else {
-            ReplyPingStatus(ev->Sender, proxyRequestId, false, ctx);
-        }
-    }
-
     void HandlePerformCleanup(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         if (ev->Get()->QueryId != QueryId) {
             return;
@@ -457,8 +377,7 @@ public:
             Y_VERIFY(CleanupState);
             auto result = CleanupState->AsyncResult->GetResult();
             if (!result.Success()) {
-                LOG_ERROR_S(ctx, NKikimrServices::KQP_WORKER, TKqpRequestInfo("", SessionId)
-                    << "Failed to cleanup: " << result.Issues().ToString());
+                LOG_E("Failed to cleanup: " << result.Issues().ToString());
             }
 
             EndCleanup(ctx);
@@ -467,21 +386,12 @@ public:
         }
     }
 
-    void HandlePerformCleanup(TEvKqp::TEvIdleTimeout::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-    }
-
     STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvQueryRequest, HandleReady);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
-                HFunc(TEvKqp::TEvPingSessionRequest, HandleReady);
                 HFunc(TEvKqp::TEvContinueProcess, HandleReady);
-                HFunc(TEvKqp::TEvIdleTimeout, HandleReady);
-                HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
-                HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
             default:
                 UnexpectedEvent("ReadyState", ev, ctx);
             }
@@ -495,11 +405,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvQueryRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformQuery);
-                HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformQuery);
-                HFunc(TEvKqp::TEvIdleTimeout, HandlePerformQuery);
-                HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
-                HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
             default:
                 UnexpectedEvent("PerformQueryState", ev, ctx);
             }
@@ -513,11 +419,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvQueryRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformCleanup);
-                HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformCleanup);
-                HFunc(TEvKqp::TEvIdleTimeout, HandlePerformCleanup);
-                HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
-                HFunc(TEvKqp::TEvContinueShutdown, HandleContinueShutdown);
             default:
                 UnexpectedEvent("PerformCleanupState", ev, ctx);
             }
@@ -527,9 +429,7 @@ public:
     }
 
 private:
-    bool CheckLegacyYql(const TKqpRequestInfo& requestInfo, const NKikimrKqp::TQueryRequest& queryRequest,
-        const TActorContext& ctx)
-    {
+    bool CheckLegacyYql(const NKikimrKqp::TQueryRequest& queryRequest) {
         switch (queryRequest.GetType()) {
             case NKikimrKqp::QUERY_TYPE_UNDEFINED:
                 switch (queryRequest.GetAction()) {
@@ -550,7 +450,7 @@ private:
                 return true;
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, requestInfo << "Legacy YQL request"
+        LOG_N("Legacy YQL request"
             << ", action: " << (ui32)queryRequest.GetAction()
             << ", type: " << (ui32)queryRequest.GetType()
             << ", query: \"" << queryRequest.GetQuery().substr(0, 1000) << "\"");
@@ -560,15 +460,14 @@ private:
 
     void PerformQuery(const TActorContext& ctx) {
         Y_VERIFY(QueryState);
-        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId, QueryState->TraceId);
 
         Gateway->SetToken(Settings.Cluster, QueryState->UserToken);
         auto& queryRequest = QueryState->Request;
 
-        auto onError = [this, &ctx, &requestInfo]
+        auto onError = [this, &ctx]
             (Ydb::StatusIds::StatusCode status, const TString& message) {
-                ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, requestInfo, status, message, ctx);
+                ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, status, message, ctx);
 
                 if (Settings.LongSession) {
                     QueryState.Reset();
@@ -637,9 +536,7 @@ private:
         CleanupState->Start = TInstant::Now();
 
         if (isFinal) {
-            StopIdleTimer(ctx);
             Counters->ReportQueriesPerWorker(Settings.DbCounters, QueryId);
-
             MakeNewQueryState();
         }
 
@@ -674,7 +571,6 @@ private:
             Die(ctx);
         } else {
             if (ReplyQueryResult(ctx)) {
-                StartIdleTimer(ctx);
                 Become(&TKqpWorkerActor::ReadyState);
             } else {
                 FinalCleanup(ctx);
@@ -833,8 +729,6 @@ private:
     bool Reply(THolder<TEvKqp::TEvQueryResponse>&& responseEv, const TActorContext &ctx) {
         Y_VERIFY(QueryState);
 
-        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-
         auto& record = responseEv->Record.GetRef();
         auto& response = *record.MutableResponse();
         const auto& status = record.GetYdbStatus();
@@ -845,37 +739,32 @@ private:
         }
 
         ctx.Send(QueryState->Sender, responseEv.Release(), 0, QueryState->ProxyRequestId);
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
-            << "Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
+        LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());
 
         QueryState.Reset();
 
         if (Settings.LongSession) {
             if (status == Ydb::StatusIds::INTERNAL_ERROR) {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
-                    << "Worker destroyed due to internal error");
+                LOG_D("Worker destroyed due to internal error");
                 Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
             if (status == Ydb::StatusIds::BAD_SESSION) {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
-                    << "Worker destroyed due to session error");
+                LOG_D("Worker destroyed due to session error");
                 Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
         } else {
             if (status != Ydb::StatusIds::SUCCESS) {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
-                    << "Worker destroyed due to query error");
+                LOG_D("Worker destroyed due to query error");
                 Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
         }
 
         if (!keepSession) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, requestInfo
-                << "Worker destroyed due to negative keep session flag");
+            LOG_D("Worker destroyed due to negative keep session flag");
             Counters->ReportWorkerClosedRequest(Settings.DbCounters);
             return false;
         }
@@ -936,11 +825,11 @@ private:
         stats.SetDurationUs(queryDuration.MicroSeconds());
         stats.SetWorkerCpuTimeUs(QueryState->CpuTime.MicroSeconds());
 
-        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         if (IsExecuteAction(queryRequest.GetAction())) {
             auto ru = CalcRequestUnit(stats);
             record.SetConsumedRu(ru);
             CollectSystemViewQueryStats(ctx, &stats, queryDuration, queryRequest.GetDatabase(), ru);
+            auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
             SlowLogQuery(ctx, Config.Get(), requestInfo, queryDuration, record.GetYdbStatus(), QueryState->UserToken,
                 QueryState->ParametersSize, &record, [this] () { return this->ExtractQueryText(); });
         }
@@ -958,7 +847,7 @@ private:
     template<class TEvRecord>
     void AddTrailingInfo(TEvRecord& record) {
         if (ShutdownState) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, "Session ["  << SessionId  << "] is closing, set trailing metadata to request session shutdown");
+            LOG_D("Session is closing, set trailing metadata to request session shutdown");
             record.SetWorkerIsClosing(true);
         }
     }
@@ -975,10 +864,10 @@ private:
         return ctx.Send(sender, ev.Release(), 0, proxyRequestId);
     }
 
-    bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId, const TKqpRequestInfo& requestInfo,
+    bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId,
         Ydb::StatusIds::StatusCode ydbStatus, const TString& message, const TActorContext& ctx)
     {
-        LOG_WARN_S(ctx, NKikimrServices::KQP_WORKER, requestInfo << message);
+        LOG_W(message);
 
         auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
 
@@ -986,13 +875,12 @@ private:
         return ctx.Send(sender, response.Release(), 0, proxyRequestId);
     }
 
-    bool CheckRequest(const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 proxyRequestId,
-        const TActorContext& ctx)
+    bool CheckRequest(const TString& eventSessionId, const TActorId& sender, ui64 proxyRequestId, const TActorContext& ctx)
     {
-        if (requestInfo.GetSessionId() != SessionId) {
-            TString error = TStringBuilder() << "Invalid session, got: " << requestInfo.GetSessionId()
+        if (eventSessionId != SessionId) {
+            TString error = TStringBuilder() << "Invalid session, got: " << eventSessionId
                 << " expected: " << SessionId << ", request ignored";
-            ReplyProcessError(sender, proxyRequestId, requestInfo, Ydb::StatusIds::BAD_SESSION, error, ctx);
+            ReplyProcessError(sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, error, ctx);
             return false;
         }
 
@@ -1001,10 +889,7 @@ private:
 
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev, const TActorContext& ctx) {
         ui64 proxyRequestId = ev->Cookie;
-        auto& event = ev->Get()->Record;
-        auto requestInfo = TKqpRequestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
-
-        if (!CheckRequest(requestInfo, ev->Sender, proxyRequestId, ctx)) {
+        if (!CheckRequest(ev->Get()->Record.GetRequest().GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
             return;
         }
 
@@ -1012,7 +897,7 @@ private:
             ? Ydb::StatusIds::SESSION_BUSY
             : Ydb::StatusIds::PRECONDITION_FAILED;
 
-        ReplyProcessError(ev->Sender, proxyRequestId, requestInfo, busyStatus,
+        ReplyProcessError(ev->Sender, proxyRequestId, busyStatus,
             "Pending previous query completion", ctx);
     }
 
@@ -1136,52 +1021,6 @@ private:
         QueryState.Reset(MakeHolder<TKqpQueryState>());
     }
 
-    void ScheduleNextShutdownTick(const TActorContext& ctx) {
-        ctx.Schedule(TDuration::MilliSeconds(ShutdownState->GetNextTickMs()), new TEvKqp::TEvContinueShutdown());
-    }
-
-    void CheckContinueShutdown(const TActorContext& ctx) {
-        Y_VERIFY(ShutdownState);
-        ShutdownState->MoveToNextState();
-        if (ShutdownState->HardTimeoutReached()){
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_WORKER, "Reached hard shutdown timeout " << TKqpRequestInfo("", SessionId));
-            if (CleanupState) {
-                if (!CleanupState->Final) {
-                    Y_VERIFY(QueryState);
-                    QueryState->KeepSession = false;
-                }
-            } else if (QueryState) {
-                QueryState->KeepSession = false;
-            } else {
-                FinalCleanup(ctx);
-            }
-
-        } else {
-            ScheduleNextShutdownTick(ctx);
-            LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, "Schedule next shutdown tick " << TKqpRequestInfo("", SessionId));
-        }
-    }
-
-    void StartIdleTimer(const TActorContext& ctx) {
-        StopIdleTimer(ctx);
-
-        ++IdleTimerId;
-        auto idleDuration = TDuration::Seconds(Config->_KqpSessionIdleTimeoutSec.Get().GetRef());
-        IdleTimerActorId = CreateLongTimer(ctx, idleDuration,
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvKqp::TEvIdleTimeout(IdleTimerId)));
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Created long timer for idle timeout, timer id: " << IdleTimerId
-            << ", duration: " << idleDuration << ", actor: " << IdleTimerActorId);
-    }
-
-    void StopIdleTimer(const TActorContext& ctx) {
-        if (IdleTimerActorId) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "Destroying long timer actor for idle timout: "
-                << IdleTimerActorId);
-            ctx.Send(IdleTimerActorId, new TEvents::TEvPoisonPill());
-        }
-        IdleTimerActorId = TActorId();
-    }
-
     IKikimrQueryExecutor::TExecuteSettings CreateRollbackSettings() {
         YQL_ENSURE(QueryState);
 
@@ -1216,13 +1055,9 @@ private:
     }
 
     void InternalError(const TString& message, const TActorContext& ctx) {
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_WORKER, "Internal error, SelfId: "
-            << SelfId() << ", message: " << message);
-
+        LOG_E("Internal error, message: " << message);
         if (QueryState) {
-            auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-            ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, requestInfo,
-                Ydb::StatusIds::INTERNAL_ERROR, message, ctx);
+            ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, Ydb::StatusIds::INTERNAL_ERROR, message, ctx);
         }
 
         auto lifeSpan = TInstant::Now() - CreationTime;
@@ -1251,8 +1086,6 @@ private:
     ui32 QueryId;
     THolder<TKqpQueryState> QueryState;
     THolder<TKqpCleanupState> CleanupState;
-    ui32 IdleTimerId;
-    TActorId IdleTimerActorId;
     std::optional<TSessionShutdownState> ShutdownState;
 };
 

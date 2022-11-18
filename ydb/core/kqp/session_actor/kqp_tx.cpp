@@ -89,7 +89,7 @@ bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue&
             return false;
         } else {
             txCtx.Locks.MarkBroken(issues.back());
-            if (!txCtx.DeferredEffects.Empty()) {
+            if (txCtx.TxHasEffects()) {
                 txCtx.Locks.ReportIssues(ctx);
                 return false;
             }

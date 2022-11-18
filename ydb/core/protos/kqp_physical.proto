@@ -337,4 +337,5 @@ message TKqpPhyQuery {
     // StrictDml constraints info
     repeated TKqpTableOp TableOps = 7;
     repeated TKqpTableInfo TableInfos = 8;
+    bool HasUncommittedChangesRead = 9;
 }

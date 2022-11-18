@@ -722,8 +722,9 @@ public:
                 case EKikimrQueryType::YqlScript:
                     if (useScanQuery) {
                         ui64 rowsLimit = 0;
-                        if (!dataQuery.Results().Empty()) {
-                            rowsLimit = FromString<ui64>(dataQuery.Results().Item(0).RowsLimit());
+                        if (!dataQuery.Blocks().Empty() && !dataQuery.Blocks().Item(0).Results().Empty()) {
+                            const auto& queryBlock = dataQuery.Blocks().Item(0);
+                            rowsLimit = FromString<ui64>(queryBlock.Results().Item(0).RowsLimit());
                         }
 
                         if (SessionCtx->Query().PrepareOnly) {
@@ -800,12 +801,19 @@ private:
             return *settings.UseScanQuery;
         }
 
-        if (query.Effects().ArgCount() > 0) {
+        if (query.Blocks().Size() != 1) {
+            // Don't use ScanQuery for muiltiple blocks query
+            return false;
+        }
+
+        const auto& queryBlock = query.Blocks().Item(0);
+
+        if (queryBlock.Effects().ArgCount() > 0) {
             // Do not use ScanQuery for queries with effects.
             return false;
         }
 
-        if (query.Results().Size() != 1) {
+        if (queryBlock.Results().Size() != 1) {
             // Do not use ScanQuery for queries with multiple result sets.
             return false;
         }
@@ -829,7 +837,7 @@ private:
 
         bool hasIndexReads = false;
         bool hasJoins = false;
-        VisitExpr(query.Results().Ptr(), [&hasIndexReads, &hasJoins] (const TExprNode::TPtr& exprNode) {
+        VisitExpr(queryBlock.Results().Ptr(), [&hasIndexReads, &hasJoins] (const TExprNode::TPtr& exprNode) {
             auto node = TExprBase(exprNode);
 
             if (auto read = node.Maybe<TKiReadTable>()) {

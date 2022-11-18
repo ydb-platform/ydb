@@ -64,10 +64,16 @@ ui64 GetResultRowsLimit(const TResWriteBase& resWrite) {
 }
 
 struct TKiExploreTxResults {
+    struct TKiQueryBlock {
+        TVector<TExprBase> Results;
+        TVector<TExprBase> Effects;
+        THashSet<std::string_view> TablesWithEffects;
+        bool HasUncommittedChangesRead = false;
+    };
+
     THashSet<const TExprNode*> Ops;
     TVector<TExprBase> Sync;
-    TVector<TExprBase> Results;
-    TVector<TExprBase> Effects;
+    TVector<TKiQueryBlock> QueryBlocks;
     TVector<TKiOperation> TableOperations;
     bool HasExecute;
 
@@ -88,6 +94,44 @@ struct TKiExploreTxResults {
             hasScheme = hasScheme || (op & KikimrSchemeOps());
             hasData = hasData || (op & KikimrDataOps());
         }
+    }
+
+    void AddEffect(const TExprBase& effect, std::string_view table) {
+        if (QueryBlocks.empty()) {
+            AddQueryBlock();
+        }
+
+        auto& curBlock = QueryBlocks.back();
+        curBlock.Effects.push_back(effect);
+        curBlock.TablesWithEffects.insert(table);
+    }
+
+    void AddResult(const TExprBase& result) {
+        if (QueryBlocks.empty()) {
+            AddQueryBlock();
+        }
+
+        auto& curBlock = QueryBlocks.back();
+        curBlock.Results.push_back(result);
+    }
+
+    bool HasEffects(std::string_view table) {
+        if (QueryBlocks.empty()) {
+            return false;
+        }
+
+        auto& curBlock = QueryBlocks.back();
+        return curBlock.TablesWithEffects.contains(table);
+    }
+
+    void AddQueryBlock() {
+        QueryBlocks.emplace_back();
+    }
+
+    void SetBlockHasUncommittedChangesRead() {
+        YQL_ENSURE(!QueryBlocks.empty());
+        auto& curBlock = QueryBlocks.back();
+        curBlock.HasUncommittedChangesRead = true;
     }
 
     TKiExploreTxResults()
@@ -133,6 +177,10 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto result = ExploreTx(maybeRead.Cast().World(), ctx, dataSink, txRes);
 
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Select, read.Pos(), ctx));
+        if (txRes.HasEffects(table)) {
+            txRes.AddQueryBlock();
+            txRes.SetBlockHasUncommittedChangesRead();
+        }
         return result;
     }
 
@@ -147,7 +195,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto result = ExploreTx(write.World(), ctx, dataSink, txRes);
         auto tableOp = GetTableOp(write);
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, tableOp, write.Pos(), ctx));
-        txRes.Effects.push_back(node);
+        txRes.AddEffect(node, table);
         return result;
     }
 
@@ -161,7 +209,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(update.World(), ctx, dataSink, txRes);
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Update, update.Pos(), ctx));
-        txRes.Effects.push_back(node);
+        txRes.AddEffect(node, table);
         return result;
     }
 
@@ -175,7 +223,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(del.World(), ctx, dataSink, txRes);
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Delete, del.Pos(), ctx));
-        txRes.Effects.push_back(node);
+        txRes.AddEffect(node, table);
         return result;
     }
 
@@ -327,7 +375,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
     {
         txRes.Ops.insert(node.Raw());
         bool result = ExploreTx(TExprBase(node.Ref().ChildPtr(0)), ctx, dataSink, txRes);
-        txRes.Results.push_back(node);
+        txRes.AddResult(node);
         return result;
     }
 
@@ -408,28 +456,42 @@ TExprNode::TPtr MakeSchemeTx(TCoCommit commit, TExprContext& ctx) {
 }
 
 TKiDataQuery MakeKiDataQuery(TExprBase node, const TKiExploreTxResults& txExplore, TExprContext& ctx) {
-    TExprNode::TListType queryResults;
-    for (auto& result : txExplore.Results) {
-        auto resWrite = result.Cast<TResWriteBase>();
+    TVector<TKiDataQueryBlock> queryBlocks;
+    queryBlocks.reserve(txExplore.QueryBlocks.size());
 
-        auto kiResult = Build<TKiResult>(ctx, node.Pos())
-            .Value(resWrite.Data())
-            .Columns(GetResultColumns(resWrite, ctx))
-            .RowsLimit().Build(GetResultRowsLimit(resWrite))
-            .Done();
+    for (const auto& block : txExplore.QueryBlocks) {
+        TKiDataQueryBlockSettings settings;
+        settings.HasUncommittedChangesRead = block.HasUncommittedChangesRead;
 
-        queryResults.push_back(kiResult.Ptr());
+        TExprNode::TListType queryResults;
+        for (auto& result : block.Results) {
+            auto resWrite = result.Cast<TResWriteBase>();
+
+            auto kiResult = Build<TKiResult>(ctx, node.Pos())
+                .Value(resWrite.Data())
+                .Columns(GetResultColumns(resWrite, ctx))
+                .RowsLimit().Build(GetResultRowsLimit(resWrite))
+                .Done();
+
+            queryResults.push_back(kiResult.Ptr());
+        }
+        queryBlocks.emplace_back(Build<TKiDataQueryBlock>(ctx, node.Pos())
+            .Results()
+                .Add(queryResults)
+                .Build()
+            .Effects()
+                .Add(block.Effects)
+                .Build()
+            .Settings(settings.BuildNode(ctx, node.Pos()))
+            .Done());
     }
 
     auto query = Build<TKiDataQuery>(ctx, node.Pos())
         .Operations()
             .Add(txExplore.TableOperations)
             .Build()
-        .Results()
-            .Add(queryResults)
-            .Build()
-        .Effects()
-            .Add(txExplore.Effects)
+        .Blocks()
+            .Add(queryBlocks)
             .Build()
         .Done();
 
@@ -527,36 +589,44 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx) {
         .Input(execQuery)
         .Done();
 
-    if (!txExplore.Results.empty()) {
+
+    bool hasResults = false;
+    for (const auto& block : txExplore.QueryBlocks) {
+        hasResults = hasResults || !block.Results.empty();
+    }
+
+    if (hasResults) {
         auto execRight = Build<TCoRight>(ctx, node.Pos())
             .Input(execQuery)
             .Done()
             .Ptr();
 
-        for (size_t i = 0; i < txExplore.Results.size(); ++i) {
-            auto result = txExplore.Results[i].Cast<TResWriteBase>();
+        for (auto& block : txExplore.QueryBlocks) {
+            for (size_t i = 0; i < block.Results.size(); ++i) {
+                auto result = block.Results[i].Cast<TResWriteBase>();
 
-            auto extractValue = Build<TCoNth>(ctx, node.Pos())
-                .Tuple(execRight)
-                .Index().Build(i)
-                .Done()
-                .Ptr();
+                auto extractValue = Build<TCoNth>(ctx, node.Pos())
+                    .Tuple(execRight)
+                    .Index().Build(i)
+                    .Done()
+                    .Ptr();
 
-            auto newResult = ctx.ChangeChild(
-                *ctx.ChangeChild(
-                    result.Ref(),
-                    TResWriteBase::idx_World,
-                    execWorld.Ptr()
-                ),
-                TResWriteBase::idx_Data,
-                std::move(extractValue)
-            );
+                auto newResult = ctx.ChangeChild(
+                    *ctx.ChangeChild(
+                        result.Ref(),
+                        TResWriteBase::idx_World,
+                        execWorld.Ptr()
+                    ),
+                    TResWriteBase::idx_Data,
+                    std::move(extractValue)
+                );
 
-            execWorld = Build<TCoCommit>(ctx, node.Pos())
-                .World(newResult)
-                .DataSink<TResultDataSink>()
-                    .Build()
-                .Done();
+                execWorld = Build<TCoCommit>(ctx, node.Pos())
+                    .World(newResult)
+                    .DataSink<TResultDataSink>()
+                        .Build()
+                    .Done();
+            }
         }
     }
 
@@ -586,9 +656,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprCont
         return node.Ptr();
     }
 
-    auto dataQuery = Build<TKiDataQuery>(ctx, node.Pos())
-        .Operations()
-            .Build()
+    auto queryBlock = Build<TKiDataQueryBlock>(ctx, node.Pos())
         .Results()
             .Add()
                 .Value(resFill.Data())
@@ -597,6 +665,14 @@ TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprCont
                 .Build()
             .Build()
         .Effects()
+            .Build()
+        .Done();
+
+    auto dataQuery = Build<TKiDataQuery>(ctx, node.Pos())
+        .Operations()
+            .Build()
+        .Blocks()
+            .Add(queryBlock)
             .Build()
         .Done();
 

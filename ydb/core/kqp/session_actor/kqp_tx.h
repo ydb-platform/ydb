@@ -134,6 +134,10 @@ public:
         return DeferredEffects.Add(std::move(physicalTx), std::move(params));
     }
 
+    bool TxHasEffects() const {
+        return HasImmediateEffects || !DeferredEffects.Empty();
+    }
+
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return SnapshotHandle.Snapshot;
     }
@@ -171,6 +175,7 @@ public:
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        HasImmediateEffects = false;
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -225,6 +230,7 @@ public:
     TKqpTxLocks Locks;
 
     TDeferredEffects DeferredEffects;
+    bool HasImmediateEffects = false;
     NTopic::TTopicOperations TopicOperations;
     TIntrusivePtr<TParamsState> ParamsState;
 

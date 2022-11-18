@@ -89,6 +89,10 @@ inline bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikim
         }
     }
 
+    if (config.FeatureFlags.GetEnableKqpImmediateEffects() && physicalQuery.GetHasUncommittedChangesRead()) {
+        return true;
+    }
+
     // We don't want snapshot when there are effects at the moment,
     // because it hurts performance when there are multiple single-shard
     // reads and a single distributed commit. Taking snapshot costs
@@ -768,9 +772,11 @@ public:
     std::pair<bool, TIssues> ApplyTableOperations(TKqpTransactionContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
         auto isolationLevel = *txCtx->EffectiveIsolationLevel;
         bool strictDml = Config->StrictDml.Get(Settings.Cluster).GetOrElse(false);
+        bool enableImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
 
         TExprContext ctx;
-        bool success = txCtx->ApplyTableOperations(query.GetTableOps(), query.GetTableInfos(), isolationLevel, strictDml, EKikimrQueryType::Dml, ctx);
+        bool success = txCtx->ApplyTableOperations(query.GetTableOps(), query.GetTableInfos(), isolationLevel, strictDml,
+            enableImmediateEffects, EKikimrQueryType::Dml, ctx);
         return {success, ctx.IssueManager.GetIssues()};
     }
 
@@ -1086,30 +1092,37 @@ public:
 
         std::shared_ptr<const NKqpProto::TKqpPhyTx> tx;
         if (QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()) {
-            tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>( QueryState->PreparedQuery, &phyQuery.GetTransactions(QueryState->CurrentTx));
+            tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery, &phyQuery.GetTransactions(QueryState->CurrentTx));
         }
 
-        while (tx && tx->GetHasEffects()) {
-            if (!txCtx.AddDeferredEffect(tx, CreateKqpValueMap(*tx))) {
-                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
-                    << "Failed to mix queries with old- and new- engines";
-            }
-            LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
+        if (!Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
+            while (tx && tx->GetHasEffects()) {
+                YQL_ENSURE(txCtx.AddDeferredEffect(tx, CreateKqpValueMap(*tx)));
+                LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
 
-            if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
-                ++QueryState->CurrentTx;
-                tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
-                        &phyQuery.GetTransactions(QueryState->CurrentTx));
-            } else {
-                tx = nullptr;
-                break;
+                if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
+                    ++QueryState->CurrentTx;
+                    tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
+                         &phyQuery.GetTransactions(QueryState->CurrentTx));
+                } else {
+                    tx = nullptr;
+                    break;
+                }
             }
         }
+
         if (!CheckTransacionLocks() || !CheckTopicOperations()) {
             return;
         }
 
-        bool commit = QueryState->Commit && QueryState->CurrentTx >= phyQuery.TransactionsSize() - 1;
+        bool commit = false;
+        if (QueryState->Commit && Config->FeatureFlags.GetEnableKqpImmediateEffects() && phyQuery.GetHasUncommittedChangesRead()) {
+            // every phy tx should acquire LockTxId, so commit is sent separately at the end
+            commit = QueryState->CurrentTx >= phyQuery.TransactionsSize();
+        } else if (QueryState->Commit) {
+            commit = QueryState->CurrentTx >= phyQuery.TransactionsSize() - 1;
+        }
+
         if (tx || commit) {
             bool replied = ExecutePhyTx(&phyQuery, std::move(tx), commit);
             if (!replied) {
@@ -1164,10 +1177,11 @@ public:
             }
 
             request.Transactions.emplace_back(tx, PrepareParameters(*tx));
+            txCtx.HasImmediateEffects = txCtx.HasImmediateEffects || tx->GetHasEffects();
         } else {
             YQL_ENSURE(commit);
 
-            if (txCtx.DeferredEffects.Empty() && !txCtx.Locks.HasLocks() && !txCtx.TopicOperations.HasOperations()) {
+            if (!txCtx.TxHasEffects() && !txCtx.Locks.HasLocks() && !txCtx.TopicOperations.HasOperations()) {
                 ReplySuccess();
                 return true;
             }
@@ -1191,7 +1205,7 @@ public:
             }
 
             if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasReadOperations()) {
-                request.ValidateLocks = !(txCtx.GetSnapshot().IsValid() && txCtx.DeferredEffects.Empty()) ||
+                request.ValidateLocks = !txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() ||
                     txCtx.TopicOperations.HasReadOperations();
                 request.EraseLocks = true;
 
@@ -1262,7 +1276,7 @@ public:
             const auto& locks = result.GetLocks();
             auto [success, issues] = MergeLocks(locks.GetType(), locks.GetValue(), *txCtx);
             if (!success) {
-                if (!txCtx->GetSnapshot().IsValid() || !txCtx->DeferredEffects.Empty()) {
+                if (!txCtx->GetSnapshot().IsValid() || txCtx->TxHasEffects()) {
                     ReplyQueryError(Ydb::StatusIds::ABORTED,  "Error while locks merge",
                         MessageFromIssues(issues));
                     return false;

@@ -321,12 +321,24 @@
             "ListBase": "TKqlQueryResult"
         },
         {
-            "Name": "TKqlQuery",
+            "Name": "TKqlQueryBlock",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "Results", "Type": "TKqlQueryResultList"},
                 {"Index": 1, "Name": "Effects", "Type": "TExprList"}
+            ]
+        },
+        {
+            "Name": "TKqlQueryBlockList",
+            "ListBase": "TKqlQueryBlock"
+        },
+        {
+            "Name": "TKqlQuery",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Blocks", "Type": "TKqlQueryBlockList"}
             ]
         },
         {

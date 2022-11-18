@@ -142,12 +142,19 @@ public:
 
         TKiDataQuery dataQuery(query);
 
-        if (dataQuery.Results().Size() != 1) {
+        if (dataQuery.Blocks().Size() != 1) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(dataQuery.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+               "Scan query should have single query block."));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+        }
+
+        const auto& queryBlock = dataQuery.Blocks().Item(0);
+        if (queryBlock.Results().Size() != 1) {
             ctx.AddError(YqlIssue(ctx.GetPosition(dataQuery.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 "Scan query should have a single result set."));
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
-        if (dataQuery.Effects().ArgCount() > 0) {
+        if (queryBlock.Effects().ArgCount() > 0) {
             ctx.AddError(YqlIssue(ctx.GetPosition(dataQuery.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 "Scan query cannot have data modifications."));
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
@@ -166,15 +173,17 @@ private:
         auto* queryCtx = TransformCtx->QueryCtx.Get();
 
         if (queryCtx->Type == EKikimrQueryType::Dml) {
-            ui32 resultsCount = dataQuery.Results().Size();
-            for (ui32 i = 0; i < resultsCount; ++i) {
-                auto& result = *queryCtx->PreparingQuery->AddResults();
-                result.SetKqlIndex(0);
-                result.SetResultIndex(i);
-                for (const auto& column : dataQuery.Results().Item(i).Columns()) {
-                    *result.AddColumnHints() = column.Value();
+            ui32 resultsCount = 0;
+            for (const auto& block : dataQuery.Blocks()) {
+                for (ui32 i = 0; i < block.Results().Size(); ++i, ++resultsCount) {
+                    auto& result = *queryCtx->PreparingQuery->AddResults();
+                    result.SetKqlIndex(0);
+                    result.SetResultIndex(resultsCount);
+                    for (const auto& column : block.Results().Item(i).Columns()) {
+                        *result.AddColumnHints() = column.Value();
+                    }
+                    result.SetRowsLimit(FromString<ui64>(block.Results().Item(i).RowsLimit()));
                 }
-                result.SetRowsLimit(FromString<ui64>(dataQuery.Results().Item(i).RowsLimit()));
             }
         } else {
             // scan query
@@ -251,8 +260,7 @@ private:
         auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery;
         TKqpPhysicalQuery physicalQuery(transformedQuery);
         auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx->Tables, FuncRegistry);
-        auto ret = compiler->CompilePhysicalQuery(physicalQuery, dataQuery.Operations(),
-            *preparedQuery.MutablePhysicalQuery(), ctx);
+        auto ret = compiler->CompilePhysicalQuery(physicalQuery, dataQuery, *preparedQuery.MutablePhysicalQuery(), ctx);
         if (!ret) {
             ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to compile physical query."));
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));

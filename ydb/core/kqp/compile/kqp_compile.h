@@ -12,7 +12,7 @@ namespace NKqp {
 class IKqpQueryCompiler : public TThrRefBase {
 public:
     virtual bool CompilePhysicalQuery(const NYql::NNodes::TKqpPhysicalQuery& query,
-        const NYql::NNodes::TKiOperationList& tableOps, NKqpProto::TKqpPhyQuery& queryProto,
+        const NYql::NNodes::TKiDataQuery& dataQuery, NKqpProto::TKqpPhyQuery& queryProto,
         NYql::TExprContext& ctx) = 0;
 };
 

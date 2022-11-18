@@ -44,6 +44,7 @@ private:
     virtual TStatus HandleKql(NNodes::TCallable node, TExprContext& ctx) = 0;
     virtual TStatus HandleExecDataQuery(NNodes::TKiExecDataQuery node, TExprContext& ctx) = 0;
     virtual TStatus HandleDataQuery(NNodes::TKiDataQuery node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDataQueryBlock(NNodes::TKiDataQueryBlock node, TExprContext& ctx) = 0;
     virtual TStatus HandleEffects(NNodes::TKiEffects node, TExprContext& ctx) = 0;
 };
 
@@ -94,6 +95,14 @@ private:
     TMaybe<Type> KeyType;
     TString Target;
     TMaybe<TString> View;
+};
+
+struct TKiDataQueryBlockSettings {
+    static constexpr std::string_view HasUncommittedChangesReadSettingName = "has_uncommitted_changes_read"sv;
+    bool HasUncommittedChangesRead = false;
+
+    static TKiDataQueryBlockSettings Parse(const NNodes::TKiDataQueryBlock& node);
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
 struct TKiExecDataQuerySettings {

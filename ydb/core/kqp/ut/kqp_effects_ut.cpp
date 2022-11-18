@@ -512,6 +512,227 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
         UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
     }
+
+    Y_UNIT_TEST(ImmediateInsert) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpImmediateEffects(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                CREATE TABLE `/Root/TestImmediateInsert` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync());
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                INSERT INTO `/Root/TestImmediateInsert` (Key, Value) VALUES
+                    (1u, "One"),
+                    (2u, "Two");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM `/Root/TestImmediateInsert`;
+                INSERT INTO `/Root/TestImmediateInsert` (Key, Value) VALUES
+                    (3u, "Three"),
+                    (4u, "Four");
+
+                SELECT * FROM `/Root/TestImmediateInsert`;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                INSERT INTO `/Root/TestImmediateInsert` (Key, Value) VALUES (5u, "Five");
+                INSERT INTO `/Root/TestImmediateInsert` (Key, Value) VALUES (6u, "Six");
+                INSERT INTO `/Root/TestImmediateInsert` (Key, Value) VALUES (7u, "Seven");
+
+                SELECT * FROM `/Root/TestImmediateInsert`;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]];
+                [[7u];["Seven"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ImmediateUpdate) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpImmediateEffects(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                CREATE TABLE `/Root/TestImmediateUpdate` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync());
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                INSERT INTO `/Root/TestImmediateUpdate` (Key, Value) VALUES
+                    (1u, "One"),
+                    (2u, "Two");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM `/Root/TestImmediateUpdate`;
+                UPDATE `/Root/TestImmediateUpdate` ON (Key, Value) VALUES
+                    (1u, "Updated1"),
+                    (2u, "Updated2");
+
+                SELECT * FROM `/Root/TestImmediateUpdate`;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["Updated1"]];
+                [[2u];["Updated2"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPDATE `/Root/TestImmediateUpdate` ON (Key, Value) VALUES
+                    (1u, "Updated3"),
+                    (2u, "Updated4");
+
+                UPDATE `/Root/TestImmediateUpdate` ON (Key, Value) VALUES
+                    (1u, "Updated5");
+
+                SELECT * FROM `/Root/TestImmediateUpdate`;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Updated5"]];
+                [[2u];["Updated4"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ImmediateDelete) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpImmediateEffects(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                CREATE TABLE `/Root/TestImmediateDelete` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync());
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                INSERT INTO `/Root/TestImmediateDelete` (Key, Value) VALUES
+                    (1u, "One"),
+                    (2u, "Two"),
+                    (3u, "Three"),
+                    (4u, "Four");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM `/Root/TestImmediateDelete`;
+                DELETE FROM `/Root/TestImmediateDelete` WHERE Key = 4;
+
+                SELECT * FROM `/Root/TestImmediateDelete`;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                DELETE FROM `/Root/TestImmediateDelete` WHERE Key > 2;
+                DELETE FROM `/Root/TestImmediateDelete` WHERE Key < 2;
+
+                SELECT * FROM `/Root/TestImmediateDelete`;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 } // namespace NKqp

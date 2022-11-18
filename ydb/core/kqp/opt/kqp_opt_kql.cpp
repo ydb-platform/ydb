@@ -748,40 +748,51 @@ TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& r
 TMaybe<TKqlQuery> BuildKqlQuery(TKiDataQuery query, const TKikimrTablesData& tablesData, TExprContext& ctx,
     bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
-    TVector<TExprBase> kqlEffects;
-    for (const auto& effect : query.Effects()) {
-        if (auto maybeWrite = effect.Maybe<TKiWriteTable>()) {
-            auto result = HandleWriteTable(maybeWrite.Cast(), ctx, tablesData);
-            kqlEffects.push_back(result);
+    TVector<TKqlQueryBlock> queryBlocks;
+    queryBlocks.reserve(query.Blocks().Size());
+
+    for (const auto& block : query.Blocks()) {
+        TVector <TExprBase> kqlEffects;
+        for (const auto& effect : block.Effects()) {
+            if (auto maybeWrite = effect.Maybe<TKiWriteTable>()) {
+                auto result = HandleWriteTable(maybeWrite.Cast(), ctx, tablesData);
+                kqlEffects.push_back(result);
+            }
+
+            if (auto maybeUpdate = effect.Maybe<TKiUpdateTable>()) {
+                auto results = HandleUpdateTable(maybeUpdate.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
+                kqlEffects.insert(kqlEffects.end(), results.begin(), results.end());
+            }
+
+            if (auto maybeDelete = effect.Maybe<TKiDeleteTable>()) {
+                auto results = HandleDeleteTable(maybeDelete.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
+                kqlEffects.insert(kqlEffects.end(), results.begin(), results.end());
+            }
         }
 
-        if (auto maybeUpdate = effect.Maybe<TKiUpdateTable>()) {
-            auto results = HandleUpdateTable(maybeUpdate.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
-            kqlEffects.insert(kqlEffects.end(), results.begin(), results.end());
+        TVector <TKqlQueryResult> kqlResults;
+        kqlResults.reserve(block.Results().Size());
+        for (const auto& kiResult : block.Results()) {
+            kqlResults.emplace_back(
+                Build<TKqlQueryResult>(ctx, kiResult.Pos())
+                    .Value(kiResult.Value())
+                    .ColumnHints(kiResult.Columns())
+                    .Done());
         }
 
-        if (auto maybeDelete = effect.Maybe<TKiDeleteTable>()) {
-            auto results = HandleDeleteTable(maybeDelete.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
-            kqlEffects.insert(kqlEffects.end(), results.begin(), results.end());
-        }
-    }
-
-    TVector<TKqlQueryResult> kqlResults;
-    kqlResults.reserve(query.Results().Size());
-    for (const auto& kiResult : query.Results()) {
-        kqlResults.emplace_back(
-            Build<TKqlQueryResult>(ctx, kiResult.Pos())
-                .Value(kiResult.Value())
-                .ColumnHints(kiResult.Columns())
-                .Done());
+        queryBlocks.emplace_back(Build<TKqlQueryBlock>(ctx, query.Pos())
+            .Results()
+                .Add(kqlResults)
+                .Build()
+             .Effects()
+                .Add(kqlEffects)
+                .Build()
+             .Done());
     }
 
     TKqlQuery kqlQuery = Build<TKqlQuery>(ctx, query.Pos())
-        .Results()
-            .Add(kqlResults)
-            .Build()
-        .Effects()
-            .Add(kqlEffects)
+        .Blocks()
+            .Add(queryBlocks)
             .Build()
         .Done();
 

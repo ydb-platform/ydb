@@ -521,9 +521,16 @@ public:
 
             auto exec = execQuery.Cast();
             auto query = exec.Query();
-            auto results = query.Results();
 
-            auto result = results.Item(index);
+            ui32 blockId = 0;
+            ui32 startBlockIndex = 0;
+            while (blockId < query.Blocks().Size() && startBlockIndex + query.Blocks().Item(blockId).Results().Size() <= index) {
+                startBlockIndex += query.Blocks().Item(blockId).Results().Size();
+                ++blockId;
+            }
+            auto results = query.Blocks().Item(blockId).Results();
+
+            auto result = results.Item(index - startBlockIndex);
             ui64 rowsLimit = ::FromString<ui64>(result.RowsLimit());
             if (!rowsLimit) {
                 if (!fillSettings.RowsLimitPerWrite) {
@@ -546,12 +553,13 @@ public:
                 .RowsLimit().Build(ToString(rowsLimit))
                 .Done();
 
-            auto newResults = ctx.ChangeChild(results.Ref(), index, newResult.Ptr());
+            auto newResults = ctx.ChangeChild(results.Ref(), index - startBlockIndex, newResult.Ptr());
+            auto newQueryBlock = ctx.ChangeChild(query.Blocks().Item(blockId).Ref(), 0, std::move(newResults));
+            auto newQueryBlocks = ctx.ChangeChild(query.Blocks().Ref(), blockId, std::move(newQueryBlock));
 
             auto newQuery = Build<TKiDataQuery>(ctx, query.Pos())
                 .Operations(query.Operations())
-                .Results(newResults)
-                .Effects(query.Effects())
+                .Blocks(newQueryBlocks)
                 .Done();
 
             auto newExec = Build<TKiExecDataQuery>(ctx, exec.Pos())

@@ -20,10 +20,12 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
             auto query = TKqlQuery(input);
             YQL_ENSURE(query.Ref().GetTypeAnn());
 
-            for (const auto& result : query.Effects()) {
-                if (!result.Maybe<TDqOutput>()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(result.Pos()), "Failed to build query effects."));
-                    return TStatus::Error;
+            for (const auto& block : query.Blocks()) {
+                for (const auto& effect : block.Effects()) {
+                    if (!effect.Maybe<TDqOutput>()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(effect.Pos()), "Failed to build query effects."));
+                        return TStatus::Error;
+                    }
                 }
             }
 

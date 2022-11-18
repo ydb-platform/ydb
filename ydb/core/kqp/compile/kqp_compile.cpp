@@ -355,7 +355,7 @@ public:
         Alloc.Acquire();
     }
 
-    bool CompilePhysicalQuery(const TKqpPhysicalQuery& query, const TKiOperationList& tableOps,
+    bool CompilePhysicalQuery(const TKqpPhysicalQuery& query, const TKiDataQuery& dataQuery,
         NKqpProto::TKqpPhyQuery& queryProto, TExprContext& ctx) final
     {
         TGuard<TScopedAlloc> allocGuard(Alloc);
@@ -364,7 +364,15 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
-        auto ops = TableOperationsToProto(tableOps, ctx);
+        for (const auto& queryBlock : dataQuery.Blocks()) {
+            auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
+            if (queryBlockSettings.HasUncommittedChangesRead) {
+                queryProto.SetHasUncommittedChangesRead(true);
+                break;
+            }
+        }
+
+        auto ops = TableOperationsToProto(dataQuery.Operations(), ctx);
         for (auto& op : ops) {
             const auto tableName = op.GetTable();
             auto operation = static_cast<TYdbOperation>(op.GetOperation());

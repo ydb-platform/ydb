@@ -50,6 +50,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateGroup::CallableName());
         DataSinkNames.insert(TKiAlterGroup::CallableName());
         DataSinkNames.insert(TKiDropGroup::CallableName());
+        DataSinkNames.insert(TKiDataQueryBlock::CallableName());
         DataSinkNames.insert(TKiDataQuery::CallableName());
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
@@ -569,6 +570,33 @@ bool AddDmlIssue(const TIssue& issue, bool strictDml, TExprContext& ctx) {
         }
         return true;
     }
+}
+
+TKiDataQueryBlockSettings TKiDataQueryBlockSettings::Parse(const NNodes::TKiDataQueryBlock& node) {
+    TKiDataQueryBlockSettings settings;
+
+    for (const auto& tuple : node.Settings()) {
+        auto name = tuple.Name().Value();
+        if (name == HasUncommittedChangesReadSettingName) {
+            settings.HasUncommittedChangesRead = true;
+        }
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TKiDataQueryBlockSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+
+    if (HasUncommittedChangesRead) {
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(HasUncommittedChangesReadSettingName)
+            .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
 }
 
 TKiExecDataQuerySettings TKiExecDataQuerySettings::Parse(TKiExecDataQuery exec) {

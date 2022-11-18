@@ -245,13 +245,26 @@
             "Match": {"Type": "Callable", "Name": "KiEffects"}
         },
         {
+            "Name": "TKiDataQueryBlock",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKiDataQueryBlock"},
+            "Children": [
+                {"Index": 0, "Name": "Results", "Type": "TKiResultList"},
+                {"Index": 1, "Name": "Effects", "Type": "TKiEffects"},
+                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiDataQueryBlockList",
+            "ListBase": "TKiDataQueryBlock"
+        },
+        {
             "Name": "TKiDataQuery",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiDataQuery"},
             "Children": [
                 {"Index": 0, "Name": "Operations", "Type": "TKiOperationList"},
-                {"Index": 1, "Name": "Results", "Type": "TKiResultList"},
-                {"Index": 2, "Name": "Effects", "Type": "TKiEffects"}
+                {"Index": 1, "Name": "Blocks", "Type": "TKiDataQueryBlockList"}
             ]
         },
         {

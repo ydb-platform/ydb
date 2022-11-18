@@ -1220,7 +1220,7 @@ private:
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleDataQuery(NNodes::TKiDataQuery node, TExprContext& ctx) override {
+    virtual TStatus HandleDataQueryBlock(NNodes::TKiDataQueryBlock node, TExprContext& ctx) override {
         if (!EnsureWorldType(node.Effects().Ref(), ctx)) {
             return TStatus::Error;
         }
@@ -1246,6 +1246,23 @@ private:
             }
 
             resultTypes.push_back(resultType);
+        }
+
+        node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(resultTypes));
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleDataQuery(NNodes::TKiDataQuery node, TExprContext& ctx) override {
+        TTypeAnnotationNode::TListType resultTypes;
+        for (const auto& block : node.Blocks()) {
+            auto blockType = block.Ref().GetTypeAnn();
+            if (!EnsureTupleType(block.Pos(), *blockType, ctx)) {
+                return TStatus::Error;
+            }
+
+            for (const auto& resultType : blockType->Cast<TTupleExprType>()->GetItems()) {
+                resultTypes.push_back(resultType);
+            }
         }
 
         node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(resultTypes));

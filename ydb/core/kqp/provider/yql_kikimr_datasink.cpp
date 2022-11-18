@@ -234,6 +234,13 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleDataQueryBlock(TKiDataQueryBlock node, TExprContext& ctx) override {
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+
+        return TStatus::Ok;
+    }
+
     TStatus HandleDataQuery(TKiDataQuery node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         for (const auto& op : node.Operations()) {
@@ -711,6 +718,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TCoCommit>()) {
         return HandleCommit(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiDataQueryBlock>()) {
+        return HandleDataQueryBlock(node.Cast(), ctx);
     }
 
     if (auto node = callable.Maybe<TKiDataQuery>()) {

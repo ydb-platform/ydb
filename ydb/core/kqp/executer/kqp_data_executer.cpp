@@ -1271,7 +1271,7 @@ private:
             << ", locks: " << dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString());
 
         TEvDataShard::TEvProposeTransaction* ev;
-        if (Snapshot.IsValid() && ReadOnlyTx) {
+        if (Snapshot.IsValid() && (ReadOnlyTx || AppData()->FeatureFlags.GetEnableKqpImmediateEffects())) {
             ev = new TEvDataShard::TEvProposeTransaction(
                 NKikimrTxDataShard::TX_KIND_DATA,
                 SelfId(),
@@ -1574,7 +1574,7 @@ private:
                 break;
         }
 
-        if (ReadOnlyTx && Request.Snapshot.IsValid()) {
+        if ((ReadOnlyTx || AppData()->FeatureFlags.GetEnableKqpImmediateEffects()) && Request.Snapshot.IsValid()) {
             // Snapshot reads are always immediate
             Snapshot = Request.Snapshot;
             ImmediateTx = true;

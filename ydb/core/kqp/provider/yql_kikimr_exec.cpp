@@ -1312,6 +1312,7 @@ private:
         NKikimrKqp::EIsolationLevel isolationLevel, TExprContext& ctx)
     {
         bool strictDml = SessionCtx->Config().StrictDml.Get(cluster).GetRef();
+        bool enableImmediateEffects = SessionCtx->Config().FeatureFlags.GetEnableKqpImmediateEffects();
         auto queryType = SessionCtx->Query().Type;
         TVector<NKqpProto::TKqpTableInfo> tableInfo;
 
@@ -1325,10 +1326,12 @@ private:
 
         if (!SessionCtx->HasTx()) {
             TKikimrTransactionContextBase emptyCtx;
-            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, queryType, ctx);
+            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, enableImmediateEffects,
+                queryType, ctx);
         }
 
-        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, queryType, ctx);
+        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml,
+            enableImmediateEffects, queryType, ctx);
     }
 
     bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table,

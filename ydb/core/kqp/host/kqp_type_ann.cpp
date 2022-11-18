@@ -1363,12 +1363,14 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckQueryTransformer() {
             YQL_ENSURE(TMaybeNode<TKqlQuery>(input));
 
             auto query = TKqlQuery(input);
-            for (const auto& result : query.Results()) {
-                if (!EnsureTupleSize(result.Ref(), 2, ctx)) {
-                    return TStatus::Error;
-                }
-                if (!EnsureListType(result.Value().Ref(), ctx)) {
-                    return TStatus::Error;
+            for (const auto& block : query.Blocks()) {
+                for (const auto& result : block.Results()) {
+                    if (!EnsureTupleSize(result.Ref(), 2, ctx)) {
+                        return TStatus::Error;
+                    }
+                    if (!EnsureListType(result.Value().Ref(), ctx)) {
+                        return TStatus::Error;
+                    }
                 }
             }
 

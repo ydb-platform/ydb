@@ -6,7 +6,7 @@ namespace NYql {
 namespace NDq {
 
 void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& taskStats,
-    NDqProto::TDqTaskStats* protoTask, bool withProfileStats)
+    NDqProto::TDqTaskStats* protoTask, bool withProfileStats, const THashMap<ui64, ui64>& ingressBytesMap)
 {
     protoTask->SetTaskId(taskId);
     protoTask->SetStageId(stageId);
@@ -78,8 +78,11 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
             firstRowTs = std::min(firstRowTs, sourceStats->FirstRowTs.MilliSeconds());
         }
 
+        auto ingressBytes = ingressBytesMap.Value(inputIndex, 0); 
+
         protoTask->SetInputRows(protoTask->GetInputRows() + sourceStats->RowsOut); // the same comment here ... ^^^
         protoTask->SetInputBytes(protoTask->GetInputBytes() + sourceStats->Bytes);
+        protoTask->SetIngressBytes(protoTask->GetIngressBytes() + ingressBytes);
 
         if (Y_UNLIKELY(withProfileStats)) {
             auto* protoSource = protoTask->AddSources();
@@ -88,6 +91,8 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
             protoSource->SetBytes(sourceStats->Bytes);
             protoSource->SetRowsIn(sourceStats->RowsIn);
             protoSource->SetRowsOut(sourceStats->RowsOut);
+            protoSource->SetIngressBytes(ingressBytes);
+
             protoSource->SetMaxMemoryUsage(sourceStats->MaxMemoryUsage);
         }
     }

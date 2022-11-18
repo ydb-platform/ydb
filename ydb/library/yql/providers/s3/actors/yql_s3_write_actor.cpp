@@ -62,8 +62,9 @@ struct TEvPrivate {
 
     // Events
     struct TEvUploadFinished : public TEventLocal<TEvUploadFinished, EvUploadFinished> {
-        TEvUploadFinished(const TString& key, const TString& url) : Key(key), Url(url) {}
+        TEvUploadFinished(const TString& key, const TString& url, ui64 uploadSize) : Key(key), Url(url), UploadSize(uploadSize) {}
         const TString Key, Url;
+        const ui64 UploadSize;
     };
 
     struct TEvUploadError : public TEventLocal<TEvUploadError, EvUploadError> {
@@ -151,7 +152,7 @@ public:
             const auto size = Parts->Volume();
             InFlight += size;
             SentSize += size;
-            Gateway->Upload(Url, MakeHeaders(RequestId), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, std::placeholders::_1), true, RetryPolicy);
+            Gateway->Upload(Url, MakeHeaders(RequestId), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1), true, RetryPolicy);
         } else {
             Become(&TS3FileWriteActor::InitialStateFunc);
             Gateway->Upload(Url + "?uploads", MakeHeaders(RequestId), 0, std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, RequestId, std::placeholders::_1), false, RetryPolicy);
@@ -253,7 +254,7 @@ private:
         }
     }
 
-    static void OnMultipartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, IHTTPGateway::TResult&& result) {
+    static void OnMultipartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, ui64 sentSize, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U: try {
             const NXml::TDocument xml(std::get<IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
@@ -264,7 +265,7 @@ private:
             } else if (root.Name() != "CompleteMultipartUploadResult")
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on finish upload: " << root.Name() << ", request id: [" << requestId << "]")));
             else
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             break;
         } catch (const std::exception& ex) {
             actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Error on parse finish upload response: " << ex.what() << ", request id: [" << requestId << "]")));
@@ -281,7 +282,7 @@ private:
         }
     }
 
-    static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, IHTTPGateway::TResult&& result) {
+    static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, ui64 sentSize, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U:
             if (auto content = std::get<IHTTPGateway::TContent>(std::move(result)); content.HttpResponseCode >= 300) {
@@ -294,7 +295,7 @@ private:
                     actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(content.HttpResponseCode, TStringBuilder{} << errorText << ", request id: [" << requestId << "]")));
                 }
             } else {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             }
             break;
         case 1U: {
@@ -342,7 +343,7 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeaders(RequestId), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, std::placeholders::_1), false, RetryPolicy);
+        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeaders(RequestId), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1), false, RetryPolicy);
     }
 
     IHTTPGateway::THeaders MakeHeaders(const TString& requestId) const {
@@ -475,6 +476,10 @@ private:
         data.clear();
     }
 
+    ui64 GetEgressBytes() override {
+        return EgressBytes;
+    }
+
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
         LOG_W("TS3WriteActor", "TEvUploadError " << result->Get()->Issues.ToOneLineString());
 
@@ -502,6 +507,7 @@ private:
 
     void Handle(TEvPrivate::TEvUploadFinished::TPtr& result) {
         if (const auto it = FileWriteActors.find(result->Get()->Key); FileWriteActors.cend() != it) {
+            EgressBytes += result->Get()->UploadSize;
             if (const auto ft = std::find_if(it->second.cbegin(), it->second.cend(), [&](TS3FileWriteActor* actor){ return result->Get()->Url == actor->GetUrl(); }); it->second.cend() != ft) {
                 (*ft)->PassAway();
                 it->second.erase(ft);
@@ -552,6 +558,7 @@ private:
     const size_t MaxFileSize;
     const TString Compression;
     bool Finished = false;
+    ui64 EgressBytes = 0;
 
     std::unordered_map<TString, std::vector<TS3FileWriteActor*>> FileWriteActors;
 };

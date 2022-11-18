@@ -157,14 +157,16 @@ struct TEvPrivate {
     };
 
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
-        TEvReadFinished() = default;
+        TEvReadFinished(ui64 ingressBytes = 0)
+            : IngressBytes(ingressBytes) {
+        }
 
-        TEvReadFinished(TIssues&& issues)
-            : Issues(std::move(issues))
-        {
+        TEvReadFinished(TIssues&& issues, ui64 ingressBytes = 0)
+            : Issues(std::move(issues)), IngressBytes(ingressBytes) {
         }
 
         TIssues Issues;
+        ui64 IngressBytes;
     };
 
     struct TEvReadError : public TEventLocal<TEvReadError, EvReadError> {
@@ -185,17 +187,19 @@ struct TEvPrivate {
     };
 
     struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
-        TEvNextBlock(NDB::Block& block, size_t pathInd, std::function<void()> functor = [](){}) : PathIndex(pathInd), Functor(functor) { Block.swap(block); }
+        TEvNextBlock(NDB::Block& block, size_t pathInd, std::function<void()> functor = [](){}, ui64 ingressBytes = 0) : PathIndex(pathInd), Functor(functor), IngressBytes(ingressBytes) { Block.swap(block); }
         NDB::Block Block;
         const size_t PathIndex;
         std::function<void()> Functor;
+        ui64 IngressBytes;
     };
 
     struct TEvNextRecordBatch : public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {
-        TEvNextRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, size_t pathInd, std::function<void()> functor = []() {}) : Batch(batch), PathIndex(pathInd), Functor(functor) { }
+        TEvNextRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, size_t pathInd, std::function<void()> functor = []() {}, ui64 ingressBytes = 0) : Batch(batch), PathIndex(pathInd), Functor(functor), IngressBytes(ingressBytes) { }
         std::shared_ptr<arrow::RecordBatch> Batch;
         const size_t PathIndex;
         std::function<void()> Functor;
+        ui64 IngressBytes;
     };
 
     struct TEvBlockProcessed : public NActors::TEventLocal<TEvBlockProcessed, EvBlockProcessed> {
@@ -257,6 +261,10 @@ private:
     void CommitState(const NDqProto::TCheckpoint&) final {}
     ui64 GetInputIndex() const final { return InputIndex; }
 
+    ui64 GetIngressBytes() override {
+        return IngressBytes;
+    }
+
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvReadResult, Handle);
         hFunc(TEvPrivate::TEvReadError, Handle);
@@ -312,6 +320,7 @@ private:
         const auto path = std::get<TString>(Paths[id - StartPathIndex]);
         const auto httpCode = result->Get()->Result.HttpResponseCode;
         const auto requestId = result->Get()->RequestId;
+        IngressBytes += result->Get()->Result.size();
         LOG_D("TS3ReadActor", "ID: " << id << ", Path: " << path << ", read size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode << ", request id: [" << requestId << "]");
         if (200 == httpCode || 206 == httpCode) {
             Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), id));
@@ -373,6 +382,7 @@ private:
     const bool AddPathIndex;
     const ui64 StartPathIndex;
     const ui64 SizeLimit;
+    ui64 IngressBytes = 0;
 
     std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
 };
@@ -595,6 +605,7 @@ public:
             case TEvPrivate::TEvDataPart::EventType:
                 if (200L == HttpResponseCode || 206L == HttpResponseCode) {
                     value = ev->Get<TEvPrivate::TEvDataPart>()->Result.Extract();
+                    IngressBytes += value.size();
                     RetryStuff->Offset += value.size();
                     RetryStuff->SizeLimit -= value.size();
                     LastOffset = RetryStuff->Offset;
@@ -725,7 +736,7 @@ private:
         if (issues)
             Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), fatalCode));
         else
-            Send(ParentActorId, new TEvPrivate::TEvReadFinished);
+            Send(ParentActorId, new TEvPrivate::TEvReadFinished(IngressBytes));
     } catch (const TDtorException&) {
         return RetryStuff->Cancel();
     } catch (const std::exception& err) {
@@ -751,7 +762,7 @@ private:
                 }
                 Send(ParentActorId, new TEv(batch, PathIndex, [actorSystem, selfActorId]() {
                     actorSystem->Send(new IEventHandle(selfActorId, selfActorId, new TEvPrivate::TEvBlockProcessed()));
-                }));
+                }, IngressBytes));
             }
             while (cntBlocksInFly--) {
                 WaitForSpecificEvent<TEvPrivate::TEvBlockProcessed>();
@@ -831,6 +842,7 @@ private:
     std::size_t LastOffset = 0;
     TString LastData;
     std::size_t MaxBlocksInFly = 2;
+    ui64 IngressBytes = 0;
 };
 
 class TS3ReadCoroActor : public TActorCoro {
@@ -964,6 +976,10 @@ private:
     void CommitState(const NDqProto::TCheckpoint&) final {}
     ui64 GetInputIndex() const final { return InputIndex; }
 
+    ui64 GetIngressBytes() override {
+        return IngressBytes;
+    }
+
     i64 GetAsyncInputData(TUnboxedValueVector& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
         i64 total = 0LL;
         if (!Blocks.empty()) do {
@@ -1035,7 +1051,7 @@ private:
         hFunc(TEvPrivate::TEvRetryEventFunc, HandleRetry);
         hFunc(TEvPrivate::TEvNextBlock, HandleNextBlock);
         hFunc(TEvPrivate::TEvNextRecordBatch, HandleNextRecordBatch);
-        cFunc(TEvPrivate::EvReadFinished, HandleReadFinished);
+        hFunc(TEvPrivate::TEvReadFinished, HandleReadFinished);
     )
 
     void HandleRetry(TEvPrivate::TEvRetryEventFunc::TPtr& retry) {
@@ -1044,17 +1060,20 @@ private:
 
     void HandleNextBlock(TEvPrivate::TEvNextBlock::TPtr& next) {
         YQL_ENSURE(!ReadSpec->Arrow);
+        IngressBytes = next->Get()->IngressBytes;
         Blocks.emplace_back(next);
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void HandleNextRecordBatch(TEvPrivate::TEvNextRecordBatch::TPtr& next) {
         YQL_ENSURE(ReadSpec->Arrow);
+        IngressBytes = next->Get()->IngressBytes;
         Blocks.emplace_back(next);
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    void HandleReadFinished() {
+    void HandleReadFinished(TEvPrivate::TEvReadFinished::TPtr& ev) {
+        IngressBytes = ev->Get()->IngressBytes;
         Y_VERIFY(Count);
         --Count;
         /*
@@ -1089,6 +1108,7 @@ private:
     std::deque<TReadyBlock> Blocks;
     ui32 Count;
     const std::size_t MaxBlocksInFly;
+    ui64 IngressBytes = 0;
 };
 
 using namespace NKikimr::NMiniKQL;

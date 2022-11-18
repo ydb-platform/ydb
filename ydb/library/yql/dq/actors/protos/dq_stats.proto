@@ -25,6 +25,8 @@ message TDqAsyncInputBufferStats {
     uint64 MaxMemoryUsage = 6;
     uint32 ErrorsCount = 7;
 
+    uint64 IngressBytes = 8;
+
     google.protobuf.Any Extra = 100;
 }
 
@@ -58,6 +60,8 @@ message TDqAsyncOutputBufferStats {
     // profile stats
     uint64 MaxMemoryUsage = 6;
     uint32 ErrorsCount = 7;
+
+    uint64 EgressBytes = 8;
 
     google.protobuf.Any Extra = 100;
 }
@@ -121,6 +125,9 @@ message TDqTaskStats {
     uint64 OutputBytes = 9;
 
     repeated TDqTableStats Tables = 10;
+
+    uint64 IngressBytes = 11;
+    uint64 EgressBytes = 12;
 
     // profile stats
     uint64 BuildCpuTimeUs = 103;   // prepare task time: build computation graph, prepare parameters, ...

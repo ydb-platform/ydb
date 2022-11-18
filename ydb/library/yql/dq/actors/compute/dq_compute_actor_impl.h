@@ -1870,7 +1870,14 @@ public:
             Stat->Clear();
         } else if (auto* taskStats = GetTaskRunnerStats()) { // for task_runner_actor_local
             auto* protoTask = dst->AddTasks();
-            FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats());
+
+            THashMap<ui64, ui64> ingressBytesMap;
+            for (auto& [inputIndex, sourceInfo] : SourcesMap) {
+                if (sourceInfo.AsyncInput) {
+                    ingressBytesMap.emplace(inputIndex, sourceInfo.AsyncInput->GetIngressBytes());
+                }
+            }
+            FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats(), ingressBytesMap);
 
             // More accurate cpu time counter:
             if (TDerived::HasAsyncTaskRunner) {
@@ -1878,9 +1885,13 @@ public:
             }
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
+
+                ui64 egressBytes = sinkInfo.AsyncOutput ? sinkInfo.AsyncOutput->GetEgressBytes() : 0;
+
                 if (auto* sinkStats = GetSinkStats(outputIndex, sinkInfo)) {
                     protoTask->SetOutputRows(protoTask->GetOutputRows() + sinkStats->RowsIn);
                     protoTask->SetOutputBytes(protoTask->GetOutputBytes() + sinkStats->Bytes);
+                    protoTask->SetEgressBytes(protoTask->GetEgressBytes() + egressBytes);
 
                     if (GetProfileStats()) {
                         auto* protoSink = protoTask->AddSinks();
@@ -1890,6 +1901,7 @@ public:
                         protoSink->SetBytes(sinkStats->Bytes);
                         protoSink->SetRowsIn(sinkStats->RowsIn);
                         protoSink->SetRowsOut(sinkStats->RowsOut);
+                        protoSink->SetEgressBytes(egressBytes);
 
                         protoSink->SetMaxMemoryUsage(sinkStats->MaxMemoryUsage);
                         protoSink->SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());

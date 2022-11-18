@@ -83,6 +83,10 @@ struct IDqComputeActorAsyncInput {
     virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
     virtual void LoadState(const NDqProto::TSourceState& state) = 0;
 
+    virtual ui64 GetIngressBytes() {
+        return 0;
+    }
+
     // The same signature as IActor::PassAway().
     // It is guaranted that this method will be called with bound MKQL allocator.
     // So, it is the right place to destroy all internal UnboxedValues.
@@ -141,6 +145,10 @@ struct IDqComputeActorAsyncOutput {
     // Checkpointing.
     virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
     virtual void LoadState(const NDqProto::TSinkState& state) = 0;
+
+    virtual ui64 GetEgressBytes() {
+        return 0;
+    }
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 

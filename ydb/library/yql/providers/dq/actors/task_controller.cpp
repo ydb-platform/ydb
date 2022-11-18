@@ -324,8 +324,10 @@ private:
         ADD_COUNTER(FinishTimeUs)
         ADD_COUNTER(InputRows)
         ADD_COUNTER(InputBytes)
+        ADD_COUNTER(IngressBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
+        ADD_COUNTER(EgressBytes)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
@@ -411,6 +413,7 @@ private:
 
             ADD_COUNTER(Chunks);
             ADD_COUNTER(Bytes);
+            ADD_COUNTER(IngressBytes)
             ADD_COUNTER(RowsIn);
             ADD_COUNTER(RowsOut);
             ADD_COUNTER(MaxMemoryUsage);
@@ -430,6 +433,7 @@ private:
 
             ADD_COUNTER(Chunks)
             ADD_COUNTER(Bytes);
+            ADD_COUNTER(EgressBytes)
             ADD_COUNTER(RowsIn);
             ADD_COUNTER(RowsOut);
             ADD_COUNTER(MaxMemoryUsage);

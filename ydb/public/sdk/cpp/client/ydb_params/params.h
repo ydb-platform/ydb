@@ -14,6 +14,8 @@ namespace NScripting {
     class TScriptingClient;
 }
 
+class TProtoAccessor;
+
 namespace NTable {
     class TTableClient;
     class TSession;
@@ -33,6 +35,7 @@ class TParams {
     friend class NTable::TDataQuery;
     friend class NScripting::TScriptingClient;
     friend class NExperimental::TStreamQueryClient;
+    friend class NYdb::TProtoAccessor;
 public:
     bool Empty() const;
 

@@ -22,6 +22,7 @@ target_link_libraries(ydb-public-lib-json_value-ut PUBLIC
   library-cpp-json
   cpp-testing-unittest
   cpp-client-ydb_proto
+  cpp-client-ydb_params
 )
 target_link_options(ydb-public-lib-json_value-ut PRIVATE
   -ldl

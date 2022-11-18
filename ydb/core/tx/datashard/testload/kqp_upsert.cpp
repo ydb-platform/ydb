@@ -21,26 +21,6 @@ namespace NKikimr::NDataShardLoad {
 
 namespace {
 
-void ConvertYdbParamsToMiniKQLParams(const NYdb::TParams& input, NKikimrMiniKQL::TParams& output) {
-    output.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-    auto type = output.MutableType()->MutableStruct();
-    auto value = output.MutableValue();
-    for (const auto& p : input.GetValues()) {
-        auto typeMember = type->AddMember();
-        auto valueItem = value->AddStruct();
-        typeMember->SetName(p.first);
-
-        ConvertYdbTypeToMiniKQLType(
-            NYdb::TProtoAccessor::GetProto(p.second.GetType()),
-            *typeMember->MutableType());
-
-        ConvertYdbValueToMiniKQLValue(
-            NYdb::TProtoAccessor::GetProto(p.second.GetType()),
-            NYdb::TProtoAccessor::GetProto(p.second),
-            *valueItem);
-    }
-}
-
 struct TQueryInfo {
     TQueryInfo()
         : Query("")
@@ -320,9 +300,8 @@ private:
                 request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
                 request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
 
-                NKikimrMiniKQL::TParams params;
-                ConvertYdbParamsToMiniKQLParams(queryInfo.Params, params);
-                request->Record.MutableRequest()->MutableParameters()->Swap(&params);
+                const auto& params = NYdb::TProtoAccessor::GetProtoMap(queryInfo.Params);
+                request->Record.MutableRequest()->MutableYdbParameters()->insert(params.begin(), params.end());
 
                 requests.emplace_back(std::move(request));
             }

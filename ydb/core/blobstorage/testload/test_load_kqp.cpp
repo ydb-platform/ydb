@@ -73,19 +73,6 @@ public:
 
 };
 
-void ConvertYdbParamsToMiniKQLParams(const NYdb::TParams& input, NKikimrMiniKQL::TParams& output) {
-    output.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-    auto type = output.MutableType()->MutableStruct();
-    auto value = output.MutableValue();
-    for (const auto& p : input.GetValues()) {
-        auto typeMember = type->AddMember();
-        auto valueItem = value->AddStruct();
-        typeMember->SetName(p.first);
-        ConvertYdbTypeToMiniKQLType(NYdb::TProtoAccessor::GetProto(p.second.GetType()), *typeMember->MutableType());
-        ConvertYdbValueToMiniKQLValue(NYdb::TProtoAccessor::GetProto(p.second.GetType()), NYdb::TProtoAccessor::GetProto(p.second), *valueItem);
-    }
-}
-
 class TKqpLoadWorker : public TActorBootstrapped<TKqpLoadWorker> {
 public:
     TKqpLoadWorker(TActorId parent,
@@ -197,8 +184,6 @@ private:
         Transactions->Inc();
 
         TString query_text = TString(q.Query);
-        NYdb::TParams query_params = q.Params;
-
         auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " using session: " << WorkerSession);
@@ -217,9 +202,8 @@ private:
 
         request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection_Mode::QueryStatsCollection_Mode_STATS_COLLECTION_BASIC);
 
-        NKikimrMiniKQL::TParams params;
-        ConvertYdbParamsToMiniKQLParams(query_params, params);
-        request->Record.MutableRequest()->MutableParameters()->Swap(&params);
+        const auto& paramsMap = NYdb::TProtoAccessor::GetProtoMap(q.Params);
+        request->Record.MutableRequest()->MutableYdbParameters()->insert(paramsMap.begin(), paramsMap.end());
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
 
@@ -607,7 +591,6 @@ private:
             << " Creating request for init query, need to exec: " << InitData.size() + 1);
 
         TString query_text = TString(q.Query);
-        NYdb::TParams query_params = q.Params;
 
         auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
@@ -627,9 +610,8 @@ private:
 
         request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection_Mode::QueryStatsCollection_Mode_STATS_COLLECTION_BASIC);
 
-        NKikimrMiniKQL::TParams params;
-        ConvertYdbParamsToMiniKQLParams(query_params, params);
-        request->Record.MutableRequest()->MutableParameters()->Swap(&params);
+        const auto& paramsMap = NYdb::TProtoAccessor::GetProtoMap(q.Params);
+        request->Record.MutableRequest()->MutableYdbParameters()->insert(paramsMap.begin(), paramsMap.end());
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
 

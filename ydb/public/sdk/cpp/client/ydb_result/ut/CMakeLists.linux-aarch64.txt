@@ -17,6 +17,7 @@ target_link_libraries(ydb-public-sdk-cpp-client-ydb_result-ut PUBLIC
   library-cpp-lfalloc
   cpp-testing-unittest_main
   cpp-client-ydb_result
+  cpp-client-ydb_params
 )
 target_link_options(ydb-public-sdk-cpp-client-ydb_result-ut PRIVATE
   -ldl

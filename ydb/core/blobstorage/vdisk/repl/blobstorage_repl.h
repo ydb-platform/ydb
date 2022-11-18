@@ -11,7 +11,7 @@ namespace NKikimr {
         struct TProxyStat;
     };
 
-    using TBlobIdQueue = TQueue<TLogoBlobID>;
+    using TBlobIdQueue = std::deque<TLogoBlobID>;
     using TBlobIdQueuePtr = std::shared_ptr<TBlobIdQueue>;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -33,6 +33,10 @@ namespace NKikimr {
             ui64 ReplicaOk = 0;
             ui64 RecoveryScheduled = 0;
             ui64 IgnoredDueToGC = 0;
+            ui64 WorkUnitsPlanned = 0;
+            ui64 WorkUnitsTotal = 0;
+            ui64 WorkUnitsProcessed = 0;
+            ui64 PhantomLike = 0;
 
             // plan execution stats
             ui64 DataRecoverySuccess = 0;

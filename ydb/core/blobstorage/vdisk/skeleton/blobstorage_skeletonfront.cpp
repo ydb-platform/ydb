@@ -903,10 +903,8 @@ namespace NKikimr {
             const auto state = VDiskMonGroup.VDiskState();
             // replicated?
             bool replicated = !ReplMonGroup.ReplUnreplicatedVDisks() && !HasUnreadableBlobs;
-            bool unreplicatedPhantoms = ReplMonGroup.ReplCurrentNumUnrecoveredPhantomBlobs() +
-                ReplMonGroup.ReplNumUnrecoveredPhantomBlobs();
-            bool unreplicatedNonPhantoms = ReplMonGroup.ReplCurrentNumUnrecoveredNonPhantomBlobs() +
-                ReplMonGroup.ReplNumUnrecoveredNonPhantomBlobs();
+            bool unreplicatedPhantoms = ReplMonGroup.ReplUnreplicatedPhantoms();
+            bool unreplicatedNonPhantoms = ReplMonGroup.ReplUnreplicatedNonPhantoms();
             // unsynced VDisks
             ui64 unsyncedVDisks = SyncerMonGroup.SyncerUnsyncedDisks();
             // calculate cumulative status of Skeleton Front overload
@@ -917,8 +915,16 @@ namespace NKikimr {
                 light = Max(light, queue->GetCumulativeLight());
             }
             // send a message to Whiteboard
-            ctx.Send(SelfId(), new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(state, outOfSpaceFlags,
-                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, unsyncedVDisks, light, HasUnreadableBlobs));
+            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
+                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, unsyncedVDisks, light, HasUnreadableBlobs);
+            if (ReplMonGroup.ReplUnreplicatedVDisks()) {
+                const ui64 a = ReplMonGroup.ReplWorkUnitsDone();
+                const ui64 b = ReplMonGroup.ReplWorkUnitsRemaining();
+                ev->Record.SetReplicationProgress((double)a / (a + b));
+            } else {
+                ev->Record.SetReplicationProgress(1.0);
+            }
+            ctx.Send(SelfId(), ev.release());
             // repeat later
             if (schedule) {
                 ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard);

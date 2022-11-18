@@ -182,6 +182,8 @@ message TVDiskStateInfo {
     optional bool UnreplicatedPhantoms = 20 [default = false];
     // The same for the non-phantom-like blobs.
     optional bool UnreplicatedNonPhantoms = 21 [default = false];
+    // Replication progress (0 to 1). Only for replication, not blob scrubbing.
+    optional float ReplicationProgress = 30;
     // How many unsynced VDisks from current BlobStorage group we see
     optional uint64 UnsyncedVDisks = 15 [default = 0];
     // How much this VDisk have allocated on corresponding PDisk

@@ -71,6 +71,10 @@ namespace NKikimr {
                         PARAM_V(ReplicaOk);
                         PARAM_V(RecoveryScheduled);
                         PARAM_V(IgnoredDueToGC);
+                        PARAM_V(WorkUnitsPlanned);
+                        PARAM_V(WorkUnitsTotal);
+                        PARAM_V(WorkUnitsProcessed);
+                        PARAM_V(PhantomLike);
                     }
                     GROUP("Plan Execution Stats") {
                         PARAM_V(DataRecoverySuccess);
@@ -250,12 +254,9 @@ namespace NKikimr {
             STLOG(PRI_DEBUG, BS_REPL, BSVR15, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"));
 
             LastReplStart = TAppData::TimeProvider->Now();
-            ReplCtx->MonGroup.ReplCurrentUnreplicatedParts() = 0;
-            ReplCtx->MonGroup.ReplCurrentUnreplicatedBytes() = 0;
-            ReplCtx->MonGroup.ReplCurrentPhantoms() = 0;
-            ReplCtx->MonGroup.ReplCurrentNumUnrecoveredPhantomBlobs() = 0;
-            ReplCtx->MonGroup.ReplCurrentNumUnrecoveredNonPhantomBlobs() = 0;
             ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 1;
+            ReplCtx->MonGroup.ReplWorkUnitsRemaining() = 1;
+            ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
 
             Become(&TThis::StateRepl);
 
@@ -342,7 +343,6 @@ namespace NKikimr {
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
-                ReplCtx->MonGroup.ReplUnreplicatedBlobs() = UnreplicatedBlobsPtr->size();
                 BlobsToReplicatePtr = std::move(UnreplicatedBlobsPtr);
                 UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
                 if (BlobsToReplicatePtr->empty()) {
@@ -371,10 +371,6 @@ namespace NKikimr {
                 STLOG(PRI_DEBUG, BS_REPL, BSVR17, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL COMPLETED"),
                     (BlobsToReplicate, BlobsToReplicatePtr->size()));
                 LastReplEnd = now;
-                ReplCtx->MonGroup.ReplUnreplicatedBytes() = ReplCtx->MonGroup.ReplCurrentUnreplicatedBytes();
-                ReplCtx->MonGroup.ReplPhantoms() = ReplCtx->MonGroup.ReplCurrentPhantoms();
-                ReplCtx->MonGroup.ReplNumUnrecoveredPhantomBlobs() = ReplCtx->MonGroup.ReplCurrentNumUnrecoveredPhantomBlobs();
-                ReplCtx->MonGroup.ReplNumUnrecoveredNonPhantomBlobs() = ReplCtx->MonGroup.ReplCurrentNumUnrecoveredNonPhantomBlobs();
 
                 if (State == WaitQueues || State == Replication) {
                     // release token as we have finished replicating
@@ -382,7 +378,7 @@ namespace NKikimr {
                 }
 
                 Become(&TThis::StateRelax);
-                if (*BlobsToReplicatePtr) {
+                if (!BlobsToReplicatePtr->empty()) {
                     // try again for unreplicated blobs in some future
                     State = Relaxation;
                     Schedule(ReplCtx->VDiskCfg->ReplTimeInterval, new TEvents::TEvWakeup);
@@ -390,6 +386,10 @@ namespace NKikimr {
                     // no more blobs to replicate; replication will not resume
                     State = Finished;
                     ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 0;
+                    ReplCtx->MonGroup.ReplUnreplicatedPhantoms() = 1;
+                    ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 1;
+                    ReplCtx->MonGroup.ReplWorkUnitsRemaining() = 0;
+                    ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
                     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
                         SelfId(), nullptr, 0));
                 }

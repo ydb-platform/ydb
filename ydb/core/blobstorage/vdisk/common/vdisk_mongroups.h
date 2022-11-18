@@ -200,19 +200,16 @@ public:                                                                         
                 COUNTER_INIT(ReplHugeBlobsRecovered, true);
                 COUNTER_INIT(ReplHugeBlobBytesRecovered, true);
                 COUNTER_INIT(ReplChunksWritten, true);
-                COUNTER_INIT(ReplCurrentUnreplicatedParts, false);
-                COUNTER_INIT(ReplCurrentUnreplicatedBytes, false);
-                COUNTER_INIT(ReplCurrentPhantoms, false);
-                COUNTER_INIT(ReplUnreplicatedParts, false);
-                COUNTER_INIT(ReplUnreplicatedBytes, false);
-                COUNTER_INIT(ReplPhantoms, false);
                 COUNTER_INIT(ReplUnreplicatedVDisks, false);
-                COUNTER_INIT(ReplUnreplicatedBlobs, false);
                 COUNTER_INIT(ReplVGetBytesReceived, true);
-                COUNTER_INIT(ReplCurrentNumUnrecoveredPhantomBlobs, false);
-                COUNTER_INIT(ReplCurrentNumUnrecoveredNonPhantomBlobs, false);
-                COUNTER_INIT(ReplNumUnrecoveredPhantomBlobs, false);
-                COUNTER_INIT(ReplNumUnrecoveredNonPhantomBlobs, false);
+                COUNTER_INIT(ReplPhantomLikeDiscovered, false);
+                COUNTER_INIT(ReplPhantomLikeRecovered, false);
+                COUNTER_INIT(ReplPhantomLikeUnrecovered, false);
+                COUNTER_INIT(ReplPhantomLikeDropped, false);
+                COUNTER_INIT(ReplWorkUnitsDone, false);
+                COUNTER_INIT(ReplWorkUnitsRemaining, false);
+                COUNTER_INIT(ReplUnreplicatedPhantoms, false);
+                COUNTER_INIT(ReplUnreplicatedNonPhantoms, false);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -222,19 +219,16 @@ public:                                                                         
             COUNTER_DEF(ReplHugeBlobsRecovered);
             COUNTER_DEF(ReplHugeBlobBytesRecovered);
             COUNTER_DEF(ReplChunksWritten);
-            COUNTER_DEF(ReplCurrentUnreplicatedParts);
-            COUNTER_DEF(ReplCurrentUnreplicatedBytes);
-            COUNTER_DEF(ReplCurrentPhantoms);
-            COUNTER_DEF(ReplUnreplicatedParts);
-            COUNTER_DEF(ReplUnreplicatedBytes);
-            COUNTER_DEF(ReplPhantoms);
             COUNTER_DEF(ReplUnreplicatedVDisks);
-            COUNTER_DEF(ReplUnreplicatedBlobs);
             COUNTER_DEF(ReplVGetBytesReceived);
-            COUNTER_DEF(ReplCurrentNumUnrecoveredPhantomBlobs);
-            COUNTER_DEF(ReplCurrentNumUnrecoveredNonPhantomBlobs);
-            COUNTER_DEF(ReplNumUnrecoveredPhantomBlobs);
-            COUNTER_DEF(ReplNumUnrecoveredNonPhantomBlobs);
+            COUNTER_DEF(ReplPhantomLikeDiscovered);
+            COUNTER_DEF(ReplPhantomLikeRecovered);
+            COUNTER_DEF(ReplPhantomLikeUnrecovered);
+            COUNTER_DEF(ReplPhantomLikeDropped);
+            COUNTER_DEF(ReplWorkUnitsDone);
+            COUNTER_DEF(ReplWorkUnitsRemaining);
+            COUNTER_DEF(ReplUnreplicatedPhantoms);
+            COUNTER_DEF(ReplUnreplicatedNonPhantoms);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

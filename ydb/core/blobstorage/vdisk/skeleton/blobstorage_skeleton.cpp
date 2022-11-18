@@ -86,15 +86,13 @@ namespace NKikimr {
             }
             ctx.Send(*SkeletonFrontIDPtr, ev.release());
             // send VDisk's metric to NodeWarden
-            if (OverloadHandler) {
-                ctx.Send(NodeWardenServiceId,
-                         new TEvBlobStorage::TEvControllerUpdateDiskStatus(
-                             SelfVDiskId,
-                             OverloadHandler->GetIntegralRankPercent(),
-                             SelfId().NodeId(),
-                             Config->BaseInfo.PDiskId,
-                             Config->BaseInfo.VDiskSlotId));
-            }
+            ctx.Send(NodeWardenServiceId,
+                     new TEvBlobStorage::TEvControllerUpdateDiskStatus(
+                         SelfVDiskId,
+                         OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
+                         SelfId().NodeId(),
+                         Config->BaseInfo.PDiskId,
+                         Config->BaseInfo.VDiskSlotId));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }

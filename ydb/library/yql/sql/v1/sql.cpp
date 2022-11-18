@@ -9051,8 +9051,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
-            if (node.HasBlock7()) {
-                if (!ParseObjectFeatures(kv, node.GetBlock7().GetRule_create_object_features1().GetRule_object_features2())) {
+            if (node.HasBlock8()) {
+                if (!ParseObjectFeatures(kv, node.GetBlock8().GetRule_create_object_features1().GetRule_object_features2())) {
                     return false;
                 }
             }
@@ -9075,7 +9075,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
-            if (!ParseObjectFeatures(kv, node.GetRule_alter_object_features7().GetRule_object_features2())) {
+            if (!ParseObjectFeatures(kv, node.GetRule_alter_object_features8().GetRule_object_features2())) {
                 return false;
             }
 
@@ -9097,8 +9097,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
-            if (node.HasBlock7()) {
-                if (!ParseObjectFeatures(kv, node.GetBlock7().GetRule_drop_object_options1().GetRule_object_features2())) {
+            if (node.HasBlock8()) {
+                if (!ParseObjectFeatures(kv, node.GetBlock8().GetRule_drop_object_features1().GetRule_object_features2())) {
                     return false;
                 }
             }
@@ -10636,13 +10636,22 @@ bool TSqlTranslation::AddObjectFeature(std::map<TString, TDeferredAtom>& result,
 }
 
 bool TSqlTranslation::ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features) {
-    if (!AddObjectFeature(result, features.GetRule_object_feature1())) {
-        return false;
-    }
-    for (auto&& i : features.GetBlock2()) {
-        if (!AddObjectFeature(result, i.GetRule_object_feature2())) {
+    if (features.has_alt_object_features1()) {
+        if (!AddObjectFeature(result, features.alt_object_features1().GetRule_object_feature1())) {
             return false;
         }
+
+    } else if (features.has_alt_object_features2()) {
+        if (!AddObjectFeature(result, features.alt_object_features2().GetRule_object_feature2())) {
+            return false;
+        }
+        for (auto&& i : features.alt_object_features2().GetBlock3()) {
+            if (!AddObjectFeature(result, i.GetRule_object_feature2())) {
+                return false;
+            }
+        }
+    } else {
+        return false;
     }
     return true;
 }

@@ -250,12 +250,16 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(ObjectOperations) {
         TCases cases = {
-            {"alter oBject usEr (TYpe abcde Set a = b)",
-             "ALTER OBJECT usEr (TYPE abcde SET a = b);\n"},
-            {"creAte oBject usEr (tYpe abcde With a = b)",
-             "CREATE OBJECT usEr (TYPE abcde WITH a = b);\n"},
-            {"dRop oBject usEr (tYpe abcde With aeEE)",
-             "DROP OBJECT usEr (TYPE abcde WITH aeEE);\n"}
+            {"alter oBject usEr (TYpe abcde) Set (a = b)",
+             "ALTER OBJECT usEr (TYPE abcde) SET (a = b);\n"},
+            {"creAte oBject usEr (tYpe abcde) With (a = b)",
+             "CREATE OBJECT usEr (TYPE abcde) WITH (a = b);\n"},
+            {"creAte oBject usEr (tYpe abcde) With a = b",
+             "CREATE OBJECT usEr (TYPE abcde) WITH a = b;\n"},
+            {"dRop oBject usEr (tYpe abcde) With (aeEE)",
+             "DROP OBJECT usEr (TYPE abcde) WITH (aeEE);\n"},
+            {"dRop oBject usEr (tYpe abcde) With aeEE",
+             "DROP OBJECT usEr (TYPE abcde) WITH aeEE;\n"}
         };
 
         TSetup setup;

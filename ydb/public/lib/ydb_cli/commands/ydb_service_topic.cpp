@@ -376,9 +376,6 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("consumer", "New consumer for topic")
             .Required()
             .StoreResult(&ConsumerName_);
-        config.Opts->AddLongOption("service-type", "Service type of reader")
-            .Optional()
-            .StoreResult(&ServiceType_);
         config.Opts->AddLongOption("starting-message-timestamp", "Unix timestamp starting from '1970-01-01 00:00:00' from which read is allowed")
             .Optional()
             .StoreResult(&StartingMessageTimestamp_);

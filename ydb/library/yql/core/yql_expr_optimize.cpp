@@ -743,8 +743,8 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                 auto world = node->HeadPtr();
                 for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
                     const auto lambda = node->Child(i);
-                    if (!EnsureLambda(*lambda, ctx)) {
-                        return nullptr;
+                    if (!lambda->IsLambda()) {
+                        return node;
                     }
 
                     const auto& lambdaArgs = lambda->Head();
@@ -766,12 +766,8 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                 TMaybe<ui32> commonArgs;
                 for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
                     const auto lambda = node->Child(i);
-                    if (lambda->IsArgument()) {
+                    if (!lambda->IsLambda()) {
                         return node;
-                    }
-
-                    if (!EnsureLambda(*lambda, ctx)) {
-                        return nullptr;
                     }
 
                     const auto& lambdaArgs = lambda->Head();

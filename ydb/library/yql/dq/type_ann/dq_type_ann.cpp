@@ -63,17 +63,16 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
-        if (!EnsureTuple(*settingsTuple, ctx)) {
+    if (!EnsureTuple(*settingsTuple, ctx)) {
+        return TStatus::Error;
+    }
+
+    for (auto& setting: settingsTuple->Children()) {
+        if (!EnsureTupleMinSize(*setting, 1, ctx)) {
             return TStatus::Error;
         }
-        for (auto& setting: settingsTuple->Children()) {
-            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
-                return TStatus::Error;
-            }
-            if (!EnsureAtom(*setting->Child(0), ctx)) {
-                return TStatus::Error;
-            }
+        if (!EnsureAtom(*setting->Child(0), ctx)) {
+            return TStatus::Error;
         }
     }
 

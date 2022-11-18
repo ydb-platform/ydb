@@ -91,31 +91,10 @@ bool NeedReportPlan(const Ydb::Table::ExecuteScanQueryRequest& req) {
     }
 }
 
-bool FillKqpParameters(const ::google::protobuf::Map<TString, Ydb::TypedValue>& input,
-    NKikimrMiniKQL::TParams& output, TParseRequestError& error)
-{
-    if (input.size() != 0) {
-        try {
-            ConvertYdbParamsToMiniKQLParams(input, output);
-        } catch (const std::exception& ex) {
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Failed to parse query parameters.");
-            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYql::ExceptionToIssue(ex)));
-
-            error = TParseRequestError(Ydb::StatusIds::BAD_REQUEST, {issue});
-            return false;
-        }
-    }
-
-    return true;
-}
-
 bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
     TParseRequestError& error)
 {
-    if (!FillKqpParameters(req.parameters(), *kqpRequest.MutableRequest()->MutableParameters(), error)) {
-        return false;
-    }
-
+    kqpRequest.MutableRequest()->MutableYdbParameters()->insert(req.parameters().begin(), req.parameters().end());
     switch (req.mode()) {
         case Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC:
             kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);

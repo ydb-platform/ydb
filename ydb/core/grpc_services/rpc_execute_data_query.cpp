@@ -93,20 +93,7 @@ void SerializeQueryRequest(std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& in,
         }
     }
 
-    if (req->parametersSize() != 0) {
-        try {
-            ConvertYdbParamsToMiniKQLParams(req->parameters(), *dst->MutableRequest()->MutableParameters());
-        } catch (const std::exception& ex) {
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Failed to parse query parameters.");
-            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYql::ExceptionToIssue(ex)));
-
-            NYql::TIssues issues;
-            issues.AddIssue(issue);
-            dst->SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-            NYql::IssuesToMessage(issues, dst->MutableQueryIssues());
-            return;
-        }
-    }
+    dst->MutableRequest()->MutableYdbParameters()->insert(req->parameters().begin(), req->parameters().end());
 }
 
 class TExecuteDataQueryRPC : public TRpcKqpRequestActor<TExecuteDataQueryRPC, TEvExecuteDataQueryRequest> {

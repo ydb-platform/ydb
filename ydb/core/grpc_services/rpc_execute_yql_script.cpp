@@ -50,23 +50,7 @@ public:
 
         ev->Record.MutableRequest()->SetCancelAfterMs(GetCancelAfter().MilliSeconds());
         ev->Record.MutableRequest()->SetTimeoutMs(GetOperationTimeout().MilliSeconds());
-
-        if (req->parametersSize() != 0) {
-            try {
-                NKikimrMiniKQL::TParams params;
-                ConvertYdbParamsToMiniKQLParams(req->parameters(), params);
-                ev->Record.MutableRequest()->MutableParameters()->CopyFrom(params);
-            } catch (const std::exception& ex) {
-                NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
-                    << "Failed to parse script parameters.");
-                issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYql::ExceptionToIssue(ex)));
-
-                NYql::TIssues issues;
-                issues.AddIssue(issue);
-
-                return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-            }
-        }
+        ev->Record.MutableRequest()->MutableYdbParameters()->insert(req->parameters().begin(), req->parameters().end());
 
         auto& script = req->script();
 

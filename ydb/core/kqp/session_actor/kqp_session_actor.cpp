@@ -410,6 +410,15 @@ public:
             return;
         }
 
+        if (!event.GetRequest().HasParameters() && event.GetRequest().YdbParametersSize()) {
+            try {
+                ConvertYdbParamsToMiniKQLParams(event.GetRequest().GetYdbParameters(), *event.MutableRequest()->MutableParameters());
+            } catch (const std::exception& ex) {
+                TString message = TStringBuilder() << "Failed to parse query parameters. "<< ex.what();
+                return ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_REQUEST, message);
+            }
+        }
+
         MakeNewQueryState();
         TTimerGuard timer(this);
         QueryState->Request.Swap(event.MutableRequest());
@@ -448,15 +457,6 @@ public:
             << " type: " << (queryRequest.HasType() ? queryRequest.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED)
             << " text: " << (queryRequest.HasQuery() ? queryRequest.GetQuery() : "")
         );
-
-        if (!queryRequest.HasParameters() && queryRequest.YdbParametersSize()) {
-            try {
-                ConvertYdbParamsToMiniKQLParams(queryRequest.GetYdbParameters(), *queryRequest.MutableParameters());
-            } catch (const std::exception& ex) {
-                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
-                    << "Failed to parse query parameters. "<< ex.what();
-            }
-        }
 
         QueryState->ParametersSize = queryRequest.GetParameters().ByteSize();
         QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId());

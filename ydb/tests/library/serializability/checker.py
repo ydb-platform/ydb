@@ -234,11 +234,11 @@ class SerializabilityChecker(object):
 
     def select_read_keys(self, cnt=1):
         assert cnt >= 1
-        return random.sample(self.keys.keys(), cnt)
+        return random.sample(sorted(self.keys.keys()), cnt)
 
     def select_write_keys(self, cnt=1):
         assert cnt >= 1
-        keys = random.sample(self.keys.keys(), cnt)
+        keys = random.sample(sorted(self.keys.keys()), cnt)
         for key in keys:
             self.writing_keys[key] += 1
         return keys
@@ -258,7 +258,7 @@ class SerializabilityChecker(object):
         if len(keys) < cnt:
             # There are not enough keys
             return []
-        return random.sample(keys, cnt)
+        return random.sample(sorted(keys), cnt)
 
     def get_next_node_value(self):
         return self._next_value

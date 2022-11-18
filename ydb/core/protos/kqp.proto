@@ -12,7 +12,6 @@ import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
-import "ydb/core/protos/kqp_query_settings.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
@@ -66,14 +65,6 @@ enum EQueryReplyFlags {
     QUERY_REPLY_FLAG_AST = 4;
 };
 
-message TKqlSettings {
-    optional bool CommitTx = 1;
-    optional bool RollbackTx = 2;
-    optional bool RawResults = 3;
-    optional EIsolationLevel IsolationLevel = 5;
-    reserved 6; // (deprecated) NewEngine
-};
-
 message TTopicOperations {
     optional string Consumer = 1;
     repeated Ydb.Topic.AddOffsetsToTransactionRequest.TopicOffsets Topics = 2;
@@ -83,14 +74,13 @@ message TQueryRequest {
     optional bytes SessionId = 1;
     optional string Query = 2;
     optional EQueryType Type = 3;
-    optional TKqlSettings KqlSettings = 4;
+    reserved 4; // (deprecated) KqlSettings
     optional bool KeepSession = 5;
     reserved 6; // (deprecated) Cluster
     optional NKikimrMiniKQL.TParams Parameters = 7;
     reserved 8; // (deprecated) SqlAutoCommit
     optional EQueryAction Action = 9;
-    // optional bool Profile = 10; // DEPRECATED, use StatsMode instead
-    reserved 10;
+    reserved 10; // (deprecated) Profile
     optional bytes PreparedQuery = 11;
     optional uint32 ReplyFlags = 12 [default = 1];
     optional Ydb.Table.TransactionControl TxControl = 13;
@@ -98,7 +88,7 @@ message TQueryRequest {
     optional Ydb.Table.QueryCachePolicy QueryCachePolicy = 15;
     optional uint64 CancelAfterMs = 16;
     optional uint64 TimeoutMs = 17;
-    optional Ydb.YqlInternal.ExecQuerySettings QuerySettings = 18;
+    reserved 18; // (deprecated) QuerySettings
     reserved 19; // (deprecated) StatsMode
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
     optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;

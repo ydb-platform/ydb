@@ -27,7 +27,6 @@ struct TKqlTransformContext : TThrRefBase {
     NYql::TKikimrConfiguration::TPtr Config;
     TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
     TIntrusivePtr<NYql::TKikimrTablesData> Tables;
-    NKikimrKqp::TKqlSettings Settings;
     NActors::TActorId ReplyTarget;
 
     NKqpProto::TKqpStatsQuery QueryStats;
@@ -37,7 +36,6 @@ struct TKqlTransformContext : TThrRefBase {
     TVector<NKikimrMiniKQL::TResult> PhysicalQueryResults;
 
     void Reset() {
-        Settings = {};
         ReplyTarget = {};
         MkqlResults.clear();
         QueryStats = {};

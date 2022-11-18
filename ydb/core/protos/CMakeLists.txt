@@ -86,7 +86,6 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/index_builder.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/issue_id.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kesus.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_query_settings.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_physical.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_stats.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp.proto

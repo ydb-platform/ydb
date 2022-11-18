@@ -210,7 +210,6 @@ private:
         YQL_CLOG(DEBUG, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
 
         TransformCtx->Reset();
-        TransformCtx->Settings = NKikimrKqp::TKqlSettings();
 
         PhysicalOptimizeTransformer->Rewind();
         auto optimizedQuery = query;

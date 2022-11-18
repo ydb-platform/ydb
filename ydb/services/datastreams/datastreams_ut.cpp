@@ -91,7 +91,7 @@ public:
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG));
         if (secure) {
-            driverConfig.UseSecureConnection(NYdbSslTestData::CaCrt);
+            driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
         } else {
             driverConfig.SetDatabase("/Root/");
         }

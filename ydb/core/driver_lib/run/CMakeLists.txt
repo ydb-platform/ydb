@@ -57,6 +57,7 @@ target_link_libraries(run PUBLIC
   cli_utils
   ydb-core-formats
   ydb-core-grpc_services
+  core-grpc_services-base
   ydb-core-health_check
   ydb-core-http_proxy
   core-kesus-proxy
@@ -145,4 +146,5 @@ target_sources(run PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/run.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/service_initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/version.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/cert_auth_props.cpp
 )

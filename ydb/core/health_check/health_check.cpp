@@ -333,7 +333,7 @@ public:
         void SetOverallStatus(Ydb::Monitoring::StatusFlag::Status status) {
             OverallStatus = status;
         }
-        
+
         void InheritFrom(TSelfCheckResult& lower) {
             if (lower.GetOverallStatus() >= OverallStatus) {
                 OverallStatus = lower.GetOverallStatus();
@@ -559,7 +559,7 @@ public:
                 storagePoolName = STATIC_STORAGE_POOL_NAME;
             }
             StoragePoolState[storagePoolName].Groups.emplace(group.groupid());
-            
+
             if (!IsSpecificDatabaseFilter()) {
                 DatabaseState[DomainPath].StoragePoolNames.emplace_back(storagePoolName);
             }
@@ -1665,14 +1665,14 @@ public:
     struct TMergeIssuesContext {
         std::unordered_map<ETags, TList<TSelfCheckContext::TIssueRecord>> recordsMap;
         std::unordered_set<TString> removeIssuesIds;
-        
+
         TMergeIssuesContext(TList<TSelfCheckContext::TIssueRecord>& records) {
             for (auto it = records.begin(); it != records.end(); ) {
                 auto move = it++;
                 recordsMap[move->Tag].splice(recordsMap[move->Tag].end(), records, move);
             }
         }
-        
+
         void RemoveUnlinkIssues(TList<TSelfCheckContext::TIssueRecord>& records) {
             bool isRemovingIssuesIteration = true;
             while (isRemovingIssuesIteration) {
@@ -1780,7 +1780,7 @@ public:
                     ++it;
                 }
             }
-            
+
             if (similar.size() <= MERGING_IGNORE_SIZE) {
                 Mergeed.splice(Mergeed.end(), similar);
             }
@@ -1846,7 +1846,7 @@ public:
                 default:
                     break;
             }
-            
+
             auto donorReasons = it->IssueLog.mutable_reason();
             for (auto donorReasonIt = donorReasons->begin(); donorReasonIt != donorReasons->end(); donorReasonIt++) {
                 if (!mainReasonIds.contains(*donorReasonIt)) {
@@ -1859,7 +1859,7 @@ public:
             it = similar.erase(it);
         }
 
-        similar.begin()->IssueLog.set_count(ids.size());        
+        similar.begin()->IssueLog.set_count(ids.size());
         similar.begin()->IssueLog.set_listed(ids.size());
     }
 
@@ -2147,7 +2147,7 @@ public:
         Ydb::Monitoring::StatusFlag::Status Status = Ydb::Monitoring::StatusFlag::GREY;
         bool HasDegraded = false;
         std::unordered_set<std::pair<TString, TString>> IssueIds;
-        
+
         TOverallStateContext(Ydb::Monitoring::SelfCheckResult* result) {
             Result = result;
         }

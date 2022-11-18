@@ -19,7 +19,7 @@ struct TGRpcClientConfig {
     ui64 MaxOutboundMessageSize = 0; // overrides MaxMessageSize for outgoing requests
     ui32 MaxInFlight = 0;
     bool EnableSsl = false;
-    TString SslCaCert;  //Implicitly enables Ssl if not empty
+    grpc::SslCredentialsOptions SslCredentials;
     grpc_compression_algorithm CompressionAlgoritm = GRPC_COMPRESS_NONE;
     ui64 MemQuota = 0;
     std::unordered_map<TString, TString> StringChannelParams;
@@ -34,14 +34,14 @@ struct TGRpcClientConfig {
     TGRpcClientConfig& operator=(TGRpcClientConfig&&) = default;
 
     TGRpcClientConfig(const TString& locator, TDuration timeout = TDuration::Max(),
-            ui64 maxMessageSize = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, ui32 maxInFlight = 0, TString caCert = "",
-            grpc_compression_algorithm compressionAlgorithm = GRPC_COMPRESS_NONE, bool enableSsl = false)
+            ui64 maxMessageSize = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, ui32 maxInFlight = 0, const TString& caCert = "", const TString& clientCert = "",
+            const TString& clientPrivateKey = "", grpc_compression_algorithm compressionAlgorithm = GRPC_COMPRESS_NONE, bool enableSsl = false)
         : Locator(locator)
         , Timeout(timeout)
         , MaxMessageSize(maxMessageSize)
         , MaxInFlight(maxInFlight)
         , EnableSsl(enableSsl)
-        , SslCaCert(caCert)
+        , SslCredentials{.pem_root_certs = caCert, .pem_private_key = clientPrivateKey, .pem_cert_chain = clientCert}
         , CompressionAlgoritm(compressionAlgorithm)
     {}
 };
@@ -74,8 +74,8 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     if (!config.SslTargetNameOverride.empty()) {
         args.SetSslTargetNameOverride(config.SslTargetNameOverride);
     }
-    if (config.EnableSsl || config.SslCaCert) {
-        return grpc::CreateCustomChannel(config.Locator, grpc::SslCredentials(grpc::SslCredentialsOptions{config.SslCaCert, "", ""}), args);
+    if (config.EnableSsl || config.SslCredentials.pem_root_certs) {
+        return grpc::CreateCustomChannel(config.Locator, grpc::SslCredentials(config.SslCredentials), args);
     } else {
         return grpc::CreateCustomChannel(config.Locator, grpc::InsecureChannelCredentials(), args);
     }

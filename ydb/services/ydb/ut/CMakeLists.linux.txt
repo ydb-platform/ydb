@@ -29,6 +29,8 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   library-cpp-svnversion
   kqp-ut-common
   core-testlib-default
+  core-grpc_services-base
+  ydb-core-testlib
   yql-minikql-dom
   yql-minikql-jsonpath
   public-lib-experimental
@@ -59,6 +61,7 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_table_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_client_certs_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_s3_internal_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
@@ -70,6 +73,7 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/json_udf.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/re2_udf.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/cert_gen.cpp
 )
 add_test(
   NAME

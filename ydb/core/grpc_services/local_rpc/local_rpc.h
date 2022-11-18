@@ -56,6 +56,11 @@ public:
         return TMaybe<TString>{};
     }
 
+    TVector<TStringBuf> FindClientCert() const override {
+        Y_FAIL("Unimplemented");
+        return {};
+    }
+
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResp resp;
         NGRpcService::TCommonResponseFiller<TResp, true>::Fill(resp, IssueManager.GetIssues(), CostInfo.get(), status);

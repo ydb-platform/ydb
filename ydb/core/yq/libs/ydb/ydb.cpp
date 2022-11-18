@@ -198,14 +198,12 @@ TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
     settings.CredentialsProviderFactory(credProviderFactory(credSettings));
 
     if (config.GetUseLocalMetadataService()) {
-        settings.EnableSsl(true);
+        settings.SslCredentials(TSslCredentials(true));
     }
 
     if (config.GetCertificateFile()) {
         auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll());
-        settings
-            .EnableSsl(true)
-            .CaCert(cert);
+        settings.SslCredentials(TSslCredentials(true, cert));
     }
 
     return settings;

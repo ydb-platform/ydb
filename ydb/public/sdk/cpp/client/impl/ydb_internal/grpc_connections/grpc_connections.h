@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/ssl_credentials.h>
 
 #include "actions.h"
 #include "params.h"
@@ -60,8 +61,7 @@ public:
         const TMaybe<TStringType>& database,
         const TMaybe<TStringType>& discoveryEndpoint,
         const TMaybe<EDiscoveryMode>& discoveryMode,
-        const TMaybe<bool>& enableSsl,
-        const TMaybe<TStringType>& caCert,
+        const TMaybe<TSslCredentials>& sslCredentials,
         const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
     );
     IQueueClientContextPtr CreateContext() override;
@@ -80,8 +80,10 @@ public:
         TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
         auto clientConfig = NGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
-        clientConfig.EnableSsl = dbState->EnableSsl;
-        clientConfig.SslCaCert = dbState->CaCert;
+        const auto& sslCredentials = dbState->SslCredentials;
+        clientConfig.SslCredentials = {.pem_root_certs = sslCredentials.CaCert, .pem_private_key = sslCredentials.PrivateKey, .pem_cert_chain = sslCredentials.Cert};
+        clientConfig.EnableSsl = sslCredentials.IsEnabled;
+
         clientConfig.MemQuota = MemoryQuota_;
 
         if (MaxMessageSize_ > 0) {
@@ -703,8 +705,7 @@ private:
     std::unique_ptr<IThreadPool> ResponseQueue_;
 
     const TStringType DefaultDiscoveryEndpoint_;
-    const bool EnableSsl_;
-    const TStringType CaCert_;
+    const TSslCredentials SslCredentials_;
     const TStringType DefaultDatabase_;
     std::shared_ptr<ICredentialsProviderFactory> DefaultCredentialsProviderFactory_;
     TDbDriverStateTracker StateTracker_;

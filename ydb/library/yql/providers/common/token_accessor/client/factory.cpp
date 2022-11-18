@@ -27,7 +27,7 @@ public:
     {
         GrpcClientConfig.Locator = tokenAccessorEndpoint;
         GrpcClientConfig.EnableSsl = useSsl;
-        GrpcClientConfig.SslCaCert = sslCaCert;
+        GrpcClientConfig.SslCredentials.pem_root_certs = sslCaCert;
         Connections.reserve(connectionPoolSize);
         for (ui32 i = 0; i < connectionPoolSize; ++i) {
             Connections.push_back(Client->CreateGRpcServiceConnection<TokenAccessorService>(GrpcClientConfig));

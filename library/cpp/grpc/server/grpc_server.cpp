@@ -3,6 +3,7 @@
 #include <util/string/join.h>
 #include <util/generic/yexception.h>
 #include <util/system/thread.h>
+#include <util/generic/map.h>
 
 #include <grpc++/resource_quota.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h>
@@ -64,6 +65,11 @@ void TGRpcServer::Start() {
         grpc::SslServerCredentialsOptions sslOps;
         sslOps.pem_root_certs = std::move(Options_.SslData->Root);
         sslOps.pem_key_cert_pairs.push_back(keycert);
+
+        if (Options_.SslData->DoRequestClientCertificate) {
+            sslOps.client_certificate_request = GRPC_SSL_REQUEST_CLIENT_CERTIFICATE_AND_VERIFY;
+        }
+
         credentials = grpc::SslServerCredentials(sslOps);
     }
     if (Options_.ExternalListener) {

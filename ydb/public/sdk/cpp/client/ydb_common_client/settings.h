@@ -5,9 +5,12 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/ydb.h>
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/ssl_credentials.h>
 #include <functional>
 
 namespace NYdb {
+
+using TCertificateAndPrivateKey = std::pair<TStringType, TStringType>;
 
 struct TCommonClientSettings {
     using TSelf = TCommonClientSettings;
@@ -29,10 +32,8 @@ struct TCommonClientSettings {
     FLUENT_SETTING_OPTIONAL(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
     //! Allows to override discovery mode
     FLUENT_SETTING_OPTIONAL(EDiscoveryMode, DiscoveryMode);
-    //! Allows to override current Ssl mode
-    FLUENT_SETTING_OPTIONAL(bool, EnableSsl);
-    //! Allows to override current Ssl cert
-    FLUENT_SETTING_OPTIONAL(TStringType, CaCert);
+    //! Allows to override current Ssl credentials
+    FLUENT_SETTING_OPTIONAL(TSslCredentials, SslCredentials);
 };
 
 template<class TDerived>
@@ -49,8 +50,7 @@ struct TCommonClientSettingsBase : public TCommonClientSettings {
     COMMON_CLIENT_SETTINGS_TO_DERIVED(TMaybe<TStringType>, AuthToken);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(EDiscoveryMode, DiscoveryMode);
-    COMMON_CLIENT_SETTINGS_TO_DERIVED(bool, EnableSsl);
-    COMMON_CLIENT_SETTINGS_TO_DERIVED(TStringType, CaCert);
+    COMMON_CLIENT_SETTINGS_TO_DERIVED(TSslCredentials, SslCredentials);
 
 #undef COMMON_CLIENT_SETTINGS_TO_DERIVED
 

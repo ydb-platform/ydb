@@ -826,7 +826,7 @@ public:
                 ClientConfig.MaxMessageSize = p->MaxMessageSize;
                 ClientConfig.MaxInFlight = p->MaxInFlight;
                 ClientConfig.EnableSsl = p->EnableSsl;
-                ClientConfig.SslCaCert = p->SslCaCert;
+                ClientConfig.SslCredentials.pem_root_certs = p->SslCredentials.pem_root_certs;
             }
         }
     }

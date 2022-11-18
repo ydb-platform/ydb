@@ -96,7 +96,7 @@ public:
             .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
             .DiscoveryMode(NYdb::EDiscoveryMode::Async)
             .CredentialsProviderFactory(credentialsProviderFactory)
-            .EnableSsl(config.GetUseSecureConnection());
+            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
         if (config.HasDatabase()) {
             clientSettings.Database(config.GetDatabase());
         }

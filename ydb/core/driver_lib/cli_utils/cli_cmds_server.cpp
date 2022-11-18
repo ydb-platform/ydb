@@ -854,8 +854,9 @@ protected:
     {
         // static node
         if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
-            if (!NodeId)
+            if (!NodeId) {
                 ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
+            }
 
             if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
                 LoadCachedConfigsForStaticNode();
@@ -1113,8 +1114,13 @@ private:
         grpcConfig.LoadBalancingPolicy = "round_robin";
         if (endpoint.EnableSsl.Defined()) {
             grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
-            if (!PathToInterconnectCaFile.Empty()) {
-                grpcConfig.SslCaCert = ReadFromFile(PathToInterconnectCaFile, "CA certificates");
+            auto& sslCredentials = grpcConfig.SslCredentials;
+            if (PathToGrpcCaFile) {
+                sslCredentials.pem_root_certs = ReadFromFile(PathToGrpcCaFile, "CA certificates");
+            }
+            if (PathToGrpcCertFile && PathToGrpcPrivateKeyFile) {
+                sslCredentials.pem_cert_chain = ReadFromFile(PathToGrpcCertFile, "Client certificates");
+                sslCredentials.pem_private_key = ReadFromFile(PathToGrpcPrivateKeyFile, "Client certificates key");
             }
         }
         return NClient::TKikimr(grpcConfig);

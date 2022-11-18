@@ -51,6 +51,7 @@ public:
     //! caCerts  - The buffer containing the PEM encoding of the server root certificates.
     //!            If this parameter is empty, the default roots will be used.
     TDriverConfig& UseSecureConnection(const TStringType& caCerts = TStringType());
+    TDriverConfig& UseClientCertificate(const TStringType& clientCert, const TStringType& clientPrivateKey);
     //! Set token, this option can be overridden for client by ClientSettings
     TDriverConfig& SetAuthToken(const TStringType& token);
     //! Set database, this option can be overridden for client by ClientSettings

@@ -162,7 +162,7 @@ private:
             .DiscoveryEndpoint(Topic.cluster_endpoint())
             .CredentialsProviderFactory(std::move(credentialsProvider))
             .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .EnableSsl(Topic.use_ssl());
+            .SslCredentials(NYdb::TSslCredentials(Topic.use_ssl()));
     }
 
 private:

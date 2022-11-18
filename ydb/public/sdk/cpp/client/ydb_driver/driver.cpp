@@ -9,6 +9,7 @@
 #include <library/cpp/logger/log.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/getenv.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/ssl_credentials.h>
 #include <util/stream/file.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_ca.h>
 
@@ -32,8 +33,7 @@ public:
     size_t GetNetworkThreadsNum() const override { return NetworkThreadsNum; }
     size_t GetClientThreadsNum() const override { return ClientThreadsNum; }
     size_t GetMaxQueuedResponses() const override { return MaxQueuedResponses; }
-    bool IsSslEnabled() const override { return EnableSsl; }
-    TStringType GetCaCert() const override { return CaCert; }
+    TSslCredentials GetSslCredentials() const override { return SslCredentials; }
     TStringType GetDatabase() const override { return Database; }
     std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const override { return CredentialsProviderFactory; }
     EDiscoveryMode GetDiscoveryMode() const override { return DiscoveryMode; }
@@ -54,8 +54,7 @@ public:
     size_t NetworkThreadsNum = 2;
     size_t ClientThreadsNum = 0;
     size_t MaxQueuedResponses = 0;
-    bool EnableSsl = false;
-    TStringType CaCert;
+    TSslCredentials SslCredentials;
     TStringType Database;
     std::shared_ptr<ICredentialsProviderFactory> CredentialsProviderFactory = CreateInsecureCredentialsProviderFactory();
     EDiscoveryMode DiscoveryMode = EDiscoveryMode::Sync;
@@ -85,7 +84,7 @@ TDriverConfig::TDriverConfig(const TStringType& connectionString)
             auto connectionInfo = ParseConnectionString(connectionString);
             SetEndpoint(connectionInfo.Endpoint);
             SetDatabase(connectionInfo.Database);
-            Impl_->EnableSsl = connectionInfo.EnableSsl;
+            Impl_->SslCredentials.IsEnabled = connectionInfo.EnableSsl;
         }
 }
 
@@ -110,8 +109,14 @@ TDriverConfig& TDriverConfig::SetMaxClientQueueSize(size_t sz) {
 }
 
 TDriverConfig& TDriverConfig::UseSecureConnection(const TStringType& cert) {
-    Impl_->EnableSsl = true;
-    Impl_->CaCert = cert;
+    Impl_->SslCredentials.IsEnabled = true;
+    Impl_->SslCredentials.CaCert = cert;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::UseClientCertificate(const TStringType& clientCert, const TStringType& clientPrivateKey) {
+    Impl_->SslCredentials.Cert = clientCert;
+    Impl_->SslCredentials.PrivateKey = clientPrivateKey;
     return *this;
 }
 

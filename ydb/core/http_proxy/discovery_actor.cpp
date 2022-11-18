@@ -28,7 +28,7 @@ namespace NKikimr::NHttpProxy {
             grpcConf.Locator = Settings.DiscoveryEndpoint;
             if (Settings.CaCert) {
                 grpcConf.EnableSsl = true;
-                grpcConf.SslCaCert = *Settings.CaCert;
+                grpcConf.SslCredentials.pem_root_certs = *Settings.CaCert;
             }
             Connection = GrpcClient.CreateGRpcServiceConnection<TProtoService>(grpcConf);
         }

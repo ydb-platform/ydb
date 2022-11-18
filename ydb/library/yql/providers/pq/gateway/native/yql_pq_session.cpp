@@ -20,7 +20,7 @@ NYdb::NPersQueue::TPersQueueClientSettings GetYdbPqClientOptions(const TString& 
     opts
         .DiscoveryEndpoint(cfg.GetEndpoint())
         .Database(database)
-        .EnableSsl(cfg.GetUseSsl())
+        .SslCredentials(NYdb::TSslCredentials(cfg.GetUseSsl()))
         .CredentialsProviderFactory(credentialsProviderFactory);
 
     return opts;
@@ -31,7 +31,7 @@ NYdb::TCommonClientSettings GetDsClientOptions(const TString& database, const NY
     opts
         .DiscoveryEndpoint(cfg.GetEndpoint())
         .Database(database)
-        .EnableSsl(cfg.GetUseSsl())
+        .SslCredentials(NYdb::TSslCredentials(cfg.GetUseSsl()))
         .CredentialsProviderFactory(credentialsProviderFactory);
 
     return opts;

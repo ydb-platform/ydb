@@ -87,7 +87,7 @@ public:
         , Path(path), Columns(columns), KeyColumnTypes(keyColumnTypes)
         , MaxRows(maxRowsInRequest), MaxBytes(maxBytesInRequest)
         , EndKey(keyTo)
-        , Connection(driver, ::NYdb::TCommonClientSettings().Database(database).DiscoveryEndpoint(endpoint).CredentialsProviderFactory(credentialsProviderFactory).DiscoveryMode(::NYdb::EDiscoveryMode::Async).EnableSsl(secure))
+        , Connection(driver, ::NYdb::TCommonClientSettings().Database(database).DiscoveryEndpoint(endpoint).CredentialsProviderFactory(credentialsProviderFactory).DiscoveryMode(::NYdb::EDiscoveryMode::Async).SslCredentials(::NYdb::TSslCredentials(secure)))
         , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom)
         , LastReadKeyInclusive(false)
         , Retried(0U)

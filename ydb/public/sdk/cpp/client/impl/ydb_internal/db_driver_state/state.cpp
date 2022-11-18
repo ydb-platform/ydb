@@ -2,6 +2,7 @@
 #include "state.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -19,15 +20,13 @@ TDbDriverState::TDbDriverState(
     const TStringType& database,
     const TStringType& discoveryEndpoint,
     EDiscoveryMode discoveryMode,
-    bool enableSsl,
-    const TStringType& caCert,
+    const TSslCredentials& sslCredentials,
     IInternalClient* client
 )
     : Database(database)
     , DiscoveryEndpoint(discoveryEndpoint)
     , DiscoveryMode(discoveryMode)
-    , EnableSsl(enableSsl)
-    , CaCert(caCert)
+    , SslCredentials(sslCredentials)
     , Client(client)
     , EndpointPool([this, client]() mutable {
         // this callback will be called just after shared_ptr initialization
@@ -135,8 +134,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     TStringType database,
     TStringType discoveryEndpoint,
     EDiscoveryMode discoveryMode,
-    bool enableSsl,
-    TStringType caCert,
+    const TSslCredentials& sslCredentials,
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
     TStringType clientIdentity;
@@ -144,7 +142,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         clientIdentity = credentialsProviderFactory->GetClientIdentity();
     }
     Quote(database);
-    const TStateKey key{database, discoveryEndpoint, clientIdentity, discoveryMode, enableSsl, caCert};
+    const TStateKey key{database, discoveryEndpoint, clientIdentity, discoveryMode, sslCredentials};
     {
         std::shared_lock lock(Lock_);
         auto state = States_.find(key);
@@ -190,8 +188,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     database,
                     discoveryEndpoint,
                     discoveryMode,
-                    enableSsl,
-                    caCert,
+                    sslCredentials,
                     DiscoveryClient_),
                 deleter);
 

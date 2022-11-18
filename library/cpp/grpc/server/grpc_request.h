@@ -170,6 +170,10 @@ public:
         return TBaseAsyncContext<TService>::GetPeerMetaValues(key);
     }
 
+    TVector<TStringBuf> FindClientCert() const override {
+        return TBaseAsyncContext<TService>::FindClientCert();
+    }
+
     grpc_compression_level GetCompressionLevel() const override {
         return TBaseAsyncContext<TService>::GetCompressionLevel();
     }

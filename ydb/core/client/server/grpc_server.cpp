@@ -269,6 +269,10 @@ public:
         return GetPeerName();
     }
 
+    TVector<TStringBuf> FindClientCert() const override {
+        return TGrpcBaseAsyncContext::FindClientCert();
+    }
+
 private:
     void* GetGRpcTag() {
         return static_cast<IQueueEvent*>(this);
@@ -507,7 +511,7 @@ void TGRpcService::SetupIncomingRequests() {
     // dynamic node registration
     ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST));
-        RegisterRequestActor(CreateMessageBusRegisterNode(msg));
+        RegisterRequestActor(CreateMessageBusRegisterNode(msg, DynamicNodeAuthorizationParams));
     })
 
     // CMS request

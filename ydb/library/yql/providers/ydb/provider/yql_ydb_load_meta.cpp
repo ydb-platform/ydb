@@ -153,7 +153,7 @@ public:
             const auto ins = Clients_->emplace(cluster, std::pair<TMetaClient, std::optional<TCreateSnapshotHandleResult>>{{Driver_, NYdb::TCommonClientSettings()
                 .Database(config.Database)
                 .DiscoveryEndpoint(config.Endpoint)
-                .EnableSsl(config.Secure)
+                .SslCredentials(NYdb::TSslCredentials(config.Secure))
                 .CredentialsProviderFactory(credentialsProviderFactory)
                 .DiscoveryMode(NYdb::EDiscoveryMode::Async)}, std::nullopt});
 

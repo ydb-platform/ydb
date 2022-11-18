@@ -34,6 +34,7 @@ public:
     virtual TInstant Deadline() const;
     virtual TSet<TStringBuf> GetPeerMetaKeys() const;
     virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const;
+    virtual TVector<TStringBuf> FindClientCert() const {return {};}
     virtual grpc_compression_level GetCompressionLevel() const { return GRPC_COMPRESS_LEVEL_NONE; }
 
     virtual google::protobuf::Arena* GetArena();

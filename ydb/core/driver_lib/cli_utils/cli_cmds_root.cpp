@@ -62,7 +62,7 @@ public:
             if (config.EnableSsl) {
                 auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
                 p->EnableSsl = config.EnableSsl;
-                p->SslCaCert = config.CaCerts;
+                p->SslCredentials.pem_root_certs = config.CaCerts;
             }
             break;
         case TCommandConfig::EServerType::MessageBus:

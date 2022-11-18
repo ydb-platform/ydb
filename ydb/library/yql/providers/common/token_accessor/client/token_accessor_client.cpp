@@ -182,7 +182,7 @@ std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvid
     NGrpc::TGRpcClientConfig grpcConf;
     grpcConf.Locator = tokenAccessorEndpoint;
     grpcConf.EnableSsl = useSsl;
-    grpcConf.SslCaCert = sslCaCert;
+    grpcConf.SslCredentials.pem_root_certs = sslCaCert;
     std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection = client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
 
     return CreateTokenAccessorCredentialsProvider(std::move(client), std::move(connection), serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);

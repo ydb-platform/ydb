@@ -25,7 +25,7 @@ public:
         , Client(yqSharedResources->CoreYdbDriver,
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint("localhost:" + ToString(Config.GetPort()))
-                .EnableSsl(Config.GetSecure())
+                .SslCredentials(NYdb::TSslCredentials(Config.GetSecure()))
                 .Database(Config.GetDatabase()))
         , YqSharedResources(yqSharedResources)
     {

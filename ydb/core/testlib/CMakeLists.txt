@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   cpp-regex-pcre
   cpp-testing-gmock_in_unittest
   cpp-testing-unittest
+  run
   ydb-core-base
   core-blobstorage-base
   core-blobstorage-pdisk

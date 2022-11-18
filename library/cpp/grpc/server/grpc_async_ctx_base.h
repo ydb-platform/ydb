@@ -69,6 +69,16 @@ public:
         return values;
     }
 
+    TVector<TStringBuf> FindClientCert() const {
+        auto authContext = Context.auth_context();
+
+        TVector<TStringBuf> values;
+        for (auto& value: authContext->FindPropertyValues(GRPC_X509_PEM_CERT_PROPERTY_NAME)) {
+            values.emplace_back(value.data(), value.size());
+        }
+        return values;
+    }
+
     grpc_compression_level GetCompressionLevel() const {
         return Context.compression_level();
     }

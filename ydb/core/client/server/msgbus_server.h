@@ -1,4 +1,5 @@
 #pragma once
+#include "dynamic_node_auth_processor.h"
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/base/defs.h>
@@ -59,6 +60,7 @@ public:
     ~TMessageBusSessionIdentHolder();
     void SendReply(NBus::TBusMessage *resp);
     void SendReplyMove(NBus::TBusMessageAutoPtr resp);
+    TVector<TStringBuf> FindClientCert() const;
 
     template <typename U /* <: TBusMessage */>
     void SendReplyAutoPtr(TAutoPtr<U>& resp) { SendReplyMove(resp); }
@@ -84,6 +86,7 @@ public:
     NBus::TBusMessage* ReleaseMessage();
     void SendReplyMove(NBus::TBusMessageAutoPtr response);
     void Swap(TBusMessageContext& msg);
+    TVector<TStringBuf> FindClientCert() const;
 
 private:
     friend class TMessageBusSessionIdentHolder;
@@ -296,7 +299,7 @@ IActor* CreateMessageBusBlobStorageConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusDrainNode(TBusMessageContext &msg);
 IActor* CreateMessageBusFillNode(TBusMessageContext &msg);
 IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
-IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
+IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg, const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams);
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);

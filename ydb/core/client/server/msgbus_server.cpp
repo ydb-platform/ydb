@@ -15,6 +15,7 @@ public:
     virtual NBus::TBusMessage* GetMessage() = 0;
     virtual NBus::TBusMessage* ReleaseMessage() = 0;
     virtual void SendReplyMove(NBus::TBusMessageAutoPtr response) = 0;
+    virtual TVector<TStringBuf> FindClientCert() const = 0;
     virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
 };
 
@@ -56,6 +57,11 @@ public:
     NBus::TBusKey GetMessageId() override {
         return GetMessage()->GetHeader()->Id;
     }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        return {};
+    }
+
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
@@ -191,6 +197,10 @@ public:
         SendReply(response.Get());
     }
 
+    TVector<TStringBuf> FindClientCert() const override {
+        return RequestContext->FindClientCert();
+    };
+
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
 
@@ -236,6 +246,8 @@ void TBusMessageContext::Swap(TBusMessageContext &msg) {
     std::swap(Impl, msg.Impl);
 }
 
+TVector<TStringBuf> TBusMessageContext::FindClientCert() const { return Impl->FindClientCert(); }
+
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
     Y_VERIFY(Impl);
     return Impl->CreateSessionIdentHolder();
@@ -248,6 +260,8 @@ public:
     virtual void SendReply(NBus::TBusMessage *resp) = 0;
     virtual void SendReplyMove(NBus::TBusMessageAutoPtr resp) = 0;
     virtual ui64 GetTotalTimeout() const = 0;
+    virtual TVector<TStringBuf> FindClientCert() const = 0;
+
 };
 
 class TMessageBusSessionIdentHolder::TImplMessageBus
@@ -287,6 +301,10 @@ public:
     ui64 GetTotalTimeout() const override {
         return Session->GetConfig()->TotalTimeout;
     }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        return {};
+    }
 };
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() {
@@ -322,6 +340,10 @@ public:
         Context->SendReplyMove(resp);
 
         auto context = std::move(Context);
+    }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        return Context->FindClientCert();
     }
 
     ui64 GetTotalTimeout() const override {
@@ -361,6 +383,10 @@ void TMessageBusSessionIdentHolder::SendReply(NBus::TBusMessage *resp) {
 void TMessageBusSessionIdentHolder::SendReplyMove(NBus::TBusMessageAutoPtr resp) {
     Y_VERIFY(Impl);
     Impl->SendReplyMove(resp);
+}
+
+TVector<TStringBuf> TMessageBusSessionIdentHolder::FindClientCert() const {
+    return Impl->FindClientCert();
 }
 
 

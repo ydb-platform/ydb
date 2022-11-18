@@ -114,6 +114,7 @@ message TConfigItem {
         CompactionConfigItem = 52;
         HttpProxyConfigItem = 53;
         SchemeShardConfigItem = 54;
+        ClientCertificateAuthorizationConfigItem = 55;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

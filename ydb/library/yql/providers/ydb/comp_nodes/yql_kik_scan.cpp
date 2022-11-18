@@ -111,7 +111,7 @@ using TBaseComputation = TMutableComputationNode<TKikScan<Async>>;
                 , MaxBytes(maxBytesInRequest)
                 , EndKey(keyTo)
                 , Settings(settings)
-                , Connection(driver, NYdb::TCommonClientSettings().Database(database).DiscoveryEndpoint(endpoint).AuthToken(token).DiscoveryMode(NYdb::EDiscoveryMode::Async).EnableSsl(secure))
+                , Connection(driver, NYdb::TCommonClientSettings().Database(database).DiscoveryEndpoint(endpoint).AuthToken(token).DiscoveryMode(NYdb::EDiscoveryMode::Async).SslCredentials(NYdb::TSslCredentials(secure)))
                 , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom)
                 , LastReadKeyInclusive(false)
                 , Retried(0U)

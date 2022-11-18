@@ -74,7 +74,7 @@ public:
         const auto& requestId = ev->Get()->RequestId;
         if (!Connection) {
             BLOG_GRPC_D(Prefix(requestId) << "Connect to "
-                        << ((Config.EnableSsl || !Config.SslCaCert.empty()) ? "grpcs://" : "grpc://")
+                        << ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://")
                         << Config.Locator);
             Connection = Client.CreateGRpcServiceConnection<TGrpcService>(Config);
         }

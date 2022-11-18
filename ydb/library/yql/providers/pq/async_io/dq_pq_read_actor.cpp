@@ -131,7 +131,7 @@ public:
         NYdb::NPersQueue::TPersQueueClientSettings opts;
         opts.Database(SourceParams.GetDatabase())
             .DiscoveryEndpoint(SourceParams.GetEndpoint())
-            .EnableSsl(SourceParams.GetUseSsl())
+            .SslCredentials(NYdb::TSslCredentials(SourceParams.GetUseSsl()))
             .CredentialsProviderFactory(CredentialsProviderFactory);
 
         return opts;

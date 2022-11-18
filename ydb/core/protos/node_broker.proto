@@ -48,6 +48,7 @@ message TStatus {
     ERROR = 2;
     ERROR_TEMP = 3;
     WRONG_REQUEST = 4;
+    UNAUTHORIZED = 5;
   }
 
   optional ECode Code = 1;

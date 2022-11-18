@@ -25,6 +25,12 @@ struct TKikimrTestSettings {
     static constexpr bool AUTH = false;
     static constexpr bool PrecreatePools = true;
     static constexpr bool EnableSystemViews = true;
+
+    static TString GetCaCrt() { return NYdbSslTestData::CaCrt; }
+    static TString GetServerCrt() { return NYdbSslTestData::ServerCrt; }
+    static TString GetServerKey() { return NYdbSslTestData::ServerKey; }
+
+    static NKikimr::TDynamicNodeAuthorizationParams GetCertAuthParams() {return {}; }
 };
 
 struct TKikimrTestWithAuth : TKikimrTestSettings {
@@ -114,9 +120,12 @@ public:
         }
         grpcOption.SetPort(grpc);
         if (TestSettings::SSL) {
-            NGrpc::TSslData sslData{NYdbSslTestData::ServerCrt,
-                                          NYdbSslTestData::ServerKey,
-                                          NYdbSslTestData::CaCrt};
+            NGrpc::TSslData sslData;
+            sslData.Cert = TestSettings::GetServerCrt();
+            sslData.Key = TestSettings::GetServerKey();
+            sslData.Root =TestSettings::GetCaCrt();
+            sslData.DoRequestClientCertificate = appConfig.GetFeatureFlags().GetEnableDynamicNodeAuthorization() && appConfig.GetClientCertificateAuthorization().HasDynamicNodeAuthorization();
+
             grpcOption.SetSslData(sslData);
         }
         Server_->EnableGRpc(grpcOption);

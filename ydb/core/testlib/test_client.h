@@ -115,6 +115,7 @@ namespace Tests {
         TStoragePoolKinds StoragePoolTypes;
         TVector<NKikimrKqp::TKqpSetting> KqpSettings;
         bool EnableConsole = true;
+        bool EnableNodeBroker = false;
         bool EnableConfigsDispatcher = true;
         bool UseRealThreads = true;
         bool EnableKqpSpilling = false;
@@ -153,6 +154,7 @@ namespace Tests {
         TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0);
         TServerSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& settings) { KqpSettings = settings; return *this; }
         TServerSettings& SetEnableConsole(bool value) { EnableConsole = value; return *this; }
+        TServerSettings& SetEnableNodeBroker(bool value) { EnableNodeBroker = value; return *this; }
         TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
         TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig value) { AppConfig = value; return *this; }

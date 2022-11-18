@@ -746,6 +746,7 @@ message TFeatureFlags {
     optional bool EnableBorrowedSplitCompaction = 76 [default = true];
     optional bool EnableChangefeedInitialScan = 77 [default = false];
     optional bool EnableKqpScanQuerySourceRead = 78 [default = false];
+    optional bool EnableDynamicNodeAuthorization = 79 [default = false];
 }
 
 
@@ -1617,6 +1618,21 @@ message TConfigVersion {
     repeated TConfigItemVersion Items = 1;
 }
 
+message TClientCertificateAuthorization {
+    message TSubjectTerm {
+        optional string ShortName = 1;
+        repeated string Values = 2;
+        repeated string Suffixes = 3;
+    }
+
+    message TDynamicNodeDefinition {
+        repeated TSubjectTerm SubjectTerms = 1;
+        optional bool CanCheckNodeHostByCN = 2 [default = false];
+    }
+
+    optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
+}
+
 message TAppConfig {
     optional TActorSystemConfig ActorSystemConfig = 1;
     optional TLogConfig LogConfig = 2;
@@ -1674,6 +1690,7 @@ message TAppConfig {
     optional TMetadataProviderConfig MetadataProviderConfig = 59;
     optional TBackgroundTasksConfig BackgroundTasksConfig = 60;
     optional TAuditConfig AuditConfig = 61;
+    optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
 
     optional NYq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
 

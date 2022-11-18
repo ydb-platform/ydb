@@ -319,7 +319,7 @@ TDbPool::TPtr TDbPoolMap::GetOrCreate(EDbPoolId dbPoolId, ui32 sessionsCount, co
 
         clientSettings.CredentialsProviderFactory(CredentialsProviderFactory(credSettings));
 
-        clientSettings.EnableSsl(Config.GetStorage().GetUseSsl());
+        clientSettings.SslCredentials(NYdb::TSslCredentials(Config.GetStorage().GetUseSsl()));
 
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(Driver, clientSettings);
     }

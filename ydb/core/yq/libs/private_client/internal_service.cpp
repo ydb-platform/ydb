@@ -37,7 +37,7 @@ public:
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(privateApiConfig.GetTaskServiceEndpoint())
                 .CredentialsProviderFactory(credentialsProviderFactory({.SaKeyFile = privateApiConfig.GetSaKeyFile(), .IamEndpoint = privateApiConfig.GetIamEndpoint()}))
-                .EnableSsl(privateApiConfig.GetSecureTaskService())
+                .SslCredentials(NYdb::TSslCredentials(privateApiConfig.GetSecureTaskService()))
                 .Database(privateApiConfig.GetTaskServiceDatabase() ? privateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             counters)
     {

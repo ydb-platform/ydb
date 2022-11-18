@@ -239,7 +239,7 @@ private:
         return NYdb::NPersQueue::TPersQueueClientSettings()
             .Database(SinkParams.GetDatabase())
             .DiscoveryEndpoint(SinkParams.GetEndpoint())
-            .EnableSsl(SinkParams.GetUseSsl())
+            .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
             .CredentialsProviderFactory(CredentialsProviderFactory);
     }
 

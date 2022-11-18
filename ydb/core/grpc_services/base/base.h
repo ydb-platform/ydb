@@ -268,6 +268,8 @@ public:
     virtual TInstant GetDeadline() const = 0;
     // Meta value from request
     virtual const TMaybe<TString> GetPeerMetaValues(const TString&) const = 0;
+    // Auth property from connection
+    virtual TVector<TStringBuf> FindClientCert() const = 0;
     // Returns path and resource for rate limiter
     virtual TMaybe<NRpcService::TRlPath> GetRlPath() const = 0;
     // Raise issue on the context
@@ -507,6 +509,11 @@ public:
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
         Y_FAIL("Unimplemented");
         return TMaybe<TString>{};
+    }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        Y_FAIL("Unimplemented");
+        return {};
     }
 
     void SetDiskQuotaExceeded(bool) override {
@@ -774,6 +781,11 @@ public:
         return ToMaybe(Ctx_->GetPeerMetaValues(key));
     }
 
+    TVector<TStringBuf> FindClientCert() const override {
+        Y_FAIL("Unimplemented");
+        return {};
+    }
+
     void SetDiskQuotaExceeded(bool) override {
     }
 
@@ -964,6 +976,10 @@ public:
 
     const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
         return ToMaybe(Ctx_->GetPeerMetaValues(key));
+    }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        return Ctx_->FindClientCert();
     }
 
     void SetDiskQuotaExceeded(bool disk) override {

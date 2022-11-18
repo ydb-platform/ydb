@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_client/client.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
 
 namespace NYdb {
@@ -30,8 +31,7 @@ public:
         const TStringType& database,
         const TStringType& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
-        bool enableSsl,
-        const TStringType& caCert,
+        const TSslCredentials& sslCredentials,
         IInternalClient* client
     );
 
@@ -52,8 +52,7 @@ public:
     const TStringType Database;
     const TStringType DiscoveryEndpoint;
     const EDiscoveryMode DiscoveryMode;
-    const bool EnableSsl;
-    const TStringType CaCert;
+    const TSslCredentials SslCredentials;
     std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     IInternalClient* Client;
     TEndpointPool EndpointPool;
@@ -73,16 +72,18 @@ public:
 
 // Tracker allows to get driver state by database and credentials
 class TDbDriverStateTracker {
-    using TStateKey = std::tuple<TStringType, TStringType, TStringType, EDiscoveryMode, bool, TStringType>;
+    using TStateKey = std::tuple<TStringType, TStringType, TStringType, EDiscoveryMode, TSslCredentials>;
     struct TStateKeyHash {
         size_t operator()(const TStateKey& k) const noexcept {
             THash<TStringType> strHash;
             const size_t h0 = strHash(std::get<0>(k));
             const size_t h1 = strHash(std::get<1>(k));
             const size_t h2 = strHash(std::get<2>(k));
-            const size_t h3 = ((size_t)std::get<3>(k) << 1) + (size_t)std::get<4>(k);
-            const size_t h5 = strHash(std::get<5>(k));
-            return (h0 ^ h1 ^ h2 ^ h3 ^ h5);
+            const auto& sslCredentials = std::get<4>(k);
+            const size_t h3 = (static_cast<size_t>(std::get<3>(k)) << 1) + static_cast<size_t>(sslCredentials.IsEnabled);
+            const size_t h5 = strHash(sslCredentials.CaCert);
+            const size_t h6 = strHash(sslCredentials.Cert);
+            return (h0 ^ h1 ^ h2 ^ h3 ^ h5 ^ h6);
         }
     };
 public:
@@ -91,8 +92,7 @@ public:
         TStringType database,
         TStringType DiscoveryEndpoint,
         EDiscoveryMode discoveryMode,
-        bool enableSsl,
-        TStringType caCert,
+        const TSslCredentials& sslCredentials,
         std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
     );
     NThreading::TFuture<void> SendNotification(

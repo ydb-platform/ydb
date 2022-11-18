@@ -13,7 +13,7 @@ TCommonClientSettings GetClientSettingsFromConnectionString(const TStringType& c
     auto connectionInfo = ParseConnectionString(connectionString);
     settings.Database(connectionInfo.Database);
     settings.DiscoveryEndpoint(connectionInfo.Endpoint);
-    settings.EnableSsl(connectionInfo.EnableSsl);
+    settings.SslCredentials(TSslCredentials(connectionInfo.EnableSsl));
     return settings;
 }
 

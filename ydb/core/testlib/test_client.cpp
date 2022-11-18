@@ -71,12 +71,14 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/mind/node_broker.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/driver_lib/run/cert_auth_props.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kesus/proxy/proxy.h>
@@ -228,6 +230,11 @@ namespace Tests {
             Runtime->GetAppData(nodeIdx).DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             Runtime->GetAppData(nodeIdx).PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
 
+            Runtime->GetAppData(nodeIdx).DynamicNameserviceConfig = new TDynamicNameserviceConfig;
+            auto dnConfig = Runtime->GetAppData(nodeIdx).DynamicNameserviceConfig;
+            dnConfig->MaxStaticNodeId = 1023;
+            dnConfig->MaxDynamicNodeId = 1024 + 100;
+
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
         }
@@ -289,6 +296,10 @@ namespace Tests {
             desc->ServedServices.insert(desc->ServedServices.end(), grpcServices.begin(), grpcServices.end());
 
             system->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
+        }
+
+        if (!options.SslData.Empty()) {
+            grpcService->SetDynamicNodeAuthParams(NKikimr::GetDynamicNodeAuthorizationParams(Settings->AppConfig.GetClientCertificateAuthorization()));
         }
 
         auto future = grpcService->Prepare(
@@ -428,8 +439,10 @@ namespace Tests {
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Hive, domainId), TTabletTypes::Hive), &CreateDefaultHive);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeBSControllerID(domainId), TTabletTypes::BSController), &CreateFlatBsController);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeTenantSlotBrokerID(domainId), TTabletTypes::TenantSlotBroker), &NTenantSlotBroker::CreateTenantSlotBroker);
-        if (Settings->EnableConsole)
+        if (Settings->EnableConsole) {
             CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeConsoleID(domainId), TTabletTypes::Console), &NConsole::CreateConsole);
+        }
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeNodeBrokerID(domainId), TTabletTypes::NodeBroker), &NNodeBroker::CreateNodeBroker);
     }
 
     void TServer::SetupStorage() {

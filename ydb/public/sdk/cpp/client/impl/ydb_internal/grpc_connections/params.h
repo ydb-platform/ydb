@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/ssl_credentials.h>
 
 namespace NYdb {
 
@@ -11,8 +12,7 @@ public:
     virtual size_t GetNetworkThreadsNum() const = 0;
     virtual size_t GetClientThreadsNum() const = 0;
     virtual size_t GetMaxQueuedResponses() const = 0;
-    virtual bool IsSslEnabled() const = 0;
-    virtual TStringType GetCaCert() const = 0;
+    virtual TSslCredentials GetSslCredentials() const = 0;
     virtual TStringType GetDatabase() const = 0;
     virtual std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const = 0;
     virtual EDiscoveryMode GetDiscoveryMode() const = 0;

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+find_package(OpenSSL REQUIRED)
 add_subdirectory(index_ut)
 add_subdirectory(sdk_credprovider_ut)
 add_subdirectory(ut)
@@ -29,6 +30,7 @@ target_link_libraries(ydb-services-ydb PUBLIC
   api-grpc-draft
   api-protos
   yql-public-types
+  OpenSSL::OpenSSL
 )
 target_sources(ydb-services-ydb PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_clickhouse_internal.cpp

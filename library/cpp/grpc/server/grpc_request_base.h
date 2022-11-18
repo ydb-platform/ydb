@@ -82,6 +82,8 @@ public:
     //! Returns peer optional metavalue
     virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
 
+    virtual TVector<TStringBuf> FindClientCert() const = 0;
+
     //! Returns request compression level
     virtual grpc_compression_level GetCompressionLevel() const = 0;
 

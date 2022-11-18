@@ -159,7 +159,7 @@ TScanIterator::TScanIterator(const TDriver& driver, const TString &database, con
     , MaxRows(maxRowsInRequest)
     , MaxBytes(maxBytesInRequest)
     , Settings(settings)
-    , Connection(driver, NYdb::TCommonClientSettings().Database(database).AuthToken(token).DiscoveryEndpoint(endpoint).DiscoveryMode(NYdb::EDiscoveryMode::Async).EnableSsl(ssl))
+    , Connection(driver, NYdb::TCommonClientSettings().Database(database).AuthToken(token).DiscoveryEndpoint(endpoint).DiscoveryMode(NYdb::EDiscoveryMode::Async).SslCredentials(NYdb::TSslCredentials(ssl)))
     , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom)
     , LastReadKeyInclusive(false)
     , EndKey(keyTo)

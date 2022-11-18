@@ -188,7 +188,7 @@ private:
             .DiscoveryEndpoint(Topic.GetEndpoint())
             .CredentialsProviderFactory(std::move(credentialsProvider))
             .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .EnableSsl(Topic.GetUseSsl());
+            .SslCredentials(NYdb::TSslCredentials(Topic.GetUseSsl()));
     }
 
 private:

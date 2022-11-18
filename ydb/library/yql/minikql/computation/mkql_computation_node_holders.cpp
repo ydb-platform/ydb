@@ -1199,44 +1199,54 @@ private:
     mutable std::optional<TValuePacker> Packer;
 };
 
-template <typename T>
-class THashedSingleFixedSetHolder : public TComputationValue<THashedSingleFixedSetHolder<T>> {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedSetHolder : public TComputationValue<THashedSingleFixedSetHolder<T, OptionalKey>> {
 public:
     using TSetType = TValuesDictHashSingleFixedSet<T>;
 
     class TIterator : public TComputationValue<TIterator> {
     public:
+        enum class EState {
+            AtStart,
+            AtNull,
+            Iterator
+        };
         TIterator(const THashedSingleFixedSetHolder* parent)
             : TComputationValue<TIterator>(parent->GetMemInfo())
             , Parent(const_cast<THashedSingleFixedSetHolder*>(parent))
             , Iterator(Parent->Set.begin())
             , End(Parent->Set.end())
-            , AtStart(true)
+            , State(EState::AtStart)
         {
         }
 
     private:
-        bool Skip() override {
-            if (AtStart) {
-                AtStart = false;
-            }
-            else {
+        bool Skip() final {
+            switch (State) {
+            case EState::AtStart:
+                State = OptionalKey && Parent->HasNull ? EState::AtNull : EState::Iterator;
+                break;
+            case EState::AtNull:
+                State = EState::Iterator;
+                break;
+            case EState::Iterator:
                 if (Iterator == End)
                     return false;
                 ++Iterator;
+                break;
             }
 
-            return Iterator != End;
+            return EState::AtNull == State || Iterator != End;
         }
 
-        bool Next(NUdf::TUnboxedValue& key) override {
+        bool Next(NUdf::TUnboxedValue& key) final {
             if (!Skip())
                 return false;
-            key = NUdf::TUnboxedValuePod(*Iterator);
+            key = EState::AtNull == State ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(*Iterator);
             return true;
         }
 
-        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
+        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
             if (!Next(key))
                 return false;
             payload = NUdf::TUnboxedValuePod::Void();
@@ -1246,96 +1256,112 @@ public:
         const NUdf::TRefCountedPtr<THashedSingleFixedSetHolder> Parent;
         typename TSetType::const_iterator Iterator;
         typename TSetType::const_iterator End;
-        bool AtStart;
+        EState State;
     };
 
-    THashedSingleFixedSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set)
+    THashedSingleFixedSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set, bool hasNull)
         : TComputationValue<THashedSingleFixedSetHolder>(memInfo)
         , Set(std::move(set))
+        , HasNull(hasNull)
     {
+        MKQL_ENSURE(OptionalKey || !HasNull, "Null value is not allowed for non-optional key type");
     }
 
 private:
-    bool Contains(const NUdf::TUnboxedValuePod& key) const override {
+    bool Contains(const NUdf::TUnboxedValuePod& key) const final {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                return HasNull;
+            }
+        }
         return Set.find(key.Get<T>()) != Set.cend();
     }
 
-    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
-        const auto it = Set.find(key.Get<T>());
-        if (it == Set.cend()) {
-            return NUdf::TUnboxedValuePod();
-        }
-        return NUdf::TUnboxedValuePod::Void();
+    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const final {
+        if (Contains(key))
+            return NUdf::TUnboxedValuePod::Void();
+        return NUdf::TUnboxedValuePod();
     }
 
-    NUdf::TUnboxedValue GetKeysIterator() const override {
+    NUdf::TUnboxedValue GetKeysIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator(this));
     }
 
-    NUdf::TUnboxedValue GetDictIterator() const override {
+    NUdf::TUnboxedValue GetDictIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator(this));
     }
 
-    NUdf::TUnboxedValue GetPayloadsIterator() const override {
+    NUdf::TUnboxedValue GetPayloadsIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator(this));
     }
 
-    NUdf::TUnboxedValue GetListIterator() const override {
+    NUdf::TUnboxedValue GetListIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator(this));
     }
 
-    ui64 GetDictLength() const override {
-        return Set.size();
+    ui64 GetDictLength() const final {
+        return Set.size() + ui64(OptionalKey && HasNull);
     }
 
-    bool HasDictItems() const override {
-        return !Set.empty();
+    bool HasDictItems() const final {
+        return !Set.empty() || (OptionalKey && HasNull);
     }
 
-    bool IsSortedDict() const override {
+    bool IsSortedDict() const final {
         return false;
     }
 
     const TSetType Set;
+    const bool HasNull;
 };
 
-template <typename T>
-class THashedSingleFixedCompactSetHolder : public TComputationValue<THashedSingleFixedCompactSetHolder<T>> {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedCompactSetHolder : public TComputationValue<THashedSingleFixedCompactSetHolder<T, OptionalKey>> {
 public:
     using TSetType = TValuesDictHashSingleFixedCompactSet<T>;
 
     class TIterator : public TComputationValue<TIterator> {
     public:
+        enum class EState {
+            AtStart,
+            AtNull,
+            Iterator
+        };
         TIterator(const THashedSingleFixedCompactSetHolder* parent)
             : TComputationValue<TIterator>(parent->GetMemInfo())
             , Parent(const_cast<THashedSingleFixedCompactSetHolder*>(parent))
             , Iterator(Parent->Set.Iterate())
-            , AtStart(true)
+            , State(EState::AtStart)
         {
         }
 
     private:
-        bool Skip() override {
-            if (AtStart) {
-                AtStart = false;
-            }
-            else {
+        bool Skip() final {
+            switch (State) {
+            case EState::AtStart:
+                State = OptionalKey && Parent->HasNull ? EState::AtNull : EState::Iterator;
+                break;
+            case EState::AtNull:
+                State = EState::Iterator;
+                break;
+            case EState::Iterator:
                 if (!Iterator.Ok())
                     return false;
                 ++Iterator;
+                break;
             }
 
-            return Iterator.Ok();
+            return EState::AtNull == State || Iterator.Ok();
         }
 
-        bool Next(NUdf::TUnboxedValue& key) override {
+        bool Next(NUdf::TUnboxedValue& key) final {
             if (!Skip())
                 return false;
-            key = NUdf::TUnboxedValuePod(*Iterator);
+            key = EState::AtNull == State ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(*Iterator);
             return true;
         }
 
-        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
+        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
             if (!Next(key))
                 return false;
             payload = NUdf::TUnboxedValuePod::Void();
@@ -1344,55 +1370,63 @@ public:
 
         const NUdf::TRefCountedPtr<THashedSingleFixedCompactSetHolder> Parent;
         typename TSetType::TIterator Iterator;
-        bool AtStart;
+        EState State;
     };
 
-    THashedSingleFixedCompactSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set)
+    THashedSingleFixedCompactSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set, bool hasNull)
         : TComputationValue<THashedSingleFixedCompactSetHolder>(memInfo)
         , Set(std::move(set))
+        , HasNull(hasNull)
     {
+        MKQL_ENSURE(OptionalKey || !HasNull, "Null value is not allowed for non-optional key type");
     }
 
 private:
-    bool Contains(const NUdf::TUnboxedValuePod& key) const override {
+    bool Contains(const NUdf::TUnboxedValuePod& key) const final {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                return HasNull;
+            }
+        }
         return Set.Has(key.Get<T>());
     }
 
-    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
-        if (Set.Has(key.Get<T>()))
+    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const final {
+        if (Contains(key))
             return NUdf::TUnboxedValuePod::Void();
         return NUdf::TUnboxedValuePod();
     }
 
-    NUdf::TUnboxedValue GetKeysIterator() const override {
+    NUdf::TUnboxedValue GetKeysIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator(this));
     }
 
-    NUdf::TUnboxedValue GetDictIterator() const override {
+    NUdf::TUnboxedValue GetDictIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator(this));
     }
 
-    NUdf::TUnboxedValue GetPayloadsIterator() const override {
+    NUdf::TUnboxedValue GetPayloadsIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator(this));
     }
 
-    NUdf::TUnboxedValue GetListIterator() const override {
+    NUdf::TUnboxedValue GetListIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator(this));
     }
 
-    ui64 GetDictLength() const override {
-        return Set.Size();
+    ui64 GetDictLength() const final {
+        return Set.Size() + ui64(OptionalKey && HasNull);
     }
 
-    bool HasDictItems() const override {
-        return !Set.Empty();
+    bool HasDictItems() const final {
+        return !Set.Empty() || (OptionalKey && HasNull);
     }
 
-    bool IsSortedDict() const override {
+    bool IsSortedDict() const final {
         return false;
     }
 
     const TSetType Set;
+    const bool HasNull;
 };
 
 class THashedCompactSetHolder : public TComputationValue<THashedCompactSetHolder> {
@@ -1947,209 +1981,273 @@ private:
     std::optional<TValuePacker> Packer;
 };
 
-template <typename T>
-class THashedSingleFixedMapHolder : public TComputationValue<THashedSingleFixedMapHolder<T>> {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedMapHolder : public TComputationValue<THashedSingleFixedMapHolder<T, OptionalKey>> {
 public:
     using TMapType = TValuesDictHashSingleFixedMap<T>;
 
     template <bool NoSwap>
     class TIterator : public TComputationValue<TIterator<NoSwap>> {
     public:
+        enum class EState {
+            AtStart,
+            AtNull,
+            Iterator
+        };
         TIterator(const THashedSingleFixedMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent(const_cast<THashedSingleFixedMapHolder*>(parent))
             , Iterator(Parent->Map.begin())
             , End(Parent->Map.end())
-            , AtStart(true)
+            , State(EState::AtStart)
         {
         }
 
     private:
-        bool Skip() override {
-            if (AtStart) {
-                AtStart = false;
-            }
-            else {
+        bool Skip() final {
+            switch (State) {
+            case EState::AtStart:
+                State = OptionalKey && Parent->NullPayload.has_value() ? EState::AtNull : EState::Iterator;
+                break;
+            case EState::AtNull:
+                State = EState::Iterator;
+                break;
+            case EState::Iterator:
                 if (Iterator == End) {
                     return false;
                 }
                 ++Iterator;
+                break;
             }
 
-            return Iterator != End;
+            return EState::AtNull == State || Iterator != End;
         }
 
-        bool Next(NUdf::TUnboxedValue& key) override {
+        bool Next(NUdf::TUnboxedValue& key) final {
             if (!Skip())
                 return false;
-            key = NoSwap ? NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator->first)) : Iterator->second;
+            key = NoSwap
+                ? (EState::AtNull == State ? NUdf::TUnboxedValue() : NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator->first)))
+                : (EState::AtNull == State ? *Parent->NullPayload : Iterator->second);
             return true;
         }
 
-        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
+        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
             if (!Next(key))
                 return false;
-            payload = NoSwap ? Iterator->second : NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator->first));
+            payload = NoSwap
+                ? (EState::AtNull == State ? *Parent->NullPayload : Iterator->second)
+                : (EState::AtNull == State ? NUdf::TUnboxedValue() : NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator->first)));
             return true;
         }
 
         const NUdf::TRefCountedPtr<THashedSingleFixedMapHolder> Parent;
         typename TMapType::const_iterator Iterator;
         typename TMapType::const_iterator End;
-        bool AtStart;
+        EState State;
     };
 
-    THashedSingleFixedMapHolder(TMemoryUsageInfo* memInfo, TValuesDictHashSingleFixedMap<T>&& map)
+    THashedSingleFixedMapHolder(TMemoryUsageInfo* memInfo, TValuesDictHashSingleFixedMap<T>&& map, std::optional<NUdf::TUnboxedValue>&& nullPayload)
         : TComputationValue<THashedSingleFixedMapHolder>(memInfo)
         , Map(std::move(map))
+        , NullPayload(std::move(nullPayload))
     {
     }
 
 private:
-    bool Contains(const NUdf::TUnboxedValuePod& key) const override {
+    bool Contains(const NUdf::TUnboxedValuePod& key) const final {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                return NullPayload.has_value();
+            }
+        }
         return Map.find(key.Get<T>()) != Map.end();
     }
 
-    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
+    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const final {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                return NullPayload.has_value() ? NullPayload->MakeOptional() : NUdf::TUnboxedValuePod();
+            }
+        }
         const auto it = Map.find(key.Get<T>());
         if (it == Map.end())
             return NUdf::TUnboxedValuePod();
         return it->second.MakeOptional();
     }
 
-    NUdf::TUnboxedValue GetKeysIterator() const override {
+    NUdf::TUnboxedValue GetKeysIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator<true>(this));
     }
 
-    NUdf::TUnboxedValue GetDictIterator() const override {
+    NUdf::TUnboxedValue GetDictIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator<true>(this));
     }
 
-    NUdf::TUnboxedValue GetPayloadsIterator() const override {
+    NUdf::TUnboxedValue GetPayloadsIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator<false>(this));
     }
 
-    ui64 GetDictLength() const override {
-        return Map.size();
+    ui64 GetDictLength() const final {
+        return Map.size() + ui64(OptionalKey && NullPayload.has_value());
     }
 
-    bool HasDictItems() const override {
-        return !Map.empty();
+    bool HasDictItems() const final {
+        return !Map.empty() || (OptionalKey && NullPayload.has_value());
     }
 
-    bool IsSortedDict() const override {
+    bool IsSortedDict() const final {
         return false;
     }
 
     const TMapType Map;
+    const std::optional<NUdf::TUnboxedValue> NullPayload;
 };
 
-template <typename T>
-class THashedSingleFixedCompactMapHolder : public TComputationValue<THashedSingleFixedCompactMapHolder<T>> {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedCompactMapHolder : public TComputationValue<THashedSingleFixedCompactMapHolder<T, OptionalKey>> {
 public:
     using TMapType = TValuesDictHashSingleFixedCompactMap<T>;
 
     template <bool NoSwap>
     class TIterator : public TComputationValue<TIterator<NoSwap>> {
     public:
+        enum class EState {
+            AtStart,
+            AtNull,
+            Iterator
+        };
         TIterator(const THashedSingleFixedCompactMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent(const_cast<THashedSingleFixedCompactMapHolder*>(parent))
             , Iterator(Parent->Map.Iterate())
-            , AtStart(true)
+            , State(EState::AtStart)
         {
         }
 
     private:
-        bool Skip() override {
-            if (AtStart) {
-                AtStart = false;
-            }
-            else if (Iterator.Ok()) {
-                ++Iterator;
+        bool Skip() final {
+            switch (State) {
+            case EState::AtStart:
+                State = OptionalKey && Parent->NullPayload.has_value() ? EState::AtNull : EState::Iterator;
+                break;
+            case EState::AtNull:
+                State = EState::Iterator;
+                break;
+            case EState::Iterator:
+                if (Iterator.Ok())
+                    ++Iterator;
+                break;
             }
 
-            return Iterator.Ok();
+            return EState::AtNull == State || Iterator.Ok();
         }
 
-        bool Next(NUdf::TUnboxedValue& key) override {
+        bool Next(NUdf::TUnboxedValue& key) final {
             if (!Skip())
                 return false;
-            key = NoSwap ?
-                NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator.Get().first)):
-                Parent->PayloadPacker.Unpack(GetSmallValue(Iterator.Get().second), Parent->Ctx->HolderFactory);
+
+            key = NoSwap
+                ? (EState::AtNull == State
+                    ? NUdf::TUnboxedValue()
+                    : NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator.Get().first))
+                  )
+                : (EState::AtNull == State
+                    ? Parent->PayloadPacker.Unpack(GetSmallValue(*Parent->NullPayload), Parent->Ctx->HolderFactory)
+                    : Parent->PayloadPacker.Unpack(GetSmallValue(Iterator.Get().second), Parent->Ctx->HolderFactory)
+                  );
             return true;
         }
 
-        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
+        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
             if (!Next(key))
                 return false;
-            payload =  NoSwap ?
-                Parent->PayloadPacker.Unpack(GetSmallValue(Iterator.Get().second), Parent->Ctx->HolderFactory):
-                NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator.Get().first));
+            payload =  NoSwap
+                ? (EState::AtNull == State
+                    ? Parent->PayloadPacker.Unpack(GetSmallValue(*Parent->NullPayload), Parent->Ctx->HolderFactory)
+                    : Parent->PayloadPacker.Unpack(GetSmallValue(Iterator.Get().second), Parent->Ctx->HolderFactory)
+                  )
+                : (EState::AtNull == State
+                    ? NUdf::TUnboxedValue()
+                    : NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator.Get().first))
+                  );
             return true;
         }
 
         const NUdf::TRefCountedPtr<THashedSingleFixedCompactMapHolder> Parent;
         typename TMapType::TIterator Iterator;
-        bool AtStart;
+        EState State;
     };
 
-    THashedSingleFixedCompactMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool,
+    THashedSingleFixedCompactMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, std::optional<ui64>&& nullPayload, TPagedArena&& pool,
         TType* payloadType, TComputationContext* ctx)
         : TComputationValue<THashedSingleFixedCompactMapHolder>(memInfo)
         , Pool(std::move(pool))
         , Map(std::move(map))
+        , NullPayload(std::move(nullPayload))
         , PayloadPacker(false, payloadType)
         , Ctx(ctx)
     {
     }
 
 private:
-    bool Contains(const NUdf::TUnboxedValuePod& key) const override {
+    bool Contains(const NUdf::TUnboxedValuePod& key) const final {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                return NullPayload.has_value();
+            }
+        }
         return Map.Has(key.Get<T>());
     }
 
-    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
+    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const final {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                return NullPayload.has_value()
+                    ? PayloadPacker.Unpack(GetSmallValue(*NullPayload), Ctx->HolderFactory).Release().MakeOptional()
+                    : NUdf::TUnboxedValuePod();
+            }
+        }
         auto it = Map.Find(key.Get<T>());
         if (!it.Ok())
             return NUdf::TUnboxedValuePod();
         return PayloadPacker.Unpack(GetSmallValue(it.Get().second), Ctx->HolderFactory).Release().MakeOptional();
     }
 
-    NUdf::TUnboxedValue GetKeysIterator() const override {
+    NUdf::TUnboxedValue GetKeysIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator<true>(this));
     }
 
-    NUdf::TUnboxedValue GetDictIterator() const override {
+    NUdf::TUnboxedValue GetDictIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator<true>(this));
     }
 
-    NUdf::TUnboxedValue GetPayloadsIterator() const override {
+    NUdf::TUnboxedValue GetPayloadsIterator() const final {
         return NUdf::TUnboxedValuePod(new TIterator<false>(this));
     }
 
-    ui64 GetDictLength() const override {
-        return Map.Size();
+    ui64 GetDictLength() const final {
+        return Map.Size() + ui64(OptionalKey && NullPayload.has_value());
     }
 
-    bool HasDictItems() const override {
-        return !Map.Empty();
+    bool HasDictItems() const final {
+        return !Map.Empty() || (OptionalKey && NullPayload.has_value());
     }
 
-    bool IsSortedDict() const override {
+    bool IsSortedDict() const final {
         return false;
     }
 
 private:
     TPagedArena Pool;
     const TMapType Map;
+    const std::optional<ui64> NullPayload;
     mutable TValuePacker PayloadPacker;
     TComputationContext* Ctx;
 };
 
-template <typename T>
-class THashedSingleFixedCompactMultiMapHolder : public TComputationValue<THashedSingleFixedCompactMultiMapHolder<T>> {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedCompactMultiMapHolder : public TComputationValue<THashedSingleFixedCompactMultiMapHolder<T, OptionalKey>> {
 public:
     using TMapType = TValuesDictHashSingleFixedCompactMultiMap<T>;
     using TMapIterator = typename TMapType::TIterator;
@@ -2166,7 +2264,7 @@ public:
             }
 
         private:
-            bool Next(NUdf::TUnboxedValue& value) override {
+            bool Next(NUdf::TUnboxedValue& value) final {
                 if (!Iterator.Ok()) {
                     return false;
                 }
@@ -2176,7 +2274,7 @@ public:
                 return true;
             }
 
-            bool Skip() override {
+            bool Skip() final {
                 if (!Iterator.Ok()) {
                     return false;
                 }
@@ -2197,11 +2295,11 @@ public:
             Y_ASSERT(From.Ok());
         }
 
-        bool HasFastListLength() const override {
+        bool HasFastListLength() const final {
             return true;
         }
 
-        ui64 GetListLength() const override {
+        ui64 GetListLength() const final {
             if (!Length) {
                 Length = Parent->Map.Count(From.GetKey());
             }
@@ -2209,16 +2307,80 @@ public:
             return *Length;
         }
 
-        bool HasListItems() const override {
+        bool HasListItems() const final {
             return true;
         }
 
-        NUdf::TUnboxedValue GetListIterator() const override {
+        NUdf::TUnboxedValue GetListIterator() const final {
             return NUdf::TUnboxedValuePod(new TIterator(Parent.Get(), From));
         }
 
         const NUdf::TRefCountedPtr<THashedSingleFixedCompactMultiMapHolder> Parent;
         TMapIterator From;
+    };
+
+    class TNullPayloadList: public TCustomListValue {
+    public:
+        class TIterator : public TComputationValue<TIterator> {
+        public:
+            TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
+                : TComputationValue<TIterator>(parent->GetMemInfo())
+                , Parent(const_cast<THashedSingleFixedCompactMultiMapHolder*>(parent))
+                , Iterator(Parent->NullPayloads.cbegin())
+            {
+            }
+
+        private:
+            bool Next(NUdf::TUnboxedValue& value) final {
+                if (Iterator == Parent->NullPayloads.cend()) {
+                    return false;
+                }
+
+                value = Parent->PayloadPacker.Unpack(GetSmallValue(*Iterator), Parent->Ctx->HolderFactory);
+                ++Iterator;
+                return true;
+            }
+
+            bool Skip() final {
+                if (Iterator == Parent->NullPayloads.cend()) {
+                    return false;
+                }
+
+                ++Iterator;
+                return true;
+            }
+
+            const NUdf::TRefCountedPtr<THashedSingleFixedCompactMultiMapHolder> Parent;
+            typename std::vector<ui64>::const_iterator Iterator;
+        };
+
+        TNullPayloadList(TMemoryUsageInfo* memInfo, const THashedSingleFixedCompactMultiMapHolder* parent)
+            : TCustomListValue(memInfo)
+            , Parent(const_cast<THashedSingleFixedCompactMultiMapHolder*>(parent))
+        {
+        }
+
+        bool HasFastListLength() const final {
+            return true;
+        }
+
+        ui64 GetListLength() const final {
+            if (!Length) {
+                Length = Parent->NullPayloads.size();
+            }
+
+            return *Length;
+        }
+
+        bool HasListItems() const final {
+            return true;
+        }
+
+        NUdf::TUnboxedValue GetListIterator() const final {
+            return NUdf::TUnboxedValuePod(new TIterator(Parent.Get()));
+        }
+
+        const NUdf::TRefCountedPtr<THashedSingleFixedCompactMultiMapHolder> Parent;
     };
 
     template <bool NoSwap>
@@ -2228,11 +2390,19 @@ public:
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent(const_cast<THashedSingleFixedCompactMultiMapHolder*>(parent))
             , Iterator(parent->Map.Iterate())
+            , AtNull(OptionalKey && !parent->NullPayloads.empty())
         {
         }
 
     private:
         bool Next(NUdf::TUnboxedValue& key) override {
+            if (AtNull) {
+                AtNull = false;
+                key = NoSwap
+                    ? NUdf::TUnboxedValuePod()
+                    : Parent->Ctx->HolderFactory.template Create<TNullPayloadList>(Parent.Get());
+                return true;
+            }
             if (!Iterator.Ok()) {
                 return false;
             }
@@ -2245,6 +2415,17 @@ public:
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
+            if (AtNull) {
+                AtNull = false;
+                if (NoSwap) {
+                    key = NUdf::TUnboxedValuePod();
+                    payload = Parent->Ctx->HolderFactory.template Create<TNullPayloadList>(Parent.Get());
+                } else {
+                    payload = NUdf::TUnboxedValuePod();
+                    key = Parent->Ctx->HolderFactory.template Create<TNullPayloadList>(Parent.Get());
+                }
+                return true;
+            }
             if (!Iterator.Ok()) {
                 return false;
             }
@@ -2261,6 +2442,10 @@ public:
         }
 
         bool Skip() override {
+            if (AtNull) {
+                AtNull = false;
+                return true;
+            }
             if (!Iterator.Ok()) {
                 return false;
             }
@@ -2271,13 +2456,15 @@ public:
 
         const NUdf::TRefCountedPtr<THashedSingleFixedCompactMultiMapHolder> Parent;
         TMapIterator Iterator;
+        bool AtNull;
     };
 
-    THashedSingleFixedCompactMultiMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool,
+    THashedSingleFixedCompactMultiMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, std::vector<ui64>&& nullPayloads, TPagedArena&& pool,
         TType* payloadType, TComputationContext* ctx)
         : TComputationValue<THashedSingleFixedCompactMultiMapHolder>(memInfo)
         , Pool(std::move(pool))
         , Map(std::move(map))
+        , NullPayloads(std::move(nullPayloads))
         , PayloadPacker(false, payloadType)
         , Ctx(ctx)
     {
@@ -2285,10 +2472,22 @@ public:
 
 private:
     bool Contains(const NUdf::TUnboxedValuePod& key) const override {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                return !NullPayloads.empty();
+            }
+        }
         return Map.Has(key.Get<T>());
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                return NullPayloads.empty()
+                    ? NUdf::TUnboxedValuePod()
+                    : Ctx->HolderFactory.Create<TNullPayloadList>(this);
+            }
+        }
         const auto it = Map.Find(key.Get<T>());
         if (!it.Ok())
             return NUdf::TUnboxedValuePod();
@@ -2308,11 +2507,11 @@ private:
     }
 
     ui64 GetDictLength() const override {
-        return Map.UniqSize();
+        return Map.UniqSize() + ui64(OptionalKey && !NullPayloads.empty());
     }
 
     bool HasDictItems() const override {
-        return !Map.Empty();
+        return !Map.Empty() || (OptionalKey && !NullPayloads.empty());
     }
 
     bool IsSortedDict() const override {
@@ -2322,6 +2521,7 @@ private:
 private:
     TPagedArena Pool;
     const TMapType Map;
+    const std::vector<ui64> NullPayloads;
     mutable TValuePacker PayloadPacker;
     TComputationContext* Ctx;
 };
@@ -3316,36 +3516,50 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSetHolder(
         filler, types, isTuple, eagerFill, encodedType, hash, equate, *this));
 }
 
-template <typename T>
+template <typename T, bool OptionalKey>
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedSetHolder(
-    TValuesDictHashSingleFixedSet<T>&& set) const {
-    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedSetHolder<T>>(CurrentAllocState, &MemInfo, std::move(set)));
+    TValuesDictHashSingleFixedSet<T>&& set, bool hasNull) const {
+    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedSetHolder<T, OptionalKey>>(CurrentAllocState, &MemInfo, std::move(set), hasNull));
 }
 
-#define DEFINE_HASHED_SINGLE_FIXED_SET(xType) \
-    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedSetHolder<xType> \
-    (TValuesDictHashSingleFixedSet<xType>&& set) const;
+#define DEFINE_HASHED_SINGLE_FIXED_SET_OPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedSetHolder<xType, true> \
+    (TValuesDictHashSingleFixedSet<xType>&& set, bool hasNull) const;
 
-KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_SET)
-#undef DEFINE_HASHED_SINGLE_FIXED_SET
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_SET_OPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_SET_OPT
 
-template <typename T>
+#define DEFINE_HASHED_SINGLE_FIXED_SET_NONOPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedSetHolder<xType, false> \
+    (TValuesDictHashSingleFixedSet<xType>&& set, bool hasNull) const;
+
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_SET_NONOPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_SET_NONOPT
+
+template <typename T, bool OptionalKey>
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactSetHolder(
-    TValuesDictHashSingleFixedCompactSet<T>&& set) const {
-    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedCompactSetHolder<T>>(CurrentAllocState, &MemInfo, std::move(set)));
+    TValuesDictHashSingleFixedCompactSet<T>&& set, bool hasNull) const {
+    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedCompactSetHolder<T, OptionalKey>>(CurrentAllocState, &MemInfo, std::move(set), hasNull));
 }
 
-#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET(xType) \
-    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactSetHolder<xType> \
-    (TValuesDictHashSingleFixedCompactSet<xType>&& set) const;
+#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET_OPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactSetHolder<xType, true> \
+    (TValuesDictHashSingleFixedCompactSet<xType>&& set, bool hasNull) const;
 
-KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET)
-#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET_OPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET_OPT
 
-template <typename T>
+#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET_NONOPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactSetHolder<xType, false> \
+    (TValuesDictHashSingleFixedCompactSet<xType>&& set, bool hasNull) const;
+
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET_NONOPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_SET_NONOPT
+
+template <typename T, bool OptionalKey>
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedMapHolder(
-    TValuesDictHashSingleFixedMap<T>&& map) const {
-    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedMapHolder<T>>(CurrentAllocState, &MemInfo, std::move(map)));
+    TValuesDictHashSingleFixedMap<T>&& map, std::optional<NUdf::TUnboxedValue>&& nullPayload) const {
+    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedMapHolder<T, OptionalKey>>(CurrentAllocState, &MemInfo, std::move(map), std::move(nullPayload)));
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedCompactSetHolder(
@@ -3365,18 +3579,20 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedCompactMultiMapHolder(
     return NUdf::TUnboxedValuePod(AllocateOn<THashedCompactMultiMapHolder>(CurrentAllocState, &MemInfo, std::move(map), std::move(pool), keyType, payloadType, ctx));
 }
 
-template <typename T>
+template <typename T, bool OptionalKey>
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactMapHolder(
-    TValuesDictHashSingleFixedCompactMap<T>&& map, TPagedArena&& pool, TType* payloadType,
+    TValuesDictHashSingleFixedCompactMap<T>&& map, std::optional<ui64>&& nullPayload, TPagedArena&& pool, TType* payloadType,
     TComputationContext* ctx) const {
-    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedCompactMapHolder<T>>(CurrentAllocState, &MemInfo, std::move(map), std::move(pool), payloadType, ctx));
+    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedCompactMapHolder<T, OptionalKey>>(CurrentAllocState, &MemInfo,
+        std::move(map), std::move(nullPayload), std::move(pool), payloadType, ctx));
 }
 
-template <typename T>
+template <typename T, bool OptionalKey>
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactMultiMapHolder(
-    TValuesDictHashSingleFixedCompactMultiMap<T>&& map, TPagedArena&& pool, TType* payloadType,
+    TValuesDictHashSingleFixedCompactMultiMap<T>&& map, std::vector<ui64>&& nullPayloads, TPagedArena&& pool, TType* payloadType,
     TComputationContext* ctx) const {
-    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedCompactMultiMapHolder<T>>(CurrentAllocState, &MemInfo, std::move(map), std::move(pool), payloadType, ctx));
+    return NUdf::TUnboxedValuePod(AllocateOn<THashedSingleFixedCompactMultiMapHolder<T, OptionalKey>>(CurrentAllocState, &MemInfo,
+        std::move(map), std::move(nullPayloads), std::move(pool), payloadType, ctx));
 }
 
 NUdf::IDictValueBuilder::TPtr THolderFactory::NewDict(
@@ -3395,28 +3611,51 @@ NUdf::IDictValueBuilder::TPtr THolderFactory::NewDict(
         useIHash ? MakeCompareImpl(keyType) : nullptr);
 }
 
-#define DEFINE_HASHED_SINGLE_FIXED_MAP(xType) \
-    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedMapHolder<xType> \
-    (TValuesDictHashSingleFixedMap<xType>&& map) const;
+#define DEFINE_HASHED_SINGLE_FIXED_MAP_OPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedMapHolder<xType, true> \
+    (TValuesDictHashSingleFixedMap<xType>&& map, std::optional<NUdf::TUnboxedValue>&& nullPayload) const;
 
-KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_MAP)
-#undef DEFINE_HASHED_SINGLE_FIXED_MAP
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_MAP_OPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_MAP_OPT
 
-#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP(xType) \
-    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactMapHolder<xType> \
-    (TValuesDictHashSingleFixedCompactMap<xType>&& map, TPagedArena&& pool, TType* payloadType, \
+#define DEFINE_HASHED_SINGLE_FIXED_MAP_NONOPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedMapHolder<xType, false> \
+    (TValuesDictHashSingleFixedMap<xType>&& map, std::optional<NUdf::TUnboxedValue>&& nullPayload) const;
+
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_MAP_NONOPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_MAP_NONOPT
+
+#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP_OPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactMapHolder<xType, true> \
+    (TValuesDictHashSingleFixedCompactMap<xType>&& map, std::optional<ui64>&& nullPayload, TPagedArena&& pool, TType* payloadType, \
     TComputationContext* ctx) const;
 
-KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP)
-#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP_OPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP_OPT
 
-#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP(xType) \
-    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactMultiMapHolder<xType> \
-    (TValuesDictHashSingleFixedCompactMultiMap<xType>&& map, TPagedArena&& pool, TType* payloadType, \
+#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP_NONOPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactMapHolder<xType, false> \
+    (TValuesDictHashSingleFixedCompactMap<xType>&& map, std::optional<ui64>&& nullPayload, TPagedArena&& pool, TType* payloadType, \
     TComputationContext* ctx) const;
 
-KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP)
-#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP_NONOPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MAP_NONOPT
+
+#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_OPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactMultiMapHolder<xType, true> \
+    (TValuesDictHashSingleFixedCompactMultiMap<xType>&& map, std::vector<ui64>&& nullPayloads, TPagedArena&& pool, TType* payloadType, \
+    TComputationContext* ctx) const;
+
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_OPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_OPT
+
+#define DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_NONOPT(xType) \
+    template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedCompactMultiMapHolder<xType, false> \
+    (TValuesDictHashSingleFixedCompactMultiMap<xType>&& map, std::vector<ui64>&& nullPayloads, TPagedArena&& pool, TType* payloadType, \
+    TComputationContext* ctx) const;
+
+KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_NONOPT)
+#undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_NONOPT
 
 //////////////////////////////////////////////////////////////////////////////
 // TNodeFactory

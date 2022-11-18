@@ -5,10 +5,10 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
 #include <util/random/shuffle.h>
+#include <map>
+#include <optional>
 
-
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 static const TStringBuf data[] = {
     "13d49d4db08e57d645fe4d44bbed4738f386af6e9e742cf186961063feb9919b",
@@ -214,7 +214,336 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
         }
     }
 #endif
+    template <bool LLVM>
+    static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, bool withNull, bool withData) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        TType* keyType = pb.NewDataType(NUdf::EDataSlot::Int32, optionalKey);
+        TType* valueType = pb.NewDataType(NUdf::EDataSlot::Int32, false);
+        TType* tupleType = pb.NewTupleType({keyType, valueType});
+        TVector<TRuntimeNode> items;
+        TVector<TRuntimeNode> keys;
+        if (withNull) {
+            UNIT_ASSERT(optionalKey);
+            keys.push_back(pb.NewEmptyOptional(keyType));
+            for (size_t k = 0; k < 1 + multi; ++k) {
+                items.push_back(pb.NewTuple(tupleType, {keys.back(), pb.NewDataLiteral((i32)items.size())}));
+            }
+        }
+        if (withData) {
+            for (i32 i = 0; i < 2; ++i) {
+                auto key = pb.NewDataLiteral(i);
+                if (optionalKey) {
+                    key = pb.NewOptional(key);
+                }
+                keys.push_back(key);
+                for (size_t k = 0; k < 1 + multi; ++k) {
+                    items.push_back(pb.NewTuple(tupleType, {key, pb.NewDataLiteral((i32)items.size())}));
+                }
+            }
+        }
+        auto list = pb.NewList(tupleType, items);
+        auto keyList = pb.NewList(keyType, keys);
+        auto dict = pb.ToHashedDict(list, multi, [&](TRuntimeNode tuple) { return pb.Nth(tuple, 0); }, [&pb](TRuntimeNode tuple) { return pb.Nth(tuple, 1); }, compact);
+
+        auto compareLists = [&](bool itemIsTuple, TRuntimeNode list1, TRuntimeNode list2) {
+            return pb.And({
+                pb.Equals(
+                    pb.Length(list1),
+                    pb.Length(list2)
+                ),
+                pb.Not(
+                    pb.Exists(
+                        pb.Head(
+                            pb.SkipWhile(
+                                pb.Zip({list1, list2}),
+                                [&](TRuntimeNode pair) {
+                                    if (itemIsTuple) {
+                                        return pb.And({
+                                            pb.AggrEquals(pb.Nth(pb.Nth(pair, 0), 0), pb.Nth(pb.Nth(pair, 1), 0)),
+                                            pb.AggrEquals(pb.Nth(pb.Nth(pair, 0), 1), pb.Nth(pb.Nth(pair, 1), 1)),
+                                        });
+                                    } else {
+                                        return pb.AggrEquals(pb.Nth(pair, 0), pb.Nth(pair, 1));
+                                    }
+                                }
+                            )
+                        )
+                    )
+                )
+            });
+        };
+
+        TVector<TRuntimeNode> results;
+
+        // Check Dict has items
+        results.push_back(pb.AggrEquals(
+            pb.HasItems(dict),
+            pb.NewDataLiteral(withNull || withData)
+        ));
+
+        // Check Dict length
+        results.push_back(pb.AggrEquals(
+            pb.Length(dict),
+            pb.NewDataLiteral((ui64)keys.size())
+        ));
+
+        // Check Dict Contains
+        results.push_back(pb.AllOf(
+            pb.Map(list, [&](TRuntimeNode tuple) {
+                return pb.Contains(dict, pb.Nth(tuple, 0));
+            }),
+            [&](TRuntimeNode item) { return item; }
+        ));
+
+        // Check Dict Lookup
+        results.push_back(compareLists(false,
+            pb.Sort(
+                pb.FlatMap(
+                    pb.Map(
+                        keyList,
+                        [&](TRuntimeNode key) {
+                            return pb.Unwrap(pb.Lookup(dict, key), pb.NewDataLiteral<NUdf::EDataSlot::String>("Lookup failed"), "", 0, 0);
+                        }
+                    ),
+                    [&](TRuntimeNode item) {
+                        return multi ? item : pb.NewOptional(item);
+                    }
+                ),
+                pb.NewDataLiteral(true),
+                [&](TRuntimeNode item) { return item; }
+            ),
+            pb.Sort(
+                pb.Map(list, [&](TRuntimeNode tuple) {
+                    return pb.Nth(tuple, 1);
+                }),
+                pb.NewDataLiteral(true),
+                [&](TRuntimeNode item) { return item; }
+            )
+        ));
+
+        // Check Dict items iterator
+        results.push_back(compareLists(true,
+            pb.Sort(
+                pb.FlatMap(
+                    pb.DictItems(dict),
+                    [&](TRuntimeNode pair) {
+                        if (multi) {
+                            return pb.Map(
+                                pb.Nth(pair, 1),
+                                [&](TRuntimeNode p) {
+                                    return pb.NewTuple({pb.Nth(pair, 0), p});
+                                }
+                            );
+                        } else {
+                            return pb.NewOptional(pair);
+                        }
+                    }
+                ),
+                pb.NewTuple({pb.NewDataLiteral(true), pb.NewDataLiteral(true)}),
+                [&](TRuntimeNode item) { return item; }
+            ),
+            list
+        ));
+
+        // Check Dict payloads iterator
+        results.push_back(compareLists(false,
+            pb.Sort(
+                pb.FlatMap(
+                    pb.DictPayloads(dict),
+                    [&](TRuntimeNode item) {
+                        return multi ? item : pb.NewOptional(item);
+                    }
+                ),
+                pb.NewDataLiteral(true),
+                [&](TRuntimeNode item) { return item; }
+            ),
+            pb.Map(
+                list,
+                [&](TRuntimeNode item) {
+                    return pb.Nth(item, 1);
+                }
+            )
+        ));
+
+        auto graph = setup.BuildGraph(pb.NewTuple(results));
+        NUdf::TUnboxedValue res = graph->GetValue();
+
+        UNIT_ASSERT_C(res.GetElement(0).Get<bool>(), "Dict HasItems fail");
+        UNIT_ASSERT_C(res.GetElement(1).Get<bool>(), "Dict Length fail");
+        UNIT_ASSERT_C(res.GetElement(2).Get<bool>(), "Dict Contains fail");
+        UNIT_ASSERT_C(res.GetElement(3).Get<bool>(), "Dict Lookup fail");
+        UNIT_ASSERT_C(res.GetElement(4).Get<bool>(), "DictItems fail");
+        UNIT_ASSERT_C(res.GetElement(5).Get<bool>(), "DictPayloads fail");
+    }
+
+    Y_UNIT_TEST_LLVM(TestDictWithDataKey) {
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*multi*/false, /*compact*/false, /*withNull*/false, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*multi*/false, /*compact*/false, /*withNull*/false, /*withData*/false); // empty dict
+    }
+
+    Y_UNIT_TEST_LLVM(TestDictCompactWithDataKey) {
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*multi*/false, /*compact*/true, /*withNull*/false, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*multi*/false, /*compact*/true, /*withNull*/false, /*withData*/false); // empty dict
+    }
+
+    Y_UNIT_TEST_LLVM(TestDictMultiWithDataKey) {
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*multi*/true, /*compact*/false, /*withNull*/false, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*multi*/true, /*compact*/false, /*withNull*/false, /*withData*/false); // empty dict
+    }
+
+    Y_UNIT_TEST_LLVM(TestDictCompactMultiWithDataKey) {
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*multi*/true, /*compact*/true, /*withNull*/false, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*multi*/true, /*compact*/true, /*withNull*/false, /*withData*/false); // empty dict
+    }
+
+    Y_UNIT_TEST_LLVM(TestDictWithOptionalDataKey) {
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/false, /*compact*/false, /*withNull*/false, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/false, /*compact*/false, /*withNull*/true, /*withData*/false);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/false, /*compact*/false, /*withNull*/true, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/false, /*compact*/false, /*withNull*/false, /*withData*/false); // empty dict
+    }
+
+    Y_UNIT_TEST_LLVM(TestDictCompactWithOptionalDataKey) {
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/false, /*compact*/true, /*withNull*/false, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/false, /*compact*/true, /*withNull*/true, /*withData*/false);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/false, /*compact*/true, /*withNull*/true, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/false, /*compact*/true, /*withNull*/false, /*withData*/false); // empty dict
+    }
+
+    Y_UNIT_TEST_LLVM(TestDictMultiWithOptionalDataKey) {
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/true, /*compact*/false, /*withNull*/false, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/true, /*compact*/false, /*withNull*/true, /*withData*/false);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/true, /*compact*/false, /*withNull*/true, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/true, /*compact*/false, /*withNull*/false, /*withData*/false); // empty dict
+    }
+
+    Y_UNIT_TEST_LLVM(TestDictCompactMultiWithOptionalDataKey) {
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/true, /*compact*/true, /*withNull*/false, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/true, /*compact*/true, /*withNull*/true, /*withData*/false);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/true, /*compact*/true, /*withNull*/true, /*withData*/true);
+        TestDictWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*multi*/true, /*compact*/true, /*withNull*/false, /*withData*/false); // empty dict
+    }
+
+    template <bool LLVM>
+    static void TestSetWithDataKeyImpl(bool optionalKey, bool compact, bool withNull, bool withData) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        TType* keyType = pb.NewDataType(NUdf::EDataSlot::Int32, optionalKey);
+        TVector<TRuntimeNode> keys;
+        if (withNull) {
+            UNIT_ASSERT(optionalKey);
+            keys.push_back(pb.NewEmptyOptional(keyType));
+        }
+        if (withData) {
+            for (i32 i = 0; i < 2; ++i) {
+                auto key = pb.NewDataLiteral(i);
+                if (optionalKey) {
+                    key = pb.NewOptional(key);
+                }
+                keys.push_back(key);
+            }
+        }
+        auto keyList = pb.NewList(keyType, keys);
+        auto set = pb.ToHashedDict(keyList, false, [&](TRuntimeNode key) { return key; }, [&pb](TRuntimeNode) { return pb.NewVoid(); }, compact);
+
+        auto compareLists = [&](TRuntimeNode list1, TRuntimeNode list2) {
+            return pb.And({
+                pb.Equals(
+                    pb.Length(list1),
+                    pb.Length(list2)
+                ),
+                pb.Not(
+                    pb.Exists(
+                        pb.Head(
+                            pb.SkipWhile(
+                                pb.Zip({list1, list2}),
+                                [&](TRuntimeNode pair) {
+                                    return pb.AggrEquals(pb.Nth(pair, 0), pb.Nth(pair, 1));
+                                }
+                            )
+                        )
+                    )
+                )
+            });
+        };
+
+        TVector<TRuntimeNode> results;
+
+        // Check Set has items
+        results.push_back(pb.AggrEquals(
+            pb.HasItems(set),
+            pb.NewDataLiteral(withNull || withData)
+        ));
+
+        // Check Set length
+        results.push_back(pb.AggrEquals(
+            pb.Length(set),
+            pb.NewDataLiteral((ui64)keys.size())
+        ));
+
+        // Check Set Contains
+        results.push_back(pb.AllOf(
+            pb.Map(keyList, [&](TRuntimeNode key) {
+                return pb.Contains(set, key);
+            }),
+            [&](TRuntimeNode item) { return item; }
+        ));
+
+        // Check Set Lookup
+        results.push_back(pb.AllOf(
+            pb.Map(keyList, [&](TRuntimeNode key) {
+                return pb.Exists(pb.Lookup(set, key));
+            }),
+            [&](TRuntimeNode item) { return item; }
+        ));
+
+        // Check Set items iterator
+        results.push_back(compareLists(
+            pb.Sort(
+                pb.DictKeys(set),
+                pb.NewDataLiteral(true),
+                [&](TRuntimeNode item) { return item; }
+            ),
+            keyList
+        ));
+
+        auto graph = setup.BuildGraph(pb.NewTuple(results));
+        NUdf::TUnboxedValue res = graph->GetValue();
+
+        UNIT_ASSERT_C(res.GetElement(0).Get<bool>(), "Set HasItems fail");
+        UNIT_ASSERT_C(res.GetElement(1).Get<bool>(), "Set Length fail");
+        UNIT_ASSERT_C(res.GetElement(2).Get<bool>(), "Set Contains fail");
+        UNIT_ASSERT_C(res.GetElement(3).Get<bool>(), "Set Lookup fail");
+        UNIT_ASSERT_C(res.GetElement(4).Get<bool>(), "Set DictKeys fail");
+    }
+
+    Y_UNIT_TEST_LLVM(TestSetWithDataKey) {
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*compact*/false, /*withNull*/false, /*withData*/true);
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*compact*/false, /*withNull*/false, /*withData*/false); // empty set
+    }
+
+    Y_UNIT_TEST_LLVM(TestSetCompactWithDataKey) {
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*compact*/true, /*withNull*/false, /*withData*/true);
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/false, /*compact*/true, /*withNull*/false, /*withData*/false); // empty set
+    }
+
+    Y_UNIT_TEST_LLVM(TestSetWithOptionalDataKey) {
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*compact*/false, /*withNull*/false, /*withData*/true);
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*compact*/false, /*withNull*/true, /*withData*/false);
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*compact*/false, /*withNull*/true, /*withData*/true);
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*compact*/false, /*withNull*/false, /*withData*/false); // empty set
+    }
+
+    Y_UNIT_TEST_LLVM(TestSetCompactWithOptionalDataKey) {
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*compact*/true, /*withNull*/false, /*withData*/true);
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*compact*/true, /*withNull*/true, /*withData*/false);
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*compact*/true, /*withNull*/true, /*withData*/true);
+        TestSetWithDataKeyImpl<LLVM>(/*optionalKey*/true, /*compact*/true, /*withNull*/false, /*withData*/false); // empty set
+    }
 }
 
-}
-}
+
+} // namespace

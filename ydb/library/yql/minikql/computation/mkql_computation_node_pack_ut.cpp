@@ -261,7 +261,7 @@ protected:
         map[4] = NUdf::TUnboxedValuePod::Embedded("4");
         map[10] = NUdf::TUnboxedValuePod::Embedded("10");
         map[1] = NUdf::TUnboxedValuePod::Embedded("1");
-        const NUdf::TUnboxedValue value = HolderFactory.CreateDirectHashedSingleFixedMapHolder<ui32>(std::move(map));
+        const NUdf::TUnboxedValue value = HolderFactory.CreateDirectHashedSingleFixedMapHolder<ui32, false>(std::move(map), std::nullopt);
 
         const auto uValue = TestPackUnpack(dictType, value, "Type:Dict");
 

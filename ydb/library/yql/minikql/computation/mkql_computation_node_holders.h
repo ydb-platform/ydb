@@ -18,6 +18,8 @@
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <optional>
+#include <vector>
 
 #ifndef MKQL_DISABLE_CODEGEN
 namespace llvm {
@@ -460,14 +462,14 @@ public:
         NUdf::IHash::TPtr hash,
         NUdf::IEquate::TPtr equate) const;
 
-    template <typename T>
-    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedSetHolder(TValuesDictHashSingleFixedSet<T>&& set) const;
+    template <typename T, bool OptionalKey>
+    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedSetHolder(TValuesDictHashSingleFixedSet<T>&& set, bool hasNull) const;
 
-    template <typename T>
-    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedCompactSetHolder(TValuesDictHashSingleFixedCompactSet<T>&& set) const;
+    template <typename T, bool OptionalKey>
+    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedCompactSetHolder(TValuesDictHashSingleFixedCompactSet<T>&& set, bool hasNull) const;
 
-    template <typename T>
-    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedMapHolder(TValuesDictHashSingleFixedMap<T>&& map) const;
+    template <typename T, bool OptionalKey>
+    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedMapHolder(TValuesDictHashSingleFixedMap<T>&& map, std::optional<NUdf::TUnboxedValue>&& nullPayload) const;
 
     NUdf::TUnboxedValuePod CreateDirectHashedCompactSetHolder(
         TValuesDictHashCompactSet&& set, TPagedArena&& pool, TType* keyType,
@@ -481,14 +483,14 @@ public:
         TValuesDictHashCompactMultiMap&& map, TPagedArena&& pool, TType* keyType, TType* payloadType,
         TComputationContext* ctx) const;
 
-    template <typename T>
+    template <typename T, bool OptionalKey>
     NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedCompactMapHolder(
-        TValuesDictHashSingleFixedCompactMap<T>&& map, TPagedArena&& pool, TType* payloadType,
+        TValuesDictHashSingleFixedCompactMap<T>&& map, std::optional<ui64>&& nullPayload, TPagedArena&& pool, TType* payloadType,
         TComputationContext* ctx) const;
 
-    template <typename T>
+    template <typename T, bool OptionalKey>
     NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedCompactMultiMapHolder(
-        TValuesDictHashSingleFixedCompactMultiMap<T>&& map, TPagedArena&& pool, TType* payloadType,
+        TValuesDictHashSingleFixedCompactMultiMap<T>&& map, std::vector<ui64>&& nullPayloads, TPagedArena&& pool, TType* payloadType,
         TComputationContext* ctx) const;
 
     NUdf::IDictValueBuilder::TPtr NewDict(

@@ -13,6 +13,8 @@
 
 #include <algorithm>
 #include <unordered_map>
+#include <optional>
+#include <vector>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -137,7 +139,7 @@ public:
     }
 };
 
-template<typename T>
+template<typename T, bool OptionalKey>
 class THashedSingleFixedMultiMapAccumulator {
     using TMapType = std::unordered_map<
         T,
@@ -149,6 +151,7 @@ class THashedSingleFixedMultiMapAccumulator {
     TComputationContext& Ctx;
     const TKeyTypes& KeyTypes;
     TMapType Map;
+    TUnboxedValueVector NullPayloads;
 
 public:
     THashedSingleFixedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
@@ -167,6 +170,12 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
     {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                NullPayloads.emplace_back(std::move(payload));
+                return;
+            }
+        }
         const auto ins = Map.emplace(key.Get<T>(), 1U);
         if (ins.second)
             ins.first->second.front() = std::move(payload);
@@ -179,11 +188,10 @@ public:
         const auto filler = [this](TValuesDictHashMap& targetMap) {
             targetMap.reserve(Map.size());
 
+            auto itemFactory = [](const NUdf::TUnboxedValuePod& value) {
+                return value;
+            };
             for (auto& pair : Map) {
-                auto itemFactory = [](const NUdf::TUnboxedValuePod& value) {
-                    return value;
-                };
-
                 ui64 start = 0;
                 ui64 finish = pair.second.size();
                 auto payloadList = CreateOwningVectorListAdapter(std::move(pair.second), itemFactory,
@@ -192,18 +200,28 @@ public:
 
                 targetMap.emplace(NUdf::TUnboxedValuePod(pair.first), std::move(payloadList));
             }
+            if constexpr (OptionalKey) {
+                if (!NullPayloads.empty()) {
+                    auto payloadList = CreateOwningVectorListAdapter(std::move(NullPayloads), itemFactory,
+                        /*start*/ 0, /*finish*/ NullPayloads.size(), /*reversed*/ false,
+                        Ctx.HolderFactory.GetMemInfo());
+
+                    targetMap.emplace(NUdf::TUnboxedValuePod(), std::move(payloadList));
+                }
+            }
         };
 
         return Ctx.HolderFactory.CreateDirectHashedDictHolder(filler, KeyTypes, false, true, nullptr, nullptr, nullptr);
     }
 };
 
-template<typename T>
+template<typename T, bool OptionalKey>
 class THashedSingleFixedMapAccumulator {
     using TMapType = TValuesDictHashSingleFixedMap<T>;
 
     TComputationContext& Ctx;
     TMapType Map;
+    std::optional<NUdf::TUnboxedValue> NullPayload;
 
 public:
     THashedSingleFixedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
@@ -223,12 +241,18 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
     {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                NullPayload.emplace(std::move(payload));
+                return;
+            }
+        }
         Map.emplace(key.Get<T>(), std::move(payload));
     }
 
     NUdf::TUnboxedValue Build()
     {
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedMapHolder<T>(std::move(Map));
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedMapHolder<T, OptionalKey>(std::move(Map), std::move(NullPayload));
     }
 };
 
@@ -277,12 +301,13 @@ public:
     }
 };
 
-template <typename T>
+template <typename T, bool OptionalKey>
 class THashedSingleFixedSetAccumulator {
     using TSetType = TValuesDictHashSingleFixedSet<T>;
 
     TComputationContext& Ctx;
     TSetType Set;
+    bool HasNull = false;
 
 public:
     THashedSingleFixedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
@@ -301,22 +326,29 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key)
     {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                HasNull = true;
+                return;
+            }
+        }
         Set.emplace(key.Get<T>());
     }
 
     NUdf::TUnboxedValue Build()
     {
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedSetHolder<T>(std::move(Set));
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedSetHolder<T, OptionalKey>(std::move(Set), HasNull);
     }
 };
 
-template <typename T>
+template <typename T, bool OptionalKey>
 class THashedSingleFixedCompactSetAccumulator {
     using TSetType = TValuesDictHashSingleFixedCompactSet<T>;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
     TSetType Set;
+    bool HasNull = false;
 
 public:
     THashedSingleFixedCompactSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
@@ -335,12 +367,18 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key)
     {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                HasNull = true;
+                return;
+            }
+        }
         Set.Insert(key.Get<T>());
     }
 
     NUdf::TUnboxedValue Build()
     {
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactSetHolder<T>(std::move(Set));
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactSetHolder<T, OptionalKey>(std::move(Set), HasNull);
     }
 };
 
@@ -454,17 +492,18 @@ public:
     }
 };
 
-template <typename T, bool Multi>
+template <typename T, bool OptionalKey, bool Multi>
 class THashedSingleFixedCompactMapAccumulator;
 
-template <typename T>
-class THashedSingleFixedCompactMapAccumulator<T, false> {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedCompactMapAccumulator<T, OptionalKey, false> {
     using TMapType = TValuesDictHashSingleFixedCompactMap<T>;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
     TMapType Map;
-    TType *PayloadType;
+    std::optional<ui64> NullPayload;
+    TType* PayloadType;
     TValuePacker PayloadPacker;
 
 public:
@@ -485,23 +524,30 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
     {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                NullPayload = AddSmallValue(Pool, PayloadPacker.Pack(payload));
+                return;
+            }
+        }
         Map.InsertNew(key.Get<T>(), AddSmallValue(Pool, PayloadPacker.Pack(payload)));
     }
 
     NUdf::TUnboxedValue Build()
     {
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMapHolder(std::move(Map), std::move(Pool), PayloadType, &Ctx);
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMapHolder<T, OptionalKey>(std::move(Map), std::move(NullPayload), std::move(Pool), PayloadType, &Ctx);
     }
 };
 
-template <typename T>
-class THashedSingleFixedCompactMapAccumulator<T, true> {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedCompactMapAccumulator<T, OptionalKey, true> {
     using TMapType = TValuesDictHashSingleFixedCompactMultiMap<T>;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
     TMapType Map;
-    TType *PayloadType;
+    std::vector<ui64> NullPayloads;
+    TType* PayloadType;
     TValuePacker PayloadPacker;
 
 public:
@@ -522,12 +568,18 @@ public:
 
     void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
     {
+        if constexpr (OptionalKey) {
+            if (!key) {
+                NullPayloads.push_back(AddSmallValue(Pool, PayloadPacker.Pack(payload)));
+                return;
+            }
+        }
         Map.Insert(key.Get<T>(), AddSmallValue(Pool, PayloadPacker.Pack(payload)));
     }
 
     NUdf::TUnboxedValue Build()
     {
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMultiMapHolder(std::move(Map), std::move(Pool), PayloadType, &Ctx);
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMultiMapHolder<T, OptionalKey>(std::move(Map), std::move(NullPayloads), std::move(Pool), PayloadType, &Ctx);
     }
 };
 
@@ -1881,15 +1933,23 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
     const bool isCompact = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>();
     const auto payloadSelectorNode = callable.GetInput(callable.GetInputsCount() - 4U);
 
+    const bool isOptional = keyType->IsOptional();
+    const auto unwrappedKeyType = isOptional ? AS_TYPE(TOptionalType, keyType)->GetItemType() : keyType;
+
     if (!multi && payloadType->IsVoid()) {
         if (isCompact) {
-            if (keyType->IsData()) {
+            if (unwrappedKeyType->IsData()) {
 #define USE_HASHED_SINGLE_FIXED_COMPACT_SET(xType, xLayoutType) \
                 case NUdf::TDataType<xType>::Id: \
-                    return WrapToSet< \
-                        THashedSingleFixedCompactSetAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables);
+                    if (isOptional) { \
+                        return WrapToSet< \
+                            THashedSingleFixedCompactSetAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                    } else { \
+                        return WrapToSet< \
+                            THashedSingleFixedCompactSetAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                    }
 
-                switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
+                switch (AS_TYPE(TDataType, unwrappedKeyType)->GetSchemeType()) {
                     KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_COMPACT_SET)
                 }
 #undef USE_HASHED_SINGLE_FIXED_COMPACT_SET
@@ -1898,13 +1958,18 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
             return WrapToSet<THashedCompactSetAccumulator>(callable, ctx.NodeLocator, ctx.Mutables);
         }
 
-        if (keyType->IsData()) {
+        if (unwrappedKeyType->IsData()) {
 #define USE_HASHED_SINGLE_FIXED_SET(xType, xLayoutType) \
             case NUdf::TDataType<xType>::Id: \
-                return WrapToSet< \
-                    THashedSingleFixedSetAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables);
+                if (isOptional) { \
+                    return WrapToSet< \
+                        THashedSingleFixedSetAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
+               } else { \
+                   return WrapToSet< \
+                       THashedSingleFixedSetAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+               }
 
-            switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
+            switch (AS_TYPE(TDataType, unwrappedKeyType)->GetSchemeType()) {
                 KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_SET)
             }
 #undef USE_HASHED_SINGLE_FIXED_SET
@@ -1913,18 +1978,28 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
     }
 
     if (isCompact) {
-        if (keyType->IsData()) {
+        if (unwrappedKeyType->IsData()) {
 #define USE_HASHED_SINGLE_FIXED_COMPACT_MAP(xType, xLayoutType) \
                 case NUdf::TDataType<xType>::Id: \
                     if (multi) { \
-                        return WrapToMap< \
-                            THashedSingleFixedCompactMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                        if (isOptional) { \
+                            return WrapToMap< \
+                                THashedSingleFixedCompactMapAccumulator<xLayoutType, true, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                        } else { \
+                            return WrapToMap< \
+                                THashedSingleFixedCompactMapAccumulator<xLayoutType, false, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                        } \
                     } else { \
-                        return WrapToMap< \
-                            THashedSingleFixedCompactMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                        if (isOptional) { \
+                            return WrapToMap< \
+                                THashedSingleFixedCompactMapAccumulator<xLayoutType, true, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                        } else { \
+                            return WrapToMap< \
+                                THashedSingleFixedCompactMapAccumulator<xLayoutType, false, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                        } \
                     }
 
-            switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
+            switch (AS_TYPE(TDataType, unwrappedKeyType)->GetSchemeType()) {
                 KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_COMPACT_MAP)
             }
 #undef USE_HASHED_SINGLE_FIXED_COMPACT_MAP
@@ -1937,18 +2012,28 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
         }
     }
 
-    if (keyType->IsData()) {
+    if (unwrappedKeyType->IsData()) {
 #define USE_HASHED_SINGLE_FIXED_MAP(xType, xLayoutType) \
             case NUdf::TDataType<xType>::Id: \
                 if (multi) { \
-                    return WrapToMap< \
-                        THashedSingleFixedMultiMapAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                    if (isOptional) { \
+                        return WrapToMap< \
+                            THashedSingleFixedMultiMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                    } else { \
+                        return WrapToMap< \
+                            THashedSingleFixedMultiMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                    } \
                 } else { \
-                    return WrapToMap< \
-                        THashedSingleFixedMapAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                    if (isOptional) { \
+                        return WrapToMap< \
+                            THashedSingleFixedMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                    } else { \
+                        return WrapToMap< \
+                            THashedSingleFixedMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+                    } \
                 }
 
-        switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
+        switch (AS_TYPE(TDataType, unwrappedKeyType)->GetSchemeType()) {
             KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_MAP)
         }
 #undef USE_HASHED_SINGLE_FIXED_MAP

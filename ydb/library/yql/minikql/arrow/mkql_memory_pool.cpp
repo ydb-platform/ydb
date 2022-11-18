@@ -6,28 +6,44 @@ namespace {
 class TArrowMemoryPool : public arrow::MemoryPool {
 public:
     explicit TArrowMemoryPool(TAllocState& allocState)
-        : AllocState(allocState) {
+        : ArrowMemoryUsage(allocState.ArrowMemoryUsage) {
     }
 
     arrow::Status Allocate(int64_t size, uint8_t** out) override {
-        *out = static_cast<uint8_t*>(MKQLAllocWithSize(size));
+        *out = static_cast<uint8_t*>(malloc(size));
+        if (auto p = ArrowMemoryUsage.lock()) {
+            *p += size;
+        }
+
         return arrow::Status();
     }
 
     arrow::Status Reallocate(int64_t oldSize, int64_t newSize, uint8_t** ptr) override {
-        void* newPtr = MKQLAllocWithSize(newSize);
+        void* newPtr = malloc(newSize);
         ::memcpy(newPtr, *ptr, std::min(oldSize, newSize));
-        MKQLFreeWithSize(*ptr, oldSize);
+        free(*ptr);
         *ptr = static_cast<uint8_t*>(newPtr);
+        if (auto p = ArrowMemoryUsage.lock()) {
+            *p -= oldSize;
+            *p += newSize;
+        }
+
         return arrow::Status();
     }
 
     void Free(uint8_t* buffer, int64_t size) override {
-        MKQLFreeWithSize(buffer, size);
+        free(buffer);
+        if (auto p = ArrowMemoryUsage.lock()) {
+            *p -= size;
+        }
     }
 
     int64_t bytes_allocated() const override {
-        return AllocState.GetUsed();
+        if (auto p = ArrowMemoryUsage.lock()) {
+            return *p;
+        }
+
+        return 0;
     }
 
     int64_t max_memory() const override {
@@ -39,7 +55,7 @@ public:
     }
 
 private:
-    TAllocState& AllocState;
+    std::weak_ptr<std::atomic<size_t>> ArrowMemoryUsage;
 };
 }
 

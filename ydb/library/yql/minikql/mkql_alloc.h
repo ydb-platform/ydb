@@ -10,6 +10,8 @@
 #include <util/system/tls.h>
 #include <new>
 #include <unordered_map>
+#include <atomic>
+#include <memory>
 
 namespace NKikimr {
 
@@ -59,6 +61,7 @@ struct TAllocState : public TAlignedPagePool
     TListEntry OffloadedBlocksRoot;
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
+    std::shared_ptr<std::atomic<size_t>> ArrowMemoryUsage = std::make_shared<std::atomic<size_t>>();
     void* MainContext = nullptr;
     void* CurrentContext = nullptr;
 

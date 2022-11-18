@@ -88,7 +88,7 @@ namespace NActors {
     }
 
     template <class T>
-    inline TString SafeTypeName(T* t) {
+    inline TString SafeTypeName(const T* t) {
         if (t == nullptr) {
             return "nullptr";
         }
@@ -99,11 +99,7 @@ namespace NActors {
         }
     }
 
-    inline TString ActorTypeName(const IActor* actor, ui32 activityType) {
-        return actor ? SafeTypeName(actor) : ("activityType_" + ToString(activityType) + " (destroyed)");
-    }
-
-    inline void LwTraceSlowDelivery(IEventHandle* ev, const IActor* actor, ui32 poolId, const TActorId& currentRecipient,
+    inline void LwTraceSlowDelivery(IEventHandle* ev, const std::type_info* actorType, ui32 poolId, const TActorId& currentRecipient,
                                     double delivMs, double sinceActivationMs, ui32 eventsExecutedBefore) {
         const auto baseEv = (ev && ev->HasEvent()) ? ev->GetBase() : nullptr;
         LWPROBE(EventSlowDelivery,
@@ -113,10 +109,10 @@ namespace NActors {
                 eventsExecutedBefore,
                 baseEv ? SafeTypeName(baseEv) : (ev ? ToString(ev->Type) : TString("nullptr")),
                 currentRecipient.ToString(),
-                SafeTypeName(actor));
+                SafeTypeName(actorType));
     }
 
-    inline void LwTraceSlowEvent(IEventHandle* ev, ui32 evTypeForTracing, const IActor* actor, ui32 poolId, ui32 activityType,
+    inline void LwTraceSlowEvent(IEventHandle* ev, ui32 evTypeForTracing, const std::type_info* actorType, ui32 poolId,
                                  const TActorId& currentRecipient, double eventMs) {
         // Event could have been destroyed by actor->Receive();
         const auto baseEv = (ev && ev->HasEvent()) ? ev->GetBase() : nullptr;
@@ -125,7 +121,7 @@ namespace NActors {
                 eventMs,
                 baseEv ? SafeTypeName(baseEv) : ToString(evTypeForTracing),
                 currentRecipient.ToString(),
-                ActorTypeName(actor, activityType));
+                SafeTypeName(actorType));
     }
 
     template <typename TMailbox>
@@ -138,6 +134,7 @@ namespace NActors {
         NHPTimer::STime hpprev = hpstart;
 
         IActor* actor = nullptr;
+        const std::type_info* actorType = nullptr;
         ui32 prevActivityType = std::numeric_limits<ui32>::max();
         TActorId recipient;
         for (ui32 executed = 0; executed < Ctx.EventsPerMailbox; ++executed) {
@@ -148,6 +145,9 @@ namespace NActors {
                 if (actor = mailbox->FindActor(recipient.LocalId())) {
                     TActorContext ctx(*mailbox, *this, hpprev, recipient);
                     TlsActivationContext = &ctx;
+
+                    // Since actor is not null there should be no exceptions
+                    actorType = &typeid(*actor);
 
 #ifdef USE_ACTOR_CALLSTACK
                     TCallstack::GetTlsCallstack() = ev->Callstack;
@@ -166,7 +166,7 @@ namespace NActors {
                     i64 usecDeliv = Ctx.AddEventDeliveryStats(ev->SendTime, hpprev);
                     if (usecDeliv > 5000) {
                         double sinceActivationMs = NHPTimer::GetSeconds(hpprev - hpstart) * 1000.0;
-                        LwTraceSlowDelivery(ev.Get(), actor, Ctx.PoolId, CurrentRecipient, NHPTimer::GetSeconds(hpprev - ev->SendTime) * 1000.0, sinceActivationMs, executed);
+                        LwTraceSlowDelivery(ev.Get(), actorType, Ctx.PoolId, CurrentRecipient, NHPTimer::GetSeconds(hpprev - ev->SendTime) * 1000.0, sinceActivationMs, executed);
                     }
 
                     ui32 evTypeForTracing = ev->Type;
@@ -192,7 +192,7 @@ namespace NActors {
                     hpnow = GetCycleCountFast();
                     NHPTimer::STime elapsed = Ctx.AddEventProcessingStats(hpprev, hpnow, activityType, CurrentActorScheduledEventsCounter);
                     if (elapsed > 1000000) {
-                        LwTraceSlowEvent(ev.Get(), evTypeForTracing, actor, Ctx.PoolId, activityType, CurrentRecipient, NHPTimer::GetSeconds(elapsed) * 1000.0);
+                        LwTraceSlowEvent(ev.Get(), evTypeForTracing, actorType, Ctx.PoolId, CurrentRecipient, NHPTimer::GetSeconds(elapsed) * 1000.0);
                     }
 
                     // The actor might have been destroyed
@@ -201,6 +201,8 @@ namespace NActors {
 
                     CurrentRecipient = TActorId();
                 } else {
+                    actorType = nullptr;
+
                     TAutoPtr<IEventHandle> nonDelivered = ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown);
                     if (nonDelivered.Get()) {
                         ActorSystem->Send(nonDelivered);
@@ -224,7 +226,7 @@ namespace NActors {
                             CyclesToDuration(hpnow - hpstart),
                             Ctx.WorkerId,
                             recipient.ToString(),
-                            SafeTypeName(actor));
+                            SafeTypeName(actorType));
                     break;
                 }
 
@@ -240,7 +242,7 @@ namespace NActors {
                             CyclesToDuration(hpnow - hpstart),
                             Ctx.WorkerId,
                             recipient.ToString(),
-                            SafeTypeName(actor));
+                            SafeTypeName(actorType));
                     break;
                 }
 
@@ -255,7 +257,7 @@ namespace NActors {
                             CyclesToDuration(hpnow - hpstart),
                             Ctx.WorkerId,
                             recipient.ToString(),
-                            SafeTypeName(actor));
+                            SafeTypeName(actorType));
                     break;
                 }
             } else {

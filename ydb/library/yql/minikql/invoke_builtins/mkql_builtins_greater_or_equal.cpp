@@ -148,6 +148,14 @@ struct TGreaterOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TGreater
 #endif
 };
 
+template<typename TLeft, typename TRight, typename TOutput>
+struct TGreaterOrEqualOp;
+
+template<typename TLeft, typename TRight>
+struct TGreaterOrEqualOp<TLeft, TRight, bool> : public TGreaterOrEqual<TLeft, TRight, false> {
+    static constexpr bool DefaultNulls = true;
+};
+
 template<typename TLeft, typename TRight, bool Aggr>
 struct TDiffDateGreaterOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateGreaterOrEqual<TLeft, TRight, Aggr>>, public TAggrGreaterOrEqual {
     static bool Do(TLeft left, TRight right)
@@ -271,6 +279,10 @@ void RegisterGreaterOrEqual(IBuiltinFunctionRegistry& registry) {
 
     RegisterAggrCompareStrings<TCustomGreaterOrEqual, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrGreaterOrEqual, TCompareArgsOpt>(registry, aggrName);
+}
+
+void RegisterGreaterOrEqual(arrow::compute::FunctionRegistry& registry) {
+    AddFunction(registry, std::make_shared<TBinaryNumericPredicate<TGreaterOrEqualOp>>("GreaterOrEqual"));
 }
 
 } // namespace NMiniKQL

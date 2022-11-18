@@ -148,6 +148,14 @@ struct TLess : public TCompareArithmeticBinary<TLeft, TRight, TLess<TLeft, TRigh
 #endif
 };
 
+template<typename TLeft, typename TRight, typename TOutput>
+struct TLessOp;
+
+template<typename TLeft, typename TRight>
+struct TLessOp<TLeft, TRight, bool> : public TLess<TLeft, TRight, false> {
+    static constexpr bool DefaultNulls = true;
+};
+
 template<typename TLeft, typename TRight, bool Aggr>
 struct TDiffDateLess : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateLess<TLeft, TRight, Aggr>>, public TAggrLess {
     static bool Do(TLeft left, TRight right)
@@ -271,6 +279,10 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
 
     RegisterAggrCompareStrings<TCustomLess, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrLess, TCompareArgsOpt>(registry, aggrName);
+}
+
+void RegisterLess(arrow::compute::FunctionRegistry& registry) {
+    AddFunction(registry, std::make_shared<TBinaryNumericPredicate<TLessOp>>("Less"));
 }
 
 } // namespace NMiniKQL

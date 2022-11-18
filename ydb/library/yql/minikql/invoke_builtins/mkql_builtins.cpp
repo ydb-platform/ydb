@@ -56,11 +56,17 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, arrow::comput
     RegisterAggrMax(registry);
     RegisterAggrMin(registry);
     RegisterEquals(registry);
+    RegisterEquals(arrowRegistry);
     RegisterNotEquals(registry);
+    RegisterNotEquals(arrowRegistry);
     RegisterLess(registry);
+    RegisterLess(arrowRegistry);
     RegisterLessOrEqual(registry);
+    RegisterLessOrEqual(arrowRegistry);
     RegisterGreater(registry);
+    RegisterGreater(arrowRegistry);
     RegisterGreaterOrEqual(registry);
+    RegisterGreaterOrEqual(arrowRegistry);
 }
 
 void PrintType(NUdf::TDataTypeId schemeType, bool isOptional, IOutputStream& out)

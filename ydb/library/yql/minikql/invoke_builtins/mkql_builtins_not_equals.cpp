@@ -155,6 +155,14 @@ struct TNotEquals : public TCompareArithmeticBinary<TLeft, TRight, TNotEquals<TL
 #endif
 };
 
+template<typename TLeft, typename TRight, typename TOutput>
+struct TNotEqualsOp;
+
+template<typename TLeft, typename TRight>
+struct TNotEqualsOp<TLeft, TRight, bool> : public TNotEquals<TLeft, TRight, false> {
+    static constexpr bool DefaultNulls = true;
+};
+
 template<typename TLeft, typename TRight, bool Aggr>
 struct TDiffDateNotEquals : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateNotEquals<TLeft, TRight, Aggr>>, public TAggrNotEquals {
     static bool Do(TLeft left, TRight right)
@@ -275,6 +283,11 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareStrings<TCustomNotEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrNotEquals, TCompareArgsOpt>(registry, aggrName);
 }
+
+void RegisterNotEquals(arrow::compute::FunctionRegistry& registry) {
+    AddFunction(registry, std::make_shared<TBinaryNumericPredicate<TNotEqualsOp>>("NotEquals"));
+}
+
 
 } // namespace NMiniKQL
 } // namespace NKikimr

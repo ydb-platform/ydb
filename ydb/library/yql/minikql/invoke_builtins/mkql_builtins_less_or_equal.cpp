@@ -148,6 +148,14 @@ struct TLessOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TLessOrEqua
 #endif
 };
 
+template<typename TLeft, typename TRight, typename TOutput>
+struct TLessOrEqualOp;
+
+template<typename TLeft, typename TRight>
+struct TLessOrEqualOp<TLeft, TRight, bool> : public TLessOrEqual<TLeft, TRight, false> {
+    static constexpr bool DefaultNulls = true;
+};
+
 template<typename TLeft, typename TRight, bool Aggr>
 struct TDiffDateLessOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateLessOrEqual<TLeft, TRight, Aggr>>, public TAggrLessOrEqual {
     static bool Do(TLeft left, TRight right)
@@ -271,6 +279,10 @@ void RegisterLessOrEqual(IBuiltinFunctionRegistry& registry) {
 
     RegisterAggrCompareStrings<TCustomLessOrEqual, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrLessOrEqual, TCompareArgsOpt>(registry, aggrName);
+}
+
+void RegisterLessOrEqual(arrow::compute::FunctionRegistry& registry) {
+    AddFunction(registry, std::make_shared<TBinaryNumericPredicate<TLessOrEqualOp>>("LessOrEqual"));
 }
 
 } // namespace NMiniKQL

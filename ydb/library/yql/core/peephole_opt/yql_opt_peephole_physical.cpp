@@ -2611,11 +2611,18 @@ TExprNode::TPtr OptimizeSkip(const TExprNode::TPtr& node, TExprContext& ctx) {
 template <bool EnableNewOptimizers>
 TExprNode::TPtr OptimizeTake(const TExprNode::TPtr& node, TExprContext& ctx) {
     if constexpr (EnableNewOptimizers) {
-        if (const auto& input = node->Head(); input.IsCallable({"Filter", "OrderedFilter", "WideFilter"}) && 2U == input.ChildrenSize()) {
-            YQL_CLOG(DEBUG, CorePeepHole) << "Inject " << node->Content() << " limit into " << input.Content();
-            auto list = input.ChildrenList();
-            list.emplace_back(node->TailPtr());
-            return ctx.ChangeChildren(input, std::move(list));
+        if (const auto& input = node->Head(); input.IsCallable({"Filter", "OrderedFilter", "WideFilter"})) {
+            if (2U == input.ChildrenSize()) {
+                YQL_CLOG(DEBUG, CorePeepHole) << "Inject " << node->Content() << " limit into " << input.Content();
+                auto list = input.ChildrenList();
+                list.emplace_back(node->TailPtr());
+                return ctx.ChangeChildren(input, std::move(list));
+            }
+
+            auto childLimit = input.ChildPtr(2);
+            auto myLimit = node->ChildPtr(1);
+            YQL_CLOG(DEBUG, CorePeepHole) << "Merge " << node->Content() << " limit into " << input.Content();
+            return ctx.ChangeChild(input, 2, ctx.NewCallable(node->Pos(), "Min", { myLimit, childLimit }));
         }
 
         if (const auto& input = node->Head(); 1U == input.UseCount()) {
@@ -4326,6 +4333,14 @@ struct TBlockRules {
         {"/", { "Div?" } }, // kernel produces optional output on non-optional inputs
         {"%", { "Mod?" } }, // kernel produces optional output on non-optional inputs
         {"Not", { "invert" }},
+
+        // comparison kernels
+        {"==", { "Equals" } },
+        {"!=", { "NotEquals" } },
+        {"<",  { "Less" } },
+        {"<=", { "LessOrEqual" } },
+        {">",  { "Greater" } },
+        {">=", { "GreaterOrEqual" } },
     };
 
     TBlockRules()
@@ -4621,7 +4636,7 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
 TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
-    auto lambda = node->TailPtr();
+    auto lambda = node->ChildPtr(1);
     YQL_ENSURE(lambda->ChildrenSize() == 2); // filter lambda should have single output
 
     ui32 newNodes;

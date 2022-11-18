@@ -923,6 +923,87 @@ inline arrow::Datum MakeScalarDatum<ui64>(ui64 value) {
     return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(value));
 }
 
+template<typename TInput1, typename TInput2,
+         template<typename, typename, typename> class TPred>
+void CalcPredScalarArray(TInput1 val1, const TInput2* in2, ui8* output, size_t size)
+{
+    using TPredInstance = TPred<TInput1, TInput2, bool>;
+    while (size >= 8) {
+        ui8 result = 0;
+        result |= (ui8(TPredInstance::Do(val1, *in2++)) << 0);
+        result |= (ui8(TPredInstance::Do(val1, *in2++)) << 1);
+        result |= (ui8(TPredInstance::Do(val1, *in2++)) << 2);
+        result |= (ui8(TPredInstance::Do(val1, *in2++)) << 3);
+        result |= (ui8(TPredInstance::Do(val1, *in2++)) << 4);
+        result |= (ui8(TPredInstance::Do(val1, *in2++)) << 5);
+        result |= (ui8(TPredInstance::Do(val1, *in2++)) << 6);
+        result |= (ui8(TPredInstance::Do(val1, *in2++)) << 7);
+        *output++ = result;
+        size -= 8;
+    }
+    if (size) {
+        ui8 result = 0;
+        for (ui8 i = 0; i < size; ++i) {
+            result |= (ui8(TPredInstance::Do(val1, *in2++)) << i);
+        }
+        *output = result;
+    }
+}
+
+template<typename TInput1, typename TInput2,
+         template<typename, typename, typename> class TPred>
+void CalcPredArrayScalar(const TInput1* in1, TInput2 val2, ui8* output, size_t size)
+{
+    using TPredInstance = TPred<TInput1, TInput2, bool>;
+    while (size >= 8) {
+        ui8 result = 0;
+        result |= (ui8(TPredInstance::Do(*in1++, val2)) << 0);
+        result |= (ui8(TPredInstance::Do(*in1++, val2)) << 1);
+        result |= (ui8(TPredInstance::Do(*in1++, val2)) << 2);
+        result |= (ui8(TPredInstance::Do(*in1++, val2)) << 3);
+        result |= (ui8(TPredInstance::Do(*in1++, val2)) << 4);
+        result |= (ui8(TPredInstance::Do(*in1++, val2)) << 5);
+        result |= (ui8(TPredInstance::Do(*in1++, val2)) << 6);
+        result |= (ui8(TPredInstance::Do(*in1++, val2)) << 7);
+        *output++ = result;
+        size -= 8;
+    }
+    if (size) {
+        ui8 result = 0;
+        for (ui8 i = 0; i < size; ++i) {
+            result |= (ui8(TPredInstance::Do(*in1++, val2)) << i);
+        }
+        *output = result;
+    }
+}
+
+template<typename TInput1, typename TInput2,
+         template<typename, typename, typename> class TPred>
+void CalcPredArrayArray(const TInput1* in1, const TInput2* in2, ui8* output, size_t size)
+{
+    using TPredInstance = TPred<TInput1, TInput2, bool>;
+    while (size >= 8) {
+        ui8 result = 0;
+        result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << 0);
+        result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << 1);
+        result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << 2);
+        result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << 3);
+        result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << 4);
+        result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << 5);
+        result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << 6);
+        result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << 7);
+        *output++ = result;
+        size -= 8;
+    }
+    if (size) {
+        ui8 result = 0;
+        for (ui8 i = 0; i < size; ++i) {
+            result |= (ui8(TPredInstance::Do(*in1++, *in2++)) << i);
+        }
+        *output = result;
+    }
+}
+
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc, bool DefaultNulls>
 struct TBinaryKernelExecs;
@@ -958,9 +1039,15 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, true>
             const auto& arr2 = *arg2.array();
             auto length = arr2.length;
             const auto values2 = arr2.GetValues<TInput2>(1);
-            auto resValues = resArr.GetMutableValues<TOutput>(1);
-            for (int64_t i = 0; i < length; ++i) {
-                resValues[i] = TFuncInstance::Do(val1, values2[i]);
+            if constexpr (std::is_same<TOutput, bool>::value) {
+                MKQL_ENSURE(resArr.offset == 0, "Expecting zero output offset");
+                ui8* resValues = resArr.GetMutableValues<ui8>(1, 0);
+                CalcPredScalarArray<TInput1, TInput2, TFunc>(val1, values2, resValues, length);
+            } else {
+                auto resValues = resArr.GetMutableValues<TOutput>(1);
+                for (int64_t i = 0; i < length; ++i) {
+                    resValues[i] = TFuncInstance::Do(val1, values2[i]);
+                }
             }
         }
 
@@ -976,10 +1063,16 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, true>
             const auto& arr1 = *arg1.array();
             auto length = arr1.length;
             const auto values1 = arr1.GetValues<TInput1>(1);
-            auto resValues = resArr.GetMutableValues<TOutput>(1);
             const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
-            for (int64_t i = 0; i < length; ++i) {
-                resValues[i] = TFuncInstance::Do(values1[i], val2);
+            if constexpr (std::is_same<TOutput, bool>::value) {
+                MKQL_ENSURE(resArr.offset == 0, "Expecting zero output offset");
+                ui8* resValues = resArr.GetMutableValues<ui8>(1, 0);
+                CalcPredArrayScalar<TInput1, TInput2, TFunc>(values1, val2, resValues, length);
+            } else {
+                auto resValues = resArr.GetMutableValues<TOutput>(1);
+                for (int64_t i = 0; i < length; ++i) {
+                    resValues[i] = TFuncInstance::Do(values1[i], val2);
+                }
             }
         }
 
@@ -997,9 +1090,15 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, true>
         auto length = arr1.length;
         const auto values1 = arr1.GetValues<TInput1>(1);
         const auto values2 = arr2.GetValues<TInput2>(1);
-        auto resValues = resArr.GetMutableValues<TOutput>(1);
-        for (int64_t i = 0; i < length; ++i) {
-            resValues[i] = TFuncInstance::Do(values1[i], values2[i]);
+        if constexpr (std::is_same<TOutput, bool>::value) {
+            MKQL_ENSURE(resArr.offset == 0, "Expecting zero output offset");
+            ui8* resValues = resArr.GetMutableValues<ui8>(1, 0);
+            CalcPredArrayArray<TInput1, TInput2, TFunc>(values1, values2, resValues, length);
+        } else {
+            auto resValues = resArr.GetMutableValues<TOutput>(1);
+            for (int64_t i = 0; i < length; ++i) {
+                resValues[i] = TFuncInstance::Do(values1[i], values2[i]);
+            }
         }
 
         return arrow::Status::OK();
@@ -1034,6 +1133,7 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false>
 
     static arrow::Status ExecScalarArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         const auto& arr2 = *arg2.array();
@@ -1068,6 +1168,7 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false>
 
     static arrow::Status ExecArrayScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         const auto& arr1 = *arg1.array();
@@ -1102,6 +1203,7 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false>
 
     static arrow::Status ExecArrayArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
+        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         const auto& arr1 = *arg1.array();
@@ -1241,6 +1343,91 @@ public:
         : ScalarFunction(name, arrow::compute::Arity::Binary(), nullptr)
     {
         AddBinaryIntegralKernels<TFunc>(*this);
+    }
+};
+
+template<template<typename, typename, typename> class TPred>
+void AddBinaryIntegralPredicateKernels(arrow::compute::ScalarFunction& function) {
+    AddBinaryKernel<ui8, ui8, bool, TPred>(function);
+    AddBinaryKernel<ui8, i8, bool, TPred>(function);
+    AddBinaryKernel<ui8, ui16, bool, TPred>(function);
+    AddBinaryKernel<ui8, i16, bool, TPred>(function);
+    AddBinaryKernel<ui8, ui32, bool, TPred>(function);
+    AddBinaryKernel<ui8, i32, bool, TPred>(function);
+    AddBinaryKernel<ui8, ui64, bool, TPred>(function);
+    AddBinaryKernel<ui8, i64, bool, TPred>(function);
+
+    AddBinaryKernel<i8, ui8, bool, TPred>(function);
+    AddBinaryKernel<i8, i8, bool, TPred>(function);
+    AddBinaryKernel<i8, ui16, bool, TPred>(function);
+    AddBinaryKernel<i8, i16, bool, TPred>(function);
+    AddBinaryKernel<i8, ui32, bool, TPred>(function);
+    AddBinaryKernel<i8, i32, bool, TPred>(function);
+    AddBinaryKernel<i8, ui64, bool, TPred>(function);
+    AddBinaryKernel<i8, i64, bool, TPred>(function);
+
+    AddBinaryKernel<ui16, ui8, bool, TPred>(function);
+    AddBinaryKernel<ui16, i8, bool, TPred>(function);
+    AddBinaryKernel<ui16, ui16, bool, TPred>(function);
+    AddBinaryKernel<ui16, i16, bool, TPred>(function);
+    AddBinaryKernel<ui16, ui32, bool, TPred>(function);
+    AddBinaryKernel<ui16, i32, bool, TPred>(function);
+    AddBinaryKernel<ui16, ui64, bool, TPred>(function);
+    AddBinaryKernel<ui16, i64, bool, TPred>(function);
+
+    AddBinaryKernel<i16, ui8, bool, TPred>(function);
+    AddBinaryKernel<i16, i8, bool, TPred>(function);
+    AddBinaryKernel<i16, ui16, bool, TPred>(function);
+    AddBinaryKernel<i16, i16, bool, TPred>(function);
+    AddBinaryKernel<i16, ui32, bool, TPred>(function);
+    AddBinaryKernel<i16, i32, bool, TPred>(function);
+    AddBinaryKernel<i16, ui64, bool, TPred>(function);
+    AddBinaryKernel<i16, i64, bool, TPred>(function);
+
+    AddBinaryKernel<ui32, ui8, bool, TPred>(function);
+    AddBinaryKernel<ui32, i8, bool, TPred>(function);
+    AddBinaryKernel<ui32, ui16, bool, TPred>(function);
+    AddBinaryKernel<ui32, i16, bool, TPred>(function);
+    AddBinaryKernel<ui32, ui32, bool, TPred>(function);
+    AddBinaryKernel<ui32, i32, bool, TPred>(function);
+    AddBinaryKernel<ui32, ui64, bool, TPred>(function);
+    AddBinaryKernel<ui32, i64, bool, TPred>(function);
+
+    AddBinaryKernel<i32, ui8, bool, TPred>(function);
+    AddBinaryKernel<i32, i8, bool, TPred>(function);
+    AddBinaryKernel<i32, ui16, bool, TPred>(function);
+    AddBinaryKernel<i32, i16, bool, TPred>(function);
+    AddBinaryKernel<i32, ui32, bool, TPred>(function);
+    AddBinaryKernel<i32, i32, bool, TPred>(function);
+    AddBinaryKernel<i32, ui64, bool, TPred>(function);
+    AddBinaryKernel<i32, i64, bool, TPred>(function);
+
+    AddBinaryKernel<ui64, ui8, bool, TPred>(function);
+    AddBinaryKernel<ui64, i8, bool, TPred>(function);
+    AddBinaryKernel<ui64, ui16, bool, TPred>(function);
+    AddBinaryKernel<ui64, i16, bool, TPred>(function);
+    AddBinaryKernel<ui64, ui32, bool, TPred>(function);
+    AddBinaryKernel<ui64, i32, bool, TPred>(function);
+    AddBinaryKernel<ui64, ui64, bool, TPred>(function);
+    AddBinaryKernel<ui64, i64, bool, TPred>(function);
+
+    AddBinaryKernel<i64, ui8, bool, TPred>(function);
+    AddBinaryKernel<i64, i8, bool, TPred>(function);
+    AddBinaryKernel<i64, ui16, bool, TPred>(function);
+    AddBinaryKernel<i64, i16, bool, TPred>(function);
+    AddBinaryKernel<i64, ui32, bool, TPred>(function);
+    AddBinaryKernel<i64, i32, bool, TPred>(function);
+    AddBinaryKernel<i64, ui64, bool, TPred>(function);
+    AddBinaryKernel<i64, i64, bool, TPred>(function);
+}
+
+template<template<typename, typename, typename> class TPred>
+class TBinaryNumericPredicate : public arrow::compute::ScalarFunction {
+public:
+    TBinaryNumericPredicate(const std::string& name)
+        : ScalarFunction(name, arrow::compute::Arity::Binary(), nullptr)
+    {
+        AddBinaryIntegralPredicateKernels<TPred>(*this);
     }
 };
 

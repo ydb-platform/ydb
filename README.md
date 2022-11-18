@@ -2,14 +2,16 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/ydb-platform/ydb.svg?style=flat-square)](https://github.com/ydb-platform/ydb/releases)
-[![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/YDBPlatform)
+[![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/ydb_en)
 
 ## YDB
 
 [Website](https://ydb.tech) |
 [Documentation](https://ydb.tech/docs) |
 [Official Repository](https://github.com/ydb-platform/ydb) |
-[YouTube Channel](https://www.youtube.com/channel/UCHrVUvA1cRakxRP3iwA-yyw)
+[YouTube](https://www.youtube.com/c/YDBPlatform) |
+[Blog](https://medium.com/ydbtech) |
+[Twitter](https://twitter.com/YDBPlatform)
 
 YDB is an open-source Distributed SQL Database that combines high availability and scalability with strict consistency and ACID transactions.
 
@@ -79,7 +81,7 @@ For development purposes we test that YDB could be built and run under latest ve
 
 We are glad to welcome new contributors!
 
-1. Please read [contributor's guide](CONTRIBUTING.md).
+1. Please read the [contributor's guide](CONTRIBUTING.md).
 2. We can accept your work to YDB after you have signed contributor's license agreement (aka CLA).
 3. Please don't forget to add a note to your pull request, that you agree to the terms of the CLA.
 

@@ -251,61 +251,6 @@ public:
                     return RunResOrPullForExec(TResOrPullBase(input), maybeExecQuery.Cast(), ctx, index);
                 }
             }
-
-            IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input);
-
-            if (auto maybeTableList = TMaybeNode<TCoRight>(pullInput).Input().Maybe<TKiReadTableList>()) {
-                if (!EnsureNotPrepare("tablelist", pullInput->Pos(), SessionCtx->Query(), ctx)) {
-                    return SyncError();
-                }
-
-                TKikimrKey key(ctx);
-                YQL_ENSURE(key.Extract(maybeTableList.Cast().TableKey().Ref()));
-                auto future = Gateway->ListPath(TString(maybeTableList.Cast().DataSource().Cluster()),
-                    key.GetFolderPath());
-
-                return WrapFuture(future, [fillSettings](const IKikimrGateway::TListPathResult& res,
-                    const TExprNode::TPtr& input, TExprContext& ctx)
-                {
-                    auto result = GetTableListResult(res, fillSettings, ctx);
-                    YQL_ENSURE(result);
-
-                    return ctx.NewAtom(input->Pos(), *result);
-                });
-            }
-
-            if (auto maybeTableScheme = TMaybeNode<TCoRight>(pullInput).Input().Maybe<TKiReadTableScheme>()) {
-                if (!EnsureNotPrepare("tablescheme", pullInput->Pos(), SessionCtx->Query(), ctx)) {
-                    return SyncError();
-                }
-
-                TKikimrKey key(ctx);
-                auto cluster = maybeTableScheme.Cast().DataSource().Cluster();
-                YQL_ENSURE(key.Extract(maybeTableScheme.Cast().TableKey().Ref()));
-
-                auto& tableDesc = SessionCtx->Tables().ExistingTable(TString(cluster), key.GetTablePath());
-                TKikimrTableDescription rawTableDesc;
-                rawTableDesc.Metadata = tableDesc.Metadata;
-                rawTableDesc.Load(ctx);
-
-                auto result = GetTableMetadataResult(rawTableDesc, fillSettings, ctx);
-                YQL_ENSURE(result);
-
-                auto resultNode = ctx.NewAtom(input->Pos(), *result);
-
-                return std::make_pair(
-                    IGraphTransformer::TStatus::Async,
-                    MakeFuture(TAsyncTransformCallback([resultNode](const TExprNode::TPtr& input,
-                        TExprNode::TPtr& output, TExprContext& ctx)
-                    {
-                        Y_UNUSED(output);
-                        Y_UNUSED(ctx);
-
-                        input->SetState(TExprNode::EState::ExecutionComplete);
-                        input->SetResult(TExprNode::TPtr(resultNode));
-                        return IGraphTransformer::TStatus::Ok;
-                    })));
-            }
         }
 
         if (input->Content() == "Result") {
@@ -385,7 +330,7 @@ public:
 
 private:
     static TExprNode::TPtr GetResOrPullResult(const TExprNode& node, const IDataProvider::TFillSettings& fillSettings,
-        const TTypeAnnotationNode* resultType, const NKikimrMiniKQL::TResult& resultValue, TExprContext& ctx)
+        const NKikimrMiniKQL::TResult& resultValue, TExprContext& ctx)
     {
         TVector<TString> columnHints(NCommon::GetResOrPullColumnHints(node));
 
@@ -395,30 +340,12 @@ private:
             protoValue = KikimrResultToProto(resultValue, columnHints, fillSettings, resultValue.GetArena());
         }
 
-        // TODO: Fix Void? and Null type difference
-        // YQL_ENSURE(CheckKqpResultType(*protoValue, *resultType, ctx));
-        Y_UNUSED(resultType);
+        YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Custom);
+        YQL_ENSURE(fillSettings.FormatDetails == KikimrMkqlProtoFormat);
 
-        TExprNode::TPtr resultNode;
-        if (fillSettings.Format == IDataProvider::EResultFormat::Yson) {
-            NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
-
-            auto yson = KqpResultToYson(*protoValue, ysonFormat, ctx);
-            if (!yson) {
-                return nullptr;
-            }
-
-            resultNode = ctx.NewAtom(node.Pos(), *yson);
-        } else {
-            YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Custom);
-            YQL_ENSURE(fillSettings.FormatDetails == KikimrMkqlProtoFormat);
-
-            TVector<char> buffer(protoValue->ByteSize());
-            Y_PROTOBUF_SUPPRESS_NODISCARD protoValue->SerializeToArray(buffer.data(), buffer.size());
-            resultNode = ctx.NewAtom(node.Pos(), TStringBuf(buffer.data(), buffer.size()));
-        }
-
-        return resultNode;
+        TVector<char> buffer(protoValue->ByteSize());
+        Y_PROTOBUF_SUPPRESS_NODISCARD protoValue->SerializeToArray(buffer.data(), buffer.size());
+        return ctx.NewAtom(node.Pos(), TStringBuf(buffer.data(), buffer.size()));
     }
 
     std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> RunResOrPullForExec(TResOrPullBase res,
@@ -447,14 +374,11 @@ private:
             return SyncOk();
         }
 
-        auto executeRightType = exec.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1];
-        auto resultType = executeRightType->Cast<TTupleExprType>()->GetItems()[resultIndex];
-
         YQL_ENSURE(resultIndex < runResult->Results.size());
         auto resultValue = runResult->Results[resultIndex];
         YQL_ENSURE(resultValue);
 
-        auto resResultNode = GetResOrPullResult(res.Ref(), fillSettings, resultType, *resultValue, ctx);
+        auto resResultNode = GetResOrPullResult(res.Ref(), fillSettings, *resultValue, ctx);
 
         res.Ptr()->SetResult(std::move(resResultNode));
         return SyncOk();

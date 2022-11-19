@@ -960,7 +960,7 @@ public:
             return nullptr;
         }
 
-        if (!IsSameType(parameter->GetType(), type)) {
+        if (!IsSameProtoType(parameter->GetType(), type)) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << "Parameter " << name
                 << " type mismatch, expected: " << type << ", actual: " << parameter->GetType();
         }

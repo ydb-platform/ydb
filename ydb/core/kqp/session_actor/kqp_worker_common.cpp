@@ -4,6 +4,68 @@ namespace NKikimr::NKqp {
 
 using namespace NYql;
 
+namespace {
+
+bool IsSameProtoTypeImpl(const NKikimrMiniKQL::TDataType& actual, const NKikimrMiniKQL::TDataType& expected) {
+    return actual.GetScheme() == expected.GetScheme() &&
+        actual.GetDecimalParams().GetPrecision() == expected.GetDecimalParams().GetPrecision() &&
+        actual.GetDecimalParams().GetScale() == expected.GetDecimalParams().GetScale();
+}
+
+bool IsSameProtoTypeImpl(const NKikimrMiniKQL::TTupleType& actual, const NKikimrMiniKQL::TTupleType& expected) {
+    size_t size = actual.ElementSize();
+    if (size != expected.ElementSize()) {
+        return false;
+    }
+    for (size_t i = 0; i < size; ++i) {
+        if (!IsSameProtoType(actual.GetElement(i), expected.GetElement(i))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsSameProtoTypeImpl(const NKikimrMiniKQL::TStructType& actual, const NKikimrMiniKQL::TStructType& expected) {
+    size_t size = actual.MemberSize();
+    if (size != expected.MemberSize()) {
+        return false;
+    }
+    std::map<TString, NKikimrMiniKQL::TType> expected_fields;
+    for (size_t i = 0; i < size; ++i) {
+        auto& st = expected.GetMember(i);
+        expected_fields.emplace(st.GetName(), st.GetType());
+    }
+    for (size_t i = 0; i < size; ++i) {
+        auto& f = actual.GetMember(i);
+        auto it = expected_fields.find(f.GetName());
+        if (it == expected_fields.end()) {
+            return false;
+        }
+
+        if (!IsSameProtoType(f.GetType(), it->second)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsSameProtoTypeImpl(const NKikimrMiniKQL::TVariantType& actual, const NKikimrMiniKQL::TVariantType& expected) {
+    if (actual.GetTypeCase() != expected.GetTypeCase()) {
+        return false;
+    }
+    switch (actual.GetTypeCase()) {
+        case NKikimrMiniKQL::TVariantType::kTupleItems:
+            return IsSameProtoTypeImpl(actual.GetTupleItems(), expected.GetTupleItems());
+        case NKikimrMiniKQL::TVariantType::kStructItems:
+            return IsSameProtoTypeImpl(actual.GetStructItems(), expected.GetStructItems());
+        case NKikimrMiniKQL::TVariantType::TYPE_NOT_SET:
+            Y_ENSURE(false, "Variant type not set");
+            return false;
+    }
+}
+
+} // namespace
+
 EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest) {
     switch (queryRequest.GetCollectStats()) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
@@ -83,6 +145,42 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             << ", results: " << resultsSize << 'b'
             << ", text: \"" << EscapeC(queryText) << '"'
             << ", parameters: " << paramsText);
+    }
+}
+
+bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::TType& expected) {
+    if (actual.GetKind() != expected.GetKind()) {
+        return false;
+    }
+
+    switch (actual.GetKind()) {
+        case NKikimrMiniKQL::ETypeKind::Void:
+            return true;
+        case NKikimrMiniKQL::ETypeKind::Data:
+            return IsSameProtoTypeImpl(actual.GetData(), expected.GetData());
+        case NKikimrMiniKQL::ETypeKind::Optional:
+            return IsSameProtoType(actual.GetOptional().GetItem(), expected.GetOptional().GetItem());
+        case NKikimrMiniKQL::ETypeKind::List:
+            return IsSameProtoType(actual.GetList().GetItem(), expected.GetList().GetItem());
+        case NKikimrMiniKQL::ETypeKind::Tuple:
+            return IsSameProtoTypeImpl(actual.GetTuple(), expected.GetTuple());
+        case NKikimrMiniKQL::ETypeKind::Struct:
+            return IsSameProtoTypeImpl(actual.GetStruct(), expected.GetStruct());
+        case NKikimrMiniKQL::ETypeKind::Dict:
+            return IsSameProtoType(actual.GetDict().GetKey(), expected.GetDict().GetKey()) &&
+                IsSameProtoType(actual.GetDict().GetPayload(), expected.GetDict().GetPayload());
+        case NKikimrMiniKQL::ETypeKind::Variant:
+            return IsSameProtoTypeImpl(actual.GetVariant(), expected.GetVariant());
+        case NKikimrMiniKQL::ETypeKind::Null:
+            return true;
+        case NKikimrMiniKQL::ETypeKind::Pg:
+            return actual.GetPg().Getoid() == expected.GetPg().Getoid();
+        case NKikimrMiniKQL::ETypeKind::Unknown:
+        case NKikimrMiniKQL::ETypeKind::Reserved_11:
+        case NKikimrMiniKQL::ETypeKind::Reserved_12:
+        case NKikimrMiniKQL::ETypeKind::Reserved_13:
+        case NKikimrMiniKQL::ETypeKind::Reserved_14:
+            return false;
     }
 }
 

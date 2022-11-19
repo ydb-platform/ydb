@@ -404,33 +404,8 @@ public:
     }
 
     bool CollectDiagnostics(NYson::TYsonWriter& writer) override {
-        auto& execResults = SessionCtx->Query().Results;
-        if (!std::find_if(execResults.begin(), execResults.end(),
-            [] (const auto& pair) { return pair.second.Profile; }))
-        {
-            return false;
-        }
-
-        writer.OnBeginMap();
-        writer.OnKeyedItem("KqlProfiles");
-        writer.OnBeginList();
-
-        for (auto& pair : execResults) {
-            auto& result = pair.second;
-            if (result.Profile) {
-                writer.OnListItem();
-
-                YQL_ENSURE(result.Profile->GetKqlProfiles().size() == 1);
-                auto& kqlProfile = result.Profile->GetKqlProfiles(0);
-
-                KikimrProfileToYson(kqlProfile, writer);
-            }
-        }
-
-        writer.OnEndList();
-        writer.OnEndMap();
-
-        return true;
+        Y_UNUSED(writer);
+        return false;
     }
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {

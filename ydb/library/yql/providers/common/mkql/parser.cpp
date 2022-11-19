@@ -157,16 +157,14 @@ TRuntimeNode BuildParseCall(
         return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input), [&](TRuntimeNode item) {
             MKQL_ENSURE(!extraColumnsByPathIndex && metadataColumns.empty(), "TODO");
 
-            auto structObj = ctx.ProgramBuilder.Nth(item, 0);
-            auto length = ctx.ProgramBuilder.Nth(item, 1);
             TRuntimeNode::TList fields;
 
             for (ui32 i = 0; i < finalItemStructType->GetMembersCount(); ++i) {
                 TStringBuf name = finalItemStructType->GetMemberName(i);
-                fields.push_back(ctx.ProgramBuilder.Member(structObj, name));
+                fields.push_back(ctx.ProgramBuilder.Member(item, name));
             }
 
-            fields.push_back(length);
+            fields.push_back(ctx.ProgramBuilder.Member(item, "_yql_block_length"));
             return fields;
         });
     }

@@ -183,10 +183,8 @@ public:
                 blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(x->GetName(), ctx.MakeType<TBlockExprType>(x->GetItemType())));
             }
 
-            auto blockRowType = ctx.MakeType<TStructExprType>(blockRowTypeItems);
-
-            itemType = ctx.MakeType<TTupleExprType>(
-                TTypeAnnotationNode::TListType{ blockRowType, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)) }); // struct + block length
+            blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>("_yql_block_length", ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
+            itemType = ctx.MakeType<TStructExprType>(blockRowTypeItems);
         } else {
             itemType = ctx.MakeType<TResourceExprType>("ClickHouseClient.Block");
         }

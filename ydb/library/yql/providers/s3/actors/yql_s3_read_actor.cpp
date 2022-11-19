@@ -396,6 +396,8 @@ struct TReadSpec {
     NDB::FormatSettings Settings;
     TString Format, Compression;
     ui64 SizeLimit = 0;
+    ui32 BlockLengthPosition = 0;
+    std::vector<ui32> ColumnReorder;
 };
 
 struct TRetryStuff {
@@ -990,16 +992,13 @@ private:
                 const auto& batch = *Blocks.front().Batch;
 
                 NUdf::TUnboxedValue* structItems = nullptr;
-                auto structObj = ArrowRowContainerCache.NewArray(HolderFactory, batch.num_columns(), structItems);
+                auto structObj = ArrowRowContainerCache.NewArray(HolderFactory, 1 + batch.num_columns(), structItems);
                 for (int i = 0; i < batch.num_columns(); ++i) {
-                    structItems[i] = HolderFactory.CreateArrowBlock(arrow::Datum(batch.column_data(i)));
+                    structItems[ReadSpec->ColumnReorder[i]] = HolderFactory.CreateArrowBlock(arrow::Datum(batch.column_data(i)));
                 }
 
-                NUdf::TUnboxedValue* tupleItems = nullptr;
-                auto tuple = ArrowTupleContainerCache.NewArray(HolderFactory, 2, tupleItems);
-                *tupleItems++ = structObj;
-                *tupleItems++ = HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.num_rows())));
-                value = tuple;
+                structItems[ReadSpec->BlockLengthPosition] = HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.num_rows())));
+                value = structObj;
             } else {
                 value = HolderFactory.Create<TBoxedBlock>(Blocks.front().Block);
             }
@@ -1263,13 +1262,22 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         readSpec->Arrow = params.GetArrow();
         if (readSpec->Arrow) {
             arrow::SchemaBuilder builder;
-            for (ui32 i = 0U; i < structType->GetMembersCount(); ++i) {
-                auto memberType = structType->GetMemberType(i);
+            auto extraStructType = static_cast<TStructType*>(pb->NewStructType(structType, "_yql_block_length",
+                pb->NewBlockType(pb->NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar)));
+
+            for (ui32 i = 0U; i < extraStructType->GetMembersCount(); ++i) {
+                if (extraStructType->GetMemberName(i) == "_yql_block_length") {
+                    readSpec->BlockLengthPosition = i;
+                    continue;
+                }
+
+                auto memberType = extraStructType->GetMemberType(i);
                 bool isOptional;
                 std::shared_ptr<arrow::DataType> dataType;
 
                 YQL_ENSURE(ConvertArrowType(memberType, isOptional, dataType), "Unsupported arrow type");
-                THROW_ARROW_NOT_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(structType->GetMemberName(i)), dataType, isOptional)));
+                THROW_ARROW_NOT_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(extraStructType->GetMemberName(i)), dataType, isOptional)));
+                readSpec->ColumnReorder.push_back(i);
             }
 
             auto res = builder.Finish();

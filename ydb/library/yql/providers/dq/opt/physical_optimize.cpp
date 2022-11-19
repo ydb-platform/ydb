@@ -108,17 +108,16 @@ protected:
         }
         const auto& items = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
         auto sourceArg = ctx.NewArgument(node.Pos(), "source");
-        bool supportsBlocks = false;
         auto inputType = GetSeqItemType(wrap.Input().Ref().GetTypeAnn());
         while (inputType->GetKind() == ETypeAnnotationKind::Tuple) {
             auto tupleType = inputType->Cast<TTupleExprType>();
-            if (tupleType->GetSize() == 2 && tupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Scalar) {
-                supportsBlocks = true;
-                break;
+            if (tupleType->GetSize() > 0) {
+                inputType = tupleType->GetItems()[0];
             }
-
-            inputType = tupleType->GetItems()[0];
         }
+
+        bool supportsBlocks = inputType->GetKind() == ETypeAnnotationKind::Struct &&
+            inputType->Cast<TStructExprType>()->FindItem("_yql_block_length").Defined();
 
         auto wideWrap = ctx.Builder(node.Pos())
             .Callable(UseBlocks && supportsBlocks ? TDqSourceWideBlockWrap::CallableName() : TDqSourceWideWrap::CallableName())

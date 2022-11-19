@@ -4332,7 +4332,13 @@ struct TBlockRules {
         {"*", { "Mul" } },
         {"/", { "Div?" } }, // kernel produces optional output on non-optional inputs
         {"%", { "Mod?" } }, // kernel produces optional output on non-optional inputs
+
+        // logical operators
         {"Not", { "invert" }},
+        // standard boolean kernels support only 2 inputs, so arguments are split into pairs before deploying next 3 kernels
+        {"And", { "and_kleene" }},
+        {"Or", { "or_kleene" }},
+        {"Xor", { "xor" }},
 
         // comparison kernels
         {"==", { "Equals" } },
@@ -4353,6 +4359,24 @@ struct TBlockRules {
 
     const TBlockFuncMap Funcs;
 };
+
+TExprNode::TPtr SplitByPairs(TPositionHandle pos, const TExprNode::TPtr& funcName, const TExprNode::TListType& funcArgs,
+    size_t begin, size_t end, TExprContext& ctx)
+{
+    YQL_ENSURE(end >= begin + 2);
+    const size_t len = end - begin;
+    if (len < 4) {
+        auto result = ctx.NewCallable(pos, "BlockFunc", { funcName, funcArgs[begin], funcArgs[begin + 1] });
+        if (len == 3) {
+            result = ctx.NewCallable(pos, "BlockFunc", { funcName, result, funcArgs[begin + 2] });
+        }
+        return result;
+    }
+
+    auto left = SplitByPairs(pos, funcName, funcArgs, begin, begin + len / 2, ctx);
+    auto right = SplitByPairs(pos, funcName, funcArgs, begin + len / 2, end, ctx);
+    return ctx.NewCallable(pos, "BlockFunc", { funcName, left, right });
+}
 
 bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputColumns, const TExprNode::TPtr& lambda,
     ui32& newNodes, TNodeMap<size_t>& rewritePositions,
@@ -4421,6 +4445,27 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
+        if (node->IsCallable({"And", "Or", "Xor"}) && node->ChildrenSize() > 2) {
+            // Split original argument list by pairs (since the order is not important balanced tree is used)
+            for (auto& child : node->ChildrenList()) {
+                if (child->IsComplete()) {
+                    funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { child }));
+                } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
+                    funcArgs.push_back(rit->second);
+                } else {
+                    return true;
+                }
+            }
+
+            auto fit = funcs.find(node->Content());
+            YQL_ENSURE(fit != funcs.end());
+            arrowFunctionName = fit->second.Name;
+
+            auto nameAtom = ctx.NewAtom(node->Pos(), arrowFunctionName);
+            rewrites[node.Get()] = SplitByPairs(node->Pos(), nameAtom, funcArgs, 0, funcArgs.size(), ctx);
+            ++newNodes;
+            return true;
+        }
         if (node->IsCallable("Apply") && node->Head().IsCallable("Udf")) {
             auto func = node->Head().Head().Content();
             if (!func.StartsWith("ClickHouse.")) {
